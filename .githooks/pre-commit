@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+.codex/hooks/check-contracts.sh
+.codex/hooks/check-docs.sh

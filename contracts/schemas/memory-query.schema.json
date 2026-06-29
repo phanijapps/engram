@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engram.local/schemas/memory-query.schema.json",
+  "title": "RetrievalRequest legacy pointer",
+  "$ref": "../v1/schemas/engram-v1.schema.json#/$defs/RetrievalRequest"
+}

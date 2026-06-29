@@ -1,0 +1,8 @@
+{
+  "query": "This retrieval request is invalid because requester is required.",
+  "scope": {
+    "tenant": "tenant-demo",
+    "workspace": "engram"
+  },
+  "includeExplanations": true
+}

@@ -1,0 +1,713 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engram.local/contracts/v1/schemas/engram-v1.schema.json",
+  "title": "Engram v1 contract definitions",
+  "type": "object",
+  "$defs": {
+    "Identifier": {
+      "type": "string",
+      "minLength": 1
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "Metadata": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "Actor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "kind": {
+          "type": "string",
+          "enum": ["user", "agent", "system", "service", "tool"]
+        },
+        "displayName": { "type": "string" },
+        "metadata": { "$ref": "#/$defs/Metadata" }
+      }
+    },
+    "Requester": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actor"],
+      "properties": {
+        "actor": { "$ref": "#/$defs/Actor" },
+        "roles": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "permissions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "onBehalfOf": { "$ref": "#/$defs/Actor" }
+      }
+    },
+    "Scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tenant"],
+      "properties": {
+        "tenant": { "type": "string", "minLength": 1 },
+        "subject": { "type": "string" },
+        "workspace": { "type": "string" },
+        "session": { "type": "string" },
+        "environment": { "type": "string" }
+      }
+    },
+    "Policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["visibility", "retention"],
+      "properties": {
+        "visibility": {
+          "type": "string",
+          "enum": ["private", "workspace", "organization", "public"]
+        },
+        "retention": {
+          "type": "string",
+          "enum": ["ephemeral", "session", "durable", "legal_hold"]
+        },
+        "sensitivity": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "restricted"]
+        },
+        "allowedUses": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["retrieval", "personalization", "evaluation", "consolidation", "debugging"]
+          },
+          "uniqueItems": true
+        },
+        "expiresAt": { "$ref": "#/$defs/Timestamp" },
+        "deleteMode": { "$ref": "#/$defs/DeleteMode" }
+      }
+    },
+    "DeleteMode": {
+      "type": "string",
+      "enum": ["delete", "redact", "tombstone", "archive"]
+    },
+    "SourceLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "startLine": { "type": "integer", "minimum": 1 },
+        "endLine": { "type": "integer", "minimum": 1 },
+        "startOffset": { "type": "integer", "minimum": 0 },
+        "endOffset": { "type": "integer", "minimum": 0 },
+        "anchor": { "type": "string" }
+      }
+    },
+    "EvidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType"],
+      "properties": {
+        "targetType": {
+          "type": "string",
+          "enum": ["memory", "event", "source", "document", "chunk", "entity", "concept", "url"]
+        },
+        "targetId": { "type": "string" },
+        "uri": { "type": "string" },
+        "quote": { "type": "string", "maxLength": 500 },
+        "location": { "$ref": "#/$defs/SourceLocation" }
+      },
+      "anyOf": [
+        { "required": ["targetId"] },
+        { "required": ["uri"] },
+        { "required": ["location"] }
+      ]
+    },
+    "DerivationRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "createdAt"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["manual", "ingestion", "extraction", "summarization", "consolidation", "ranking", "taxonomy_evolution"]
+        },
+        "model": { "type": "string" },
+        "promptHash": { "type": "string" },
+        "inputRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceRef" }
+        },
+        "createdAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "Provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "actor", "observedAt"],
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "actor": { "$ref": "#/$defs/Actor" },
+        "observedAt": { "$ref": "#/$defs/Timestamp" },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvidenceRef" }
+        },
+        "derivations": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/DerivationRef" }
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "method": { "type": "string" }
+      }
+    },
+    "EntityRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "kind": { "type": "string" },
+        "name": { "type": "string" },
+        "aliases": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "ConceptRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "uri": { "type": "string" },
+        "label": { "type": "string" }
+      }
+    },
+    "MemoryKind": {
+      "type": "string",
+      "enum": ["observation", "fact", "preference", "episode", "artifact", "relationship", "procedure"]
+    },
+    "MemoryStatus": {
+      "type": "string",
+      "enum": ["active", "archived", "redacted", "forgotten", "expired"]
+    },
+    "MemoryContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" },
+        "summary": { "type": "string" },
+        "entities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EntityRef" }
+        },
+        "language": { "type": "string" },
+        "format": {
+          "type": "string",
+          "enum": ["text", "markdown", "json", "code", "structured"]
+        },
+        "structured": true,
+        "hash": { "type": "string" }
+      }
+    },
+    "MemoryLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rel", "targetType", "targetId"],
+      "properties": {
+        "rel": { "type": "string" },
+        "targetType": {
+          "type": "string",
+          "enum": ["memory", "event", "belief", "contradiction", "chunk", "document", "entity", "concept", "hierarchy_node", "source"]
+        },
+        "targetId": { "type": "string" },
+        "provenance": { "$ref": "#/$defs/Provenance" }
+      }
+    },
+    "MemoryRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "content", "scope", "provenance", "policy", "status", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "kind": { "$ref": "#/$defs/MemoryKind" },
+        "content": { "$ref": "#/$defs/MemoryContent" },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "provenance": { "$ref": "#/$defs/Provenance" },
+        "policy": { "$ref": "#/$defs/Policy" },
+        "status": { "$ref": "#/$defs/MemoryStatus" },
+        "links": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MemoryLink" }
+        },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" },
+        "metadata": { "$ref": "#/$defs/Metadata" }
+      }
+    },
+    "MemoryEventKind": {
+      "type": "string",
+      "enum": ["observed", "written", "updated", "retrieved", "consolidated", "redacted", "forgotten", "expired", "policy_changed", "linked", "unlinked", "belief_synthesized", "belief_retracted", "contradiction_detected", "hierarchy_built"]
+    },
+    "MemoryEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "scope", "actor", "payload", "provenance", "occurredAt", "recordedAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "kind": { "$ref": "#/$defs/MemoryEventKind" },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "actor": { "$ref": "#/$defs/Actor" },
+        "memoryId": { "$ref": "#/$defs/Identifier" },
+        "payload": true,
+        "provenance": { "$ref": "#/$defs/Provenance" },
+        "occurredAt": { "$ref": "#/$defs/Timestamp" },
+        "recordedAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "SourceKind": {
+      "type": "string",
+      "enum": ["filesystem", "git_repository", "url", "upload", "database", "api", "generated"]
+    },
+    "SourceDocumentKind": {
+      "type": "string",
+      "enum": ["text", "markdown", "html", "pdf", "code", "notebook", "image", "audio", "video", "structured_data", "unknown"]
+    },
+    "KnowledgeChunkKind": {
+      "type": "string",
+      "enum": ["document_section", "paragraph", "table", "code_block", "code_symbol", "file", "diff_hunk", "api_reference", "transcript_segment", "structured_record"]
+    },
+    "EmbeddingRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "model", "dimensions", "targetType", "targetId", "contentHash", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "model": { "type": "string" },
+        "dimensions": { "type": "integer", "minimum": 1 },
+        "targetType": {
+          "type": "string",
+          "enum": ["memory", "chunk", "entity", "concept"]
+        },
+        "targetId": { "$ref": "#/$defs/Identifier" },
+        "contentHash": { "type": "string" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "KnowledgeSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "scope", "name", "policy", "provenance", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "kind": { "$ref": "#/$defs/SourceKind" },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "name": { "type": "string" },
+        "uri": { "type": "string" },
+        "version": { "type": "string" },
+        "policy": { "$ref": "#/$defs/Policy" },
+        "provenance": { "$ref": "#/$defs/Provenance" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" },
+        "metadata": { "$ref": "#/$defs/Metadata" }
+      }
+    },
+    "SourceDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "sourceId", "kind", "contentHash", "provenance", "policy", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "sourceId": { "$ref": "#/$defs/Identifier" },
+        "kind": { "$ref": "#/$defs/SourceDocumentKind" },
+        "uri": { "type": "string" },
+        "path": { "type": "string" },
+        "title": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "language": { "type": "string" },
+        "version": { "type": "string" },
+        "contentHash": { "type": "string" },
+        "provenance": { "$ref": "#/$defs/Provenance" },
+        "policy": { "$ref": "#/$defs/Policy" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" },
+        "metadata": { "$ref": "#/$defs/Metadata" }
+      }
+    },
+    "KnowledgeChunk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "documentId", "sourceId", "kind", "text", "contentHash", "provenance", "policy", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "documentId": { "$ref": "#/$defs/Identifier" },
+        "sourceId": { "$ref": "#/$defs/Identifier" },
+        "kind": { "$ref": "#/$defs/KnowledgeChunkKind" },
+        "text": { "type": "string" },
+        "summary": { "type": "string" },
+        "location": { "$ref": "#/$defs/SourceLocation" },
+        "entities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EntityRef" }
+        },
+        "concepts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConceptRef" }
+        },
+        "embeddingRefs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EmbeddingRef" }
+        },
+        "contentHash": { "type": "string" },
+        "provenance": { "$ref": "#/$defs/Provenance" },
+        "policy": { "$ref": "#/$defs/Policy" },
+        "createdAt": { "$ref": "#/$defs/Timestamp" },
+        "updatedAt": { "$ref": "#/$defs/Timestamp" },
+        "metadata": { "$ref": "#/$defs/Metadata" }
+      }
+    },
+    "RetrievalMode": {
+      "type": "string",
+      "enum": ["temporal", "cue", "hierarchical", "semantic", "graph", "keyword"]
+    },
+    "QueryFilter": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "memoryKinds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MemoryKind" }
+        },
+        "sourceKinds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceKind" }
+        },
+        "chunkKinds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/KnowledgeChunkKind" }
+        },
+        "conceptIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Identifier" }
+        },
+        "entityIds": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Identifier" }
+        },
+        "since": { "$ref": "#/$defs/Timestamp" },
+        "until": { "$ref": "#/$defs/Timestamp" },
+        "minConfidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "includeArchived": { "type": "boolean" }
+      }
+    },
+    "Cue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "value"],
+      "properties": {
+        "slot": { "type": "string" },
+        "value": true,
+        "operator": {
+          "type": "string",
+          "enum": ["equals", "contains", "starts_with", "ends_with", "exists", "in", "range"]
+        },
+        "weight": { "type": "number" }
+      }
+    },
+    "ContextBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxItems": { "type": "integer", "minimum": 1 },
+        "maxTokens": { "type": "integer", "minimum": 1 },
+        "maxBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "RetrievalRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query", "scope", "requester"],
+      "properties": {
+        "query": { "type": "string" },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "requester": { "$ref": "#/$defs/Requester" },
+        "modes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RetrievalMode" }
+        },
+        "filters": { "$ref": "#/$defs/QueryFilter" },
+        "cues": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Cue" }
+        },
+        "limit": { "type": "integer", "minimum": 1 },
+        "budget": { "$ref": "#/$defs/ContextBudget" },
+        "includeExplanations": { "type": "boolean" }
+      }
+    },
+    "RetrievalTargetType": {
+      "type": "string",
+      "enum": ["memory", "event", "chunk", "document", "entity", "relationship", "concept", "belief", "contradiction", "hierarchy_node", "hierarchy_relation"]
+    },
+    "RetrievalScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total"],
+      "properties": {
+        "total": { "type": "number", "minimum": 0, "maximum": 1 },
+        "relevance": { "type": "number", "minimum": 0, "maximum": 1 },
+        "recency": { "type": "number", "minimum": 0, "maximum": 1 },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "cueMatch": { "type": "number", "minimum": 0, "maximum": 1 },
+        "hierarchicalFit": { "type": "number", "minimum": 0, "maximum": 1 },
+        "policyFit": { "type": "number", "minimum": 0, "maximum": 1 }
+      }
+    },
+    "RetrievalExplanation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason"],
+      "properties": {
+        "reason": { "type": "string" },
+        "matchedCues": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Cue" }
+        },
+        "matchedTerms": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "path": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sourceSummary": { "type": "string" }
+      }
+    },
+    "FusionTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": { "type": "string" },
+        "sourceRank": { "type": "integer", "minimum": 1 },
+        "sourceScore": { "type": "number" },
+        "fusionStrategy": {
+          "type": "string",
+          "enum": ["none", "weighted_sum", "reciprocal_rank_fusion", "max_score", "learned_ranker"]
+        },
+        "fusionScore": { "type": "number" },
+        "rerankStrategy": {
+          "type": "string",
+          "enum": ["none", "mmr", "cross_encoder", "llm_judge", "policy_priority"]
+        },
+        "rerankScore": { "type": "number" },
+        "deduplicatedWith": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "RetrievalResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "targetType", "targetId", "content", "score", "provenance", "policy"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "targetType": { "$ref": "#/$defs/RetrievalTargetType" },
+        "targetId": { "$ref": "#/$defs/Identifier" },
+        "content": { "type": "string" },
+        "score": { "$ref": "#/$defs/RetrievalScore" },
+        "provenance": { "$ref": "#/$defs/Provenance" },
+        "policy": { "$ref": "#/$defs/Policy" },
+        "explanation": { "$ref": "#/$defs/RetrievalExplanation" },
+        "fusionTrace": { "$ref": "#/$defs/FusionTrace" },
+        "metadata": { "$ref": "#/$defs/Metadata" }
+      }
+    },
+    "OmittedResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType", "targetId", "reason"],
+      "properties": {
+        "targetType": { "$ref": "#/$defs/RetrievalTargetType" },
+        "targetId": { "$ref": "#/$defs/Identifier" },
+        "reason": {
+          "type": "string",
+          "enum": ["policy_denied", "budget_exceeded", "low_score", "expired", "redacted"]
+        }
+      }
+    },
+    "RetrievalSourceFailure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "severity", "reason", "degraded"],
+      "properties": {
+        "source": { "type": "string" },
+        "mode": { "$ref": "#/$defs/RetrievalMode" },
+        "severity": {
+          "type": "string",
+          "enum": ["info", "warning", "error"]
+        },
+        "reason": { "type": "string" },
+        "message": { "type": "string" },
+        "degraded": { "type": "boolean" }
+      }
+    },
+    "ContextPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items", "createdAt"],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RetrievalResult" }
+        },
+        "budget": { "$ref": "#/$defs/ContextBudget" },
+        "omitted": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OmittedResult" }
+        },
+        "sourceFailures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RetrievalSourceFailure" }
+        },
+        "createdAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "WriteMemoryRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "content", "scope", "requester", "provenance", "policy"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/MemoryKind" },
+        "content": { "$ref": "#/$defs/MemoryContent" },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "requester": { "$ref": "#/$defs/Requester" },
+        "provenance": { "$ref": "#/$defs/Provenance" },
+        "policy": { "$ref": "#/$defs/Policy" },
+        "links": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/MemoryLink" }
+        },
+        "idempotencyKey": { "type": "string" }
+      }
+    },
+    "WriteMemoryResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record", "event"],
+      "properties": {
+        "record": { "$ref": "#/$defs/MemoryRecord" },
+        "event": { "$ref": "#/$defs/MemoryEvent" },
+        "deduplicated": { "type": "boolean" }
+      }
+    },
+    "ForgetRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType", "targetId", "scope", "requester", "mode"],
+      "properties": {
+        "targetType": {
+          "type": "string",
+          "enum": ["memory", "event", "source", "document", "chunk", "entity", "concept"]
+        },
+        "targetId": { "$ref": "#/$defs/Identifier" },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "requester": { "$ref": "#/$defs/Requester" },
+        "mode": { "$ref": "#/$defs/DeleteMode" },
+        "reason": { "type": "string" }
+      }
+    },
+    "ForgetResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType", "targetId", "status"],
+      "properties": {
+        "targetType": { "type": "string" },
+        "targetId": { "$ref": "#/$defs/Identifier" },
+        "status": {
+          "type": "string",
+          "enum": ["deleted", "redacted", "tombstoned", "archived", "denied", "not_found"]
+        },
+        "event": { "$ref": "#/$defs/MemoryEvent" }
+      }
+    },
+    "EvaluationFixture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "scope", "setup", "cases", "createdAt"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Identifier" },
+        "name": { "type": "string" },
+        "scope": { "$ref": "#/$defs/Scope" },
+        "setup": { "$ref": "#/$defs/EvaluationSetup" },
+        "cases": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/EvaluationCase" }
+        },
+        "createdAt": { "$ref": "#/$defs/Timestamp" }
+      }
+    },
+    "EvaluationSetup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "memories": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WriteMemoryRequest" }
+        },
+        "sources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/KnowledgeSource" }
+        },
+        "documents": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/SourceDocument" }
+        },
+        "chunks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/KnowledgeChunk" }
+        }
+      }
+    },
+    "EvaluationCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "request", "expect"],
+      "properties": {
+        "id": { "type": "string" },
+        "request": { "$ref": "#/$defs/RetrievalRequest" },
+        "expect": { "$ref": "#/$defs/EvaluationExpectation" }
+      }
+    },
+    "EvaluationExpectation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mustInclude": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ExpectedTarget" }
+        },
+        "mustExclude": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ExpectedTarget" }
+        },
+        "minScore": { "type": "number", "minimum": 0, "maximum": 1 },
+        "maxResults": { "type": "integer", "minimum": 1 },
+        "requiresExplanation": { "type": "boolean" }
+      }
+    },
+    "ExpectedTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targetType", "targetId"],
+      "properties": {
+        "targetType": { "$ref": "#/$defs/RetrievalTargetType" },
+        "targetId": { "$ref": "#/$defs/Identifier" }
+      }
+    }
+  }
+}

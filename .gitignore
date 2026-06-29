@@ -1,0 +1,33 @@
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs and temporary output
+*.log
+tmp/
+temp/
+.cache/
+
+# Common build output
+dist/
+build/
+target/
+coverage/
+node_modules/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+
+# Local databases and artifacts
+*.db
+*.sqlite
+*.sqlite3
+*.parquet
+artifacts/

@@ -1,0 +1,84 @@
+{
+  "id": "eval-contract-001",
+  "name": "v1 stack memory retrieval",
+  "scope": {
+    "tenant": "tenant-demo",
+    "workspace": "engram",
+    "environment": "local"
+  },
+  "setup": {
+    "memories": [
+      {
+        "kind": "fact",
+        "content": {
+          "text": "engram v1 uses Rust 2024 for the deterministic core and TypeScript for bindings.",
+          "format": "text"
+        },
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-agent-1",
+            "kind": "agent",
+            "displayName": "Contract Agent"
+          }
+        },
+        "provenance": {
+          "source": "evaluation_fixture",
+          "actor": {
+            "id": "actor-agent-1",
+            "kind": "agent",
+            "displayName": "Contract Agent"
+          },
+          "observedAt": "2026-06-29T12:00:00Z",
+          "method": "manual"
+        },
+        "policy": {
+          "visibility": "workspace",
+          "retention": "durable",
+          "allowedUses": ["retrieval", "evaluation"]
+        }
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "retrieve-stack",
+      "request": {
+        "query": "What stack does engram use?",
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-agent-1",
+            "kind": "agent",
+            "displayName": "Contract Agent"
+          }
+        },
+        "includeExplanations": true
+      },
+      "expect": {
+        "mustInclude": [
+          {
+            "targetType": "memory",
+            "targetId": "memory-001"
+          }
+        ],
+        "mustExclude": [
+          {
+            "targetType": "memory",
+            "targetId": "memory-other-tenant"
+          }
+        ],
+        "requiresExplanation": true
+      }
+    }
+  ],
+  "createdAt": "2026-06-29T12:03:00Z"
+}

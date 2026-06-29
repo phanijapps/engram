@@ -1,0 +1,28 @@
+{
+  "kind": "fact",
+  "content": {
+    "text": "This request is invalid because scope.tenant is missing.",
+    "format": "text"
+  },
+  "scope": {
+    "workspace": "engram"
+  },
+  "requester": {
+    "actor": {
+      "id": "actor-agent-1",
+      "kind": "agent"
+    }
+  },
+  "provenance": {
+    "source": "invalid_example",
+    "actor": {
+      "id": "actor-agent-1",
+      "kind": "agent"
+    },
+    "observedAt": "2026-06-29T12:00:00Z"
+  },
+  "policy": {
+    "visibility": "workspace",
+    "retention": "durable"
+  }
+}

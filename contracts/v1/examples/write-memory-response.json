@@ -1,0 +1,70 @@
+{
+  "record": {
+    "id": "memory-001",
+    "kind": "fact",
+    "content": {
+      "text": "engram v1 uses Rust 2024 for the deterministic core and TypeScript for bindings.",
+      "summary": "Rust core with TypeScript bindings",
+      "language": "en",
+      "format": "text",
+      "hash": "sha256:example-write-memory"
+    },
+    "scope": {
+      "tenant": "tenant-demo",
+      "workspace": "engram",
+      "environment": "local"
+    },
+    "provenance": {
+      "source": "manual_contract_example",
+      "actor": {
+        "id": "actor-agent-1",
+        "kind": "agent",
+        "displayName": "Contract Agent"
+      },
+      "observedAt": "2026-06-29T12:00:00Z",
+      "confidence": 1,
+      "method": "manual"
+    },
+    "policy": {
+      "visibility": "workspace",
+      "retention": "durable",
+      "sensitivity": "low",
+      "allowedUses": ["retrieval", "evaluation", "debugging"],
+      "deleteMode": "tombstone"
+    },
+    "status": "active",
+    "createdAt": "2026-06-29T12:00:01Z"
+  },
+  "event": {
+    "id": "event-001",
+    "kind": "written",
+    "scope": {
+      "tenant": "tenant-demo",
+      "workspace": "engram",
+      "environment": "local"
+    },
+    "actor": {
+      "id": "actor-agent-1",
+      "kind": "agent",
+      "displayName": "Contract Agent"
+    },
+    "memoryId": "memory-001",
+    "payload": {
+      "idempotencyKey": "write-example-001"
+    },
+    "provenance": {
+      "source": "manual_contract_example",
+      "actor": {
+        "id": "actor-agent-1",
+        "kind": "agent",
+        "displayName": "Contract Agent"
+      },
+      "observedAt": "2026-06-29T12:00:00Z",
+      "confidence": 1,
+      "method": "manual"
+    },
+    "occurredAt": "2026-06-29T12:00:01Z",
+    "recordedAt": "2026-06-29T12:00:01Z"
+  },
+  "deduplicated": false
+}

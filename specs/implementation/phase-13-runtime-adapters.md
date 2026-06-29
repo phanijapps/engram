@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft.
+Done for the framework-neutral observed transport slice.
 
 ## Scope
 

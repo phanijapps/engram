@@ -15,9 +15,13 @@ bindings, SDKs, and application integrations.
 
 ## Status
 
-Engram is pre-implementation and contract-first. The accepted v1 core
-contract lives under `contracts/v1/`; implementation slices should start from
-`specs/v1/`.
+Engram is pre-1.0 and contract-first. The accepted v1 core contract lives under
+`contracts/v1/`, with Rust crates and TypeScript packages being implemented
+through spec-driven slices. Current behavior includes memory write/retrieve/
+forget, evaluation fixtures, SQLite persistence, native TypeScript bindings,
+source-grounded ingestion, sqlite-vec retrieval tests, hierarchy and belief
+repositories, dry-run consolidation reporting, and framework-neutral adapter
+observability.
 
 ## Workspace
 
@@ -32,12 +36,13 @@ specs/              Spec-driven acceptance contracts for implementation slices.
 
 ## Current Phase
 
-1. Keep `docs/domain-data-model.md` aligned with the accepted v1 contract.
+1. Keep `docs/domain-data-model.md` aligned with accepted contracts.
 2. Use `contracts/v1/` as the machine-readable v1 contract package.
-3. Use `specs/v1/` for spec-driven acceptance criteria before implementation
-   slices.
-4. Add deterministic evaluation fixtures alongside each behavior slice.
-5. Generate TypeScript contracts from accepted contract artifacts.
+3. Add or update a spec before implementation slices.
+4. Add deterministic evaluation fixtures alongside behavior slices.
+5. Keep Rust behavior, TypeScript bindings, and generated contracts in sync.
+6. Avoid production, security, or performance claims until backed by release
+   gates and evidence.
 
 ## Architectural Bias
 
@@ -52,6 +57,11 @@ agent feature. The default shape is ports and adapters:
   integration helpers.
 
 See `docs/architecture.md` for the initial module map.
+
+## Release Readiness
+
+Engram is not production-ready. Before publishing crates, npm packages, or
+release tags, follow `docs/release-checklist.md`.
 
 ## Validation
 

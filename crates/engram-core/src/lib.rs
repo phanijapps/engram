@@ -5,9 +5,13 @@
 //! infrastructure: SQL stores, vector indexes, embedding providers, schedulers,
 //! gateways, and TypeScript bindings should implement these traits elsewhere.
 
+mod consolidation;
+
 use async_trait::async_trait;
 use engram_domain::*;
 use thiserror::Error;
+
+pub use consolidation::DryRunConsolidationService;
 
 /// Stable error surface shared by core services and adapters.
 ///

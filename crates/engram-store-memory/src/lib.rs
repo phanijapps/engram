@@ -6,8 +6,11 @@
 //! details. Durable SQL, vector, and provider-backed adapters should live in
 //! separate crates and satisfy the same core contracts.
 
+mod belief;
 mod dependencies;
 mod forget;
+mod hierarchy;
+mod knowledge;
 mod retrieval;
 mod scope;
 mod service;

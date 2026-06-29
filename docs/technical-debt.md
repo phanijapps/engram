@@ -15,3 +15,19 @@ Remaining work:
 - add file-backed SQLite construction after in-memory conformance is stable
 - decide whether server database adapters belong in this crate or sibling
   adapter crates
+
+## Vector Hybrid Fusion
+
+Phase: `PHASE09`
+
+`engram-store-vector` currently proves sqlite-vec storage and nearest-neighbor
+queries with fixed vectors. FastEmbed BGE-small coverage exists as an opt-in
+smoke test because model downloads should not happen in the default gate.
+
+Remaining work:
+
+- define hybrid fusion policy across keyword, vector, recency, provenance, and
+  hierarchy signals
+- decide how vector source failures appear in `ContextPayload`
+- revisit the `sqlite-vec` dependency pin after crates.io publishes a non-broken
+  release newer than `0.1.9`

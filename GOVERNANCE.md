@@ -1,21 +1,47 @@
 # Governance
 
-Engram is currently maintainer-led.
+Engram is maintainer-led while the project is pre-1.0. The governance model is
+intentionally small until the contributor base and release process are proven.
+
+## Decision Model
+
+The project maintainer owns final decisions for:
+
+- accepted contract changes,
+- crate and package boundaries,
+- release timing,
+- security response,
+- contributor access,
+- ADR acceptance.
+
+Non-trivial technical changes should start as an ADR, RFC, issue, or spec before
+implementation. Contract-breaking changes require an ADR and a new versioned
+contract path rather than changing v1 in place.
 
 ## Maintainer Responsibilities
 
-- Protect accepted contracts from incompatible drift.
-- Review ADRs for durable technical decisions.
-- Keep contribution expectations clear.
-- Require tests or specs for behavior changes.
-- Handle security and conduct reports promptly.
+Maintainers should:
 
-## Decision Records
+- keep public docs accurate,
+- require validation before merge,
+- avoid production or benchmark claims without evidence,
+- protect user data, policy, provenance, and deletion semantics,
+- document compatibility changes before release,
+- respond to security reports through private channels.
 
-Durable decisions live under `docs/adr/`. Contract changes that break accepted
-versions require a new ADR and a new versioned contract package.
+## Contributor Path
 
-## Contract Stewardship
+Contributors can start with issues, docs, fixtures, tests, adapters, and
+well-scoped implementation specs. Broader ownership may be granted after a
+pattern of high-quality contributions and review judgment.
 
-The v1 contract is accepted. Compatible additions may be reviewed through pull
-requests. Breaking changes require a future `contracts/vN/` package.
+## Conflict Resolution
+
+Technical disagreements should be resolved from contracts, tests, ADRs, and
+measured behavior. If consensus does not emerge, the maintainer decides and
+records the durable reasoning in an ADR or issue comment.
+
+## Changes To Governance
+
+Governance changes should be proposed through an RFC or issue before editing
+this document.

@@ -1,6 +1,6 @@
 # Spec: TypeScript Native Surface
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0003
@@ -62,17 +62,17 @@ application and adapter integrations.
 
 ## Acceptance Criteria
 
-- [ ] `@engram/contracts` remains generated from accepted contract artifacts and
+- [x] `@engram/contracts` remains generated from accepted contract artifacts and
   has no manual domain redefinitions.
-- [ ] `@engram/node` exposes a narrow native binding surface for write,
+- [x] `@engram/node` exposes a narrow native binding surface for write,
   retrieve, and forget flows backed by Rust behavior.
-- [ ] `@engram/client` composes generated types and native calls without owning
+- [x] `@engram/client` composes generated types and native calls without owning
   persistence, policy, or domain logic.
-- [ ] Native payload round-trip tests prove Rust accepts and returns the same v1
+- [x] Native payload round-trip tests prove Rust accepts and returns the same v1
   contract shapes TypeScript exports.
-- [ ] Client tests exercise write, retrieve, and forget flows through the local
+- [x] Client tests exercise write, retrieve, and forget flows through the local
   binding surface or a deterministic equivalent declared in the plan.
-- [ ] Package entry points remain facades with behavior split into focused
+- [x] Package entry points remain facades with behavior split into focused
   modules for validation, native transport, client operations, adapters, and
   fixtures.
 

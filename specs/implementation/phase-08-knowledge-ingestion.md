@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft.
+Done for deterministic text ingestion and in-memory repository baseline.
 
 ## Scope
 

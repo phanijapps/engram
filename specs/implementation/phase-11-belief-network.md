@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft.
+Done for in-memory belief and contradiction repository baseline.
 
 ## Scope
 

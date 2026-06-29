@@ -38,6 +38,9 @@ git config core.hooksPath .githooks
 5. Add valid and invalid examples for contract changes.
 6. Run validation before opening a pull request.
 
+See `GOVERNANCE.md` for maintainer decision rules and conflict resolution.
+Release candidates must satisfy `docs/release-checklist.md`.
+
 ## Contract Rules
 
 - Do not break v1 in place.

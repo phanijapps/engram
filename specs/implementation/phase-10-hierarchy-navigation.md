@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft.
+Done for in-memory hierarchy repository and parent-chain navigation baseline.
 
 ## Scope
 

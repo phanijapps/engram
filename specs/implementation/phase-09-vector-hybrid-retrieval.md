@@ -2,11 +2,13 @@
 
 ## Status
 
-Draft.
+Done for sqlite-vec vector index baseline and opt-in FastEmbed BGE-small smoke
+path; hybrid fusion remains future work.
 
 ## Scope
 
-Add semantic retrieval as a replaceable secondary index.
+Add semantic retrieval as a replaceable secondary index. SQLite vector testing
+must use `sqlite-vec` with FastEmbed BGE-small embeddings.
 
 ## Acceptance
 

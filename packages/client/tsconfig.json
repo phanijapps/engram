@@ -4,7 +4,8 @@
     "baseUrl": ".",
     "outDir": "dist",
     "paths": {
-      "@engram/contracts": ["../contracts/src/index.ts"]
+      "@engram/contracts": ["../contracts/src/index.ts"],
+      "@engram/node": ["../node/src/index.ts"]
     }
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]

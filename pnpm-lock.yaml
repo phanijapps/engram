@@ -24,13 +24,31 @@ importers:
         specifier: ^3.0.5
         version: 3.2.6(@types/node@22.20.0)
 
+  packages/adapters:
+    dependencies:
+      '@engram/client':
+        specifier: workspace:*
+        version: link:../client
+      '@engram/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
   packages/client:
     dependencies:
       '@engram/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@engram/node':
+        specifier: workspace:*
+        version: link:../node
 
   packages/contracts: {}
+
+  packages/node:
+    dependencies:
+      '@engram/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
 packages:
 

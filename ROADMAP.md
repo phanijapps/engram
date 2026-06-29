@@ -15,17 +15,26 @@ use the implementation roadmap as the spec-driven execution loop.
   tests.
 - Keep evaluation fixtures executable through the Rust fixture runner.
 - Keep SQLite SQL behavior covered by write/retrieve/forget/eval service tests.
+- Keep native bindings as a JSON transport over Rust behavior.
+- Keep source-grounded knowledge ingestion deterministic and separate from
+  memory records.
+- Keep sqlite-vec vector tests available without making embeddings canonical.
+- Keep hierarchy navigation scoped and provenance-preserving.
+- Keep belief and contradiction records distinct from source truth.
+- Keep dry-run consolidation reports auditable before adding mutating sleep
+  tasks.
+- Keep runtime adapters as wrappers over client transports.
+- Keep public repository docs honest about pre-1.0 readiness and release gates.
 - Keep concrete adapters outside `engram-core`.
 
-## Next: TypeScript And Native Surface
+## Next: Post-Roadmap Slices
 
-- TypeScript client over generated contracts.
-- Native binding package plan and skeleton.
+- Filesystem, Git, and code-symbol ingestion adapters.
+- Hybrid ranking and retrieval fusion.
+- Mutating consolidation tasks with evaluation gates.
 
 ## Later
 
-- SQL and vector adapters.
-- Code and document ingestion.
-- Belief network.
-- Hierarchy navigation.
-- Consolidation and sleep-cycle behavior.
+- Hierarchy construction, retrieval expansion, belief synthesis, and
+  contradiction detection over real evidence.
+- Benchmarks, security review, release automation, and documentation site.

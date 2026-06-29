@@ -34,3 +34,16 @@ This project follows a contract-first changelog while pre-1.0.
 - Accepted SQLite as the first SQL adapter target in ADR 0006.
 - Added SQL-backed `MemoryService` orchestration for write, retrieve, forget,
   and evaluation fixture behavior.
+- Added `engram-node`, `@engram/node`, and native client helpers for a narrow
+  TypeScript binding surface over Rust memory behavior.
+- Added `engram-ingest` with deterministic source/document/chunk ingestion and
+  in-memory knowledge repository support.
+- Added `engram-store-vector` with SQLite `sqlite-vec` fixed-vector tests and
+  an opt-in FastEmbed BGE-small smoke test.
+- Added in-memory hierarchy repository and scoped parent-chain navigation.
+- Added in-memory belief and contradiction repository support.
+- Added a dry-run consolidation service that returns auditable
+  `ConsolidationRun` records without durable mutations.
+- Added `@engram/adapters` with framework-neutral observed transport utilities.
+- Added public governance and release-checklist documentation for pre-1.0
+  hardening.

@@ -1,7 +1,7 @@
 # Plan: TypeScript Native Surface
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting
+- **Status:** Done
 
 > **Plan contract:** this is the implementation strategy. Unlike the spec, this
 > document is allowed to change as you learn. When it changes substantially
@@ -36,8 +36,9 @@ belongs after the stable client surface.
 **Integration tests:** native round-trip tests cover write, retrieve, and forget
 payloads through Rust-backed behavior once the binding crate/package exists.
 
-**Manual verification:** package import smoke tests may be used for the built
-native artifact if automated native loading is not yet stable in CI.
+**Manual verification:** package import smoke tests can be used for published
+native artifacts. The current CI-friendly slice uses Rust unit tests for native
+round trips and Vitest deterministic binding doubles for package behavior.
 
 ## Design (LLD)
 
@@ -63,9 +64,10 @@ returns generated payload types.
 
 - `crates/engram-node` owns native bridge code and Rust serialization
   round-trips.
-- `packages/node` owns native package metadata, exports, and loading behavior.
-- `packages/client` owns public SDK methods, TypeScript validation wrappers,
-  and client-facing error translation.
+- `packages/node` owns native package metadata, exports, loading behavior, and
+  JSON transport wrapping.
+- `packages/client` owns public SDK methods and client construction over
+  injected or native transports.
 - `packages/contracts` owns generated types and schemas.
 - `packages/eval` owns fixture authoring helpers after the native/client surface
   can run fixtures.
@@ -154,7 +156,8 @@ pass.
 ## Rollout
 
 This ships as library packages and a Rust native bridge on the implementation
-branch. There is no service deployment or production data migration.
+branch. There is no service deployment or production data migration. Published
+native artifact naming and CI matrix packaging remain future release work.
 
 ## Risks
 
@@ -166,3 +169,5 @@ branch. There is no service deployment or production data migration.
 ## Changelog
 
 - 2026-06-29: initial plan for the TypeScript/native binding phase.
+- 2026-06-29: implemented NAPI JSON bridge, node transport package, and native
+  client helper.

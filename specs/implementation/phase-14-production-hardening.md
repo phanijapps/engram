@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft.
+Done for the public-repository hygiene slice.
 
 ## Scope
 

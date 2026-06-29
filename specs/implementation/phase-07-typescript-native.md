@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress.
+Done for the local NAPI bridge and TypeScript package surface.
 
 ## Scope
 

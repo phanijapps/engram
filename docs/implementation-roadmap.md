@@ -260,7 +260,8 @@ Acceptance gate:
 
 ## Phase 7: TypeScript Client and Native Binding
 
-Status: in progress.
+Status: complete for local NAPI bridge and package surface; release packaging
+matrix remains future work.
 
 Goal: expose the Rust behavior ergonomically to TypeScript without creating a
 second implementation.
@@ -290,6 +291,10 @@ Acceptance gate:
 - The client can run the same acceptance fixtures against a local engine.
 
 ## Phase 8: Knowledge Ingestion for Code and Documents
+
+Status: complete for deterministic text ingestion and in-memory repository
+baseline; filesystem, Git, code-symbol, and SQL persistence adapters remain
+future work.
 
 Goal: store code and unstructured documents as source-grounded knowledge without
 confusing them with agent memories.
@@ -321,6 +326,9 @@ Acceptance gate:
 
 ## Phase 9: Vector and Hybrid Retrieval
 
+Status: complete for sqlite-vec vector index baseline and opt-in FastEmbed
+BGE-small smoke path; hybrid fusion remains future work.
+
 Goal: add semantic retrieval as a replaceable index, not a dependency baked into
 the core.
 
@@ -348,6 +356,9 @@ Acceptance gate:
 
 ## Phase 10: Hierarchy Navigation
 
+Status: complete for in-memory hierarchy repository and parent-chain navigation;
+construction algorithms and retrieval expansion remain future work.
+
 Goal: add hierarchical memory organization for navigation, compression, and
 retrieval expansion.
 
@@ -371,6 +382,9 @@ Acceptance gate:
 - Rebuilds do not corrupt older hierarchy versions.
 
 ## Phase 11: Belief Network
+
+Status: complete for in-memory belief and contradiction repository baseline;
+synthesis, detection, and retrieval remain future work.
 
 Goal: derive reviewable beliefs and contradictions from evidence without making
 beliefs indistinguishable from source facts.
@@ -396,6 +410,8 @@ Acceptance gate:
 
 ## Phase 12: Consolidation and Sleep Cycle
 
+Status: done for the dry-run run-reporting slice.
+
 Goal: make background consolidation auditable and reversible enough to trust.
 
 Crates:
@@ -420,7 +436,17 @@ Acceptance gate:
 - Failed tasks are recoverable and inspectable.
 - Consolidation improves or preserves evaluation results for protected fixtures.
 
+Shipped slice:
+
+- Added a dry-run `ConsolidationService` implementation in `engram-core`.
+- Validates scope, requester, dry-run mode, and time-window ordering before
+  planning tasks.
+- Returns auditable `ConsolidationRun` records with zero-mutation stats and no
+  scheduler, model provider, or repository dependency.
+
 ## Phase 13: Integrations and Runtime Adapters
+
+Status: done for the framework-neutral observed transport slice.
 
 Goal: make Engram useful from real agent runtimes without contaminating core
 contracts.
@@ -444,7 +470,18 @@ Acceptance gate:
 - Framework adapters can be added or removed without touching domain crates.
 - Examples run in CI or a documented smoke-test path.
 
+Shipped slice:
+
+- Added `@engram/adapters` with an observed transport wrapper over
+  `EngramTransport`.
+- Emits operation, retrieval trace, transport error, and policy-denial-shaped
+  events without changing operation results.
+- Leaves framework-specific adapters, telemetry exporters, and examples for
+  later slices.
+
 ## Phase 14: Production Hardening
+
+Status: done for the public-repository hygiene slice.
 
 Goal: prepare the project for external users and operational use.
 
@@ -464,6 +501,13 @@ Acceptance gate:
 - Benchmarks exist before performance claims are made.
 - Releases can be reproduced from CI.
 - New contributors can run tests and examples from documented commands.
+
+Shipped slice:
+
+- Updated public README status to reflect implemented pre-1.0 behavior.
+- Added governance and release-checklist documentation.
+- Preserved benchmark, security-audit, production-readiness, and release
+  automation claims as future work until backed by evidence and CI automation.
 
 ## Stop Conditions
 

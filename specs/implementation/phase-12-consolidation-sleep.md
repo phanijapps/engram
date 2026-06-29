@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft.
+Done for the dry-run run-reporting slice.
 
 ## Scope
 

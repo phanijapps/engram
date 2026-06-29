@@ -1,0 +1,20 @@
+[package]
+name = "engram-store-vector"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+fastembed-tests = ["dep:fastembed"]
+
+[dependencies]
+engram-core = { path = "../engram-core" }
+engram-domain = { path = "../engram-domain" }
+rusqlite.workspace = true
+sqlite-vec.workspace = true
+
+[dependencies.fastembed]
+version = "5.17.2"
+optional = true
+

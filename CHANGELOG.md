@@ -20,3 +20,5 @@ This project follows a contract-first changelog while pre-1.0.
   budget omissions.
 - Documented storage adapter transaction, idempotency, event, and scope
   semantics before SQL implementation.
+- Split `engram-store-memory` into focused modules to avoid god-module
+  service, retrieval, write, state, scope, dependency, and validation code.

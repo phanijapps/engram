@@ -18,6 +18,17 @@ Current scope:
 - permissive policy authorizer for tests
 - injectable clock and ID generator dependencies
 
+Module boundaries:
+
+- `lib.rs`: crate facade and public re-exports only.
+- `dependencies.rs`: default local clock, ID generator, and permissive policy.
+- `service.rs`: service construction plus repository and event trait impls.
+- `write.rs`: write-memory transaction behavior.
+- `retrieval.rs`: exact/keyword retrieval, scoring, omissions, and composition.
+- `state.rs`: private process-local storage shape.
+- `scope.rs`: shared scope visibility checks.
+- `validation.rs`: behavior-level request validation.
+
 Out of scope:
 
 - SQL persistence

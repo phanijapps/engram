@@ -140,7 +140,7 @@ Acceptance gate:
 
 ## Phase 3: Retrieve Context Slice
 
-Status: in progress.
+Status: complete for in-memory baseline; advanced retrieval remains future work.
 
 Goal: retrieve useful, explainable context from written memories without adding
 embeddings or external services yet.
@@ -171,6 +171,9 @@ Acceptance gate:
 
 ## Phase 4: Forget, Redact, Archive, and Tombstone
 
+Status: complete for in-memory baseline; durable adapter conformance remains
+future work.
+
 Goal: make lifecycle control first-class before adding more stores.
 
 Crates:
@@ -196,6 +199,9 @@ Acceptance gate:
 - Hard delete behavior is explicit and tested.
 
 ## Phase 5: Evaluation Harness
+
+Status: complete for Rust fixture-runner baseline; TypeScript helpers remain
+future work.
 
 Goal: make quality and safety measurable before introducing embeddings,
 hierarchy, beliefs, or production stores.
@@ -223,6 +229,8 @@ Acceptance gate:
   adapters.
 
 ## Phase 6: SQL Persistence Adapter
+
+Status: in progress.
 
 Goal: add durable storage without changing the public domain contract.
 

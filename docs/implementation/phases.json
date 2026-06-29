@@ -1,0 +1,107 @@
+[
+  {
+    "phase_id": "PHASE00",
+    "status": "DONE",
+    "description": "Repository contract baseline",
+    "spec_file": "specs/implementation/phase-00-contract-baseline.md",
+    "plan_file": "docs/implementation/phase-00-contract-baseline.md"
+  },
+  {
+    "phase_id": "PHASE01",
+    "status": "DONE",
+    "description": "Core crate boundaries",
+    "spec_file": "specs/implementation/phase-01-core-boundaries.md",
+    "plan_file": "docs/implementation/phase-01-core-boundaries.md"
+  },
+  {
+    "phase_id": "PHASE02",
+    "status": "DONE",
+    "description": "Write memory completion",
+    "spec_file": "specs/implementation/phase-02-write-memory.md",
+    "plan_file": "docs/implementation/phase-02-write-memory.md"
+  },
+  {
+    "phase_id": "PHASE03",
+    "status": "DONE",
+    "description": "Retrieve context slice",
+    "spec_file": "specs/implementation/phase-03-retrieve-context.md",
+    "plan_file": "docs/implementation/phase-03-retrieve-context.md"
+  },
+  {
+    "phase_id": "PHASE04",
+    "status": "DONE",
+    "description": "Forget, redact, archive, and tombstone",
+    "spec_file": "specs/implementation/phase-04-forget-lifecycle.md",
+    "plan_file": "docs/implementation/phase-04-forget-lifecycle.md"
+  },
+  {
+    "phase_id": "PHASE05",
+    "status": "DONE",
+    "description": "Evaluation harness",
+    "spec_file": "specs/implementation/phase-05-evaluation-harness.md",
+    "plan_file": "docs/implementation/phase-05-evaluation-harness.md"
+  },
+  {
+    "phase_id": "PHASE06",
+    "status": "IN_PROGRESS",
+    "description": "SQL persistence adapter",
+    "spec_file": "specs/implementation/phase-06-sql-adapter.md",
+    "plan_file": "docs/implementation/phase-06-sql-adapter.md"
+  },
+  {
+    "phase_id": "PHASE07",
+    "status": "DRAFT",
+    "description": "TypeScript client and native binding",
+    "spec_file": "specs/implementation/phase-07-typescript-native.md",
+    "plan_file": "docs/implementation/phase-07-typescript-native.md"
+  },
+  {
+    "phase_id": "PHASE08",
+    "status": "DRAFT",
+    "description": "Knowledge ingestion for code and documents",
+    "spec_file": "specs/implementation/phase-08-knowledge-ingestion.md",
+    "plan_file": "docs/implementation/phase-08-knowledge-ingestion.md"
+  },
+  {
+    "phase_id": "PHASE09",
+    "status": "DRAFT",
+    "description": "Vector and hybrid retrieval",
+    "spec_file": "specs/implementation/phase-09-vector-hybrid-retrieval.md",
+    "plan_file": "docs/implementation/phase-09-vector-hybrid-retrieval.md"
+  },
+  {
+    "phase_id": "PHASE10",
+    "status": "DRAFT",
+    "description": "Hierarchy navigation",
+    "spec_file": "specs/implementation/phase-10-hierarchy-navigation.md",
+    "plan_file": "docs/implementation/phase-10-hierarchy-navigation.md"
+  },
+  {
+    "phase_id": "PHASE11",
+    "status": "DRAFT",
+    "description": "Belief network",
+    "spec_file": "specs/implementation/phase-11-belief-network.md",
+    "plan_file": "docs/implementation/phase-11-belief-network.md"
+  },
+  {
+    "phase_id": "PHASE12",
+    "status": "DRAFT",
+    "description": "Consolidation and sleep cycle",
+    "spec_file": "specs/implementation/phase-12-consolidation-sleep.md",
+    "plan_file": "docs/implementation/phase-12-consolidation-sleep.md"
+  },
+  {
+    "phase_id": "PHASE13",
+    "status": "DRAFT",
+    "description": "Integrations and runtime adapters",
+    "spec_file": "specs/implementation/phase-13-runtime-adapters.md",
+    "plan_file": "docs/implementation/phase-13-runtime-adapters.md"
+  },
+  {
+    "phase_id": "PHASE14",
+    "status": "DRAFT",
+    "description": "Production hardening",
+    "spec_file": "specs/implementation/phase-14-production-hardening.md",
+    "plan_file": "docs/implementation/phase-14-production-hardening.md"
+  }
+]

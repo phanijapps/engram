@@ -13,6 +13,7 @@ Current scope:
 
 - v1 write-memory slice
 - exact and keyword retrieve-context baseline
+- forget lifecycle behavior for delete, redact, tombstone, and archive modes
 - memory record lookup
 - memory lifecycle event lookup
 - permissive policy authorizer for tests
@@ -25,6 +26,7 @@ Module boundaries:
 - `service.rs`: service construction plus repository and event trait impls.
 - `write.rs`: write-memory transaction behavior.
 - `retrieval.rs`: exact/keyword retrieval, scoring, omissions, and composition.
+- `forget.rs`: delete/redact/tombstone/archive lifecycle behavior.
 - `state.rs`: private process-local storage shape.
 - `scope.rs`: shared scope visibility checks.
 - `validation.rs`: behavior-level request validation.

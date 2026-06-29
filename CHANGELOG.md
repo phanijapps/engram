@@ -22,3 +22,13 @@ This project follows a contract-first changelog while pre-1.0.
   semantics before SQL implementation.
 - Split `engram-store-memory` into focused modules to avoid god-module
   service, retrieval, write, state, scope, dependency, and validation code.
+- Added loop-da-loop phase state, phase specs, phase plans, and a roadmap status
+  updater.
+- Added in-memory forget lifecycle behavior for delete, redact, tombstone, and
+  archive modes.
+- Marked in-memory retrieve and forget baselines complete in the implementation
+  roadmap.
+- Added `engram-eval` with a deterministic Rust fixture runner for
+  `MemoryService` implementations.
+- Added `engram-store-sql` with a SQLite-backed memory/event repository slice.
+- Accepted SQLite as the first SQL adapter target in ADR 0006.

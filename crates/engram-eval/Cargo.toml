@@ -1,0 +1,16 @@
+[package]
+name = "engram-eval"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+engram-core = { path = "../engram-core" }
+engram-domain = { path = "../engram-domain" }
+
+[dev-dependencies]
+engram-store-memory = { path = "../engram-store-memory" }
+futures.workspace = true
+serde_json.workspace = true

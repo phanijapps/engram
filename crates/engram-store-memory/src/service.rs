@@ -1,8 +1,9 @@
 //! Service and repository implementation for the in-memory adapter.
 //!
 //! This module wires core traits to process-local state. Operation-specific
-//! behavior is delegated to `write` and `retrieval` so construction, repository
-//! access, and request orchestration do not collapse into one large module.
+//! behavior is delegated to `write`, `retrieval`, and `forget` so construction,
+//! repository access, and request orchestration do not collapse into one large
+//! module.
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -22,9 +23,8 @@ use crate::{
 /// In-memory implementation for early Engram memory slices.
 ///
 /// This service supports writes, exact/keyword retrieval, record lookup,
-/// lifecycle event lookup, and status updates against process-local state.
-/// Forgetting remains intentionally unimplemented until the lifecycle slice is
-/// specified and tested.
+/// lifecycle event lookup, forget lifecycle behavior, and status updates
+/// against process-local state.
 #[derive(Clone)]
 pub struct InMemoryMemoryService {
     pub(crate) state: Arc<Mutex<InMemoryState>>,
@@ -190,9 +190,7 @@ impl MemoryService for InMemoryMemoryService {
         crate::retrieval::retrieve(self, request).await
     }
 
-    async fn forget(&self, _request: ForgetRequest) -> CoreResult<ForgetResult> {
-        Err(CoreError::InvalidRequest {
-            reason: "forget is not implemented in the current in-memory slice".to_owned(),
-        })
+    async fn forget(&self, request: ForgetRequest) -> CoreResult<ForgetResult> {
+        crate::forget::forget(self, request).await
     }
 }

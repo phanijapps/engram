@@ -10,14 +10,16 @@ use the implementation roadmap as the spec-driven execution loop.
 - Validate Rust projections against accepted wire contracts.
 - Maintain generated-contract drift checks in CI.
 - Keep write-memory behavior covered by executable fixtures.
-- Extend retrieve-context fixtures from the exact/keyword baseline.
+- Keep retrieve-context behavior covered by exact/keyword fixtures.
+- Keep forget lifecycle behavior covered by delete/redact/tombstone/archive
+  tests.
+- Keep evaluation fixtures executable through the Rust fixture runner.
 - Keep concrete adapters outside `engram-core`.
 
-## Next: Retrieval And Lifecycle Slices
+## Next: SQL Adapter Conformance
 
-- Forget memory slice.
-- Evaluation fixture runner.
 - Reusable adapter conformance fixture utilities.
+- SQLite-backed SQL repository adapter.
 
 ## Later
 

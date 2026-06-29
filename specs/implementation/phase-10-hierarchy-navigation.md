@@ -1,0 +1,16 @@
+# Phase 10 Spec: Hierarchy Navigation
+
+## Status
+
+Draft.
+
+## Scope
+
+Build auditable hierarchy nodes and paths for navigation and retrieval
+expansion.
+
+## Acceptance
+
+- Hierarchy nodes preserve build provenance.
+- Retrieval explains when hierarchy affects results.
+- Rebuilds do not corrupt older hierarchy versions.

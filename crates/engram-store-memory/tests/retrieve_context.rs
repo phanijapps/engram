@@ -296,3 +296,22 @@ fn retrieve_reports_budget_exceeded_candidates() {
     assert_eq!(context.omitted.len(), 1);
     assert_eq!(context.omitted[0].reason, OmittedReason::BudgetExceeded);
 }
+
+#[test]
+fn retrieve_returns_empty_context_for_no_result_query() {
+    let service = service(Arc::new(AllowAll));
+    block_on(service.write_memory(write_request(
+        "Memory about Rust bindings.",
+        "tenant-demo",
+        vec![AllowedUse::Retrieval],
+    )))
+    .expect("write memory");
+
+    let context =
+        block_on(service.retrieve(retrieval_request("unmatched banana query", "tenant-demo")))
+            .expect("retrieve context");
+
+    assert!(context.items.is_empty());
+    assert!(context.omitted.is_empty());
+    assert!(context.source_failures.is_empty());
+}

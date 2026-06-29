@@ -7,6 +7,7 @@
 //! separate crates and satisfy the same core contracts.
 
 mod dependencies;
+mod forget;
 mod retrieval;
 mod scope;
 mod service;

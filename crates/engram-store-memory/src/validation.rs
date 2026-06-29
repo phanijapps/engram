@@ -5,7 +5,7 @@
 //! v1 writes and rejecting zero-valued retrieval budgets.
 
 use engram_core::{CoreError, CoreResult};
-use engram_domain::{AllowedUse, RetrievalRequest, WriteMemoryRequest};
+use engram_domain::{AllowedUse, ForgetRequest, RetrievalRequest, WriteMemoryRequest};
 
 /// Validates behavior-level constraints for v1 memory writes.
 ///
@@ -67,6 +67,25 @@ pub(crate) fn validate_retrieval_request(request: &RetrievalRequest) -> CoreResu
     {
         return Err(CoreError::InvalidRequest {
             reason: "budget limits must be positive when supplied".to_owned(),
+        });
+    }
+    Ok(())
+}
+
+/// Validates behavior-level constraints for forget requests.
+///
+/// Shape validation proves the request can be deserialized. This function keeps
+/// lifecycle behavior deterministic by rejecting empty scope and target values
+/// before any state mutation is attempted.
+pub(crate) fn validate_forget_request(request: &ForgetRequest) -> CoreResult<()> {
+    if request.scope.tenant.trim().is_empty() {
+        return Err(CoreError::InvalidRequest {
+            reason: "scope.tenant is required".to_owned(),
+        });
+    }
+    if request.target_id.trim().is_empty() {
+        return Err(CoreError::InvalidRequest {
+            reason: "targetId is required".to_owned(),
         });
     }
     Ok(())

@@ -32,3 +32,5 @@ This project follows a contract-first changelog while pre-1.0.
   `MemoryService` implementations.
 - Added `engram-store-sql` with a SQLite-backed memory/event repository slice.
 - Accepted SQLite as the first SQL adapter target in ADR 0006.
+- Added SQL-backed `MemoryService` orchestration for write, retrieve, forget,
+  and evaluation fixture behavior.

@@ -1,0 +1,259 @@
+//! SQL-backed exact and keyword retrieval baseline.
+//!
+//! This module intentionally scans canonical memory JSON before specialized SQL
+//! or vector indexes exist. It keeps SQL service behavior aligned with the
+//! in-memory conformance baseline.
+
+use std::collections::BTreeSet;
+
+use engram_core::{CoreError, CoreResult};
+use engram_domain::*;
+
+use crate::{
+    engine::SqlMemoryService, scope::scope_allows, validation::validate_retrieval_request,
+};
+
+/// Retrieves context from SQL records using deterministic keyword scoring.
+///
+/// The baseline applies scope, policy, lifecycle status, budget, and
+/// explanation behavior before any future SQL indexes or vector sources are
+/// introduced.
+pub(crate) async fn retrieve(
+    service: &SqlMemoryService,
+    request: RetrievalRequest,
+) -> CoreResult<ContextPayload> {
+    validate_retrieval_request(&request)?;
+    let now = service.clock.now();
+    let terms = query_terms(&request.query);
+    let include_explanations = request.include_explanations.unwrap_or(false);
+    let max_items = effective_max_items(&request);
+    let records = service.store.list_memories()?;
+
+    let mut candidates = Vec::new();
+    let mut omitted = Vec::new();
+    for record in records {
+        if !scope_allows(&record.scope, &request.scope) {
+            continue;
+        }
+        if !memory_filter_allows(&record, request.filters.as_ref()) {
+            continue;
+        }
+        if let Some(expires_at) = record.policy.expires_at
+            && expires_at <= now
+        {
+            omitted.push(omitted_result(&record, OmittedReason::Expired));
+            continue;
+        }
+        if matches!(
+            record.status,
+            MemoryStatus::Redacted | MemoryStatus::Forgotten
+        ) {
+            omitted.push(omitted_result(&record, OmittedReason::Redacted));
+            continue;
+        }
+        if matches!(record.status, MemoryStatus::Archived)
+            && !request
+                .filters
+                .as_ref()
+                .and_then(|filters| filters.include_archived)
+                .unwrap_or(false)
+        {
+            continue;
+        }
+        if !record.policy.allowed_uses.is_empty()
+            && !record.policy.allowed_uses.contains(&AllowedUse::Retrieval)
+        {
+            omitted.push(omitted_result(&record, OmittedReason::PolicyDenied));
+            continue;
+        }
+        if let Err(error) =
+            service
+                .authorizer
+                .can_retrieve(&request.requester, &record.scope, &record.policy)
+        {
+            if matches!(error, CoreError::PolicyDenied { .. }) {
+                omitted.push(omitted_result(&record, OmittedReason::PolicyDenied));
+                continue;
+            }
+            return Err(error);
+        }
+
+        if let Some((score, matched_terms)) = keyword_score(&record, &request.query, &terms) {
+            candidates.push((score, matched_terms, record));
+        }
+    }
+
+    candidates.sort_by(|left, right| {
+        right
+            .0
+            .total_cmp(&left.0)
+            .then_with(|| right.2.created_at.cmp(&left.2.created_at))
+            .then_with(|| left.2.id.cmp(&right.2.id))
+    });
+
+    let mut items = Vec::new();
+    for (index, (score, matched_terms, record)) in candidates.into_iter().enumerate() {
+        if index >= max_items {
+            omitted.push(omitted_result(&record, OmittedReason::BudgetExceeded));
+            continue;
+        }
+        items.push(retrieval_result(
+            index,
+            score,
+            matched_terms,
+            record,
+            include_explanations,
+        ));
+    }
+
+    Ok(ContextPayload {
+        items,
+        budget: request.budget,
+        omitted,
+        source_failures: Vec::new(),
+        created_at: now,
+    })
+}
+
+fn effective_max_items(request: &RetrievalRequest) -> usize {
+    let limit = request.limit.unwrap_or(u32::MAX);
+    let budget_limit = request
+        .budget
+        .as_ref()
+        .and_then(|budget| budget.max_items)
+        .unwrap_or(u32::MAX);
+    limit.min(budget_limit) as usize
+}
+
+fn memory_filter_allows(record: &MemoryRecord, filters: Option<&QueryFilter>) -> bool {
+    let Some(filters) = filters else {
+        return true;
+    };
+    if !filters.memory_kinds.is_empty() && !filters.memory_kinds.contains(&record.kind) {
+        return false;
+    }
+    if let Some(since) = filters.since
+        && record.created_at < since
+    {
+        return false;
+    }
+    if let Some(until) = filters.until
+        && record.created_at > until
+    {
+        return false;
+    }
+    if let Some(min_confidence) = filters.min_confidence
+        && record.provenance.confidence.unwrap_or(0.0) < min_confidence
+    {
+        return false;
+    }
+    true
+}
+
+fn query_terms(query: &str) -> Vec<String> {
+    query
+        .split(|character: char| !character.is_alphanumeric())
+        .filter_map(|term| {
+            let term = term.trim().to_lowercase();
+            (!term.is_empty()).then_some(term)
+        })
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn keyword_score(
+    record: &MemoryRecord,
+    query: &str,
+    terms: &[String],
+) -> Option<(f32, Vec<String>)> {
+    let content = searchable_content(record);
+    let normalized_query = query.trim().to_lowercase();
+    let exact_match = content.contains(&normalized_query);
+    let matched_terms = terms
+        .iter()
+        .filter(|term| content.contains(term.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !exact_match && matched_terms.is_empty() {
+        return None;
+    }
+
+    let term_score = if terms.is_empty() {
+        0.0
+    } else {
+        matched_terms.len() as f32 / terms.len() as f32
+    };
+    let relevance = if exact_match {
+        1.0_f32.max(term_score)
+    } else {
+        term_score
+    };
+    let confidence = record.provenance.confidence.unwrap_or(1.0);
+    Some((
+        ((relevance * 0.85) + (confidence * 0.15)).min(1.0),
+        matched_terms,
+    ))
+}
+
+fn searchable_content(record: &MemoryRecord) -> String {
+    let mut content = record.content.text.to_lowercase();
+    if let Some(summary) = &record.content.summary {
+        content.push(' ');
+        content.push_str(&summary.to_lowercase());
+    }
+    content
+}
+
+fn retrieval_result(
+    index: usize,
+    total_score: f32,
+    matched_terms: Vec<String>,
+    record: MemoryRecord,
+    include_explanation: bool,
+) -> RetrievalResult {
+    let explanation = include_explanation.then(|| RetrievalExplanation {
+        reason: "Matched memory content with SQL keyword retrieval.".to_owned(),
+        matched_cues: Vec::new(),
+        matched_terms,
+        path: Vec::new(),
+        source_summary: record.content.summary.clone(),
+    });
+    RetrievalResult {
+        id: format!("result-{}", record.id),
+        target_type: RetrievalTargetType::Memory,
+        target_id: record.id.to_string(),
+        content: record.content.text,
+        score: RetrievalScore {
+            total: total_score,
+            relevance: Some(total_score),
+            recency: None,
+            confidence: record.provenance.confidence,
+            cue_match: None,
+            hierarchical_fit: None,
+            policy_fit: Some(1.0),
+        },
+        provenance: record.provenance,
+        policy: record.policy,
+        explanation,
+        fusion_trace: Some(FusionTrace {
+            source: "sql.memory.keyword".to_owned(),
+            source_rank: Some((index + 1) as u32),
+            source_score: Some(total_score),
+            fusion_strategy: Some(FusionStrategy::None),
+            fusion_score: Some(total_score),
+            rerank_strategy: Some(RerankStrategy::None),
+            rerank_score: Some(total_score),
+            deduplicated_with: Vec::new(),
+        }),
+        metadata: None,
+    }
+}
+
+fn omitted_result(record: &MemoryRecord, reason: OmittedReason) -> OmittedResult {
+    OmittedResult {
+        target_type: RetrievalTargetType::Memory,
+        target_id: record.id.to_string(),
+        reason,
+    }
+}

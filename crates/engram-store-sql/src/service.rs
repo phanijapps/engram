@@ -39,11 +39,86 @@ impl SqlMemoryStore {
         })
     }
 
-    fn lock_connection(&self) -> CoreResult<MutexGuard<'_, Connection>> {
+    /// Locks the SQLite connection and maps synchronization failure to core.
+    ///
+    /// The adapter uses one connection behind a mutex for deterministic
+    /// conformance tests. Future pooled adapters should preserve the same error
+    /// boundary.
+    pub(crate) fn lock_connection(&self) -> CoreResult<MutexGuard<'_, Connection>> {
         self.connection.lock().map_err(|_| CoreError::Adapter {
             adapter: "engram-store-sql".to_owned(),
             message: "connection lock poisoned".to_owned(),
         })
+    }
+
+    /// Lists all memories for service-level candidate scanning.
+    ///
+    /// Retrieval still applies scope and policy after loading records; this
+    /// helper exists so the SQL service can share deterministic baseline
+    /// behavior with the in-memory adapter before specialized indexes exist.
+    pub(crate) fn list_memories(&self) -> CoreResult<Vec<MemoryRecord>> {
+        let connection = self.lock_connection()?;
+        let mut statement = connection
+            .prepare("SELECT record_json FROM memories")
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut records = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            records.push(serde_json::from_str::<MemoryRecord>(&json).map_err(json_error)?);
+        }
+        Ok(records)
+    }
+
+    /// Removes a scoped memory record for hard-delete behavior.
+    ///
+    /// The method first verifies the stored record is visible to the supplied
+    /// scope so cross-tenant delete attempts cannot remove hidden data.
+    pub(crate) fn remove_memory(&self, id: &MemoryId, scope: &Scope) -> CoreResult<bool> {
+        let connection = self.lock_connection()?;
+        let record = connection
+            .query_row(
+                "SELECT record_json FROM memories WHERE id = ?1",
+                params![id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(sql_error)?
+            .map(|json| serde_json::from_str::<MemoryRecord>(&json).map_err(json_error))
+            .transpose()?;
+        let Some(record) = record.filter(|record| scope_allows(&record.scope, scope)) else {
+            return Ok(false);
+        };
+        let deleted = connection
+            .execute(
+                "DELETE FROM memories WHERE id = ?1",
+                params![record.id.to_string()],
+            )
+            .map_err(sql_error)?;
+        Ok(deleted > 0)
+    }
+
+    /// Returns a stored idempotent write response when the scoped key exists.
+    ///
+    /// Service write orchestration uses this to return the original response
+    /// without appending a duplicate lifecycle event.
+    pub(crate) fn get_idempotent_response(
+        &self,
+        key: &str,
+    ) -> CoreResult<Option<WriteMemoryResponse>> {
+        let connection = self.lock_connection()?;
+        connection
+            .query_row(
+                "SELECT response_json FROM write_idempotency WHERE key = ?1",
+                params![key],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(sql_error)?
+            .map(|json| serde_json::from_str::<WriteMemoryResponse>(&json).map_err(json_error))
+            .transpose()
     }
 }
 

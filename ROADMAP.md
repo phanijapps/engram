@@ -14,12 +14,13 @@ use the implementation roadmap as the spec-driven execution loop.
 - Keep forget lifecycle behavior covered by delete/redact/tombstone/archive
   tests.
 - Keep evaluation fixtures executable through the Rust fixture runner.
+- Keep SQLite SQL behavior covered by write/retrieve/forget/eval service tests.
 - Keep concrete adapters outside `engram-core`.
 
-## Next: SQL Adapter Conformance
+## Next: TypeScript And Native Surface
 
-- Reusable adapter conformance fixture utilities.
-- SQLite-backed SQL repository adapter.
+- TypeScript client over generated contracts.
+- Native binding package plan and skeleton.
 
 ## Later
 

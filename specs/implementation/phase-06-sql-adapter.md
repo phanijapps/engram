@@ -2,7 +2,7 @@
 
 ## Status
 
-In progress.
+Done for the SQLite in-memory service baseline.
 
 ## Scope
 

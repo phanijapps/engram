@@ -6,6 +6,10 @@
 
 use engram_domain::Scope;
 
+/// Returns true when a stored SQL row is visible to a request scope.
+///
+/// Tenant must match exactly. Optional request scope fields narrow visibility
+/// without requiring every scope dimension to be supplied.
 pub(crate) fn scope_allows(record_scope: &Scope, request_scope: &Scope) -> bool {
     record_scope.tenant == request_scope.tenant
         && optional_scope_matches(&record_scope.subject, &request_scope.subject)

@@ -11,6 +11,7 @@ Current scope:
 - lifecycle event persistence as accepted contract JSON
 - write idempotency through a unique SQL key
 - repository reads for memory records and events
+- SQL-backed `MemoryService` write, retrieve, forget, and evaluation behavior
 
 Out of scope for the first slice:
 
@@ -18,4 +19,4 @@ Out of scope for the first slice:
 - vector indexes
 - embedding providers
 - migrations for multiple deployed versions
-- TypeScript native bindings
+- file-backed SQLite construction

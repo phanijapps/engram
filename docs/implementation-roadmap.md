@@ -17,10 +17,11 @@ ports until their contracts are proven.
 
 Apply this loop to every feature slice.
 
-1. Update or add the spec under `specs/v1/`.
+1. Update or add the implementation spec under `docs/specs/<feature>/`.
 2. Confirm whether the public contract changes.
-3. If the contract changes, update `docs/domain-data-model.md`,
-   `contracts/v1/`, examples, invalid examples, and generated TypeScript.
+3. If the public contract changes, update `docs/domain-data-model.md`,
+   `contracts/v1/`, `specs/v1/`, examples, invalid examples, and generated
+   TypeScript.
 4. Add conformance tests that prove Rust serialization still matches the
    accepted schema.
 5. Implement the smallest vertical slice behind existing traits or a new
@@ -230,7 +231,8 @@ Acceptance gate:
 
 ## Phase 6: SQL Persistence Adapter
 
-Status: in progress.
+Status: complete for SQLite in-memory service baseline; file-backed and server
+database adapters remain future work.
 
 Goal: add durable storage without changing the public domain contract.
 
@@ -257,6 +259,8 @@ Acceptance gate:
 - Migrations are reversible or have an explicit forward-only policy.
 
 ## Phase 7: TypeScript Client and Native Binding
+
+Status: in progress.
 
 Goal: expose the Rust behavior ergonomically to TypeScript without creating a
 second implementation.

@@ -60,10 +60,27 @@ the stack ADR is accepted.
   manually.
 - Memory, knowledge, belief, hierarchy, policy, provenance, and evaluation
   concepts must remain distinct unless an ADR changes the model.
+- Do not create god classes, god modules, or god packages. A file that owns
+  construction, validation, state, orchestration, scoring, persistence, and
+  error translation at the same time must be split before handoff.
+- Crate roots and package entry points should be facades: module declarations,
+  narrow public re-exports, and top-level documentation only. Put behavior in
+  focused modules named for the responsibility they own.
+- When a module grows to mix multiple reasons to change, split it by boundary:
+  domain model, validation, state, repository adapter, operation orchestration,
+  scoring/ranking, policy, serialization, or external integration.
 
 ## Rust Standards
 
 - Prefer small crates with explicit responsibilities over a large shared crate.
+- Prefer focused modules with explicit responsibilities over large `lib.rs`,
+  `main.rs`, `mod.rs`, or catch-all service files.
+- Keep public service structs thin. They may compose dependencies and implement
+  traits, but operation-specific behavior should live in focused modules or
+  collaborators.
+- Do not hide unrelated behavior behind a generic `Manager`, `Service`,
+  `Engine`, `Processor`, or `Handler` unless the surrounding modules make the
+  real responsibilities explicit.
 - Use typed errors; avoid stringly public error contracts.
 - Keep policy checks visible on write, retrieve, ingest, consolidate, and forget
   paths.
@@ -77,6 +94,10 @@ the stack ADR is accepted.
 
 - Keep public APIs typed from generated contracts.
 - Keep package entry points narrow and stable.
+- Keep package `index.ts` files as public facades. Move validation, transport,
+  native binding calls, adapters, fixtures, and formatting into focused modules.
+- Avoid monolithic SDK clients that own transport, retries, validation,
+  serialization, policy decisions, and fixture execution in one class.
 - Treat the native binding package as a transport over Rust behavior, not a
   second implementation.
 - Put framework-specific code in `packages/adapters/`, not in the client core.

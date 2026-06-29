@@ -12,6 +12,7 @@ this crate.
 Current scope:
 
 - v1 write-memory slice
+- exact and keyword retrieve-context baseline
 - memory record lookup
 - memory lifecycle event lookup
 - permissive policy authorizer for tests

@@ -9,14 +9,15 @@ use the implementation roadmap as the spec-driven execution loop.
 - Keep v1 schemas, examples, and specs coherent.
 - Validate Rust projections against accepted wire contracts.
 - Maintain generated-contract drift checks in CI.
-- Complete write-memory behavior through executable fixtures.
+- Keep write-memory behavior covered by executable fixtures.
+- Extend retrieve-context fixtures from the exact/keyword baseline.
 - Keep concrete adapters outside `engram-core`.
 
 ## Next: Retrieval And Lifecycle Slices
 
-- Retrieve context slice.
 - Forget memory slice.
 - Evaluation fixture runner.
+- Reusable adapter conformance fixture utilities.
 
 ## Later
 

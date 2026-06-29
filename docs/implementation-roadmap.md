@@ -105,7 +105,7 @@ Acceptance gate:
 
 ## Phase 2: Write Memory Completion
 
-Status: in progress.
+Status: complete for in-memory baseline; SQL conformance remains future work.
 
 Goal: make writing memories complete enough to become the foundation for later
 retrieval, forgetting, evaluation, and persistence.
@@ -139,6 +139,8 @@ Acceptance gate:
 - Fixtures can be reused by future SQL and native binding implementations.
 
 ## Phase 3: Retrieve Context Slice
+
+Status: in progress.
 
 Goal: retrieve useful, explainable context from written memories without adding
 embeddings or external services yet.
@@ -469,9 +471,12 @@ Do not move to a later phase when any of these are true:
 
 The next implementation loop should be:
 
-1. Convert write-memory examples and invalid examples into executable fixtures.
-2. Add a reusable fixture runner shape for future SQL and native bindings.
-3. Define durable transaction and idempotency semantics before adding SQL.
-4. Add scope-isolation fixture cases for memory reads and event reads.
-5. Start the retrieve-context slice with exact and keyword retrieval only.
+1. Extract the current write and retrieval tests into reusable fixture-runner
+   utilities for future SQL and native bindings.
+2. Add accepted retrieval fixture files for positive recall, forbidden recall,
+   budget omission, and no-result behavior.
+3. Add forget-memory behavior for archive, tombstone, redaction, and hard
+   delete policy outcomes.
+4. Add evaluation report generation over the executable fixture set.
+5. Start SQL adapter design from `docs/adr/0005-storage-adapter-semantics.md`.
 6. Update docs and run the full validation suite.

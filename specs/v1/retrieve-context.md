@@ -23,6 +23,8 @@
 
 - Retrieval must apply scope eligibility before result composition.
 - Retrieval must apply policy before returning result content.
+- The in-memory baseline supports exact and keyword retrieval without requiring
+  vector search, SQL, graph search, or model providers.
 - Each returned item includes `targetType`, `targetId`, `content`, `score`,
   `provenance`, and `policy`.
 - `ContextPayload.createdAt` records composition time.
@@ -50,3 +52,5 @@
 - Policy-denied candidate must not appear in `items`.
 - Budget-excluded candidate may appear in `omitted` with
   `reason: budget_exceeded`.
+- Exact or keyword matches should include matched terms when explanations are
+  requested.

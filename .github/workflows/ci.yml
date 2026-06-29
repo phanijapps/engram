@@ -66,6 +66,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Generate contracts
         run: pnpm run contracts:generate
+      - name: Check generated contract drift
+        run: git diff --exit-code -- packages/contracts/src/generated
       - name: Typecheck
         run: pnpm run typecheck
       - name: Test

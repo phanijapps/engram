@@ -25,6 +25,8 @@
 - The written record preserves `scope`, `policy`, `provenance`, `kind`,
   `content`, and `links` from the request.
 - The write produces a `MemoryEvent` with `kind: written`.
+- The written event is queryable by memory ID and by visible scope through the
+  memory event repository contract.
 - If `idempotencyKey` matches an existing write in the same scope, the response
   may return the existing record with `deduplicated: true`.
 - IDs returned by the implementation are opaque strings.
@@ -46,4 +48,6 @@
 - Missing `scope.tenant` is rejected.
 - Missing `provenance.actor` is rejected.
 - A write outside requester policy returns a denied result or error without
-  creating a retrievable memory.
+  creating a retrievable memory or lifecycle event.
+- An idempotent retry returns the original record and does not append a second
+  written event.

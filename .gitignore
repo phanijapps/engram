@@ -33,6 +33,9 @@ __pycache__/
 
 # Local databases and artifacts
 *.db
+*.db-wal
+*.db-shm
+*.db.scan-manifest.json
 *.sqlite
 *.sqlite3
 *.parquet

@@ -166,5 +166,12 @@
     "description": "In-memory consolidation compaction",
     "spec_file": "docs/specs/in-memory-consolidation-compaction/spec.md",
     "plan_file": "docs/specs/in-memory-consolidation-compaction/plan.md"
+  },
+  {
+    "phase_id": "PHASE24",
+    "status": "DONE",
+    "description": "In-memory consolidation decay",
+    "spec_file": "docs/specs/in-memory-consolidation-decay/spec.md",
+    "plan_file": "docs/specs/in-memory-consolidation-decay/plan.md"
   }
 ]

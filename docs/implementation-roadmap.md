@@ -411,8 +411,8 @@ Acceptance gate:
 ## Phase 12: Consolidation and Sleep Cycle
 
 Status: done for the dry-run run-reporting slice, gated mutating
-orchestration, and in-memory exact-text compaction. Additional task algorithms
-remain future work.
+orchestration, in-memory exact-text compaction, and in-memory policy-expiry
+decay. Additional task algorithms remain future work.
 
 Goal: make background consolidation auditable and reversible enough to trust.
 
@@ -453,6 +453,11 @@ Shipped slice:
 - Added `InMemoryConsolidationExecutor` with exact-text duplicate compaction,
   scoped archiving, `Consolidated` lifecycle events, skipped unsupported task
   reporting, and deterministic adapter tests.
+- Split in-memory consolidation into focused executor, compaction, decay, and
+  audit-helper modules.
+- Added policy-expiry decay that marks due scoped active memories expired,
+  respects legal hold, records `Expired` lifecycle events, and reports
+  deterministic task counters.
 
 ## Phase 13: Integrations and Runtime Adapters
 

@@ -63,3 +63,5 @@ This project follows a contract-first changelog while pre-1.0.
   resolver ports.
 - Added exact-text in-memory consolidation compaction with scoped archive
   events and skipped unsupported task reporting.
+- Added in-memory policy-expiry decay with legal-hold protection and expired
+  lifecycle events.

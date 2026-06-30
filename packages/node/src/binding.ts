@@ -12,9 +12,30 @@ export interface NativeMemoryEngineConstructor {
   new (): NativeMemoryEngineBinding;
 }
 
+/** Native class shape for the Rust-backed knowledge + taxonomy engine. */
+export interface NativeKnowledgeEngineBinding {
+  putEntityJson(entityJson: string): string;
+  putRelationshipJson(relationshipJson: string): string;
+  getEntityJson(requestJson: string): string;
+  putGraphJson(graphJson: string): string;
+  getGraphJson(requestJson: string): string;
+  neighborsJson(requestJson: string): string;
+  putConceptSchemeJson(schemeJson: string): string;
+  getConceptSchemeJson(requestJson: string): string;
+  putConceptJson(conceptJson: string): string;
+  putConceptRelationJson(relationJson: string): string;
+  listConceptsJson(requestJson: string): string;
+}
+
+/** Constructor shape for the Rust-backed knowledge + taxonomy engine. */
+export interface NativeKnowledgeEngineConstructor {
+  new (): NativeKnowledgeEngineBinding;
+}
+
 /** Native addon surface consumed by `@engram/node`. */
 export interface NativeBinding {
   NativeMemoryEngine: NativeMemoryEngineConstructor;
+  NativeKnowledgeEngine: NativeKnowledgeEngineConstructor;
 }
 
 /** Function used to load a native addon, injectable for deterministic tests. */

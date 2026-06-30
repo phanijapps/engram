@@ -10,7 +10,10 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 engram-domain = { path = "../../core/domain" }
+engram-knowledge = { path = "../../core/knowledge" }
 engram-memory = { path = "../../core/memory" }
+engram-runtime = { path = "../../core/runtime" }
+engram-store-knowledge-sqlite = { path = "../../adapters/knowledge/sqlite" }
 engram-store-sql = { path = "../../adapters/memory/sqlite" }
 futures.workspace = true
 napi.workspace = true

@@ -11,6 +11,7 @@ import {
   loadNativeBinding,
   type NativeBinding,
   type NativeBindingLoader,
+  type NativeKnowledgeEngineBinding,
   type NativeMemoryEngineBinding
 } from "./binding.js";
 
@@ -57,4 +58,86 @@ function encode(value: unknown): string {
 
 function decode<T>(json: string): T {
   return JSON.parse(json) as T;
+}
+
+/** Transport interface for knowledge graph + taxonomy operations. */
+export interface NativeKnowledgeTransport {
+  putEntity(entity: unknown): Promise<unknown>;
+  putRelationship(relationship: unknown): Promise<unknown>;
+  getEntity(id: string, scope: unknown): Promise<unknown>;
+  putGraph(graph: unknown): Promise<unknown>;
+  getGraph(id: string, scope: unknown): Promise<unknown>;
+  neighbors(
+    graphId: string,
+    nodeId: string,
+    scope: unknown,
+    limit?: number
+  ): Promise<unknown>;
+  putConceptScheme(scheme: unknown): Promise<unknown>;
+  putConcept(concept: unknown): Promise<unknown>;
+  putConceptRelation(relation: unknown): Promise<unknown>;
+  listConcepts(schemeId: string, scope: unknown): Promise<unknown>;
+}
+
+/** Options for constructing a native knowledge transport. */
+export interface NativeKnowledgeTransportOptions {
+  binding?: NativeBinding;
+  loader?: NativeBindingLoader;
+}
+
+/** Creates a transport that delegates knowledge + taxonomy behavior to Rust. */
+export function createNativeKnowledgeTransport(
+  options: NativeKnowledgeTransportOptions = {}
+): NativeKnowledgeTransport {
+  const binding = options.binding ?? loadNativeBinding(options.loader);
+  return new JsonNativeKnowledgeTransport(new binding.NativeKnowledgeEngine());
+}
+
+class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
+  constructor(private readonly engine: NativeKnowledgeEngineBinding) {}
+
+  async putEntity(entity: unknown): Promise<unknown> {
+    return decode(this.engine.putEntityJson(encode(entity)));
+  }
+
+  async putRelationship(relationship: unknown): Promise<unknown> {
+    return decode(this.engine.putRelationshipJson(encode(relationship)));
+  }
+
+  async getEntity(id: string, scope: unknown): Promise<unknown> {
+    return decode(this.engine.getEntityJson(encode({ id, scope })));
+  }
+
+  async putGraph(graph: unknown): Promise<unknown> {
+    return decode(this.engine.putGraphJson(encode(graph)));
+  }
+
+  async getGraph(id: string, scope: unknown): Promise<unknown> {
+    return decode(this.engine.getGraphJson(encode({ id, scope })));
+  }
+
+  async neighbors(
+    graphId: string,
+    nodeId: string,
+    scope: unknown,
+    limit?: number
+  ): Promise<unknown> {
+    return decode(this.engine.neighborsJson(encode({ graphId, nodeId, scope, limit })));
+  }
+
+  async putConceptScheme(scheme: unknown): Promise<unknown> {
+    return decode(this.engine.putConceptSchemeJson(encode(scheme)));
+  }
+
+  async putConcept(concept: unknown): Promise<unknown> {
+    return decode(this.engine.putConceptJson(encode(concept)));
+  }
+
+  async putConceptRelation(relation: unknown): Promise<unknown> {
+    return decode(this.engine.putConceptRelationJson(encode(relation)));
+  }
+
+  async listConcepts(schemeId: string, scope: unknown): Promise<unknown> {
+    return decode(this.engine.listConceptsJson(encode({ schemeId, scope })));
+  }
 }

@@ -29,8 +29,9 @@ ingest, retrieval, or taxonomy is Slice 1 (after ADR-0007).
 
 ### Always do
 
-- Build the `.node` via `@napi-rs/cli` and load it for real in `@engram/node`'s
-  test (a real-load smoke test against compiled Rust, not only the fake).
+- Build the `.node` via `build:native` (`cargo build --release -p engram-node`)
+  and load it for real in `@engram/node`'s test (a real-load smoke test against
+  compiled Rust, not only the fake).
 - Keep the binding memory-only in this slice — the existing
   `writeMemoryJson`/`retrieveJson`/`forgetJson` over `SqlMemoryService`; no new
   N-API methods.
@@ -40,9 +41,11 @@ ingest, retrieval, or taxonomy is Slice 1 (after ADR-0007).
 
 ### Ask first
 
-- Adding `@napi-rs/cli` as a workspace devDependency / build step (pre-authorized
-  by RFC-0003 D1; recorded here because `workspace-responsibility-layout` flags
-  N-API/TS configuration surfaces as Ask-first).
+- Adding a `build:native` script to `@engram/node` (`cargo build --release` +
+  place the cdylib artifact as `engram_node.node`) — pre-authorized by RFC-0003
+  D1; recorded here because `workspace-responsibility-layout` flags N-API/TS
+  configuration surfaces as Ask-first. (`@napi-rs/cli` reserved for future
+  cross-platform packaging, not this slice.)
 - Making the demo's memory durable (file-backed SQLite). Default for this slice:
   keep the existing in-memory engine; defer file-backed construction to Slice 1.
 
@@ -60,8 +63,8 @@ ingest, retrieval, or taxonomy is Slice 1 (after ADR-0007).
 
 ## Testing Strategy
 
-- **Binding load (goal-based, integration):** `@napi-rs/cli` builds a loadable
-  `engram_node.node` for the host triple, verified by a real-load test. Why
+- **Binding load (goal-based, integration):** the `build:native` script builds a
+  loadable `engram_node.node` for the host triple, verified by a real-load test. Why
   goal-based: the outcome ("a `.node` loads and round-trips") is best proved by
   a build + a load assertion, not a unit invariant.
 - **Real-load round-trip (TDD-shaped integration):** `@engram/node` constructs
@@ -80,7 +83,8 @@ ingest, retrieval, or taxonomy is Slice 1 (after ADR-0007).
 
 ## Acceptance Criteria
 
-- [ ] `@napi-rs/cli` `build` produces a loadable `engram_node.node` for the host
+- [ ] The `build:native` script (`cargo build --release -p engram-node`, then
+  place the cdylib as `engram_node.node`) produces a loadable addon for the host
   triple (linux x64-gnu for local runs) — verifiable by `pnpm --filter
   @engram/node build:native && node -e "require('./packages/node/engram_node.node')"`.
 - [ ] A real-load test in `@engram/node` constructs `NativeMemoryEngine` from the
@@ -103,9 +107,11 @@ ingest, retrieval, or taxonomy is Slice 1 (after ADR-0007).
   (source: `cargo build -p engram-node` probe, 2026-06-30).
 - Technical: N-API crates `napi` 3.9.4 / `napi-derive` 3.5.7 / `napi-build`
   2.3.2 (source: `bindings/node/Cargo.toml`).
-- Technical: `@napi-rs/cli` latest is 3.7.2 and matches the `napi` 3.x Rust
-  crates (source: `npm view @napi-rs/cli version` probe, 2026-06-30). Resolves
-  RFC-0003 OQ1.
+- Technical: a plain `cargo build --release -p engram-node` cdylib loads in Node
+  when placed as `engram_node.node` (source: probe 2026-06-30 — exports
+  `NativeMemoryEngine`; `writeMemoryJson` returned `memory-000001`; real-load test
+  green). `@napi-rs/cli` (3.7.2) is reserved for future multi-triple packaging,
+  not required for the local demo. Resolves RFC-0003 OQ1.
 - Technical: toolchain Node 22.14.0, pnpm 10.0.0, rustc 1.94.1 (source: version
   probes, 2026-06-30); satisfies `engines: node>=22`.
 - Technical: `pnpm-workspace.yaml` globs `packages/*` only; a `demo/*` glob is

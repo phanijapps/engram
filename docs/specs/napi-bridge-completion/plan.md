@@ -8,13 +8,13 @@
 
 ## Approach
 
-Three layers, built bottom-up so each de-risks the next. (1) Wire `@napi-rs/cli`
-into `@engram/node` so a `build:native` script emits a loadable `engram_node.node`
-and the existing loader finds it; replace the fake-only test with a real-load
+Three layers, built bottom-up so each de-risks the next. (1) Add a `build:native` script to `@engram/node` that runs `cargo
+build --release -p engram-node` and places the cdylib as a loadable
+`engram_node.node`; replace the fake-only test with a real-load
 smoke test that constructs `NativeMemoryEngine` from compiled Rust. (2) `demo/
 backend`: a Hono server that constructs the native engine once and exposes three
 memory endpoints over JSON. (3) `demo/frontend`: a Vite + React memory panel
-that calls the backend. The riskiest step is T1 — `@napi-rs/cli` producing a
+that calls the backend. The riskiest step is T1 — the `build:native` script producing a
 loadable `.node` for the `napi` 3.x crate — so it lands first and is gated by the
 real-load test before any backend work begins.
 
@@ -40,8 +40,9 @@ real-load test before any backend work begins.
 
 ### Design decisions
 
-- `@napi-rs/cli` (3.7.2) builds the `napi` 3.x cdylib into `engram_node.node`;
-  no hand-rolled `cargo build` + rename. Traces to: AC1, AC2.
+- `build:native` = `cargo build --release -p engram-node` + place the cdylib as
+  `engram_node.node` (probe-proven to load in Node); no `@napi-rs/cli` dependency
+  for the local demo. Traces to: AC1, AC2.
 - Backend is Hono (minimal, TS-native, Node runtime); one native engine instance
   held in module scope, shared across requests. Traces to: AC3.
 - `demo/*` added to `pnpm-workspace.yaml` so `demo/backend` depends on
@@ -56,8 +57,8 @@ real-load test before any backend work begins.
 
 ### Component / module decomposition
 
-- `packages/node`: add `build:native` script (`napi build`) + `@napi-rs/cli`
-  devDependency; real-load test.
+- `packages/node`: add `build:native` script (`cargo build --release` + place
+  artifact) + real-load test.
 - `demo/backend`: `src/server.ts` (Hono app), `src/engram.ts` (engine
   construction + JSON transport), `package.json`, `tsconfig.json`.
 - `demo/frontend`: Vite + React app; `src/App.tsx` memory panel; `vite.config.ts`
@@ -66,31 +67,30 @@ real-load test before any backend work begins.
 
 ### Dependencies & integration
 
-- `@napi-rs/cli` ^3.7.2 (workspace devDependency) → produces `engram_node.node`.
+- `cargo build --release -p engram-node` (via `build:native`) → produces `engram_node.node`.
 - `demo/backend` → `@engram/node` (workspace:*), `hono`, `@hono/node-server`.
 - `demo/frontend` → `react`, `react-dom`, `vite`, `@vitejs/plugin-react`.
 - No new Rust dependencies; `engram-node` is unchanged source-wise.
 
 ## Tasks
 
-### T1: Produce a loadable `engram_node.node` via `@napi-rs/cli`
+### T1: Produce a loadable `engram_node.node` via a `build:native` script
 
 **Depends on:** none
 
 **Tests:**
-- `napi build` (via `@napi-rs/cli`) exits 0 and writes `engram_node.node` into
-  `packages/node` (AC1).
-- The produced `.node` lands at a path among the loader candidates in
-  `packages/node/src/binding.ts` (`../engram_node.node`, etc.) so
-  `loadNativeBinding()` resolves it without throwing.
+- `pnpm --filter @engram/node build:native` exits 0 and writes `engram_node.node`
+  into `packages/node` (AC1).
+- The produced `.node` lands at a loader-candidate path
+  (`packages/node/engram_node.node`) so `loadNativeBinding()` resolves it without
+  throwing.
 
 **Approach:**
-- Add `@napi-rs/cli` ^3.7.2 as a workspace devDependency.
-- Add `build:native` script to `packages/node/package.json` (`napi build
-  --platform --release`).
-- Add an `[package.metadata.napi]` name field if `@napi-rs/cli` requires it
-  (package name `engram-node` → `engram_node.node`).
-- Run the build; confirm the `.node` lands where `binding.ts` looks.
+- Add `packages/node/scripts/build-native.mjs`: `execFileSync('cargo',
+  ['build','--release','-p','engram-node'])` then copy the platform cdylib
+  (`libengram_node.so` / `.dylib` / `.dll`) to `packages/node/engram_node.node`.
+- Add `build:native` script to `packages/node/package.json`.
+- Add `*.node` to `.gitignore` (build artifact).
 
 **Done when:** `pnpm --filter @engram/node build:native` produces
 `packages/node/engram_node.node` and `node -e "require('./packages/node/engram_node.node')"`
@@ -183,8 +183,8 @@ sourced from Rust, and `pnpm --filter demo-frontend build` succeeds.
 
 ## Risks
 
-- `@napi-rs/cli` 3.7.2 mis-builds the `napi` 3.x crate (symbol/name mismatch).
-  Mitigation: T1's load check catches it before T3.
+- The cdylib fails to load in Node (symbol/registration mismatch).
+  Mitigation: T1's real-load test catches it before T3 (probe already passed).
 - `.node` is host-specific; a reviewer on another OS must rebuild. Mitigation:
   README documents the rebuild; T2 skips cleanly when absent.
 - `pnpm` workspace glob for `demo/*` may not resolve `@engram/node`'s built
@@ -193,3 +193,7 @@ sourced from Rust, and `pnpm --filter demo-frontend build` succeeds.
 ## Changelog
 
 - 2026-06-30: initial plan (Slice 0 of RFC-0003 demo program).
+- 2026-06-30: switched T1 from `@napi-rs/cli` to a plain `cargo build --release`
+  + place-artifact script after a probe proved the cdylib loads in Node when
+  placed as `engram_node.node`; simpler, no new CLI dependency. `@napi-rs/cli`
+  reserved for future cross-platform packaging.

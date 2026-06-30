@@ -25,6 +25,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# Native addon build artifacts (engram_node.node etc.)
+*.node
+
 # Local databases and artifacts
 *.db
 *.sqlite

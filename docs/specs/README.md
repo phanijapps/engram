@@ -26,6 +26,10 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 - [`retrieval-composition-boundary`](retrieval-composition-boundary/spec.md):
   moves multi-source retrieval composition out of store adapters and into a
   storage-neutral retrieval boundary.
+- [`demo-ui-shell`](demo-ui-shell/spec.md): re-skin `demo/frontend` onto the
+  [shadcn-admin](https://github.com/satnaing/shadcn-admin) shell (TanStack Router
+  + Tailwind + shadcn/ui + sidebar + command palette + dark mode) — one route per
+  capability, keep `Graph3D`, backend untouched.
 
 ## Existing Slices
 

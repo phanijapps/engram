@@ -11,6 +11,7 @@ mod dependencies;
 mod forget;
 mod hierarchy;
 mod knowledge;
+mod knowledge_retrieval;
 mod retrieval;
 mod scope;
 mod service;

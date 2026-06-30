@@ -726,6 +726,42 @@ Shipped slice:
 - Added a retrieval test proving injected fusion controls ordering before
   request-limit truncation.
 
+## Phase 21: In-Memory Knowledge Retrieval
+
+Status: complete for source-grounded in-memory chunk retrieval.
+
+Goal: return knowledge chunks alongside memory candidates through the shared
+retrieval fusion path while keeping chunks distinct from memory records.
+
+Crates:
+
+- `engram-store-memory`
+
+Implementation work:
+
+- Snapshot valid source-document-chunk chains from in-memory state.
+- Apply source scope, source kind filters, chunk kind filters, time filters, and
+  retrieval policy checks before fusion.
+- Convert matching chunks into `RetrievalTargetType::Chunk` results.
+- Preserve chunk provenance, source location, summaries, and fusion traces.
+- Compose memory and knowledge candidates through `RetrievalFusion` before
+  final context truncation.
+
+Acceptance gate:
+
+- Matching chunks are returned as chunks, not memories.
+- Cross-scope chunks do not leak.
+- Source and chunk filters affect only knowledge candidates.
+- Budget-exceeded omissions reflect post-fusion memory plus knowledge ranking.
+
+Shipped slice:
+
+- Added focused `knowledge_retrieval` module in `engram-store-memory`.
+- Added tests for chunk recall, source/chunk filters, scope isolation, and
+  post-fusion truncation over memory plus knowledge candidates.
+- Kept vector-backed semantic retrieval deferred until query embedding and
+  policy rehydration contracts are specified.
+
 ## Stop Conditions
 
 Do not move to a later phase when any of these are true:

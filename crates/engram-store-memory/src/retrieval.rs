@@ -11,7 +11,10 @@ use engram_core::{CoreError, CoreResult};
 use engram_domain::*;
 
 use crate::{
-    scope::scope_allows, service::InMemoryMemoryService, validation::validate_retrieval_request,
+    knowledge_retrieval::{KnowledgeSnapshot, knowledge_candidates},
+    scope::scope_allows,
+    service::InMemoryMemoryService,
+    validation::validate_retrieval_request,
 };
 
 /// Retrieves context from in-memory records using the deterministic baseline.
@@ -29,9 +32,23 @@ pub(crate) async fn retrieve(
     let terms = query_terms(&request.query);
     let include_explanations = request.include_explanations.unwrap_or(false);
     let max_items = effective_max_items(&request);
-    let records = {
+    let (records, knowledge_snapshots) = {
         let state = service.lock_state()?;
-        state.memories.values().cloned().collect::<Vec<_>>()
+        let records = state.memories.values().cloned().collect::<Vec<_>>();
+        let knowledge_snapshots = state
+            .knowledge_chunks
+            .values()
+            .filter_map(|chunk| {
+                let document = state.source_documents.get(chunk.document_id.as_str())?;
+                let source = state.knowledge_sources.get(document.source_id.as_str())?;
+                Some(KnowledgeSnapshot {
+                    source: source.clone(),
+                    document: document.clone(),
+                    chunk: chunk.clone(),
+                })
+            })
+            .collect::<Vec<_>>();
+        (records, knowledge_snapshots)
     };
 
     let mut candidates = Vec::new();
@@ -106,6 +123,16 @@ pub(crate) async fn retrieve(
             include_explanations,
         ));
     }
+    let (mut knowledge_results, knowledge_omissions) = knowledge_candidates(
+        knowledge_snapshots,
+        &request,
+        &terms,
+        include_explanations,
+        now,
+        service.authorizer.as_ref(),
+    )?;
+    candidate_results.append(&mut knowledge_results);
+    omitted.extend(knowledge_omissions);
 
     let mut fusion_request = request.clone();
     fusion_request.limit = None;

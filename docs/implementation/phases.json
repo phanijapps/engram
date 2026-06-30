@@ -145,5 +145,12 @@
     "description": "In-memory retrieval fusion wiring",
     "spec_file": "docs/specs/in-memory-retrieval-fusion-wiring/spec.md",
     "plan_file": "docs/specs/in-memory-retrieval-fusion-wiring/plan.md"
+  },
+  {
+    "phase_id": "PHASE21",
+    "status": "DONE",
+    "description": "In-memory knowledge retrieval",
+    "spec_file": "docs/specs/in-memory-knowledge-retrieval/spec.md",
+    "plan_file": "docs/specs/in-memory-knowledge-retrieval/plan.md"
   }
 ]

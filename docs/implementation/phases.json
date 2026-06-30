@@ -173,5 +173,12 @@
     "description": "In-memory consolidation decay",
     "spec_file": "docs/specs/in-memory-consolidation-decay/spec.md",
     "plan_file": "docs/specs/in-memory-consolidation-decay/plan.md"
+  },
+  {
+    "phase_id": "PHASE25",
+    "status": "DONE",
+    "description": "In-memory hierarchy base build",
+    "spec_file": "docs/specs/in-memory-hierarchy-base-build/spec.md",
+    "plan_file": "docs/specs/in-memory-hierarchy-base-build/plan.md"
   }
 ]

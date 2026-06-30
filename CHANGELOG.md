@@ -65,3 +65,5 @@ This project follows a contract-first changelog while pre-1.0.
   events and skipped unsupported task reporting.
 - Added in-memory policy-expiry decay with legal-hold protection and expired
   lifecycle events.
+- Added deterministic in-memory hierarchy base-node construction with
+  hierarchy-built events and path navigation coverage.

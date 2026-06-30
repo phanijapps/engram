@@ -356,8 +356,9 @@ Acceptance gate:
 
 ## Phase 10: Hierarchy Navigation
 
-Status: complete for in-memory hierarchy repository and parent-chain navigation;
-construction algorithms and retrieval expansion remain future work.
+Status: complete for in-memory hierarchy repository, parent-chain navigation,
+and memory base-node construction; aggregate construction and retrieval
+expansion remain future work.
 
 Goal: add hierarchical memory organization for navigation, compression, and
 retrieval expansion.
@@ -411,8 +412,9 @@ Acceptance gate:
 ## Phase 12: Consolidation and Sleep Cycle
 
 Status: done for the dry-run run-reporting slice, gated mutating
-orchestration, in-memory exact-text compaction, and in-memory policy-expiry
-decay. Additional task algorithms remain future work.
+orchestration, in-memory exact-text compaction, in-memory policy-expiry decay,
+and deterministic in-memory hierarchy base-node construction. Additional task
+algorithms remain future work.
 
 Goal: make background consolidation auditable and reversible enough to trust.
 
@@ -458,6 +460,9 @@ Shipped slice:
 - Added policy-expiry decay that marks due scoped active memories expired,
   respects legal hold, records `Expired` lifecycle events, and reports
   deterministic task counters.
+- Added hierarchy base-node construction for scoped active memories, including
+  duplicate prevention, `HierarchyBuilt` lifecycle events, and path navigation
+  coverage.
 
 ## Phase 13: Integrations and Runtime Adapters
 

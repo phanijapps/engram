@@ -30,6 +30,8 @@ use the implementation roadmap as the spec-driven execution loop.
   events.
 - Keep in-memory decay policy-driven: due active memories expire, legal hold
   wins over expiry, and expired lifecycle events carry the audit trail.
+- Keep hierarchy construction incremental: base memory nodes are deterministic
+  and auditable before aggregate clustering or retrieval expansion exists.
 - Keep runtime adapters as wrappers over client transports.
 - Keep public repository docs honest about pre-1.0 readiness and release gates.
 - Keep filesystem source discovery behind the `SourceReader` port.
@@ -49,7 +51,8 @@ use the implementation roadmap as the spec-driven execution loop.
 
 ## Next: Post-Roadmap Slices
 
-- Concrete consolidation task algorithms for hierarchy and belief synthesis.
+- Concrete consolidation task algorithms for aggregate hierarchy and belief
+  synthesis.
 - Production embedding provider wiring and full vector fusion service
   composition.
 

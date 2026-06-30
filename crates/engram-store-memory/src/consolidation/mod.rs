@@ -15,6 +15,7 @@ use crate::service::InMemoryMemoryService;
 mod common;
 mod compaction;
 mod decay;
+mod hierarchy_build;
 
 /// Mutating consolidation executor for the in-memory adapter.
 ///
@@ -70,6 +71,15 @@ impl ConsolidationMutationExecutor for InMemoryConsolidationExecutor {
                 ConsolidationTaskKind::Decay => {
                     let result =
                         decay::expire_due_memories(&self.service, request, started_at, &mut stats)?;
+                    tasks.push(result);
+                }
+                ConsolidationTaskKind::HierarchyBuild => {
+                    let result = hierarchy_build::build_base_nodes(
+                        &self.service,
+                        request,
+                        started_at,
+                        &mut stats,
+                    )?;
                     tasks.push(result);
                 }
                 unsupported => tasks.push(common::skipped_task(unsupported.clone(), started_at)),

@@ -506,6 +506,8 @@ Shipped slice:
 
 - Updated public README status to reflect implemented pre-1.0 behavior.
 - Added governance and release-checklist documentation.
+- Scoped documentation checks to tracked repository docs and tracked repository
+  skills so untracked local Codex assets do not block release gates.
 - Preserved benchmark, security-audit, production-readiness, and release
   automation claims as future work until backed by evidence and CI automation.
 

@@ -50,6 +50,8 @@ unsupported compatibility, benchmark, or production claims.
 - [x] Release checklist documents required gates and unsupported claims.
 - [x] The roadmap distinguishes completed public-hygiene work from future
   benchmark, security, and release automation work.
+- [x] Documentation checks ignore untracked developer-local Codex assets while
+  still validating tracked repository docs and tracked repository skills.
 
 ## Assumptions
 

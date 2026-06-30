@@ -47,3 +47,5 @@ This project follows a contract-first changelog while pre-1.0.
 - Added `@engram/adapters` with framework-neutral observed transport utilities.
 - Added public governance and release-checklist documentation for pre-1.0
   hardening.
+- Scoped documentation checks to tracked repository docs and tracked repository
+  skills.

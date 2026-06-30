@@ -75,3 +75,5 @@ Documentation and repository metadata only.
 
 - 2026-06-29: initial public-repository hygiene plan.
 - 2026-06-29: shipped README status, governance, and release checklist updates.
+- 2026-06-30: scoped documentation hooks to tracked repository docs and tracked
+  repository skills.

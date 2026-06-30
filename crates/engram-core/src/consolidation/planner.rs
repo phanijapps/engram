@@ -89,6 +89,7 @@ pub(crate) fn planned_task_kinds(request: &ConsolidationRequest) -> Vec<Consolid
             vec![
                 ConsolidationTaskKind::Compaction,
                 ConsolidationTaskKind::BeliefSynthesis,
+                ConsolidationTaskKind::BeliefContradictionDetection,
                 ConsolidationTaskKind::HierarchyBuild,
                 ConsolidationTaskKind::Evaluation,
             ]

@@ -69,3 +69,5 @@ This project follows a contract-first changelog while pre-1.0.
   hierarchy-built events and path navigation coverage.
 - Added assertion-backed in-memory belief synthesis with duplicate prevention
   and belief-synthesized lifecycle events.
+- Added explicit assertion-pair in-memory contradiction detection with
+  duplicate-open-record prevention and contradiction-detected lifecycle events.

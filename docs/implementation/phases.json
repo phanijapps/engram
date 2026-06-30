@@ -187,5 +187,12 @@
     "description": "In-memory belief assertion synthesis",
     "spec_file": "docs/specs/in-memory-belief-assertion-synthesis/spec.md",
     "plan_file": "docs/specs/in-memory-belief-assertion-synthesis/plan.md"
+  },
+  {
+    "phase_id": "PHASE27",
+    "status": "DONE",
+    "description": "In-memory assertion contradiction detection",
+    "spec_file": "docs/specs/in-memory-assertion-contradiction-detection/spec.md",
+    "plan_file": "docs/specs/in-memory-assertion-contradiction-detection/plan.md"
   }
 ]

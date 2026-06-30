@@ -15,6 +15,7 @@ use crate::service::InMemoryMemoryService;
 mod belief_synthesis;
 mod common;
 mod compaction;
+mod contradiction_detection;
 mod decay;
 mod hierarchy_build;
 
@@ -85,6 +86,15 @@ impl ConsolidationMutationExecutor for InMemoryConsolidationExecutor {
                 }
                 ConsolidationTaskKind::BeliefSynthesis => {
                     let result = belief_synthesis::synthesize_assertion_beliefs(
+                        &self.service,
+                        request,
+                        started_at,
+                        &mut stats,
+                    )?;
+                    tasks.push(result);
+                }
+                ConsolidationTaskKind::BeliefContradictionDetection => {
+                    let result = contradiction_detection::detect_assertion_contradictions(
                         &self.service,
                         request,
                         started_at,

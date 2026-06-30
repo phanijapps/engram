@@ -6,7 +6,7 @@ use engram_core::{
 };
 use engram_domain::{
     Actor, ActorKind, ConsolidationRequest, ConsolidationRunStatus, ConsolidationStrategy,
-    ConsolidationTaskStatus, Id, Requester, Scope, Timestamp,
+    ConsolidationTaskKind, ConsolidationTaskStatus, Id, Requester, Scope, Timestamp,
 };
 use futures::executor::block_on;
 
@@ -48,7 +48,12 @@ fn dry_run_returns_completed_auditable_run() {
     assert_eq!(run.status, ConsolidationRunStatus::Completed);
     assert_eq!(run.started_at, fixed_time());
     assert_eq!(run.completed_at, Some(fixed_time()));
-    assert_eq!(run.tasks.len(), 4);
+    assert_eq!(run.tasks.len(), 5);
+    assert!(
+        run.tasks
+            .iter()
+            .any(|task| task.task == ConsolidationTaskKind::BeliefContradictionDetection)
+    );
     assert!(
         run.tasks
             .iter()

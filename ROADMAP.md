@@ -33,7 +33,10 @@ use the implementation roadmap as the spec-driven execution loop.
 - Keep hierarchy construction incremental: base memory nodes are deterministic
   and auditable before aggregate clustering or retrieval expansion exists.
 - Keep belief synthesis evidence-bound: explicit memory assertions can produce
-  beliefs, while inference and contradiction detection stay separate.
+  beliefs, while inference and semantic contradiction work stay separate.
+- Keep explicit assertion contradiction detection review-only: new
+  contradictions create open records and source events without mutating source
+  truth.
 - Keep runtime adapters as wrappers over client transports.
 - Keep public repository docs honest about pre-1.0 readiness and release gates.
 - Keep filesystem source discovery behind the `SourceReader` port.
@@ -53,14 +56,14 @@ use the implementation roadmap as the spec-driven execution loop.
 
 ## Next: Post-Roadmap Slices
 
-- Concrete consolidation task algorithms for aggregate hierarchy and
+- Concrete consolidation task algorithms for aggregate hierarchy and semantic
   contradiction detection.
 - Production embedding provider wiring and full vector fusion service
   composition.
 
 ## Later
 
-- Hierarchy construction, retrieval expansion, belief synthesis, and
-  contradiction detection over real evidence.
+- Hierarchy construction, retrieval expansion, belief retrieval, and
+  contradiction resolution over real evidence.
 - AST-backed symbol extraction and symbol relationship graphs.
 - Benchmarks, security review, release automation, and documentation site.

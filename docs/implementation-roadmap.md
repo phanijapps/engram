@@ -384,8 +384,9 @@ Acceptance gate:
 
 ## Phase 11: Belief Network
 
-Status: complete for in-memory belief and contradiction repository baseline and
-assertion-backed belief synthesis; contradiction detection and belief retrieval
+Status: complete for in-memory belief and contradiction repository baseline,
+assertion-backed belief synthesis, and explicit assertion contradiction
+detection; semantic contradiction detection, resolution, and belief retrieval
 remain future work.
 
 Goal: derive reviewable beliefs and contradictions from evidence without making
@@ -415,7 +416,8 @@ Acceptance gate:
 Status: done for the dry-run run-reporting slice, gated mutating
 orchestration, in-memory exact-text compaction, in-memory policy-expiry decay,
 deterministic in-memory hierarchy base-node construction, and assertion-backed
-belief synthesis. Additional task algorithms remain future work.
+belief synthesis, and explicit assertion contradiction detection. Additional
+task algorithms remain future work.
 
 Goal: make background consolidation auditable and reversible enough to trust.
 
@@ -467,6 +469,9 @@ Shipped slice:
 - Added assertion-backed belief synthesis for scoped active memories, including
   duplicate prevention, `BeliefSynthesized` lifecycle events, and deterministic
   task counters.
+- Added explicit assertion-pair contradiction detection for scoped active
+  memories, including duplicate-open-record prevention,
+  `ContradictionDetected` lifecycle events, and deterministic task counters.
 
 ## Phase 13: Integrations and Runtime Adapters
 

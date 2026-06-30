@@ -1,6 +1,6 @@
 # Spec: graph-explorer (whole-knowledge-graph explorer)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Shape:** mixed (service + ui)
 - **Constrained by:** demo-ui-shell (lives in the shell as a route); backend adds endpoints only (no contract/Rust-domain change); consumes the existing knowledge-graph data
 - **Contract:** none (new demo-only endpoints; transport stays `unknown`-typed)
@@ -48,8 +48,8 @@ This phase runs on **existing** ingested data (repos + code/concept entities + t
 
 ## Acceptance Criteria
 
-- [ ] `SqlKnowledgeStore` exposes scope-filtered `list_graphs`/`list_entities`/`list_relationships` (+ Rust unit tests for scope isolation).
-- [ ] `NativeKnowledgeEngine` exposes them over N-API; `NativeKnowledgeTransport` wraps them; `POST /knowledge/overview` returns `{graphs, entities, relationships}` scope-filtered.
-- [ ] A `/explorer` route renders a 2D force-directed graph clustered by source/repo, with cross-repo edges on shared entity names.
-- [ ] Double-clicking a cluster expands it to its member entities + internal relationships; clicking a node opens a detail panel.
-- [ ] Sidebar + command palette include the explorer; backend untouched otherwise; typecheck/build/test green.
+- [x] `SqlKnowledgeStore` exposes scope-filtered `list_graphs`/`list_entities`/`list_relationships` (+ Rust unit tests for scope isolation).
+- [x] `NativeKnowledgeEngine` exposes them over N-API; `NativeKnowledgeTransport` wraps them; `POST /knowledge/overview` returns `{graphs, entities, relationships}` scope-filtered.
+- [x] A `/explorer` route renders a 2D force-directed graph clustered by source/repo, with cross-repo edges on shared entity names.
+- [x] Double-clicking a cluster expands it to its member entities + internal relationships; clicking a node opens a detail panel.
+- [x] Sidebar + command palette include the explorer; backend untouched otherwise; typecheck/build/test green.

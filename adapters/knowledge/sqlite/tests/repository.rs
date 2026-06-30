@@ -469,6 +469,9 @@ fn list_graphs_entities_relationships_are_scope_filtered() {
     assert_eq!(entities.len(), 1);
     assert_eq!(entities[0].graph_id, Some(Id::from("graph-tenant-a")));
     assert_eq!(relationships.len(), 1);
+    assert_eq!(relationships[0].id, Id::from("rel-tenant-a"));
+    // Explicit: tenant-a's list excludes tenant-b's relationship.
+    assert!(!relationships.iter().any(|r| r.id == Id::from("rel-tenant-b")));
     assert_eq!(hidden_graphs.len(), 1);
     assert_eq!(hidden_graphs[0].id, Id::from("graph-tenant-b"));
 }

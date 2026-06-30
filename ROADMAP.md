@@ -30,12 +30,15 @@ use the implementation roadmap as the spec-driven execution loop.
   specified.
 - Keep code-symbol chunking deterministic and declaration-oriented until AST
   parser contracts are specified.
+- Keep hybrid retrieval fusion deterministic, traceable, and independent of
+  concrete stores or embedding providers.
 - Keep concrete adapters outside `engram-core`.
 
 ## Next: Post-Roadmap Slices
 
-- Hybrid ranking and retrieval fusion.
 - Mutating consolidation tasks with evaluation gates.
+- Service wiring for retrieval fusion with memory, knowledge, and vector
+  candidates.
 
 ## Later
 

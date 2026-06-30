@@ -326,8 +326,8 @@ Acceptance gate:
 
 ## Phase 9: Vector and Hybrid Retrieval
 
-Status: complete for sqlite-vec vector index baseline and opt-in FastEmbed
-BGE-small smoke path; hybrid fusion remains future work.
+Status: complete for sqlite-vec vector index baseline, opt-in FastEmbed
+BGE-small smoke path, and deterministic weighted fusion.
 
 Goal: add semantic retrieval as a replaceable index, not a dependency baked into
 the core.
@@ -615,6 +615,41 @@ Shipped slice:
   Go, and JVM/C-like languages.
 - Emits `CodeSymbol` chunks with anchors and line ranges, with a file-level
   fallback when no declaration is recognized.
+
+## Phase 18: Hybrid Retrieval Fusion
+
+Status: complete for deterministic weighted fusion. Advanced rerankers and
+service wiring remain future work.
+
+Goal: merge candidate results from multiple retrieval sources with
+deterministic scoring, duplicate collapse, and explainable fusion traces.
+
+Crates:
+
+- `engram-retrieval`
+
+Implementation work:
+
+- Implement `RetrievalFusion` for a weighted deterministic fusion strategy.
+- Preserve candidate policy, provenance, content, and explanations.
+- Collapse duplicate targets by type and ID.
+- Populate `FusionTrace` with strategy, scores, rank, and deduplication
+  evidence.
+- Keep learned rerankers, vector calls, and service wiring out of this slice.
+
+Acceptance gate:
+
+- Hybrid fusion ranks by deterministic weighted score.
+- Duplicate candidates collapse without hiding trace evidence.
+- Public v1 retrieval contracts do not change.
+
+Shipped slice:
+
+- Added `engram-retrieval` as a focused crate for retrieval collaborators.
+- Added `WeightedRetrievalFusion` over existing `RetrievalResult` candidates.
+- Added source weights, duplicate collapse, request-limit handling, and
+  `FusionTrace` evidence without store, vector, embedding, model, runtime, or
+  TypeScript dependencies.
 
 ## Stop Conditions
 

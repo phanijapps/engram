@@ -8,6 +8,7 @@ members = [
     "crates/engram-node",
     "crates/engram-ingest",
     "crates/engram-store-vector",
+    "crates/engram-retrieval",
 ]
 resolver = "3"
 

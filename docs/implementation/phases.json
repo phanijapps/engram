@@ -124,5 +124,12 @@
     "description": "Code symbol chunker",
     "spec_file": "docs/specs/code-symbol-chunker/spec.md",
     "plan_file": "docs/specs/code-symbol-chunker/plan.md"
+  },
+  {
+    "phase_id": "PHASE18",
+    "status": "DONE",
+    "description": "Hybrid retrieval fusion",
+    "spec_file": "docs/specs/hybrid-retrieval-fusion/spec.md",
+    "plan_file": "docs/specs/hybrid-retrieval-fusion/plan.md"
   }
 ]

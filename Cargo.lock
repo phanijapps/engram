@@ -744,6 +744,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-retrieval"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "engram-core",
+ "engram-domain",
+]
+
+[[package]]
 name = "engram-store-memory"
 version = "0.1.0"
 dependencies = [

@@ -355,5 +355,12 @@
     "description": "Roadmap validation sweep",
     "spec_file": "docs/specs/roadmap-validation-sweep/spec.md",
     "plan_file": "docs/specs/roadmap-validation-sweep/plan.md"
+  },
+  {
+    "phase_id": "PHASE51",
+    "status": "DONE",
+    "description": "Memory and knowledge crate boundaries",
+    "spec_file": "docs/specs/memory-knowledge-boundaries/spec.md",
+    "plan_file": "docs/specs/memory-knowledge-boundaries/plan.md"
   }
 ]

@@ -190,7 +190,7 @@ If any check fails, push back rather than proceeding.
    - Tempted to recommend a best practice mid-reference → link to the
      explanation.
 
-   The link can be a placeholder (`<!-- TODO: link to … -->`) if the
+   The link can be a placeholder (`<!-- pending link to … -->`) if the
    adjacent piece doesn't exist yet; surface those placeholders in the
    final summary so the next guide gets written.
 
@@ -224,7 +224,7 @@ If any check fails, push back rather than proceeding.
    concept, the how-to that uses what reference describes (and vice
    versa), the explanation that says *why* — check whether the file
    exists. If it does, link it. If it doesn't, surface the gap in the
-   final summary as a follow-up TODO; don't write a broken link, and
+   final summary as a follow-up item; don't write a broken link, and
    don't synthesize a plausible-sounding path. From each existing
    sibling, add a reverse link to the new piece. Cross-links are a
    maintenance pact: when one rots, the others surface the drift.

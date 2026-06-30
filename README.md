@@ -64,9 +64,9 @@ Before publishing crates, npm packages, release tags, or benchmark claims, use
                                              |
                                              v
         +----------------------------------------------------------------+
-        |                         Rust core ports                         |
-        | engram-core: MemoryService, repositories, retrieval, policy,   |
-        | evaluation, consolidation, ingestion, hierarchy, belief ports   |
+        |                    Rust behavior boundaries                     |
+        | runtime: errors/policy deps · memory: memory ports · knowledge: |
+        | graph/ontology/source ports · core: orchestration/retrieval     |
         +-------------------------------+--------------------------------+
                                         |
                                         v
@@ -91,16 +91,18 @@ Before publishing crates, npm packages, release tags, or benchmark claims, use
 +--------------------+        +--------------------+        +--------------------+
 ```
 
-The rule of thumb: `engram-core` owns ports and deterministic behavior,
-`engram-domain` owns portable concepts, concrete infrastructure lives behind
-adapters, and TypeScript wraps generated contracts instead of redefining them.
+The rule of thumb: `engram-domain` owns portable concepts, `engram-memory`
+owns memory ports, `engram-knowledge` owns knowledge graph, ontology, source,
+and ingestion ports, `engram-core` composes behavior, concrete infrastructure
+lives behind adapters, and TypeScript wraps generated contracts instead of
+redefining them.
 
 ## Repository Layout
 
 ```text
 contracts/        Accepted JSON schemas, examples, and contract notes.
-crates/           Rust workspace: domain, core, memory, SQL, vector, ingest,
-                  evaluation, retrieval, and node bridge crates.
+crates/           Rust workspace: domain, runtime, memory, knowledge, core,
+                  SQL, vector, ingest, evaluation, retrieval, and node bridge.
 docs/             Architecture docs, ADRs, RFCs, research, specs, and roadmap.
 examples/         Scenario fixtures and usage sketches.
 packages/         TypeScript contracts, client, node package, adapters, eval.

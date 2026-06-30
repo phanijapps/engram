@@ -1,6 +1,9 @@
 [workspace]
 members = [
     "crates/engram-domain",
+    "crates/engram-runtime",
+    "crates/engram-memory",
+    "crates/engram-knowledge",
     "crates/engram-core",
     "crates/engram-store-memory",
     "crates/engram-eval",

@@ -5,7 +5,10 @@ This map is a planning baseline, not an implementation lock. Change it through a
 ## Rust Workspace
 
 - `engram-domain`: accepted domain types, invariants, serialization, version markers.
-- `engram-core`: engine orchestration, policy gates, ports, retrieval pipeline, write path, forget path.
+- `engram-runtime`: shared portable errors, result type, clocks, id generation, scope matching, and policy gates.
+- `engram-memory`: memory service and repository ports for write, retrieve, forget, and lifecycle events.
+- `engram-knowledge`: source-grounded knowledge, knowledge graph, ontology, source reader, chunker, and ingestion ports.
+- `engram-core`: orchestration facade, retrieval pipeline, consolidation, hierarchy, belief, and evaluation ports.
 - `engram-eval`: fixtures, deterministic harness, recall/leakage/ranking assertions.
 - `engram-ingest`: source parsing interfaces, chunking contracts, document/code ingestion pipeline.
 - `engram-hierarchy`: hierarchy build/maintenance algorithms, paths, expansion strategies.
@@ -27,7 +30,8 @@ This map is a planning baseline, not an implementation lock. Change it through a
 ## Boundary Rules
 
 - The Rust domain crate must not depend on storage adapters, model providers, or TypeScript bindings.
-- The Rust core crate depends on ports, not concrete SQL/vector/provider implementations.
+- Memory and knowledge ports live in their own crates so memory storage and knowledge graph storage can use different backends.
+- The Rust core crate composes ports, not concrete SQL/vector/graph/provider implementations.
 - TypeScript may compose application workflows, but deterministic domain behavior should live in Rust.
 - Adapters may translate infrastructure-specific errors into stable domain errors.
 - Generated contracts should be reproducible from source, not edited manually.

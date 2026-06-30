@@ -30,7 +30,7 @@ PLAN, not into a regenerate loop.
 > A stub is **as much of the real failing test as the AC and contract honestly
 > determine** — a *full* assertion where the AC pins exact behaviour, a
 > *contract-surface (shape)* assertion otherwise. **Never less than a compiling
-> assertion on the contract surface; never a bare `TODO`.**
+> assertion on the contract surface; never a bare placeholder comment.**
 
 "Stub" means a **compilable-but-failing test**, not a test double / fake
 dependency. It is a floor, not a licence to write half a test:
@@ -78,7 +78,7 @@ For each TDD-mode AC, name the test function after the criterion. If you cannot
 even name the function — the AC is too abstract to type a test against — that
 **is** the under-specification signal: surface it as a finding ("AC N is not
 concrete enough to stub") and sharpen the spec, rather than writing a hollow
-`TODO`-test.
+placeholder-only test.
 
 ### 2. Resolve stack
 
@@ -100,7 +100,7 @@ One stub **file per plan task** (the grouping default), one **test function per
 AC**, named from the criterion, importing the contract types (or placeholders
 where the contract is thin). Apply the stub-fullness rule above: a full red
 assertion where the AC pins behaviour, a shape assertion with a placeholder
-otherwise. Never a bare `TODO`.
+otherwise. Never a bare placeholder comment.
 
 #### Stub marker convention (defined once)
 
@@ -144,7 +144,7 @@ block the plan (the plan gate runs no compiler; it reads the surfaced result).
 Where an AC's true surface is only reachable out-of-process (a CLI exit code,
 say), assert the nearest in-process data contract and record the out-of-process
 assertion as a deferred assertion for the full test — again, never a bare
-`TODO`.
+placeholder comment.
 
 ### 5. Record
 

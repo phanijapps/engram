@@ -8,8 +8,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ChunkId, ConceptRef, DocumentId, EntityId, EntityRef, EvidenceRef, Metadata, Policy,
-    Provenance, RelationshipId, Scope, SourceId, Timestamp,
+    ChunkId, ConceptRef, DocumentId, EntityId, EntityRef, EvidenceRef, KnowledgeGraphId, Metadata,
+    OntologyRef, Policy, Provenance, RelationshipId, Scope, SourceId, Timestamp,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,6 +35,27 @@ pub struct KnowledgeSource {
     pub uri: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    pub policy: Policy,
+    pub provenance: Provenance,
+    pub created_at: Timestamp,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<Timestamp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Metadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KnowledgeGraph {
+    pub id: KnowledgeGraphId,
+    pub scope: Scope,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub ontology_refs: Vec<OntologyRef>,
     pub policy: Policy,
     pub provenance: Provenance,
     pub created_at: Timestamp,
@@ -173,6 +194,8 @@ pub enum EntityKind {
 #[serde(rename_all = "camelCase")]
 pub struct KnowledgeEntity {
     pub id: EntityId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_id: Option<KnowledgeGraphId>,
     pub kind: EntityKind,
     pub name: String,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
@@ -194,6 +217,8 @@ pub struct KnowledgeEntity {
 #[serde(rename_all = "camelCase")]
 pub struct KnowledgeRelationship {
     pub id: RelationshipId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_id: Option<KnowledgeGraphId>,
     pub subject: EntityRef,
     pub predicate: String,
     pub object: EntityRef,

@@ -686,9 +686,11 @@ dependencies = [
  "async-trait",
  "chrono",
  "engram-domain",
+ "engram-knowledge",
+ "engram-memory",
+ "engram-runtime",
  "futures",
  "serde_json",
- "thiserror",
 ]
 
 [[package]]
@@ -730,6 +732,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-knowledge"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "engram-domain",
+ "engram-runtime",
+]
+
+[[package]]
+name = "engram-memory"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "engram-domain",
+ "engram-runtime",
+]
+
+[[package]]
 name = "engram-node"
 version = "0.1.0"
 dependencies = [
@@ -751,6 +771,14 @@ dependencies = [
  "chrono",
  "engram-core",
  "engram-domain",
+]
+
+[[package]]
+name = "engram-runtime"
+version = "0.1.0"
+dependencies = [
+ "engram-domain",
+ "thiserror",
 ]
 
 [[package]]

@@ -18,16 +18,41 @@ should derive from that model.
 
 ## Core Modules
 
-### Memory Core
+### Domain Contract
 
-Owns the domain model and use-case interfaces.
+Owns portable data shapes and storage-neutral semantics.
+
+- `MemoryRecord` and `MemoryEvent`: agent state and lifecycle.
+- `KnowledgeSource`, `SourceDocument`, and `KnowledgeChunk`: source-grounded
+  corpus content.
+- `KnowledgeGraph`, `KnowledgeEntity`, and `KnowledgeRelationship`: typed graph
+  content.
+- `Ontology`, `OntologyClass`, `OntologyProperty`, and `OntologyAxiom`: graph
+  governance and validation vocabulary.
+- `Provenance` and `Policy`: source, actor, confidence, permission, retention,
+  and sensitivity controls.
+
+### Memory Ports
+
+Own memory service and repository interfaces.
 
 - `MemoryRecord`: canonical persisted memory unit.
 - `MemoryEvent`: append-only event describing creation, update, access, or
   deletion.
-- `Provenance`: source, timestamp, actor, confidence, and derivation chain.
-- `Policy`: scope, permission, retention, and sensitivity controls.
-- `MemoryPort`: write, retrieve, update, consolidate, and forget operations.
+- `MemoryService`: write, retrieve, and forget operations.
+- `MemoryRepository`: memory record persistence.
+- `MemoryEventRepository`: lifecycle event reads.
+
+### Knowledge Ports
+
+Own source-grounded knowledge, graph, ontology, and ingestion interfaces.
+
+- `KnowledgeRepository`: sources, documents, chunks, entities, and
+  relationships.
+- `KnowledgeGraphRepository`: named graph identity and graph traversal.
+- `OntologyRepository`: ontology classes, properties, axioms, and validation.
+- `SourceReader`, `Chunker`, and `IngestionService`: source extraction and
+  normalization.
 
 ### Ingestion
 
@@ -60,10 +85,11 @@ Turns traces into durable knowledge.
 
 Storage should be swappable behind ports.
 
-- Event log for auditability and replay.
-- Document store for canonical records.
+- Memory stores for records, lifecycle events, idempotency, and replay.
+- Knowledge stores for documents, chunks, entities, relationships, and
+  ontologies.
 - Vector index for semantic recall.
-- Graph index for relationships and entity memory.
+- Graph index for relationships, ontology-backed graph traversal, and GraphRAG.
 
 ### Knowledge Source Extension
 
@@ -85,20 +111,24 @@ into core.
 - CLI connector.
 - Evaluation harness connector.
 
-## Initial Package Boundaries
+## Initial Crate Boundaries
 
 ```text
-packages/core
-  Domain types, ports, policies, ranking interfaces.
+crates/engram-domain
+  Portable domain types and serialization contracts.
 
-packages/stores
-  Storage adapters and migrations.
+crates/engram-runtime
+  Shared errors, result type, clocks, id generation, scope matching, policy gates.
 
-packages/connectors
-  Integrations with agent frameworks and apps.
+crates/engram-memory
+  Memory service, memory repository, lifecycle event repository.
 
-packages/evaluations
-  Golden datasets, retrieval tests, safety checks, and metrics.
+crates/engram-knowledge
+  Knowledge repositories, graph repositories, ontology repositories, source
+  readers, chunkers, ingestion.
+
+crates/engram-core
+  Orchestration facade, retrieval, consolidation, hierarchy, belief, evaluation.
 ```
 
 ## First Vertical Slice

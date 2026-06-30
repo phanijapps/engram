@@ -81,7 +81,12 @@ pub type EntityId = Id;
 pub type EvaluationId = Id;
 pub type EventId = Id;
 pub type HierarchyNodeId = Id;
+pub type KnowledgeGraphId = Id;
 pub type MemoryId = Id;
+pub type OntologyAxiomId = Id;
+pub type OntologyClassId = Id;
+pub type OntologyId = Id;
+pub type OntologyPropertyId = Id;
 pub type RelationshipId = Id;
 pub type SourceId = Id;
 
@@ -107,6 +112,17 @@ pub struct ConceptRef {
     pub uri: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OntologyRef {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<OntologyId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,5 +1,5 @@
 [package]
-name = "engram-core"
+name = "engram-knowledge"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,11 +8,4 @@ rust-version.workspace = true
 [dependencies]
 async-trait.workspace = true
 engram-domain = { path = "../engram-domain" }
-engram-knowledge = { path = "../engram-knowledge" }
-engram-memory = { path = "../engram-memory" }
 engram-runtime = { path = "../engram-runtime" }
-serde_json.workspace = true
-
-[dev-dependencies]
-chrono.workspace = true
-futures.workspace = true

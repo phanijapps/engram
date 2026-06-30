@@ -110,9 +110,17 @@ Knowledge
   KnowledgeSource
   SourceDocument
   KnowledgeChunk
+  KnowledgeGraph
   KnowledgeEntity
   KnowledgeRelationship
   EmbeddingRef
+
+Ontology
+  Ontology
+  OntologyClass
+  OntologyProperty
+  OntologyAxiom
+  OntologyValidationFinding
 
 Taxonomy
   ConceptScheme
@@ -576,6 +584,10 @@ Enum:
 
 Knowledge records describe source-grounded information external to, or derived
 from, corpora such as code repositories, documents, URLs, and uploaded files.
+Knowledge graph records describe typed entities and relationships, while
+ontologies describe the classes, properties, axioms, and constraints that govern
+those graphs. A knowledge graph may be stored in Neo4j, a property graph, RDF,
+SQL, or another backend, but the portable model does not encode any backend.
 
 ### KnowledgeSource
 
@@ -608,6 +620,34 @@ Enum:
 - `database`
 - `api`
 - `generated`
+
+### KnowledgeGraph
+
+Named graph boundary for source-grounded entities and relationships.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | KnowledgeGraphId | Stable graph identifier |
+| `scope` | yes | Scope | Graph ownership and access scope |
+| `name` | yes | string | Human-readable graph name |
+| `uri` | no | string | Graph URI or external locator |
+| `version` | no | string | Graph version marker |
+| `ontologyRefs` | no | OntologyRef[] | Ontologies governing this graph |
+| `policy` | yes | Policy | Access and retention policy |
+| `provenance` | yes | Provenance | Graph creation provenance |
+| `createdAt` | yes | Timestamp | Creation time |
+| `updatedAt` | no | Timestamp | Last update |
+| `metadata` | no | object | Adapter-specific metadata |
+
+Rules:
+
+- A graph id is a logical domain boundary, not a database name.
+- A graph may reference multiple ontologies when a domain graph combines
+  source-specific and shared vocabularies.
+- Graph adapters may materialize the graph as labels, relationships, triples,
+  tables, or documents, but those choices stay outside the portable contract.
 
 ### SourceDocument
 
@@ -714,6 +754,7 @@ Fields:
 | Field | Required | Type | Meaning |
 |-------|----------|------|---------|
 | `id` | yes | EntityId | Stable entity identifier |
+| `graphId` | no | KnowledgeGraphId | Containing graph, if graph-scoped |
 | `kind` | yes | EntityKind | Entity category |
 | `name` | yes | string | Canonical name |
 | `aliases` | no | string[] | Alternate names |
@@ -755,6 +796,7 @@ Fields:
 | Field | Required | Type | Meaning |
 |-------|----------|------|---------|
 | `id` | yes | RelationshipId | Stable relationship identifier |
+| `graphId` | no | KnowledgeGraphId | Containing graph, if graph-scoped |
 | `subject` | yes | EntityRef | Subject node |
 | `predicate` | yes | string | Edge type |
 | `object` | yes | EntityRef | Object node |
@@ -800,6 +842,124 @@ Rules:
 - The portable domain model references embeddings but does not require embedding
   vectors inline.
 - Vector storage is adapter-specific.
+
+## Ontology Model
+
+Ontologies are part of the knowledge graph contract. They define the vocabulary,
+classes, properties, axioms, and validation constraints used to interpret graph
+entities and relationships. Taxonomies remain SKOS-aligned concept schemes;
+ontologies govern graph shape and semantics.
+
+### Ontology
+
+Ontology identity and version record.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | OntologyId | Stable ontology identifier |
+| `uri` | yes | string | Ontology URI |
+| `name` | yes | string | Human-readable name |
+| `scope` | yes | Scope | Ontology ownership and access scope |
+| `language` | yes | enum | `property_graph`, `rdf`, `rdfs`, `owl`, `shacl`, `skos`, `custom` |
+| `version` | yes | string | Ontology version |
+| `status` | yes | enum | `draft`, `active`, `deprecated`, `archived` |
+| `imports` | no | OntologyImport[] | Imported ontology URIs and versions |
+| `policy` | yes | Policy | Access and retention policy |
+| `provenance` | yes | Provenance | Creation provenance |
+| `createdAt` | yes | Timestamp | Creation time |
+| `updatedAt` | no | Timestamp | Last update |
+| `metadata` | no | object | Adapter-specific metadata |
+
+### OntologyClass
+
+Class definition for graph entities.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | OntologyClassId | Stable class identifier |
+| `ontologyId` | yes | OntologyId | Owning ontology |
+| `uri` | yes | string | Class URI |
+| `label` | yes | string | Human-readable label |
+| `description` | no | string | Definition or usage note |
+| `parentClassIds` | no | OntologyClassId[] | Immediate parent classes |
+| `conceptRefs` | no | ConceptRef[] | Taxonomy concepts aligned to this class |
+| `status` | yes | enum | `proposed`, `active`, `deprecated`, `rejected` |
+| `provenance` | yes | Provenance | Declaration provenance |
+| `createdAt` | yes | Timestamp | Creation time |
+| `updatedAt` | no | Timestamp | Last update |
+| `metadata` | no | object | Adapter-specific metadata |
+
+### OntologyProperty
+
+Property or edge definition for graph relationships and attributes.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | OntologyPropertyId | Stable property identifier |
+| `ontologyId` | yes | OntologyId | Owning ontology |
+| `uri` | yes | string | Property URI |
+| `label` | yes | string | Human-readable label |
+| `kind` | yes | enum | `object`, `data`, `annotation` |
+| `domainClassId` | no | OntologyClassId | Expected subject class |
+| `rangeClassId` | no | OntologyClassId | Expected object class |
+| `datatype` | no | string | Expected scalar datatype for data properties |
+| `inversePropertyId` | no | OntologyPropertyId | Inverse property, if defined |
+| `status` | yes | enum | `proposed`, `active`, `deprecated`, `rejected` |
+| `provenance` | yes | Provenance | Declaration provenance |
+| `createdAt` | yes | Timestamp | Creation time |
+| `updatedAt` | no | Timestamp | Last update |
+| `metadata` | no | object | Adapter-specific metadata |
+
+### OntologyAxiom
+
+Constraint or semantic rule attached to an ontology.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | OntologyAxiomId | Stable axiom identifier |
+| `ontologyId` | yes | OntologyId | Owning ontology |
+| `kind` | yes | enum | `sub_class_of`, `equivalent_class`, `disjoint_with`, `domain`, `range`, `functional`, `inverse_of`, `transitive`, `symmetric`, `cardinality`, `constraint`, `custom` |
+| `subjectClassId` | no | OntologyClassId | Subject class, when applicable |
+| `propertyId` | no | OntologyPropertyId | Property, when applicable |
+| `objectClassId` | no | OntologyClassId | Object class, when applicable |
+| `expression` | no | object | Storage-neutral constraint expression |
+| `provenance` | yes | Provenance | Declaration provenance |
+| `createdAt` | yes | Timestamp | Creation time |
+| `metadata` | no | object | Adapter-specific metadata |
+
+### OntologyValidationFinding
+
+Result of validating graph records against an ontology.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable finding id |
+| `ontologyId` | yes | OntologyId | Ontology used for validation |
+| `severity` | yes | enum | `info`, `warning`, `error` |
+| `code` | yes | string | Machine-readable finding code |
+| `message` | yes | string | Human-readable explanation |
+| `target` | no | EntityRef | Target entity or relationship reference |
+| `axiomId` | no | OntologyAxiomId | Violated axiom, if known |
+| `provenance` | yes | Provenance | Validation provenance |
+| `detectedAt` | yes | Timestamp | Detection time |
+
+Rules:
+
+- Ontology validation is advisory unless a policy or adapter explicitly treats
+  findings as write blockers.
+- Ontology semantics must be typed in contract fields, not hidden in metadata.
+- Adapter-specific projections such as Neo4j labels, RDF triples, or SQL tables
+  are implementation details.
 
 ## Taxonomy Model
 

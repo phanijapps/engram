@@ -23,7 +23,10 @@ examples/                  Scenario fixtures and usage sketches.
 
 crates/                    Rust workspace.
   engram-domain/        Domain types, invariants, serde, version markers.
-  engram-core/          Engine orchestration, ports, policy, retrieval.
+  engram-runtime/       Shared errors, result type, clocks, ids, policy gates.
+  engram-memory/        Memory service and repository ports.
+  engram-knowledge/     Knowledge, graph, ontology, source, ingestion ports.
+  engram-core/          Orchestration facade, retrieval, consolidation.
   engram-eval/          Deterministic fixtures and regression harness.
   engram-ingest/        Document/code source ingestion and chunking ports.
   engram-hierarchy/     Hierarchy construction, paths, expansion logic.
@@ -50,8 +53,17 @@ the stack ADR is accepted.
   accepted as the generated-contract source.
 - `engram-domain` must not depend on SQL, vector stores, embedding providers,
   async runtimes, Node, N-API, or TypeScript tooling.
-- `engram-core` owns deterministic memory behavior and depends on ports, not
-  concrete infrastructure adapters.
+- `engram-runtime` owns shared runtime primitives only: portable errors, result
+  type, clocks, id generation, scope matching, and policy authorizer traits.
+- `engram-memory` owns memory service and repository ports. It must not own
+  knowledge graph, ontology, source ingestion, vector, or document parsing
+  contracts.
+- `engram-knowledge` owns source-grounded knowledge, graph, ontology, source
+  reader, chunker, and ingestion ports. It must not own memory write, lifecycle
+  event, or forget service contracts.
+- `engram-core` is an orchestration facade and compatibility re-export layer
+  above split behavior crates. It must not become the canonical owner of memory
+  or knowledge ports again.
 - Store, vector, embedding, model, and gateway integrations belong in adapter
   crates or TypeScript packages.
 - TypeScript must not redefine domain truth. It may wrap, validate, compose, and

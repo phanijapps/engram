@@ -11,7 +11,7 @@ import { getBeliefTransport, getKnowledgeTransport, getTransport } from "./engra
 import type { Scope } from "@engram/contracts";
 
 export type QaSource = {
-  kind: "memory" | "belief" | "entity" | "relationship";
+  kind: "memory" | "belief" | "entity" | "relationship" | "chunk";
   id: string;
   text: string;
   source: string;
@@ -41,6 +41,12 @@ export type QaRelationship = {
   subject: { id?: string; name?: string; kind?: string };
   predicate: string;
   object: { id?: string; name?: string; kind?: string };
+};
+export type QaChunk = {
+  id: string;
+  text: string;
+  documentId?: string;
+  entities?: { id?: string }[];
 };
 
 const QA_REQUESTER = {
@@ -74,6 +80,7 @@ export function buildEvidence(
   beliefs: QaBelief[],
   entities: QaEntity[],
   relationships: QaRelationship[],
+  chunks: QaChunk[],
 ): { context: string; sources: QaSource[] } {
   const terms = queryTerms(question);
   const sources: QaSource[] = [];
@@ -128,6 +135,27 @@ export function buildEvidence(
     blocks.push(`[relationship ${r.id}] ${sName} ${r.predicate} ${oName}`);
   }
 
+  // Knowledge chunks: the actual code/document text. Include chunks that
+  // reference a matched entity (entity-ref match) OR whose text contains a
+  // query term. This gives the LLM the real code to explain, not just names.
+  const matchedChunks = chunks
+    .filter((c) => {
+      const byEntity = c.entities?.some((e) => e.id && matchedEntityIds.has(e.id));
+      const byText = terms.some((t) => c.text.toLowerCase().includes(t));
+      return byEntity || byText;
+    })
+    .slice(0, 8);
+  for (const chunk of matchedChunks) {
+    const text = chunk.text.slice(0, 600);
+    blocks.push(`[chunk ${chunk.id}] ${text}`);
+    sources.push({
+      kind: "chunk",
+      id: chunk.id,
+      text: chunk.text.slice(0, 120),
+      source: "code",
+    });
+  }
+
   return {
     context: blocks.length ? blocks.join("\n") : "(no relevant records found)",
     sources,
@@ -141,17 +169,18 @@ const QA_SYSTEM_PROMPT =
   "contains, depends_on, etc.) shown in the context. Cite sources by their [id]. " +
   "If the context does not contain the answer, say so — do not invent records.";
 
-/** Fetch knowledge-graph entities + relationships visible to `scope`. */
-async function fetchGraph(scope: unknown): Promise<{ entities: QaEntity[]; relationships: QaRelationship[] }> {
+/** Fetch knowledge-graph entities + relationships + chunks visible to `scope`. */
+async function fetchGraph(scope: unknown): Promise<{ entities: QaEntity[]; relationships: QaRelationship[]; chunks: QaChunk[] }> {
   try {
     const transport = getKnowledgeTransport();
-    const [entities, relationships] = await Promise.all([
+    const [entities, relationships, chunks] = await Promise.all([
       transport.listEntities(scope),
       transport.listRelationships(scope),
+      transport.listChunks(scope),
     ]);
-    return { entities: entities as QaEntity[], relationships: relationships as QaRelationship[] };
+    return { entities: entities as QaEntity[], relationships: relationships as QaRelationship[], chunks: chunks as QaChunk[] };
   } catch {
-    return { entities: [], relationships: [] };
+    return { entities: [], relationships: [], chunks: [] };
   }
 }
 
@@ -176,6 +205,7 @@ export async function answerQuestion(question: string, scope: unknown): Promise<
     beliefs as QaBelief[],
     graph.entities,
     graph.relationships,
+    graph.chunks,
   );
 
   const config = getLLMConfig();

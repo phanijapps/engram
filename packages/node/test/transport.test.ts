@@ -65,6 +65,7 @@ describe("@engram/node", () => {
         listGraphsJson(): string { return "[]"; }
         listEntitiesJson(): string { return "[]"; }
         listRelationshipsJson(): string { return "[]"; }
+        listChunksJson(): string { return "[]"; }
       },
       NativeIngestEngine: class {
         ingestExtractJson(): string {

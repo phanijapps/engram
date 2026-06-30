@@ -105,6 +105,32 @@ impl SqlKnowledgeStore {
         Ok(entities)
     }
 
+    /// Lists knowledge chunks visible to `scope`. Chunks carry the actual
+    /// document/code text so Q&A can explain what code does (not just its
+    /// call-graph edges).
+    pub async fn list_chunks(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeChunk>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT record_json FROM knowledge_chunks ORDER BY document_id, id",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut chunks = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let chunk = serde_json::from_str::<KnowledgeChunk>(&json).map_err(json_error)?;
+            // Chunks inherit visibility from their source.
+            let source = source_for_chunk(&connection, &chunk)?;
+            if source.map(|s| scope_allows(&s.scope, scope)).unwrap_or(false) {
+                chunks.push(chunk);
+            }
+        }
+        Ok(chunks)
+    }
+
     /// Lists knowledge relationships visible to `scope`.
     pub async fn list_relationships(
         &self,

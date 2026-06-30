@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEvidence, type MemoryItem, type QaBelief, type QaEntity, type QaRelationship } from "./qa.js";
+import { buildEvidence, type MemoryItem, type QaBelief, type QaEntity, type QaRelationship, type QaChunk } from "./qa.js";
 
 const memory = (id: string, text: string): MemoryItem => ({
   targetId: id,
@@ -25,7 +25,7 @@ const rel = (id: string, subj: string, pred: string, obj: string): QaRelationshi
   object: { id: `e-${obj}`, name: obj, kind: "function" },
 });
 
-const NO_GRAPH = { entities: [] as QaEntity[], relationships: [] as QaRelationship[] };
+const NO_GRAPH = { entities: [] as QaEntity[], relationships: [] as QaRelationship[], chunks: [] as QaChunk[] };
 
 describe("buildEvidence", () => {
   it("keeps memories and query-matched beliefs, with sources", () => {
@@ -38,6 +38,7 @@ describe("buildEvidence", () => {
       ],
       NO_GRAPH.entities,
       NO_GRAPH.relationships,
+      NO_GRAPH.chunks,
     );
     expect(sources).toEqual([
       { kind: "memory", id: "mem-1", text: "svc-a restarted at noon", source: "demo" },
@@ -50,7 +51,7 @@ describe("buildEvidence", () => {
   });
 
   it("reports no-relevant-records when nothing matches", () => {
-    const { context, sources } = buildEvidence("zzz nope", [memory("m", "")], [], [], []);
+    const { context, sources } = buildEvidence("zzz nope", [memory("m", "")], [], [], [], []);
     expect(sources).toEqual([]);
     expect(context).toContain("no relevant records");
   });
@@ -58,7 +59,7 @@ describe("buildEvidence", () => {
   it("drops beliefs whose content is empty even on a subject-key match", () => {
     const { sources } = buildEvidence(
       "svc-a status", [],
-      [belief("b1", "svc-a", "")], [], [],
+      [belief("b1", "svc-a", "")], [], [], [],
     );
     expect(sources).toHaveLength(1);
     expect(sources[0].source).toBe("svc-a");
@@ -78,6 +79,10 @@ describe("buildEvidence", () => {
         rel("r1", "intent_analysis", "calls", "parser"),
         rel("r2", "billing", "calls", "unrelated_fn"), // neither endpoint matched → dropped
       ],
+      [
+        { id: "chunk-1", text: "fn intent_analysis() { tokenize(); parse_intent(); classify(); }", entities: [{ id: "e-intent_analysis" }] },
+        { id: "chunk-2", text: "fn billing() { invoice(); }", entities: [{ id: "e-unrelated" }] },
+      ],
     );
     // intent_analysis matched (contains "intent" + "analysis"); parser is a neighbor.
     const entitySources = sources.filter((s) => s.kind === "entity");
@@ -93,5 +98,12 @@ describe("buildEvidence", () => {
     expect(context).toContain("[entity e-intent_analysis] intent_analysis (function)");
     expect(context).toContain("[relationship r1] intent_analysis calls parser");
     expect(context).not.toContain("billing");
+
+    // The chunk referencing intent_analysis is included (the actual code text).
+    const chunkSources = sources.filter((s) => s.kind === "chunk");
+    expect(chunkSources).toHaveLength(1);
+    expect(chunkSources[0].text).toContain("intent_analysis");
+    expect(context).toContain("[chunk chunk-1]");
+    expect(context).not.toContain("[chunk chunk-2]"); // unrelated → dropped
   });
 });

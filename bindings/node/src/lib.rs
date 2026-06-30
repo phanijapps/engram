@@ -280,6 +280,14 @@ impl NativeKnowledgeEngine {
         encode(&result)
     }
 
+    #[napi(js_name = "listChunksJson")]
+    pub fn list_chunks_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.store.list_chunks(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
     // --- OntologyRepository --------------------------------------------------
 
     #[napi(js_name = "putOntologyJson")]

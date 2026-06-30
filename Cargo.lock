@@ -711,6 +711,7 @@ dependencies = [
  "engram-domain",
  "engram-store-memory",
  "futures",
+ "serde",
  "serde_json",
 ]
 

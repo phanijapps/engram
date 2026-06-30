@@ -15,8 +15,13 @@ use engram_domain::*;
 
 pub mod accepted_examples;
 mod contract_runner;
+mod report_summary;
 
 pub use contract_runner::{MemoryContractRunner, RetrievalContractOutcome};
+pub use report_summary::{
+    CaseReportSummary, FixtureReportSummary, FixtureSetReportSummary, summarize_report,
+    summarize_reports,
+};
 
 /// Runs evaluation fixtures against a supplied memory service.
 ///

@@ -334,5 +334,12 @@
     "description": "Forget mode contract examples",
     "spec_file": "docs/specs/forget-mode-contract-examples/spec.md",
     "plan_file": "docs/specs/forget-mode-contract-examples/plan.md"
+  },
+  {
+    "phase_id": "PHASE48",
+    "status": "DONE",
+    "description": "Evaluation report generation",
+    "spec_file": "docs/specs/evaluation-report-generation/spec.md",
+    "plan_file": "docs/specs/evaluation-report-generation/plan.md"
   }
 ]

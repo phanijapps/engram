@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use engram_core::EvaluationRunner;
 use engram_domain::*;
-use engram_eval::MemoryFixtureRunner;
+use engram_eval::{MemoryFixtureRunner, summarize_reports};
 use engram_store_memory::InMemoryMemoryService;
 use futures::executor::block_on;
 
@@ -31,6 +31,7 @@ fn runner_passes_contract_evaluation_fixture() {
 
 #[test]
 fn runner_passes_accepted_retrieval_fixtures() {
+    let mut reports = Vec::new();
     for fixture_json in ACCEPTED_RETRIEVAL_FIXTURES {
         let service = Arc::new(InMemoryMemoryService::new());
         let runner = MemoryFixtureRunner::new(service);
@@ -46,7 +47,13 @@ fn runner_passes_accepted_retrieval_fixtures() {
             "{fixture_id}: {:?}",
             report.cases
         );
+        reports.push(report);
     }
+
+    let summary = summarize_reports(&reports);
+    assert_eq!(summary.total_fixtures, ACCEPTED_RETRIEVAL_FIXTURES.len());
+    assert_eq!(summary.failed_fixtures, 0);
+    assert_eq!(summary.failed_cases, 0);
 }
 
 #[test]

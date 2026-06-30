@@ -105,3 +105,4 @@ This project follows a contract-first changelog while pre-1.0.
   and no-result behavior.
 - Added accepted forget request/result examples for delete, redact, archive,
   and tombstone outcomes.
+- Added serializable evaluation report summaries in `engram-eval`.

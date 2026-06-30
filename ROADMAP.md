@@ -42,6 +42,8 @@ use the implementation roadmap as the spec-driven execution loop.
 - Keep explicit assertion contradiction detection review-only: new
   contradictions create open records and source events without mutating source
   truth.
+- Keep contradiction resolution explicit and review-record-only until target
+  mutation policy has its own spec.
 - Keep belief retrieval explicit in result type: derived beliefs can be recalled
   through shared fusion without pretending to be source memories or chunks.
 - Keep runtime adapters as wrappers over client transports.

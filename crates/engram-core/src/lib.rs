@@ -169,6 +169,21 @@ pub trait BeliefRepository: Send + Sync {
 
     /// Stores a reviewable contradiction between memories, beliefs, or knowledge.
     async fn put_contradiction(&self, contradiction: Contradiction) -> CoreResult<Contradiction>;
+
+    /// Looks up a contradiction review record inside the supplied scope.
+    async fn get_contradiction(
+        &self,
+        id: &ContradictionId,
+        scope: &Scope,
+    ) -> CoreResult<Option<Contradiction>>;
+
+    /// Applies an explicit reviewer resolution to a contradiction record.
+    async fn resolve_contradiction(
+        &self,
+        id: &ContradictionId,
+        scope: &Scope,
+        resolution: ContradictionResolution,
+    ) -> CoreResult<Contradiction>;
 }
 
 /// Persistence and navigation port for hierarchy structures.

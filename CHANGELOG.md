@@ -82,3 +82,5 @@ This project follows a contract-first changelog while pre-1.0.
   parent links, memberships, hierarchy-built events, and idempotency coverage.
 - Added in-memory retrieval-index composition with external candidate fusion,
   budget omissions, and degraded source-failure reporting.
+- Added scoped in-memory contradiction lookup and explicit contradiction
+  resolution records without target mutation.

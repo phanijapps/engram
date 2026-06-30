@@ -51,6 +51,8 @@ record shapes, and distinct contradiction review records.
 
 - [x] In-memory storage persists beliefs through `BeliefRepository`.
 - [x] In-memory storage persists contradictions through `BeliefRepository`.
+- [x] In-memory storage supports scoped contradiction lookup and explicit
+  resolution records through `BeliefRepository`.
 - [x] Belief records retain source evidence, confidence, status, policy,
   provenance, and scope.
 - [x] Contradiction records retain targets, status, severity, provenance, and

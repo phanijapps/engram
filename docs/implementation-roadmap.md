@@ -388,8 +388,8 @@ Acceptance gate:
 
 Status: complete for in-memory belief and contradiction repository baseline,
 assertion-backed belief synthesis, and explicit assertion contradiction
-detection, and in-memory belief retrieval; semantic contradiction detection and
-resolution remain future work.
+detection, in-memory belief retrieval, and explicit contradiction resolution;
+semantic contradiction detection remains future work.
 
 Goal: derive reviewable beliefs and contradictions from evidence without making
 beliefs indistinguishable from source facts.

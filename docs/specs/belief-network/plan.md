@@ -43,8 +43,9 @@ maps. No schema promotion happens in this slice.
 ### Interfaces & contracts
 
 `InMemoryMemoryService` implements `BeliefRepository` for deterministic tests.
-The core trait currently exposes writes only; read/query ports can be added when
-retrieval and review workflows are specified.
+The core trait exposes belief and contradiction writes plus scoped contradiction
+lookup and explicit contradiction resolution. Broader belief query ports can be
+added when review workflows need them.
 
 ### Component / module decomposition
 
@@ -54,8 +55,9 @@ retrieval and review workflows are specified.
 
 ### Failure, edge cases & resilience
 
-The repository stores provided records as-is. Validation, synthesis, detection,
-resolution, and lifecycle transitions remain future behavior.
+The repository stores provided records as-is for writes. Contradiction
+resolution updates only the review record; validation, automatic target
+mutation, and lifecycle transitions remain future behavior.
 
 ## Tasks
 
@@ -82,9 +84,12 @@ or review UI changes ship here.
 
 - Read/query ports are not defined yet, so tests inspect returned writes.
 - Confidence validation is still domain/future behavior.
-- Contradiction resolution workflow remains unspecified.
+- Contradiction resolution is repository-scoped only; higher-level review APIs
+  remain unspecified.
 
 ## Changelog
 
 - 2026-06-29: initial plan for in-memory belief repository baseline.
 - 2026-06-29: implemented in-memory belief and contradiction repository writes.
+- 2026-06-30: added scoped contradiction lookup and explicit contradiction
+  resolution records.

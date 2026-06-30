@@ -229,5 +229,12 @@
     "description": "In-memory retrieval index composition",
     "spec_file": "docs/specs/in-memory-retrieval-index-composition/spec.md",
     "plan_file": "docs/specs/in-memory-retrieval-index-composition/plan.md"
+  },
+  {
+    "phase_id": "PHASE33",
+    "status": "DONE",
+    "description": "In-memory contradiction resolution",
+    "spec_file": "docs/specs/in-memory-contradiction-resolution/spec.md",
+    "plan_file": "docs/specs/in-memory-contradiction-resolution/plan.md"
   }
 ]

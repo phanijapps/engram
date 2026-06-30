@@ -92,3 +92,5 @@ This project follows a contract-first changelog while pre-1.0.
   client usage.
 - Added deterministic in-memory semantic drift detection for time-window
   consolidation.
+- Added deterministic member-derived summaries for in-memory hierarchy
+  aggregate nodes.

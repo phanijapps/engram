@@ -86,6 +86,12 @@ fn hierarchy_build_creates_entity_aggregate_for_scoped_base_nodes() {
         .expect("aggregate node");
     assert_eq!(aggregate.layer, 1);
     assert_eq!(aggregate.name, "Entity: Engram");
+    assert_eq!(
+        aggregate.summary.as_deref(),
+        Some(
+            "Entity: Engram groups 2 memories: summary: Engram uses sqlite-vec; summary: Engram tests FastEmbed BGE small."
+        )
+    );
     assert_eq!(aggregate.scope, scope("engram"));
     assert_eq!(aggregate.members.len(), 2);
     assert!(

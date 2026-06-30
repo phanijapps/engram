@@ -37,6 +37,8 @@ use the implementation roadmap as the spec-driven execution loop.
   its own spec.
 - Keep aggregate hierarchy construction deterministic and entity-backed until
   semantic clustering and model summaries have quality specs.
+- Keep aggregate hierarchy summaries deterministic and member-derived until
+  model-assisted summaries have quality specs.
 - Keep belief synthesis evidence-bound: explicit memory assertions can produce
   beliefs, while inference and semantic contradiction work stay separate.
 - Keep explicit assertion contradiction detection review-only: new

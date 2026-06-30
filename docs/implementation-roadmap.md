@@ -848,6 +848,9 @@ Shipped slice:
   consolidation over explicit assertion changes.
 - Kept drift detection review-only: it writes temporal contradiction records
   and audit events without mutating source memories or beliefs.
+- Added deterministic member-derived summaries for in-memory entity aggregate
+  hierarchy nodes.
+- Kept model-assisted aggregate summaries deferred behind future quality specs.
 
 ## Stop Conditions
 

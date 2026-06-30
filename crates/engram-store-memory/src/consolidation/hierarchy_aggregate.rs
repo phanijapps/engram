@@ -65,6 +65,7 @@ pub(super) fn build_entity_aggregates(
                 node_id: node.id.clone(),
                 memory_id: memory.id.clone(),
                 memory_policy: memory.policy.clone(),
+                member_summary: member_summary(memory),
                 group,
             });
     }
@@ -213,6 +214,7 @@ struct BaseCandidate {
     node_id: HierarchyNodeId,
     memory_id: MemoryId,
     memory_policy: Policy,
+    member_summary: String,
     group: AggregateGroup,
 }
 
@@ -240,6 +242,47 @@ fn aggregate_key(node: &HierarchyNode) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+fn member_summary(memory: &MemoryRecord) -> String {
+    memory
+        .content
+        .summary
+        .as_deref()
+        .filter(|summary| !summary.trim().is_empty())
+        .map(normalize_excerpt)
+        .unwrap_or_else(|| normalize_excerpt(&memory.content.text))
+}
+
+fn aggregate_summary(group: &AggregateGroup, candidates: &[BaseCandidate]) -> String {
+    let excerpts = candidates
+        .iter()
+        .map(|candidate| candidate.member_summary.as_str())
+        .filter(|summary| !summary.is_empty())
+        .take(3)
+        .collect::<Vec<_>>();
+    if excerpts.is_empty() {
+        return format!(
+            "Entity: {} groups {} memories.",
+            group.label,
+            candidates.len()
+        );
+    }
+    format!(
+        "Entity: {} groups {} memories: {}.",
+        group.label,
+        candidates.len(),
+        excerpts.join("; ")
+    )
+}
+
+fn normalize_excerpt(text: &str) -> String {
+    text.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(120)
+        .collect()
+}
+
 fn aggregate_node(
     aggregate_id: HierarchyNodeId,
     request: &ConsolidationRequest,
@@ -253,11 +296,7 @@ fn aggregate_node(
         kind: HierarchyNodeKind::Aggregate,
         layer: 1,
         name: format!("Entity: {}", group.label),
-        summary: Some(format!(
-            "Aggregate of {} memories about {}.",
-            candidates.len(),
-            group.label
-        )),
+        summary: Some(aggregate_summary(group, candidates)),
         parent_id: None,
         members: Vec::new(),
         source_target_type: None,

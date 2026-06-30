@@ -264,5 +264,12 @@
     "description": "In-memory semantic drift detection",
     "spec_file": "docs/specs/in-memory-semantic-drift-detection/spec.md",
     "plan_file": "docs/specs/in-memory-semantic-drift-detection/plan.md"
+  },
+  {
+    "phase_id": "PHASE38",
+    "status": "DONE",
+    "description": "In-memory hierarchy aggregate summaries",
+    "spec_file": "docs/specs/in-memory-hierarchy-aggregate-summaries/spec.md",
+    "plan_file": "docs/specs/in-memory-hierarchy-aggregate-summaries/plan.md"
   }
 ]

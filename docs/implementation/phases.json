@@ -362,5 +362,40 @@
     "description": "Memory and knowledge crate boundaries",
     "spec_file": "docs/specs/memory-knowledge-boundaries/spec.md",
     "plan_file": "docs/specs/memory-knowledge-boundaries/plan.md"
+  },
+  {
+    "phase_id": "PHASE52",
+    "status": "DRAFT",
+    "description": "Demo Slice 0: N-API build pipeline + real memory bridge + Node backend + frontend shell",
+    "spec_file": "docs/specs/napi-bridge-completion/spec.md",
+    "plan_file": "docs/specs/napi-bridge-completion/plan.md"
+  },
+  {
+    "phase_id": "PHASE53",
+    "status": "DRAFT",
+    "description": "Demo Slice 1: SQLite knowledge-graph adapter + TaxonomyRepository port + forbidden-import gate",
+    "spec_file": "docs/specs/sqlite-knowledge-graph/spec.md",
+    "plan_file": "docs/specs/sqlite-knowledge-graph/plan.md"
+  },
+  {
+    "phase_id": "PHASE54",
+    "status": "DRAFT",
+    "description": "Demo Slice 2: deterministic knowledge-graph extractor (code-symbol + document)",
+    "spec_file": "docs/specs/knowledge-graph-extractor/spec.md",
+    "plan_file": "docs/specs/knowledge-graph-extractor/plan.md"
+  },
+  {
+    "phase_id": "PHASE55",
+    "status": "DRAFT",
+    "description": "Demo Slice 3: FastEmbed passage embeddings + fused retrieval wiring",
+    "spec_file": "docs/specs/fastembed-passage-embeddings/spec.md",
+    "plan_file": "docs/specs/fastembed-passage-embeddings/plan.md"
+  },
+  {
+    "phase_id": "PHASE56",
+    "status": "DRAFT",
+    "description": "Demo Slice 4: client-demo-worthy UI polish and full demo wiring",
+    "spec_file": "docs/specs/engram-demo-app/spec.md",
+    "plan_file": "docs/specs/engram-demo-app/plan.md"
   }
 ]

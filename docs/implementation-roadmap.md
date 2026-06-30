@@ -892,5 +892,18 @@ Do not move to a later phase when any of these are true:
 
 ## Near-Term Queue
 
-No queued implementation items remain in this roadmap. Open the next slice with
-a new spec or ADR before adding behavior.
+Demo application program — RFC 0003 (`docs/rfcs/0003-durable-knowledge-demo.md`):
+build a Vite/React demo over durable SQLite knowledge, delivered as five vertical
+slices tracked as `PHASE52`–`PHASE56` in `docs/implementation/phases.json` on
+branch `demo/engram-ui`. Taxonomy-only (ontology out of scope); FastEmbed on for
+the demo; shared SQLite file kept swappable to Postgres + pgvector via the
+Slice 1 forbidden-import gate. ADR-0007 (N-API binding surface extension) lands
+before `PHASE53`.
+
+- `PHASE52` — Slice 0: N-API build pipeline + real memory bridge + Node backend
+  + frontend shell.
+- `PHASE53` — Slice 1: SQLite knowledge adapter + `TaxonomyRepository` +
+  forbidden-import gate (preceded by ADR-0007).
+- `PHASE54` — Slice 2: deterministic graph extractor (code-symbol + document).
+- `PHASE55` — Slice 3: FastEmbed passage embeddings + fused retrieval.
+- `PHASE56` — Slice 4: demo UI polish (Cytoscape graph, query, taxonomy).

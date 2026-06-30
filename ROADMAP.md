@@ -28,11 +28,12 @@ use the implementation roadmap as the spec-driven execution loop.
 - Keep filesystem source discovery behind the `SourceReader` port.
 - Keep Git worktree discovery tracked-file-only until history semantics are
   specified.
+- Keep code-symbol chunking deterministic and declaration-oriented until AST
+  parser contracts are specified.
 - Keep concrete adapters outside `engram-core`.
 
 ## Next: Post-Roadmap Slices
 
-- Code-symbol ingestion adapters.
 - Hybrid ranking and retrieval fusion.
 - Mutating consolidation tasks with evaluation gates.
 
@@ -40,4 +41,5 @@ use the implementation roadmap as the spec-driven execution loop.
 
 - Hierarchy construction, retrieval expansion, belief synthesis, and
   contradiction detection over real evidence.
+- AST-backed symbol extraction and symbol relationship graphs.
 - Benchmarks, security review, release automation, and documentation site.

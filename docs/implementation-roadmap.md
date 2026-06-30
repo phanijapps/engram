@@ -580,6 +580,42 @@ Shipped slice:
 - Reuses filesystem-safe reads to reject untracked paths, traversal, absolute
   paths, symlinks, oversized files, and non-UTF-8 content.
 
+## Phase 17: Code Symbol Chunker
+
+Status: done for deterministic declaration chunking.
+
+Goal: split source-code documents into deterministic symbol-oriented chunks
+without adding parser dependencies or changing public contracts.
+
+Crates:
+
+- `engram-ingest`
+
+Implementation work:
+
+- Implement a `CodeSymbolChunker`.
+- Recognize common declaration lines for Rust, TypeScript/JavaScript, Python,
+  Go, and JVM/C-like languages.
+- Preserve symbol anchors and line ranges in `SourceLocation`.
+- Fall back to a file chunk when no declaration is recognized.
+- Keep AST parsing, symbol graphs, and relationship extraction out of this
+  slice.
+
+Acceptance gate:
+
+- Code-symbol chunks preserve source line ranges and anchors.
+- No-symbol files do not disappear from ingestion.
+- The chunker composes with `KnowledgeIngestor` and does not change public v1
+  contracts.
+
+Shipped slice:
+
+- Added `CodeSymbolChunker` in `engram-ingest`.
+- Recognizes common declaration forms for Rust, TypeScript/JavaScript, Python,
+  Go, and JVM/C-like languages.
+- Emits `CodeSymbol` chunks with anchors and line ranges, with a file-level
+  fallback when no declaration is recognized.
+
 ## Stop Conditions
 
 Do not move to a later phase when any of these are true:

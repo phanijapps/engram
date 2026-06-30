@@ -117,5 +117,12 @@
     "description": "Git source reader",
     "spec_file": "docs/specs/git-source-reader/spec.md",
     "plan_file": "docs/specs/git-source-reader/plan.md"
+  },
+  {
+    "phase_id": "PHASE17",
+    "status": "DONE",
+    "description": "Code symbol chunker",
+    "spec_file": "docs/specs/code-symbol-chunker/spec.md",
+    "plan_file": "docs/specs/code-symbol-chunker/plan.md"
   }
 ]

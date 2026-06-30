@@ -5,6 +5,7 @@
 //! context; those responsibilities belong to adapter and retrieval crates.
 
 mod chunker;
+mod code_symbol;
 mod filesystem;
 mod git;
 mod hash;
@@ -12,6 +13,7 @@ mod ingestor;
 mod request;
 
 pub use chunker::{ChunkCandidate, Chunker, PlainTextChunker, PlainTextChunkerOptions};
+pub use code_symbol::CodeSymbolChunker;
 pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
 pub use git::GitSourceReader;
 pub use hash::content_hash;

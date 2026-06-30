@@ -51,3 +51,4 @@ This project follows a contract-first changelog while pre-1.0.
   skills.
 - Added `FilesystemSourceReader` for deterministic local source discovery.
 - Added `GitSourceReader` for tracked-file local worktree discovery.
+- Added `CodeSymbolChunker` for deterministic declaration-oriented code chunks.

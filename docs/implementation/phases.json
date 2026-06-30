@@ -299,5 +299,12 @@
     "description": "SQLite file-backed construction",
     "spec_file": "docs/specs/sqlite-file-backed-construction/spec.md",
     "plan_file": "docs/specs/sqlite-file-backed-construction/plan.md"
+  },
+  {
+    "phase_id": "PHASE43",
+    "status": "DONE",
+    "description": "Release verification workflow",
+    "spec_file": "docs/specs/release-verification-workflow/spec.md",
+    "plan_file": "docs/specs/release-verification-workflow/plan.md"
   }
 ]

@@ -1,7 +1,10 @@
 # Release Checklist
 
 Engram is pre-1.0. This checklist defines gates for publishing crates, npm
-packages, or release tags. It is not release automation.
+packages, or release tags.
+
+The manual `Release Verification` workflow runs these gates for a selected ref.
+It does not publish crates, npm packages, GitHub Releases, or tags.
 
 ## Required Gates
 

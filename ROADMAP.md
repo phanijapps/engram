@@ -77,6 +77,7 @@ use the implementation roadmap as the spec-driven execution loop.
   crate feature.
 - Keep vector provider feature gates visible in CI without running model
   downloads by default.
+- Keep release verification automated separately from package publishing.
 - Keep local usage examples checked and close to the crate or package that owns
   each public API.
 - Keep concrete adapters outside `engram-core`.

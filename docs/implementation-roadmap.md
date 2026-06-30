@@ -859,6 +859,8 @@ Shipped slice:
 - Aligned README and CONTRIBUTING validation commands with PR and release gates.
 - Added file-backed SQLite construction for local durable SQL adapter smoke
   tests while keeping server database adapters deferred.
+- Added a manual release verification workflow that runs release gates without
+  publishing packages or tags.
 
 ## Stop Conditions
 

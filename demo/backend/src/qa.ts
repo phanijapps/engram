@@ -103,12 +103,24 @@ export function buildEvidence(
     blocks.push(`[belief ${belief.id}] ${belief.subject.key}: ${belief.content}`);
   }
 
-  // Knowledge-graph entities (filtered by query terms on name/kind).
-  const matchedEntityIds = new Set<string>();
-  for (const e of entities) {
-    const hay = `${e.name} ${e.kind ?? ""}`.toLowerCase();
-    if (!terms.some((t) => hay.includes(t))) continue;
-    matchedEntityIds.add(e.id);
+  // Knowledge-graph entities: rank by match quality (exact > prefix > substring)
+  // and cap at 20 so the context stays focused on large repos.
+  const ranked = entities
+    .map((e) => {
+      const name = e.name.toLowerCase();
+      const score = terms.reduce((best, t) => {
+        if (name === t) return Math.max(best, 3);
+        if (name.startsWith(t) || name.endsWith(t)) return Math.max(best, 2);
+        if (name.includes(t)) return Math.max(best, 1);
+        return best;
+      }, 0);
+      return { e, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20);
+  const matchedEntityIds = new Set(ranked.map((x) => x.e.id));
+  for (const { e } of ranked) {
     sources.push({
       kind: "entity",
       id: e.id,
@@ -119,7 +131,10 @@ export function buildEvidence(
   }
 
   // Relationships whose endpoints are matched entities (the local call graph).
+  // Cap at 30 to keep the context manageable.
+  let relCount = 0;
   for (const r of relationships) {
+    if (relCount >= 30) break;
     const sId = r.subject.id;
     const oId = r.object.id;
     if (!sId || !oId) continue;
@@ -133,11 +148,12 @@ export function buildEvidence(
       source: r.graphId ?? "graph",
     });
     blocks.push(`[relationship ${r.id}] ${sName} ${r.predicate} ${oName}`);
+    relCount++;
   }
 
   // Knowledge chunks: the actual code/document text. Include chunks that
   // reference a matched entity (entity-ref match) OR whose text contains a
-  // query term. This gives the LLM the real code to explain, not just names.
+  // query term. Cap at 8 chunks / 600 chars each.
   const matchedChunks = chunks
     .filter((c) => {
       const byEntity = c.entities?.some((e) => e.id && matchedEntityIds.has(e.id));

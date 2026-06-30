@@ -908,3 +908,9 @@ before `PHASE53`.
   **(shipped)**
 - `PHASE55` — Slice 3: FastEmbed passage embeddings + fused retrieval. **(shipped)**
 - `PHASE56` — Slice 4: demo UI polish (Cytoscape graph, query, taxonomy).
+  **(shipped)**
+
+All five demo slices (PHASE52–PHASE56) are shipped: the demo runs end-to-end
+(memory, taxonomy, graph extraction + Cytoscape, FastEmbed semantic search) over
+the `engram-node` N-API bridge with durable shared SQLite. Open the next slice
+with a new spec or ADR before adding behavior.

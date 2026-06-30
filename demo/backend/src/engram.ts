@@ -9,13 +9,19 @@ import {
   type NativeRetrievalTransport,
 } from "@engram/node";
 
+// When ENGRAM_DB is set (the demo server sets it to a shared file), the memory,
+// knowledge, and ingest engines open the SAME SQLite file so state persists
+// across restarts and the ingest + knowledge engines share graph data. When
+// unset (e.g. tests), engines are in-memory.
+const dbPath = (): string | null => process.env.ENGRAM_DB ?? null;
+
 // One Rust-backed engine is held for the process lifetime so write, retrieve,
-// and forget observe the same in-memory SQLite state.
+// and forget observe the same SQLite state.
 let transport: NativeMemoryTransport | null = null;
 
 export function getTransport(): NativeMemoryTransport {
   if (transport === null) {
-    transport = createNativeMemoryTransport();
+    transport = createNativeMemoryTransport({ dbPath: dbPath() });
   }
   return transport;
 }
@@ -25,23 +31,25 @@ let knowledge: NativeKnowledgeTransport | null = null;
 
 export function getKnowledgeTransport(): NativeKnowledgeTransport {
   if (knowledge === null) {
-    knowledge = createNativeKnowledgeTransport();
+    knowledge = createNativeKnowledgeTransport({ dbPath: dbPath() });
   }
   return knowledge;
 }
 
-// One Rust-backed ingest + extract engine.
+// One Rust-backed ingest + extract engine. Shares the knowledge file so extracted
+// graphs are visible to the knowledge engine.
 let ingest: NativeIngestTransport | null = null;
 
 export function getIngestTransport(): NativeIngestTransport {
   if (ingest === null) {
-    ingest = createNativeIngestTransport();
+    ingest = createNativeIngestTransport({ dbPath: dbPath() });
   }
   return ingest;
 }
 
 // One Rust-backed semantic-retrieval engine (FastEmbed + sqlite-vec). The first
 // call constructs the BGE-small model, which may download assets on first run.
+// Vectors stay in-memory (re-indexed each session).
 let retrieval: NativeRetrievalTransport | null = null;
 
 export function getRetrievalTransport(): NativeRetrievalTransport {

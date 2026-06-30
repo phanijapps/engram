@@ -4,9 +4,21 @@ A local, end-to-end demo of Engram memory: a browser UI (Vite + React) talks to 
 Node backend (Hono), which loads the Rust core through the `engram-node` N-API
 binding. **Browser → Node → Rust** — real behavior, no mocks.
 
-This is **Slice 0** of the demo program (RFC 0003): memory write / retrieve /
-forget only. Knowledge ingestion, the knowledge graph, taxonomy, and FastEmbed
-semantic retrieval arrive in later slices.
+This is the demo program (RFC 0003) — all five slices shipped. The UI has four
+panels, all backed by real Rust over the N-API bridge:
+
+- **Memory** — write / retrieve / forget observations.
+- **Taxonomy** — maintain a concept scheme and its concepts.
+- **Ingest & extract graph** — paste code or prose; a deterministic extractor
+  builds entities + `calls`/`mentions` edges, rendered in Cytoscape.
+- **Semantic search** — index a corpus with FastEmbed (BGE-small) and query it
+  over sqlite-vec for nearest chunks.
+
+State is **durable and shared**: the running backend opens one SQLite file
+(`demo-engram.db`, set via `ENGRAM_DB`) for memory, knowledge, and ingest, so
+writes persist across restarts and a graph extracted by ingest is visible to the
+knowledge engine. (Vectors for semantic search are in-memory, re-indexed each
+session; the FastEmbed model downloads on first retrieval use, then is cached.)
 
 ## Prerequisites
 

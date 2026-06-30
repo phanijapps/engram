@@ -9,7 +9,7 @@ export interface NativeMemoryEngineBinding {
 
 /** Constructor shape for the Rust-backed local memory engine. */
 export interface NativeMemoryEngineConstructor {
-  new (): NativeMemoryEngineBinding;
+  new (path?: string | null): NativeMemoryEngineBinding;
 }
 
 /** Native class shape for the Rust-backed knowledge + taxonomy engine. */
@@ -29,7 +29,7 @@ export interface NativeKnowledgeEngineBinding {
 
 /** Constructor shape for the Rust-backed knowledge + taxonomy engine. */
 export interface NativeKnowledgeEngineConstructor {
-  new (): NativeKnowledgeEngineBinding;
+  new (path?: string | null): NativeKnowledgeEngineBinding;
 }
 
 /** Native class shape for the Rust-backed ingest + extract engine. */
@@ -39,7 +39,7 @@ export interface NativeIngestEngineBinding {
 
 /** Constructor shape for the Rust-backed ingest + extract engine. */
 export interface NativeIngestEngineConstructor {
-  new (): NativeIngestEngineBinding;
+  new (path?: string | null): NativeIngestEngineBinding;
 }
 
 /** Native class shape for the Rust-backed semantic-retrieval engine (FastEmbed). */

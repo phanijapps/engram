@@ -393,7 +393,7 @@
   },
   {
     "phase_id": "PHASE56",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "Demo Slice 4: client-demo-worthy UI polish and full demo wiring",
     "spec_file": "docs/specs/engram-demo-app/spec.md",
     "plan_file": "docs/specs/engram-demo-app/plan.md"

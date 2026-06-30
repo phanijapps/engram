@@ -17,6 +17,9 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 - [`fastembed-passage-embeddings`](fastembed-passage-embeddings/spec.md): demo
   Slice 3 — feature-gated `NativeRetrievalEngine` (BGE-small passage + query
   embeddings over sqlite-vec) + `/retrieval/*` + SearchPanel (RFC-0003, PHASE55).
+  Shipped.
+- [`engram-demo-app`](engram-demo-app/spec.md): demo Slice 4 — durable shared
+  SQLite across memory/knowledge/ingest engines + README (RFC-0003, PHASE56).
 - [`workspace-responsibility-layout`](workspace-responsibility-layout/spec.md):
   groups Rust crates by architectural responsibility before adding more memory
   and knowledge storage backends.

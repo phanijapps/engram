@@ -28,6 +28,7 @@ export interface NativeMemoryTransport {
 export interface NativeMemoryTransportOptions {
   binding?: NativeBinding;
   loader?: NativeBindingLoader;
+  dbPath?: string | null;
 }
 
 /** Creates a transport that delegates memory behavior to the Rust native engine. */
@@ -35,7 +36,9 @@ export function createNativeMemoryTransport(
   options: NativeMemoryTransportOptions = {}
 ): NativeMemoryTransport {
   const binding = options.binding ?? loadNativeBinding(options.loader);
-  return new JsonNativeMemoryTransport(new binding.NativeMemoryEngine());
+  return new JsonNativeMemoryTransport(
+    new binding.NativeMemoryEngine(options.dbPath ?? null)
+  );
 }
 
 class JsonNativeMemoryTransport implements NativeMemoryTransport {
@@ -85,6 +88,7 @@ export interface NativeKnowledgeTransport {
 export interface NativeKnowledgeTransportOptions {
   binding?: NativeBinding;
   loader?: NativeBindingLoader;
+  dbPath?: string | null;
 }
 
 /** Creates a transport that delegates knowledge + taxonomy behavior to Rust. */
@@ -92,7 +96,9 @@ export function createNativeKnowledgeTransport(
   options: NativeKnowledgeTransportOptions = {}
 ): NativeKnowledgeTransport {
   const binding = options.binding ?? loadNativeBinding(options.loader);
-  return new JsonNativeKnowledgeTransport(new binding.NativeKnowledgeEngine());
+  return new JsonNativeKnowledgeTransport(
+    new binding.NativeKnowledgeEngine(options.dbPath ?? null)
+  );
 }
 
 class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
@@ -161,6 +167,7 @@ export interface NativeIngestTransport {
 export interface NativeIngestTransportOptions {
   binding?: NativeBinding;
   loader?: NativeBindingLoader;
+  dbPath?: string | null;
 }
 
 /** Creates a transport that delegates ingest + extract behavior to Rust. */
@@ -168,7 +175,9 @@ export function createNativeIngestTransport(
   options: NativeIngestTransportOptions = {}
 ): NativeIngestTransport {
   const binding = options.binding ?? loadNativeBinding(options.loader);
-  return new JsonNativeIngestTransport(new binding.NativeIngestEngine());
+  return new JsonNativeIngestTransport(
+    new binding.NativeIngestEngine(options.dbPath ?? null)
+  );
 }
 
 class JsonNativeIngestTransport implements NativeIngestTransport {

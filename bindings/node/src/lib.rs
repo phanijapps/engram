@@ -40,8 +40,12 @@ impl NativeMemoryEngine {
     /// file-backed configuration should be added through explicit adapter
     /// options rather than inferred from JavaScript global state.
     #[napi(constructor)]
-    pub fn new() -> Result<Self> {
-        let service = SqlMemoryService::open_in_memory().map_err(to_napi_error)?;
+    pub fn new(path: Option<String>) -> Result<Self> {
+        let service = match path {
+            Some(path) => SqlMemoryService::open_file(path),
+            None => SqlMemoryService::open_in_memory(),
+        }
+        .map_err(to_napi_error)?;
         Ok(Self { service })
     }
 
@@ -92,10 +96,16 @@ pub struct NativeKnowledgeEngine {
 
 #[napi]
 impl NativeKnowledgeEngine {
-    /// Opens a local in-memory SQLite knowledge engine for Node consumers.
+    /// Opens a SQLite knowledge engine. Pass a path for a durable file-backed
+    /// store (shared with other engines that use the same file); omit for
+    /// in-memory.
     #[napi(constructor)]
-    pub fn new() -> Result<Self> {
-        let store = SqlKnowledgeStore::open_in_memory().map_err(to_napi_error)?;
+    pub fn new(path: Option<String>) -> Result<Self> {
+        let store = match path {
+            Some(path) => SqlKnowledgeStore::open_file(path),
+            None => SqlKnowledgeStore::open_in_memory(),
+        }
+        .map_err(to_napi_error)?;
         Ok(Self { store })
     }
 
@@ -261,10 +271,16 @@ pub struct NativeIngestEngine {
 
 #[napi]
 impl NativeIngestEngine {
-    /// Opens a local in-memory SQLite ingest engine for Node consumers.
+    /// Opens a SQLite ingest engine. Pass a path for a durable file-backed store
+    /// (shared with the knowledge engine when the same file is used); omit for
+    /// in-memory.
     #[napi(constructor)]
-    pub fn new() -> Result<Self> {
-        let store = SqlKnowledgeStore::open_in_memory().map_err(to_napi_error)?;
+    pub fn new(path: Option<String>) -> Result<Self> {
+        let store = match path {
+            Some(path) => SqlKnowledgeStore::open_file(path),
+            None => SqlKnowledgeStore::open_in_memory(),
+        }
+        .map_err(to_napi_error)?;
         Ok(Self { store })
     }
 
@@ -527,7 +543,7 @@ mod tests {
 
     #[test]
     fn native_engine_round_trips_write_retrieve_and_forget_json() {
-        let engine = NativeMemoryEngine::new().expect("engine");
+        let engine = NativeMemoryEngine::new(None).expect("engine");
 
         let write_response = engine
             .write_memory_json(write_fixture())

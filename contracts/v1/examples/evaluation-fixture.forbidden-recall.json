@@ -1,0 +1,116 @@
+{
+  "id": "eval-retrieval-forbidden-001",
+  "name": "forbidden cross-scope recall",
+  "scope": {
+    "tenant": "tenant-demo",
+    "workspace": "engram",
+    "environment": "local"
+  },
+  "setup": {
+    "memories": [
+      {
+        "kind": "fact",
+        "content": {
+          "text": "Shared sesame retrieval fact belongs to the demo tenant.",
+          "format": "text"
+        },
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-eval-forbidden",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          }
+        },
+        "provenance": {
+          "source": "evaluation_fixture_forbidden_recall",
+          "actor": {
+            "id": "actor-eval-forbidden",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          },
+          "observedAt": "2026-06-30T12:02:00Z",
+          "method": "manual"
+        },
+        "policy": {
+          "visibility": "workspace",
+          "retention": "durable",
+          "allowedUses": ["retrieval", "evaluation"]
+        }
+      },
+      {
+        "kind": "fact",
+        "content": {
+          "text": "Shared sesame retrieval fact belongs to a private tenant.",
+          "format": "text"
+        },
+        "scope": {
+          "tenant": "tenant-private",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-eval-forbidden",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          }
+        },
+        "provenance": {
+          "source": "evaluation_fixture_forbidden_recall",
+          "actor": {
+            "id": "actor-eval-forbidden",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          },
+          "observedAt": "2026-06-30T12:03:00Z",
+          "method": "manual"
+        },
+        "policy": {
+          "visibility": "workspace",
+          "retention": "durable",
+          "allowedUses": ["retrieval", "evaluation"]
+        }
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "excludes-private-tenant-memory",
+      "request": {
+        "query": "shared sesame retrieval fact",
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-eval-forbidden",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          }
+        }
+      },
+      "expect": {
+        "mustInclude": [
+          {
+            "targetType": "memory",
+            "targetId": "memory-001"
+          }
+        ],
+        "mustExclude": [
+          {
+            "targetType": "memory",
+            "targetId": "memory-002"
+          }
+        ]
+      }
+    }
+  ],
+  "createdAt": "2026-06-30T12:04:00Z"
+}

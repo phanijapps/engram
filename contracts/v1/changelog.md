@@ -1,5 +1,10 @@
 # v1 Changelog
 
+## 2026-06-30
+
+- Added accepted retrieval evaluation fixtures for positive recall, forbidden
+  recall, budget-constrained retrieval, and no-result behavior.
+
 ## 2026-06-29
 
 - Accepted the v1 core memory contract.

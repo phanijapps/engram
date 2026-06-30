@@ -864,6 +864,8 @@ Shipped slice:
 - Added a local in-memory benchmark smoke path and benchmark claim boundaries.
 - Added reusable accepted write/retrieval fixture runners in `engram-eval` and
   migrated in-memory and SQL service tests to share them.
+- Added accepted retrieval evaluation fixtures for positive recall, forbidden
+  recall, budget-constrained retrieval, and no-result behavior.
 
 ## Stop Conditions
 
@@ -883,10 +885,8 @@ Do not move to a later phase when any of these are true:
 
 The next implementation loop should be:
 
-1. Add accepted retrieval fixture files for positive recall, forbidden recall,
-   budget omission, and no-result behavior.
-2. Add forget-memory behavior for archive, tombstone, redaction, and hard
+1. Add forget-memory behavior for archive, tombstone, redaction, and hard
    delete policy outcomes.
-3. Add evaluation report generation over the executable fixture set.
-4. Start SQL adapter design from `docs/adr/0005-storage-adapter-semantics.md`.
-5. Update docs and run the full validation suite.
+2. Add evaluation report generation over the executable fixture set.
+3. Start SQL adapter design from `docs/adr/0005-storage-adapter-semantics.md`.
+4. Update docs and run the full validation suite.

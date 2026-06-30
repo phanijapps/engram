@@ -320,5 +320,12 @@
     "description": "Memory contract fixture runners",
     "spec_file": "docs/specs/memory-contract-fixture-runners/spec.md",
     "plan_file": "docs/specs/memory-contract-fixture-runners/plan.md"
+  },
+  {
+    "phase_id": "PHASE46",
+    "status": "DONE",
+    "description": "Accepted retrieval fixtures",
+    "spec_file": "docs/specs/accepted-retrieval-fixtures/spec.md",
+    "plan_file": "docs/specs/accepted-retrieval-fixtures/plan.md"
   }
 ]

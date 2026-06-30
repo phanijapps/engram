@@ -5,6 +5,9 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 
 ## Active
 
+- [`napi-bridge-completion`](napi-bridge-completion/spec.md): demo Slice 0 — make
+  the `engram-node` N-API binding loadable from Node and ship a Hono + Vite/React
+  demo proving a browser→Node→Rust memory round-trip (RFC-0003, PHASE52).
 - [`workspace-responsibility-layout`](workspace-responsibility-layout/spec.md):
   groups Rust crates by architectural responsibility before adding more memory
   and knowledge storage backends.

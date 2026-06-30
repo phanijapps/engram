@@ -365,7 +365,7 @@
   },
   {
     "phase_id": "PHASE52",
-    "status": "DRAFT",
+    "status": "IN_PROGRESS",
     "description": "Demo Slice 0: N-API build pipeline + real memory bridge + Node backend + frontend shell",
     "spec_file": "docs/specs/napi-bridge-completion/spec.md",
     "plan_file": "docs/specs/napi-bridge-completion/plan.md"

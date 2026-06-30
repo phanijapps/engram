@@ -11,7 +11,7 @@ use engram_core::{CoreError, CoreResult};
 use engram_domain::*;
 
 use crate::{
-    belief_retrieval::{BeliefSnapshot, belief_candidates},
+    belief_retrieval::{BeliefSnapshot, ContradictionSnapshot, belief_candidates},
     external_retrieval::external_candidates,
     hierarchy_retrieval::{apply_hierarchy_context, expand_hierarchy_memory_candidates},
     knowledge_retrieval::{KnowledgeSnapshot, knowledge_candidates},
@@ -35,7 +35,7 @@ pub(crate) async fn retrieve(
     let terms = query_terms(&request.query);
     let include_explanations = request.include_explanations.unwrap_or(false);
     let max_items = effective_max_items(&request);
-    let (records, knowledge_snapshots, belief_snapshots, hierarchy_nodes) = {
+    let (records, knowledge_snapshots, belief_snapshots, contradiction_snapshots, hierarchy_nodes) = {
         let state = service.lock_state()?;
         let records = state.memories.values().cloned().collect::<Vec<_>>();
         let knowledge_snapshots = state
@@ -57,11 +57,18 @@ pub(crate) async fn retrieve(
             .cloned()
             .map(|belief| BeliefSnapshot { belief })
             .collect::<Vec<_>>();
+        let contradiction_snapshots = state
+            .contradictions
+            .values()
+            .cloned()
+            .map(|contradiction| ContradictionSnapshot { contradiction })
+            .collect::<Vec<_>>();
         let hierarchy_nodes = state.hierarchy_nodes.values().cloned().collect::<Vec<_>>();
         (
             records,
             knowledge_snapshots,
             belief_snapshots,
+            contradiction_snapshots,
             hierarchy_nodes,
         )
     };
@@ -151,6 +158,7 @@ pub(crate) async fn retrieve(
     omitted.extend(knowledge_omissions);
     let (mut belief_results, belief_omissions) = belief_candidates(
         belief_snapshots,
+        &contradiction_snapshots,
         &request,
         &terms,
         include_explanations,

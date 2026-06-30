@@ -30,12 +30,15 @@ returned only when their scope, lifecycle, policy, and filters allow retrieval.
 - Feed belief candidates into the existing retrieval fusion path before final
   limit or budget truncation.
 - Preserve explanations and fusion traces when explanations are requested.
+- Reduce ranking for matching beliefs that have scoped open contradiction
+  review records.
 
 ### Ask first
 
 - Add new retrieval request fields, public schemas, or generated TypeScript.
 - Retrieve stale, retracted, superseded, or archived beliefs by default.
-- Add belief graph expansion, contradiction-aware ranking, or model reranking.
+- Add belief graph expansion, automatic contradiction inference, or model
+  reranking.
 - Expose a dedicated belief query API.
 
 ### Never do
@@ -63,6 +66,8 @@ returned only when their scope, lifecycle, policy, and filters allow retrieval.
   content.
 - [x] `minConfidence`, `since`, and `until` filters apply to beliefs.
 - [x] Belief candidates participate in shared fusion and final budget omission.
+- [x] Open contradiction review records can reduce belief ranking without
+  hiding the belief result.
 - [x] No public v1 schema changes are introduced.
 
 ## Assumptions

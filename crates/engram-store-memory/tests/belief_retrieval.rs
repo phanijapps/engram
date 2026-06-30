@@ -218,6 +218,122 @@ fn retrieve_truncates_after_memory_and_belief_candidates_are_fused() {
     );
 }
 
+#[test]
+fn open_contradiction_downranks_matching_belief_with_explanation() {
+    let service = service();
+    seed_belief(
+        &service,
+        belief(
+            "belief-clear",
+            "Engram contradiction ranking target remains clear.",
+        ),
+    );
+    seed_belief(
+        &service,
+        belief(
+            "belief-contradicted",
+            "Engram contradiction ranking target remains reviewable.",
+        ),
+    );
+    seed_contradiction(
+        &service,
+        contradiction(
+            "contradiction-open",
+            "belief-contradicted",
+            scope("engram"),
+            ContradictionStatus::Open,
+        ),
+    );
+
+    let context = block_on(service.retrieve(retrieval_request(
+        "contradiction ranking target",
+        scope("engram"),
+    )))
+    .expect("retrieve context");
+
+    assert_eq!(context.items.len(), 2);
+    assert_eq!(context.items[0].target_id, "belief-clear");
+    assert_eq!(context.items[1].target_id, "belief-contradicted");
+    assert!(context.items[0].score.total > context.items[1].score.total);
+    let explanation = context.items[1]
+        .explanation
+        .as_ref()
+        .expect("contradicted belief explanation");
+    assert!(explanation.reason.contains("open contradiction"));
+    assert_eq!(
+        explanation.source_summary.as_deref(),
+        Some("Belief retrieval fixture; open contradictions: contradiction-open")
+    );
+}
+
+#[test]
+fn resolved_contradiction_does_not_downrank_matching_belief() {
+    let service = service();
+    seed_belief(
+        &service,
+        belief(
+            "belief-resolved",
+            "Engram contradiction ranking resolved target.",
+        ),
+    );
+    seed_contradiction(
+        &service,
+        contradiction(
+            "contradiction-resolved",
+            "belief-resolved",
+            scope("engram"),
+            ContradictionStatus::Resolved,
+        ),
+    );
+
+    let context = block_on(service.retrieve(retrieval_request(
+        "contradiction ranking resolved target",
+        scope("engram"),
+    )))
+    .expect("retrieve context");
+
+    assert_eq!(context.items.len(), 1);
+    assert!(context.items[0].score.total > 0.9);
+    assert!(
+        !context.items[0]
+            .explanation
+            .as_ref()
+            .expect("belief explanation")
+            .reason
+            .contains("open contradiction")
+    );
+}
+
+#[test]
+fn out_of_scope_contradiction_does_not_downrank_matching_belief() {
+    let service = service();
+    seed_belief(
+        &service,
+        belief(
+            "belief-scoped",
+            "Engram contradiction ranking scoped target.",
+        ),
+    );
+    seed_contradiction(
+        &service,
+        contradiction(
+            "contradiction-private",
+            "belief-scoped",
+            scope("private"),
+            ContradictionStatus::Open,
+        ),
+    );
+
+    let context = block_on(service.retrieve(retrieval_request(
+        "contradiction ranking scoped target",
+        scope("engram"),
+    )))
+    .expect("retrieve context");
+
+    assert_eq!(context.items.len(), 1);
+    assert!(context.items[0].score.total > 0.9);
+}
+
 fn service() -> InMemoryMemoryService {
     InMemoryMemoryService::with_dependencies(
         Arc::new(AllowAll),
@@ -228,6 +344,10 @@ fn service() -> InMemoryMemoryService {
 
 fn seed_belief(service: &InMemoryMemoryService, belief: Belief) {
     block_on(service.put_belief(belief)).expect("put belief");
+}
+
+fn seed_contradiction(service: &InMemoryMemoryService, contradiction: Contradiction) {
+    block_on(service.put_contradiction(contradiction)).expect("put contradiction");
 }
 
 fn belief(id: &str, content: &str) -> Belief {
@@ -268,6 +388,32 @@ fn belief(id: &str, content: &str) -> Belief {
         created_at: fixed_time(),
         updated_at: None,
         metadata: None,
+    }
+}
+
+fn contradiction(
+    id: &str,
+    belief_id: &str,
+    scope: Scope,
+    status: ContradictionStatus,
+) -> Contradiction {
+    Contradiction {
+        id: Id::from(id),
+        scope,
+        kind: ContradictionKind::Tension,
+        targets: vec![ContradictionTarget {
+            target_type: ContradictionTargetType::Belief,
+            target_id: belief_id.to_owned(),
+            role: Some("claim".to_owned()),
+        }],
+        severity: 0.7,
+        status,
+        reasoning: Some("contradiction-aware ranking fixture".to_owned()),
+        detected_by: None,
+        resolution: None,
+        provenance: provenance(),
+        detected_at: fixed_time(),
+        updated_at: None,
     }
 }
 

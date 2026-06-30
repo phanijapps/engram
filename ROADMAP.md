@@ -46,6 +46,8 @@ use the implementation roadmap as the spec-driven execution loop.
   mutation policy has its own spec.
 - Keep belief retrieval explicit in result type: derived beliefs can be recalled
   through shared fusion without pretending to be source memories or chunks.
+- Keep contradiction-aware belief ranking advisory: open review records reduce
+  rank and explain why without hiding or mutating beliefs.
 - Keep runtime adapters as wrappers over client transports.
 - Keep public repository docs honest about pre-1.0 readiness and release gates.
 - Keep filesystem source discovery behind the `SourceReader` port.
@@ -74,7 +76,7 @@ use the implementation roadmap as the spec-driven execution loop.
 
 ## Later
 
-- Hierarchy construction, retrieval expansion, contradiction-aware belief
-  ranking, and contradiction resolution over real evidence.
+- Hierarchy construction, retrieval expansion, and contradiction resolution over
+  real evidence.
 - AST-backed symbol extraction and symbol relationship graphs.
 - Benchmarks, security review, release automation, and documentation site.

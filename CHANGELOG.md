@@ -84,3 +84,5 @@ This project follows a contract-first changelog while pre-1.0.
   budget omissions, and degraded source-failure reporting.
 - Added scoped in-memory contradiction lookup and explicit contradiction
   resolution records without target mutation.
+- Added contradiction-aware in-memory belief ranking using explicit open review
+  records.

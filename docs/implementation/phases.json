@@ -236,5 +236,12 @@
     "description": "In-memory contradiction resolution",
     "spec_file": "docs/specs/in-memory-contradiction-resolution/spec.md",
     "plan_file": "docs/specs/in-memory-contradiction-resolution/plan.md"
+  },
+  {
+    "phase_id": "PHASE34",
+    "status": "DONE",
+    "description": "In-memory contradiction-aware belief ranking",
+    "spec_file": "docs/specs/in-memory-contradiction-aware-belief-ranking/spec.md",
+    "plan_file": "docs/specs/in-memory-contradiction-aware-belief-ranking/plan.md"
   }
 ]

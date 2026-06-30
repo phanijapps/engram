@@ -10,10 +10,18 @@ use engram_domain::*;
 
 use crate::scope::scope_allows;
 
+const OPEN_CONTRADICTION_PENALTY: f32 = 0.5;
+
 /// Immutable belief snapshot used by retrieval.
 #[derive(Debug, Clone)]
 pub(crate) struct BeliefSnapshot {
     pub(crate) belief: Belief,
+}
+
+/// Immutable contradiction snapshot used by belief ranking.
+#[derive(Debug, Clone)]
+pub(crate) struct ContradictionSnapshot {
+    pub(crate) contradiction: Contradiction,
 }
 
 /// Builds belief retrieval candidates for one request.
@@ -23,6 +31,7 @@ pub(crate) struct BeliefSnapshot {
 /// can distinguish "not matched" from "not allowed" without leaking content.
 pub(crate) fn belief_candidates(
     snapshots: Vec<BeliefSnapshot>,
+    contradictions: &[ContradictionSnapshot],
     request: &RetrievalRequest,
     terms: &[String],
     include_explanations: bool,
@@ -68,7 +77,10 @@ pub(crate) fn belief_candidates(
         }
         if let Some((score, matched_terms)) = keyword_score(&snapshot.belief, &request.query, terms)
         {
-            candidates.push((score, matched_terms, snapshot));
+            let open_contradictions =
+                open_contradiction_ids(&snapshot.belief, contradictions, &request.scope);
+            let score = contradiction_adjusted_score(score, &open_contradictions);
+            candidates.push((score, matched_terms, open_contradictions, snapshot));
         }
     }
 
@@ -76,18 +88,58 @@ pub(crate) fn belief_candidates(
         right
             .0
             .total_cmp(&left.0)
-            .then_with(|| right.2.belief.created_at.cmp(&left.2.belief.created_at))
-            .then_with(|| left.2.belief.id.cmp(&right.2.belief.id))
+            .then_with(|| right.3.belief.created_at.cmp(&left.3.belief.created_at))
+            .then_with(|| left.3.belief.id.cmp(&right.3.belief.id))
     });
 
     let results = candidates
         .into_iter()
         .enumerate()
-        .map(|(index, (score, matched_terms, snapshot))| {
-            belief_result(index, score, matched_terms, snapshot, include_explanations)
-        })
+        .map(
+            |(index, (score, matched_terms, open_contradictions, snapshot))| {
+                belief_result(
+                    index,
+                    score,
+                    matched_terms,
+                    open_contradictions,
+                    snapshot,
+                    include_explanations,
+                )
+            },
+        )
         .collect();
     Ok((results, omitted))
+}
+
+fn open_contradiction_ids(
+    belief: &Belief,
+    contradictions: &[ContradictionSnapshot],
+    request_scope: &Scope,
+) -> Vec<String> {
+    contradictions
+        .iter()
+        .filter(|snapshot| {
+            snapshot.contradiction.status == ContradictionStatus::Open
+                && scope_allows(&snapshot.contradiction.scope, request_scope)
+                && contradiction_targets_belief(&snapshot.contradiction, &belief.id)
+        })
+        .map(|snapshot| snapshot.contradiction.id.to_string())
+        .collect()
+}
+
+fn contradiction_targets_belief(contradiction: &Contradiction, belief_id: &BeliefId) -> bool {
+    contradiction.targets.iter().any(|target| {
+        target.target_type == ContradictionTargetType::Belief
+            && target.target_id == belief_id.to_string()
+    })
+}
+
+fn contradiction_adjusted_score(score: f32, open_contradictions: &[String]) -> f32 {
+    if open_contradictions.is_empty() {
+        score
+    } else {
+        score * OPEN_CONTRADICTION_PENALTY
+    }
 }
 
 fn filters_allow(belief: &Belief, filters: Option<&QueryFilter>) -> bool {
@@ -204,15 +256,17 @@ fn belief_result(
     index: usize,
     total_score: f32,
     matched_terms: Vec<String>,
+    open_contradictions: Vec<String>,
     snapshot: BeliefSnapshot,
     include_explanation: bool,
 ) -> RetrievalResult {
+    let has_open_contradictions = !open_contradictions.is_empty();
     let explanation = include_explanation.then(|| RetrievalExplanation {
-        reason: "Matched derived belief with in-memory keyword retrieval.".to_owned(),
+        reason: belief_explanation_reason(has_open_contradictions),
         matched_cues: Vec::new(),
         matched_terms,
         path: Vec::new(),
-        source_summary: snapshot.belief.reasoning.clone(),
+        source_summary: belief_source_summary(&snapshot.belief, &open_contradictions),
     });
     RetrievalResult {
         id: format!("result-{}", snapshot.belief.id),
@@ -243,6 +297,28 @@ fn belief_result(
         }),
         metadata: snapshot.belief.metadata,
     }
+}
+
+fn belief_explanation_reason(has_open_contradictions: bool) -> String {
+    if has_open_contradictions {
+        "Matched derived belief with in-memory keyword retrieval; open contradiction review records reduced ranking.".to_owned()
+    } else {
+        "Matched derived belief with in-memory keyword retrieval.".to_owned()
+    }
+}
+
+fn belief_source_summary(belief: &Belief, open_contradictions: &[String]) -> Option<String> {
+    if open_contradictions.is_empty() {
+        return belief.reasoning.clone();
+    }
+
+    let contradiction_summary = format!("open contradictions: {}", open_contradictions.join(","));
+    Some(match &belief.reasoning {
+        Some(reasoning) if !reasoning.is_empty() => {
+            format!("{reasoning}; {contradiction_summary}")
+        }
+        _ => contradiction_summary,
+    })
 }
 
 fn omitted_belief(belief: &Belief, reason: OmittedReason) -> OmittedResult {

@@ -18,17 +18,16 @@ logic.
 
 Tempted to add explicit include-beliefs request fields; declining because
 `RetrievalTargetType::Belief` is already portable and this slice can prove
-behavior without contract changes. Tempted to make belief retrieval
-contradiction-aware; declining because contradiction resolution and ranking are
-separate future specs.
+behavior without contract changes. Contradiction-aware ranking is now handled by
+the focused in-memory contradiction-aware belief ranking spec.
 
 ## Constraints
 
 - No public v1 contract or generated TypeScript changes.
 - No model, embedding, vector, SQL, scheduler, or runtime dependency.
 - Keep `engram-core` unchanged.
-- Keep belief retrieval separate from belief synthesis, contradiction
-  detection, and knowledge retrieval.
+- Keep belief retrieval separate from belief synthesis, contradiction detection,
+  and knowledge retrieval.
 
 ## Construction tests
 
@@ -63,8 +62,9 @@ to implement `MemoryService::retrieve`.
 ### Failure, edge cases & resilience
 
 Policy denials become omissions. Non-policy authorizer failures return errors.
-Expired and stale beliefs do not leak as results. Final result truncation uses
-the existing fused-result omission path.
+Expired and stale beliefs do not leak as results. Open contradictions can reduce
+belief score but do not hide the belief. Final result truncation uses the
+existing fused-result omission path.
 
 ## Tasks
 
@@ -104,8 +104,8 @@ fusion.
 
 ## Rollout
 
-Library code only. Belief graph expansion, contradiction-aware ranking,
-semantic belief retrieval, and manual belief query APIs remain future phases.
+Library code only. Belief graph expansion, semantic belief retrieval, and manual
+belief query APIs remain future phases.
 
 ## Risks
 
@@ -119,3 +119,5 @@ semantic belief retrieval, and manual belief query APIs remain future phases.
 - 2026-06-30: initial plan for in-memory belief retrieval.
 - 2026-06-30: shipped focused in-memory belief retrieval candidates with scope,
   lifecycle, policy, confidence, time-filter, explanation, and fusion coverage.
+- 2026-06-30: updated for shipped contradiction-aware belief ranking over
+  explicit open contradiction records.

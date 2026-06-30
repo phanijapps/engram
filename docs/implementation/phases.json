@@ -271,5 +271,12 @@
     "description": "In-memory hierarchy aggregate summaries",
     "spec_file": "docs/specs/in-memory-hierarchy-aggregate-summaries/spec.md",
     "plan_file": "docs/specs/in-memory-hierarchy-aggregate-summaries/plan.md"
+  },
+  {
+    "phase_id": "PHASE39",
+    "status": "DONE",
+    "description": "CI vector feature gates",
+    "spec_file": "docs/specs/ci-vector-feature-gates/spec.md",
+    "plan_file": "docs/specs/ci-vector-feature-gates/plan.md"
   }
 ]

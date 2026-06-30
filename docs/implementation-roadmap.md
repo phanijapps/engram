@@ -851,6 +851,9 @@ Shipped slice:
 - Added deterministic member-derived summaries for in-memory entity aggregate
   hierarchy nodes.
 - Kept model-assisted aggregate summaries deferred behind future quality specs.
+- Added CI and release checklist gates for the opt-in vector FastEmbed feature
+  compile path.
+- Kept provider-backed model downloads outside default CI.
 
 ## Stop Conditions
 

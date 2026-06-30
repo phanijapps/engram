@@ -9,6 +9,8 @@ packages, or release tags. It is not release automation.
 - `cargo check --workspace`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace`
+- `cargo check -p engram-store-vector --features fastembed-tests --tests`
+- `cargo clippy -p engram-store-vector --features fastembed-tests --tests -- -D warnings`
 - `python3 scripts/validate_contracts.py`
 - `.codex/hooks/check-contracts.sh`
 - `.codex/hooks/check-docs.sh`

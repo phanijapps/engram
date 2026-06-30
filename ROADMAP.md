@@ -71,6 +71,8 @@ use the implementation roadmap as the spec-driven execution loop.
   source-failure reporting without making vector providers canonical.
 - Keep FastEmbed BGE-small query-vector generation opt-in behind the vector
   crate feature.
+- Keep vector provider feature gates visible in CI without running model
+  downloads by default.
 - Keep local usage examples checked and close to the crate or package that owns
   each public API.
 - Keep concrete adapters outside `engram-core`.

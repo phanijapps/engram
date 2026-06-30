@@ -34,13 +34,14 @@ export type QaBelief = {
   content: string;
   provenance?: { source?: string };
 };
-export type QaEntity = { id: string; graphId?: string; kind?: string; name: string };
+export type QaEntity = { id: string; graphId?: string; kind?: string; name: string; provenance?: { source?: string } };
 export type QaRelationship = {
   id: string;
   graphId?: string;
   subject: { id?: string; name?: string; kind?: string };
   predicate: string;
   object: { id?: string; name?: string; kind?: string };
+  provenance?: { source?: string };
 };
 export type QaChunk = {
   id: string;
@@ -121,13 +122,14 @@ export function buildEvidence(
     .slice(0, 20);
   const matchedEntityIds = new Set(ranked.map((x) => x.e.id));
   for (const { e } of ranked) {
+    const src = e.provenance?.source ?? e.graphId ?? "graph";
     sources.push({
       kind: "entity",
       id: e.id,
       text: `${e.name} (${e.kind ?? "entity"})`,
-      source: e.graphId ?? "graph",
+      source: src,
     });
-    blocks.push(`[entity ${e.id}] ${e.name} (${e.kind ?? "entity"})`);
+    blocks.push(`[entity] ${e.name} (${e.kind ?? "entity"}) (${src})`);
   }
 
   // Relationships whose endpoints are matched entities (the local call graph).
@@ -141,13 +143,14 @@ export function buildEvidence(
     if (!matchedEntityIds.has(sId) && !matchedEntityIds.has(oId)) continue;
     const sName = r.subject.name ?? sId;
     const oName = r.object.name ?? oId;
+    const src = r.provenance?.source ?? r.graphId ?? "graph";
     sources.push({
       kind: "relationship",
       id: r.id,
       text: `${sName} ${r.predicate} ${oName}`,
-      source: r.graphId ?? "graph",
+      source: src,
     });
-    blocks.push(`[relationship ${r.id}] ${sName} ${r.predicate} ${oName}`);
+    blocks.push(`[${r.predicate}] ${sName} -> ${oName} (${src})`);
     relCount++;
   }
 
@@ -164,11 +167,13 @@ export function buildEvidence(
   const matchedChunks = (byEntityRef.length > 0 ? byEntityRef : byTextTerm).slice(0, 8);
   for (const chunk of matchedChunks) {
     const text = chunk.text.slice(0, 1200);
-    blocks.push(`[chunk ${chunk.id}] ${text}`);
+    const csrc = chunk.documentId ?? "code";
+    blocks.push(`[chunk] ${text}`);
     sources.push({
       kind: "chunk",
       id: chunk.id,
       text: chunk.text.slice(0, 120),
+      source: csrc,
       source: "code",
     });
   }
@@ -189,7 +194,11 @@ const QA_SYSTEM_PROMPT =
   "When asked for a CALL GRAPH:\n" +
   "1. List the root entity and trace outward via relationships (calls, depends_on, contains).\n" +
   "2. Show each hop as a tree or list.\n\n" +
-  "Cite sources by their [id]. Use markdown headings, bullets, and code references. " +
+  "Format rules:\n" +
+  "- Use plain text arrows (->) NOT LaTeX or math notation.\n" +
+  "- Do NOT use $...$, \\rightarrow, \\uparrow, or any LaTeX.\n" +
+  "- Cite sources by their source/repo name in parentheses, e.g. (scan:agentzero).\n" +
+  "- Use markdown headings, bullets, and code references.\n" +
   "If the context is insufficient, say so — do not invent records.";
 
 /** Fetch knowledge-graph entities + relationships + chunks visible to `scope`. */

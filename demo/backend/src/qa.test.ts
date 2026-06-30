@@ -95,15 +95,15 @@ describe("buildEvidence", () => {
     expect(relSources[0].text).toContain("calls");
     expect(relSources[0].text).toContain("parser");
 
-    expect(context).toContain("[entity e-intent_analysis] intent_analysis (function)");
-    expect(context).toContain("[relationship r1] intent_analysis calls parser");
+    expect(context).toContain("[entity] intent_analysis (function)");
+    expect(context).toContain("[calls] intent_analysis -> parser");
     expect(context).not.toContain("billing");
 
     // The chunk referencing intent_analysis is included (the actual code text).
     const chunkSources = sources.filter((s) => s.kind === "chunk");
     expect(chunkSources).toHaveLength(1);
     expect(chunkSources[0].text).toContain("intent_analysis");
-    expect(context).toContain("[chunk chunk-1]");
-    expect(context).not.toContain("[chunk chunk-2]"); // unrelated → dropped
+    expect(context).toContain("[chunk]");
+    expect(context).not.toContain("fn billing"); // unrelated chunk → dropped
   });
 });

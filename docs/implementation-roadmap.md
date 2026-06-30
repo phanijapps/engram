@@ -929,12 +929,19 @@ new belief SQLite adapter (distinct from knowledge); **hierarchy deferred to
 TBD** (documented). Lighter adversarial review per slice.
 
 - `PHASE57` — Slice 0: minimalist enterprise-ready 3D graph (navigable links),
-  replacing Cytoscape. **(next)**
+  replacing Cytoscape. **(shipped)**
 - `PHASE58` — Slice 1: scale ingestion + repo indexing (scan job + incremental).
+  **(shipped)**
 - `PHASE59` — Slice 2: LLM relationship extraction (pi SDK → ollama cloud →
-  gemma4:31b-cloud) + deterministic baseline.
-- `PHASE60` — Slice 3: ontology + taxonomy (IT org); ADR-0008.
-- `PHASE61` — Slice 4: provenance + confidence viz.
+  gemma4:31b-cloud) + deterministic baseline. **(shipped)**
+- `PHASE60` — Slice 3: ontology + taxonomy (IT org); ADR-0008. **(shipped)**
+- `PHASE61` — Slice 4: provenance + confidence viz. **(shipped)**
 - `PHASE62` — Slice 5: belief + contradiction + bi-temporal (new belief adapter
-  + consolidation + `NativeBeliefEngine`).
-- `PHASE63` — Slice 6: query + answer over knowledge + memory.
+  + `NativeBeliefEngine`). **(shipped)**
+- `PHASE63` — Slice 6: query + answer over knowledge + memory. **(shipped)**
+
+All seven RFC 0004 slices (`PHASE57`–`PHASE63`) are shipped on `demo/engram-ui`:
+the demo runs end-to-end — deterministic + LLM-enhanced ingestion, an IT-org
+ontology + taxonomy, belief/contradiction with bi-temporal display, and Q&A over
+knowledge + memory. The only path not exercised without creds is the live LLM
+call (ollama cloud); every other path is validated + smoke-tested.

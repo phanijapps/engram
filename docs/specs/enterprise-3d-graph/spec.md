@@ -1,5 +1,6 @@
 # Spec: enterprise-3d-graph (RFC 0004 Slice 0 / PHASE57)
 
+- **Status:** Shipped
 - **Shape:** ui
 - **Constrained by:** RFC-0004 (D5), ADR-0007 (no change — frontend only)
 - **Contract:** none (consumes the existing `/ingest/extract` response; no contract change)

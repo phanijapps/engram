@@ -56,11 +56,26 @@ describe("@engram/node", () => {
         putConceptJson(): string { return "null"; }
         putConceptRelationJson(): string { return "null"; }
         listConceptsJson(): string { return "[]"; }
+        putOntologyJson(): string { return "null"; }
+        getOntologyJson(): string { return "null"; }
+        putClassJson(): string { return "null"; }
+        putPropertyJson(): string { return "null"; }
+        putAxiomJson(): string { return "null"; }
+        validateGraphJson(): string { return "[]"; }
       },
       NativeIngestEngine: class {
         ingestExtractJson(): string {
           return '{"graph":{},"entities":[],"relationships":[],"chunkCount":0}';
         }
+      },
+      NativeBeliefEngine: class {
+        putBeliefJson(): string { return "null"; }
+        listBeliefsJson(): string { return "[]"; }
+        putContradictionJson(): string { return "null"; }
+        listContradictionsJson(): string { return "[]"; }
+        getContradictionJson(): string { return "null"; }
+        resolveContradictionJson(): string { return "null"; }
+        detectContradictionsJson(): string { return "[]"; }
       },
       NativeRetrievalEngine: class {
         indexJson(): string { return '{"indexed":0}'; }

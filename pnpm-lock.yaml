@@ -29,6 +29,9 @@ importers:
       '@earendil-works/pi-coding-agent':
         specifier: ^0.80.2
         version: 0.80.2(ws@8.21.0)(zod@4.4.3)
+      '@engram/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@engram/node':
         specifier: workspace:*
         version: link:../../packages/node

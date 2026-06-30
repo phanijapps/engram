@@ -1,5 +1,6 @@
 # Spec: scale-repo-ingestion (RFC 0004 Slice 1 / PHASE58)
 
+- **Status:** Shipped
 - **Shape:** mixed (service + ui)
 - **Constrained by:** RFC-0004 D4 + the Security & data-custody controls (path confinement, secret blocklist, file-size bounds); ADR-0007 (no binding change needed here — reuses `NativeIngestEngine`)
 - **Contract:** none (new demo-only routes; consumes the existing ingest transport)

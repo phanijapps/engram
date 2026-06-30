@@ -9,6 +9,7 @@
 
 import { getLLMConfig, runLLM } from "./llm.js";
 import { getBeliefTransport, getTransport } from "./engram.js";
+import type { Scope } from "@engram/contracts";
 
 export type QaSource = {
   kind: "memory" | "belief";
@@ -37,7 +38,7 @@ export type QaBelief = {
 };
 
 const QA_REQUESTER = {
-  actor: { id: "actor-demo", kind: "agent", displayName: "Demo QA" },
+  actor: { id: "actor-demo", kind: "agent" as const, displayName: "Demo QA" },
   roles: ["maintainer"],
   permissions: ["memory.retrieve"],
 };
@@ -112,7 +113,8 @@ export async function answerQuestion(question: string, scope: unknown): Promise<
   const [memoryResponse, beliefs] = await Promise.all([
     getTransport().retrieve({
       query: question,
-      scope,
+      // `scope` is untyped HTTP input; Rust enforces the real Scope shape.
+      scope: scope as Scope,
       requester: QA_REQUESTER,
       modes: ["keyword"],
       limit: 8,

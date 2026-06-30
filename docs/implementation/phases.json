@@ -421,28 +421,28 @@
   },
   {
     "phase_id": "PHASE60",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "RFC 0004 Ontology + taxonomy for an IT org (OntologyRepository SQLite + binding + UI); ADR-0008",
     "spec_file": "docs/specs/it-org-ontology/spec.md",
     "plan_file": "docs/specs/it-org-ontology/plan.md"
   },
   {
     "phase_id": "PHASE61",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "RFC 0004 Provenance + confidence viz (encode belief confidence + source provenance + links)",
     "spec_file": "docs/specs/provenance-confidence-viz/spec.md",
     "plan_file": "docs/specs/provenance-confidence-viz/plan.md"
   },
   {
     "phase_id": "PHASE62",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "RFC 0004 Belief + contradiction + bi-temporal (new belief SQLite adapter + consolidation + binding)",
     "spec_file": "docs/specs/belief-contradiction-bitemporal/spec.md",
     "plan_file": "docs/specs/belief-contradiction-bitemporal/plan.md"
   },
   {
     "phase_id": "PHASE63",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "RFC 0004 Query + answer over knowledge and memory (LLM synthesis + grounded citations)",
     "spec_file": "docs/specs/qa-over-knowledge/spec.md",
     "plan_file": "docs/specs/qa-over-knowledge/plan.md"

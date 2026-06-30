@@ -18,115 +18,171 @@ use engram_store_memory::{
 use futures::executor::block_on;
 
 #[test]
-fn hierarchy_build_creates_base_nodes_and_audit_events_for_scoped_memories() {
+fn hierarchy_build_creates_entity_aggregate_for_scoped_base_nodes() {
     let memory_service = test_memory_service();
-    let first = write_memory(&memory_service, "first hierarchy memory", "engram", None);
-    let second = write_memory(&memory_service, "second hierarchy memory", "engram", None);
+    let first = write_memory(
+        &memory_service,
+        "Engram uses sqlite-vec",
+        "engram",
+        None,
+        Some(entity("entity-engram", "Engram")),
+    );
+    let second = write_memory(
+        &memory_service,
+        "Engram tests FastEmbed BGE small",
+        "engram",
+        None,
+        Some(entity("entity-engram", "Engram")),
+    );
+    let singleton = write_memory(
+        &memory_service,
+        "Solo entity should not aggregate",
+        "engram",
+        None,
+        Some(entity("entity-solo", "Solo")),
+    );
+    let entityless = write_memory(
+        &memory_service,
+        "No entity should not aggregate",
+        "engram",
+        None,
+        None,
+    );
     let expired = write_memory(
         &memory_service,
-        "expired hierarchy memory",
+        "Expired Engram should not aggregate",
         "engram",
         Some(past_time()),
+        Some(entity("entity-engram", "Engram")),
     );
-    let other = write_memory(&memory_service, "other workspace memory", "other", None);
-
-    put_existing_base_node(&memory_service, &second);
+    let other = write_memory(
+        &memory_service,
+        "Other workspace Engram should not aggregate",
+        "other",
+        None,
+        Some(entity("entity-engram", "Engram")),
+    );
 
     let consolidation = consolidation_service(memory_service.clone());
     let run = block_on(consolidation.consolidate(consolidation_request("engram")))
-        .expect("hierarchy build should complete");
+        .expect("hierarchy aggregate build should complete");
     let hierarchy = task_result(&run, ConsolidationTaskKind::HierarchyBuild);
-    let belief = task_result(&run, ConsolidationTaskKind::BeliefSynthesis);
 
     assert_eq!(run.status, ConsolidationRunStatus::Completed);
-    assert_eq!(hierarchy.items_read, Some(3));
-    assert_eq!(hierarchy.items_written, Some(1));
-    assert_eq!(hierarchy.items_updated, Some(0));
-    assert_eq!(hierarchy.items_skipped, Some(4));
-    assert_eq!(belief.status, ConsolidationTaskStatus::Completed);
-    assert_eq!(belief.items_written, Some(0));
+    assert_eq!(hierarchy.items_read, Some(5));
+    assert_eq!(hierarchy.items_written, Some(5));
+    assert_eq!(hierarchy.items_updated, Some(2));
+    assert_eq!(hierarchy.items_skipped, Some(3));
     let stats = run.stats.expect("stats");
-    assert_eq!(stats.hierarchy_nodes_created, Some(1));
-    assert_eq!(stats.hierarchy_relations_created, Some(0));
+    assert_eq!(stats.hierarchy_nodes_created, Some(5));
 
-    let first_path =
-        block_on(memory_service.path_for(&[first.id.to_string()], &scope("engram"), Some(0)))
-            .expect("path for first memory");
-    assert_eq!(first_path.nodes.len(), 1);
-    assert_eq!(
-        first_path.nodes[0].source_target_id.as_deref(),
-        Some(first.id.as_str())
-    );
-    assert_eq!(
-        first_path.nodes[0].source_target_type,
-        Some(RetrievalTargetType::Memory)
-    );
-    assert_eq!(first_path.nodes[0].kind, HierarchyNodeKind::Base);
-    assert_eq!(first_path.nodes[0].layer, 0);
-    assert_eq!(first_path.nodes[0].status, HierarchyNodeStatus::Active);
-    assert_eq!(first_path.nodes[0].scope, scope("engram"));
-    assert_eq!(first_path.nodes[0].policy, policy(None));
-
-    let first_events = block_on(memory_service.list_events_for_memory(&first.id, &scope("engram")))
-        .expect("events for first memory");
-    let built = first_events
+    let path = block_on(memory_service.path_for(&[first.id.to_string()], &scope("engram"), None))
+        .expect("path for first memory");
+    assert_eq!(path.nodes.len(), 2);
+    let aggregate = path
+        .nodes
         .iter()
-        .find(|event| event.kind == MemoryEventKind::HierarchyBuilt)
-        .expect("hierarchy built event");
-    assert_eq!(
-        built.payload.get("reason").and_then(Scalar::as_str),
-        Some("memory_base_hierarchy_build")
-    );
+        .find(|node| node.kind == HierarchyNodeKind::Aggregate)
+        .expect("aggregate node");
+    assert_eq!(aggregate.layer, 1);
+    assert_eq!(aggregate.name, "Entity: Engram");
+    assert_eq!(aggregate.scope, scope("engram"));
+    assert_eq!(aggregate.members.len(), 2);
     assert!(
-        built
-            .payload
-            .get("hierarchyNodeId")
-            .and_then(Scalar::as_str)
-            .is_some()
+        aggregate
+            .members
+            .iter()
+            .all(|member| member.member_type == HierarchyMemberType::HierarchyNode)
+    );
+    assert_eq!(
+        aggregate
+            .metadata
+            .as_ref()
+            .and_then(|metadata| metadata.get("aggregateKey"))
+            .and_then(Scalar::as_str),
+        Some("entity:entity-engram")
     );
 
     let second_path =
-        block_on(memory_service.path_for(&[second.id.to_string()], &scope("engram"), Some(0)))
+        block_on(memory_service.path_for(&[second.id.to_string()], &scope("engram"), None))
             .expect("path for second memory");
-    assert_eq!(second_path.nodes.len(), 1);
+    assert!(second_path.nodes.iter().any(|node| node.id == aggregate.id));
 
-    let expired_path =
-        block_on(memory_service.path_for(&[expired.id.to_string()], &scope("engram"), Some(0)))
-            .expect("path for expired memory");
-    assert!(expired_path.nodes.is_empty());
+    for id in [&first.id, &second.id] {
+        let events = block_on(memory_service.list_events_for_memory(id, &scope("engram")))
+            .expect("events for memory");
+        assert!(
+            events.iter().any(|event| {
+                event.kind == MemoryEventKind::HierarchyBuilt
+                    && event.payload.get("reason").and_then(Scalar::as_str)
+                        == Some("memory_entity_aggregate_hierarchy_build")
+            }),
+            "missing aggregate hierarchy event for {id}"
+        );
+    }
 
+    for id in [&singleton.id, &entityless.id, &expired.id] {
+        let path = block_on(memory_service.path_for(&[id.to_string()], &scope("engram"), None))
+            .expect("path for skipped memory");
+        assert!(
+            path.nodes
+                .iter()
+                .all(|node| node.kind != HierarchyNodeKind::Aggregate)
+        );
+    }
     let other_path =
-        block_on(memory_service.path_for(&[other.id.to_string()], &scope("engram"), Some(0)))
-            .expect("path for other workspace memory");
+        block_on(memory_service.path_for(&[other.id.to_string()], &scope("engram"), None))
+            .expect("other path");
     assert!(other_path.nodes.is_empty());
 }
 
 #[test]
-fn hierarchy_build_is_zero_update_when_all_scoped_memories_have_base_nodes() {
+fn hierarchy_aggregate_build_is_idempotent() {
     let memory_service = test_memory_service();
-    let first = write_memory(&memory_service, "first covered memory", "engram", None);
-    let second = write_memory(&memory_service, "second covered memory", "engram", None);
-    put_existing_base_node(&memory_service, &first);
-    put_existing_base_node(&memory_service, &second);
+    let first = write_memory(
+        &memory_service,
+        "Engram memory one",
+        "engram",
+        None,
+        Some(entity("entity-engram", "Engram")),
+    );
+    let second = write_memory(
+        &memory_service,
+        "Engram memory two",
+        "engram",
+        None,
+        Some(entity("entity-engram", "Engram")),
+    );
 
     let consolidation = consolidation_service(memory_service.clone());
-    let run = block_on(consolidation.consolidate(consolidation_request("engram")))
-        .expect("hierarchy build should complete");
-    let hierarchy = task_result(&run, ConsolidationTaskKind::HierarchyBuild);
+    let first_run = block_on(consolidation.consolidate(consolidation_request("engram")))
+        .expect("first aggregate run");
+    assert_eq!(
+        task_result(&first_run, ConsolidationTaskKind::HierarchyBuild).items_updated,
+        Some(2)
+    );
 
-    assert_eq!(run.status, ConsolidationRunStatus::Completed);
-    assert_eq!(hierarchy.items_read, Some(2));
+    let second_run = block_on(consolidation.consolidate(consolidation_request("engram")))
+        .expect("second aggregate run");
+    let hierarchy = task_result(&second_run, ConsolidationTaskKind::HierarchyBuild);
     assert_eq!(hierarchy.items_written, Some(0));
-    assert_eq!(hierarchy.items_skipped, Some(4));
-    assert_eq!(run.stats.expect("stats").hierarchy_nodes_created, Some(0));
+    assert_eq!(hierarchy.items_updated, Some(0));
+    assert_eq!(
+        second_run.stats.expect("stats").hierarchy_nodes_created,
+        Some(0)
+    );
 
     for id in [first.id, second.id] {
         let events = block_on(memory_service.list_events_for_memory(&id, &scope("engram")))
             .expect("events for memory");
-        assert!(
+        assert_eq!(
             events
                 .iter()
-                .all(|event| event.kind != MemoryEventKind::HierarchyBuilt)
+                .filter(|event| event.kind == MemoryEventKind::HierarchyBuilt
+                    && event.payload.get("reason").and_then(Scalar::as_str)
+                        == Some("memory_entity_aggregate_hierarchy_build"))
+                .count(),
+            1
         );
     }
 }
@@ -151,7 +207,12 @@ fn consolidation_service(memory_service: InMemoryMemoryService) -> GatedConsolid
         Arc::new(FixedClock(fixed_time())),
         Arc::new(SequentialIdGenerator::new()),
         Arc::new(ScriptedEvaluator {
-            reports: Mutex::new(VecDeque::from(vec![passing_report(), passing_report()])),
+            reports: Mutex::new(VecDeque::from(vec![
+                passing_report(),
+                passing_report(),
+                passing_report(),
+                passing_report(),
+            ])),
         }),
         evaluation_fixture(),
         InMemoryConsolidationExecutor::shared(memory_service),
@@ -163,13 +224,14 @@ fn write_memory(
     text: &str,
     workspace: &str,
     expires_at: Option<Timestamp>,
+    entity: Option<EntityRef>,
 ) -> MemoryRecord {
     block_on(memory_service.write_memory(WriteMemoryRequest {
         kind: MemoryKind::Fact,
         content: MemoryContent {
             text: text.to_owned(),
             summary: Some(format!("summary: {text}")),
-            entities: Vec::new(),
+            entities: entity.into_iter().collect(),
             language: Some("en".to_owned()),
             format: Some(MemoryContentFormat::Text),
             structured: None,
@@ -186,27 +248,13 @@ fn write_memory(
     .record
 }
 
-fn put_existing_base_node(memory_service: &InMemoryMemoryService, record: &MemoryRecord) {
-    block_on(memory_service.put_node(HierarchyNode {
-        id: Id::from(format!("existing-node-{}", record.id)),
-        scope: record.scope.clone(),
-        kind: HierarchyNodeKind::Base,
-        layer: 0,
-        name: format!("existing {}", record.id),
-        summary: record.content.summary.clone(),
-        parent_id: None,
-        members: Vec::new(),
-        source_target_type: Some(RetrievalTargetType::Memory),
-        source_target_id: Some(record.id.to_string()),
-        embedding_refs: Vec::new(),
-        status: HierarchyNodeStatus::Active,
-        policy: record.policy.clone(),
-        provenance: provenance(),
-        created_at: fixed_time(),
-        updated_at: None,
-        metadata: None,
-    }))
-    .expect("put existing base node");
+fn entity(id: &str, name: &str) -> EntityRef {
+    EntityRef {
+        id: Some(Id::from(id)),
+        kind: Some("project".to_owned()),
+        name: Some(name.to_owned()),
+        aliases: Vec::new(),
+    }
 }
 
 fn consolidation_request(workspace: &str) -> ConsolidationRequest {
@@ -260,7 +308,7 @@ fn passing_report() -> EvaluationReport {
 fn evaluation_fixture() -> EvaluationFixture {
     EvaluationFixture {
         id: Id::from("eval-fixture"),
-        name: "Protected hierarchy fixture".to_owned(),
+        name: "Protected hierarchy aggregate fixture".to_owned(),
         scope: scope("engram"),
         setup: EvaluationSetup {
             memories: Vec::new(),
@@ -311,7 +359,7 @@ fn requester() -> Requester {
 
 fn provenance() -> Provenance {
     Provenance {
-        source: "consolidation_hierarchy_build_test".to_owned(),
+        source: "consolidation_hierarchy_aggregate_test".to_owned(),
         actor: requester().actor,
         observed_at: fixed_time(),
         evidence: Vec::new(),

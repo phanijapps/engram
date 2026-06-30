@@ -215,5 +215,12 @@
     "description": "In-memory hierarchy retrieval expansion",
     "spec_file": "docs/specs/in-memory-hierarchy-retrieval-expansion/spec.md",
     "plan_file": "docs/specs/in-memory-hierarchy-retrieval-expansion/plan.md"
+  },
+  {
+    "phase_id": "PHASE31",
+    "status": "DONE",
+    "description": "In-memory hierarchy aggregate build",
+    "spec_file": "docs/specs/in-memory-hierarchy-aggregate-build/spec.md",
+    "plan_file": "docs/specs/in-memory-hierarchy-aggregate-build/plan.md"
   }
 ]

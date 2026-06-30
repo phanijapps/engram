@@ -56,6 +56,31 @@ pub(super) fn add_counter(counter: &mut Option<u64>, amount: u64) {
     *counter = Some(counter.unwrap_or(0) + amount);
 }
 
+/// Merges two results for the same planned task into one auditable result.
+///
+/// Some adapter tasks are composed from focused collaborators. Merging keeps the
+/// public run report at the planned-task level while avoiding a god module that
+/// owns every sub-algorithm.
+pub(super) fn merge_task_results(
+    mut left: ConsolidationTaskResult,
+    right: ConsolidationTaskResult,
+) -> ConsolidationTaskResult {
+    debug_assert_eq!(left.task, right.task);
+    left.completed_at = right.completed_at.or(left.completed_at);
+    left.items_read = sum_optional_counts(left.items_read, right.items_read);
+    left.items_written = sum_optional_counts(left.items_written, right.items_written);
+    left.items_updated = sum_optional_counts(left.items_updated, right.items_updated);
+    left.items_skipped = sum_optional_counts(left.items_skipped, right.items_skipped);
+    left.model_calls = sum_optional_counts(left.model_calls, right.model_calls);
+    left.errors.extend(right.errors);
+    left.output_refs.extend(right.output_refs);
+    left
+}
+
+fn sum_optional_counts(left: Option<u64>, right: Option<u64>) -> Option<u64> {
+    Some(left.unwrap_or(0) + right.unwrap_or(0))
+}
+
 /// Creates an evidence reference pointing at a memory record.
 ///
 /// Consolidation task results use these references to name affected records

@@ -17,6 +17,7 @@ mod common;
 mod compaction;
 mod contradiction_detection;
 mod decay;
+mod hierarchy_aggregate;
 mod hierarchy_build;
 
 /// Mutating consolidation executor for the in-memory adapter.
@@ -76,12 +77,19 @@ impl ConsolidationMutationExecutor for InMemoryConsolidationExecutor {
                     tasks.push(result);
                 }
                 ConsolidationTaskKind::HierarchyBuild => {
-                    let result = hierarchy_build::build_base_nodes(
+                    let base_result = hierarchy_build::build_base_nodes(
                         &self.service,
                         request,
                         started_at,
                         &mut stats,
                     )?;
+                    let aggregate_result = hierarchy_aggregate::build_entity_aggregates(
+                        &self.service,
+                        request,
+                        started_at,
+                        &mut stats,
+                    )?;
+                    let result = common::merge_task_results(base_result, aggregate_result);
                     tasks.push(result);
                 }
                 ConsolidationTaskKind::BeliefSynthesis => {

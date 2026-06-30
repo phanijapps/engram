@@ -78,3 +78,5 @@ This project follows a contract-first changelog while pre-1.0.
 - Added hierarchy-mode retrieval expansion from matched memory base nodes to
   scoped sibling memory base nodes with policy-safe omissions and fusion trace
   evidence.
+- Added deterministic first-entity aggregate hierarchy construction with
+  parent links, memberships, hierarchy-built events, and idempotency coverage.

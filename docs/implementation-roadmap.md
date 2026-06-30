@@ -357,8 +357,9 @@ Acceptance gate:
 ## Phase 10: Hierarchy Navigation
 
 Status: complete for in-memory hierarchy repository, parent-chain navigation,
-memory base-node construction, and hierarchy retrieval context; aggregate
-construction remains future work.
+memory base-node construction, hierarchy retrieval context, and deterministic
+first-entity aggregate construction. Semantic clustering and model-assisted
+summaries remain future work.
 
 Goal: add hierarchical memory organization for navigation, compression, and
 retrieval expansion.
@@ -480,6 +481,9 @@ Shipped slice:
 - Added hierarchy-mode retrieval expansion from matched memory base nodes to
   scoped sibling memory base nodes, including policy-safe omissions,
   deduplication, and `hierarchy.expansion` trace evidence.
+- Added deterministic first-entity aggregate hierarchy construction for scoped
+  memory-backed base nodes, including parent links, aggregate memberships,
+  hierarchy-built events, and idempotency coverage.
 
 ## Phase 13: Integrations and Runtime Adapters
 

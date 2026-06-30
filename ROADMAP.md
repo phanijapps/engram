@@ -35,6 +35,8 @@ use the implementation roadmap as the spec-driven execution loop.
 - Keep hierarchy retrieval expansion opt-in through hierarchical mode and
   bounded to scoped sibling memory base nodes until aggregate construction has
   its own spec.
+- Keep aggregate hierarchy construction deterministic and entity-backed until
+  semantic clustering and model summaries have quality specs.
 - Keep belief synthesis evidence-bound: explicit memory assertions can produce
   beliefs, while inference and semantic contradiction work stay separate.
 - Keep explicit assertion contradiction detection review-only: new
@@ -63,7 +65,7 @@ use the implementation roadmap as the spec-driven execution loop.
 
 - Concrete consolidation task algorithms for aggregate hierarchy and semantic
   contradiction detection.
-- Aggregate hierarchy construction beyond base nodes and sibling expansion.
+- Semantic hierarchy clustering and model-assisted aggregate summaries.
 - Production embedding provider wiring and full vector fusion service
   composition.
 

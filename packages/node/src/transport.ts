@@ -82,6 +82,12 @@ export interface NativeKnowledgeTransport {
   putConcept(concept: unknown): Promise<unknown>;
   putConceptRelation(relation: unknown): Promise<unknown>;
   listConcepts(schemeId: string, scope: unknown): Promise<unknown>;
+  putOntology(ontology: unknown): Promise<unknown>;
+  getOntology(id: string, scope: unknown): Promise<unknown>;
+  putClass(klass: unknown): Promise<unknown>;
+  putProperty(property: unknown): Promise<unknown>;
+  putAxiom(axiom: unknown): Promise<unknown>;
+  validateGraph(graphId: string, ontologyId: string, scope: unknown): Promise<unknown>;
 }
 
 /** Options for constructing a native knowledge transport. */
@@ -147,6 +153,30 @@ class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
 
   async listConcepts(schemeId: string, scope: unknown): Promise<unknown> {
     return decode(this.engine.listConceptsJson(encode({ schemeId, scope })));
+  }
+
+  async putOntology(ontology: unknown): Promise<unknown> {
+    return decode(this.engine.putOntologyJson(encode(ontology)));
+  }
+
+  async getOntology(id: string, scope: unknown): Promise<unknown> {
+    return decode(this.engine.getOntologyJson(encode({ id, scope })));
+  }
+
+  async putClass(klass: unknown): Promise<unknown> {
+    return decode(this.engine.putClassJson(encode(klass)));
+  }
+
+  async putProperty(property: unknown): Promise<unknown> {
+    return decode(this.engine.putPropertyJson(encode(property)));
+  }
+
+  async putAxiom(axiom: unknown): Promise<unknown> {
+    return decode(this.engine.putAxiomJson(encode(axiom)));
+  }
+
+  async validateGraph(graphId: string, ontologyId: string, scope: unknown): Promise<unknown> {
+    return decode(this.engine.validateGraphJson(encode({ graphId, ontologyId, scope })));
   }
 }
 

@@ -25,6 +25,12 @@ export interface NativeKnowledgeEngineBinding {
   putConceptJson(conceptJson: string): string;
   putConceptRelationJson(relationJson: string): string;
   listConceptsJson(requestJson: string): string;
+  putOntologyJson(ontologyJson: string): string;
+  getOntologyJson(requestJson: string): string;
+  putClassJson(classJson: string): string;
+  putPropertyJson(propertyJson: string): string;
+  putAxiomJson(axiomJson: string): string;
+  validateGraphJson(requestJson: string): string;
 }
 
 /** Constructor shape for the Rust-backed knowledge + taxonomy engine. */

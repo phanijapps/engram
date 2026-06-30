@@ -6,14 +6,17 @@
 
 use engram_domain::{
     Concept, ConceptRelation, ConceptScheme, Id, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph,
-    KnowledgeRelationship, KnowledgeSource, Scope, SourceDocument, SourceDocumentKind,
+    KnowledgeRelationship, KnowledgeSource, Ontology, OntologyAxiom, OntologyClass,
+    OntologyProperty, Scope, SourceDocument, SourceDocumentKind,
 };
 use engram_domain::{ForgetRequest, RetrievalRequest, WriteMemoryRequest};
 use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, GraphExtractor, KnowledgeIngestor, PlainTextChunker,
     PlainTextChunkerOptions,
 };
-use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository, TaxonomyRepository};
+use engram_knowledge::{
+    KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
+};
 use engram_memory::{CoreError, MemoryService};
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use engram_store_sql::SqlMemoryService;
@@ -245,6 +248,56 @@ impl NativeKnowledgeEngine {
         let scope = scope_field(&value)?;
         let result =
             block_on(self.store.list_concepts(&scheme_id, &scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    // --- OntologyRepository --------------------------------------------------
+
+    #[napi(js_name = "putOntologyJson")]
+    pub fn put_ontology_json(&self, ontology_json: String) -> Result<String> {
+        let ontology: Ontology = decode(&ontology_json)?;
+        let result = block_on(self.store.put_ontology(ontology)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "getOntologyJson")]
+    pub fn get_ontology_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let id = id_field(&value, "id")?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.store.get_ontology(&id, &scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "putClassJson")]
+    pub fn put_class_json(&self, class_json: String) -> Result<String> {
+        let class: OntologyClass = decode(&class_json)?;
+        let result = block_on(self.store.put_class(class)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "putPropertyJson")]
+    pub fn put_property_json(&self, property_json: String) -> Result<String> {
+        let property: OntologyProperty = decode(&property_json)?;
+        let result = block_on(self.store.put_property(property)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "putAxiomJson")]
+    pub fn put_axiom_json(&self, axiom_json: String) -> Result<String> {
+        let axiom: OntologyAxiom = decode(&axiom_json)?;
+        let result = block_on(self.store.put_axiom(axiom)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "validateGraphJson")]
+    pub fn validate_graph_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let graph_id = id_field(&value, "graphId")?;
+        let ontology_id = id_field(&value, "ontologyId")?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.store.validate_graph(&graph_id, &ontology_id, &scope))
+            .map_err(to_napi_error)?;
         encode(&result)
     }
 }

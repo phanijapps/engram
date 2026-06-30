@@ -91,6 +91,34 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 record_json TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS ontologies (
+                id TEXT PRIMARY KEY,
+                tenant TEXT NOT NULL,
+                subject TEXT,
+                workspace TEXT,
+                session TEXT,
+                environment TEXT,
+                record_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS ontology_classes (
+                id TEXT PRIMARY KEY,
+                ontology_id TEXT NOT NULL,
+                record_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS ontology_properties (
+                id TEXT PRIMARY KEY,
+                ontology_id TEXT NOT NULL,
+                record_json TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS ontology_axioms (
+                id TEXT PRIMARY KEY,
+                ontology_id TEXT NOT NULL,
+                record_json TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_chunks_document ON knowledge_chunks(document_id);
             CREATE INDEX IF NOT EXISTS idx_chunks_source ON knowledge_chunks(source_id);
             CREATE INDEX IF NOT EXISTS idx_documents_source ON knowledge_documents(source_id);
@@ -98,6 +126,9 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 ON knowledge_relationships(graph_id, subject_id);
             CREATE INDEX IF NOT EXISTS idx_concepts_scheme ON concepts(scheme_id);
             CREATE INDEX IF NOT EXISTS idx_concept_relations_scheme ON concept_relations(scheme_id);
+            CREATE INDEX IF NOT EXISTS idx_ontology_classes ON ontology_classes(ontology_id);
+            CREATE INDEX IF NOT EXISTS idx_ontology_properties ON ontology_properties(ontology_id);
+            CREATE INDEX IF NOT EXISTS idx_ontology_axioms ON ontology_axioms(ontology_id);
             "#,
         )
         .map_err(sql_error)

@@ -1,6 +1,8 @@
 use chrono::Utc;
 use engram_domain::*;
-use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository, TaxonomyRepository};
+use engram_knowledge::{
+    KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
+};
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
@@ -257,4 +259,154 @@ fn taxonomy_round_trips_scoped_scheme_and_concepts() {
     assert_eq!(concepts.len(), 2);
     assert_eq!(concepts[0].id, Id::from("concept-rust"));
     assert!(hidden_concepts.is_empty());
+}
+
+fn ontology(ontology_id: &str, tenant: &str) -> Ontology {
+    Ontology {
+        id: Id::from(ontology_id),
+        uri: format!("urn:ontology:{ontology_id}"),
+        name: "IT Org Ontology".to_owned(),
+        scope: scope(tenant),
+        language: OntologyLanguage::Owl,
+        version: "1.0.0".to_owned(),
+        status: OntologyStatus::Active,
+        imports: Vec::new(),
+        policy: policy(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }
+}
+
+#[test]
+fn ontology_round_trips_scoped_with_classes_and_properties() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let ontology_id = Id::from("ontology-it");
+    block_on(store.put_ontology(ontology("ontology-it", "tenant-a"))).expect("put ontology");
+
+    block_on(store.put_class(OntologyClass {
+        id: Id::from("class-service"),
+        ontology_id: ontology_id.clone(),
+        uri: "urn:cls:service".to_owned(),
+        label: "Service".to_owned(),
+        description: Some("A deployable service".to_owned()),
+        parent_class_ids: Vec::new(),
+        concept_refs: Vec::new(),
+        status: OntologyTermStatus::Active,
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put class");
+
+    block_on(store.put_property(OntologyProperty {
+        id: Id::from("prop-depends-on"),
+        ontology_id: ontology_id.clone(),
+        uri: "urn:prop:depends_on".to_owned(),
+        label: "depends_on".to_owned(),
+        kind: OntologyPropertyKind::Object,
+        domain_class_id: Some(Id::from("class-service")),
+        range_class_id: Some(Id::from("class-service")),
+        datatype: None,
+        inverse_property_id: None,
+        status: OntologyTermStatus::Active,
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put property");
+
+    block_on(store.put_axiom(OntologyAxiom {
+        id: Id::from("axiom-1"),
+        ontology_id: ontology_id.clone(),
+        kind: OntologyAxiomKind::Transitive,
+        subject_class_id: Some(Id::from("class-service")),
+        property_id: Some(Id::from("prop-depends-on")),
+        object_class_id: Some(Id::from("class-service")),
+        expression: None,
+        provenance: provenance(),
+        created_at: Utc::now(),
+        metadata: None,
+    }))
+    .expect("put axiom");
+
+    let visible =
+        block_on(store.get_ontology(&ontology_id, &scope("tenant-a"))).expect("get ontology");
+    let hidden =
+        block_on(store.get_ontology(&ontology_id, &scope("tenant-b"))).expect("get ontology");
+
+    assert!(visible.is_some());
+    assert!(hidden.is_none());
+}
+
+#[test]
+fn validate_graph_warns_on_undeclared_predicate_only() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let ontology_id = Id::from("ontology-it");
+    let graph_id = Id::from("graph-it");
+
+    block_on(store.put_ontology(ontology("ontology-it", "tenant-a"))).expect("put ontology");
+    // Declare a single property "depends_on"; "calls" is intentionally undeclared.
+    block_on(store.put_property(OntologyProperty {
+        id: Id::from("prop-depends-on"),
+        ontology_id: ontology_id.clone(),
+        uri: "urn:prop:depends_on".to_owned(),
+        label: "depends_on".to_owned(),
+        kind: OntologyPropertyKind::Object,
+        domain_class_id: None,
+        range_class_id: None,
+        datatype: None,
+        inverse_property_id: None,
+        status: OntologyTermStatus::Active,
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put property");
+    block_on(store.put_graph(graph(graph_id.as_str(), "tenant-a"))).expect("put graph");
+
+    for (relationship_id, predicate) in
+        [("rel-declared", "depends_on"), ("rel-undeclared", "calls")]
+    {
+        block_on(store.put_relationship(KnowledgeRelationship {
+            id: Id::from(relationship_id),
+            graph_id: Some(graph_id.clone()),
+            subject: EntityRef {
+                id: Some(Id::from("svc-a")),
+                kind: Some("service".to_owned()),
+                name: Some("svc-a".to_owned()),
+                aliases: Vec::new(),
+            },
+            predicate: predicate.to_owned(),
+            object: EntityRef {
+                id: Some(Id::from("svc-b")),
+                kind: Some("service".to_owned()),
+                name: Some("svc-b".to_owned()),
+                aliases: Vec::new(),
+            },
+            scope: scope("tenant-a"),
+            evidence: Vec::new(),
+            confidence: Some(0.9),
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+        }))
+        .expect("put relationship");
+    }
+
+    let findings = block_on(store.validate_graph(&graph_id, &ontology_id, &scope("tenant-a")))
+        .expect("validate");
+    // Advisory: only the undeclared predicate is flagged; never rejects.
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].code, "undeclared_predicate");
+    assert_eq!(findings[0].severity, OntologyValidationSeverity::Warning);
+
+    // A scope-hidden caller sees no findings.
+    let hidden = block_on(store.validate_graph(&graph_id, &ontology_id, &scope("tenant-b")))
+        .expect("validate hidden");
+    assert!(hidden.is_empty());
 }

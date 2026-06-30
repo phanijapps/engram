@@ -298,3 +298,31 @@ app.post("/taxonomy/concepts", async (c) => {
   const { schemeId, scope } = await c.req.json();
   return c.json(await getKnowledgeTransport().listConcepts(schemeId, scope));
 });
+
+// --- Ontology (govern graphs with classes, properties, axioms; RFC 0004 S3) -
+// Thin pass-throughs over the Rust OntologyRepository. validate_graph is
+// advisory — it returns findings, never rejects writes.
+app.post("/ontology/ontology", async (c) => {
+  const request = await c.req.json();
+  return c.json(await getKnowledgeTransport().putOntology(request));
+});
+app.post("/ontology/class", async (c) => {
+  const request = await c.req.json();
+  return c.json(await getKnowledgeTransport().putClass(request));
+});
+app.post("/ontology/property", async (c) => {
+  const request = await c.req.json();
+  return c.json(await getKnowledgeTransport().putProperty(request));
+});
+app.post("/ontology/axiom", async (c) => {
+  const request = await c.req.json();
+  return c.json(await getKnowledgeTransport().putAxiom(request));
+});
+app.post("/ontology/get", async (c) => {
+  const { id, scope } = await c.req.json();
+  return c.json(await getKnowledgeTransport().getOntology(id, scope));
+});
+app.post("/ontology/validate", async (c) => {
+  const { graphId, ontologyId, scope } = await c.req.json();
+  return c.json(await getKnowledgeTransport().validateGraph(graphId, ontologyId, scope));
+});

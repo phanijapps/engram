@@ -18,11 +18,20 @@ export type GraphSourceRef = {
   location?: { path?: string; line?: number | null; column?: number | null } | null;
 };
 
+export type GraphProvenance = {
+  source?: string;
+  method?: string;
+  confidence?: number;
+  observedAt?: string;
+};
+
 export type GraphEntity = {
   id: string;
   name: string;
   kind: string;
   degree: number;
+  confidence?: number;
+  provenance?: GraphProvenance;
   aliases?: string[];
   sourceRefs?: GraphSourceRef[];
 };
@@ -33,6 +42,8 @@ export type GraphRelationship = {
   predicate: string;
   object: { id: string; name?: string };
   confidence?: number;
+  method?: string;
+  provenance?: GraphProvenance;
 };
 
 export type GraphData = {
@@ -40,13 +51,16 @@ export type GraphData = {
   relationships: GraphRelationship[];
 };
 
-// Raw shapes returned by /ingest/extract and /ingest/scan (camelCase from Rust).
+// Raw shapes returned by /ingest/extract, /ingest/scan, /llm/extract (camelCase
+// from Rust). Entities/relationships already carry `provenance` + confidence;
+// these types opt into the fields this visualization consumes.
 export type RawEntity = {
   id: string;
   name: string;
   kind?: string;
   aliases?: string[];
   sourceRefs?: GraphSourceRef[];
+  provenance?: GraphProvenance;
 };
 export type RawRelationship = {
   id?: string;
@@ -54,7 +68,15 @@ export type RawRelationship = {
   predicate: string;
   object: { id?: string; name?: string };
   confidence?: number;
+  provenance?: GraphProvenance;
 };
+
+const LLM_METHOD = "llm_extraction";
+
+/** True when a record was derived by the LLM (vs the deterministic extractor). */
+function isLLMMethod(method: string | undefined): boolean {
+  return method === LLM_METHOD;
+}
 
 /** Build a renderable graph from raw entities + relationships (shared by panels). */
 export function buildGraphData(
@@ -74,6 +96,8 @@ export function buildGraphData(
       name: entity.name,
       kind: entity.kind ?? "unknown",
       degree: degree.get(entity.id) ?? 0,
+      confidence: entity.provenance?.confidence,
+      provenance: entity.provenance,
       aliases: entity.aliases,
       sourceRefs: entity.sourceRefs,
     })),
@@ -84,7 +108,9 @@ export function buildGraphData(
         subject: { id: rel.subject.id!, name: rel.subject.name },
         predicate: rel.predicate,
         object: { id: rel.object.id!, name: rel.object.name },
-        confidence: rel.confidence,
+        confidence: rel.confidence ?? rel.provenance?.confidence,
+        method: rel.provenance?.method,
+        provenance: rel.provenance,
       })),
   };
 }
@@ -118,6 +144,39 @@ function nodeColor(kind: string): string {
 }
 function nodeSize(degree: number): number {
   return 0.13 + Math.min(0.2, degree * 0.025);
+}
+
+// Provenance/confidence encoding. Deterministic edges are blue-gray; LLM-extracted
+// edges are amber so the source of each claim is legible at a glance. Confidence
+// scales edge width/opacity and node opacity; missing confidence reads as 1.0.
+const EDGE_DET = "#3a4768";
+const EDGE_DET_DIM = "#26304a";
+const EDGE_LLM = "#8a6a2a";
+const EDGE_LLM_DIM = "#3a2f1a";
+
+function clamp01(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 1;
+  return Math.max(0, Math.min(1, value));
+}
+
+function edgeColor(isLLM: boolean, active: boolean, dimmed: boolean): string {
+  if (active) return ACCENT;
+  if (dimmed) return isLLM ? EDGE_LLM_DIM : EDGE_DET_DIM;
+  return isLLM ? EDGE_LLM : EDGE_DET;
+}
+
+function edgeWidth(confidence: number | undefined, active: boolean): number {
+  return active ? 2.4 : 0.5 + clamp01(confidence) * 1.2;
+}
+
+function edgeOpacity(confidence: number | undefined, dimmed: boolean): number {
+  if (dimmed) return 0.2;
+  return 0.4 + 0.6 * clamp01(confidence);
+}
+
+function nodeOpacity(confidence: number | undefined, dimmed: boolean): number {
+  if (dimmed) return 0.25;
+  return 0.55 + 0.45 * clamp01(confidence);
 }
 
 type Selection =
@@ -172,8 +231,8 @@ function GraphNode({
           color={color}
           emissive={active ? ACCENT : "#000"}
           emissiveIntensity={selected ? 0.7 : hovered ? 0.35 : 0}
-          transparent={dimmed}
-          opacity={dimmed ? 0.25 : 1}
+          transparent
+          opacity={nodeOpacity(entity.confidence, dimmed)}
         />
       </mesh>
       {active && (
@@ -204,11 +263,14 @@ function GraphEdge({
 }) {
   const [hovered, setHovered] = useState(false);
   const active = highlighted || hovered;
+  const llm = isLLMMethod(relationship.method);
   return (
     <Line
       points={[from, to]}
-      color={active ? ACCENT : dimmed ? "#26304a" : "#3a4768"}
-      lineWidth={active ? 2 : 1}
+      color={edgeColor(llm, active, dimmed)}
+      lineWidth={edgeWidth(relationship.confidence, active)}
+      transparent
+      opacity={edgeOpacity(relationship.confidence, dimmed)}
       onClick={(e: ThreeEvent<MouseEvent>) => {
         e.stopPropagation();
         onSelect();
@@ -223,6 +285,64 @@ function GraphEdge({
         onHover(false);
       }}
     />
+  );
+}
+
+function ConfidenceBar({ value }: { value?: number }) {
+  const c = clamp01(value);
+  return (
+    <div className="graph3d__conf" aria-label={`confidence ${c.toFixed(2)}`}>
+      <div className="graph3d__conf-fill" style={{ width: `${Math.round(c * 100)}%` }} />
+    </div>
+  );
+}
+
+function ProvenanceBlock({
+  provenance,
+  confidence,
+}: {
+  provenance?: GraphProvenance;
+  confidence?: number;
+}) {
+  if (!provenance && typeof confidence !== "number") return null;
+  const method = provenance?.method;
+  const llm = isLLMMethod(method);
+  return (
+    <div className="graph3d__prov">
+      <div className="graph3d__prov-head">provenance</div>
+      <dl className="graph3d__fields">
+        {provenance?.source && (
+          <div>
+            <dt>source</dt>
+            <dd>
+              <code>{provenance.source}</code>
+            </dd>
+          </div>
+        )}
+        {method && (
+          <div>
+            <dt>method</dt>
+            <dd>
+              <span className={`graph3d__badge${llm ? " graph3d__badge--llm" : ""}`}>
+                {llm ? "LLM" : "deterministic"}
+              </span>
+            </dd>
+          </div>
+        )}
+        <div>
+          <dt>confidence</dt>
+          <dd>
+            <ConfidenceBar value={confidence ?? provenance?.confidence} />
+          </dd>
+        </div>
+        {provenance?.observedAt && (
+          <div>
+            <dt>observed</dt>
+            <dd>{new Date(provenance.observedAt).toLocaleString()}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
   );
 }
 
@@ -289,6 +409,7 @@ function DetailOverlay({
             </ul>
           </div>
         )}
+        <ProvenanceBlock provenance={entity.provenance} confidence={entity.confidence} />
       </div>
     );
   }
@@ -312,13 +433,8 @@ function DetailOverlay({
           <dt>to</dt>
           <dd>{rel.object.name ?? rel.object.id}</dd>
         </div>
-        {typeof rel.confidence === "number" && (
-          <div>
-            <dt>confidence</dt>
-            <dd>{rel.confidence.toFixed(2)}</dd>
-          </div>
-        )}
       </dl>
+      <ProvenanceBlock provenance={rel.provenance} confidence={rel.confidence} />
     </div>
   );
 }
@@ -410,6 +526,16 @@ export function Graph3D({ data }: { data: GraphData | null }) {
         selection={selection}
         onClear={() => setSelection(null)}
       />
+      {relationships.length > 0 && (
+        <div className="graph3d__legend">
+          <span className="graph3d__legend-item">
+            <i style={{ background: EDGE_DET }} /> deterministic
+          </span>
+          <span className="graph3d__legend-item">
+            <i style={{ background: EDGE_LLM }} /> LLM-extracted
+          </span>
+        </div>
+      )}
       {entities.length === 0 && (
         <div className="graph3d__empty">Ingest a document to populate the graph.</div>
       )}

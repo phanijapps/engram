@@ -419,3 +419,66 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* Provenance + confidence encoding (RFC 0004 Slice 4) */
+.graph3d__legend {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.6rem;
+  display: flex;
+  gap: 0.85rem;
+  font-size: 0.72rem;
+  opacity: 0.82;
+  pointer-events: none;
+}
+
+.graph3d__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.graph3d__legend-item i {
+  width: 0.75rem;
+  height: 0.16rem;
+  border-radius: 1px;
+  display: inline-block;
+}
+
+.graph3d__prov {
+  margin-top: 0.6rem;
+}
+
+.graph3d__prov-head {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+  margin-bottom: 0.25rem;
+}
+
+.graph3d__badge {
+  font-size: 0.68rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 3px;
+  background: rgba(154, 166, 189, 0.18);
+  color: #cdd6e8;
+}
+
+.graph3d__badge--llm {
+  background: rgba(224, 179, 74, 0.2);
+  color: #e0b34a;
+}
+
+.graph3d__conf {
+  width: 6rem;
+  height: 0.35rem;
+  background: rgba(154, 166, 189, 0.18);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.graph3d__conf-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6ea8ff, #7bd88f);
+}

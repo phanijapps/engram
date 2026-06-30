@@ -191,6 +191,149 @@ button:disabled {
   border-radius: 8px;
 }
 
+/* --- Enterprise 3D graph (RFC 0004 Slice 0) ------------------------------ */
+.graph3d {
+  position: relative;
+  height: 440px;
+  margin-top: 0.5rem;
+  background: radial-gradient(120% 120% at 50% 0%, #111a30 0%, #0c1124 70%);
+  border: 1px solid #2a3656;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.graph3d__empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+  pointer-events: none;
+}
+
+.graph3d__label {
+  padding: 0.1rem 0.45rem;
+  background: rgba(11, 16, 32, 0.82);
+  border: 1px solid #2a3656;
+  border-radius: 5px;
+  color: var(--ink);
+  font-size: 11px;
+  white-space: nowrap;
+  transform: translateY(-2px);
+}
+
+.graph3d__detail {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  width: 230px;
+  max-width: 60%;
+  padding: 0.65rem 0.75rem;
+  background: rgba(21, 28, 48, 0.92);
+  backdrop-filter: blur(6px);
+  border: 1px solid #2a3656;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
+.graph3d__detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.3rem;
+}
+
+.graph3d__kind {
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.graph3d__close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 0.2rem;
+}
+
+.graph3d__close:hover {
+  color: var(--ink);
+}
+
+.graph3d__name {
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  word-break: break-word;
+}
+
+.graph3d__fields {
+  margin: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.graph3d__fields div {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.graph3d__fields dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  min-width: 64px;
+}
+
+.graph3d__fields dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.graph3d__fields code {
+  color: var(--accent);
+  font-size: 0.78rem;
+}
+
+.graph3d__sources {
+  margin-top: 0.45rem;
+  border-top: 1px solid #2a3656;
+  padding-top: 0.4rem;
+}
+
+.graph3d__sources-head {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.graph3d__sources ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.graph3d__sources a {
+  color: var(--accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.graph3d__sources a:hover {
+  text-decoration: underline;
+}
+
 .app__search {
   margin-top: 1rem;
 }

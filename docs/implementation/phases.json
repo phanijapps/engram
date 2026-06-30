@@ -400,7 +400,7 @@
   },
   {
     "phase_id": "PHASE57",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "RFC 0004 Enterprise 3D UI (minimalist-enterprise, navigable links) replacing Cytoscape",
     "spec_file": "docs/specs/enterprise-3d-graph/spec.md",
     "plan_file": "docs/specs/enterprise-3d-graph/plan.md"

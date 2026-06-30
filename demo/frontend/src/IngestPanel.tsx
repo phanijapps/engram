@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import cytoscape from "cytoscape";
+import { useMemo, useState } from "react";
+import { Graph3D, type GraphData, type GraphSourceRef } from "./Graph3D";
 
 const SCOPE = { tenant: "tenant-demo", workspace: "engram", environment: "local" };
 const POLICY = {
@@ -10,13 +10,25 @@ const POLICY = {
   deleteMode: "tombstone",
 };
 
-type Entity = { id: string; name: string; kind?: string };
+type Entity = {
+  id: string;
+  name: string;
+  kind?: string;
+  aliases?: string[];
+  sourceRefs?: GraphSourceRef[];
+};
 type Relationship = {
+  id: string;
   subject: { id?: string; name?: string };
   predicate: string;
   object: { id?: string; name?: string };
+  confidence?: number;
 };
-type IngestResult = { entities: Entity[]; relationships: Relationship[]; chunkCount: number };
+type IngestResult = {
+  entities: Entity[];
+  relationships: Relationship[];
+  chunkCount: number;
+};
 
 const DEFAULT_CODE =
   "fn write() { read(); flush(); }\nfn read() {}\nfn flush() {}\nstruct Store;\n";
@@ -26,75 +38,37 @@ export function IngestPanel() {
   const [isCode, setIsCode] = useState(true);
   const [result, setResult] = useState<IngestResult | null>(null);
   const [error, setError] = useState("");
-  const cyRef = useRef<HTMLDivElement>(null);
-  const cy = useRef<cytoscape.Core | null>(null);
 
-  useEffect(() => {
-    if (!cyRef.current) return;
-    cy.current = cytoscape({
-      container: cyRef.current,
-      elements: [],
-      style: [
-        {
-          selector: "node",
-          style: {
-            label: "data(label)",
-            color: "#e7ecf5",
-            "background-color": "#6ea8ff",
-            "text-wrap": "wrap",
-            "text-max-width": "120px",
-            "font-size": "11px",
-          },
-        },
-        {
-          selector: "node[kind = 'class']",
-          style: { "background-color": "#b07cff" },
-        },
-        {
-          selector: "node[kind = 'concept']",
-          style: { "background-color": "#7bd88f" },
-        },
-        {
-          selector: "edge",
-          style: {
-            label: "data(label)",
-            "curve-style": "bezier",
-            "target-arrow-shape": "triangle",
-            "line-color": "#9aa6bd",
-            "target-arrow-color": "#9aa6bd",
-            color: "#9aa6bd",
-            "font-size": "9px",
-            width: 2,
-          },
-        },
-      ],
-    });
-    return () => {
-      cy.current?.destroy();
-      cy.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    const instance = cy.current;
-    if (!instance) return;
-    instance.elements().remove();
-    if (!result) return;
-    for (const entity of result.entities) {
-      instance.add({
-        data: { id: entity.id, label: entity.name, kind: entity.kind ?? "entity" },
-      });
-    }
-    result.relationships.forEach((relationship, index) => {
-      const source = relationship.subject.id;
-      const target = relationship.object.id;
-      if (source && target) {
-        instance.add({
-          data: { id: `edge-${index}`, source, target, label: relationship.predicate },
-        });
+  const graphData: GraphData | null = useMemo(() => {
+    if (!result) return null;
+    const degree = new Map<string, number>();
+    for (const rel of result.relationships) {
+      // Count only edges that will actually render (both endpoints present) so
+      // node sizing matches the visible graph.
+      if (rel.subject.id && rel.object.id) {
+        degree.set(rel.subject.id, (degree.get(rel.subject.id) ?? 0) + 1);
+        degree.set(rel.object.id, (degree.get(rel.object.id) ?? 0) + 1);
       }
-    });
-    instance.layout({ name: "cose", animate: false, padding: 24 }).run();
+    }
+    return {
+      entities: result.entities.map((entity) => ({
+        id: entity.id,
+        name: entity.name,
+        kind: entity.kind ?? "unknown",
+        degree: degree.get(entity.id) ?? 0,
+        aliases: entity.aliases,
+        sourceRefs: entity.sourceRefs,
+      })),
+      relationships: result.relationships
+        .filter((rel) => rel.subject.id && rel.object.id)
+        .map((rel, index) => ({
+          id: rel.id ?? `edge-${index}`,
+          subject: { id: rel.subject.id!, name: rel.subject.name },
+          predicate: rel.predicate,
+          object: { id: rel.object.id!, name: rel.object.name },
+          confidence: rel.confidence,
+        })),
+    };
   }, [result]);
 
   const ingest = async () => {
@@ -147,7 +121,7 @@ export function IngestPanel() {
           {result.chunkCount} chunks (real Rust)
         </div>
       )}
-      <div ref={cyRef} className="ingest__graph" />
+      <Graph3D data={graphData} />
     </section>
   );
 }

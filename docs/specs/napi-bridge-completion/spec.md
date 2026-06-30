@@ -1,6 +1,6 @@
 # Spec: N-API bridge completion (demo Slice 0)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0003, ADR-0003, ADR-0006, `docs/specs/workspace-responsibility-layout`, `docs/specs/typescript-native-surface`
@@ -83,22 +83,22 @@ ingest, retrieval, or taxonomy is Slice 1 (after ADR-0007).
 
 ## Acceptance Criteria
 
-- [ ] The `build:native` script (`cargo build --release -p engram-node`, then
+- [x] The `build:native` script (`cargo build --release -p engram-node`, then
   place the cdylib as `engram_node.node`) produces a loadable addon for the host
   triple (linux x64-gnu for local runs) — verifiable by `pnpm --filter
   @engram/node build:native && node -e "require('./packages/node/engram_node.node')"`.
-- [ ] A real-load test in `@engram/node` constructs `NativeMemoryEngine` from the
+- [x] A real-load test in `@engram/node` constructs `NativeMemoryEngine` from the
   compiled addon (no injected fake) and successfully round-trips
   `writeMemoryJson` → `retrieveJson` → `forgetJson` against real Rust.
-- [ ] `demo/backend` (Hono on Node) starts and exposes `/memory/write`,
+- [x] `demo/backend` (Hono on Node) starts and exposes `/memory/write`,
   `/memory/retrieve`, `/memory/forget` that delegate to the native engine and
   return Rust-backed JSON.
-- [ ] `demo/frontend` (Vite + React) renders a memory panel; a user submits a
+- [x] `demo/frontend` (Vite + React) renders a memory panel; a user submits a
   memory and sees it returned by retrieve — end-to-end browser → Node → Rust.
-- [ ] Default repo gates pass with no v1 contract drift: `cargo check
+- [x] Default repo gates pass with no v1 contract drift: `cargo check
   --workspace`, `cargo test -p engram-node` (real-load), `pnpm run typecheck`,
   `pnpm run test`.
-- [ ] `demo/README.md` documents how to build the `.node` and run the backend and
+- [x] `demo/README.md` documents how to build the `.node` and run the backend and
   frontend.
 
 ## Assumptions

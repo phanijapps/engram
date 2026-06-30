@@ -901,7 +901,7 @@ Slice 1 forbidden-import gate. ADR-0007 (N-API binding surface extension) lands
 before `PHASE53`.
 
 - `PHASE52` — Slice 0: N-API build pipeline + real memory bridge + Node backend
-  + frontend shell.
+  + frontend shell. **(shipped)**
 - `PHASE53` — Slice 1: SQLite knowledge adapter + `TaxonomyRepository` +
   forbidden-import gate (preceded by ADR-0007).
 - `PHASE54` — Slice 2: deterministic graph extractor (code-symbol + document).

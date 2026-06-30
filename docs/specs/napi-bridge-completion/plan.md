@@ -1,7 +1,7 @@
 # Plan: N-API bridge completion (demo Slice 0)
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting
+- **Status:** Done
 
 > **Plan contract:** implementation strategy. Allowed to change as we learn;
 > substantial changes noted in the changelog at the bottom.

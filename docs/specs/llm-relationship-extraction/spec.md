@@ -1,5 +1,6 @@
 # Spec: llm-relationship-extraction (RFC 0004 Slice 2 / PHASE59)
 
+- **Status:** Shipped
 - **Shape:** mixed (service + ui)
 - **Constrained by:** RFC-0004 D2/D3 + the Security & data-custody controls (LLM-output validation, call bounds, credential isolation, supply-chain); ADR-0007 (no binding change)
 - **Contract:** none (new demo-only routes)

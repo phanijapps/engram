@@ -1,5 +1,6 @@
 # Spec: ontology-it-org (RFC 0004 Slice 3 / PHASE60)
 
+- **Status:** Shipped
 - **Shape:** mixed (data + service + ui)
 - **Constrained by:** RFC-0004 D3 (ontology reversal) + ADR-0007 (N-API surface extension pattern); records **ADR-0008** (reversal of RFC 0003's ontology deferral)
 - **Contract:** none (the `OntologyRepository` port + `core/domain/src/ontology.rs` types already exist; transport stays `unknown`-typed like taxonomy — no generated-contract change)
@@ -46,9 +47,9 @@ RFC 0003 deferred ontology as a non-goal. RFC 0004 D3 reverses that. This slice 
 
 ## Acceptance Criteria
 
-- [ ] `OntologyRepository` is implemented in `engram-store-knowledge-sqlite` (put_ontology, put_class, put_property, put_axiom, get_ontology, validate_graph) with idempotent schema + Rust unit tests.
-- [ ] The N-API binding exposes `putOntology`/`getOntology`/`putClass`/`putProperty`/`putAxiom`/`validateGraph`; the TS transport wraps them; the native module rebuilds.
-- [ ] `/ontology/ontology`, `/ontology/class`, `/ontology/property`, `/ontology/axiom`, `/ontology/get`, `/ontology/validate` routes work via curl.
-- [ ] `validate_graph` is advisory (warnings/info only, never rejects).
-- [ ] An OntologyPanel browses classes + properties; an IT-org sample ontology + taxonomy loads from a fixture.
-- [ ] ADR-0008 records the ontology reversal; `cargo fmt/check/test` + backend/frontend typecheck/build pass.
+- [x] `OntologyRepository` is implemented in `engram-store-knowledge-sqlite` (put_ontology, put_class, put_property, put_axiom, get_ontology, validate_graph) with idempotent schema + Rust unit tests.
+- [x] The N-API binding exposes `putOntology`/`getOntology`/`putClass`/`putProperty`/`putAxiom`/`validateGraph`; the TS transport wraps them; the native module rebuilds.
+- [x] `/ontology/ontology`, `/ontology/class`, `/ontology/property`, `/ontology/axiom`, `/ontology/get`, `/ontology/validate` routes work via curl.
+- [x] `validate_graph` is advisory (warnings/info only, never rejects).
+- [x] An OntologyPanel browses classes + properties; an IT-org sample ontology + taxonomy loads from a fixture.
+- [x] ADR-0008 records the ontology reversal; `cargo fmt/check/test` + backend/frontend typecheck/build pass.

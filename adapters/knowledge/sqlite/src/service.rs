@@ -559,6 +559,10 @@ impl OntologyRepository for SqlKnowledgeStore {
         Ok(ontology.filter(|ontology| scope_allows(&ontology.scope, scope)))
     }
 
+    // Classes, properties, and axioms carry no scope of their own — they inherit
+    // visibility from their owning ontology (mirroring concepts ↔ concept
+    // scheme). `put_*` does not re-verify the caller owns `ontology_id`; reads
+    // (`get_ontology`, `validate_graph`) enforce scope on the parent ontology.
     async fn put_class(&self, class: OntologyClass) -> CoreResult<OntologyClass> {
         let json = serde_json::to_string(&class).map_err(json_error)?;
         let connection = self.lock()?;
@@ -664,15 +668,35 @@ impl OntologyRepository for SqlKnowledgeStore {
         drop(property_statement);
 
         let now = Utc::now();
+        // Bound the scan so an oversized graph cannot make advisory validation
+        // unbounded: read LIMIT+1 rows, and if that many come back, report
+        // truncation instead of scanning further. `drop` the statement before
+        // reusing the connection (rusqlite borrow lifetime).
         let mut relationship_statement = connection
-            .prepare("SELECT record_json FROM knowledge_relationships WHERE graph_id = ?1")
+            .prepare(
+                "SELECT record_json FROM knowledge_relationships \
+                 WHERE graph_id = ?1 ORDER BY id LIMIT ?2",
+            )
             .map_err(sql_error)?;
-        let relationship_rows = relationship_statement
-            .query_map(params![graph_id.to_string()], |row| row.get::<_, String>(0))
+        let relationship_rows: Vec<String> = relationship_statement
+            .query_map(
+                params![
+                    graph_id.to_string(),
+                    (VALIDATE_RELATIONSHIP_LIMIT + 1) as i64
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(sql_error)?
+            .collect::<Result<_, _>>()
             .map_err(sql_error)?;
+        drop(relationship_statement);
+        let truncated = relationship_rows.len() > VALIDATE_RELATIONSHIP_LIMIT;
+
         let mut findings = Vec::new();
-        for row in relationship_rows {
-            let json = row.map_err(sql_error)?;
+        for json in relationship_rows
+            .into_iter()
+            .take(VALIDATE_RELATIONSHIP_LIMIT)
+        {
             let relationship =
                 serde_json::from_str::<KnowledgeRelationship>(&json).map_err(json_error)?;
             if !scope_allows(&relationship.scope, scope) {
@@ -696,10 +720,29 @@ impl OntologyRepository for SqlKnowledgeStore {
                 detected_at: now,
             });
         }
+        if truncated {
+            findings.push(OntologyValidationFinding {
+                id: format!("finding-{ontology_id}-truncated"),
+                ontology_id: ontology_id.clone(),
+                severity: OntologyValidationSeverity::Info,
+                code: "validation_truncated".to_owned(),
+                message: format!(
+                    "graph has more than {VALIDATE_RELATIONSHIP_LIMIT} relationships; validation truncated"
+                ),
+                target: None,
+                axiom_id: None,
+                provenance: validation_provenance(ontology_id, now),
+                detected_at: now,
+            });
+        }
         findings.sort_by(|left, right| left.id.cmp(&right.id));
         Ok(findings)
     }
 }
+
+/// Caps the number of relationships `validate_graph` scans, so advisory
+/// validation over an oversized graph stays bounded.
+const VALIDATE_RELATIONSHIP_LIMIT: usize = 5_000;
 
 /// Builds the advisory provenance stamped on every validation finding. Validation
 /// is deterministic and carries no input evidence, so a fixed system actor is used.

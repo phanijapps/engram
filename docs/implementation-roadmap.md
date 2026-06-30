@@ -866,6 +866,8 @@ Shipped slice:
   migrated in-memory and SQL service tests to share them.
 - Added accepted retrieval evaluation fixtures for positive recall, forbidden
   recall, budget-constrained retrieval, and no-result behavior.
+- Added accepted forget request/result examples for delete, redact, tombstone,
+  and archive outcomes.
 
 ## Stop Conditions
 
@@ -885,8 +887,6 @@ Do not move to a later phase when any of these are true:
 
 The next implementation loop should be:
 
-1. Add forget-memory behavior for archive, tombstone, redaction, and hard
-   delete policy outcomes.
-2. Add evaluation report generation over the executable fixture set.
-3. Start SQL adapter design from `docs/adr/0005-storage-adapter-semantics.md`.
-4. Update docs and run the full validation suite.
+1. Add evaluation report generation over the executable fixture set.
+2. Start SQL adapter design from `docs/adr/0005-storage-adapter-semantics.md`.
+3. Update docs and run the full validation suite.

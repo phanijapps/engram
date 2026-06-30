@@ -103,3 +103,5 @@ This project follows a contract-first changelog while pre-1.0.
 - Added reusable accepted write/retrieval fixture runners in `engram-eval`.
 - Added accepted retrieval evaluation fixtures for recall, exclusion, budget,
   and no-result behavior.
+- Added accepted forget request/result examples for delete, redact, archive,
+  and tombstone outcomes.

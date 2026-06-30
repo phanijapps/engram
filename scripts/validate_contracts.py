@@ -37,6 +37,12 @@ VALID_EXAMPLE_DEFS = {
     "context-payload.json": "ContextPayload",
     "forget-request.json": "ForgetRequest",
     "forget-result.json": "ForgetResult",
+    "forget-request.delete.json": "ForgetRequest",
+    "forget-result.delete.json": "ForgetResult",
+    "forget-request.redact.json": "ForgetRequest",
+    "forget-result.redact.json": "ForgetResult",
+    "forget-request.archive.json": "ForgetRequest",
+    "forget-result.archive.json": "ForgetResult",
     "evaluation-fixture.json": "EvaluationFixture",
 }
 

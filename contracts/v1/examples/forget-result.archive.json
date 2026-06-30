@@ -1,0 +1,36 @@
+{
+  "targetType": "memory",
+  "targetId": "memory-001",
+  "status": "archived",
+  "event": {
+    "id": "event-002",
+    "kind": "forgotten",
+    "scope": {
+      "tenant": "tenant-demo",
+      "workspace": "engram",
+      "environment": "local"
+    },
+    "actor": {
+      "id": "actor-agent-1",
+      "kind": "agent",
+      "displayName": "Contract Agent"
+    },
+    "memoryId": "memory-001",
+    "payload": {
+      "mode": "archive",
+      "reason": "Contract example archive"
+    },
+    "provenance": {
+      "source": "forget_request",
+      "actor": {
+        "id": "actor-agent-1",
+        "kind": "agent",
+        "displayName": "Contract Agent"
+      },
+      "observedAt": "2026-06-29T12:02:00Z",
+      "method": "manual"
+    },
+    "occurredAt": "2026-06-29T12:02:00Z",
+    "recordedAt": "2026-06-29T12:02:00Z"
+  }
+}

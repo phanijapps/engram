@@ -327,5 +327,12 @@
     "description": "Accepted retrieval fixtures",
     "spec_file": "docs/specs/accepted-retrieval-fixtures/spec.md",
     "plan_file": "docs/specs/accepted-retrieval-fixtures/plan.md"
+  },
+  {
+    "phase_id": "PHASE47",
+    "status": "DONE",
+    "description": "Forget mode contract examples",
+    "spec_file": "docs/specs/forget-mode-contract-examples/spec.md",
+    "plan_file": "docs/specs/forget-mode-contract-examples/plan.md"
   }
 ]

@@ -58,6 +58,10 @@ Accepted retrieval evaluation fixtures cover positive recall, forbidden recall,
 budget-constrained retrieval, and no-result behavior. They are executable
 through `engram-eval`.
 
+Accepted forget examples cover delete, redact, tombstone, and archive mode
+payloads. The unsuffixed `forget-request.json` and `forget-result.json` files
+remain the canonical tombstone examples.
+
 Invalid examples under `examples/invalid/` are negative contract fixtures. They
 must fail schema validation or explicit semantic checks in
 `scripts/validate_contracts.py`.

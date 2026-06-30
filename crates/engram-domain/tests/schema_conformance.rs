@@ -27,6 +27,13 @@ fn assert_matches_definition(definition: &str, value: Value) {
     }
 }
 
+fn contract_example(path: &str) -> String {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../contracts/v1/examples")
+        .join(path);
+    fs::read_to_string(path).expect("read contract example")
+}
+
 fn actor() -> Actor {
     Actor {
         id: Id::from("actor-agent-1"),
@@ -181,4 +188,29 @@ fn rust_retrieval_request_matches_v1_schema() {
         "RetrievalRequest",
         serde_json::to_value(request).expect("serialize retrieval request"),
     );
+}
+
+#[test]
+fn accepted_forget_examples_deserialize() {
+    for path in [
+        "forget-request.json",
+        "forget-request.delete.json",
+        "forget-request.redact.json",
+        "forget-request.archive.json",
+    ] {
+        let request: ForgetRequest =
+            serde_json::from_str(&contract_example(path)).expect("deserialize forget request");
+        assert_eq!(request.target_type, ForgetTargetType::Memory, "{path}");
+    }
+
+    for (path, status) in [
+        ("forget-result.json", ForgetStatus::Tombstoned),
+        ("forget-result.delete.json", ForgetStatus::Deleted),
+        ("forget-result.redact.json", ForgetStatus::Redacted),
+        ("forget-result.archive.json", ForgetStatus::Archived),
+    ] {
+        let result: ForgetResult =
+            serde_json::from_str(&contract_example(path)).expect("deserialize forget result");
+        assert_eq!(result.status, status, "{path}");
+    }
 }

@@ -6,6 +6,7 @@
 
 mod chunker;
 mod code_symbol;
+mod extractor;
 mod filesystem;
 mod git;
 mod hash;
@@ -14,6 +15,7 @@ mod request;
 
 pub use chunker::{ChunkCandidate, Chunker, PlainTextChunker, PlainTextChunkerOptions};
 pub use code_symbol::CodeSymbolChunker;
+pub use extractor::{ExtractedGraph, GraphExtractor};
 pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
 pub use git::GitSourceReader;
 pub use hash::content_hash;

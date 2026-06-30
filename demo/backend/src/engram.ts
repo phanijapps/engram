@@ -1,5 +1,7 @@
 import {
+  createNativeKnowledgeTransport,
   createNativeMemoryTransport,
+  type NativeKnowledgeTransport,
   type NativeMemoryTransport,
 } from "@engram/node";
 
@@ -12,4 +14,14 @@ export function getTransport(): NativeMemoryTransport {
     transport = createNativeMemoryTransport();
   }
   return transport;
+}
+
+// One Rust-backed knowledge + taxonomy engine for graph and taxonomy state.
+let knowledge: NativeKnowledgeTransport | null = null;
+
+export function getKnowledgeTransport(): NativeKnowledgeTransport {
+  if (knowledge === null) {
+    knowledge = createNativeKnowledgeTransport();
+  }
+  return knowledge;
 }

@@ -138,9 +138,93 @@ export function App() {
     }
   };
 
+  const [schemeReady, setSchemeReady] = useState(false);
+  const [conceptLabel, setConceptLabel] = useState("");
+  const [concepts, setConcepts] = useState<
+    { id: string; prefLabel?: { value?: string } }[]
+  >([]);
+
+  const refreshConcepts = useCallback(async () => {
+    try {
+      const list = await postJson<{ id: string; prefLabel?: { value?: string } }[]>(
+        "/taxonomy/concepts",
+        { schemeId: "scheme-demo", scope: SCOPE }
+      );
+      setConcepts(list ?? []);
+      setError("");
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    }
+  }, []);
+
+  const createScheme = async () => {
+    try {
+      const now = new Date().toISOString();
+      await postJson("/taxonomy/scheme", {
+        id: "scheme-demo",
+        uri: "urn:scheme:demo",
+        name: "Demo Taxonomy",
+        scope: SCOPE,
+        version: "1.0.0",
+        provenance: {
+          source: "demo-ui",
+          actor: baseActor,
+          observedAt: now,
+          confidence: 1,
+          method: "manual",
+        },
+        policy: {
+          visibility: "workspace",
+          retention: "durable",
+          sensitivity: "low",
+          allowedUses: ["retrieval"],
+          deleteMode: "tombstone",
+        },
+        createdAt: now,
+      });
+      setSchemeReady(true);
+      setMessage("taxonomy scheme created");
+      await refreshConcepts();
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    }
+  };
+
+  const addConcept = async () => {
+    if (!conceptLabel.trim()) return;
+    try {
+      const id = `concept-${Date.now()}`;
+      const now = new Date().toISOString();
+      await postJson("/taxonomy/concept", {
+        id,
+        uri: `urn:concept:${id}`,
+        schemeId: "scheme-demo",
+        prefLabel: { value: conceptLabel },
+        altLabels: [],
+        status: "active",
+        provenance: {
+          source: "demo-ui",
+          actor: baseActor,
+          observedAt: now,
+          confidence: 1,
+          method: "manual",
+        },
+        createdAt: now,
+      });
+      setConceptLabel("");
+      await refreshConcepts();
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    }
+  };
+
   useEffect(() => {
     void retrieve(query);
   }, [query, retrieve]);
+
+  useEffect(() => {
+    if (schemeReady) void refreshConcepts();
+  }, [schemeReady, refreshConcepts]);
 
   return (
     <div className="app">
@@ -204,6 +288,39 @@ export function App() {
           </ul>
         </section>
       </div>
+
+      <section className="panel app__taxonomy">
+        <h2>Taxonomy</h2>
+        {!schemeReady ? (
+          <button onClick={createScheme}>Create demo concept scheme</button>
+        ) : (
+          <>
+            <div className="taxonomy__add">
+              <input
+                placeholder="New concept label…"
+                value={conceptLabel}
+                onChange={(e) => setConceptLabel(e.target.value)}
+              />
+              <button onClick={addConcept} disabled={!conceptLabel.trim()}>
+                Add concept
+              </button>
+            </div>
+            <ul className="results">
+              {concepts.length === 0 && (
+                <li className="results__empty">No concepts yet.</li>
+              )}
+              {concepts.map((c) => (
+                <li key={c.id} className="result">
+                  <div className="result__body">{c.prefLabel?.value ?? c.id}</div>
+                  <div className="result__meta">
+                    <code>{c.id}</code>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
     </div>
   );
 }

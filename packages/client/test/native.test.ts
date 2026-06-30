@@ -31,6 +31,19 @@ describe("@engram/client native transport", () => {
               status: "deleted"
             });
           }
+        },
+        NativeKnowledgeEngine: class {
+          putEntityJson(): string { return "null"; }
+          putRelationshipJson(): string { return "null"; }
+          getEntityJson(): string { return "null"; }
+          putGraphJson(): string { return "null"; }
+          getGraphJson(): string { return "null"; }
+          neighborsJson(): string { return "[]"; }
+          putConceptSchemeJson(): string { return "null"; }
+          getConceptSchemeJson(): string { return "null"; }
+          putConceptJson(): string { return "null"; }
+          putConceptRelationJson(): string { return "null"; }
+          listConceptsJson(): string { return "[]"; }
         }
       }
     });

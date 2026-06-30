@@ -1,6 +1,6 @@
 # Spec: SQLite knowledge-graph + taxonomy adapter (demo Slice 1)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0003, ADR-0003, ADR-0006, ADR-0007, `docs/specs/memory-knowledge-boundaries`, `docs/specs/sql-service-conformance`
@@ -70,8 +70,9 @@ not depend on the memory or vector adapters.
   `engram-store-vector` / `engram-store-memory`).
 - [x] `cargo fmt --all --check`, `cargo clippy --workspace -- -D warnings`,
   `cargo test --workspace`, and the contract/docs hooks pass with no drift.
-- [ ] (later in slice) `NativeKnowledgeEngine` exposes knowledge + taxonomy over
-  the binding; demo backend + UI browse knowledge and maintain taxonomy.
+- [x] `NativeKnowledgeEngine` exposes knowledge + taxonomy over the binding; demo
+  backend (`/knowledge/*`, `/taxonomy/*`) + UI maintain taxonomy. (Graph
+  visualization from real ingestion lands in Slice 2.)
 
 ## Assumptions
 

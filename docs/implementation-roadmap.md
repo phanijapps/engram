@@ -903,7 +903,7 @@ before `PHASE53`.
 - `PHASE52` — Slice 0: N-API build pipeline + real memory bridge + Node backend
   + frontend shell. **(shipped)**
 - `PHASE53` — Slice 1: SQLite knowledge adapter + `TaxonomyRepository` +
-  forbidden-import gate (preceded by ADR-0007).
+  forbidden-import gate (preceded by ADR-0007). **(shipped)**
 - `PHASE54` — Slice 2: deterministic graph extractor (code-symbol + document).
 - `PHASE55` — Slice 3: FastEmbed passage embeddings + fused retrieval.
 - `PHASE56` — Slice 4: demo UI polish (Cytoscape graph, query, taxonomy).

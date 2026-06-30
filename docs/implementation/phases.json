@@ -372,7 +372,7 @@
   },
   {
     "phase_id": "PHASE53",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "Demo Slice 1: SQLite knowledge-graph adapter + TaxonomyRepository port + forbidden-import gate",
     "spec_file": "docs/specs/sqlite-knowledge-graph/spec.md",
     "plan_file": "docs/specs/sqlite-knowledge-graph/plan.md"

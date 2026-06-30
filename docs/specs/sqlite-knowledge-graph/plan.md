@@ -1,7 +1,7 @@
 # Plan: SQLite knowledge-graph + taxonomy adapter (demo Slice 1)
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Executing
+- **Status:** Done
 
 ## Approach
 

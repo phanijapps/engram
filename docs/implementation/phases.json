@@ -208,5 +208,12 @@
     "description": "In-memory hierarchy retrieval context",
     "spec_file": "docs/specs/in-memory-hierarchy-retrieval-context/spec.md",
     "plan_file": "docs/specs/in-memory-hierarchy-retrieval-context/plan.md"
+  },
+  {
+    "phase_id": "PHASE30",
+    "status": "DONE",
+    "description": "In-memory hierarchy retrieval expansion",
+    "spec_file": "docs/specs/in-memory-hierarchy-retrieval-expansion/spec.md",
+    "plan_file": "docs/specs/in-memory-hierarchy-retrieval-expansion/plan.md"
   }
 ]

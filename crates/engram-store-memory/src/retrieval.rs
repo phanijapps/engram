@@ -12,7 +12,7 @@ use engram_domain::*;
 
 use crate::{
     belief_retrieval::{BeliefSnapshot, belief_candidates},
-    hierarchy_retrieval::apply_hierarchy_context,
+    hierarchy_retrieval::{apply_hierarchy_context, expand_hierarchy_memory_candidates},
     knowledge_retrieval::{KnowledgeSnapshot, knowledge_candidates},
     scope::scope_allows,
     service::InMemoryMemoryService,
@@ -65,6 +65,7 @@ pub(crate) async fn retrieve(
         )
     };
 
+    let expansion_records = records.clone();
     let mut candidates = Vec::new();
     let mut omitted = Vec::new();
     for record in records {
@@ -157,7 +158,17 @@ pub(crate) async fn retrieve(
     )?;
     candidate_results.append(&mut belief_results);
     omitted.extend(belief_omissions);
-    apply_hierarchy_context(&mut candidate_results, hierarchy_nodes, &request);
+    let hierarchy_omissions = expand_hierarchy_memory_candidates(
+        &mut candidate_results,
+        &expansion_records,
+        &hierarchy_nodes,
+        &request,
+        include_explanations,
+        now,
+        service.authorizer.as_ref(),
+    )?;
+    omitted.extend(hierarchy_omissions);
+    apply_hierarchy_context(&mut candidate_results, &hierarchy_nodes, &request);
 
     let mut fusion_request = request.clone();
     fusion_request.limit = None;

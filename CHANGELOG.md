@@ -75,3 +75,6 @@ This project follows a contract-first changelog while pre-1.0.
   policy omissions, explanations, and shared retrieval fusion.
 - Added hierarchy-mode retrieval context for in-memory memory results with
   scoped path evidence and hierarchical-fit scoring.
+- Added hierarchy-mode retrieval expansion from matched memory base nodes to
+  scoped sibling memory base nodes with policy-safe omissions and fusion trace
+  evidence.

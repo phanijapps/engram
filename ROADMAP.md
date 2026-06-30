@@ -32,8 +32,9 @@ use the implementation roadmap as the spec-driven execution loop.
   wins over expiry, and expired lifecycle events carry the audit trail.
 - Keep hierarchy construction incremental: base memory nodes are deterministic
   and auditable before aggregate clustering or retrieval expansion exists.
-- Keep hierarchy retrieval context opt-in through hierarchical mode until
-  expansion and aggregate construction have their own specs.
+- Keep hierarchy retrieval expansion opt-in through hierarchical mode and
+  bounded to scoped sibling memory base nodes until aggregate construction has
+  its own spec.
 - Keep belief synthesis evidence-bound: explicit memory assertions can produce
   beliefs, while inference and semantic contradiction work stay separate.
 - Keep explicit assertion contradiction detection review-only: new
@@ -62,7 +63,7 @@ use the implementation roadmap as the spec-driven execution loop.
 
 - Concrete consolidation task algorithms for aggregate hierarchy and semantic
   contradiction detection.
-- Hierarchical retrieval expansion beyond annotating already-matched results.
+- Aggregate hierarchy construction beyond base nodes and sibling expansion.
 - Production embedding provider wiring and full vector fusion service
   composition.
 

@@ -358,7 +358,7 @@ Acceptance gate:
 
 Status: complete for in-memory hierarchy repository, parent-chain navigation,
 memory base-node construction, and hierarchy retrieval context; aggregate
-construction and retrieval expansion remain future work.
+construction remains future work.
 
 Goal: add hierarchical memory organization for navigation, compression, and
 retrieval expansion.
@@ -477,6 +477,9 @@ Shipped slice:
   coverage.
 - Added hierarchy-mode retrieval context for matching memory results, including
   scoped parent-chain path evidence and `hierarchicalFit` scoring.
+- Added hierarchy-mode retrieval expansion from matched memory base nodes to
+  scoped sibling memory base nodes, including policy-safe omissions,
+  deduplication, and `hierarchy.expansion` trace evidence.
 
 ## Phase 13: Integrations and Runtime Adapters
 

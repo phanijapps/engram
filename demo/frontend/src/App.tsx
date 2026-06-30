@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { BeliefPanel } from "./BeliefPanel";
 import { IngestPanel } from "./IngestPanel";
 import { OntologyPanel } from "./OntologyPanel";
 import { ScanPanel } from "./ScanPanel";
@@ -331,6 +332,8 @@ export function App() {
       <ScanPanel />
 
       <OntologyPanel />
+
+      <BeliefPanel />
 
       <SearchPanel />
     </div>

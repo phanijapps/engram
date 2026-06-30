@@ -111,9 +111,7 @@ impl SqlKnowledgeStore {
     pub async fn list_chunks(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeChunk>> {
         let connection = self.lock()?;
         let mut statement = connection
-            .prepare(
-                "SELECT record_json FROM knowledge_chunks ORDER BY document_id, id",
-            )
+            .prepare("SELECT record_json FROM knowledge_chunks ORDER BY document_id, id")
             .map_err(sql_error)?;
         let rows = statement
             .query_map([], |row| row.get::<_, String>(0))
@@ -124,7 +122,10 @@ impl SqlKnowledgeStore {
             let chunk = serde_json::from_str::<KnowledgeChunk>(&json).map_err(json_error)?;
             // Chunks inherit visibility from their source.
             let source = source_for_chunk(&connection, &chunk)?;
-            if source.map(|s| scope_allows(&s.scope, scope)).unwrap_or(false) {
+            if source
+                .map(|s| scope_allows(&s.scope, scope))
+                .unwrap_or(false)
+            {
                 chunks.push(chunk);
             }
         }

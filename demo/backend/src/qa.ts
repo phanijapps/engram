@@ -34,7 +34,14 @@ export type QaBelief = {
   content: string;
   provenance?: { source?: string };
 };
-export type QaEntity = { id: string; graphId?: string; kind?: string; name: string; provenance?: { source?: string } };
+export type QaEntity = {
+  id: string;
+  graphId?: string;
+  kind?: string;
+  name: string;
+  provenance?: { source?: string };
+  sourceRefs?: { location?: { path?: string } }[];
+};
 export type QaRelationship = {
   id: string;
   graphId?: string;
@@ -123,13 +130,15 @@ export function buildEvidence(
   const matchedEntityIds = new Set(ranked.map((x) => x.e.id));
   for (const { e } of ranked) {
     const src = e.provenance?.source ?? e.graphId ?? "graph";
+    const filePath = e.sourceRefs?.[0]?.location?.path;
+    const fileLabel = filePath ? ` ${filePath}` : "";
     sources.push({
       kind: "entity",
       id: e.id,
       text: `${e.name} (${e.kind ?? "entity"})`,
-      source: src,
+      source: filePath ? `${src}:${filePath}` : src,
     });
-    blocks.push(`[entity] ${e.name} (${e.kind ?? "entity"}) (${src})`);
+    blocks.push(`[entity] ${e.name} (${e.kind ?? "entity"})${fileLabel} (${src})`);
   }
 
   // Relationships whose endpoints are matched entities (the local call graph).

@@ -106,7 +106,10 @@ impl SqlKnowledgeStore {
     }
 
     /// Lists knowledge relationships visible to `scope`.
-    pub async fn list_relationships(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeRelationship>> {
+    pub async fn list_relationships(
+        &self,
+        scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeRelationship>> {
         let connection = self.lock()?;
         let mut statement = connection
             .prepare("SELECT record_json FROM knowledge_relationships ORDER BY id")

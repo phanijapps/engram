@@ -94,7 +94,7 @@ pub enum FileKind {
 }
 
 /// Summary returned by a scan.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct ScanSummary {
     pub scanned: usize,
     pub ingested: usize,

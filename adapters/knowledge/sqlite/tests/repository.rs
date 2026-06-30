@@ -461,7 +461,8 @@ fn list_graphs_entities_relationships_are_scope_filtered() {
 
     let graphs = block_on(store.list_graphs(&scope("tenant-a"))).expect("list graphs");
     let entities = block_on(store.list_entities(&scope("tenant-a"))).expect("list entities");
-    let relationships = block_on(store.list_relationships(&scope("tenant-a"))).expect("list relationships");
+    let relationships =
+        block_on(store.list_relationships(&scope("tenant-a"))).expect("list relationships");
     let hidden_graphs = block_on(store.list_graphs(&scope("tenant-b"))).expect("list graphs b");
 
     assert_eq!(graphs.len(), 1);
@@ -471,7 +472,11 @@ fn list_graphs_entities_relationships_are_scope_filtered() {
     assert_eq!(relationships.len(), 1);
     assert_eq!(relationships[0].id, Id::from("rel-tenant-a"));
     // Explicit: tenant-a's list excludes tenant-b's relationship.
-    assert!(!relationships.iter().any(|r| r.id == Id::from("rel-tenant-b")));
+    assert!(
+        !relationships
+            .iter()
+            .any(|r| r.id == Id::from("rel-tenant-b"))
+    );
     assert_eq!(hidden_graphs.len(), 1);
     assert_eq!(hidden_graphs[0].id, Id::from("graph-tenant-b"));
 }

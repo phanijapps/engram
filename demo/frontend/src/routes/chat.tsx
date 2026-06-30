@@ -1,4 +1,6 @@
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -66,8 +68,31 @@ function Ask() {
       )}
       {result && (
         <>
-          <div className="whitespace-pre-wrap rounded-md border-l-2 border-primary bg-primary/5 p-3 text-sm">
-            {result.answer}
+          <div className="rounded-md border-l-2 border-primary bg-primary/5 p-4">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                h1: ({ children }) => <h1 className="mb-2 text-lg font-semibold">{children}</h1>,
+                h2: ({ children }) => <h2 className="mb-2 text-base font-semibold">{children}</h2>,
+                h3: ({ children }) => <h3 className="mb-1.5 text-sm font-semibold">{children}</h3>,
+                p: ({ children }) => <p className="mb-2 text-sm leading-relaxed">{children}</p>,
+                ul: ({ children }) => <ul className="mb-2 ml-4 list-disc space-y-1 text-sm">{children}</ul>,
+                ol: ({ children }) => <ol className="mb-2 ml-4 list-decimal space-y-1 text-sm">{children}</ol>,
+                li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+                strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                code: ({ children, className }) =>
+                  className ? (
+                    <pre className="my-2 overflow-x-auto rounded bg-muted p-2 text-xs"><code>{children}</code></pre>
+                  ) : (
+                    <code className="rounded bg-muted px-1 py-0.5 text-xs">{children}</code>
+                  ),
+                a: ({ href, children }) => (
+                  <a href={href} className="text-primary underline" target="_blank" rel="noreferrer">{children}</a>
+                ),
+              }}
+            >
+              {result.answer}
+            </ReactMarkdown>
           </div>
           {result.sources.length > 0 && (
             <div>

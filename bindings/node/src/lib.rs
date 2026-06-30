@@ -6,15 +6,15 @@
 
 use engram_core::{BeliefRepository, ContradictionDetector};
 use engram_domain::{
-    Belief, Concept, ConceptRelation, ConceptScheme, Contradiction, ContradictionResolution, Id,
-    KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeRelationship, KnowledgeSource,
-    Ontology, OntologyAxiom, OntologyClass, OntologyProperty, Scope, SourceDocument,
+    Actor, Belief, Concept, ConceptRelation, ConceptScheme, Contradiction, ContradictionResolution,
+    Id, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeRelationship, KnowledgeSource,
+    Ontology, OntologyAxiom, OntologyClass, OntologyProperty, Policy, Scope, SourceDocument,
     SourceDocumentKind,
 };
 use engram_domain::{ForgetRequest, RetrievalRequest, WriteMemoryRequest};
 use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, GraphExtractor, KnowledgeIngestor, PlainTextChunker,
-    PlainTextChunkerOptions,
+    PlainTextChunkerOptions, ScanOptions, scan_repository,
 };
 use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
@@ -440,6 +440,39 @@ struct IngestExtractResponse {
 #[napi]
 pub struct NativeIngestEngine {
     store: SqlKnowledgeStore,
+    jobs: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, ScanJobState>>>,
+    job_counter: std::sync::atomic::AtomicU64,
+}
+
+/// Snapshot of a background scan job, returned to Node as JSON.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanJobState {
+    status: String, // "running" | "done" | "error"
+    current_file: Option<String>,
+    processed: usize,
+    ingested: usize,
+    unchanged: usize,
+    skipped: usize,
+    errors: usize,
+    summary: Option<engram_ingest::ScanSummary>,
+    error: Option<String>,
+}
+
+impl ScanJobState {
+    fn running() -> Self {
+        Self {
+            status: "running".to_owned(),
+            current_file: None,
+            processed: 0,
+            ingested: 0,
+            unchanged: 0,
+            skipped: 0,
+            errors: 0,
+            summary: None,
+            error: None,
+        }
+    }
 }
 
 #[napi]
@@ -454,7 +487,154 @@ impl NativeIngestEngine {
             None => SqlKnowledgeStore::open_in_memory(),
         }
         .map_err(to_napi_error)?;
-        Ok(Self { store })
+        Ok(Self {
+            store,
+            jobs: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
+            job_counter: std::sync::atomic::AtomicU64::new(0),
+        })
+    }
+
+    /// Starts a background repository scan; returns `{ jobId }` immediately.
+    /// Progress is read via `getScanJobJson`. The request carries
+    /// `{ root, scope, policy, actor, sourceName, maxBytes, manifestPath }`.
+    #[napi(js_name = "startScanJobJson")]
+    pub fn start_scan_job_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let root = value
+            .get("root")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::from_reason("missing 'root'"))?
+            .to_owned();
+        let source_name = value
+            .get("sourceName")
+            .and_then(|v| v.as_str())
+            .unwrap_or("scan")
+            .to_owned();
+        let max_bytes = value.get("maxBytes").and_then(|v| v.as_u64()).unwrap_or(0);
+        let manifest_path = value
+            .get("manifestPath")
+            .and_then(|v| v.as_str())
+            .map(std::path::PathBuf::from);
+        let scope: Scope = scope_field(&value)?;
+        let policy: Policy = serde_json::from_value(
+            value
+                .get("policy")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
+        )
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+        let actor: Actor = serde_json::from_value(
+            value
+                .get("actor")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
+        )
+        .map_err(|e| Error::from_reason(e.to_string()))?;
+
+        // Load the prior manifest (incremental resume), keyed by source/relpath.
+        let prior = manifest_path
+            .as_ref()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|s| {
+                serde_json::from_str::<std::collections::HashMap<String, String>>(&s).ok()
+            })
+            .unwrap_or_default();
+
+        let job_id = format!(
+            "job-{}",
+            self.job_counter
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        );
+        self.jobs
+            .lock()
+            .map_err(|_| Error::from_reason("job lock poisoned"))?
+            .insert(job_id.clone(), ScanJobState::running());
+
+        let store = self.store.clone();
+        let jobs = self.jobs.clone();
+        // Spawn a background Rust thread that runs the parallel scan and updates
+        // the shared job state. No N-API calls cross the thread boundary — Node
+        // polls via getScanJobJson.
+        let job_id_for_thread = job_id.clone();
+        std::thread::spawn(move || {
+            let opts = ScanOptions {
+                scope,
+                policy,
+                actor,
+                source_name: source_name.clone(),
+                max_bytes,
+                manifest: prior,
+            };
+            let progress = |p: engram_ingest::ScanProgress| {
+                if let Ok(mut jobs) = jobs.lock() {
+                    if let Some(state) = jobs.get_mut(&job_id_for_thread) {
+                        state.current_file = Some(p.file);
+                        state.processed += 1;
+                        match p.status {
+                            "ingested" => state.ingested += 1,
+                            "unchanged" => state.unchanged += 1,
+                            "skipped" => state.skipped += 1,
+                            "error" => state.errors += 1,
+                            _ => {}
+                        }
+                    }
+                }
+            };
+            let result = scan_repository(std::path::Path::new(&root), &opts, &store, progress);
+            let final_state = match result {
+                Ok((summary, new_manifest)) => {
+                    if let Some(path) = manifest_path {
+                        let _ = std::fs::write(
+                            &path,
+                            serde_json::to_string(&new_manifest).unwrap_or_default(),
+                        );
+                    }
+                    ScanJobState {
+                        processed: summary.ingested
+                            + summary.unchanged
+                            + summary.skipped
+                            + summary.errors,
+                        ingested: summary.ingested,
+                        unchanged: summary.unchanged,
+                        skipped: summary.skipped,
+                        errors: summary.errors,
+                        status: "done".to_owned(),
+                        summary: Some(summary),
+                        ..ScanJobState::running()
+                    }
+                }
+                Err(e) => ScanJobState {
+                    status: "error".to_owned(),
+                    error: Some(e.to_string()),
+                    ..ScanJobState::running()
+                },
+            };
+            if let Ok(mut jobs) = jobs.lock() {
+                jobs.insert(job_id_for_thread, final_state);
+            }
+        });
+
+        encode(&serde_json::json!({ "jobId": job_id }))
+    }
+
+    /// Reads the current state of a scan job: `{ status, currentFile, processed,
+    /// ingested, unchanged, skipped, errors, summary, error }`.
+    #[napi(js_name = "getScanJobJson")]
+    pub fn get_scan_job_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let job_id = value
+            .get("jobId")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::from_reason("missing 'jobId'"))?;
+        let jobs = self
+            .jobs
+            .lock()
+            .map_err(|_| Error::from_reason("job lock poisoned"))?;
+        let state = jobs.get(job_id).cloned().unwrap_or(ScanJobState {
+            status: "unknown".to_owned(),
+            ..ScanJobState::running()
+        });
+        encode(&state)
     }
 
     /// Ingests a document and extracts its knowledge graph in one pass.

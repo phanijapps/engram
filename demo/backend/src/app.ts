@@ -9,6 +9,7 @@ import {
   getKnowledgeTransport,
   getRetrievalTransport,
   getTransport,
+  scanManifestPath,
 } from "./engram.js";
 import { walk, safeReadText, type ScanFile } from "./scan.js";
 import { hashContent, isUnchanged, loadManifest, saveManifest } from "./manifest.js";
@@ -259,6 +260,34 @@ app.post("/ingest/scan", async (c) => {
     );
   });
 });
+
+// --- Background repo indexing (RFC 0004 background-repo-indexer) ------------
+// Starts a Rust rayon-parallel scan on a background thread; returns a job id.
+// Progress is polled via GET /ingest/jobs/:id. Replaces the blocking stream
+// above for large repos; the old route is removed in a follow-up.
+app.post("/ingest/jobs", async (c) => {
+  const { root, scope, policy, sourceName, maxBytes } = await c.req.json();
+  if (!root || typeof root !== "string") return c.json({ error: "root required" }, 400);
+  const reqScope = scope ?? SCAN_SCOPE;
+  const reqPolicy = policy ?? SCAN_POLICY;
+  const reqSource = sourceName ?? `scan:${path.basename(path.resolve(root))}`;
+  const result = await getIngestTransport().startScanJob({
+    root,
+    scope: reqScope,
+    policy: reqPolicy,
+    actor: SCAN_ACTOR,
+    sourceName: reqSource,
+    maxBytes: typeof maxBytes === "number" ? maxBytes : 0,
+    manifestPath: scanManifestPath() ?? undefined,
+  });
+  return c.json(result);
+});
+
+app.get("/ingest/jobs/:id", async (c) => {
+  const id = c.req.param("id");
+  return c.json(await getIngestTransport().getScanJob(id));
+});
+
 app.post("/retrieval/index", async (c) => {
   const { text } = await c.req.json();
   return c.json(await getRetrievalTransport().index(text));

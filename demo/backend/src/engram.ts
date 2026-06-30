@@ -17,6 +17,12 @@ import {
 // unset (e.g. tests), engines are in-memory.
 const dbPath = (): string | null => process.env.ENGRAM_DB ?? null;
 
+/** Sidecar path for the Rust scan manifest (incremental resume), next to the DB. */
+export function scanManifestPath(): string | null {
+  const db = dbPath();
+  return db ? `${db}.scan-manifest.json` : null;
+}
+
 // One Rust-backed engine is held for the process lifetime so write, retrieve,
 // and forget observe the same SQLite state.
 let transport: NativeMemoryTransport | null = null;

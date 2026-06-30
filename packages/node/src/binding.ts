@@ -44,6 +44,8 @@ export interface NativeKnowledgeEngineConstructor {
 /** Native class shape for the Rust-backed ingest + extract engine. */
 export interface NativeIngestEngineBinding {
   ingestExtractJson(requestJson: string): string;
+  startScanJobJson(requestJson: string): string;
+  getScanJobJson(requestJson: string): string;
 }
 
 /** Constructor shape for the Rust-backed ingest + extract engine. */

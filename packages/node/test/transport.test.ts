@@ -62,10 +62,17 @@ describe("@engram/node", () => {
         putPropertyJson(): string { return "null"; }
         putAxiomJson(): string { return "null"; }
         validateGraphJson(): string { return "[]"; }
+        listGraphsJson(): string { return "[]"; }
+        listEntitiesJson(): string { return "[]"; }
+        listRelationshipsJson(): string { return "[]"; }
       },
       NativeIngestEngine: class {
         ingestExtractJson(): string {
           return '{"graph":{},"entities":[],"relationships":[],"chunkCount":0}';
+        }
+        startScanJobJson(): string { return '{"jobId":"job-0"}'; }
+        getScanJobJson(): string {
+          return '{"status":"done","processed":0,"ingested":0,"unchanged":0,"skipped":0,"errors":0}';
         }
       },
       NativeBeliefEngine: class {

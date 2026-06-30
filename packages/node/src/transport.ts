@@ -207,6 +207,8 @@ export interface IngestExtractResult {
 /** Transport interface for ingest + extract operations. */
 export interface NativeIngestTransport {
   ingestExtract(request: unknown): Promise<IngestExtractResult>;
+  startScanJob(request: unknown): Promise<{ jobId: string }>;
+  getScanJob(jobId: string): Promise<unknown>;
 }
 
 /** Options for constructing a native ingest transport. */
@@ -231,6 +233,14 @@ class JsonNativeIngestTransport implements NativeIngestTransport {
 
   async ingestExtract(request: unknown): Promise<IngestExtractResult> {
     return decode(this.engine.ingestExtractJson(encode(request)));
+  }
+
+  async startScanJob(request: unknown): Promise<{ jobId: string }> {
+    return decode(this.engine.startScanJobJson(encode(request)));
+  }
+
+  async getScanJob(jobId: string): Promise<unknown> {
+    return decode(this.engine.getScanJobJson(encode({ jobId })));
   }
 }
 

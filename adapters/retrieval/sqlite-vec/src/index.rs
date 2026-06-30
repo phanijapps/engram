@@ -134,6 +134,14 @@ impl SqliteVectorIndex {
         }
         Ok(results)
     }
+
+    /// Removes all vectors from the index.
+    pub fn clear(&self) -> CoreResult<()> {
+        self.connection
+            .execute("DELETE FROM vectors", [])
+            .map_err(sql_error)?;
+        Ok(())
+    }
 }
 
 fn validate_dimensions(expected: u32, declared: u32, actual: usize) -> CoreResult<()> {

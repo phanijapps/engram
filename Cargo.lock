@@ -726,8 +726,10 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-knowledge",
+ "engram-store-knowledge-memory",
  "engram-store-memory",
  "futures",
+ "serde",
  "serde_json",
  "sha2",
 ]
@@ -755,8 +757,13 @@ name = "engram-node"
 version = "0.1.0"
 dependencies = [
  "engram-domain",
+ "engram-ingest",
+ "engram-knowledge",
  "engram-memory",
+ "engram-runtime",
+ "engram-store-knowledge-sqlite",
  "engram-store-sql",
+ "engram-store-vector",
  "futures",
  "napi",
  "napi-build",
@@ -793,6 +800,20 @@ dependencies = [
  "engram-knowledge",
  "engram-runtime",
  "futures",
+]
+
+[[package]]
+name = "engram-store-knowledge-sqlite"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-domain",
+ "engram-knowledge",
+ "engram-runtime",
+ "futures",
+ "rusqlite",
+ "serde_json",
 ]
 
 [[package]]

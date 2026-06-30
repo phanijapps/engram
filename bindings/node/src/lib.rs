@@ -452,6 +452,11 @@ mod retrieval {
                 .state
                 .lock()
                 .map_err(|_| Error::from_reason("retrieval state lock poisoned"))?;
+            // Indexing replaces the current index: clear vectors + chunk registry
+            // so re-indexing never hits a primary-key collision and the index
+            // always reflects the latest corpus.
+            state.index.clear().map_err(to_napi_error)?;
+            state.chunks.clear();
             let mut indexed = 0;
             for (id, text, embedding) in entries {
                 state

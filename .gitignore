@@ -28,6 +28,9 @@ __pycache__/
 # Native addon build artifacts (engram_node.node etc.)
 *.node
 
+# FastEmbed model cache (BGE-small etc., downloaded at runtime)
+.fastembed_cache/
+
 # Local databases and artifacts
 *.db
 *.sqlite

@@ -12,6 +12,7 @@ import {
 import { walk, safeReadText, type ScanFile } from "./scan.js";
 import { hashContent, isUnchanged, loadManifest, saveManifest } from "./manifest.js";
 import { enhanceWithLLM } from "./enhance.js";
+import { buildItOrgOntology } from "./itOrgOntology.js";
 
 // Demo-local defaults for scan-ingested documents (single-user, local).
 const SCAN_SCOPE = { tenant: "tenant-demo", workspace: "engram", environment: "local" };
@@ -325,4 +326,28 @@ app.post("/ontology/get", async (c) => {
 app.post("/ontology/validate", async (c) => {
   const { graphId, ontologyId, scope } = await c.req.json();
   return c.json(await getKnowledgeTransport().validateGraph(graphId, ontologyId, scope));
+});
+
+// Loads the IT-org sample ontology + taxonomy (RFC 0004 Slice 3) through the
+// knowledge transport and returns the records so the UI can browse them without
+// separate list endpoints.
+app.post("/ontology/it-org", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const reqScope = body.scope ?? SCAN_SCOPE;
+  const reqPolicy = body.policy ?? SCAN_POLICY;
+  const reqActor = body.actor ?? SCAN_ACTOR;
+  const sample = buildItOrgOntology({
+    scope: reqScope,
+    policy: reqPolicy,
+    actor: reqActor,
+    now: new Date().toISOString(),
+  });
+  const transport = getKnowledgeTransport();
+  await transport.putOntology(sample.ontology);
+  for (const klass of sample.classes) await transport.putClass(klass);
+  for (const property of sample.properties) await transport.putProperty(property);
+  for (const axiom of sample.axioms) await transport.putAxiom(axiom);
+  await transport.putConceptScheme(sample.scheme);
+  for (const concept of sample.concepts) await transport.putConcept(concept);
+  return c.json({ loaded: true, sample });
 });

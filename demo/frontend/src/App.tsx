@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { IngestPanel } from "./IngestPanel";
+import { OntologyPanel } from "./OntologyPanel";
 import { ScanPanel } from "./ScanPanel";
 import { SearchPanel } from "./SearchPanel";
 
@@ -328,6 +329,8 @@ export function App() {
       <IngestPanel />
 
       <ScanPanel />
+
+      <OntologyPanel />
 
       <SearchPanel />
     </div>

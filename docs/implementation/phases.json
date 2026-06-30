@@ -407,7 +407,7 @@
   },
   {
     "phase_id": "PHASE58",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "RFC 0004 Scale ingestion + repo indexing (scan job, .gitignore, batched embed, incremental)",
     "spec_file": "docs/specs/scale-repo-ingestion/spec.md",
     "plan_file": "docs/specs/scale-repo-ingestion/plan.md"

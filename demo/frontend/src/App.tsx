@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { IngestPanel } from "./IngestPanel";
+import { ScanPanel } from "./ScanPanel";
 import { SearchPanel } from "./SearchPanel";
 
 // Demo-local defaults (single-user, local). The backend is a pure JSON
@@ -325,6 +326,8 @@ export function App() {
       </section>
 
       <IngestPanel />
+
+      <ScanPanel />
 
       <SearchPanel />
     </div>

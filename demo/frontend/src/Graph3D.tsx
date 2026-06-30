@@ -40,6 +40,55 @@ export type GraphData = {
   relationships: GraphRelationship[];
 };
 
+// Raw shapes returned by /ingest/extract and /ingest/scan (camelCase from Rust).
+export type RawEntity = {
+  id: string;
+  name: string;
+  kind?: string;
+  aliases?: string[];
+  sourceRefs?: GraphSourceRef[];
+};
+export type RawRelationship = {
+  id?: string;
+  subject: { id?: string; name?: string };
+  predicate: string;
+  object: { id?: string; name?: string };
+  confidence?: number;
+};
+
+/** Build a renderable graph from raw entities + relationships (shared by panels). */
+export function buildGraphData(
+  entities: RawEntity[],
+  relationships: RawRelationship[]
+): GraphData {
+  const degree = new Map<string, number>();
+  for (const rel of relationships) {
+    if (rel.subject.id && rel.object.id) {
+      degree.set(rel.subject.id, (degree.get(rel.subject.id) ?? 0) + 1);
+      degree.set(rel.object.id, (degree.get(rel.object.id) ?? 0) + 1);
+    }
+  }
+  return {
+    entities: entities.map((entity) => ({
+      id: entity.id,
+      name: entity.name,
+      kind: entity.kind ?? "unknown",
+      degree: degree.get(entity.id) ?? 0,
+      aliases: entity.aliases,
+      sourceRefs: entity.sourceRefs,
+    })),
+    relationships: relationships
+      .filter((rel) => rel.subject.id && rel.object.id)
+      .map((rel, index) => ({
+        id: rel.id ?? `edge-${index}`,
+        subject: { id: rel.subject.id!, name: rel.subject.name },
+        predicate: rel.predicate,
+        object: { id: rel.object.id!, name: rel.object.name },
+        confidence: rel.confidence,
+      })),
+  };
+}
+
 const PALETTE: Record<string, string> = {
   function: "#6ea8ff",
   method: "#6ea8ff",

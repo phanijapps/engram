@@ -1,11 +1,27 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { stream } from "hono/streaming";
+import fs from "node:fs/promises";
+import path from "node:path";
 import {
   getIngestTransport,
   getKnowledgeTransport,
   getRetrievalTransport,
   getTransport,
 } from "./engram.js";
+import { walk, safeReadText, type ScanFile } from "./scan.js";
+import { hashContent, isUnchanged, loadManifest, saveManifest } from "./manifest.js";
+
+// Demo-local defaults for scan-ingested documents (single-user, local).
+const SCAN_SCOPE = { tenant: "tenant-demo", workspace: "engram", environment: "local" };
+const SCAN_POLICY = {
+  visibility: "workspace",
+  retention: "durable",
+  sensitivity: "low",
+  allowedUses: ["retrieval"],
+  deleteMode: "tombstone",
+};
+const SCAN_ACTOR = { id: "actor-demo", kind: "agent", displayName: "Demo Scan" };
 
 // The backend is a thin JSON transport over the Rust memory service. It owns no
 // behavior — v1 JSON in, v1 JSON out, unchanged by Rust — so TypeScript stays
@@ -42,6 +58,121 @@ app.post("/memory/forget", async (c) => {
 app.post("/ingest/extract", async (c) => {
   const request = await c.req.json();
   return c.json(await getIngestTransport().ingestExtract(request));
+});
+
+// --- Scale ingestion: point at a folder/repo and index it (RFC 0004 Slice 1) --
+// Walks the tree (.gitignore + secret blocklist + size bound + path confinement),
+// ingests each text/code file via the existing Rust path, and streams NDJSON
+// progress. Re-scans are incremental (content-hash manifest).
+app.post("/ingest/scan", async (c) => {
+  const { path: root, scope, policy, maxBytes } = await c.req.json();
+  if (!root || typeof root !== "string") return c.json({ error: "path required" }, 400);
+  let stat;
+  try {
+    stat = await fs.stat(root);
+  } catch {
+    return c.json({ error: `not found: ${root}` }, 400);
+  }
+  if (!stat.isDirectory()) return c.json({ error: "not a directory" }, 400);
+
+  const rootAbs = path.resolve(root);
+  const reqScope = scope ?? SCAN_SCOPE;
+  const reqPolicy = policy ?? SCAN_POLICY;
+
+  const files: ScanFile[] = [];
+  for await (const f of walk(rootAbs, { maxBytes })) files.push(f);
+  const included = files.filter((f) => f.include);
+  const total = included.length;
+
+  return stream(c, async (s) => {
+    const manifest = await loadManifest();
+    let ingested = 0;
+    let skipped = 0;
+    let unchanged = 0;
+    let entities = 0;
+    let relationships = 0;
+    let errors = 0;
+
+    for (const f of files) {
+      if (!f.include) {
+        skipped++;
+        await s.write(
+          JSON.stringify({ type: "skip", file: f.relPath, reason: f.reason }) + "\n"
+        );
+      }
+    }
+
+    let index = 0;
+    for (const f of included) {
+      index++;
+      try {
+        const text = await safeReadText(rootAbs, f.absPath);
+        const hash = hashContent(text);
+        if (isUnchanged(manifest, f.relPath, hash)) {
+          unchanged++;
+          await s.write(
+            JSON.stringify({ type: "progress", index, total, file: f.relPath, unchanged: true }) +
+              "\n"
+          );
+          continue;
+        }
+        const result = await getIngestTransport().ingestExtract({
+          sourceKind: "filesystem",
+          sourceName: `scan:${path.basename(rootAbs)}`,
+          scope: reqScope,
+          documentKind: f.kind,
+          document: { path: f.relPath },
+          text,
+          policy: reqPolicy,
+          actor: SCAN_ACTOR,
+        });
+        manifest[f.relPath] = hash;
+        const e = Array.isArray(result.entities) ? result.entities.length : 0;
+        const r = Array.isArray(result.relationships) ? result.relationships.length : 0;
+        entities += e;
+        relationships += r;
+        ingested++;
+        await s.write(
+          JSON.stringify({
+            type: "progress",
+            index,
+            total,
+            file: f.relPath,
+            entities: result.entities,
+            relationships: result.relationships,
+          }) + "\n"
+        );
+        // Persist incrementally so an aborted scan does not re-ingest files
+        // that already succeeded on the next run.
+        await saveManifest(manifest);
+      } catch (err) {
+        errors++;
+        await s.write(
+          JSON.stringify({
+            type: "error",
+            file: f.relPath,
+            message: String(err instanceof Error ? err.message : err),
+          }) + "\n"
+        );
+      }
+    }
+
+    await saveManifest(manifest);
+    await s.write(
+      JSON.stringify({
+        type: "done",
+        summary: {
+          scanned: files.length,
+          ingested,
+          unchanged,
+          skipped,
+          entities,
+          relationships,
+          errors,
+        },
+      }) + "\n"
+    );
+  });
 });
 app.post("/retrieval/index", async (c) => {
   const { text } = await c.req.json();

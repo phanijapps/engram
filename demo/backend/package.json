@@ -16,7 +16,8 @@
   "dependencies": {
     "@engram/node": "workspace:*",
     "@hono/node-server": "^1.13.0",
-    "hono": "^4.6.0"
+    "hono": "^4.6.0",
+    "ignore": "^7.0.5"
   },
   "devDependencies": {
     "@types/node": "^22.13.0",

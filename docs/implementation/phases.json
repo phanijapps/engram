@@ -222,5 +222,12 @@
     "description": "In-memory hierarchy aggregate build",
     "spec_file": "docs/specs/in-memory-hierarchy-aggregate-build/spec.md",
     "plan_file": "docs/specs/in-memory-hierarchy-aggregate-build/plan.md"
+  },
+  {
+    "phase_id": "PHASE32",
+    "status": "DONE",
+    "description": "In-memory retrieval index composition",
+    "spec_file": "docs/specs/in-memory-retrieval-index-composition/spec.md",
+    "plan_file": "docs/specs/in-memory-retrieval-index-composition/plan.md"
   }
 ]

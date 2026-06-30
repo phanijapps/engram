@@ -12,6 +12,7 @@ use engram_domain::*;
 
 use crate::{
     belief_retrieval::{BeliefSnapshot, belief_candidates},
+    external_retrieval::external_candidates,
     hierarchy_retrieval::{apply_hierarchy_context, expand_hierarchy_memory_candidates},
     knowledge_retrieval::{KnowledgeSnapshot, knowledge_candidates},
     scope::scope_allows,
@@ -168,6 +169,9 @@ pub(crate) async fn retrieve(
         service.authorizer.as_ref(),
     )?;
     omitted.extend(hierarchy_omissions);
+    let (mut external_results, source_failures) =
+        external_candidates(&service.retrieval_indexes, &request).await;
+    candidate_results.append(&mut external_results);
     apply_hierarchy_context(&mut candidate_results, &hierarchy_nodes, &request);
 
     let mut fusion_request = request.clone();
@@ -189,7 +193,7 @@ pub(crate) async fn retrieve(
         items,
         budget: request.budget,
         omitted,
-        source_failures: Vec::new(),
+        source_failures,
         created_at: now,
     })
 }

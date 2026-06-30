@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use async_trait::async_trait;
 use engram_core::{
     Clock, CoreError, CoreResult, IdGenerator, MemoryEventRepository, MemoryRepository,
-    MemoryService, PolicyAuthorizer, RetrievalFusion,
+    MemoryService, PolicyAuthorizer, RetrievalFusion, RetrievalIndex,
 };
 use engram_domain::*;
 use engram_retrieval::WeightedRetrievalFusion;
@@ -33,6 +33,7 @@ pub struct InMemoryMemoryService {
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) ids: Arc<dyn IdGenerator>,
     pub(crate) retrieval_fusion: Arc<dyn RetrievalFusion>,
+    pub(crate) retrieval_indexes: Vec<Arc<dyn RetrievalIndex>>,
 }
 
 impl InMemoryMemoryService {
@@ -93,12 +94,55 @@ impl InMemoryMemoryService {
         ids: Arc<dyn IdGenerator>,
         retrieval_fusion: Arc<dyn RetrievalFusion>,
     ) -> Self {
+        Self::with_retrieval_fusion_and_indexes(
+            authorizer,
+            clock,
+            ids,
+            retrieval_fusion,
+            Vec::new(),
+        )
+    }
+
+    /// Creates an in-memory service with injected external retrieval indexes.
+    ///
+    /// This constructor composes semantic, graph, or other candidate sources
+    /// behind `RetrievalIndex` without making the in-memory adapter depend on a
+    /// concrete vector store or provider. The default weighted fusion strategy
+    /// still owns cross-source ranking.
+    pub fn with_retrieval_indexes(
+        authorizer: Arc<dyn PolicyAuthorizer>,
+        clock: Arc<dyn Clock>,
+        ids: Arc<dyn IdGenerator>,
+        retrieval_indexes: Vec<Arc<dyn RetrievalIndex>>,
+    ) -> Self {
+        Self::with_retrieval_fusion_and_indexes(
+            authorizer,
+            clock,
+            ids,
+            Arc::new(WeightedRetrievalFusion::default()),
+            retrieval_indexes,
+        )
+    }
+
+    /// Creates an in-memory service with injected fusion and retrieval indexes.
+    ///
+    /// Tests and integration layers can use this as the full retrieval
+    /// composition boundary while keeping concrete adapter dependencies outside
+    /// this crate.
+    pub fn with_retrieval_fusion_and_indexes(
+        authorizer: Arc<dyn PolicyAuthorizer>,
+        clock: Arc<dyn Clock>,
+        ids: Arc<dyn IdGenerator>,
+        retrieval_fusion: Arc<dyn RetrievalFusion>,
+        retrieval_indexes: Vec<Arc<dyn RetrievalIndex>>,
+    ) -> Self {
         Self {
             state: Arc::new(Mutex::new(InMemoryState::default())),
             authorizer,
             clock,
             ids,
             retrieval_fusion,
+            retrieval_indexes,
         }
     }
 

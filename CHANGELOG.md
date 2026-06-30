@@ -80,3 +80,5 @@ This project follows a contract-first changelog while pre-1.0.
   evidence.
 - Added deterministic first-entity aggregate hierarchy construction with
   parent links, memberships, hierarchy-built events, and idempotency coverage.
+- Added in-memory retrieval-index composition with external candidate fusion,
+  budget omissions, and degraded source-failure reporting.

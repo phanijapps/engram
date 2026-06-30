@@ -10,6 +10,7 @@ mod belief;
 mod belief_retrieval;
 mod consolidation;
 mod dependencies;
+mod external_retrieval;
 mod forget;
 mod hierarchy;
 mod hierarchy_retrieval;

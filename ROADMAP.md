@@ -59,6 +59,8 @@ use the implementation roadmap as the spec-driven execution loop.
   path as memory candidates.
 - Keep sqlite-vec retrieval exposed through injected query-vector and target
   resolver ports.
+- Keep injected retrieval indexes composed through in-memory fusion and
+  source-failure reporting without making vector providers canonical.
 - Keep concrete adapters outside `engram-core`.
 
 ## Next: Post-Roadmap Slices
@@ -66,8 +68,7 @@ use the implementation roadmap as the spec-driven execution loop.
 - Concrete consolidation task algorithms for aggregate hierarchy and semantic
   contradiction detection.
 - Semantic hierarchy clustering and model-assisted aggregate summaries.
-- Production embedding provider wiring and full vector fusion service
-  composition.
+- Production embedding provider wiring.
 
 ## Later
 

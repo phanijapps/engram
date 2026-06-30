@@ -73,3 +73,5 @@ This project follows a contract-first changelog while pre-1.0.
   duplicate-open-record prevention and contradiction-detected lifecycle events.
 - Added in-memory belief retrieval with scoped active belief candidates,
   policy omissions, explanations, and shared retrieval fusion.
+- Added hierarchy-mode retrieval context for in-memory memory results with
+  scoped path evidence and hierarchical-fit scoring.

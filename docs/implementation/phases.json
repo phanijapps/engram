@@ -201,5 +201,12 @@
     "description": "In-memory belief retrieval",
     "spec_file": "docs/specs/in-memory-belief-retrieval/spec.md",
     "plan_file": "docs/specs/in-memory-belief-retrieval/plan.md"
+  },
+  {
+    "phase_id": "PHASE29",
+    "status": "DONE",
+    "description": "In-memory hierarchy retrieval context",
+    "spec_file": "docs/specs/in-memory-hierarchy-retrieval-context/spec.md",
+    "plan_file": "docs/specs/in-memory-hierarchy-retrieval-context/plan.md"
   }
 ]

@@ -12,6 +12,7 @@ mod consolidation;
 mod dependencies;
 mod forget;
 mod hierarchy;
+mod hierarchy_retrieval;
 mod knowledge;
 mod knowledge_retrieval;
 mod retrieval;

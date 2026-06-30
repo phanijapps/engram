@@ -357,8 +357,8 @@ Acceptance gate:
 ## Phase 10: Hierarchy Navigation
 
 Status: complete for in-memory hierarchy repository, parent-chain navigation,
-and memory base-node construction; aggregate construction and retrieval
-expansion remain future work.
+memory base-node construction, and hierarchy retrieval context; aggregate
+construction and retrieval expansion remain future work.
 
 Goal: add hierarchical memory organization for navigation, compression, and
 retrieval expansion.
@@ -475,6 +475,8 @@ Shipped slice:
 - Added in-memory belief retrieval for active scoped beliefs, including
   lifecycle, policy, confidence, time-filter, explanation, and shared-fusion
   coverage.
+- Added hierarchy-mode retrieval context for matching memory results, including
+  scoped parent-chain path evidence and `hierarchicalFit` scoring.
 
 ## Phase 13: Integrations and Runtime Adapters
 

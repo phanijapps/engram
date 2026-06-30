@@ -12,6 +12,7 @@ use engram_domain::*;
 
 use crate::{
     belief_retrieval::{BeliefSnapshot, belief_candidates},
+    hierarchy_retrieval::apply_hierarchy_context,
     knowledge_retrieval::{KnowledgeSnapshot, knowledge_candidates},
     scope::scope_allows,
     service::InMemoryMemoryService,
@@ -33,7 +34,7 @@ pub(crate) async fn retrieve(
     let terms = query_terms(&request.query);
     let include_explanations = request.include_explanations.unwrap_or(false);
     let max_items = effective_max_items(&request);
-    let (records, knowledge_snapshots, belief_snapshots) = {
+    let (records, knowledge_snapshots, belief_snapshots, hierarchy_nodes) = {
         let state = service.lock_state()?;
         let records = state.memories.values().cloned().collect::<Vec<_>>();
         let knowledge_snapshots = state
@@ -55,7 +56,13 @@ pub(crate) async fn retrieve(
             .cloned()
             .map(|belief| BeliefSnapshot { belief })
             .collect::<Vec<_>>();
-        (records, knowledge_snapshots, belief_snapshots)
+        let hierarchy_nodes = state.hierarchy_nodes.values().cloned().collect::<Vec<_>>();
+        (
+            records,
+            knowledge_snapshots,
+            belief_snapshots,
+            hierarchy_nodes,
+        )
     };
 
     let mut candidates = Vec::new();
@@ -150,6 +157,7 @@ pub(crate) async fn retrieve(
     )?;
     candidate_results.append(&mut belief_results);
     omitted.extend(belief_omissions);
+    apply_hierarchy_context(&mut candidate_results, hierarchy_nodes, &request);
 
     let mut fusion_request = request.clone();
     fusion_request.limit = None;

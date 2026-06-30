@@ -760,6 +760,7 @@ dependencies = [
  "chrono",
  "engram-core",
  "engram-domain",
+ "engram-retrieval",
  "futures",
  "serde_json",
 ]

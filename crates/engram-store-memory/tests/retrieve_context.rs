@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use chrono::{TimeZone, Utc};
-use engram_core::{Clock, CoreError, CoreResult, MemoryService, PolicyAuthorizer};
+use engram_core::{Clock, CoreError, CoreResult, MemoryService, PolicyAuthorizer, RetrievalFusion};
 use engram_domain::*;
 use engram_store_memory::{InMemoryMemoryService, SequentialIdGenerator};
 use futures::executor::block_on;
@@ -78,6 +78,20 @@ impl PolicyAuthorizer for DenyRetrieve {
         _policy: &Policy,
     ) -> CoreResult<()> {
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct ReverseFusion;
+
+impl RetrievalFusion for ReverseFusion {
+    fn fuse(
+        &self,
+        _request: &RetrievalRequest,
+        mut candidates: Vec<RetrievalResult>,
+    ) -> CoreResult<Vec<RetrievalResult>> {
+        candidates.reverse();
+        Ok(candidates)
     }
 }
 
@@ -191,6 +205,18 @@ fn service(authorizer: Arc<dyn PolicyAuthorizer>) -> InMemoryMemoryService {
     )
 }
 
+fn service_with_fusion(
+    authorizer: Arc<dyn PolicyAuthorizer>,
+    fusion: Arc<dyn RetrievalFusion>,
+) -> InMemoryMemoryService {
+    InMemoryMemoryService::with_retrieval_fusion(
+        authorizer,
+        Arc::new(FixedClock(fixed_time())),
+        Arc::new(SequentialIdGenerator::new()),
+        fusion,
+    )
+}
+
 #[test]
 fn retrieve_returns_keyword_match_with_explanation() {
     let service = service(Arc::new(AllowAll));
@@ -225,6 +251,32 @@ fn retrieve_returns_keyword_match_with_explanation() {
     );
     assert!(context.omitted.is_empty());
     assert_eq!(context.created_at, fixed_time());
+}
+
+#[test]
+fn retrieve_uses_injected_fusion_before_limit() {
+    let service = service_with_fusion(Arc::new(AllowAll), Arc::new(ReverseFusion));
+    block_on(service.write_memory(write_request(
+        "Rust retrieval alpha",
+        "tenant-demo",
+        vec![AllowedUse::Retrieval],
+    )))
+    .expect("write first memory");
+    block_on(service.write_memory(write_request(
+        "Rust retrieval beta",
+        "tenant-demo",
+        vec![AllowedUse::Retrieval],
+    )))
+    .expect("write second memory");
+
+    let mut request = retrieval_request("Rust retrieval", "tenant-demo");
+    request.limit = Some(1);
+    let context = block_on(service.retrieve(request)).expect("retrieve context");
+
+    assert_eq!(context.items.len(), 1);
+    assert!(context.items[0].content.contains("beta"));
+    assert_eq!(context.omitted.len(), 1);
+    assert_eq!(context.omitted[0].reason, OmittedReason::BudgetExceeded);
 }
 
 #[test]

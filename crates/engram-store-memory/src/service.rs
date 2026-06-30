@@ -10,9 +10,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use async_trait::async_trait;
 use engram_core::{
     Clock, CoreError, CoreResult, IdGenerator, MemoryEventRepository, MemoryRepository,
-    MemoryService, PolicyAuthorizer,
+    MemoryService, PolicyAuthorizer, RetrievalFusion,
 };
 use engram_domain::*;
+use engram_retrieval::WeightedRetrievalFusion;
 
 use crate::{
     dependencies::{AllowAllPolicyAuthorizer, SequentialIdGenerator, SystemClock},
@@ -31,6 +32,7 @@ pub struct InMemoryMemoryService {
     pub(crate) authorizer: Arc<dyn PolicyAuthorizer>,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) ids: Arc<dyn IdGenerator>,
+    pub(crate) retrieval_fusion: Arc<dyn RetrievalFusion>,
 }
 
 impl InMemoryMemoryService {
@@ -72,11 +74,31 @@ impl InMemoryMemoryService {
         clock: Arc<dyn Clock>,
         ids: Arc<dyn IdGenerator>,
     ) -> Self {
+        Self::with_retrieval_fusion(
+            authorizer,
+            clock,
+            ids,
+            Arc::new(WeightedRetrievalFusion::default()),
+        )
+    }
+
+    /// Creates an in-memory service with an injected retrieval fusion strategy.
+    ///
+    /// This constructor is the adapter composition boundary for retrieval
+    /// experiments. Candidate production remains in this crate, while fusion can
+    /// be swapped without changing core traits or public JSON contracts.
+    pub fn with_retrieval_fusion(
+        authorizer: Arc<dyn PolicyAuthorizer>,
+        clock: Arc<dyn Clock>,
+        ids: Arc<dyn IdGenerator>,
+        retrieval_fusion: Arc<dyn RetrievalFusion>,
+    ) -> Self {
         Self {
             state: Arc::new(Mutex::new(InMemoryState::default())),
             authorizer,
             clock,
             ids,
+            retrieval_fusion,
         }
     }
 

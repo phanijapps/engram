@@ -55,3 +55,5 @@ This project follows a contract-first changelog while pre-1.0.
 - Added `engram-retrieval` with deterministic weighted hybrid retrieval fusion.
 - Added gated mutating consolidation orchestration with pre/post evaluation
   checks.
+- Wired in-memory retrieval through injectable deterministic fusion before final
+  context truncation.

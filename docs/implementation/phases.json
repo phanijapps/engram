@@ -138,5 +138,12 @@
     "description": "Mutating consolidation gates",
     "spec_file": "docs/specs/mutating-consolidation-gates/spec.md",
     "plan_file": "docs/specs/mutating-consolidation-gates/plan.md"
+  },
+  {
+    "phase_id": "PHASE20",
+    "status": "DONE",
+    "description": "In-memory retrieval fusion wiring",
+    "spec_file": "docs/specs/in-memory-retrieval-fusion-wiring/spec.md",
+    "plan_file": "docs/specs/in-memory-retrieval-fusion-wiring/plan.md"
   }
 ]

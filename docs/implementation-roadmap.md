@@ -692,6 +692,40 @@ Shipped slice:
 - Added focused tests for gate order, pre-gate failure, post-gate regression,
   and explicit mutating-mode validation.
 
+## Phase 20: In-Memory Retrieval Fusion Wiring
+
+Status: complete for in-memory adapter fusion composition.
+
+Goal: route in-memory retrieval candidates through the `RetrievalFusion` port
+before final context truncation.
+
+Crates:
+
+- `engram-store-memory`
+- `engram-retrieval`
+
+Implementation work:
+
+- Inject a retrieval fusion collaborator into `InMemoryMemoryService`.
+- Use deterministic weighted fusion by default.
+- Keep policy-checked keyword candidate production in the adapter.
+- Apply request limit and item budget after fusion.
+- Preserve omitted-result reporting for candidates dropped by final truncation.
+
+Acceptance gate:
+
+- Default retrieval behavior remains compatible with existing fixtures.
+- Tests can inject a custom fusion collaborator.
+- Budget-exceeded omissions reflect post-fusion ranking.
+- Core remains independent of concrete retrieval implementations.
+
+Shipped slice:
+
+- Added `InMemoryMemoryService::with_retrieval_fusion`.
+- Wired default construction to `WeightedRetrievalFusion`.
+- Added a retrieval test proving injected fusion controls ordering before
+  request-limit truncation.
+
 ## Stop Conditions
 
 Do not move to a later phase when any of these are true:

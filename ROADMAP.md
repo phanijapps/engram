@@ -34,12 +34,13 @@ use the implementation roadmap as the spec-driven execution loop.
   parser contracts are specified.
 - Keep hybrid retrieval fusion deterministic, traceable, and independent of
   concrete stores or embedding providers.
+- Keep in-memory retrieval wired through the fusion port before final context
+  truncation.
 - Keep concrete adapters outside `engram-core`.
 
 ## Next: Post-Roadmap Slices
 
-- Service wiring for retrieval fusion with memory, knowledge, and vector
-  candidates.
+- Service wiring for retrieval fusion with knowledge and vector candidates.
 - Concrete consolidation task algorithms for compaction, decay, hierarchy, and
   belief synthesis.
 

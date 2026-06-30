@@ -96,19 +96,30 @@ pub(crate) async fn retrieve(
             .then_with(|| left.2.id.cmp(&right.2.id))
     });
 
-    let mut items = Vec::new();
+    let mut candidate_results = Vec::new();
     for (index, (score, matched_terms, record)) in candidates.into_iter().enumerate() {
-        if index >= max_items {
-            omitted.push(omitted_result(&record, OmittedReason::BudgetExceeded));
-            continue;
-        }
-        items.push(retrieval_result(
+        candidate_results.push(retrieval_result(
             index,
             score,
             matched_terms,
             record,
             include_explanations,
         ));
+    }
+
+    let mut fusion_request = request.clone();
+    fusion_request.limit = None;
+    let fused_results = service
+        .retrieval_fusion
+        .fuse(&fusion_request, candidate_results)?;
+
+    let mut items = Vec::new();
+    for (index, result) in fused_results.into_iter().enumerate() {
+        if index >= max_items {
+            omitted.push(omitted_fused_result(&result, OmittedReason::BudgetExceeded));
+            continue;
+        }
+        items.push(result);
     }
 
     Ok(ContextPayload {
@@ -259,6 +270,14 @@ fn omitted_result(record: &MemoryRecord, reason: OmittedReason) -> OmittedResult
     OmittedResult {
         target_type: RetrievalTargetType::Memory,
         target_id: record.id.to_string(),
+        reason,
+    }
+}
+
+fn omitted_fused_result(result: &RetrievalResult, reason: OmittedReason) -> OmittedResult {
+    OmittedResult {
+        target_type: result.target_type.clone(),
+        target_id: result.target_id.clone(),
         reason,
     }
 }

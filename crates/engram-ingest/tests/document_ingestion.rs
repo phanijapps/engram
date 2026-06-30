@@ -1,9 +1,9 @@
-use engram_core::KnowledgeRepository;
 use engram_domain::*;
 use engram_ingest::{
     DocumentIngestRequest, DocumentMetadata, KnowledgeIngestor, PlainTextChunker,
     PlainTextChunkerOptions,
 };
+use engram_knowledge::KnowledgeRepository;
 use engram_store_memory::InMemoryMemoryService;
 use futures::executor::block_on;
 

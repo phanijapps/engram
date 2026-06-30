@@ -3,8 +3,8 @@
 //! This module owns the SQLite transaction that keeps a write, its lifecycle
 //! event, and its optional idempotency record from being partially committed.
 
-use engram_core::CoreResult;
 use engram_domain::*;
+use engram_memory::CoreResult;
 use rusqlite::{OptionalExtension, params};
 
 use crate::{

@@ -1,5 +1,5 @@
 [package]
-name = "engram-store-memory"
+name = "engram-store-knowledge-memory"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,15 +7,10 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
-chrono.workspace = true
-engram-core = { path = "../engram-core" }
 engram-domain = { path = "../engram-domain" }
 engram-knowledge = { path = "../engram-knowledge" }
-engram-memory = { path = "../engram-memory" }
-engram-retrieval = { path = "../engram-retrieval" }
 engram-runtime = { path = "../engram-runtime" }
-serde_json.workspace = true
 
 [dev-dependencies]
-engram-eval = { path = "../engram-eval" }
+chrono.workspace = true
 futures.workspace = true

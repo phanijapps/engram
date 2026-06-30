@@ -4,8 +4,8 @@
 //! captured by deserialization alone, such as forbidding `training_export` on
 //! v1 writes and rejecting zero-valued retrieval budgets.
 
-use engram_core::{CoreError, CoreResult};
 use engram_domain::{AllowedUse, ForgetRequest, RetrievalRequest, WriteMemoryRequest};
+use engram_runtime::{CoreError, CoreResult};
 
 /// Validates behavior-level constraints for v1 memory writes.
 ///

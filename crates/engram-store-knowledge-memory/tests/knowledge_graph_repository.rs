@@ -1,7 +1,7 @@
 use chrono::Utc;
-use engram_core::{KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository};
 use engram_domain::*;
-use engram_store_memory::InMemoryMemoryService;
+use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository};
+use engram_store_knowledge_memory::InMemoryKnowledgeStore;
 use futures::executor::block_on;
 
 fn actor() -> Actor {
@@ -48,7 +48,7 @@ fn provenance() -> Provenance {
 
 #[test]
 fn knowledge_graph_repository_round_trips_scoped_graph() {
-    let service = InMemoryMemoryService::new();
+    let store = InMemoryKnowledgeStore::new();
     let graph = KnowledgeGraph {
         id: Id::from("graph-1"),
         scope: scope("tenant-a"),
@@ -67,9 +67,9 @@ fn knowledge_graph_repository_round_trips_scoped_graph() {
         metadata: None,
     };
 
-    let stored = block_on(service.put_graph(graph.clone())).expect("put graph");
-    let visible = block_on(service.get_graph(&graph.id, &scope("tenant-a"))).expect("get graph");
-    let hidden = block_on(service.get_graph(&graph.id, &scope("tenant-b"))).expect("get graph");
+    let stored = block_on(store.put_graph(graph.clone())).expect("put graph");
+    let visible = block_on(store.get_graph(&graph.id, &scope("tenant-a"))).expect("get graph");
+    let hidden = block_on(store.get_graph(&graph.id, &scope("tenant-b"))).expect("get graph");
 
     assert_eq!(stored.id, graph.id);
     assert_eq!(visible.expect("visible graph").name, "Code Graph");
@@ -78,10 +78,10 @@ fn knowledge_graph_repository_round_trips_scoped_graph() {
 
 #[test]
 fn knowledge_graph_neighbors_respect_scope_and_limit() {
-    let service = InMemoryMemoryService::new();
+    let store = InMemoryKnowledgeStore::new();
     let graph_id = Id::from("graph-1");
     let function_a = Id::from("function-a");
-    block_on(service.put_graph(KnowledgeGraph {
+    block_on(store.put_graph(KnowledgeGraph {
         id: graph_id.clone(),
         scope: scope("tenant-a"),
         name: "Code Graph".to_owned(),
@@ -96,7 +96,7 @@ fn knowledge_graph_neighbors_respect_scope_and_limit() {
     }))
     .expect("put graph");
 
-    block_on(service.put_entity(KnowledgeEntity {
+    block_on(store.put_entity(KnowledgeEntity {
         id: function_a.clone(),
         graph_id: Some(graph_id.clone()),
         kind: EntityKind::Function,
@@ -113,7 +113,7 @@ fn knowledge_graph_neighbors_respect_scope_and_limit() {
     .expect("put entity");
 
     for (relationship_id, object_id) in [("rel-1", "function-b"), ("rel-2", "function-c")] {
-        block_on(service.put_relationship(KnowledgeRelationship {
+        block_on(store.put_relationship(KnowledgeRelationship {
             id: Id::from(relationship_id),
             graph_id: Some(graph_id.clone()),
             subject: EntityRef {
@@ -139,10 +139,9 @@ fn knowledge_graph_neighbors_respect_scope_and_limit() {
         .expect("put relationship");
     }
 
-    let neighbors =
-        block_on(service.neighbors(&graph_id, &function_a, &scope("tenant-a"), Some(1)))
-            .expect("neighbors");
-    let hidden = block_on(service.neighbors(&graph_id, &function_a, &scope("tenant-b"), None))
+    let neighbors = block_on(store.neighbors(&graph_id, &function_a, &scope("tenant-a"), Some(1)))
+        .expect("neighbors");
+    let hidden = block_on(store.neighbors(&graph_id, &function_a, &scope("tenant-b"), None))
         .expect("hidden neighbors");
 
     assert_eq!(neighbors.len(), 1);
@@ -152,11 +151,11 @@ fn knowledge_graph_neighbors_respect_scope_and_limit() {
 
 #[test]
 fn ontology_repository_validates_visible_graph_and_ontology() {
-    let service = InMemoryMemoryService::new();
+    let store = InMemoryKnowledgeStore::new();
     let graph_id = Id::from("graph-1");
     let ontology_id = Id::from("ontology-1");
 
-    block_on(service.put_graph(KnowledgeGraph {
+    block_on(store.put_graph(KnowledgeGraph {
         id: graph_id.clone(),
         scope: scope("tenant-a"),
         name: "Code Graph".to_owned(),
@@ -170,7 +169,7 @@ fn ontology_repository_validates_visible_graph_and_ontology() {
         metadata: None,
     }))
     .expect("put graph");
-    block_on(service.put_ontology(Ontology {
+    block_on(store.put_ontology(Ontology {
         id: ontology_id.clone(),
         uri: "urn:ontology:code".to_owned(),
         name: "Code Ontology".to_owned(),
@@ -187,10 +186,10 @@ fn ontology_repository_validates_visible_graph_and_ontology() {
     }))
     .expect("put ontology");
 
-    let findings = block_on(service.validate_graph(&graph_id, &ontology_id, &scope("tenant-a")))
+    let findings = block_on(store.validate_graph(&graph_id, &ontology_id, &scope("tenant-a")))
         .expect("validate graph");
     let hidden =
-        block_on(service.get_ontology(&ontology_id, &scope("tenant-b"))).expect("get ontology");
+        block_on(store.get_ontology(&ontology_id, &scope("tenant-b"))).expect("get ontology");
 
     assert!(findings.is_empty());
     assert!(hidden.is_none());

@@ -6,8 +6,8 @@
 
 use std::collections::BTreeSet;
 
-use engram_core::{CoreError, CoreResult};
 use engram_domain::*;
+use engram_memory::{CoreError, CoreResult};
 
 use crate::{
     engine::SqlMemoryService, scope::scope_allows, validation::validate_retrieval_request,

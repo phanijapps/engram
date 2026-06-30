@@ -4,8 +4,8 @@
 //! validate, authorize, create a memory, append a written event, and preserve
 //! idempotency without leaking storage details into the core ports.
 
-use engram_core::CoreResult;
 use engram_domain::*;
+use engram_runtime::CoreResult;
 use serde_json::json;
 
 use crate::{service::InMemoryMemoryService, validation::validate_write_request};

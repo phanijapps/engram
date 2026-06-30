@@ -1,9 +1,9 @@
 use std::{fs, path::Path, process::Command};
 
 use chrono::Utc;
-use engram_core::SourceReader;
 use engram_domain::*;
 use engram_ingest::{FilesystemSourceReaderOptions, GitSourceReader};
+use engram_knowledge::SourceReader;
 use futures::executor::block_on;
 
 #[test]

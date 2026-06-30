@@ -7,8 +7,8 @@
 
 use std::collections::BTreeSet;
 
-use engram_core::{CoreError, CoreResult};
 use engram_domain::*;
+use engram_runtime::{CoreError, CoreResult};
 
 use crate::{
     belief_retrieval::{BeliefSnapshot, ContradictionSnapshot, belief_candidates},

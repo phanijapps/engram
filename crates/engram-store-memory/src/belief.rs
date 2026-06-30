@@ -5,8 +5,9 @@
 //! source-grounded evidence and derived stance records.
 
 use async_trait::async_trait;
-use engram_core::{BeliefRepository, CoreError, CoreResult};
+use engram_core::BeliefRepository;
 use engram_domain::*;
+use engram_runtime::{CoreError, CoreResult};
 
 use crate::{scope::scope_allows, service::InMemoryMemoryService};
 

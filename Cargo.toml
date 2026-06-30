@@ -6,6 +6,7 @@ members = [
     "crates/engram-knowledge",
     "crates/engram-core",
     "crates/engram-store-memory",
+    "crates/engram-store-knowledge-memory",
     "crates/engram-eval",
     "crates/engram-store-sql",
     "crates/engram-node",

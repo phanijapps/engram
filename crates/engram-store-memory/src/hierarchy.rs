@@ -7,8 +7,9 @@
 use std::collections::BTreeSet;
 
 use async_trait::async_trait;
-use engram_core::{CoreResult, HierarchyRepository};
+use engram_core::HierarchyRepository;
 use engram_domain::*;
+use engram_runtime::CoreResult;
 
 use crate::{scope::scope_allows, service::InMemoryMemoryService};
 

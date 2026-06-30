@@ -4,8 +4,8 @@
 //! `tombstone`, and `archive`. It keeps audit events visible while ensuring
 //! normal retrieval cannot leak forgotten or redacted memory content.
 
-use engram_core::{CoreError, CoreResult};
 use engram_domain::*;
+use engram_runtime::{CoreError, CoreResult};
 use serde_json::json;
 
 use crate::{

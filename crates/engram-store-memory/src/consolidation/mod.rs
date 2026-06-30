@@ -7,8 +7,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use engram_core::{ConsolidationMutationExecutor, ConsolidationMutationOutcome, CoreResult};
+use engram_core::{ConsolidationMutationExecutor, ConsolidationMutationOutcome};
 use engram_domain::*;
+use engram_runtime::CoreResult;
 
 use crate::service::InMemoryMemoryService;
 

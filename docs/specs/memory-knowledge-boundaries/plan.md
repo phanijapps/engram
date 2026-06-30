@@ -158,15 +158,18 @@ checked.
 **Depends on:** T2, T3
 
 **Tests:**
-- `cargo test -p engram-store-memory --test knowledge_graph_repository`
+- `cargo test -p engram-store-knowledge-memory --test knowledge_graph_repository`
   proves graph and ontology repository behavior is executable.
 
 **Approach:**
 - Add graph, entity, relationship, ontology, class, property, and axiom maps to
-  the in-memory adapter state.
+  a dedicated `engram-store-knowledge-memory` adapter state.
 - Implement `KnowledgeGraphRepository` and `OntologyRepository` for
-  `InMemoryMemoryService`.
-- Extend `KnowledgeRepository` to round-trip entities and relationships.
+  `InMemoryKnowledgeStore`.
+- Extend the knowledge fixture's `KnowledgeRepository` to round-trip entities
+  and relationships.
+- Keep `engram-store-memory` limited to memory plus source/document/chunk
+  records required by quick retrieval tests.
 
 **Done when:** scoped graph lookup, neighbor traversal, and visible
 graph/ontology validation tests pass.
@@ -174,8 +177,9 @@ graph/ontology validation tests pass.
 ## Rollout
 
 This is a source-compatible crate-boundary split. Existing imports through
-`engram-core` continue to work in this slice. Future specs may migrate adapters
-to import directly from `engram-memory` and `engram-knowledge`.
+`engram-core` continue to work in this slice for compatibility. Production
+adapters now import direct memory and knowledge crates where the canonical
+ports exist.
 
 ## Risks
 
@@ -189,3 +193,6 @@ to import directly from `engram-memory` and `engram-knowledge`.
 ## Changelog
 
 - 2026-06-30: initial plan.
+- 2026-06-30: extracted graph/ontology in-memory behavior into
+  `engram-store-knowledge-memory` and narrowed `engram-store-memory` back to a
+  quick memory fixture.

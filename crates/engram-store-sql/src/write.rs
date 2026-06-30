@@ -3,8 +3,8 @@
 //! The write path mirrors the in-memory baseline while persisting records,
 //! events, and idempotency responses through SQLite repository helpers.
 
-use engram_core::CoreResult;
 use engram_domain::*;
+use engram_memory::CoreResult;
 use serde_json::json;
 
 use crate::{

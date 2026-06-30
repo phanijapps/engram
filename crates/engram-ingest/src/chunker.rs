@@ -5,8 +5,8 @@
 //! language-aware code parsing; those responsibilities live in ingestion and
 //! future source-specific adapters.
 
-use engram_core::{CoreError, CoreResult};
 use engram_domain::{KnowledgeChunkKind, SourceLocation};
+use engram_knowledge::{CoreError, CoreResult};
 
 /// Candidate chunk produced before domain IDs and provenance are attached.
 #[derive(Debug, Clone, PartialEq, Eq)]

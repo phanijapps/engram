@@ -8,11 +8,12 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use async_trait::async_trait;
-use engram_core::{
-    Clock, CoreError, CoreResult, IdGenerator, MemoryEventRepository, MemoryRepository,
-    MemoryService, PolicyAuthorizer, RetrievalFusion, RetrievalIndex,
-};
+use engram_core::{RetrievalFusion, RetrievalIndex};
 use engram_domain::*;
+use engram_memory::{
+    Clock, CoreError, CoreResult, IdGenerator, MemoryEventRepository, MemoryRepository,
+    MemoryService, PolicyAuthorizer,
+};
 use engram_retrieval::WeightedRetrievalFusion;
 
 use crate::{

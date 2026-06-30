@@ -11,10 +11,10 @@ use std::{
 
 use async_trait::async_trait;
 use chrono::Utc;
-use engram_core::{CoreError, CoreResult, SourceReader};
 use engram_domain::{
     KnowledgeSource, SourceDocument, SourceDocumentKind, SourceKind, SourceLocation,
 };
+use engram_knowledge::{CoreError, CoreResult, SourceReader};
 
 use crate::content_hash;
 

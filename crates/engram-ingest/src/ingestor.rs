@@ -5,8 +5,8 @@
 //! not read files, clone repositories, embed text, or turn source facts into
 //! memory records.
 
-use engram_core::{CoreError, CoreResult, KnowledgeRepository};
 use engram_domain::*;
+use engram_knowledge::{CoreError, CoreResult, KnowledgeRepository};
 
 use crate::{
     chunker::Chunker,

@@ -31,7 +31,8 @@ crates/                    Rust workspace.
   engram-ingest/        Document/code source ingestion and chunking ports.
   engram-hierarchy/     Hierarchy construction, paths, expansion logic.
   engram-belief/        Belief derivation, contradiction, consolidation.
-  engram-store-memory/  In-memory adapter for tests and first slices.
+  engram-store-memory/  In-memory memory adapter for quick tests only.
+  engram-store-knowledge-memory/ In-memory knowledge/graph/ontology test adapter.
   engram-store-sql/     SQL persistence adapter.
   engram-store-vector/  Vector index adapter.
   engram-node/          N-API bridge for TypeScript.
@@ -64,6 +65,11 @@ the stack ADR is accepted.
 - `engram-core` is an orchestration facade and compatibility re-export layer
   above split behavior crates. It must not become the canonical owner of memory
   or knowledge ports again.
+- `engram-store-memory` is a quick memory fixture. Do not add graph, ontology,
+  embedding provider, durable document, or production cache behavior to it.
+- `engram-store-knowledge-memory` is a quick knowledge, graph, and ontology
+  fixture. It must not own memory writes, memory lifecycle events, or memory
+  forget semantics.
 - Store, vector, embedding, model, and gateway integrations belong in adapter
   crates or TypeScript packages.
 - TypeScript must not redefine domain truth. It may wrap, validate, compose, and

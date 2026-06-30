@@ -5,8 +5,8 @@
 
 use std::collections::BTreeSet;
 
-use engram_core::{CoreError, CoreResult, PolicyAuthorizer};
 use engram_domain::*;
+use engram_memory::{CoreError, CoreResult, PolicyAuthorizer};
 
 use crate::scope::scope_allows;
 

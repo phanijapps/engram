@@ -74,9 +74,11 @@ without forcing either side into the other's persistence model.
   crates compile against the split boundaries.
 - [x] The domain model documents memory storage, knowledge graph storage, vector
   storage, and retrieval composition as separate replaceable concerns.
-- [x] The in-memory adapter provides a testable knowledge graph and ontology
-  repository baseline with scoped graph lookup, neighbor traversal, and ontology
-  validation entry points.
+- [x] The in-memory knowledge adapter provides a testable knowledge graph and
+  ontology repository baseline with scoped graph lookup, neighbor traversal, and
+  ontology validation entry points.
+- [x] The in-memory memory adapter no longer owns graph or ontology state; it
+  keeps source/document/chunk records only as a quick retrieval fixture.
 
 ## Assumptions
 

@@ -1,5 +1,5 @@
-use engram_core::MemoryService;
 use engram_domain::{RetrievalRequest, WriteMemoryRequest};
+use engram_memory::MemoryService;
 use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
 

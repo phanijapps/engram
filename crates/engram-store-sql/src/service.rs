@@ -10,8 +10,8 @@ use std::{
 };
 
 use async_trait::async_trait;
-use engram_core::{CoreError, CoreResult, MemoryEventRepository, MemoryRepository};
 use engram_domain::*;
+use engram_memory::{CoreError, CoreResult, MemoryEventRepository, MemoryRepository};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{

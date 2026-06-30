@@ -7,11 +7,11 @@
 use std::{path::Path, sync::Arc};
 
 use async_trait::async_trait;
-use engram_core::{
+use engram_domain::*;
+use engram_memory::{
     Clock, CoreResult, IdGenerator, MemoryEventRepository, MemoryRepository, MemoryService,
     PolicyAuthorizer,
 };
-use engram_domain::*;
 
 use crate::{
     dependencies::{AllowAllPolicyAuthorizer, SequentialIdGenerator, SystemClock},

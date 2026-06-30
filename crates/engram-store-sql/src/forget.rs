@@ -3,8 +3,8 @@
 //! This module applies delete, redact, tombstone, and archive behavior through
 //! SQL repository operations while preserving lifecycle audit events.
 
-use engram_core::{CoreError, CoreResult, MemoryRepository};
 use engram_domain::*;
+use engram_memory::{CoreError, CoreResult, MemoryRepository};
 use serde_json::json;
 
 use crate::{engine::SqlMemoryService, validation::validate_forget_request};

@@ -37,6 +37,7 @@ Current validated surface includes:
 - accepted v1 JSON schemas and TypeScript contract generation
 - reusable Rust evaluation fixtures and report summaries
 - in-memory and SQLite-backed memory services
+- separate in-memory knowledge graph and ontology test adapter
 - file-backed SQLite local smoke support
 - sqlite-vec candidate retrieval with opt-in FastEmbed BGE-small test wiring
 - source-grounded document/code ingestion
@@ -80,14 +81,14 @@ Before publishing crates, npm packages, release tags, or benchmark claims, use
           |                             |                             |
           v                             v                             v
 +--------------------+        +--------------------+        +--------------------+
-| Memory adapters    |        | Knowledge ingest   |        | Retrieval adapters |
-| in-memory, SQLite  |        | docs, files, code  |        | sqlite-vec, fusion |
+| Memory adapters    |        | Knowledge adapters |        | Retrieval adapters |
+| quick memory, SQL  |        | ingest, graph test |        | sqlite-vec, fusion |
 +---------+----------+        +---------+----------+        +---------+----------+
           |                             |                             |
           v                             v                             v
 +--------------------+        +--------------------+        +--------------------+
-| Local state / SQL  |        | Source documents   |        | Vector candidates  |
-| events/idempotency |        | chunks/provenance  |        | rehydrated targets |
+| Local state / SQL  |        | Sources/chunks     |        | Vector candidates  |
+| events/idempotency |        | graph/ontology     |        | rehydrated targets |
 +--------------------+        +--------------------+        +--------------------+
 ```
 
@@ -102,7 +103,8 @@ redefining them.
 ```text
 contracts/        Accepted JSON schemas, examples, and contract notes.
 crates/           Rust workspace: domain, runtime, memory, knowledge, core,
-                  SQL, vector, ingest, evaluation, retrieval, and node bridge.
+                  SQL, vector, ingest, in-memory test adapters, evaluation,
+                  retrieval, and node bridge.
 docs/             Architecture docs, ADRs, RFCs, research, specs, and roadmap.
 examples/         Scenario fixtures and usage sketches.
 packages/         TypeScript contracts, client, node package, adapters, eval.

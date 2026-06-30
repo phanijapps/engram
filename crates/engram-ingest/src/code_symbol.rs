@@ -4,8 +4,8 @@
 //! ingestion. It emits symbol-oriented chunk candidates with line spans and
 //! anchors, but it is not an AST parser and does not infer relationships.
 
-use engram_core::{CoreError, CoreResult};
 use engram_domain::{KnowledgeChunkKind, SourceLocation};
+use engram_knowledge::{CoreError, CoreResult};
 
 use crate::chunker::{ChunkCandidate, Chunker};
 

@@ -90,6 +90,9 @@ Storage should be swappable behind ports.
   ontologies.
 - Vector index for semantic recall.
 - Graph index for relationships, ontology-backed graph traversal, and GraphRAG.
+- Process-local in-memory adapters are conformance fixtures only. Memory,
+  knowledge graph, and ontology fixtures stay in separate crates so production
+  backends can diverge by technology.
 
 ### Knowledge Source Extension
 
@@ -129,6 +132,12 @@ crates/engram-knowledge
 
 crates/engram-core
   Orchestration facade, retrieval, consolidation, hierarchy, belief, evaluation.
+
+crates/engram-store-memory
+  Quick in-memory memory fixture for tests and examples only.
+
+crates/engram-store-knowledge-memory
+  Quick in-memory knowledge, graph, and ontology fixture for tests and examples.
 ```
 
 ## First Vertical Slice

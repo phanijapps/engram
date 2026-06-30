@@ -3,7 +3,7 @@
 //! The first SQL schema stores accepted contract payloads losslessly as JSON
 //! while also indexing scope and target fields needed by repository ports.
 
-use engram_core::{CoreError, CoreResult};
+use engram_memory::{CoreError, CoreResult};
 use rusqlite::Connection;
 
 /// Creates the SQLite tables required by the first SQL adapter slice.

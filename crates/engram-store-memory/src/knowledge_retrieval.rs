@@ -4,8 +4,8 @@
 //! source, document, and chunk policy checks visible before candidates reach the
 //! shared fusion step.
 
-use engram_core::{CoreError, CoreResult, PolicyAuthorizer};
 use engram_domain::*;
+use engram_memory::{CoreError, CoreResult, PolicyAuthorizer};
 
 use crate::scope::scope_allows;
 

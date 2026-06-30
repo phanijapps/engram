@@ -7,8 +7,8 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use chrono::Utc;
-use engram_core::{Clock, CoreResult, IdGenerator, PolicyAuthorizer};
 use engram_domain::{Id, Policy, Requester, Scope, Timestamp};
+use engram_memory::{Clock, CoreResult, IdGenerator, PolicyAuthorizer};
 
 /// Clock implementation backed by the current system UTC time.
 ///

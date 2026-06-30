@@ -6,8 +6,8 @@
 
 use std::collections::BTreeSet;
 
-use engram_core::CoreResult;
 use engram_domain::*;
+use engram_runtime::CoreResult;
 use serde_json::json;
 
 use crate::{

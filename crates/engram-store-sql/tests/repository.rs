@@ -1,6 +1,6 @@
 use chrono::{TimeZone, Utc};
-use engram_core::{MemoryEventRepository, MemoryRepository};
 use engram_domain::*;
+use engram_memory::{MemoryEventRepository, MemoryRepository};
 use engram_store_sql::SqlMemoryStore;
 use futures::executor::block_on;
 use serde_json::json;

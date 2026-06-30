@@ -4,8 +4,8 @@
 //! packages own ergonomics; this crate owns serialization round trips into the
 //! Rust memory service.
 
-use engram_core::MemoryService;
 use engram_domain::{ForgetRequest, RetrievalRequest, WriteMemoryRequest};
+use engram_memory::{CoreError, MemoryService};
 use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
@@ -83,7 +83,7 @@ where
     serde_json::to_string(value).map_err(|error| Error::from_reason(error.to_string()))
 }
 
-fn to_napi_error(error: engram_core::CoreError) -> Error {
+fn to_napi_error(error: CoreError) -> Error {
     Error::from_reason(error.to_string())
 }
 

@@ -1,18 +1,18 @@
 [workspace]
 members = [
-    "crates/engram-domain",
-    "crates/engram-runtime",
-    "crates/engram-memory",
-    "crates/engram-knowledge",
-    "crates/engram-core",
-    "crates/engram-store-memory",
-    "crates/engram-store-knowledge-memory",
-    "crates/engram-eval",
-    "crates/engram-store-sql",
-    "crates/engram-node",
-    "crates/engram-ingest",
-    "crates/engram-store-vector",
-    "crates/engram-retrieval",
+    "core/domain",
+    "core/runtime",
+    "core/memory",
+    "core/knowledge",
+    "core/retrieval",
+    "core/orchestration",
+    "core/eval",
+    "adapters/ingest",
+    "adapters/memory/inmem",
+    "adapters/memory/sqlite",
+    "adapters/knowledge/inmem",
+    "adapters/retrieval/sqlite-vec",
+    "bindings/node",
 ]
 resolver = "3"
 

@@ -72,11 +72,11 @@ scope, lifecycle, policy, and filter checks as directly matched memory results.
 
 - Technical: hierarchy base nodes already link back to memory targets through
   `sourceTargetType` and `sourceTargetId` (source:
-  `crates/engram-domain/src/hierarchy.rs`).
+  `core/domain/src/hierarchy.rs`).
 - Technical: in-memory retrieval already snapshots memories and hierarchy nodes
-  before fusion (source: `crates/engram-store-memory/src/retrieval.rs`).
+  before fusion (source: `adapters/memory/inmem/src/retrieval.rs`).
 - Technical: weighted fusion can rank mixed direct and expanded candidates
   using existing `FusionTrace` and `RetrievalScore` fields (source:
-  `crates/engram-retrieval/src/lib.rs`).
+  `core/retrieval/src/lib.rs`).
 - Process: expansion must stay adapter-local and keep `engram-core` free of
   concrete hierarchy algorithms (source: `AGENTS.md`).

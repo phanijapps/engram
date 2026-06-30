@@ -52,7 +52,7 @@ is deferred.
 ## Examples
 
 Examples under `examples/` are normative shape examples. They are not exhaustive
-behavior tests; the specs under `specs/v1/` define acceptance behavior.
+behavior tests; the specs under `docs/specs/` define acceptance behavior.
 
 Accepted retrieval evaluation fixtures cover positive recall, forbidden recall,
 budget-constrained retrieval, and no-result behavior. They are executable

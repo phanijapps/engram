@@ -4,20 +4,28 @@ This map is a planning baseline, not an implementation lock. Change it through a
 
 ## Rust Workspace
 
+### Core
+
 - `engram-domain`: accepted domain types, invariants, serialization, version markers.
 - `engram-runtime`: shared portable errors, result type, clocks, id generation, scope matching, and policy gates.
 - `engram-memory`: memory service and repository ports for write, retrieve, forget, and lifecycle events.
 - `engram-knowledge`: source-grounded knowledge, knowledge graph, ontology, source reader, chunker, and ingestion ports.
 - `engram-core`: orchestration facade, retrieval pipeline, consolidation, hierarchy, belief, and evaluation ports.
 - `engram-eval`: fixtures, deterministic harness, recall/leakage/ranking assertions.
-- `engram-ingest`: source parsing interfaces, chunking contracts, document/code ingestion pipeline.
 - `engram-hierarchy`: hierarchy build/maintenance algorithms, paths, expansion strategies.
 - `engram-belief`: belief derivation, contradiction detection, consolidation tasks.
+
+### Adapters
+
+- `engram-ingest`: current mixed filesystem/Git source reader and deterministic ingestion crate; split pure ingestion into core later.
 - `engram-store-memory`: in-memory memory adapter for quick tests and first vertical slices only.
 - `engram-store-knowledge-memory`: in-memory knowledge, graph, and ontology adapter for conformance tests and examples only.
 - `engram-store-sql`: SQL persistence adapter after the domain and ports are stable.
 - `engram-store-vector`: vector index adapter after retrieval interfaces stabilize.
 - `engram-provider-embed`: embedding provider adapter traits and selected provider implementations.
+
+### Bindings
+
 - `engram-node`: N-API bridge exposing stable Rust APIs to TypeScript.
 
 ## TypeScript Workspace

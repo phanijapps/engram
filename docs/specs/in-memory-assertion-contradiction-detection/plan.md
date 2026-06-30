@@ -52,13 +52,13 @@ introduced.
 
 ### Component / module decomposition
 
-- `crates/engram-core/src/consolidation/planner.rs` adds the task to hybrid
+- `core/orchestration/src/consolidation/planner.rs` adds the task to hybrid
   planning.
-- `crates/engram-store-memory/src/consolidation/contradiction_detection.rs`
+- `adapters/memory/inmem/src/consolidation/contradiction_detection.rs`
   owns assertion grouping, duplicate detection, contradiction construction, and
   event creation.
-- Tests live in `crates/engram-core/tests/consolidation_dry_run.rs` and
-  `crates/engram-store-memory/tests/consolidation_contradiction_detection.rs`.
+- Tests live in `core/orchestration/tests/consolidation_dry_run.rs` and
+  `adapters/memory/inmem/tests/consolidation_contradiction_detection.rs`.
 
 ### Failure, edge cases & resilience
 

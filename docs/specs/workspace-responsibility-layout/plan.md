@@ -1,7 +1,7 @@
 # Plan: Workspace Responsibility Layout
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting
+- **Status:** Done
 
 > **Plan contract:** this is the implementation strategy. Unlike the spec, this
 > document is allowed to change as you learn. When it changes substantially
@@ -274,3 +274,4 @@ does not obscure the path migration.
 ## Changelog
 
 - 2026-06-30: initial plan.
+- 2026-06-30: shipped grouped Rust workspace layout with stable package names.

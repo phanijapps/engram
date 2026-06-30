@@ -66,12 +66,12 @@ memory or knowledge ports directly.
 
 ### Component / module decomposition
 
-- `crates/engram-memory`: memory-only behavior ports.
-- `crates/engram-knowledge`: knowledge, graph, ontology, source, and ingestion
+- `core/memory`: memory-only behavior ports.
+- `core/knowledge`: knowledge, graph, ontology, source, and ingestion
   behavior ports.
-- `crates/engram-runtime`: shared error/result and dependency traits.
-- `crates/engram-core`: orchestration facade and remaining cross-cutting ports.
-- `crates/engram-domain`: storage-neutral contract types.
+- `core/runtime`: shared error/result and dependency traits.
+- `core/orchestration`: orchestration facade and remaining cross-cutting ports.
+- `core/domain`: storage-neutral contract types.
 
 ### Failure, edge cases & resilience
 
@@ -91,7 +91,7 @@ memory or knowledge ports directly.
 - `cargo check -p engram-core` proves compatibility re-exports compile.
 
 **Approach:**
-- Add `crates/engram-memory`.
+- Add `core/memory`.
 - Move canonical memory service/repository/dependency traits out of
   `engram-core`.
 - Re-export the memory crate from `engram-core`.
@@ -109,7 +109,7 @@ imports through `engram-core` still compile.
 - Domain serialization tests cover representative ontology and graph records.
 
 **Approach:**
-- Add `crates/engram-knowledge`.
+- Add `core/knowledge`.
 - Move canonical knowledge repository, source reader, chunker, and ingestion
   service traits out of `engram-core`.
 - Add `KnowledgeGraphRepository` and `OntologyRepository` traits.

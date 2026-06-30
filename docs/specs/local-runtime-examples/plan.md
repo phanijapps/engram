@@ -7,8 +7,8 @@ facade. Keep examples contract-backed and focused on write/retrieve flows.
 
 ## Steps
 
-- [x] Add `crates/engram-store-memory/examples/local_memory.rs`.
-- [x] Add `crates/engram-store-sql/examples/sql_memory.rs`.
+- [x] Add `adapters/memory/inmem/examples/local_memory.rs`.
+- [x] Add `adapters/memory/sqlite/examples/sql_memory.rs`.
 - [x] Add `packages/client/examples/injected-transport.ts`.
 - [x] Include client examples in TypeScript typechecking.
 - [x] Add a client test that executes the injected-transport example.

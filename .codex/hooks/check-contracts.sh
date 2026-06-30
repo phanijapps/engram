@@ -39,12 +39,10 @@ required_files=(
   "contracts/v1/examples/invalid/memory-record.missing-provenance-actor.json"
   "contracts/v1/examples/invalid/retrieval-request.missing-requester.json"
   "contracts/v1/examples/invalid/context-payload.redacted-content.json"
-  "specs/TEMPLATE.md"
-  "specs/v1/write-memory.md"
-  "specs/v1/retrieve-context.md"
-  "specs/v1/forget-memory.md"
-  "specs/v1/policy-enforcement.md"
-  "specs/v1/evaluation-fixtures.md"
+  "docs/specs/README.md"
+  "docs/specs/memory-contract-fixture-runners/spec.md"
+  "docs/specs/accepted-retrieval-fixtures/spec.md"
+  "docs/specs/forget-mode-contract-examples/spec.md"
 )
 
 for file in "${required_files[@]}"; do

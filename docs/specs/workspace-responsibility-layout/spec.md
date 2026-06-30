@@ -1,6 +1,6 @@
 # Spec: Workspace Responsibility Layout
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** `docs/domain-data-model.md`, `docs/architecture.md`, `docs/rfcs/0001-memory-layer-scope.md`, `docs/rfcs/0002-knowledge-source-extension.md`, `AGENTS.md`
@@ -71,23 +71,23 @@ does not introduce new runtime logic.
 
 ## Acceptance Criteria
 
-- [ ] Rust workspace members are grouped under responsibility directories:
+- [x] Rust workspace members are grouped under responsibility directories:
   `core/`, `adapters/`, and `bindings/`.
-- [ ] Package names remain stable for the first migration; `cargo metadata`
+- [x] Package names remain stable for the first migration; `cargo metadata`
   reports the same Rust package names before and after the path move.
-- [ ] `core/` contains only storage-neutral Rust crates: domain, runtime,
+- [x] `core/` contains only storage-neutral Rust crates: domain, runtime,
   memory ports, knowledge ports, retrieval, orchestration, and evaluation.
-- [ ] `adapters/` contains replaceable infrastructure crates, including memory
+- [x] `adapters/` contains replaceable infrastructure crates, including memory
   in-memory, memory SQLite, knowledge in-memory, retrieval sqlite-vec, and the
   current mixed ingest crate while it still owns filesystem and Git readers.
-- [ ] `bindings/` contains the N-API bridge crate.
-- [ ] New `AGENTS.md` files exist at `core/AGENTS.md`, `adapters/AGENTS.md`,
+- [x] `bindings/` contains the N-API bridge crate.
+- [x] New `AGENTS.md` files exist at `core/AGENTS.md`, `adapters/AGENTS.md`,
   `bindings/AGENTS.md`, and inside each adapter crate after movement.
-- [ ] Root `Cargo.toml`, crate path dependencies, examples, docs, and local
+- [x] Root `Cargo.toml`, crate path dependencies, examples, docs, and local
   scripts resolve the new paths without relying on stale `crates/` assumptions.
-- [ ] Existing Rust gates, TypeScript gates, contract hooks, and docs hooks pass
+- [x] Existing Rust gates, TypeScript gates, contract hooks, and docs hooks pass
   without v1 schema changes.
-- [ ] `docs/arch_divergence.md` and README architecture sections describe the
+- [x] `docs/arch_divergence.md` and README architecture sections describe the
   grouped layout and remaining staged renames or engine extraction work.
 
 ## Assumptions

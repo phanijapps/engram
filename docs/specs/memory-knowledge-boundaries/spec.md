@@ -5,7 +5,7 @@
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0003, RFC-0001, RFC-0002
 - **Brief:** none
-- **Contract:** `docs/domain-data-model.md`, `crates/engram-domain`, `crates/engram-runtime`, `crates/engram-memory`, `crates/engram-knowledge`
+- **Contract:** `docs/domain-data-model.md`, `core/domain`, `core/runtime`, `core/memory`, `core/knowledge`
 - **Shape:** mixed
 
 > **Spec contract:** this document defines what "done" means. The implementing
@@ -91,7 +91,7 @@ without forcing either side into the other's persistence model.
   `docs/rfcs/0002-knowledge-source-extension.md`).
 - Technical: current `engram-core` owns both memory and knowledge repository
   ports, so the split moves canonical ports out of core (source:
-  `crates/engram-core/src/lib.rs`).
+  `core/orchestration/src/lib.rs`).
 - Process: contract-affecting changes update the domain model and run contract
   checks (source: `.codex/skills/engram-contract/SKILL.md`).
 - Product: ontology support is mandatory in the knowledge graph contract and

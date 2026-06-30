@@ -62,7 +62,7 @@ returns generated payload types.
 
 ### Component / module decomposition
 
-- `crates/engram-node` owns native bridge code and Rust serialization
+- `bindings/node` owns native bridge code and Rust serialization
   round-trips.
 - `packages/node` owns native package metadata, exports, loading behavior, and
   JSON transport wrapping.
@@ -115,7 +115,7 @@ of scope.
   or service behavior and assert accepted response shapes.
 
 **Approach:**
-- Add `crates/engram-node` with a narrow binding surface.
+- Add `bindings/node` with a narrow binding surface.
 - Keep native bridge behavior focused on serialization and service invocation.
 - Avoid adding native dependencies to domain or core crates.
 

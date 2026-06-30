@@ -119,31 +119,45 @@ into core.
 ## Initial Crate Boundaries
 
 ```text
-crates/engram-domain
+core/domain
   Portable domain types and serialization contracts.
 
-crates/engram-runtime
+core/runtime
   Shared errors, result type, clocks, id generation, scope matching, policy gates.
 
-crates/engram-memory
+core/memory
   Memory service, memory repository, lifecycle event repository.
 
-crates/engram-knowledge
+core/knowledge
   Knowledge repositories, graph repositories, ontology repositories, source
   readers, chunkers, ingestion.
 
-crates/engram-core
+core/orchestration
   Orchestration facade, consolidation, hierarchy, belief, evaluation, and
   compatibility re-exports.
 
-crates/engram-retrieval
+core/retrieval
   Storage-neutral retrieval traits, context composition, and fusion algorithms.
 
-crates/engram-store-memory
+adapters/memory/inmem
   Quick in-memory memory fixture for tests and examples only.
 
-crates/engram-store-knowledge-memory
+adapters/knowledge/inmem
   Quick in-memory knowledge, graph, and ontology fixture for tests and examples.
+
+adapters/memory/sqlite
+  SQLite-backed memory persistence adapter.
+
+adapters/retrieval/sqlite-vec
+  sqlite-vec backed retrieval index adapter.
+
+adapters/ingest
+  Current mixed filesystem/Git source reader and deterministic ingestion crate;
+  deterministic ingestion orchestration can move to core after source readers
+  split into dedicated adapters.
+
+bindings/node
+  N-API bridge exposing Rust behavior to TypeScript.
 ```
 
 ## First Vertical Slice

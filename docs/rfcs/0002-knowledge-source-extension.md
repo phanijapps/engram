@@ -40,15 +40,15 @@ SourceDocument
 ## Proposed Future Crates
 
 ```text
-crates/
-  mem-source/
-  mem-source-fs/
-  mem-source-git/
-  mem-ingest/
-  mem-docs/
-  mem-code/
-  mem-store-vector/
-  mem-store-graph/
+core/
+  knowledge/
+  ingest/
+
+adapters/
+  source/fs/
+  source/git/
+  retrieval/vector/
+  knowledge/graph/
 ```
 
 ### `mem-source`
@@ -254,4 +254,3 @@ Retrieval explanations should distinguish memory from knowledge:
 - How much code intelligence is required before Tree-sitter is worth adding?
 - Should graph storage begin as SQLite edge tables before introducing a graph
   database adapter?
-

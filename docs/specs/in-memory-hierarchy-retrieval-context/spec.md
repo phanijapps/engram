@@ -68,8 +68,8 @@ clustering.
 
 - Technical: base hierarchy nodes already record `sourceTargetType` and
   `sourceTargetId` for memory records (source:
-  `crates/engram-store-memory/src/consolidation/hierarchy_build.rs`).
+  `adapters/memory/inmem/src/consolidation/hierarchy_build.rs`).
 - Technical: retrieval explanations already carry a string `path` field (source:
-  `crates/engram-domain/src/retrieval.rs`).
+  `core/domain/src/retrieval.rs`).
 - Technical: hierarchy path navigation is repository-local and scoped (source:
-  `crates/engram-store-memory/src/hierarchy.rs`).
+  `adapters/memory/inmem/src/hierarchy.rs`).

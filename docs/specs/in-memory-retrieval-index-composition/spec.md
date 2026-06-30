@@ -71,11 +71,11 @@ vector, embedding, SQL, or provider dependency to `engram-store-memory`.
 ## Assumptions
 
 - Technical: `RetrievalIndex` is the existing core candidate-source boundary
-  (source: `crates/engram-core/src/lib.rs`).
+  (source: `core/orchestration/src/lib.rs`).
 - Technical: sqlite-vec candidate generation already exists behind
   `VectorRetrievalIndex` (source:
-  `crates/engram-store-vector/src/retrieval.rs`).
+  `adapters/retrieval/sqlite-vec/src/retrieval.rs`).
 - Technical: `ContextPayload.sourceFailures` is the accepted degraded-source
-  reporting surface (source: `crates/engram-domain/src/retrieval.rs`).
+  reporting surface (source: `core/domain/src/retrieval.rs`).
 - Process: concrete adapters stay outside `engram-core` and are composed behind
   ports (source: `AGENTS.md`).

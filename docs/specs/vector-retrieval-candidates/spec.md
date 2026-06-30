@@ -65,8 +65,8 @@ rehydration, and canonical records remain outside the vector table.
 ## Assumptions
 
 - Technical: sqlite-vec search already returns adapter-local rows ordered by
-  distance (source: `crates/engram-store-vector/src/index.rs`).
+  distance (source: `adapters/retrieval/sqlite-vec/src/index.rs`).
 - Technical: `RetrievalIndex` is the core candidate-source boundary (source:
-  `crates/engram-core/src/lib.rs`).
+  `core/orchestration/src/lib.rs`).
 - Process: vector storage is secondary adapter state and must not become domain
   truth (source: `docs/implementation-roadmap.md`).

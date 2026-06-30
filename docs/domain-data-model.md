@@ -49,7 +49,7 @@ V1 source of truth:
 - Human-readable semantics: this document.
 - Machine-readable wire contract: `contracts/v1/schemas/engram-v1.schema.json`.
 - Operation examples: `contracts/v1/examples/`.
-- Behavior acceptance specs: `specs/v1/`.
+- Behavior acceptance specs: `docs/specs/`.
 
 Implementation code, generated TypeScript, generated schemas, database schemas,
 and API payloads must conform to these artifacts. Rust domain types may become

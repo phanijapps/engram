@@ -70,11 +70,11 @@ on the source memory.
 ## Assumptions
 
 - Technical: `MemoryAssertion` already carries subject, predicate, object, and
-  confidence fields (source: `crates/engram-domain/src/memory.rs`).
+  confidence fields (source: `core/domain/src/memory.rs`).
 - Technical: belief records already carry sources and provenance separately
-  from source memories (source: `crates/engram-domain/src/belief.rs`).
+  from source memories (source: `core/domain/src/belief.rs`).
 - Technical: mutating consolidation is already gated by
   `GatedConsolidationService` and an injected `ConsolidationMutationExecutor`
-  (source: `crates/engram-core/src/consolidation/mutating.rs`).
+  (source: `core/orchestration/src/consolidation/mutating.rs`).
 - Process: beliefs remain derived stance, not source truth (source:
   `docs/implementation-roadmap.md`).

@@ -50,13 +50,13 @@ fields carry the expansion signal.
 
 ### Component / module decomposition
 
-- `crates/engram-store-memory/src/hierarchy_retrieval.rs` owns expansion lookup,
+- `adapters/memory/inmem/src/hierarchy_retrieval.rs` owns expansion lookup,
   memory candidate conversion, deduplication, and hierarchy context annotation.
-- `crates/engram-store-memory/src/retrieval.rs` snapshots memory records and
+- `adapters/memory/inmem/src/retrieval.rs` snapshots memory records and
   hierarchy nodes, invokes expansion before hierarchy annotation, and keeps
   final fusion/truncation unchanged.
 - Tests live in
-  `crates/engram-store-memory/tests/hierarchy_retrieval_expansion.rs`.
+  `adapters/memory/inmem/tests/hierarchy_retrieval_expansion.rs`.
 
 ### Failure, edge cases & resilience
 

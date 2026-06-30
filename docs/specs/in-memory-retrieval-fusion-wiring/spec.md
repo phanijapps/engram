@@ -62,7 +62,7 @@ different fusion collaborator.
 ## Assumptions
 
 - Technical: `engram-retrieval` owns deterministic weighted fusion (source:
-  `crates/engram-retrieval/src/lib.rs`).
+  `core/retrieval/src/lib.rs`).
 - Technical: `engram-store-memory` is an adapter and may depend on retrieval
   collaborators without changing core boundaries (source: `AGENTS.md`).
 - Process: concrete adapters stay outside `engram-core` (source: ADR-0003).

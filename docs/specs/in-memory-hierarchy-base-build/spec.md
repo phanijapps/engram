@@ -73,11 +73,11 @@ policy, and is auditable through a `MemoryEventKind::HierarchyBuilt` event.
 
 - Technical: hierarchy nodes can already point to retrieval targets through
   `source_target_type` and `source_target_id` (source:
-  `crates/engram-domain/src/hierarchy.rs`).
+  `core/domain/src/hierarchy.rs`).
 - Technical: in-memory hierarchy repository and path navigation already exist
-  (source: `crates/engram-store-memory/src/hierarchy.rs`).
+  (source: `adapters/memory/inmem/src/hierarchy.rs`).
 - Technical: mutating consolidation is already gated by
   `GatedConsolidationService` and an injected `ConsolidationMutationExecutor`
-  (source: `crates/engram-core/src/consolidation/mutating.rs`).
+  (source: `core/orchestration/src/consolidation/mutating.rs`).
 - Process: concrete hierarchy algorithms remain outside `engram-core` (source:
   `docs/implementation-roadmap.md`).

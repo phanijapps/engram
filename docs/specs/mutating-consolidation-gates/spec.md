@@ -68,8 +68,8 @@ algorithms behind an injected executor port.
 ## Assumptions
 
 - Technical: `ConsolidationRun` and task/error shapes already exist in the
-  domain contract (source: `crates/engram-domain/src/operations.rs`).
+  domain contract (source: `core/domain/src/operations.rs`).
 - Technical: `EvaluationRunner` already exists as the protected-fixture gate
-  boundary (source: `crates/engram-core/src/lib.rs`).
+  boundary (source: `core/orchestration/src/lib.rs`).
 - Process: durable consolidation mutations must be auditable and evaluation
   gated (source: `docs/implementation-roadmap.md`).

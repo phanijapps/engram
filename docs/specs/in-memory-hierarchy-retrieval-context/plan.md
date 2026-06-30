@@ -49,12 +49,12 @@ the new explanatory signal.
 
 ### Component / module decomposition
 
-- `crates/engram-store-memory/src/hierarchy_retrieval.rs` owns hierarchy-path
+- `adapters/memory/inmem/src/hierarchy_retrieval.rs` owns hierarchy-path
   annotation.
-- `crates/engram-store-memory/src/retrieval.rs` snapshots hierarchy nodes and
+- `adapters/memory/inmem/src/retrieval.rs` snapshots hierarchy nodes and
   invokes the helper before fusion.
 - Tests live in
-  `crates/engram-store-memory/tests/hierarchy_retrieval.rs`.
+  `adapters/memory/inmem/tests/hierarchy_retrieval.rs`.
 
 ### Failure, edge cases & resilience
 

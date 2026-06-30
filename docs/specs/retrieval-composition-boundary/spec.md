@@ -5,7 +5,7 @@
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0002, `docs/domain-data-model.md`, `docs/arch_divergence.md`
 - **Brief:** none
-- **Contract:** `contracts/v1/schemas/engram-v1.schema.json`, `crates/engram-retrieval` public Rust API
+- **Contract:** `contracts/v1/schemas/engram-v1.schema.json`, `core/retrieval` public Rust API
 - **Shape:** mixed
 
 > **Spec contract:** this document defines what "done" means. The implementing
@@ -98,7 +98,7 @@ payload behavior.
   `docs/arch_divergence.md`).
 - Technical: `engram-retrieval` already exists and currently provides weighted
   fusion while canonical retrieval traits still come from `engram-core` (source:
-  `crates/engram-retrieval`, `crates/engram-core`).
+  `core/retrieval`, `core/orchestration`).
 - Process: specs under `docs/specs/` define acceptance criteria and plans for
   implementation slices (source: existing `docs/specs/*/spec.md` and
   `docs/specs/*/plan.md`).

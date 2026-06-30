@@ -104,13 +104,14 @@ contracts instead of redefining them.
 
 ```text
 contracts/        Accepted JSON schemas, examples, and contract notes.
-crates/           Rust workspace: domain, runtime, memory, knowledge, core,
-                  SQL, vector, ingest, in-memory test adapters, evaluation,
-                  retrieval, and node bridge.
+core/             Storage-neutral Rust crates: domain, runtime, memory,
+                  knowledge, retrieval, orchestration, and evaluation.
+adapters/         Replaceable Rust infrastructure: ingest, memory stores,
+                  knowledge stores, and retrieval indexes.
+bindings/         Native language bridges, including the Node N-API crate.
 docs/             Architecture docs, ADRs, RFCs, research, specs, and roadmap.
 examples/         Scenario fixtures and usage sketches.
 packages/         TypeScript contracts, client, node package, adapters, eval.
-specs/            V1 acceptance specs and legacy implementation phase specs.
 .codex/           Local agent skills, review agents, and validation hooks.
 ```
 

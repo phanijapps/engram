@@ -66,10 +66,10 @@ beliefs in conflict.
 ## Assumptions
 
 - Technical: `ContradictionResolution` and `ContradictionStatus` are already in
-  the domain model (source: `crates/engram-domain/src/belief.rs`).
+  the domain model (source: `core/domain/src/belief.rs`).
 - Technical: `BeliefRepository` is the existing core port for belief and
-  contradiction persistence (source: `crates/engram-core/src/lib.rs`).
+  contradiction persistence (source: `core/orchestration/src/lib.rs`).
 - Technical: in-memory state already stores contradictions separately from
-  beliefs and memories (source: `crates/engram-store-memory/src/state.rs`).
+  beliefs and memories (source: `adapters/memory/inmem/src/state.rs`).
 - Process: semantic contradiction detection remains future work until a quality
   spec exists (source: `docs/implementation-roadmap.md`).

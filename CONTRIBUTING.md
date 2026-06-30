@@ -1,7 +1,7 @@
 # Contributing
 
 Engram is contract-first. Public behavior starts in `contracts/v1/` and
-`specs/v1/`, then implementation follows.
+`docs/specs/`, then implementation follows.
 
 ## Development Setup
 
@@ -41,7 +41,7 @@ git config core.hooksPath .githooks
 1. Open an issue or discussion for non-trivial contract changes.
 2. Update `docs/domain-data-model.md` when changing accepted semantics.
 3. Update `contracts/v1/` for accepted wire contracts.
-4. Update `specs/v1/` before implementation behavior.
+4. Update `docs/specs/` before implementation behavior.
 5. Add valid and invalid examples for contract changes.
 6. Run validation before opening a pull request.
 

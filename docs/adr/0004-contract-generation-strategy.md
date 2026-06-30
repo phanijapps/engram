@@ -20,7 +20,7 @@ The source of truth is:
 - `docs/domain-data-model.md` for semantics.
 - `contracts/v1/schemas/engram-v1.schema.json` for wire shape.
 - `contracts/v1/examples/` for valid and invalid examples.
-- `specs/v1/` for acceptance behavior.
+- `docs/specs/` for acceptance behavior.
 
 Rust and TypeScript projections must conform to these artifacts. Rust types may
 be promoted to the generation source later only after the v1 contract has proven

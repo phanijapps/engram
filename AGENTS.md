@@ -21,21 +21,24 @@ contracts/                 Portable JSON schemas and generated contract outputs.
 docs/                      Architecture, ADRs, RFCs, research, and domain model.
 examples/                  Scenario fixtures and usage sketches.
 
-crates/                    Rust workspace.
-  engram-domain/        Domain types, invariants, serde, version markers.
-  engram-runtime/       Shared errors, result type, clocks, ids, policy gates.
-  engram-memory/        Memory service and repository ports.
-  engram-knowledge/     Knowledge, graph, ontology, source, ingestion ports.
-  engram-core/          Orchestration facade, retrieval, consolidation.
-  engram-eval/          Deterministic fixtures and regression harness.
-  engram-ingest/        Document/code source ingestion and chunking ports.
-  engram-hierarchy/     Hierarchy construction, paths, expansion logic.
-  engram-belief/        Belief derivation, contradiction, consolidation.
-  engram-store-memory/  In-memory memory adapter for quick tests only.
-  engram-store-knowledge-memory/ In-memory knowledge/graph/ontology test adapter.
-  engram-store-sql/     SQL persistence adapter.
-  engram-store-vector/  Vector index adapter.
-  engram-node/          N-API bridge for TypeScript.
+core/                      Storage-neutral Rust crates.
+  domain/                  Domain types, invariants, serde, version markers.
+  runtime/                 Shared errors, result type, clocks, ids, policy gates.
+  memory/                  Memory service and repository ports.
+  knowledge/               Knowledge, graph, ontology, source, ingestion ports.
+  retrieval/               Retrieval composition and fusion ports.
+  orchestration/           Orchestration facade and compatibility re-exports.
+  eval/                    Deterministic fixtures and regression harness.
+
+adapters/                  Replaceable infrastructure crates.
+  ingest/                  Filesystem/Git ingestion adapter until split.
+  memory/inmem/            In-memory memory adapter for quick tests only.
+  memory/sqlite/           SQLite memory persistence adapter.
+  knowledge/inmem/         In-memory knowledge/graph/ontology test adapter.
+  retrieval/sqlite-vec/    sqlite-vec retrieval index adapter.
+
+bindings/                  Native language bridges.
+  node/                    N-API bridge for TypeScript.
 
 packages/                  TypeScript workspace.
   contracts/               Generated TypeScript types and schemas.
@@ -131,7 +134,7 @@ the stack ADR is accepted.
   generated public types.
 - Classify public contract changes as compatible or breaking.
 - Put accepted machine-readable contract artifacts under `contracts/v1/`.
-- Put spec-driven acceptance criteria under `specs/v1/`.
+- Put spec-driven acceptance criteria under `docs/specs/`.
 - Do not treat `contracts/schemas/` as the source of truth; those files are
   legacy pointers.
 

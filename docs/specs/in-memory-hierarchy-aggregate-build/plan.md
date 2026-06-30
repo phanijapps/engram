@@ -49,15 +49,15 @@ the behavior.
 
 ### Component / module decomposition
 
-- `crates/engram-store-memory/src/consolidation/hierarchy_build.rs` remains
+- `adapters/memory/inmem/src/consolidation/hierarchy_build.rs` remains
   focused on base-node construction.
-- `crates/engram-store-memory/src/consolidation/hierarchy_aggregate.rs` owns
+- `adapters/memory/inmem/src/consolidation/hierarchy_aggregate.rs` owns
   entity grouping, aggregate node creation, base-node parent assignment,
   membership construction, audit events, and aggregate counters.
-- `crates/engram-store-memory/src/consolidation/mod.rs` composes both helpers
+- `adapters/memory/inmem/src/consolidation/mod.rs` composes both helpers
   under the existing `HierarchyBuild` task.
 - Tests live in
-  `crates/engram-store-memory/tests/consolidation_hierarchy_aggregate.rs`.
+  `adapters/memory/inmem/tests/consolidation_hierarchy_aggregate.rs`.
 
 ### Failure, edge cases & resilience
 

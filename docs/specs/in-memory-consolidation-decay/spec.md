@@ -72,11 +72,11 @@ event.
 
 - Technical: mutating consolidation is already gated by
   `GatedConsolidationService` and an injected `ConsolidationMutationExecutor`
-  (source: `crates/engram-core/src/consolidation/mutating.rs`).
+  (source: `core/orchestration/src/consolidation/mutating.rs`).
 - Technical: policy expiry and legal-hold retention are domain contract fields
-  (source: `crates/engram-domain/src/policy.rs`).
+  (source: `core/domain/src/policy.rs`).
 - Technical: in-memory storage exposes `MemoryStatus::Expired` and
   `MemoryEventKind::Expired` for auditable decay (source:
-  `crates/engram-domain/src/memory.rs`).
+  `core/domain/src/memory.rs`).
 - Process: concrete consolidation algorithms remain outside `engram-core`
   (source: `docs/implementation-roadmap.md`).

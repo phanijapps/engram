@@ -67,9 +67,9 @@ non-files are rejected or skipped according to the spec. Symlinks are skipped.
 - Path traversal and oversized reads fail.
 
 **Approach:**
-- Add `filesystem.rs` in `crates/engram-ingest/src`.
+- Add `filesystem.rs` in `adapters/ingest/src`.
 - Implement path normalization and extension-based classification.
-- Add integration tests under `crates/engram-ingest/tests`.
+- Add integration tests under `adapters/ingest/tests`.
 
 **Done when:** filesystem reader tests and full repository gates pass.
 

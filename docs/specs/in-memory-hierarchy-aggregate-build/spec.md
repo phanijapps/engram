@@ -76,11 +76,11 @@ fields.
 ## Assumptions
 
 - Technical: memory content already carries `entities` as structured
-  `EntityRef` values (source: `crates/engram-domain/src/memory.rs`).
+  `EntityRef` values (source: `core/domain/src/memory.rs`).
 - Technical: hierarchy nodes already support aggregate kind, parent links, and
-  membership entries (source: `crates/engram-domain/src/hierarchy.rs`).
+  membership entries (source: `core/domain/src/hierarchy.rs`).
 - Technical: `HierarchyBuild` is already part of hybrid consolidation and
   adapter-local algorithms live under `engram-store-memory` (source:
-  `crates/engram-store-memory/src/consolidation/mod.rs`).
+  `adapters/memory/inmem/src/consolidation/mod.rs`).
 - Process: no god modules; aggregate construction belongs in a focused module
   separate from base-node construction (source: `AGENTS.md`).

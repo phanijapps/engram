@@ -49,11 +49,11 @@ contract is introduced.
 
 ### Component / module decomposition
 
-- `crates/engram-store-memory/src/consolidation/hierarchy_build.rs` owns
+- `adapters/memory/inmem/src/consolidation/hierarchy_build.rs` owns
   base-node construction and event creation.
-- `crates/engram-store-memory/src/consolidation/mod.rs` only routes the planned
+- `adapters/memory/inmem/src/consolidation/mod.rs` only routes the planned
   task kind to the focused module.
-- Tests live in `crates/engram-store-memory/tests/consolidation_hierarchy_build.rs`.
+- Tests live in `adapters/memory/inmem/tests/consolidation_hierarchy_build.rs`.
 
 ### Failure, edge cases & resilience
 

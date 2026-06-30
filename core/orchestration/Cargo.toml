@@ -1,0 +1,19 @@
+[package]
+name = "engram-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+engram-domain = { path = "../domain" }
+engram-knowledge = { path = "../knowledge" }
+engram-memory = { path = "../memory" }
+engram-retrieval = { path = "../retrieval" }
+engram-runtime = { path = "../runtime" }
+serde_json.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true
+futures.workspace = true

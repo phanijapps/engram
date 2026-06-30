@@ -70,15 +70,15 @@ No portable v1 schema change is part of this slice. Existing
 
 ### Component / module decomposition
 
-- `crates/engram-retrieval/src/lib.rs`: facade and public re-exports only.
-- `crates/engram-retrieval/src/ports.rs`: retrieval source, index, and fusion
+- `core/retrieval/src/lib.rs`: facade and public re-exports only.
+- `core/retrieval/src/ports.rs`: retrieval source, index, and fusion
   traits.
-- `crates/engram-retrieval/src/composer.rs`: storage-neutral composition from
+- `core/retrieval/src/composer.rs`: storage-neutral composition from
   candidate groups to `ContextPayload`.
-- `crates/engram-retrieval/src/weighted.rs`: weighted fusion implementation.
-- `crates/engram-store-memory/src/retrieval.rs`: quick fixture candidate
+- `core/retrieval/src/weighted.rs`: weighted fusion implementation.
+- `adapters/memory/inmem/src/retrieval.rs`: quick fixture candidate
   extraction only, calling the retrieval composer for shared fan-in and fusion.
-- `crates/engram-store-vector/src/retrieval.rs`: vector index implementation
+- `adapters/retrieval/sqlite-vec/src/retrieval.rs`: vector index implementation
   imports retrieval traits directly from `engram-retrieval`.
 
 ### State & control flow
@@ -139,18 +139,18 @@ No portable v1 schema change is part of this slice. Existing
 
 **Depends on:** none
 
-**Touches:** `crates/engram-retrieval/src/*.rs`, `crates/engram-core/src/lib.rs`,
-`crates/engram-retrieval/tests/*.rs`
+**Touches:** `core/retrieval/src/*.rs`, `core/orchestration/src/lib.rs`,
+`core/retrieval/tests/*.rs`
 
 **Tests:**
 - `cargo test -p engram-retrieval` verifies weighted fusion still satisfies
   AC1 and AC7.
-- `rg -n "pub trait Retrieval(Index|Fusion)" crates/engram-core/src/lib.rs`
+- `rg -n "pub trait Retrieval(Index|Fusion)" core/orchestration/src/lib.rs`
   returns no canonical trait definitions and proves AC1 migration.
 
 **Approach:**
 - Move `RetrievalIndex` and `RetrievalFusion` trait definitions into
-  `crates/engram-retrieval/src/ports.rs`.
+  `core/retrieval/src/ports.rs`.
 - Re-export the traits from `engram-retrieval/src/lib.rs`.
 - Re-export the traits from `engram-core/src/lib.rs` for compatibility.
 - Update `WeightedRetrievalFusion` to import traits from its own crate.
@@ -162,8 +162,8 @@ fusion tests pass.
 
 **Depends on:** T1
 
-**Touches:** `crates/engram-retrieval/src/composer.rs`,
-`crates/engram-retrieval/src/lib.rs`, `crates/engram-retrieval/tests/*.rs`
+**Touches:** `core/retrieval/src/composer.rs`,
+`core/retrieval/src/lib.rs`, `core/retrieval/tests/*.rs`
 
 **Tests:**
 - TDD tests prove empty candidates, duplicate target fusion, budget omissions,
@@ -183,11 +183,11 @@ store crates.
 
 **Depends on:** T2
 
-**Touches:** `crates/engram-store-memory/src/retrieval.rs`,
-`crates/engram-store-memory/src/service.rs`,
-`crates/engram-store-memory/tests/retrieve_context.rs`,
-`crates/engram-store-memory/tests/knowledge_retrieval.rs`,
-`crates/engram-store-memory/tests/retrieval_indexes.rs`
+**Touches:** `adapters/memory/inmem/src/retrieval.rs`,
+`adapters/memory/inmem/src/service.rs`,
+`adapters/memory/inmem/tests/retrieve_context.rs`,
+`adapters/memory/inmem/tests/knowledge_retrieval.rs`,
+`adapters/memory/inmem/tests/retrieval_indexes.rs`
 
 **Tests:**
 - `cargo test -p engram-store-memory --test retrieve_context` verifies memory
@@ -211,13 +211,13 @@ store crates.
 
 **Depends on:** T1-T3
 
-**Touches:** `crates/engram-store-memory/**/*.rs`,
-`crates/engram-store-vector/**/*.rs`, `crates/engram-retrieval/**/*.rs`,
+**Touches:** `adapters/memory/inmem/**/*.rs`,
+`adapters/retrieval/sqlite-vec/**/*.rs`, `core/retrieval/**/*.rs`,
 `docs/arch_divergence.md`
 
 **Tests:**
 - `cargo check --workspace` verifies compile-time compatibility for AC6.
-- `rg -n "engram_core::.*Retrieval(Index|Fusion)" crates/engram-store-memory crates/engram-store-vector`
+- `rg -n "engram_core::.*Retrieval(Index|Fusion)" adapters/memory/inmem adapters/retrieval/sqlite-vec`
   returns no production imports and verifies AC5 and AC6.
 
 **Approach:**

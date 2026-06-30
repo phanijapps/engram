@@ -52,12 +52,12 @@ to implement `MemoryService::retrieve`.
 
 ### Component / module decomposition
 
-- `crates/engram-store-memory/src/belief_retrieval.rs` owns belief candidate
+- `adapters/memory/inmem/src/belief_retrieval.rs` owns belief candidate
   construction.
-- `crates/engram-store-memory/src/retrieval.rs` snapshots beliefs and appends
+- `adapters/memory/inmem/src/retrieval.rs` snapshots beliefs and appends
   their candidates before shared fusion.
 - Tests live in
-  `crates/engram-store-memory/tests/belief_retrieval.rs`.
+  `adapters/memory/inmem/tests/belief_retrieval.rs`.
 
 ### Failure, edge cases & resilience
 

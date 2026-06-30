@@ -63,8 +63,8 @@ truncation.
 ## Assumptions
 
 - Technical: knowledge sources, documents, and chunks are already stored in the
-  in-memory adapter (source: `crates/engram-store-memory/src/knowledge.rs`).
+  in-memory adapter (source: `adapters/memory/inmem/src/knowledge.rs`).
 - Technical: retrieval already composes candidates through `RetrievalFusion`
-  (source: `crates/engram-store-memory/src/retrieval.rs`).
+  (source: `adapters/memory/inmem/src/retrieval.rs`).
 - Process: knowledge remains distinct from memory (source:
   `docs/implementation-roadmap.md`).

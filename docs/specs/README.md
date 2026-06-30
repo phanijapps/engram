@@ -5,6 +5,9 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 
 ## Active
 
+- [`workspace-responsibility-layout`](workspace-responsibility-layout/spec.md):
+  groups Rust crates by architectural responsibility before adding more memory
+  and knowledge storage backends.
 - [`retrieval-composition-boundary`](retrieval-composition-boundary/spec.md):
   moves multi-source retrieval composition out of store adapters and into a
   storage-neutral retrieval boundary.

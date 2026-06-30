@@ -64,7 +64,7 @@ stored records.
 ## Assumptions
 
 - Technical: consolidation request and run domain types already exist (source:
-  `crates/engram-domain/src/operations.rs`).
+  `core/domain/src/operations.rs`).
 - Process: durable mutations must be explicit and auditable (source:
   `docs/implementation-roadmap.md`).
 - Product: first sleep-cycle slice is dry-run planning/reporting, not automatic

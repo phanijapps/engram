@@ -2,7 +2,8 @@
 
 ## Rust
 
-- Every Rust source module under `crates/*/src` starts with `//!` module docs.
+- Every Rust source module under `core/*/src`, `adapters/**/src`, or
+  `bindings/*/src` starts with `//!` module docs.
 - Public traits and public free functions require `///` docs.
 - Module docs must explain ownership, boundaries, and what does not belong in
   the module. One-line labels are not acceptable.

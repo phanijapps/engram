@@ -64,7 +64,7 @@ details into domain contracts.
 ## Assumptions
 
 - Technical: source reading belongs behind the `SourceReader` port (source:
-  `crates/engram-core/src/lib.rs`).
+  `core/orchestration/src/lib.rs`).
 - Technical: filesystem knowledge remains distinct from memory records (source:
   `docs/implementation-roadmap.md` Phase 8).
 - Process: public contracts do not change for this adapter slice (source:

@@ -1,6 +1,6 @@
 # Spec: background-repo-indexer (Rust rayon scan + background jobs)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Shape:** mixed (data + service + ui)
 - **Constrained by:** the Slice-1 security controls (path confinement, secret blocklist, size bound, .gitignore) — ported to Rust, not relaxed; AGENTS.md boundary (Rust owns deterministic ingest behavior); the panic fix in `extractor.rs` (prerequisite, done)
 - **Contract:** none (new demo endpoints; transport `unknown`-typed)
@@ -47,8 +47,8 @@ Parallelism lives in **Rust** (`rayon` over the file list after the walk), per t
 
 ## Acceptance Criteria
 
-- [ ] A Rust `RepositoryScanner` walks a root (`.gitignore`-aware) with path confinement, secret blocklist, size bound (+ unit tests for each control).
-- [ ] Ingest runs in parallel via `rayon`, sharing the `SqlKnowledgeStore`; the manifest gives incremental resume.
-- [ ] `POST /ingest/jobs` starts a background scan → `{jobId}` (non-blocking); `GET /ingest/jobs/:id` polls `{status, progress, summary}`.
-- [ ] The old blocking TS `/ingest/scan` + `scan.ts`/`decide.ts`/`manifest.ts` are removed (Rust path covers them); the `/index` route uses the job API + polls.
-- [ ] Backend + frontend typecheck/build/test green; agentzero-scale repo indexes without crashing.
+- [x] A Rust `RepositoryScanner` walks a root (`.gitignore`-aware) with path confinement, secret blocklist, size bound (+ unit tests for each control).
+- [x] Ingest runs in parallel via `rayon`, sharing the `SqlKnowledgeStore`; the manifest gives incremental resume.
+- [x] `POST /ingest/jobs` starts a background scan → `{jobId}` (non-blocking); `GET /ingest/jobs/:id` polls `{status, progress, summary}`.
+- [x] The old blocking TS `/ingest/scan` + `scan.ts`/`decide.ts`/`manifest.ts` are removed (Rust path covers them); the `/index` route uses the job API + polls.
+- [x] Backend + frontend typecheck/build/test green; agentzero-scale repo indexes without crashing.

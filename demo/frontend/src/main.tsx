@@ -1,10 +1,16 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
-import "./styles.css";
+import { RouterProvider } from "@tanstack/react-router";
+import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
+import { router } from "@/router";
+import "@/index.css";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <ThemeProvider defaultTheme="dark">
+      <RouterProvider router={router} />
+      <Toaster />
+    </ThemeProvider>
   </React.StrictMode>
 );

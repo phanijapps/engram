@@ -11,6 +11,7 @@ members = [
     "adapters/memory/inmem",
     "adapters/memory/sqlite",
     "adapters/knowledge/inmem",
+    "adapters/knowledge/sqlite",
     "adapters/retrieval/sqlite-vec",
     "bindings/node",
 ]

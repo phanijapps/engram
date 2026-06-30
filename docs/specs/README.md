@@ -7,7 +7,10 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 
 - [`napi-bridge-completion`](napi-bridge-completion/spec.md): demo Slice 0 — make
   the `engram-node` N-API binding loadable from Node and ship a Hono + Vite/React
-  demo proving a browser→Node→Rust memory round-trip (RFC-0003, PHASE52).
+  demo proving a browser→Node→Rust memory round-trip (RFC-0003, PHASE52). Shipped.
+- [`sqlite-knowledge-graph`](sqlite-knowledge-graph/spec.md): demo Slice 1 —
+  `engram-store-knowledge-sqlite` adapter + `TaxonomyRepository` port + forbidden-
+  import gate (RFC-0003, PHASE53).
 - [`workspace-responsibility-layout`](workspace-responsibility-layout/spec.md):
   groups Rust crates by architectural responsibility before adding more memory
   and knowledge storage backends.

@@ -88,3 +88,5 @@ This project follows a contract-first changelog while pre-1.0.
   records.
 - Added a feature-gated FastEmbed BGE-small query provider for sqlite-vec
   retrieval tests.
+- Added checked local runtime examples for in-memory, SQLite, and TypeScript
+  client usage.

@@ -840,6 +840,10 @@ Shipped slice:
 - Added feature-gated FastEmbed BGE-small query provider wiring for local
   sqlite-vec semantic retrieval smoke tests.
 - Kept FastEmbed as opt-in test coverage rather than a default runtime path.
+- Added checked local examples for the in-memory adapter, SQLite adapter, and
+  TypeScript client facade.
+- Kept examples as thin usage sketches over accepted fixtures and injected
+  transports rather than new runtime implementations.
 
 ## Stop Conditions
 

@@ -250,5 +250,12 @@
     "description": "FastEmbed query provider",
     "spec_file": "docs/specs/fastembed-query-provider/spec.md",
     "plan_file": "docs/specs/fastembed-query-provider/plan.md"
+  },
+  {
+    "phase_id": "PHASE36",
+    "status": "DONE",
+    "description": "Local runtime examples",
+    "spec_file": "docs/specs/local-runtime-examples/spec.md",
+    "plan_file": "docs/specs/local-runtime-examples/plan.md"
   }
 ]

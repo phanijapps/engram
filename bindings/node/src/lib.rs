@@ -379,7 +379,7 @@ impl NativeBeliefEngine {
             value
                 .get("resolution")
                 .cloned()
-                .unwrap_or(serde_json::Value::Null),
+                .ok_or_else(|| Error::from_reason("missing 'resolution' field"))?,
         )
         .map_err(|error| Error::from_reason(error.to_string()))?;
         let result = block_on(self.store.resolve_contradiction(&id, &scope, resolution))

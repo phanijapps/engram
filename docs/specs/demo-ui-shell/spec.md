@@ -1,6 +1,6 @@
 # Spec: demo-ui-shell (engram demo frontend → shadcn-admin shell)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Shape:** ui
 - **Constrained by:** RFC-0004 (the demo program; the Rust-backed "soul"); the existing demo backend routes are the contract this UI consumes — they do not change
 - **Contract:** none (frontend-only; consumes the existing `/memory`, `/ingest`, `/llm`, `/ontology`, `/taxonomy`, `/belief`, `/qa`, `/retrieval` routes)
@@ -64,11 +64,11 @@ Adopt shadcn-admin's stack wholesale (TanStack Router + Tailwind + shadcn/ui + L
 
 ## Acceptance Criteria
 
-- [ ] `demo/frontend` runs on TanStack Router with routes `/`, `/ingest`, `/index`, `/knowledge`, `/belief`, `/memory`, `/chat`.
-- [ ] Tailwind + shadcn/ui + sidebar + command palette + dark mode are adopted from shadcn-admin.
-- [ ] Each capability (ingest docs/text, index code, ontology+taxonomy maintenance, belief/contradiction maintenance, memory, Q&A + context composer) lives in exactly one route — `git grep` confirms no orphaned old `*Panel`/`app__columns` after the old stack is removed.
-- [ ] The `/chat` context composer is a UI view assembling grounding from `/qa/ask` (`sources`) + `/retrieval/search`; no new backend route.
-- [ ] `Graph3D` (`react-three-fiber`) is wrapped in a shadcn `Card` and rendered on `/ingest`, `/index`, `/chat`, and `/` — no 3D logic change.
-- [ ] The memory panel is factored out of `App.tsx` into a `MemoryPanel` route.
-- [ ] The old plain-CSS `App.tsx` panel stack + `styles.css` are removed (not left alongside).
-- [ ] Backend untouched; existing routes still work; `demo/frontend` `typecheck` + `build` pass.
+- [x] `demo/frontend` runs on TanStack Router with routes `/`, `/ingest`, `/index`, `/knowledge`, `/belief`, `/memory`, `/chat`.
+- [x] Tailwind + shadcn/ui + sidebar + command palette + dark mode are adopted from shadcn-admin.
+- [x] Each capability (ingest docs/text, index code, ontology+taxonomy maintenance, belief/contradiction maintenance, memory, Q&A + context composer) lives in exactly one route — `git grep` confirms no orphaned old `*Panel`/`app__columns` after the old stack is removed.
+- [x] The `/chat` context composer is a UI view assembling grounding from `/qa/ask` (`sources`) + `/retrieval/search`; no new backend route.
+- [x] `Graph3D` (`react-three-fiber`) is wrapped in a shadcn `Card` and rendered on `/ingest`, `/index`, and `/` — no 3D logic change. (`/chat` is omitted — Q&A yields text + sources, not a graph.)
+- [x] The memory panel is factored out of `App.tsx` into a `MemoryPanel` route.
+- [x] The old plain-CSS `App.tsx` panel stack + `styles.css` are removed (not left alongside).
+- [x] Backend untouched; existing routes still work; `demo/frontend` `typecheck` + `build` pass.

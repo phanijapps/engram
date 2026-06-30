@@ -9,6 +9,7 @@ rust-version.workspace = true
 fastembed-tests = ["dep:fastembed"]
 
 [dependencies]
+async-trait.workspace = true
 engram-core = { path = "../engram-core" }
 engram-domain = { path = "../engram-domain" }
 rusqlite.workspace = true
@@ -18,3 +19,6 @@ sqlite-vec.workspace = true
 version = "5.17.2"
 optional = true
 
+[dev-dependencies]
+chrono.workspace = true
+futures.workspace = true

@@ -59,3 +59,5 @@ This project follows a contract-first changelog while pre-1.0.
   context truncation.
 - Added source-grounded in-memory knowledge chunk retrieval through the shared
   fusion path.
+- Added sqlite-vec retrieval candidates through injected query-vector and target
+  resolver ports.

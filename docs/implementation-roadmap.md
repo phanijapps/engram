@@ -762,6 +762,41 @@ Shipped slice:
 - Kept vector-backed semantic retrieval deferred until query embedding and
   policy rehydration contracts are specified.
 
+## Phase 22: Vector Retrieval Candidates
+
+Status: complete for sqlite-vec candidate adapter wiring. Production embedding
+providers and full service composition remain future work.
+
+Goal: expose sqlite-vec nearest-neighbor rows through the `RetrievalIndex` port
+after query-vector generation and canonical target rehydration.
+
+Crates:
+
+- `engram-store-vector`
+
+Implementation work:
+
+- Add injected `VectorQueryProvider` for retrieval request to vector conversion.
+- Add injected `VectorTargetResolver` for canonical target rehydration.
+- Implement `VectorRetrievalIndex` over `SqliteVectorIndex`.
+- Convert vector distance into deterministic retrieval score and trace evidence.
+- Skip stale vector rows whose targets cannot be rehydrated.
+
+Acceptance gate:
+
+- Vector hits become portable `RetrievalResult` candidates only after resolver
+  rehydration.
+- Missing targets do not fail the whole vector query.
+- Query dimension mismatches remain explicit errors.
+- Public v1 schemas do not change.
+
+Shipped slice:
+
+- Added vector retrieval candidate adapter in `engram-store-vector`.
+- Added deterministic tests for nearest-hit order, missing-target skips, and
+  query vector dimension mismatch.
+- Kept FastEmbed as opt-in test coverage rather than a default runtime path.
+
 ## Stop Conditions
 
 Do not move to a later phase when any of these are true:

@@ -152,5 +152,12 @@
     "description": "In-memory knowledge retrieval",
     "spec_file": "docs/specs/in-memory-knowledge-retrieval/spec.md",
     "plan_file": "docs/specs/in-memory-knowledge-retrieval/plan.md"
+  },
+  {
+    "phase_id": "PHASE22",
+    "status": "DONE",
+    "description": "Vector retrieval candidates",
+    "spec_file": "docs/specs/vector-retrieval-candidates/spec.md",
+    "plan_file": "docs/specs/vector-retrieval-candidates/plan.md"
   }
 ]

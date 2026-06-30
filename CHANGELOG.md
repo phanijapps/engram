@@ -90,3 +90,5 @@ This project follows a contract-first changelog while pre-1.0.
   retrieval tests.
 - Added checked local runtime examples for in-memory, SQLite, and TypeScript
   client usage.
+- Added deterministic in-memory semantic drift detection for time-window
+  consolidation.

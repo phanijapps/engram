@@ -60,7 +60,9 @@ fn decay_expires_due_scoped_memories_and_records_events() {
     assert_eq!(decay.items_updated, Some(1));
     assert_eq!(decay.items_written, Some(0));
     assert_eq!(decay.items_skipped, Some(2));
-    assert_eq!(drift.status, ConsolidationTaskStatus::Skipped);
+    assert_eq!(drift.status, ConsolidationTaskStatus::Completed);
+    assert_eq!(drift.items_read, Some(3));
+    assert_eq!(drift.items_written, Some(0));
     assert_eq!(run.stats.and_then(|stats| stats.records_decayed), Some(1));
 
     assert_status(&memory_service, &due.id, "engram", MemoryStatus::Expired);
@@ -165,7 +167,12 @@ fn consolidation_service(memory_service: InMemoryMemoryService) -> GatedConsolid
         Arc::new(FixedClock(fixed_time())),
         Arc::new(SequentialIdGenerator::new()),
         Arc::new(ScriptedEvaluator {
-            reports: Mutex::new(VecDeque::from(vec![passing_report(), passing_report()])),
+            reports: Mutex::new(VecDeque::from(vec![
+                passing_report(),
+                passing_report(),
+                passing_report(),
+                passing_report(),
+            ])),
         }),
         evaluation_fixture(),
         InMemoryConsolidationExecutor::shared(memory_service),

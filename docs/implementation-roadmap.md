@@ -844,6 +844,10 @@ Shipped slice:
   TypeScript client facade.
 - Kept examples as thin usage sketches over accepted fixtures and injected
   transports rather than new runtime implementations.
+- Added deterministic in-memory semantic drift detection for time-window
+  consolidation over explicit assertion changes.
+- Kept drift detection review-only: it writes temporal contradiction records
+  and audit events without mutating source memories or beliefs.
 
 ## Stop Conditions
 

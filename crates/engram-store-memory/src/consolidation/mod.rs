@@ -19,12 +19,13 @@ mod contradiction_detection;
 mod decay;
 mod hierarchy_aggregate;
 mod hierarchy_build;
+mod semantic_drift;
 
 /// Mutating consolidation executor for the in-memory adapter.
 ///
-/// The executor currently implements exact-text compaction and policy-expiry
-/// decay. It delegates each algorithm to a focused module and reports skipped
-/// task results for planned task kinds this adapter does not implement yet.
+/// The executor delegates each supported task to a focused module and reports
+/// skipped task results for planned task kinds this adapter does not implement
+/// yet.
 #[derive(Clone)]
 pub struct InMemoryConsolidationExecutor {
     service: InMemoryMemoryService,
@@ -103,6 +104,15 @@ impl ConsolidationMutationExecutor for InMemoryConsolidationExecutor {
                 }
                 ConsolidationTaskKind::BeliefContradictionDetection => {
                     let result = contradiction_detection::detect_assertion_contradictions(
+                        &self.service,
+                        request,
+                        started_at,
+                        &mut stats,
+                    )?;
+                    tasks.push(result);
+                }
+                ConsolidationTaskKind::SemanticDriftDetection => {
+                    let result = semantic_drift::detect_assertion_drift(
                         &self.service,
                         request,
                         started_at,

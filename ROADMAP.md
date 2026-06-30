@@ -48,6 +48,8 @@ use the implementation roadmap as the spec-driven execution loop.
   through shared fusion without pretending to be source memories or chunks.
 - Keep contradiction-aware belief ranking advisory: open review records reduce
   rank and explain why without hiding or mutating beliefs.
+- Keep semantic drift detection deterministic: explicit time-ordered assertion
+  changes create review records without choosing winners.
 - Keep runtime adapters as wrappers over client transports.
 - Keep public repository docs honest about pre-1.0 readiness and release gates.
 - Keep filesystem source discovery behind the `SourceReader` port.

@@ -257,5 +257,12 @@
     "description": "Local runtime examples",
     "spec_file": "docs/specs/local-runtime-examples/spec.md",
     "plan_file": "docs/specs/local-runtime-examples/plan.md"
+  },
+  {
+    "phase_id": "PHASE37",
+    "status": "DONE",
+    "description": "In-memory semantic drift detection",
+    "spec_file": "docs/specs/in-memory-semantic-drift-detection/spec.md",
+    "plan_file": "docs/specs/in-memory-semantic-drift-detection/plan.md"
   }
 ]

@@ -165,17 +165,20 @@ async function ensureModelsJson(config: LLMConfig): Promise<string> {
 }
 
 /**
- * Runs ollama cloud via the pi SDK and returns a validated parsed graph.
- * Throws on any failure (no creds, timeout, malformed output). The caller must
- * already have gated on `getLLMConfig()` and fall back to deterministic output
- * on error. The SDK is imported lazily so the zero-credential path and the unit
- * tests never load the agent harness.
+ * Runs ollama cloud via the pi SDK and returns the model's text response.
+ * Shared by relationship extraction (`extractGraph`) and Q&A synthesis. The
+ * caller gates on `getLLMConfig()` and supplies a system prompt + user text;
+ * the call is bounded (~30 s abort, ~100 KB streamed-response cap, input
+ * truncated). The SDK is imported lazily so the zero-credential path and unit
+ * tests never load the harness. Throws a redacted error when no content is
+ * produced. The result is untrusted model text — callers must validate before
+ * treating any of it as data.
  */
-export async function extractGraph(
-  text: string,
-  kind: "code" | "text",
+export async function runLLM(
+  systemPrompt: string,
+  userText: string,
   config: LLMConfig
-): Promise<ParsedGraph> {
+): Promise<string> {
   const modelsJsonPath = await ensureModelsJson(config);
   const pi = await import("@earendil-works/pi-coding-agent");
   const authStorage = pi.AuthStorage.inMemory();
@@ -217,13 +220,13 @@ export async function extractGraph(
 
   let promptError: unknown = null;
   try {
-    const truncated = text.length > MAX_INPUT_CHARS ? text.slice(0, MAX_INPUT_CHARS) : text;
-    const prompt = `${extractionPrompt(kind)}\n\nDocument:\n"""\n${truncated}\n"""`;
-    await session.prompt(prompt);
+    const truncated =
+      userText.length > MAX_INPUT_CHARS ? userText.slice(0, MAX_INPUT_CHARS) : userText;
+    await session.prompt(`${systemPrompt}\n\n${truncated}`);
   } catch (err) {
     // abort (timeout / response cap) or provider error: fall through with
-    // whatever text was streamed so far and let validation decide. Preserve the
-    // error (redacted) so a misconfigured key is diagnosable instead of silent.
+    // whatever text was streamed so far. Preserve the error (redacted) so a
+    // misconfigured key is diagnosable instead of silent.
     promptError = err;
   } finally {
     clearTimeout(timer);
@@ -232,10 +235,30 @@ export async function extractGraph(
   }
 
   if (collected.length > MAX_RESPONSE_CHARS) collected = collected.slice(0, MAX_RESPONSE_CHARS);
-  if (!collected.includes("{")) {
+  if (!collected.trim()) {
     const detail =
-      promptError instanceof Error ? redactKey(promptError.message) : promptError ? redactKey(String(promptError)) : "no content";
+      promptError instanceof Error
+        ? redactKey(promptError.message)
+        : promptError
+          ? redactKey(String(promptError))
+          : "no content";
     throw new Error(`LLM returned no content: ${detail}`);
   }
-  return parseLLMGraph(JSON.parse(extractJsonObject(collected)));
+  return collected;
+}
+
+/**
+ * Extracts a validated knowledge graph via the LLM. Thin wrapper over `runLLM`
+ * that parses the model's JSON output. Throws on any failure; callers gate on
+ * `getLLMConfig()` and fall back to deterministic output on error.
+ */
+export async function extractGraph(
+  text: string,
+  kind: "code" | "text",
+  config: LLMConfig
+): Promise<ParsedGraph> {
+  const systemPrompt = extractionPrompt(kind);
+  const userText = `Document:\n"""\n${text}\n"""`;
+  const raw = await runLLM(systemPrompt, userText, config);
+  return parseLLMGraph(JSON.parse(extractJsonObject(raw)));
 }

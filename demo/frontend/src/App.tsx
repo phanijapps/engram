@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { BeliefPanel } from "./BeliefPanel";
 import { IngestPanel } from "./IngestPanel";
 import { OntologyPanel } from "./OntologyPanel";
+import { QAPanel } from "./QAPanel";
 import { ScanPanel } from "./ScanPanel";
 import { SearchPanel } from "./SearchPanel";
 
@@ -334,6 +335,8 @@ export function App() {
       <OntologyPanel />
 
       <BeliefPanel />
+
+      <QAPanel />
 
       <SearchPanel />
     </div>

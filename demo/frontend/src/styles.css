@@ -511,3 +511,15 @@ button:disabled {
   padding: 0.1rem 0.5rem;
   font-size: 0.72rem;
 }
+
+/* Q&A panel (RFC 0004 Slice 6) */
+.qa__answer {
+  margin: 0.5rem 0;
+  padding: 0.6rem 0.75rem;
+  background: rgba(110, 168, 255, 0.06);
+  border-left: 2px solid #6ea8ff;
+  border-radius: 3px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

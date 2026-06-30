@@ -14,6 +14,7 @@ import { walk, safeReadText, type ScanFile } from "./scan.js";
 import { hashContent, isUnchanged, loadManifest, saveManifest } from "./manifest.js";
 import { enhanceWithLLM } from "./enhance.js";
 import { buildItOrgOntology } from "./itOrgOntology.js";
+import { answerQuestion } from "./qa.js";
 
 // Demo-local defaults for scan-ingested documents (single-user, local).
 const SCAN_SCOPE = { tenant: "tenant-demo", workspace: "engram", environment: "local" };
@@ -391,4 +392,15 @@ app.post("/belief/detect", async (c) => {
     await transport.putContradiction(contradiction);
   }
   return c.json({ beliefs: (beliefs as unknown[]).length, contradictions: detected });
+});
+
+// --- Q&A over knowledge + memory (RFC 0004 Slice 6) -------------------------
+// Grounds in deterministic retrieval (memory + beliefs); synthesizes via the pi
+// SDK when .env creds are present. Sources come only from retrieval, never from
+// LLM-invented text. Never throws — missing/failed LLM → evidence summary.
+app.post("/qa/ask", async (c) => {
+  const { question, scope } = await c.req.json();
+  if (!question || typeof question !== "string") return c.json({ error: "question required" }, 400);
+  const reqScope = scope ?? SCAN_SCOPE;
+  return c.json(await answerQuestion(question, reqScope));
 });

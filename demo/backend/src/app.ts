@@ -284,6 +284,20 @@ app.post("/knowledge/neighbors", async (c) => {
   return c.json(await getKnowledgeTransport().neighbors(graphId, nodeId, scope, limit));
 });
 
+// Whole-graph overview for the explorer: every graph (source/repo), entity, and
+// relationship visible to `scope`. Clustering + cross-repo linking are computed
+// client-side from these lists.
+app.post("/knowledge/overview", async (c) => {
+  const { scope } = await c.req.json();
+  const transport = getKnowledgeTransport();
+  const [graphs, entities, relationships] = await Promise.all([
+    transport.listGraphs(scope),
+    transport.listEntities(scope),
+    transport.listRelationships(scope),
+  ]);
+  return c.json({ graphs, entities, relationships });
+});
+
 // --- Taxonomy (maintain concept schemes + concepts) -------------------------
 app.post("/taxonomy/scheme", async (c) => {
   const request = await c.req.json();

@@ -410,3 +410,65 @@ fn validate_graph_warns_on_undeclared_predicate_only() {
         .expect("validate hidden");
     assert!(hidden.is_empty());
 }
+
+#[test]
+fn list_graphs_entities_relationships_are_scope_filtered() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+
+    for tenant in ["tenant-a", "tenant-b"] {
+        let graph_id = Id::from(format!("graph-{tenant}"));
+        block_on(store.put_graph(graph(graph_id.as_str(), tenant))).expect("put graph");
+        block_on(store.put_entity(KnowledgeEntity {
+            id: Id::from(format!("entity-{tenant}")),
+            graph_id: Some(graph_id.clone()),
+            kind: EntityKind::Function,
+            name: format!("fn_{tenant}"),
+            aliases: Vec::new(),
+            scope: scope(tenant),
+            source_refs: Vec::new(),
+            concept_refs: Vec::new(),
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }))
+        .expect("put entity");
+        block_on(store.put_relationship(KnowledgeRelationship {
+            id: Id::from(format!("rel-{tenant}")),
+            graph_id: Some(graph_id.clone()),
+            subject: EntityRef {
+                id: Some(Id::from(format!("entity-{tenant}"))),
+                kind: Some("function".to_owned()),
+                name: Some(format!("fn_{tenant}")),
+                aliases: Vec::new(),
+            },
+            predicate: "calls".to_owned(),
+            object: EntityRef {
+                id: Some(Id::from(format!("entity-{tenant}"))),
+                kind: Some("function".to_owned()),
+                name: Some(format!("fn_{tenant}")),
+                aliases: Vec::new(),
+            },
+            scope: scope(tenant),
+            evidence: Vec::new(),
+            confidence: Some(0.5),
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+        }))
+        .expect("put relationship");
+    }
+
+    let graphs = block_on(store.list_graphs(&scope("tenant-a"))).expect("list graphs");
+    let entities = block_on(store.list_entities(&scope("tenant-a"))).expect("list entities");
+    let relationships = block_on(store.list_relationships(&scope("tenant-a"))).expect("list relationships");
+    let hidden_graphs = block_on(store.list_graphs(&scope("tenant-b"))).expect("list graphs b");
+
+    assert_eq!(graphs.len(), 1);
+    assert_eq!(graphs[0].id, Id::from("graph-tenant-a"));
+    assert_eq!(entities.len(), 1);
+    assert_eq!(entities[0].graph_id, Some(Id::from("graph-tenant-a")));
+    assert_eq!(relationships.len(), 1);
+    assert_eq!(hidden_graphs.len(), 1);
+    assert_eq!(hidden_graphs[0].id, Id::from("graph-tenant-b"));
+}

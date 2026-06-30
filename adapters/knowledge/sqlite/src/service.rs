@@ -62,6 +62,69 @@ impl SqlKnowledgeStore {
             message: "connection lock poisoned".to_owned(),
         })
     }
+
+    /// Lists knowledge graphs visible to `scope` (store-specific; not on a port).
+    /// Used by the whole-graph explorer to enumerate ingested sources/repos.
+    pub async fn list_graphs(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeGraph>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare("SELECT record_json FROM knowledge_graphs ORDER BY id")
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut graphs = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let graph = serde_json::from_str::<KnowledgeGraph>(&json).map_err(json_error)?;
+            if scope_allows(&graph.scope, scope) {
+                graphs.push(graph);
+            }
+        }
+        Ok(graphs)
+    }
+
+    /// Lists knowledge entities visible to `scope`. Each entity carries its
+    /// `graph_id` so the explorer can cluster by source/repo.
+    pub async fn list_entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare("SELECT record_json FROM knowledge_entities ORDER BY id")
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut entities = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let entity = serde_json::from_str::<KnowledgeEntity>(&json).map_err(json_error)?;
+            if scope_allows(&entity.scope, scope) {
+                entities.push(entity);
+            }
+        }
+        Ok(entities)
+    }
+
+    /// Lists knowledge relationships visible to `scope`.
+    pub async fn list_relationships(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeRelationship>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare("SELECT record_json FROM knowledge_relationships ORDER BY id")
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut relationships = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let relationship =
+                serde_json::from_str::<KnowledgeRelationship>(&json).map_err(json_error)?;
+            if scope_allows(&relationship.scope, scope) {
+                relationships.push(relationship);
+            }
+        }
+        Ok(relationships)
+    }
 }
 
 #[async_trait]

@@ -254,6 +254,32 @@ impl NativeKnowledgeEngine {
         encode(&result)
     }
 
+    // --- Whole-graph exploration (store-specific list methods) ----------------
+
+    #[napi(js_name = "listGraphsJson")]
+    pub fn list_graphs_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.store.list_graphs(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "listEntitiesJson")]
+    pub fn list_entities_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.store.list_entities(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "listRelationshipsJson")]
+    pub fn list_relationships_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.store.list_relationships(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
     // --- OntologyRepository --------------------------------------------------
 
     #[napi(js_name = "putOntologyJson")]

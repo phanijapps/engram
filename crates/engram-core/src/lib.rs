@@ -11,7 +11,10 @@ use async_trait::async_trait;
 use engram_domain::*;
 use thiserror::Error;
 
-pub use consolidation::DryRunConsolidationService;
+pub use consolidation::{
+    ConsolidationMutationExecutor, ConsolidationMutationOutcome, DryRunConsolidationService,
+    GatedConsolidationService,
+};
 
 /// Stable error surface shared by core services and adapters.
 ///

@@ -410,7 +410,8 @@ Acceptance gate:
 
 ## Phase 12: Consolidation and Sleep Cycle
 
-Status: done for the dry-run run-reporting slice.
+Status: done for the dry-run run-reporting slice and gated mutating
+orchestration. Concrete task algorithms remain future work.
 
 Goal: make background consolidation auditable and reversible enough to trust.
 
@@ -443,6 +444,11 @@ Shipped slice:
   planning tasks.
 - Returns auditable `ConsolidationRun` records with zero-mutation stats and no
   scheduler, model provider, or repository dependency.
+- Added `GatedConsolidationService` for explicitly mutating requests with
+  protected pre/post evaluation gates.
+- Added `ConsolidationMutationExecutor` and `ConsolidationMutationOutcome` so
+  concrete mutation algorithms remain outside core while task outcomes remain
+  auditable.
 
 ## Phase 13: Integrations and Runtime Adapters
 
@@ -650,6 +656,41 @@ Shipped slice:
 - Added source weights, duplicate collapse, request-limit handling, and
   `FusionTrace` evidence without store, vector, embedding, model, runtime, or
   TypeScript dependencies.
+
+## Phase 19: Mutating Consolidation Gates
+
+Status: complete for gated mutating orchestration. Concrete consolidation task
+algorithms remain future work.
+
+Goal: let explicitly requested mutating consolidation run only through
+evaluation gates and an auditable executor boundary.
+
+Crates:
+
+- `engram-core`
+
+Implementation work:
+
+- Require explicit `dryRun=false` for mutating consolidation.
+- Run protected evaluation before and after mutation execution.
+- Prevent mutation when pre-evaluation fails.
+- Report post-evaluation regressions through `ConsolidationRun` errors and
+  non-successful status.
+- Keep concrete mutation algorithms behind an executor trait.
+
+Acceptance gate:
+
+- Mutating requests are explicit and validation-gated.
+- Durable executor work is surrounded by evaluation gates.
+- Regression evidence is visible in the returned run.
+- Public v1 retrieval and consolidation schemas do not change.
+
+Shipped slice:
+
+- Added `GatedConsolidationService` in `engram-core`.
+- Added `ConsolidationMutationExecutor` and `ConsolidationMutationOutcome`.
+- Added focused tests for gate order, pre-gate failure, post-gate regression,
+  and explicit mutating-mode validation.
 
 ## Stop Conditions
 

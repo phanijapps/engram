@@ -23,6 +23,8 @@ use the implementation roadmap as the spec-driven execution loop.
 - Keep belief and contradiction records distinct from source truth.
 - Keep dry-run consolidation reports auditable before adding mutating sleep
   tasks.
+- Keep mutating consolidation behind explicit evaluation gates and injected
+  executor ports.
 - Keep runtime adapters as wrappers over client transports.
 - Keep public repository docs honest about pre-1.0 readiness and release gates.
 - Keep filesystem source discovery behind the `SourceReader` port.
@@ -36,9 +38,10 @@ use the implementation roadmap as the spec-driven execution loop.
 
 ## Next: Post-Roadmap Slices
 
-- Mutating consolidation tasks with evaluation gates.
 - Service wiring for retrieval fusion with memory, knowledge, and vector
   candidates.
+- Concrete consolidation task algorithms for compaction, decay, hierarchy, and
+  belief synthesis.
 
 ## Later
 

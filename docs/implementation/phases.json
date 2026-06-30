@@ -131,5 +131,12 @@
     "description": "Hybrid retrieval fusion",
     "spec_file": "docs/specs/hybrid-retrieval-fusion/spec.md",
     "plan_file": "docs/specs/hybrid-retrieval-fusion/plan.md"
+  },
+  {
+    "phase_id": "PHASE19",
+    "status": "DONE",
+    "description": "Mutating consolidation gates",
+    "spec_file": "docs/specs/mutating-consolidation-gates/spec.md",
+    "plan_file": "docs/specs/mutating-consolidation-gates/plan.md"
   }
 ]

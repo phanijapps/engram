@@ -36,7 +36,7 @@ pub(crate) fn plan_tasks(
     request: &ConsolidationRequest,
     started_at: Timestamp,
 ) -> Vec<ConsolidationTaskResult> {
-    task_kinds(request)
+    planned_task_kinds(request)
         .into_iter()
         .map(|task| completed_dry_run_task(task, started_at))
         .collect()
@@ -61,7 +61,11 @@ pub(crate) fn empty_stats() -> ConsolidationStats {
     }
 }
 
-fn task_kinds(request: &ConsolidationRequest) -> Vec<ConsolidationTaskKind> {
+/// Returns planned task kinds for a consolidation strategy without executing.
+///
+/// Mutating services use these kinds as executor input. Dry-run planning turns
+/// the same kinds into zero-mutation task reports.
+pub(crate) fn planned_task_kinds(request: &ConsolidationRequest) -> Vec<ConsolidationTaskKind> {
     match request.strategy {
         Some(ConsolidationStrategy::TimeWindow) => {
             vec![

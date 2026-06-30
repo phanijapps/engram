@@ -7,6 +7,7 @@
 //! separate crates and satisfy the same core contracts.
 
 mod belief;
+mod consolidation;
 mod dependencies;
 mod forget;
 mod hierarchy;
@@ -19,5 +20,6 @@ mod state;
 mod validation;
 mod write;
 
+pub use consolidation::InMemoryConsolidationExecutor;
 pub use dependencies::{AllowAllPolicyAuthorizer, SequentialIdGenerator, SystemClock};
 pub use service::InMemoryMemoryService;

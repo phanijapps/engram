@@ -410,8 +410,9 @@ Acceptance gate:
 
 ## Phase 12: Consolidation and Sleep Cycle
 
-Status: done for the dry-run run-reporting slice and gated mutating
-orchestration. Concrete task algorithms remain future work.
+Status: done for the dry-run run-reporting slice, gated mutating
+orchestration, and in-memory exact-text compaction. Additional task algorithms
+remain future work.
 
 Goal: make background consolidation auditable and reversible enough to trust.
 
@@ -449,6 +450,9 @@ Shipped slice:
 - Added `ConsolidationMutationExecutor` and `ConsolidationMutationOutcome` so
   concrete mutation algorithms remain outside core while task outcomes remain
   auditable.
+- Added `InMemoryConsolidationExecutor` with exact-text duplicate compaction,
+  scoped archiving, `Consolidated` lifecycle events, skipped unsupported task
+  reporting, and deterministic adapter tests.
 
 ## Phase 13: Integrations and Runtime Adapters
 

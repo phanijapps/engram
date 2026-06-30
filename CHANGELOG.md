@@ -61,3 +61,5 @@ This project follows a contract-first changelog while pre-1.0.
   fusion path.
 - Added sqlite-vec retrieval candidates through injected query-vector and target
   resolver ports.
+- Added exact-text in-memory consolidation compaction with scoped archive
+  events and skipped unsupported task reporting.

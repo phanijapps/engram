@@ -25,6 +25,9 @@ use the implementation roadmap as the spec-driven execution loop.
   tasks.
 - Keep mutating consolidation behind explicit evaluation gates and injected
   executor ports.
+- Keep the in-memory consolidation executor scoped, auditable, and conservative:
+  exact duplicate compaction archives later records and records consolidated
+  events.
 - Keep runtime adapters as wrappers over client transports.
 - Keep public repository docs honest about pre-1.0 readiness and release gates.
 - Keep filesystem source discovery behind the `SourceReader` port.
@@ -44,8 +47,8 @@ use the implementation roadmap as the spec-driven execution loop.
 
 ## Next: Post-Roadmap Slices
 
-- Concrete consolidation task algorithms for compaction, decay, hierarchy, and
-  belief synthesis.
+- Concrete consolidation task algorithms for decay, hierarchy, and belief
+  synthesis.
 - Production embedding provider wiring and full vector fusion service
   composition.
 

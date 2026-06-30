@@ -190,3 +190,17 @@ button:disabled {
   border: 1px solid #2a3656;
   border-radius: 8px;
 }
+
+.app__search {
+  margin-top: 1rem;
+}
+
+.search__query {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.search__query input {
+  flex: 1;
+}

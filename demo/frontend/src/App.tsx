@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { IngestPanel } from "./IngestPanel";
+import { SearchPanel } from "./SearchPanel";
 
 // Demo-local defaults (single-user, local). The backend is a pure JSON
 // pass-through to the Rust memory service, so these mirror the v1 contract
@@ -324,6 +325,8 @@ export function App() {
       </section>
 
       <IngestPanel />
+
+      <SearchPanel />
     </div>
   );
 }

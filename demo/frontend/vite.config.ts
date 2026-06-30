@@ -12,6 +12,7 @@ export default defineConfig({
       "/knowledge": "http://localhost:8787",
       "/taxonomy": "http://localhost:8787",
       "/ingest": "http://localhost:8787",
+      "/retrieval": "http://localhost:8787",
       "/health": "http://localhost:8787"
     }
   }

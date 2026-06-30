@@ -25,12 +25,17 @@ if (!artifact) {
   throw new Error(`unsupported platform: ${process.platform}`);
 }
 
-console.log(`cargo build --release -p engram-node (${process.platform})`);
-// No shell, no interpolation: argv is a fixed literal.
-execFileSync("cargo", ["build", "--release", "-p", "engram-node"], {
-  stdio: "inherit",
-  cwd: repoRoot,
-});
+console.log(`cargo build --release -p engram-node --features fastembed (${process.platform})`);
+// No shell, no interpolation: argv is a fixed literal. The demo enables the
+// `fastembed` feature so NativeRetrievalEngine (semantic retrieval) is included.
+execFileSync(
+  "cargo",
+  ["build", "--release", "-p", "engram-node", "--features", "fastembed"],
+  {
+    stdio: "inherit",
+    cwd: repoRoot,
+  }
+);
 
 const src = join(repoRoot, "target", "release", artifact);
 const dest = join(pkgRoot, "engram_node.node");

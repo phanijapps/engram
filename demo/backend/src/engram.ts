@@ -2,9 +2,11 @@ import {
   createNativeIngestTransport,
   createNativeKnowledgeTransport,
   createNativeMemoryTransport,
+  createNativeRetrievalTransport,
   type NativeIngestTransport,
   type NativeKnowledgeTransport,
   type NativeMemoryTransport,
+  type NativeRetrievalTransport,
 } from "@engram/node";
 
 // One Rust-backed engine is held for the process lifetime so write, retrieve,
@@ -36,4 +38,15 @@ export function getIngestTransport(): NativeIngestTransport {
     ingest = createNativeIngestTransport();
   }
   return ingest;
+}
+
+// One Rust-backed semantic-retrieval engine (FastEmbed + sqlite-vec). The first
+// call constructs the BGE-small model, which may download assets on first run.
+let retrieval: NativeRetrievalTransport | null = null;
+
+export function getRetrievalTransport(): NativeRetrievalTransport {
+  if (retrieval === null) {
+    retrieval = createNativeRetrievalTransport();
+  }
+  return retrieval;
 }

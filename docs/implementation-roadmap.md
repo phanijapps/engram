@@ -906,5 +906,5 @@ before `PHASE53`.
   forbidden-import gate (preceded by ADR-0007). **(shipped)**
 - `PHASE54` — Slice 2: deterministic graph extractor (code-symbol + document).
   **(shipped)**
-- `PHASE55` — Slice 3: FastEmbed passage embeddings + fused retrieval.
+- `PHASE55` — Slice 3: FastEmbed passage embeddings + fused retrieval. **(shipped)**
 - `PHASE56` — Slice 4: demo UI polish (Cytoscape graph, query, taxonomy).

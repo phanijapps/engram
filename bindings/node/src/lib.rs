@@ -337,6 +337,156 @@ fn to_napi_error(error: CoreError) -> Error {
     Error::from_reason(error.to_string())
 }
 
+/// FastEmbed-powered semantic retrieval (feature-gated; the demo build enables
+/// `fastembed`). Indexes chunked text with BGE-small passage embeddings into an
+/// in-memory sqlite-vec index and answers queries with BGE-small query embeddings.
+#[cfg(feature = "fastembed")]
+mod retrieval {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+
+    use engram_domain::EmbeddingTargetType;
+    use engram_ingest::{Chunker, PlainTextChunker, PlainTextChunkerOptions};
+    use engram_store_vector::{FastEmbedBgeSmallQueryProvider, SqliteVectorIndex, VectorEntry};
+    use napi::bindgen_prelude::*;
+    use napi_derive::napi;
+    use serde::{Deserialize, Serialize};
+
+    use crate::{decode, encode, to_napi_error};
+
+    const DIMENSIONS: u32 = 384;
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct IndexRequest {
+        text: String,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct IndexResponse {
+        indexed: usize,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SearchRequest {
+        query: String,
+        top_k: Option<u32>,
+    }
+
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct SearchHit {
+        id: String,
+        text: String,
+        score: f32,
+    }
+
+    struct State {
+        index: SqliteVectorIndex,
+        chunks: HashMap<String, String>,
+    }
+
+    /// Stateful local semantic-retrieval engine exposed to Node through N-API.
+    #[napi]
+    pub struct NativeRetrievalEngine {
+        provider: FastEmbedBgeSmallQueryProvider,
+        state: Mutex<State>,
+    }
+
+    #[napi]
+    impl NativeRetrievalEngine {
+        /// Opens the engine; constructs the FastEmbed BGE-small model (may
+        /// download model assets on first use).
+        #[napi(constructor)]
+        pub fn new() -> Result<Self> {
+            let provider = FastEmbedBgeSmallQueryProvider::new().map_err(to_napi_error)?;
+            let index = SqliteVectorIndex::open_in_memory(DIMENSIONS).map_err(to_napi_error)?;
+            Ok(Self {
+                provider,
+                state: Mutex::new(State {
+                    index,
+                    chunks: HashMap::new(),
+                }),
+            })
+        }
+
+        /// Chunks text, embeds each chunk (BGE-small passage), and indexes it.
+        #[napi(js_name = "indexJson")]
+        pub fn index_json(&self, request_json: String) -> Result<String> {
+            let request: IndexRequest = decode(&request_json)?;
+            let chunker = PlainTextChunker::new(PlainTextChunkerOptions {
+                max_chars_per_chunk: 120,
+            })
+            .map_err(to_napi_error)?;
+            let candidates = chunker.chunk(&request.text).map_err(to_napi_error)?;
+            let model = self.provider.model_name().to_owned();
+            // Embed before taking the state lock so reads are not blocked by inference.
+            let mut entries = Vec::with_capacity(candidates.len());
+            for (index, candidate) in candidates.iter().enumerate() {
+                let id = format!("chunk-{index}");
+                let embedding = self
+                    .provider
+                    .embed_passage(&candidate.text)
+                    .map_err(to_napi_error)?;
+                entries.push((id, candidate.text.clone(), embedding));
+            }
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| Error::from_reason("retrieval state lock poisoned"))?;
+            let mut indexed = 0;
+            for (id, text, embedding) in entries {
+                state
+                    .index
+                    .insert(VectorEntry {
+                        id: id.clone(),
+                        target_type: EmbeddingTargetType::Chunk,
+                        target_id: id.clone(),
+                        model: model.clone(),
+                        dimensions: DIMENSIONS,
+                        content_hash: id.clone(),
+                        embedding,
+                    })
+                    .map_err(to_napi_error)?;
+                state.chunks.insert(id, text);
+                indexed += 1;
+            }
+            encode(&IndexResponse { indexed })
+        }
+
+        /// Embeds the query (BGE-small query) and returns nearest chunks.
+        #[napi(js_name = "searchJson")]
+        pub fn search_json(&self, request_json: String) -> Result<String> {
+            let request: SearchRequest = decode(&request_json)?;
+            let query = self
+                .provider
+                .embed_query(&request.query)
+                .map_err(to_napi_error)?;
+            let limit = request.top_k.unwrap_or(5).max(1);
+            let state = self
+                .state
+                .lock()
+                .map_err(|_| Error::from_reason("retrieval state lock poisoned"))?;
+            let hits = state.index.search(&query, limit).map_err(to_napi_error)?;
+            let results: Vec<SearchHit> = hits
+                .iter()
+                .map(|hit| SearchHit {
+                    id: hit.target_id.clone(),
+                    text: state
+                        .chunks
+                        .get(&hit.target_id)
+                        .cloned()
+                        .unwrap_or_default(),
+                    score: 1.0 / (1.0 + hit.distance.max(0.0)),
+                })
+                .collect();
+            encode(&results)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

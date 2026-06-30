@@ -49,6 +49,10 @@ describe("@engram/client native transport", () => {
           ingestExtractJson(): string {
             return '{"graph":{},"entities":[],"relationships":[],"chunkCount":0}';
           }
+        },
+        NativeRetrievalEngine: class {
+          indexJson(): string { return '{"indexed":0}'; }
+          searchJson(): string { return "[]"; }
         }
       }
     });

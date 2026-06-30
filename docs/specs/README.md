@@ -13,7 +13,10 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   import gate (RFC-0003, PHASE53). Shipped.
 - [`knowledge-graph-extractor`](knowledge-graph-extractor/spec.md): demo Slice 2 —
   deterministic `GraphExtractor` (code symbols + calls/mentions) + ingest+extract
-  over the binding + Cytoscape graph panel (RFC-0003, PHASE54).
+  over the binding + Cytoscape graph panel (RFC-0003, PHASE54). Shipped.
+- [`fastembed-passage-embeddings`](fastembed-passage-embeddings/spec.md): demo
+  Slice 3 — feature-gated `NativeRetrievalEngine` (BGE-small passage + query
+  embeddings over sqlite-vec) + `/retrieval/*` + SearchPanel (RFC-0003, PHASE55).
 - [`workspace-responsibility-layout`](workspace-responsibility-layout/spec.md):
   groups Rust crates by architectural responsibility before adding more memory
   and knowledge storage backends.

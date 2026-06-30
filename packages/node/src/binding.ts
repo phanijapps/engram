@@ -42,11 +42,23 @@ export interface NativeIngestEngineConstructor {
   new (): NativeIngestEngineBinding;
 }
 
+/** Native class shape for the Rust-backed semantic-retrieval engine (FastEmbed). */
+export interface NativeRetrievalEngineBinding {
+  indexJson(requestJson: string): string;
+  searchJson(requestJson: string): string;
+}
+
+/** Constructor shape for the Rust-backed semantic-retrieval engine. */
+export interface NativeRetrievalEngineConstructor {
+  new (): NativeRetrievalEngineBinding;
+}
+
 /** Native addon surface consumed by `@engram/node`. */
 export interface NativeBinding {
   NativeMemoryEngine: NativeMemoryEngineConstructor;
   NativeKnowledgeEngine: NativeKnowledgeEngineConstructor;
   NativeIngestEngine: NativeIngestEngineConstructor;
+  NativeRetrievalEngine: NativeRetrievalEngineConstructor;
 }
 
 /** Function used to load a native addon, injectable for deterministic tests. */

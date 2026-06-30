@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { getIngestTransport, getKnowledgeTransport, getTransport } from "./engram.js";
+import {
+  getIngestTransport,
+  getKnowledgeTransport,
+  getRetrievalTransport,
+  getTransport,
+} from "./engram.js";
 
 // The backend is a thin JSON transport over the Rust memory service. It owns no
 // behavior — v1 JSON in, v1 JSON out, unchanged by Rust — so TypeScript stays
@@ -37,6 +42,14 @@ app.post("/memory/forget", async (c) => {
 app.post("/ingest/extract", async (c) => {
   const request = await c.req.json();
   return c.json(await getIngestTransport().ingestExtract(request));
+});
+app.post("/retrieval/index", async (c) => {
+  const { text } = await c.req.json();
+  return c.json(await getRetrievalTransport().index(text));
+});
+app.post("/retrieval/search", async (c) => {
+  const { query, topK } = await c.req.json();
+  return c.json(await getRetrievalTransport().search(query, topK));
 });
 app.post("/knowledge/entity", async (c) => {
   const request = await c.req.json();

@@ -13,7 +13,8 @@ import {
   type NativeBindingLoader,
   type NativeIngestEngineBinding,
   type NativeKnowledgeEngineBinding,
-  type NativeMemoryEngineBinding
+  type NativeMemoryEngineBinding,
+  type NativeRetrievalEngineBinding
 } from "./binding.js";
 
 /** Transport interface implemented by the native Engram Node package. */
@@ -175,5 +176,44 @@ class JsonNativeIngestTransport implements NativeIngestTransport {
 
   async ingestExtract(request: unknown): Promise<IngestExtractResult> {
     return decode(this.engine.ingestExtractJson(encode(request)));
+  }
+}
+
+/** One semantic-search hit returned by Rust. */
+export interface RetrievalSearchHit {
+  id: string;
+  text: string;
+  score: number;
+}
+
+/** Transport interface for FastEmbed semantic retrieval. */
+export interface NativeRetrievalTransport {
+  index(text: string): Promise<{ indexed: number }>;
+  search(query: string, topK?: number): Promise<RetrievalSearchHit[]>;
+}
+
+/** Options for constructing a native retrieval transport. */
+export interface NativeRetrievalTransportOptions {
+  binding?: NativeBinding;
+  loader?: NativeBindingLoader;
+}
+
+/** Creates a transport that delegates semantic retrieval to Rust (FastEmbed). */
+export function createNativeRetrievalTransport(
+  options: NativeRetrievalTransportOptions = {}
+): NativeRetrievalTransport {
+  const binding = options.binding ?? loadNativeBinding(options.loader);
+  return new JsonNativeRetrievalTransport(new binding.NativeRetrievalEngine());
+}
+
+class JsonNativeRetrievalTransport implements NativeRetrievalTransport {
+  constructor(private readonly engine: NativeRetrievalEngineBinding) {}
+
+  async index(text: string): Promise<{ indexed: number }> {
+    return decode(this.engine.indexJson(encode({ text })));
+  }
+
+  async search(query: string, topK?: number): Promise<RetrievalSearchHit[]> {
+    return decode(this.engine.searchJson(encode({ query, topK })));
   }
 }

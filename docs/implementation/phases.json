@@ -386,7 +386,7 @@
   },
   {
     "phase_id": "PHASE55",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "Demo Slice 3: FastEmbed passage embeddings + fused retrieval wiring",
     "spec_file": "docs/specs/fastembed-passage-embeddings/spec.md",
     "plan_file": "docs/specs/fastembed-passage-embeddings/plan.md"

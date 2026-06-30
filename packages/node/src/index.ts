@@ -7,17 +7,23 @@ export {
   type NativeKnowledgeEngineBinding,
   type NativeKnowledgeEngineConstructor,
   type NativeMemoryEngineBinding,
-  type NativeMemoryEngineConstructor
+  type NativeMemoryEngineConstructor,
+  type NativeRetrievalEngineBinding,
+  type NativeRetrievalEngineConstructor
 } from "./binding.js";
 export {
   createNativeIngestTransport,
   createNativeKnowledgeTransport,
   createNativeMemoryTransport,
+  createNativeRetrievalTransport,
   type IngestExtractResult,
   type NativeIngestTransport,
   type NativeIngestTransportOptions,
   type NativeKnowledgeTransport,
   type NativeKnowledgeTransportOptions,
   type NativeMemoryTransport,
-  type NativeMemoryTransportOptions
+  type NativeMemoryTransportOptions,
+  type NativeRetrievalTransport,
+  type NativeRetrievalTransportOptions,
+  type RetrievalSearchHit
 } from "./transport.js";

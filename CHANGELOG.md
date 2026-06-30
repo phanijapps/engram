@@ -99,3 +99,4 @@ This project follows a contract-first changelog while pre-1.0.
 - Aligned contributor validation documentation with PR and release gates.
 - Added file-backed SQLite construction for the SQL memory service and store.
 - Added a manual release verification workflow for release gates.
+- Added a local in-memory benchmark smoke example and benchmark documentation.

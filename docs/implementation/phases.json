@@ -306,5 +306,12 @@
     "description": "Release verification workflow",
     "spec_file": "docs/specs/release-verification-workflow/spec.md",
     "plan_file": "docs/specs/release-verification-workflow/plan.md"
+  },
+  {
+    "phase_id": "PHASE44",
+    "status": "DONE",
+    "description": "Local benchmark smoke",
+    "spec_file": "docs/specs/local-benchmark-smoke/spec.md",
+    "plan_file": "docs/specs/local-benchmark-smoke/plan.md"
   }
 ]

@@ -861,6 +861,7 @@ Shipped slice:
   tests while keeping server database adapters deferred.
 - Added a manual release verification workflow that runs release gates without
   publishing packages or tags.
+- Added a local in-memory benchmark smoke path and benchmark claim boundaries.
 
 ## Stop Conditions
 

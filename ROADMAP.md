@@ -58,6 +58,8 @@ use the implementation roadmap as the spec-driven execution loop.
 - Keep public repository docs honest about pre-1.0 readiness and release gates.
 - Keep governance lightweight and contract-first while the project is pre-1.0.
 - Keep contributor validation docs aligned with PR, CI, and release gates.
+- Keep benchmark smoke paths local and non-claiming until datasets and targets
+  are specified.
 - Keep filesystem source discovery behind the `SourceReader` port.
 - Keep Git worktree discovery tracked-file-only until history semantics are
   specified.

@@ -34,6 +34,8 @@ It does not publish crates, npm packages, GitHub Releases, or tags.
 - Crates and packages expose narrow facades.
 - Generated files are either reproducible or excluded from hand edits.
 - Examples and smoke tests document how to run the shipped surface.
+- Benchmark claims cite `docs/benchmarks.md` output and name the dataset,
+  environment, and command used.
 - Release notes include contract, Rust, TypeScript, adapter, and migration
   impacts.
 

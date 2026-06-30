@@ -63,6 +63,11 @@ See `docs/architecture.md` for the initial module map.
 Engram is not production-ready. Before publishing crates, npm packages, or
 release tags, follow `docs/release-checklist.md`.
 
+## Benchmarks
+
+Local benchmark smoke commands are documented in `docs/benchmarks.md`. They
+collect observations only and do not support performance claims.
+
 ## Validation
 
 ```bash

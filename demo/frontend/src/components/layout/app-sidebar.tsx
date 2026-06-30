@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Network,
   Scale,
+  Waypoints,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import {
@@ -31,6 +32,7 @@ export type NavItem = {
 
 export const NAV_ITEMS: NavItem[] = [
   { title: "Dashboard", to: "/", icon: LayoutDashboard },
+  { title: "Explorer", to: "/explorer", icon: Waypoints },
   { title: "Ingest", to: "/ingest", icon: FileInput },
   { title: "Index", to: "/index", icon: FolderTree },
   { title: "Knowledge", to: "/knowledge", icon: Network },

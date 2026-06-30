@@ -158,23 +158,7 @@ impl FilesystemSourceReader {
     }
 
     fn read_bytes(&self, relative_path: &str) -> CoreResult<Vec<u8>> {
-        validate_relative_path(relative_path)?;
-        let path = self.root.join(relative_path);
-        let metadata = fs::symlink_metadata(&path).map_err(file_error)?;
-        if !metadata.is_file() {
-            return invalid("document path must point to a regular file");
-        }
-        if metadata.file_type().is_symlink() {
-            return invalid("document path must not be a symlink");
-        }
-        if metadata.len() > self.options.max_file_bytes {
-            return invalid(format!(
-                "document exceeds max_file_bytes: {} > {}",
-                metadata.len(),
-                self.options.max_file_bytes
-            ));
-        }
-        fs::read(path).map_err(file_error)
+        read_file_bytes(&self.root, &self.options, relative_path)
     }
 
     fn relative_path(&self, path: &Path) -> CoreResult<String> {
@@ -207,7 +191,39 @@ impl SourceReader for FilesystemSourceReader {
     }
 }
 
-fn validate_relative_path(path: &str) -> CoreResult<()> {
+/// Reads one relative file after enforcing shared source-reader safety checks.
+///
+/// Git and filesystem readers both use this path so max-size, symlink, regular
+/// file, and traversal behavior stay identical across local source adapters.
+pub(crate) fn read_file_bytes(
+    root: &Path,
+    options: &FilesystemSourceReaderOptions,
+    relative_path: &str,
+) -> CoreResult<Vec<u8>> {
+    validate_relative_path(relative_path)?;
+    let path = root.join(relative_path);
+    let metadata = fs::symlink_metadata(&path).map_err(file_error)?;
+    if !metadata.is_file() {
+        return invalid("document path must point to a regular file");
+    }
+    if metadata.file_type().is_symlink() {
+        return invalid("document path must not be a symlink");
+    }
+    if metadata.len() > options.max_file_bytes {
+        return invalid(format!(
+            "document exceeds max_file_bytes: {} > {}",
+            metadata.len(),
+            options.max_file_bytes
+        ));
+    }
+    fs::read(path).map_err(file_error)
+}
+
+/// Validates that a document path is relative and contains no traversal.
+///
+/// This protects source readers before they join caller-provided paths onto a
+/// trusted root directory.
+pub(crate) fn validate_relative_path(path: &str) -> CoreResult<()> {
     if path.trim().is_empty() {
         return invalid("document path must not be empty");
     }
@@ -224,7 +240,11 @@ fn validate_relative_path(path: &str) -> CoreResult<()> {
     Ok(())
 }
 
-fn normalize_relative_path(path: &Path) -> CoreResult<String> {
+/// Converts a filesystem-relative path into the portable slash-separated form.
+///
+/// The returned value is safe to store on `SourceDocument.path` because it has
+/// already rejected prefixes, parent components, and non-UTF-8 segments.
+pub(crate) fn normalize_relative_path(path: &Path) -> CoreResult<String> {
     let mut components = Vec::new();
     for component in path.components() {
         match component {
@@ -251,7 +271,11 @@ fn should_skip_path(path: &Path, include_hidden: bool) -> bool {
         .is_some_and(|name| name.starts_with('.'))
 }
 
-fn classify_document(path: &Path) -> Option<SourceDocumentKind> {
+/// Classifies supported first-slice text, structured-data, and code files.
+///
+/// Unsupported extensions return `None` so readers can skip binary and unknown
+/// files without pretending they are source-grounded text.
+pub(crate) fn classify_document(path: &Path) -> Option<SourceDocumentKind> {
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
     match extension.as_str() {
         "txt" => Some(SourceDocumentKind::Text),
@@ -265,7 +289,11 @@ fn classify_document(path: &Path) -> Option<SourceDocumentKind> {
     }
 }
 
-fn mime_type(path: &Path) -> Option<&'static str> {
+/// Returns a conservative MIME hint for supported local source files.
+///
+/// The value is metadata only; callers must not infer parser or security policy
+/// from it.
+pub(crate) fn mime_type(path: &Path) -> Option<&'static str> {
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
     match extension.as_str() {
         "txt" => Some("text/plain"),
@@ -278,7 +306,11 @@ fn mime_type(path: &Path) -> Option<&'static str> {
     }
 }
 
-fn language(path: &Path) -> Option<&'static str> {
+/// Returns a lightweight language hint from a supported file extension.
+///
+/// This is not symbol extraction or syntax validation; it only gives downstream
+/// chunkers and examples a stable hint.
+pub(crate) fn language(path: &Path) -> Option<&'static str> {
     let extension = path.extension()?.to_str()?.to_ascii_lowercase();
     match extension.as_str() {
         "rs" => Some("rust"),
@@ -304,7 +336,11 @@ fn language(path: &Path) -> Option<&'static str> {
     }
 }
 
-fn source_document_id(
+/// Builds a deterministic document ID from source, relative path, and content.
+///
+/// The path participates in identity so two files with identical content remain
+/// distinct documents inside the same source.
+pub(crate) fn source_document_id(
     source_id: &str,
     relative_path: &str,
     document_hash: &str,
@@ -324,7 +360,11 @@ fn invalid<T>(reason: impl Into<String>) -> CoreResult<T> {
     })
 }
 
-fn file_error(error: std::io::Error) -> CoreError {
+/// Translates filesystem I/O failures into the stable core adapter error.
+///
+/// Source readers keep raw I/O types behind this boundary so callers can handle
+/// portable `CoreError` categories.
+pub(crate) fn file_error(error: std::io::Error) -> CoreError {
     CoreError::Adapter {
         adapter: "engram-ingest-filesystem".to_owned(),
         message: error.to_string(),

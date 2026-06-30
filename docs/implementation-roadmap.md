@@ -547,6 +547,39 @@ Shipped slice:
 - Reads UTF-8 document content while rejecting path traversal, absolute paths,
   symlinks, and oversized files.
 
+## Phase 16: Git Source Reader
+
+Status: done for local tracked-file discovery.
+
+Goal: discover tracked files from a local Git worktree as source-grounded
+knowledge inputs without cloning remotes, reading history, or adding Git details
+to portable contracts.
+
+Crates:
+
+- `engram-ingest`
+
+Implementation work:
+
+- Implement a Git worktree `SourceReader`.
+- Use tracked Git paths for discovery.
+- Preserve relative paths, content hashes, source policy, and provenance.
+- Reject untracked paths, traversal, absolute paths, and oversized reads.
+- Keep remote clone, history, diffs, and symbol extraction out of this slice.
+
+Acceptance gate:
+
+- Git documents can be discovered and read through the `SourceReader` port.
+- Only tracked supported files are discovered.
+- Reads cannot escape the worktree root and do not change public v1 contracts.
+
+Shipped slice:
+
+- Added `GitSourceReader` in `engram-ingest`.
+- Uses `git ls-files` to discover tracked supported files in sorted path order.
+- Reuses filesystem-safe reads to reject untracked paths, traversal, absolute
+  paths, symlinks, oversized files, and non-UTF-8 content.
+
 ## Stop Conditions
 
 Do not move to a later phase when any of these are true:

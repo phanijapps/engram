@@ -110,5 +110,12 @@
     "description": "Filesystem source reader",
     "spec_file": "docs/specs/filesystem-source-reader/spec.md",
     "plan_file": "docs/specs/filesystem-source-reader/plan.md"
+  },
+  {
+    "phase_id": "PHASE16",
+    "status": "DONE",
+    "description": "Git source reader",
+    "spec_file": "docs/specs/git-source-reader/spec.md",
+    "plan_file": "docs/specs/git-source-reader/plan.md"
   }
 ]

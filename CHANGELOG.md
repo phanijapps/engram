@@ -50,3 +50,4 @@ This project follows a contract-first changelog while pre-1.0.
 - Scoped documentation checks to tracked repository docs and tracked repository
   skills.
 - Added `FilesystemSourceReader` for deterministic local source discovery.
+- Added `GitSourceReader` for tracked-file local worktree discovery.

@@ -3,8 +3,14 @@
 `engram-eval` runs portable evaluation fixtures against any implementation of
 the Engram `MemoryService` contract.
 
+It also exposes accepted v1 example loaders and a small contract runner for
+write/retrieval smoke behavior so store crates can reuse the same fixture path
+without copying JSON parsing or service orchestration.
+
 Current scope:
 
+- load accepted portable contract examples
+- run accepted write/retrieval examples through `MemoryService`
 - seed memories through normal write behavior
 - run retrieval cases
 - report missing required targets

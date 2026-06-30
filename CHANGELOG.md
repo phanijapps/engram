@@ -100,3 +100,4 @@ This project follows a contract-first changelog while pre-1.0.
 - Added file-backed SQLite construction for the SQL memory service and store.
 - Added a manual release verification workflow for release gates.
 - Added a local in-memory benchmark smoke example and benchmark documentation.
+- Added reusable accepted write/retrieval fixture runners in `engram-eval`.

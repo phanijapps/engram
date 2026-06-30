@@ -13,6 +13,11 @@ use engram_core::{
 };
 use engram_domain::*;
 
+pub mod accepted_examples;
+mod contract_runner;
+
+pub use contract_runner::{MemoryContractRunner, RetrievalContractOutcome};
+
 /// Runs evaluation fixtures against a supplied memory service.
 ///
 /// The runner is intentionally adapter-neutral. In-memory, SQL, native binding,

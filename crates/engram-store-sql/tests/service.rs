@@ -1,6 +1,6 @@
 use engram_core::{EvaluationRunner, MemoryEventRepository, MemoryRepository, MemoryService};
 use engram_domain::*;
-use engram_eval::MemoryFixtureRunner;
+use engram_eval::{MemoryContractRunner, MemoryFixtureRunner, accepted_examples};
 use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
 use std::path::PathBuf;
@@ -8,17 +8,7 @@ use std::sync::Arc;
 use std::thread;
 
 fn write_fixture() -> WriteMemoryRequest {
-    serde_json::from_str(include_str!(
-        "../../../contracts/v1/examples/write-memory-request.json"
-    ))
-    .expect("deserialize write fixture")
-}
-
-fn retrieval_fixture() -> RetrievalRequest {
-    serde_json::from_str(include_str!(
-        "../../../contracts/v1/examples/retrieval-request.json"
-    ))
-    .expect("deserialize retrieval fixture")
+    accepted_examples::write_memory_request().expect("deserialize write fixture")
 }
 
 #[test]
@@ -71,13 +61,14 @@ fn sql_service_serializes_concurrent_idempotent_writes() {
 
 #[test]
 fn sql_service_retrieves_written_memory() {
-    let service = SqlMemoryService::open_in_memory().expect("open sql service");
-    block_on(service.write_memory(write_fixture())).expect("write memory");
+    let runner = MemoryContractRunner::new(Arc::new(
+        SqlMemoryService::open_in_memory().expect("open sql service"),
+    ));
 
-    let context = block_on(service.retrieve(retrieval_fixture())).expect("retrieve context");
+    let outcome = block_on(runner.retrieve_accepted_example()).expect("retrieve context");
 
-    assert_eq!(context.items.len(), 1);
-    assert!(context.items[0].content.contains("Rust 2024"));
+    assert_eq!(outcome.context.items.len(), 1);
+    assert!(outcome.context.items[0].content.contains("Rust 2024"));
 }
 
 #[test]

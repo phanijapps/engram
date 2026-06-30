@@ -313,5 +313,12 @@
     "description": "Local benchmark smoke",
     "spec_file": "docs/specs/local-benchmark-smoke/spec.md",
     "plan_file": "docs/specs/local-benchmark-smoke/plan.md"
+  },
+  {
+    "phase_id": "PHASE45",
+    "status": "DONE",
+    "description": "Memory contract fixture runners",
+    "spec_file": "docs/specs/memory-contract-fixture-runners/spec.md",
+    "plan_file": "docs/specs/memory-contract-fixture-runners/plan.md"
   }
 ]

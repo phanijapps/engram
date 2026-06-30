@@ -278,5 +278,12 @@
     "description": "CI vector feature gates",
     "spec_file": "docs/specs/ci-vector-feature-gates/spec.md",
     "plan_file": "docs/specs/ci-vector-feature-gates/plan.md"
+  },
+  {
+    "phase_id": "PHASE40",
+    "status": "DONE",
+    "description": "Open source governance",
+    "spec_file": "docs/specs/open-source-governance/spec.md",
+    "plan_file": "docs/specs/open-source-governance/plan.md"
   }
 ]

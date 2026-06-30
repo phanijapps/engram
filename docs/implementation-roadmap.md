@@ -854,6 +854,8 @@ Shipped slice:
 - Added CI and release checklist gates for the opt-in vector FastEmbed feature
   compile path.
 - Kept provider-backed model downloads outside default CI.
+- Added top-level open-source governance covering maintainer decisions,
+  contract changes, releases, disputes, and private escalation paths.
 
 ## Stop Conditions
 

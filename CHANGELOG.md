@@ -95,3 +95,4 @@ This project follows a contract-first changelog while pre-1.0.
 - Added deterministic member-derived summaries for in-memory hierarchy
   aggregate nodes.
 - Added CI and release checklist gates for vector FastEmbed feature compilation.
+- Added top-level open-source governance documentation.

@@ -10,6 +10,9 @@ async-trait.workspace = true
 chrono.workspace = true
 engram-domain = { path = "../../core/domain" }
 engram-knowledge = { path = "../../core/knowledge" }
+futures.workspace = true
+ignore.workspace = true
+rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

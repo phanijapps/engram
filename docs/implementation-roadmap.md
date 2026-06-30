@@ -511,6 +511,42 @@ Shipped slice:
 - Preserved benchmark, security-audit, production-readiness, and release
   automation claims as future work until backed by evidence and CI automation.
 
+## Phase 15: Filesystem Source Reader
+
+Status: done for local filesystem discovery.
+
+Goal: discover local code and unstructured text documents as source-grounded
+knowledge inputs without adding Git history, embeddings, or persistence
+concerns.
+
+Crates:
+
+- `engram-ingest`
+
+Implementation work:
+
+- Implement a local filesystem `SourceReader`.
+- Discover supported text, Markdown, and code files in deterministic order.
+- Preserve relative source paths, content hashes, policy, and provenance.
+- Reject path traversal and oversized reads.
+- Keep symlink traversal, Git readers, and code-symbol extraction out of this
+  slice.
+
+Acceptance gate:
+
+- Filesystem documents can be discovered and read through the `SourceReader`
+  port.
+- File reads cannot escape the configured root.
+- Discovery is deterministic and does not change public v1 contracts.
+
+Shipped slice:
+
+- Added `FilesystemSourceReader` in `engram-ingest`.
+- Discovers supported text, Markdown, structured-data, and code files in sorted
+  relative-path order.
+- Reads UTF-8 document content while rejecting path traversal, absolute paths,
+  symlinks, and oversized files.
+
 ## Stop Conditions
 
 Do not move to a later phase when any of these are true:

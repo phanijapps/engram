@@ -103,5 +103,12 @@
     "description": "Production hardening",
     "spec_file": "docs/specs/production-hardening/spec.md",
     "plan_file": "docs/specs/production-hardening/plan.md"
+  },
+  {
+    "phase_id": "PHASE15",
+    "status": "DONE",
+    "description": "Filesystem source reader",
+    "spec_file": "docs/specs/filesystem-source-reader/spec.md",
+    "plan_file": "docs/specs/filesystem-source-reader/plan.md"
   }
 ]

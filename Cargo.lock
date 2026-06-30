@@ -718,11 +718,13 @@ dependencies = [
 name = "engram-ingest"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "engram-core",
  "engram-domain",
  "engram-store-memory",
  "futures",
+ "serde_json",
  "sha2",
 ]
 

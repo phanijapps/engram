@@ -5,11 +5,13 @@
 //! context; those responsibilities belong to adapter and retrieval crates.
 
 mod chunker;
+mod filesystem;
 mod hash;
 mod ingestor;
 mod request;
 
 pub use chunker::{ChunkCandidate, Chunker, PlainTextChunker, PlainTextChunkerOptions};
+pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
 pub use hash::content_hash;
 pub use ingestor::{IngestedKnowledge, KnowledgeIngestor};
 pub use request::{DocumentIngestRequest, DocumentMetadata};

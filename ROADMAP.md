@@ -25,11 +25,12 @@ use the implementation roadmap as the spec-driven execution loop.
   tasks.
 - Keep runtime adapters as wrappers over client transports.
 - Keep public repository docs honest about pre-1.0 readiness and release gates.
+- Keep filesystem source discovery behind the `SourceReader` port.
 - Keep concrete adapters outside `engram-core`.
 
 ## Next: Post-Roadmap Slices
 
-- Filesystem, Git, and code-symbol ingestion adapters.
+- Git and code-symbol ingestion adapters.
 - Hybrid ranking and retrieval fusion.
 - Mutating consolidation tasks with evaluation gates.
 

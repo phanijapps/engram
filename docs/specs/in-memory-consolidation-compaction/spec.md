@@ -76,12 +76,12 @@ each archived duplicate.
 
 - Technical: mutating consolidation is already gated by
   `GatedConsolidationService` and an injected `ConsolidationMutationExecutor`
-  (source: `crates/engram-core/src/consolidation/mutating.rs`).
+  (source: `core/orchestration/src/consolidation/mutating.rs`).
 - Technical: in-memory storage exposes `MemoryStatus::Archived` and
   `MemoryEventKind::Consolidated` for auditable compaction (source:
-  `crates/engram-domain/src/memory.rs`).
+  `core/domain/src/memory.rs`).
 - Technical: scope matching already exists in the in-memory adapter and should
   be reused for mutation boundaries (source:
-  `crates/engram-store-memory/src/scope.rs`).
+  `adapters/memory/inmem/src/scope.rs`).
 - Process: concrete consolidation algorithms remain outside `engram-core`
   (source: `docs/implementation-roadmap.md`).

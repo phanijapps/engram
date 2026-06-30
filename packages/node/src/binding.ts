@@ -46,7 +46,7 @@ function loadCompiledBinding(): NativeBinding {
   }
 
   throw new Error(
-    "Unable to load @engram/node native addon. Build crates/engram-node and place the .node artifact in the package root."
+    "Unable to load @engram/node native addon. Build bindings/node and place the .node artifact in the package root."
   );
 }
 

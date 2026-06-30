@@ -686,9 +686,12 @@ dependencies = [
  "async-trait",
  "chrono",
  "engram-domain",
+ "engram-knowledge",
+ "engram-memory",
+ "engram-retrieval",
+ "engram-runtime",
  "futures",
  "serde_json",
- "thiserror",
 ]
 
 [[package]]
@@ -721,8 +724,8 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "engram-core",
  "engram-domain",
+ "engram-knowledge",
  "engram-store-memory",
  "futures",
  "serde_json",
@@ -730,11 +733,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-knowledge"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "engram-domain",
+ "engram-runtime",
+]
+
+[[package]]
+name = "engram-memory"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "engram-domain",
+ "engram-runtime",
+]
+
+[[package]]
 name = "engram-node"
 version = "0.1.0"
 dependencies = [
- "engram-core",
  "engram-domain",
+ "engram-memory",
  "engram-store-sql",
  "futures",
  "napi",
@@ -748,9 +769,30 @@ dependencies = [
 name = "engram-retrieval"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
- "engram-core",
  "engram-domain",
+ "engram-runtime",
+]
+
+[[package]]
+name = "engram-runtime"
+version = "0.1.0"
+dependencies = [
+ "engram-domain",
+ "thiserror",
+]
+
+[[package]]
+name = "engram-store-knowledge-memory"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-domain",
+ "engram-knowledge",
+ "engram-runtime",
+ "futures",
 ]
 
 [[package]]
@@ -762,7 +804,10 @@ dependencies = [
  "engram-core",
  "engram-domain",
  "engram-eval",
+ "engram-knowledge",
+ "engram-memory",
  "engram-retrieval",
+ "engram-runtime",
  "futures",
  "serde_json",
 ]
@@ -776,6 +821,7 @@ dependencies = [
  "engram-core",
  "engram-domain",
  "engram-eval",
+ "engram-memory",
  "futures",
  "rusqlite",
  "serde_json",
@@ -787,8 +833,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "engram-core",
  "engram-domain",
+ "engram-retrieval",
+ "engram-runtime",
  "fastembed",
  "futures",
  "rusqlite",

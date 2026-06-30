@@ -63,9 +63,9 @@ record shapes, and distinct contradiction review records.
 ## Assumptions
 
 - Technical: domain belief types already model beliefs, sources, contradictions,
-  targets, and resolutions (source: `crates/engram-domain/src/belief.rs`).
+  targets, and resolutions (source: `core/domain/src/belief.rs`).
 - Technical: `engram-core` already exposes `BeliefRepository` for belief and
-  contradiction writes (source: `crates/engram-core/src/lib.rs`).
+  contradiction writes (source: `core/orchestration/src/lib.rs`).
 - Research: source attribution and confidence calibration are central to
   derived beliefs (source: `docs/research/memory-knowledge-architecture.md`).
 - Process: derived behavior stays outside `engram-domain` and storage stays

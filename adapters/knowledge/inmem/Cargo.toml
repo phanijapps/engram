@@ -1,0 +1,16 @@
+[package]
+name = "engram-store-knowledge-memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+engram-domain = { path = "../../../core/domain" }
+engram-knowledge = { path = "../../../core/knowledge" }
+engram-runtime = { path = "../../../core/runtime" }
+
+[dev-dependencies]
+chrono.workspace = true
+futures.workspace = true

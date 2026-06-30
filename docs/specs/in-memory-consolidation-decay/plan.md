@@ -48,9 +48,9 @@ contract is introduced.
 
 ### Component / module decomposition
 
-- `crates/engram-store-memory/src/consolidation.rs` owns decay execution,
+- `adapters/memory/inmem/src/consolidation.rs` owns decay execution,
   policy-expiry checks, event construction, and audit counters.
-- `crates/engram-store-memory/tests/consolidation_decay.rs` exercises the real
+- `adapters/memory/inmem/tests/consolidation_decay.rs` exercises the real
   gated mutating consolidation service.
 
 ### Failure, edge cases & resilience

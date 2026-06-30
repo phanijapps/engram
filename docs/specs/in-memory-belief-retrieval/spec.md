@@ -73,12 +73,12 @@ returned only when their scope, lifecycle, policy, and filters allow retrieval.
 ## Assumptions
 
 - Technical: `RetrievalTargetType::Belief` already exists in the accepted
-  retrieval contract (source: `crates/engram-domain/src/retrieval.rs`).
+  retrieval contract (source: `core/domain/src/retrieval.rs`).
 - Technical: belief records already carry scope, lifecycle status, policy,
   provenance, confidence, and timestamps (source:
-  `crates/engram-domain/src/belief.rs`).
+  `core/domain/src/belief.rs`).
 - Technical: the in-memory retrieval path already fuses memory and knowledge
   candidates through `RetrievalFusion` before final truncation (source:
-  `crates/engram-store-memory/src/retrieval.rs`).
+  `adapters/memory/inmem/src/retrieval.rs`).
 - Process: belief results must remain distinct from source truth (source:
   `docs/domain-data-model.md`).

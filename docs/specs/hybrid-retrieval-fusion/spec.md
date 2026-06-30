@@ -58,8 +58,8 @@ explanations without baking any index or embedding provider into core crates.
 ## Assumptions
 
 - Technical: core already defines `RetrievalFusion` as the fusion boundary
-  (source: `crates/engram-core/src/lib.rs`).
+  (source: `core/orchestration/src/lib.rs`).
 - Technical: `FusionTrace` already carries strategy, scores, source rank, and
-  duplicate IDs (source: `crates/engram-domain/src/retrieval.rs`).
+  duplicate IDs (source: `core/domain/src/retrieval.rs`).
 - Process: public contracts do not change for this fusion slice (source:
   ADR-0004).

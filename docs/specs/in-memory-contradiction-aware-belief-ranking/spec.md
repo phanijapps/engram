@@ -65,10 +65,10 @@ score and explain why the rank changed.
 ## Assumptions
 
 - Technical: beliefs and contradictions are stored separately in in-memory state
-  (source: `crates/engram-store-memory/src/state.rs`).
+  (source: `adapters/memory/inmem/src/state.rs`).
 - Technical: belief retrieval already creates `RetrievalTargetType::Belief`
   candidates through shared fusion (source:
-  `crates/engram-store-memory/src/belief_retrieval.rs`).
+  `adapters/memory/inmem/src/belief_retrieval.rs`).
 - Technical: explicit contradiction resolution now updates review records
   without target mutation (source:
   `docs/specs/in-memory-contradiction-resolution/spec.md`).

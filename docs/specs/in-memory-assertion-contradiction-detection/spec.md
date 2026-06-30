@@ -72,11 +72,11 @@ task creates reviewable contradiction records and records
 ## Assumptions
 
 - Technical: memory assertions carry subject, predicate, object, confidence, and
-  validity fields (source: `crates/engram-domain/src/memory.rs`).
+  validity fields (source: `core/domain/src/memory.rs`).
 - Technical: contradiction records already model reviewable targets and open
-  status (source: `crates/engram-domain/src/belief.rs`).
+  status (source: `core/domain/src/belief.rs`).
 - Technical: hybrid consolidation is the existing strategy that groups
   compaction, belief, hierarchy, and evaluation tasks (source:
-  `crates/engram-core/src/consolidation/planner.rs`).
+  `core/orchestration/src/consolidation/planner.rs`).
 - Process: contradictions must not silently mutate source truth (source:
   `docs/implementation-roadmap.md`).

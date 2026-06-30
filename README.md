@@ -37,6 +37,8 @@ Current validated surface includes:
 - accepted v1 JSON schemas and TypeScript contract generation
 - reusable Rust evaluation fixtures and report summaries
 - in-memory and SQLite-backed memory services
+- separate in-memory knowledge graph and ontology test adapter
+- storage-neutral retrieval composition and weighted fusion
 - file-backed SQLite local smoke support
 - sqlite-vec candidate retrieval with opt-in FastEmbed BGE-small test wiring
 - source-grounded document/code ingestion
@@ -64,9 +66,9 @@ Before publishing crates, npm packages, release tags, or benchmark claims, use
                                              |
                                              v
         +----------------------------------------------------------------+
-        |                         Rust core ports                         |
-        | engram-core: MemoryService, repositories, retrieval, policy,   |
-        | evaluation, consolidation, ingestion, hierarchy, belief ports   |
+        |                    Rust behavior boundaries                     |
+        | runtime: errors/policy deps · memory: memory ports · knowledge: |
+        | graph/ontology/source ports · retrieval: composition/fusion     |
         +-------------------------------+--------------------------------+
                                         |
                                         v
@@ -80,31 +82,36 @@ Before publishing crates, npm packages, release tags, or benchmark claims, use
           |                             |                             |
           v                             v                             v
 +--------------------+        +--------------------+        +--------------------+
-| Memory adapters    |        | Knowledge ingest   |        | Retrieval adapters |
-| in-memory, SQLite  |        | docs, files, code  |        | sqlite-vec, fusion |
+| Memory adapters    |        | Knowledge adapters |        | Retrieval adapters |
+| quick memory, SQL  |        | ingest, graph test |        | sqlite-vec, fusion |
 +---------+----------+        +---------+----------+        +---------+----------+
           |                             |                             |
           v                             v                             v
 +--------------------+        +--------------------+        +--------------------+
-| Local state / SQL  |        | Source documents   |        | Vector candidates  |
-| events/idempotency |        | chunks/provenance  |        | rehydrated targets |
+| Local state / SQL  |        | Sources/chunks     |        | Vector candidates  |
+| events/idempotency |        | graph/ontology     |        | rehydrated targets |
 +--------------------+        +--------------------+        +--------------------+
 ```
 
-The rule of thumb: `engram-core` owns ports and deterministic behavior,
-`engram-domain` owns portable concepts, concrete infrastructure lives behind
-adapters, and TypeScript wraps generated contracts instead of redefining them.
+The rule of thumb: `engram-domain` owns portable concepts, `engram-memory`
+owns memory ports, `engram-knowledge` owns knowledge graph, ontology, source,
+and ingestion ports, `engram-retrieval` owns candidate composition and fusion,
+`engram-core` keeps higher-level orchestration and compatibility re-exports,
+concrete infrastructure lives behind adapters, and TypeScript wraps generated
+contracts instead of redefining them.
 
 ## Repository Layout
 
 ```text
 contracts/        Accepted JSON schemas, examples, and contract notes.
-crates/           Rust workspace: domain, core, memory, SQL, vector, ingest,
-                  evaluation, retrieval, and node bridge crates.
+core/             Storage-neutral Rust crates: domain, runtime, memory,
+                  knowledge, retrieval, orchestration, and evaluation.
+adapters/         Replaceable Rust infrastructure: ingest, memory stores,
+                  knowledge stores, and retrieval indexes.
+bindings/         Native language bridges, including the Node N-API crate.
 docs/             Architecture docs, ADRs, RFCs, research, specs, and roadmap.
 examples/         Scenario fixtures and usage sketches.
 packages/         TypeScript contracts, client, node package, adapters, eval.
-specs/            V1 acceptance specs and legacy implementation phase specs.
 .codex/           Local agent skills, review agents, and validation hooks.
 ```
 

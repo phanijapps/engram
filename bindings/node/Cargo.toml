@@ -1,0 +1,22 @@
+[package]
+name = "engram-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+engram-domain = { path = "../../core/domain" }
+engram-memory = { path = "../../core/memory" }
+engram-store-sql = { path = "../../adapters/memory/sqlite" }
+futures.workspace = true
+napi.workspace = true
+napi-derive.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[build-dependencies]
+napi-build = "2.3.2"

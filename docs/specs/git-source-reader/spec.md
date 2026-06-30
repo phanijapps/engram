@@ -63,6 +63,6 @@ contracts.
 - Technical: local `git` CLI is available for tests (source: `git --version`
   returned `git version 2.51.0`).
 - Technical: Git source reading belongs behind `SourceReader` (source:
-  `crates/engram-core/src/lib.rs`).
+  `core/orchestration/src/lib.rs`).
 - Process: public contracts do not change for this adapter slice (source:
   ADR-0004).

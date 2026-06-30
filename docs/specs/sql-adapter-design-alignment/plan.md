@@ -8,7 +8,7 @@ Do not change SQL implementation.
 ## Steps
 
 - [x] Add `docs/sql-adapter-design.md`.
-- [x] Update `crates/engram-store-sql/README.md`.
+- [x] Update `adapters/memory/sqlite/README.md`.
 - [x] Update implementation roadmap/changelog/phase status.
 - [x] Run documentation and diff validation.
 

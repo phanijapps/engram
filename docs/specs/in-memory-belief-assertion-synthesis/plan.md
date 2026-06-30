@@ -49,11 +49,11 @@ contract is introduced.
 
 ### Component / module decomposition
 
-- `crates/engram-store-memory/src/consolidation/belief_synthesis.rs` owns
+- `adapters/memory/inmem/src/consolidation/belief_synthesis.rs` owns
   assertion-to-belief mapping and event creation.
-- `crates/engram-store-memory/src/consolidation/mod.rs` only routes the planned
+- `adapters/memory/inmem/src/consolidation/mod.rs` only routes the planned
   task kind to the focused module.
-- Tests live in `crates/engram-store-memory/tests/consolidation_belief_synthesis.rs`.
+- Tests live in `adapters/memory/inmem/tests/consolidation_belief_synthesis.rs`.
 
 ### Failure, edge cases & resilience
 

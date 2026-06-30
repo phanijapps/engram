@@ -50,10 +50,10 @@ contract is introduced.
 
 ### Component / module decomposition
 
-- `crates/engram-store-memory/src/consolidation.rs` owns compaction execution,
+- `adapters/memory/inmem/src/consolidation.rs` owns compaction execution,
   duplicate grouping, event construction, and audit counters.
-- `crates/engram-store-memory/src/lib.rs` re-exports only the executor type.
-- Tests live in `crates/engram-store-memory/tests/consolidation_compaction.rs`
+- `adapters/memory/inmem/src/lib.rs` re-exports only the executor type.
+- Tests live in `adapters/memory/inmem/tests/consolidation_compaction.rs`
   and use `GatedConsolidationService` to exercise the real mutating envelope.
 
 ### Failure, edge cases & resilience

@@ -21,17 +21,24 @@ contracts/                 Portable JSON schemas and generated contract outputs.
 docs/                      Architecture, ADRs, RFCs, research, and domain model.
 examples/                  Scenario fixtures and usage sketches.
 
-crates/                    Rust workspace.
-  engram-domain/        Domain types, invariants, serde, version markers.
-  engram-core/          Engine orchestration, ports, policy, retrieval.
-  engram-eval/          Deterministic fixtures and regression harness.
-  engram-ingest/        Document/code source ingestion and chunking ports.
-  engram-hierarchy/     Hierarchy construction, paths, expansion logic.
-  engram-belief/        Belief derivation, contradiction, consolidation.
-  engram-store-memory/  In-memory adapter for tests and first slices.
-  engram-store-sql/     SQL persistence adapter.
-  engram-store-vector/  Vector index adapter.
-  engram-node/          N-API bridge for TypeScript.
+core/                      Storage-neutral Rust crates.
+  domain/                  Domain types, invariants, serde, version markers.
+  runtime/                 Shared errors, result type, clocks, ids, policy gates.
+  memory/                  Memory service and repository ports.
+  knowledge/               Knowledge, graph, ontology, source, ingestion ports.
+  retrieval/               Retrieval composition and fusion ports.
+  orchestration/           Orchestration facade and compatibility re-exports.
+  eval/                    Deterministic fixtures and regression harness.
+
+adapters/                  Replaceable infrastructure crates.
+  ingest/                  Filesystem/Git ingestion adapter until split.
+  memory/inmem/            In-memory memory adapter for quick tests only.
+  memory/sqlite/           SQLite memory persistence adapter.
+  knowledge/inmem/         In-memory knowledge/graph/ontology test adapter.
+  retrieval/sqlite-vec/    sqlite-vec retrieval index adapter.
+
+bindings/                  Native language bridges.
+  node/                    N-API bridge for TypeScript.
 
 packages/                  TypeScript workspace.
   contracts/               Generated TypeScript types and schemas.
@@ -50,8 +57,22 @@ the stack ADR is accepted.
   accepted as the generated-contract source.
 - `engram-domain` must not depend on SQL, vector stores, embedding providers,
   async runtimes, Node, N-API, or TypeScript tooling.
-- `engram-core` owns deterministic memory behavior and depends on ports, not
-  concrete infrastructure adapters.
+- `engram-runtime` owns shared runtime primitives only: portable errors, result
+  type, clocks, id generation, scope matching, and policy authorizer traits.
+- `engram-memory` owns memory service and repository ports. It must not own
+  knowledge graph, ontology, source ingestion, vector, or document parsing
+  contracts.
+- `engram-knowledge` owns source-grounded knowledge, graph, ontology, source
+  reader, chunker, and ingestion ports. It must not own memory write, lifecycle
+  event, or forget service contracts.
+- `engram-core` is an orchestration facade and compatibility re-export layer
+  above split behavior crates. It must not become the canonical owner of memory
+  or knowledge ports again.
+- `engram-store-memory` is a quick memory fixture. Do not add graph, ontology,
+  embedding provider, durable document, or production cache behavior to it.
+- `engram-store-knowledge-memory` is a quick knowledge, graph, and ontology
+  fixture. It must not own memory writes, memory lifecycle events, or memory
+  forget semantics.
 - Store, vector, embedding, model, and gateway integrations belong in adapter
   crates or TypeScript packages.
 - TypeScript must not redefine domain truth. It may wrap, validate, compose, and
@@ -113,7 +134,7 @@ the stack ADR is accepted.
   generated public types.
 - Classify public contract changes as compatible or breaking.
 - Put accepted machine-readable contract artifacts under `contracts/v1/`.
-- Put spec-driven acceptance criteria under `specs/v1/`.
+- Put spec-driven acceptance criteria under `docs/specs/`.
 - Do not treat `contracts/schemas/` as the source of truth; those files are
   legacy pointers.
 

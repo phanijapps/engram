@@ -14,7 +14,7 @@ Read these files before changing contract-affecting behavior:
 - `docs/domain-data-model.md`
 - `contracts/v1/**/*.md`
 - `contracts/v1/**/*.json`
-- `specs/v1/*.md`
+- `docs/specs/*.md`
 - `docs/architecture.md`
 - `docs/adr/*.md` when the change touches architecture policy
 - `docs/rfcs/*.md` when the change touches scope or extension points

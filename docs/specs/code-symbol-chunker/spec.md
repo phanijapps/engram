@@ -60,8 +60,8 @@ parser dependencies or changing public domain contracts.
 
 - Technical: code-aware chunks are represented by existing
   `KnowledgeChunkKind::CodeSymbol` and `SourceLocation.anchor` fields (source:
-  `crates/engram-domain/src/knowledge.rs`).
+  `core/domain/src/knowledge.rs`).
 - Technical: ingestion owns chunk candidates while IDs/provenance are attached
-  by `KnowledgeIngestor` (source: `crates/engram-ingest/src/ingestor.rs`).
+  by `KnowledgeIngestor` (source: `adapters/ingest/src/ingestor.rs`).
 - Process: public contracts do not change for this chunker slice (source:
   ADR-0004).

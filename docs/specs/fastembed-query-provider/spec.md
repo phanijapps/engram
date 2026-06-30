@@ -68,11 +68,11 @@ downloads, or embeddings part of default Engram behavior.
 ## Assumptions
 
 - Technical: `VectorQueryProvider` is the existing query-vector seam (source:
-  `crates/engram-store-vector/src/retrieval.rs`).
+  `adapters/retrieval/sqlite-vec/src/retrieval.rs`).
 - Technical: FastEmbed BGE-small smoke coverage already exists as an ignored
   feature-gated test (source:
-  `crates/engram-store-vector/tests/fastembed_bge_small.rs`).
+  `adapters/retrieval/sqlite-vec/tests/fastembed_bge_small.rs`).
 - Technical: FastEmbed is currently optional in the vector crate only (source:
-  `crates/engram-store-vector/Cargo.toml`).
+  `adapters/retrieval/sqlite-vec/Cargo.toml`).
 - Process: vector stores and embedding providers stay outside core/domain
   contracts (source: `AGENTS.md`).

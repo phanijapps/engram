@@ -3,42 +3,42 @@
     "phase_id": "PHASE00",
     "status": "DONE",
     "description": "Repository contract baseline",
-    "spec_file": "specs/implementation/phase-00-contract-baseline.md",
+    "spec_file": "docs/implementation/phase-00-contract-baseline.md",
     "plan_file": "docs/implementation/phase-00-contract-baseline.md"
   },
   {
     "phase_id": "PHASE01",
     "status": "DONE",
     "description": "Core crate boundaries",
-    "spec_file": "specs/implementation/phase-01-core-boundaries.md",
+    "spec_file": "docs/implementation/phase-01-core-boundaries.md",
     "plan_file": "docs/implementation/phase-01-core-boundaries.md"
   },
   {
     "phase_id": "PHASE02",
     "status": "DONE",
     "description": "Write memory completion",
-    "spec_file": "specs/implementation/phase-02-write-memory.md",
+    "spec_file": "docs/implementation/phase-02-write-memory.md",
     "plan_file": "docs/implementation/phase-02-write-memory.md"
   },
   {
     "phase_id": "PHASE03",
     "status": "DONE",
     "description": "Retrieve context slice",
-    "spec_file": "specs/implementation/phase-03-retrieve-context.md",
+    "spec_file": "docs/implementation/phase-03-retrieve-context.md",
     "plan_file": "docs/implementation/phase-03-retrieve-context.md"
   },
   {
     "phase_id": "PHASE04",
     "status": "DONE",
     "description": "Forget, redact, archive, and tombstone",
-    "spec_file": "specs/implementation/phase-04-forget-lifecycle.md",
+    "spec_file": "docs/implementation/phase-04-forget-lifecycle.md",
     "plan_file": "docs/implementation/phase-04-forget-lifecycle.md"
   },
   {
     "phase_id": "PHASE05",
     "status": "DONE",
     "description": "Evaluation harness",
-    "spec_file": "specs/implementation/phase-05-evaluation-harness.md",
+    "spec_file": "docs/implementation/phase-05-evaluation-harness.md",
     "plan_file": "docs/implementation/phase-05-evaluation-harness.md"
   },
   {
@@ -355,5 +355,12 @@
     "description": "Roadmap validation sweep",
     "spec_file": "docs/specs/roadmap-validation-sweep/spec.md",
     "plan_file": "docs/specs/roadmap-validation-sweep/plan.md"
+  },
+  {
+    "phase_id": "PHASE51",
+    "status": "DONE",
+    "description": "Memory and knowledge crate boundaries",
+    "spec_file": "docs/specs/memory-knowledge-boundaries/spec.md",
+    "plan_file": "docs/specs/memory-knowledge-boundaries/plan.md"
   }
 ]

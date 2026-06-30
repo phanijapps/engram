@@ -18,16 +18,41 @@ should derive from that model.
 
 ## Core Modules
 
-### Memory Core
+### Domain Contract
 
-Owns the domain model and use-case interfaces.
+Owns portable data shapes and storage-neutral semantics.
+
+- `MemoryRecord` and `MemoryEvent`: agent state and lifecycle.
+- `KnowledgeSource`, `SourceDocument`, and `KnowledgeChunk`: source-grounded
+  corpus content.
+- `KnowledgeGraph`, `KnowledgeEntity`, and `KnowledgeRelationship`: typed graph
+  content.
+- `Ontology`, `OntologyClass`, `OntologyProperty`, and `OntologyAxiom`: graph
+  governance and validation vocabulary.
+- `Provenance` and `Policy`: source, actor, confidence, permission, retention,
+  and sensitivity controls.
+
+### Memory Ports
+
+Own memory service and repository interfaces.
 
 - `MemoryRecord`: canonical persisted memory unit.
 - `MemoryEvent`: append-only event describing creation, update, access, or
   deletion.
-- `Provenance`: source, timestamp, actor, confidence, and derivation chain.
-- `Policy`: scope, permission, retention, and sensitivity controls.
-- `MemoryPort`: write, retrieve, update, consolidate, and forget operations.
+- `MemoryService`: write, retrieve, and forget operations.
+- `MemoryRepository`: memory record persistence.
+- `MemoryEventRepository`: lifecycle event reads.
+
+### Knowledge Ports
+
+Own source-grounded knowledge, graph, ontology, and ingestion interfaces.
+
+- `KnowledgeRepository`: sources, documents, chunks, entities, and
+  relationships.
+- `KnowledgeGraphRepository`: named graph identity and graph traversal.
+- `OntologyRepository`: ontology classes, properties, axioms, and validation.
+- `SourceReader`, `Chunker`, and `IngestionService`: source extraction and
+  normalization.
 
 ### Ingestion
 
@@ -46,6 +71,8 @@ Returns context for a task using multiple retrieval strategies.
 - Keyword and structured metadata filters.
 - Graph traversal for related entities and episodes.
 - Recency, confidence, and policy-aware ranking.
+- Shared fan-in, fusion, final context limits, omissions, and degraded-source
+  reporting through the retrieval boundary.
 
 ### Consolidation
 
@@ -60,10 +87,14 @@ Turns traces into durable knowledge.
 
 Storage should be swappable behind ports.
 
-- Event log for auditability and replay.
-- Document store for canonical records.
+- Memory stores for records, lifecycle events, idempotency, and replay.
+- Knowledge stores for documents, chunks, entities, relationships, and
+  ontologies.
 - Vector index for semantic recall.
-- Graph index for relationships and entity memory.
+- Graph index for relationships, ontology-backed graph traversal, and GraphRAG.
+- Process-local in-memory adapters are conformance fixtures only. Memory,
+  knowledge graph, and ontology fixtures stay in separate crates so production
+  backends can diverge by technology.
 
 ### Knowledge Source Extension
 
@@ -85,20 +116,48 @@ into core.
 - CLI connector.
 - Evaluation harness connector.
 
-## Initial Package Boundaries
+## Initial Crate Boundaries
 
 ```text
-packages/core
-  Domain types, ports, policies, ranking interfaces.
+core/domain
+  Portable domain types and serialization contracts.
 
-packages/stores
-  Storage adapters and migrations.
+core/runtime
+  Shared errors, result type, clocks, id generation, scope matching, policy gates.
 
-packages/connectors
-  Integrations with agent frameworks and apps.
+core/memory
+  Memory service, memory repository, lifecycle event repository.
 
-packages/evaluations
-  Golden datasets, retrieval tests, safety checks, and metrics.
+core/knowledge
+  Knowledge repositories, graph repositories, ontology repositories, source
+  readers, chunkers, ingestion.
+
+core/orchestration
+  Orchestration facade, consolidation, hierarchy, belief, evaluation, and
+  compatibility re-exports.
+
+core/retrieval
+  Storage-neutral retrieval traits, context composition, and fusion algorithms.
+
+adapters/memory/inmem
+  Quick in-memory memory fixture for tests and examples only.
+
+adapters/knowledge/inmem
+  Quick in-memory knowledge, graph, and ontology fixture for tests and examples.
+
+adapters/memory/sqlite
+  SQLite-backed memory persistence adapter.
+
+adapters/retrieval/sqlite-vec
+  sqlite-vec backed retrieval index adapter.
+
+adapters/ingest
+  Current mixed filesystem/Git source reader and deterministic ingestion crate;
+  deterministic ingestion orchestration can move to core after source readers
+  split into dedicated adapters.
+
+bindings/node
+  N-API bridge exposing Rust behavior to TypeScript.
 ```
 
 ## First Vertical Slice

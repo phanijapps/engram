@@ -20,7 +20,7 @@ Apply this loop to every feature slice.
 1. Update or add the implementation spec under `docs/specs/<feature>/`.
 2. Confirm whether the public contract changes.
 3. If the public contract changes, update `docs/domain-data-model.md`,
-   `contracts/v1/`, `specs/v1/`, examples, invalid examples, and generated
+   `contracts/v1/`, `docs/specs/`, examples, invalid examples, and generated
    TypeScript.
 4. Add conformance tests that prove Rust serialization still matches the
    accepted schema.
@@ -120,7 +120,8 @@ Crates:
 
 Implementation work:
 
-- Convert `specs/v1/write-memory.md` acceptance checks into executable fixtures.
+- Convert accepted memory behavior specs under `docs/specs/` into executable
+  fixtures.
 - Validate required fields and contract-level forbidden behavior.
 - Enforce policy before durable mutation.
 - Preserve provenance, policy, content, links, timestamps, and metadata.

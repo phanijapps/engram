@@ -7,7 +7,7 @@ adding dependencies or performance thresholds.
 
 ## Steps
 
-- [x] Add `crates/engram-store-memory/examples/benchmark_local.rs`.
+- [x] Add `adapters/memory/inmem/examples/benchmark_local.rs`.
 - [x] Add `docs/benchmarks.md` with run commands and claim boundaries.
 - [x] Update roadmap/changelog/phase status.
 - [x] Run example, compile, docs, and diff validation.

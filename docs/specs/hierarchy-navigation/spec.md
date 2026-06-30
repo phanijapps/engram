@@ -66,9 +66,9 @@ auditable provenance preservation, and parent-chain traversal.
 
 - Technical: domain hierarchy types already model nodes, memberships,
   relations, build configs, and paths (source:
-  `crates/engram-domain/src/hierarchy.rs`).
+  `core/domain/src/hierarchy.rs`).
 - Technical: `engram-core` already exposes `HierarchyRepository` with node,
-  relation, and path operations (source: `crates/engram-core/src/lib.rs`).
+  relation, and path operations (source: `core/orchestration/src/lib.rs`).
 - Research: hierarchy should separate construction from navigation and support
   temporal plus hierarchical views (source:
   `docs/research/hierarchical-taxonomy-research.md`).

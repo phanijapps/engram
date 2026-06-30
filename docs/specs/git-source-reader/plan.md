@@ -63,9 +63,9 @@ oversized, and non-UTF-8 reads fail before content is returned.
 - Read document returns UTF-8 text.
 
 **Approach:**
-- Add `git.rs` in `crates/engram-ingest/src`.
+- Add `git.rs` in `adapters/ingest/src`.
 - Reuse filesystem helper functions for path and file behavior.
-- Add integration tests under `crates/engram-ingest/tests`.
+- Add integration tests under `adapters/ingest/tests`.
 
 **Done when:** Git reader tests and full repository gates pass.
 

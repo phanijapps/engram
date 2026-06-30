@@ -1,6 +1,6 @@
 # v1 Contract Review Checklist
 
-Use this checklist for every change to `contracts/v1/`, `specs/v1/`, or
+Use this checklist for every change to `contracts/v1/`, `docs/specs/`, or
 accepted v1 sections of `docs/domain-data-model.md`.
 
 ## Wire Compatibility

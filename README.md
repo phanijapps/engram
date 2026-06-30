@@ -38,6 +38,7 @@ Current validated surface includes:
 - reusable Rust evaluation fixtures and report summaries
 - in-memory and SQLite-backed memory services
 - separate in-memory knowledge graph and ontology test adapter
+- storage-neutral retrieval composition and weighted fusion
 - file-backed SQLite local smoke support
 - sqlite-vec candidate retrieval with opt-in FastEmbed BGE-small test wiring
 - source-grounded document/code ingestion
@@ -67,7 +68,7 @@ Before publishing crates, npm packages, release tags, or benchmark claims, use
         +----------------------------------------------------------------+
         |                    Rust behavior boundaries                     |
         | runtime: errors/policy deps · memory: memory ports · knowledge: |
-        | graph/ontology/source ports · core: orchestration/retrieval     |
+        | graph/ontology/source ports · retrieval: composition/fusion     |
         +-------------------------------+--------------------------------+
                                         |
                                         v
@@ -94,9 +95,10 @@ Before publishing crates, npm packages, release tags, or benchmark claims, use
 
 The rule of thumb: `engram-domain` owns portable concepts, `engram-memory`
 owns memory ports, `engram-knowledge` owns knowledge graph, ontology, source,
-and ingestion ports, `engram-core` composes behavior, concrete infrastructure
-lives behind adapters, and TypeScript wraps generated contracts instead of
-redefining them.
+and ingestion ports, `engram-retrieval` owns candidate composition and fusion,
+`engram-core` keeps higher-level orchestration and compatibility re-exports,
+concrete infrastructure lives behind adapters, and TypeScript wraps generated
+contracts instead of redefining them.
 
 ## Repository Layout
 

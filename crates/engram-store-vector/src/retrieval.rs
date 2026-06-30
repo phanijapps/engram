@@ -7,11 +7,12 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use engram_core::{CoreError, CoreResult, RetrievalIndex};
 use engram_domain::{
     FusionStrategy, FusionTrace, Metadata, Policy, Provenance, RerankStrategy,
     RetrievalExplanation, RetrievalRequest, RetrievalResult, RetrievalScore, RetrievalTargetType,
 };
+use engram_retrieval::RetrievalIndex;
+use engram_runtime::{CoreError, CoreResult};
 
 use crate::{SqliteVectorIndex, VectorSearchResult};
 

@@ -71,6 +71,8 @@ Returns context for a task using multiple retrieval strategies.
 - Keyword and structured metadata filters.
 - Graph traversal for related entities and episodes.
 - Recency, confidence, and policy-aware ranking.
+- Shared fan-in, fusion, final context limits, omissions, and degraded-source
+  reporting through the retrieval boundary.
 
 ### Consolidation
 
@@ -131,7 +133,11 @@ crates/engram-knowledge
   readers, chunkers, ingestion.
 
 crates/engram-core
-  Orchestration facade, retrieval, consolidation, hierarchy, belief, evaluation.
+  Orchestration facade, consolidation, hierarchy, belief, evaluation, and
+  compatibility re-exports.
+
+crates/engram-retrieval
+  Storage-neutral retrieval traits, context composition, and fusion algorithms.
 
 crates/engram-store-memory
   Quick in-memory memory fixture for tests and examples only.

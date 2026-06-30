@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use engram_core::{CoreError, CoreResult};
+use engram_runtime::{CoreError, CoreResult};
 
 /// Source weighting configuration for weighted-sum retrieval fusion.
 #[derive(Debug, Clone, PartialEq)]

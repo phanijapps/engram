@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
-use engram_core::{Clock, CoreError, CoreResult, MemoryService, PolicyAuthorizer, RetrievalIndex};
 use engram_domain::*;
+use engram_memory::{Clock, CoreError, CoreResult, MemoryService, PolicyAuthorizer};
+use engram_retrieval::RetrievalIndex;
 use engram_store_memory::{InMemoryMemoryService, SequentialIdGenerator};
 use futures::executor::block_on;
 

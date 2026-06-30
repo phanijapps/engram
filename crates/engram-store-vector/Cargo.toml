@@ -11,8 +11,9 @@ fastembed-tests = ["fastembed-provider"]
 
 [dependencies]
 async-trait.workspace = true
-engram-core = { path = "../engram-core" }
 engram-domain = { path = "../engram-domain" }
+engram-retrieval = { path = "../engram-retrieval" }
+engram-runtime = { path = "../engram-runtime" }
 rusqlite.workspace = true
 sqlite-vec.workspace = true
 

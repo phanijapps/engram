@@ -1,7 +1,7 @@
 # Plan: Retrieval Composition Boundary
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting
+- **Status:** Done
 
 > **Plan contract:** this is the implementation strategy. Unlike the spec, this
 > document is allowed to change as you learn. When it changes substantially
@@ -273,3 +273,5 @@ portable contract migration is part of this rollout.
 ## Changelog
 
 - 2026-06-30: initial plan.
+- 2026-06-30: moved retrieval traits and context composition into
+  `engram-retrieval`, migrated adapter imports, and closed the slice.

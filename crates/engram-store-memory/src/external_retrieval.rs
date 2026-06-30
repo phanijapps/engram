@@ -6,10 +6,10 @@
 
 use std::sync::Arc;
 
-use engram_core::RetrievalIndex;
 use engram_domain::{
     RetrievalRequest, RetrievalResult, RetrievalSourceFailure, SourceFailureSeverity,
 };
+use engram_retrieval::RetrievalIndex;
 
 /// Collects candidates from injected retrieval indexes without failing local retrieval.
 ///

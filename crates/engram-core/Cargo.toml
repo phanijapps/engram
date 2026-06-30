@@ -10,6 +10,7 @@ async-trait.workspace = true
 engram-domain = { path = "../engram-domain" }
 engram-knowledge = { path = "../engram-knowledge" }
 engram-memory = { path = "../engram-memory" }
+engram-retrieval = { path = "../engram-retrieval" }
 engram-runtime = { path = "../engram-runtime" }
 serde_json.workspace = true
 

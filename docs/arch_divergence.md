@@ -17,14 +17,14 @@ working engineering ledger, not a replacement for ADRs or specs.
 
 | Area | Target | Current | Divergence | Closing condition | Status |
 |------|--------|---------|------------|-------------------|--------|
-| Memory/knowledge separation | Memory storage and knowledge storage are separate replaceable concerns. Retrieval composes them without merging persistence. | `engram-memory` and `engram-knowledge` own separate ports. `engram-store-sql` is memory-only. `engram-store-knowledge-memory` owns graph/ontology test storage. `engram-store-memory` keeps source/document/chunk records only for quick retrieval fixtures. | The memory fixture still carries source chunk state for retrieval smoke tests, so full production retrieval composition is not yet isolated in a dedicated orchestrator. Compatibility re-exports remain in `engram-core`. | Retrieval composition moves out of the memory fixture; durable knowledge graph/document adapters exist; compatibility imports are no longer needed by production crates. | `85%` |
-| Rust crate modularity | Small crates own one reason to change: domain, runtime primitives, memory ports, knowledge ports, retrieval, graph/ontology adapters, SQL memory adapters, vector adapters. | Split crates exist for domain, runtime, memory, knowledge, core, retrieval, SQL, vector, ingest, eval, node, memory fixture, and knowledge fixture. Production memory and ingestion adapters import canonical boundary crates directly where possible. | `engram-core` still owns belief, hierarchy, consolidation, retrieval, and evaluation ports. `engram-store-memory` is still broad because it proves memory, hierarchy, belief, consolidation, and retrieval fixtures. | Later specs split belief, hierarchy, consolidation, and retrieval ports from `engram-core`; in-memory fixtures can then be split further by behavior. | `80%` |
+| Memory/knowledge separation | Memory storage and knowledge storage are separate replaceable concerns. Retrieval composes them without merging persistence. | `engram-memory` and `engram-knowledge` own separate ports. `engram-store-sql` is memory-only. `engram-store-knowledge-memory` owns graph/ontology test storage. `engram-retrieval` owns shared fan-in, fusion, final limit, omission, and degraded-source composition. | The memory fixture still carries source/document/chunk state for quick retrieval smoke tests, and no durable knowledge document or graph backend exists yet. `engram-core` keeps compatibility re-exports. | Durable knowledge graph/document adapters exist and compatibility imports are no longer needed by downstream crates. | `90%` |
+| Rust crate modularity | Small crates own one reason to change: domain, runtime primitives, memory ports, knowledge ports, retrieval, graph/ontology adapters, SQL memory adapters, vector adapters. | Split crates exist for domain, runtime, memory, knowledge, retrieval, core, SQL, vector, ingest, eval, node, memory fixture, and knowledge fixture. Production memory, ingestion, vector, and retrieval code import canonical boundary crates directly where possible. | `engram-core` still owns belief, hierarchy, consolidation, and evaluation ports. `engram-store-memory` is still broad because it proves memory, hierarchy, belief, consolidation, and retrieval fixtures. | Later specs split belief, hierarchy, consolidation, and evaluation ports from `engram-core`; in-memory fixtures can then be split further by behavior. | `85%` |
 
 ## Current Alignment Snapshot
 
 | v2 Architecture Item | Implementation State | Gap |
 |----------------------|----------------------|-----|
-| Memory and knowledge are separate but composable | Separate memory and knowledge port crates exist; graph/ontology test storage is outside the memory fixture. | Retrieval composition still partly lives in in-memory memory service tests. |
+| Memory and knowledge are separate but composable | Separate memory and knowledge port crates exist; graph/ontology test storage is outside the memory fixture; shared retrieval composition lives in `engram-retrieval`. | Durable knowledge document and graph backends are not implemented yet. |
 | Knowledge graph with ontology semantics | `KnowledgeGraph`, ontology domain records, and repository ports exist. | No durable graph backend yet. |
 | Storage layer supports SQL/vector/graph separation | SQL memory and vector adapters exist; graph ports exist. | No `engram-store-graph` durable adapter yet. |
 | SKOS taxonomy evolution | Taxonomy contract exists. | Evolution pipeline is not implemented as governed workflow. |
@@ -41,8 +41,8 @@ working engineering ledger, not a replacement for ADRs or specs.
    ontology conformance tests until a durable graph/document backend is added.
 4. Keep `engram-store-memory` as a quick memory test fixture and stop adding
    graph/ontology behavior to it.
-5. Move retrieval composition out of `engram-store-memory` when the next
-   orchestration slice is specified.
+5. Add durable knowledge document and graph adapters behind `engram-knowledge`
+   ports when the graph storage spec is accepted.
 6. Track future splits for `engram-belief`, `engram-hierarchy`, and
    `engram-consolidation` before adding production-grade belief or sleep-cycle
    behavior.

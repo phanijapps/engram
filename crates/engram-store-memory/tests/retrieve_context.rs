@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use chrono::{TimeZone, Utc};
-use engram_core::{Clock, CoreError, CoreResult, MemoryService, PolicyAuthorizer, RetrievalFusion};
 use engram_domain::*;
+use engram_memory::{Clock, CoreError, CoreResult, MemoryService, PolicyAuthorizer};
+use engram_retrieval::RetrievalFusion;
 use engram_store_memory::{InMemoryMemoryService, SequentialIdGenerator};
 use futures::executor::block_on;
 

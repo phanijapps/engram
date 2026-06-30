@@ -1,6 +1,6 @@
 # Spec: Retrieval Composition Boundary
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0002, `docs/domain-data-model.md`, `docs/arch_divergence.md`
@@ -63,25 +63,25 @@ payload behavior.
 
 ## Acceptance Criteria
 
-- [ ] `engram-retrieval` owns the canonical retrieval composition traits and
+- [x] `engram-retrieval` owns the canonical retrieval composition traits and
   fusion strategy without depending on concrete memory, knowledge, SQL, vector,
   graph, Node, or TypeScript adapters.
-- [ ] A composed retrieval service accepts memory candidates, knowledge
+- [x] A composed retrieval service accepts memory candidates, knowledge
   candidates, and external index candidates through ports, applies shared fusion
   once, and returns one `ContextPayload`.
-- [ ] Policy and scope checks stay visible before a candidate enters fusion, and
+- [x] Policy and scope checks stay visible before a candidate enters fusion, and
   denied candidates become `OmittedResult` entries instead of hidden leaks.
-- [ ] Failed optional indexes become `RetrievalSourceFailure` entries without
+- [x] Failed optional indexes become `RetrievalSourceFailure` entries without
   suppressing successful local memory or knowledge results.
-- [ ] `engram-store-memory` keeps quick local retrieval fixtures but no longer
+- [x] `engram-store-memory` keeps quick local retrieval fixtures but no longer
   defines the canonical composition traits or owns the production composition
   path.
-- [ ] `engram-store-sql`, `engram-store-vector`, and future graph/knowledge
+- [x] `engram-store-sql`, `engram-store-vector`, and future graph/knowledge
   adapters can participate in retrieval composition without depending on each
   other.
-- [ ] Existing accepted retrieval fixtures and TypeScript contract checks pass
+- [x] Existing accepted retrieval fixtures and TypeScript contract checks pass
   without portable v1 schema changes.
-- [ ] `docs/arch_divergence.md` records the updated alignment score and any
+- [x] `docs/arch_divergence.md` records the updated alignment score and any
   remaining retrieval modularity gaps.
 
 ## Assumptions

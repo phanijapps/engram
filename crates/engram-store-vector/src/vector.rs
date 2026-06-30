@@ -4,7 +4,7 @@
 //! little-endian byte representation. Dimension policy remains in the index
 //! module where the table shape is known.
 
-use engram_core::{CoreError, CoreResult};
+use engram_runtime::{CoreError, CoreResult};
 
 /// Serializes `f32` vectors as little-endian bytes for sqlite-vec.
 ///

@@ -8,6 +8,7 @@
 use std::collections::BTreeSet;
 
 use engram_domain::*;
+use engram_retrieval::{RetrievalCompositionInput, compose_context};
 use engram_runtime::{CoreError, CoreResult};
 
 use crate::{
@@ -34,7 +35,6 @@ pub(crate) async fn retrieve(
     let now = service.clock.now();
     let terms = query_terms(&request.query);
     let include_explanations = request.include_explanations.unwrap_or(false);
-    let max_items = effective_max_items(&request);
     let (records, knowledge_snapshots, belief_snapshots, contradiction_snapshots, hierarchy_nodes) = {
         let state = service.lock_state()?;
         let records = state.memories.values().cloned().collect::<Vec<_>>();
@@ -182,38 +182,14 @@ pub(crate) async fn retrieve(
     candidate_results.append(&mut external_results);
     apply_hierarchy_context(&mut candidate_results, &hierarchy_nodes, &request);
 
-    let mut fusion_request = request.clone();
-    fusion_request.limit = None;
-    let fused_results = service
-        .retrieval_fusion
-        .fuse(&fusion_request, candidate_results)?;
-
-    let mut items = Vec::new();
-    for (index, result) in fused_results.into_iter().enumerate() {
-        if index >= max_items {
-            omitted.push(omitted_fused_result(&result, OmittedReason::BudgetExceeded));
-            continue;
-        }
-        items.push(result);
-    }
-
-    Ok(ContextPayload {
-        items,
-        budget: request.budget,
+    compose_context(RetrievalCompositionInput {
+        request: &request,
+        fusion: service.retrieval_fusion.as_ref(),
+        candidates: candidate_results,
         omitted,
         source_failures,
         created_at: now,
     })
-}
-
-fn effective_max_items(request: &RetrievalRequest) -> usize {
-    let limit = request.limit.unwrap_or(u32::MAX);
-    let budget_limit = request
-        .budget
-        .as_ref()
-        .and_then(|budget| budget.max_items)
-        .unwrap_or(u32::MAX);
-    limit.min(budget_limit) as usize
 }
 
 fn memory_filter_allows(record: &MemoryRecord, filters: Option<&QueryFilter>) -> bool {
@@ -345,14 +321,6 @@ fn omitted_result(record: &MemoryRecord, reason: OmittedReason) -> OmittedResult
     OmittedResult {
         target_type: RetrievalTargetType::Memory,
         target_id: record.id.to_string(),
-        reason,
-    }
-}
-
-fn omitted_fused_result(result: &RetrievalResult, reason: OmittedReason) -> OmittedResult {
-    OmittedResult {
-        target_type: result.target_type.clone(),
-        target_id: result.target_id.clone(),
         reason,
     }
 }

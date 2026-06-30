@@ -6,8 +6,8 @@
 
 use std::sync::Mutex;
 
-use engram_core::{CoreError, CoreResult};
 use engram_domain::RetrievalRequest;
+use engram_runtime::{CoreError, CoreResult};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
 use crate::VectorQueryProvider;

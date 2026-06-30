@@ -1,8 +1,9 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use chrono::{TimeZone, Utc};
-use engram_core::{CoreResult, RetrievalIndex};
 use engram_domain::*;
+use engram_retrieval::RetrievalIndex;
+use engram_runtime::CoreResult;
 use engram_store_vector::{
     SqliteVectorIndex, VectorEntry, VectorQueryProvider, VectorResolvedTarget,
     VectorRetrievalIndex, VectorSearchResult, VectorTargetResolver,

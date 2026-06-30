@@ -5,8 +5,8 @@
 //! embeddings, hybrid ranking, policy decisions, or portable retrieval
 //! contracts.
 
-use engram_core::{CoreError, CoreResult};
 use engram_domain::EmbeddingTargetType;
+use engram_runtime::{CoreError, CoreResult};
 use rusqlite::{Connection, params};
 
 use crate::{

@@ -5,12 +5,12 @@
 
 use std::{cmp::Ordering, collections::BTreeMap};
 
-use engram_core::{CoreResult, RetrievalFusion};
 use engram_domain::{
     FusionStrategy, FusionTrace, RetrievalRequest, RetrievalResult, RetrievalScore,
 };
+use engram_runtime::CoreResult;
 
-use crate::WeightedFusionConfig;
+use crate::{RetrievalFusion, WeightedFusionConfig};
 
 /// Deterministic weighted-sum implementation of `RetrievalFusion`.
 ///

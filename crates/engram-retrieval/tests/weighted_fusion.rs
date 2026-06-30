@@ -1,9 +1,8 @@
 use std::collections::BTreeMap;
 
 use chrono::Utc;
-use engram_core::RetrievalFusion;
 use engram_domain::*;
-use engram_retrieval::{WeightedFusionConfig, WeightedRetrievalFusion};
+use engram_retrieval::{RetrievalFusion, WeightedFusionConfig, WeightedRetrievalFusion};
 
 #[test]
 fn weighted_fusion_ranks_by_weighted_score() {

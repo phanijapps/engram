@@ -6,8 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-engram-core = { path = "../engram-core" }
+async-trait.workspace = true
 engram-domain = { path = "../engram-domain" }
+engram-runtime = { path = "../engram-runtime" }
 
 [dev-dependencies]
 chrono.workspace = true

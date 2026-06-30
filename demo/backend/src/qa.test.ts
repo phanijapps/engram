@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEvidence, type MemoryItem, type QaBelief } from "./qa.js";
+import { buildEvidence, type MemoryItem, type QaBelief, type QaEntity, type QaRelationship } from "./qa.js";
 
 const memory = (id: string, text: string): MemoryItem => ({
   targetId: id,
@@ -13,6 +13,20 @@ const belief = (id: string, key: string, content: string): QaBelief => ({
   content,
 });
 
+const entity = (id: string, name: string, kind = "function"): QaEntity => ({
+  id, name, kind, graphId: "graph-1",
+});
+
+const rel = (id: string, subj: string, pred: string, obj: string): QaRelationship => ({
+  id,
+  graphId: "graph-1",
+  subject: { id: `e-${subj}`, name: subj, kind: "function" },
+  predicate: pred,
+  object: { id: `e-${obj}`, name: obj, kind: "function" },
+});
+
+const NO_GRAPH = { entities: [] as QaEntity[], relationships: [] as QaRelationship[] };
+
 describe("buildEvidence", () => {
   it("keeps memories and query-matched beliefs, with sources", () => {
     const { context, sources } = buildEvidence(
@@ -21,7 +35,9 @@ describe("buildEvidence", () => {
       [
         belief("b1", "svc-a", "svc-a is up"),
         belief("b2", "billing", "invoices are late"), // no query-term overlap → dropped
-      ]
+      ],
+      NO_GRAPH.entities,
+      NO_GRAPH.relationships,
     );
     expect(sources).toEqual([
       { kind: "memory", id: "mem-1", text: "svc-a restarted at noon", source: "demo" },
@@ -34,18 +50,48 @@ describe("buildEvidence", () => {
   });
 
   it("reports no-relevant-records when nothing matches", () => {
-    const { context, sources } = buildEvidence("zzz nope", [memory("m", "")], []);
+    const { context, sources } = buildEvidence("zzz nope", [memory("m", "")], [], [], []);
     expect(sources).toEqual([]);
     expect(context).toContain("no relevant records");
   });
 
   it("drops beliefs whose content is empty even on a subject-key match", () => {
     const { sources } = buildEvidence(
-      "svc-a status",
-      [],
-      [belief("b1", "svc-a", "")] // empty content → still matched on key, included
+      "svc-a status", [],
+      [belief("b1", "svc-a", "")], [], [],
     );
     expect(sources).toHaveLength(1);
     expect(sources[0].source).toBe("svc-a");
+  });
+
+  it("grounds in knowledge-graph entities + their call-graph relationships", () => {
+    const { context, sources } = buildEvidence(
+      "call graph for intent analysis",
+      [],
+      [],
+      [
+        entity("e-intent_analysis", "intent_analysis", "function"),
+        entity("e-parser", "parser", "function"),
+        entity("e-unrelated", "billing", "function"), // no query-term overlap → dropped
+      ],
+      [
+        rel("r1", "intent_analysis", "calls", "parser"),
+        rel("r2", "billing", "calls", "unrelated_fn"), // neither endpoint matched → dropped
+      ],
+    );
+    // intent_analysis matched (contains "intent" + "analysis"); parser is a neighbor.
+    const entitySources = sources.filter((s) => s.kind === "entity");
+    expect(entitySources).toHaveLength(1);
+    expect(entitySources[0].text).toContain("intent_analysis");
+
+    // The call-graph relationship (intent_analysis calls parser) is included.
+    const relSources = sources.filter((s) => s.kind === "relationship");
+    expect(relSources).toHaveLength(1);
+    expect(relSources[0].text).toContain("calls");
+    expect(relSources[0].text).toContain("parser");
+
+    expect(context).toContain("[entity e-intent_analysis] intent_analysis (function)");
+    expect(context).toContain("[relationship r1] intent_analysis calls parser");
+    expect(context).not.toContain("billing");
   });
 });

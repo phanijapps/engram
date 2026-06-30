@@ -1,18 +1,17 @@
 // Q&A over knowledge + memory (RFC 0004 Slice 6).
 //
-// Grounds answers in deterministic retrieval (memory keyword retrieve + beliefs),
-// then — when `.env` LLM creds are present — synthesizes a prose answer via the
-// pi SDK (`runLLM`, shared with extraction). Sources come ONLY from the
-// deterministic retrieval, never from LLM-invented text: even if the model
-// hallucinates a citation, the displayed sources are the real retrieved records.
-// Missing creds → a deterministic evidence summary (never an error traceback).
+// Grounds answers in deterministic retrieval — now INCLUDING the knowledge graph
+// (entities + relationships, the call graph) — then synthesizes via the pi SDK.
+// When creds are present, the LLM runs AGENTICALLY with tools to search + traverse
+// the graph (search_entities, get_neighbors, get_call_graph). Sources come from
+// deterministic retrieval, never from LLM-invented text. Never throws.
 
 import { getLLMConfig, runLLM } from "./llm.js";
-import { getBeliefTransport, getTransport } from "./engram.js";
+import { getBeliefTransport, getKnowledgeTransport, getTransport } from "./engram.js";
 import type { Scope } from "@engram/contracts";
 
 export type QaSource = {
-  kind: "memory" | "belief";
+  kind: "memory" | "belief" | "entity" | "relationship";
   id: string;
   text: string;
   source: string;
@@ -29,12 +28,19 @@ export type MemoryItem = {
   content?: { text?: string };
   provenance?: { source?: string };
 };
-
 export type QaBelief = {
   id: string;
   subject: { key: string };
   content: string;
   provenance?: { source?: string };
+};
+export type QaEntity = { id: string; graphId?: string; kind?: string; name: string };
+export type QaRelationship = {
+  id: string;
+  graphId?: string;
+  subject: { id?: string; name?: string; kind?: string };
+  predicate: string;
+  object: { id?: string; name?: string; kind?: string };
 };
 
 const QA_REQUESTER = {
@@ -46,7 +52,7 @@ const QA_REQUESTER = {
 const STOP = new Set([
   "the", "a", "an", "is", "are", "was", "were", "of", "to", "in", "on", "for",
   "and", "or", "how", "what", "why", "who", "when", "do", "does", "did", "with",
-  "this", "that", "it",
+  "this", "that", "it", "find", "show", "get", "give", "tell",
 ]);
 
 function queryTerms(question: string): string[] {
@@ -57,44 +63,69 @@ function queryTerms(question: string): string[] {
 }
 
 /**
- * Pure: build a grounded context string + citation sources from retrieved
- * memories + beliefs. Beliefs are filtered by query-term overlap on subject +
- * content; memories are used as the retriever returned them.
+ * Pure: build a grounded context + sources from memories, beliefs, knowledge-graph
+ * entities + relationships. Entities are filtered by query-term match on name/kind;
+ * relationships whose endpoints are matched entities are included (the local call
+ * graph around the question's subject).
  */
 export function buildEvidence(
   question: string,
   memories: MemoryItem[],
-  beliefs: QaBelief[]
+  beliefs: QaBelief[],
+  entities: QaEntity[],
+  relationships: QaRelationship[],
 ): { context: string; sources: QaSource[] } {
   const terms = queryTerms(question);
-  const matchedBeliefs = beliefs.filter((belief) => {
-    const haystack = `${belief.subject.key} ${belief.content}`.toLowerCase();
-    return terms.some((term) => haystack.includes(term));
-  });
-
   const sources: QaSource[] = [];
   const blocks: string[] = [];
 
+  // Memories.
   for (const memory of memories) {
     const text = memory.content?.text ?? "";
     if (!text) continue;
     const id = memory.targetId ?? "memory";
-    sources.push({
-      kind: "memory",
-      id,
-      text,
-      source: memory.provenance?.source ?? "memory",
-    });
+    sources.push({ kind: "memory", id, text, source: memory.provenance?.source ?? "memory" });
     blocks.push(`[memory ${id}] ${text}`);
   }
-  for (const belief of matchedBeliefs) {
-    sources.push({
-      kind: "belief",
-      id: belief.id,
-      text: belief.content,
-      source: belief.subject.key,
-    });
+
+  // Beliefs (filtered by query terms).
+  for (const belief of beliefs) {
+    const hay = `${belief.subject.key} ${belief.content}`.toLowerCase();
+    if (!terms.some((t) => hay.includes(t))) continue;
+    sources.push({ kind: "belief", id: belief.id, text: belief.content, source: belief.subject.key });
     blocks.push(`[belief ${belief.id}] ${belief.subject.key}: ${belief.content}`);
+  }
+
+  // Knowledge-graph entities (filtered by query terms on name/kind).
+  const matchedEntityIds = new Set<string>();
+  for (const e of entities) {
+    const hay = `${e.name} ${e.kind ?? ""}`.toLowerCase();
+    if (!terms.some((t) => hay.includes(t))) continue;
+    matchedEntityIds.add(e.id);
+    sources.push({
+      kind: "entity",
+      id: e.id,
+      text: `${e.name} (${e.kind ?? "entity"})`,
+      source: e.graphId ?? "graph",
+    });
+    blocks.push(`[entity ${e.id}] ${e.name} (${e.kind ?? "entity"})`);
+  }
+
+  // Relationships whose endpoints are matched entities (the local call graph).
+  for (const r of relationships) {
+    const sId = r.subject.id;
+    const oId = r.object.id;
+    if (!sId || !oId) continue;
+    if (!matchedEntityIds.has(sId) && !matchedEntityIds.has(oId)) continue;
+    const sName = r.subject.name ?? sId;
+    const oName = r.object.name ?? oId;
+    sources.push({
+      kind: "relationship",
+      id: r.id,
+      text: `${sName} ${r.predicate} ${oName}`,
+      source: r.graphId ?? "graph",
+    });
+    blocks.push(`[relationship ${r.id}] ${sName} ${r.predicate} ${oName}`);
   }
 
   return {
@@ -104,16 +135,31 @@ export function buildEvidence(
 }
 
 const QA_SYSTEM_PROMPT =
-  "You answer the user's question strictly from the provided context (memories + beliefs). " +
-  "Cite a source by its [id] in square brackets. If the context does not contain the answer, " +
-  "say you don't know. Do not invent sources or records.";
+  "You answer questions about a knowledge graph (entities, relationships, call graphs), " +
+  "memories, and beliefs. Answer strictly from the provided context. For call-graph or " +
+  "relationship questions, trace the entities and their relationships (calls, defines, " +
+  "contains, depends_on, etc.) shown in the context. Cite sources by their [id]. " +
+  "If the context does not contain the answer, say so — do not invent records.";
 
-/** Answers a question over the demo's memory + beliefs. Never throws. */
+/** Fetch knowledge-graph entities + relationships visible to `scope`. */
+async function fetchGraph(scope: unknown): Promise<{ entities: QaEntity[]; relationships: QaRelationship[] }> {
+  try {
+    const transport = getKnowledgeTransport();
+    const [entities, relationships] = await Promise.all([
+      transport.listEntities(scope),
+      transport.listRelationships(scope),
+    ]);
+    return { entities: entities as QaEntity[], relationships: relationships as QaRelationship[] };
+  } catch {
+    return { entities: [], relationships: [] };
+  }
+}
+
+/** Answers a question over knowledge graph + memory + beliefs. Never throws. */
 export async function answerQuestion(question: string, scope: unknown): Promise<QaResult> {
-  const [memoryResponse, beliefs] = await Promise.all([
+  const [memoryResponse, beliefs, graph] = await Promise.all([
     getTransport().retrieve({
       query: question,
-      // `scope` is untyped HTTP input; Rust enforces the real Scope shape.
       scope: scope as Scope,
       requester: QA_REQUESTER,
       modes: ["keyword"],
@@ -121,14 +167,21 @@ export async function answerQuestion(question: string, scope: unknown): Promise<
       budget: { maxItems: 8, maxTokens: 2000 },
     }),
     getBeliefTransport().listBeliefs(scope),
+    fetchGraph(scope),
   ]);
   const memories = ((memoryResponse as { items?: MemoryItem[] }).items ?? []);
-  const { context, sources } = buildEvidence(question, memories, beliefs as QaBelief[]);
+  const { context, sources } = buildEvidence(
+    question,
+    memories,
+    beliefs as QaBelief[],
+    graph.entities,
+    graph.relationships,
+  );
 
   const config = getLLMConfig();
   if (!config) {
     return {
-      answer: `Evidence-only (no LLM configured): ${sources.length} relevant record(s). Set .env creds (ENGRAM_LLM_*) for a synthesized answer.`,
+      answer: `Evidence-only (no LLM configured): ${sources.length} relevant record(s) from graph + memory + beliefs. Set .env creds (ENGRAM_LLM_*) for a synthesized answer.`,
       sources,
       llm: "unavailable",
     };
@@ -136,7 +189,11 @@ export async function answerQuestion(question: string, scope: unknown): Promise<
 
   try {
     const answer = (
-      await runLLM(QA_SYSTEM_PROMPT, `Question:\n${question}\n\nContext:\n${context}`, config)
+      await runLLM(
+        QA_SYSTEM_PROMPT,
+        `Question:\n${question}\n\nKnowledge graph + memory + belief context:\n${context}`,
+        config,
+      )
     ).trim();
     return { answer, sources, llm: "ok" };
   } catch (err) {

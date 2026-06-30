@@ -1,119 +1,109 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Progress } from "@/components/ui/progress";
-import { buildGraphData, type RawEntity, type RawRelationship } from "@/Graph3D";
+import { Badge } from "@/components/ui/badge";
+import {
+  buildGraphData,
+  type GraphData,
+  type RawEntity,
+  type RawRelationship,
+} from "@/Graph3D";
 import { Graph3DCard } from "@/components/graph-3d-card";
+import { SCOPE } from "@/lib/constants";
 
-type Status = "idle" | "scanning" | "done" | "error";
+type JobState = {
+  status: string; // "running" | "done" | "error" | "unknown"
+  currentFile?: string;
+  processed?: number;
+  ingested?: number;
+  unchanged?: number;
+  skipped?: number;
+  errors?: number;
+  summary?: {
+    scanned: number;
+    ingested: number;
+    unchanged: number;
+    skipped: number;
+    entities: number;
+    relationships: number;
+    errors: number;
+  };
+  error?: string;
+};
 
-type ScanEvent =
-  | {
-      type: "progress";
-      index: number;
-      total: number;
-      file: string;
-      unchanged?: boolean;
-      entities?: RawEntity[];
-      relationships?: RawRelationship[];
-      llm?: string;
-    }
-  | { type: "skip"; file: string; reason?: string }
-  | { type: "error"; file: string; message: string }
-  | { type: "done"; summary?: Record<string, number> };
+type Overview = {
+  entities: RawEntity[];
+  relationships: RawRelationship[];
+};
 
 export function RepoIndex() {
-  const [path, setPath] = useState("");
-  const [enhance, setEnhance] = useState(false);
-  const [status, setStatus] = useState<Status>("idle");
-  const [progress, setProgress] = useState<{ index: number; total: number; file: string } | null>(null);
-  const [summary, setSummary] = useState<Record<string, number> | null>(null);
-  const [llmUnavailable, setLlmUnavailable] = useState(false);
-  const [skips, setSkips] = useState<string[]>([]);
-  const [errors, setErrors] = useState<string[]>([]);
-  const [graph, setGraph] = useState<{ entities: RawEntity[]; relationships: RawRelationship[] }>({
-    entities: [],
-    relationships: [],
-  });
+  const [root, setRoot] = useState("");
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [job, setJob] = useState<JobState | null>(null);
+  const [graph, setGraph] = useState<GraphData | null>(null);
   const [error, setError] = useState("");
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const scan = async () => {
-    if (!path.trim()) return;
-    setStatus("scanning");
-    setProgress(null);
-    setSummary(null);
-    setLlmUnavailable(false);
-    setSkips([]);
-    setErrors([]);
-    setGraph({ entities: [], relationships: [] });
-    setError("");
-
-    const ents: RawEntity[] = [];
-    const rels: RawRelationship[] = [];
-
-    try {
-      const res = await fetch("/ingest/scan", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path, enhance }),
-      });
-      if (!res.ok || !res.body) throw new Error(`${res.status} ${await res.text()}`);
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() ?? "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          let evt: ScanEvent;
-          try {
-            evt = JSON.parse(line) as ScanEvent;
-          } catch {
-            continue;
-          }
-          if (evt.type === "progress") {
-            if (Array.isArray(evt.entities)) ents.push(...evt.entities);
-            if (Array.isArray(evt.relationships)) rels.push(...evt.relationships);
-            setProgress({ index: evt.index, total: evt.total, file: evt.file });
-            setGraph({ entities: [...ents], relationships: [...rels] });
-            if (evt.llm === "unavailable") setLlmUnavailable(true);
-          } else if (evt.type === "skip") {
-            setSkips((s) => [...s, `${evt.file} (${evt.reason ?? "skipped"})`].slice(-12));
-          } else if (evt.type === "error") {
-            setErrors((e) => [...e, `${evt.file}: ${evt.message}`].slice(-12));
-          } else if (evt.type === "done") {
-            setSummary(
-              evt.summary ?? {
-                ingested: 0,
-                unchanged: 0,
-                skipped: 0,
-                entities: ents.length,
-                relationships: rels.length,
-                errors: 0,
-              }
-            );
+  // Poll the job until it settles.
+  useEffect(() => {
+    if (!jobId) return;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/ingest/jobs/${jobId}`);
+        if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+        const state = (await res.json()) as JobState;
+        setJob(state);
+        if (state.status === "done" || state.status === "error") {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          if (state.status === "done") {
+            // Load the freshly-indexed graph for visualization.
+            const ovRes = await fetch("/knowledge/overview", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ scope: SCOPE }),
+            });
+            if (ovRes.ok) {
+              const ov = (await ovRes.json()) as Overview;
+              setGraph(buildGraphData(ov.entities, ov.relationships));
+            }
           }
         }
+      } catch (e) {
+        setError(String(e instanceof Error ? e.message : e));
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
       }
-      setStatus("done");
+    };
+    void tick();
+    pollRef.current = setInterval(tick, 1200);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null;
+    };
+  }, [jobId]);
+
+  const start = async () => {
+    if (!root.trim()) return;
+    setError("");
+    setJob(null);
+    setGraph(null);
+    try {
+      const res = await fetch("/ingest/jobs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ root: root.trim() }),
+      });
+      if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+      setJobId(((await res.json()) as { jobId: string }).jobId);
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
-      setStatus("error");
     }
   };
 
-  const graphData = graph.entities.length
-    ? buildGraphData(graph.entities, graph.relationships)
-    : null;
-  const pct = progress && progress.total ? Math.round((progress.index / progress.total) * 100) : null;
+  const running = job?.status === "running";
+  const summary = job?.summary;
 
   return (
     <Card>
@@ -121,63 +111,57 @@ export function RepoIndex() {
         <CardTitle>Index a folder or repo</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <Input
             placeholder="/absolute/path/to/repo"
-            value={path}
-            onChange={(e) => setPath(e.target.value)}
-            className="min-w-[20rem]"
+            value={root}
+            onChange={(e) => setRoot(e.target.value)}
+            className="min-w-[24rem]"
           />
-          <div className="flex items-center gap-2">
-            <Switch checked={enhance} onCheckedChange={setEnhance} id="idx-enhance" />
-            <Label htmlFor="idx-enhance">LLM enhance</Label>
-          </div>
-          <Button onClick={scan} disabled={!path.trim() || status === "scanning"}>
-            {status === "scanning" ? "Indexing…" : "Index"}
+          <Button onClick={start} disabled={!root.trim() || running}>
+            {running ? "Indexing…" : "Index"}
           </Button>
         </div>
+        <p className="text-xs text-muted-foreground">
+          Runs a parallel Rust scan in the background (rayon); progress is polled.
+          Deterministic extraction only — use /ingest for LLM-enhanced per-doc
+          extraction.
+        </p>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        {llmUnavailable && (
-          <p className="text-sm text-destructive">
-            LLM unavailable (set .env creds) — scan ran deterministic-only
-          </p>
-        )}
-        {status === "scanning" && progress && (
+        {job && (
           <div className="space-y-1">
-            <Progress value={pct ?? 0} />
-            <p className="text-xs text-muted-foreground">
-              {pct}% · {progress.index}/{progress.total} · <code>{progress.file}</code>
-            </p>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant={running ? "default" : job.status === "done" ? "outline" : "destructive"}
+                className={running ? "animate-pulse" : ""}
+              >
+                {running ? "indexing" : job.status}
+              </Badge>
+            </div>
+            {(running || job.currentFile) && job.currentFile && (
+              <p className="text-xs text-muted-foreground">
+                <code>{job.currentFile}</code>
+              </p>
+            )}
+            {(job.processed ?? 0) > 0 && (
+              <p className="text-xs text-muted-foreground">
+                processed {job.processed} · ingested {job.ingested} · unchanged{" "}
+                {job.unchanged} · skipped {job.skipped} · errors {job.errors}
+              </p>
+            )}
+            {summary && (
+              <p className="text-sm text-muted-foreground">
+                Scanned <strong>{summary.scanned}</strong> · ingested{" "}
+                {summary.ingested} · unchanged {summary.unchanged} · skipped{" "}
+                {summary.skipped} · {summary.entities} entities ·{" "}
+                {summary.relationships} edges
+                {summary.errors ? ` · ${summary.errors} errors` : ""}
+              </p>
+            )}
+            {job.error && <p className="text-sm text-destructive">{job.error}</p>}
           </div>
         )}
-        {summary && (
-          <p className="text-sm text-muted-foreground">
-            Indexed <strong>{summary.ingested}</strong> file(s) · {summary.unchanged} unchanged
-            · {summary.skipped} skipped · {summary.entities} entities ·{" "}
-            {summary.relationships} edges
-            {(summary.llmEntities || summary.llmRelationships)
-              ? ` · LLM +${summary.llmEntities} entities · +${summary.llmRelationships} edges`
-              : ""}
-            {summary.errors ? ` · ${summary.errors} errors` : ""}
-          </p>
-        )}
-        {skips.length > 0 && (
-          <details className="text-sm">
-            <summary className="cursor-pointer text-muted-foreground">Skipped ({skips.length})</summary>
-            <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-              {skips.map((s, i) => <li key={i}>{s}</li>)}
-            </ul>
-          </details>
-        )}
-        {errors.length > 0 && (
-          <details className="text-sm">
-            <summary className="cursor-pointer text-destructive">Errors ({errors.length})</summary>
-            <ul className="mt-1 space-y-0.5 text-xs text-destructive">
-              {errors.map((s, i) => <li key={i}>{s}</li>)}
-            </ul>
-          </details>
-        )}
-        <Graph3DCard data={graphData} />
+        <Graph3DCard data={graph} />
       </CardContent>
     </Card>
   );

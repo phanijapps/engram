@@ -328,7 +328,8 @@ Acceptance gate:
 
 Status: complete for sqlite-vec vector index baseline, opt-in FastEmbed
 BGE-small smoke path, deterministic weighted fusion, and in-memory service
-composition through injected retrieval indexes.
+composition through injected retrieval indexes, and feature-gated FastEmbed
+BGE-small query-provider wiring.
 
 Goal: add semantic retrieval as a replaceable index, not a dependency baked into
 the core.
@@ -801,9 +802,9 @@ Shipped slice:
 
 ## Phase 22: Vector Retrieval Candidates
 
-Status: complete for sqlite-vec candidate adapter wiring and in-memory service
-composition through injected retrieval indexes. Production embedding providers
-remain future work.
+Status: complete for sqlite-vec candidate adapter wiring, in-memory service
+composition through injected retrieval indexes, and opt-in FastEmbed BGE-small
+query-provider wiring. Hosted production embedding providers remain future work.
 
 Goal: expose sqlite-vec nearest-neighbor rows through the `RetrievalIndex` port
 after query-vector generation and canonical target rehydration.
@@ -836,6 +837,8 @@ Shipped slice:
 - Added in-memory service composition for injected `RetrievalIndex` sources,
   including external candidate fusion, budget omissions, and degraded
   source-failure reporting.
+- Added feature-gated FastEmbed BGE-small query provider wiring for local
+  sqlite-vec semantic retrieval smoke tests.
 - Kept FastEmbed as opt-in test coverage rather than a default runtime path.
 
 ## Stop Conditions

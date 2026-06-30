@@ -6,7 +6,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
-fastembed-tests = ["dep:fastembed"]
+fastembed-provider = ["dep:fastembed"]
+fastembed-tests = ["fastembed-provider"]
 
 [dependencies]
 async-trait.workspace = true

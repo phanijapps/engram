@@ -5,11 +5,15 @@
 
 mod entry;
 mod extension;
+#[cfg(feature = "fastembed-provider")]
+mod fastembed_provider;
 mod index;
 mod retrieval;
 mod vector;
 
 pub use entry::{VectorEntry, VectorSearchResult};
+#[cfg(feature = "fastembed-provider")]
+pub use fastembed_provider::FastEmbedBgeSmallQueryProvider;
 pub use index::SqliteVectorIndex;
 pub use retrieval::{
     VectorQueryProvider, VectorResolvedTarget, VectorRetrievalIndex, VectorTargetResolver,

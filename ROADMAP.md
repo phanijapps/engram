@@ -65,6 +65,8 @@ use the implementation roadmap as the spec-driven execution loop.
   resolver ports.
 - Keep injected retrieval indexes composed through in-memory fusion and
   source-failure reporting without making vector providers canonical.
+- Keep FastEmbed BGE-small query-vector generation opt-in behind the vector
+  crate feature.
 - Keep concrete adapters outside `engram-core`.
 
 ## Next: Post-Roadmap Slices
@@ -72,7 +74,7 @@ use the implementation roadmap as the spec-driven execution loop.
 - Concrete consolidation task algorithms for aggregate hierarchy and semantic
   contradiction detection.
 - Semantic hierarchy clustering and model-assisted aggregate summaries.
-- Production embedding provider wiring.
+- Hosted production embedding provider wiring.
 
 ## Later
 

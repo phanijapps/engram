@@ -243,5 +243,12 @@
     "description": "In-memory contradiction-aware belief ranking",
     "spec_file": "docs/specs/in-memory-contradiction-aware-belief-ranking/spec.md",
     "plan_file": "docs/specs/in-memory-contradiction-aware-belief-ranking/plan.md"
+  },
+  {
+    "phase_id": "PHASE35",
+    "status": "DONE",
+    "description": "FastEmbed query provider",
+    "spec_file": "docs/specs/fastembed-query-provider/spec.md",
+    "plan_file": "docs/specs/fastembed-query-provider/plan.md"
   }
 ]

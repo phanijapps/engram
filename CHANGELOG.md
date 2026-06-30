@@ -86,3 +86,5 @@ This project follows a contract-first changelog while pre-1.0.
   resolution records without target mutation.
 - Added contradiction-aware in-memory belief ranking using explicit open review
   records.
+- Added a feature-gated FastEmbed BGE-small query provider for sqlite-vec
+  retrieval tests.

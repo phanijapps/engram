@@ -10,7 +10,10 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   demo proving a browser→Node→Rust memory round-trip (RFC-0003, PHASE52). Shipped.
 - [`sqlite-knowledge-graph`](sqlite-knowledge-graph/spec.md): demo Slice 1 —
   `engram-store-knowledge-sqlite` adapter + `TaxonomyRepository` port + forbidden-
-  import gate (RFC-0003, PHASE53).
+  import gate (RFC-0003, PHASE53). Shipped.
+- [`knowledge-graph-extractor`](knowledge-graph-extractor/spec.md): demo Slice 2 —
+  deterministic `GraphExtractor` (code symbols + calls/mentions) + ingest+extract
+  over the binding + Cytoscape graph panel (RFC-0003, PHASE54).
 - [`workspace-responsibility-layout`](workspace-responsibility-layout/spec.md):
   groups Rust crates by architectural responsibility before adding more memory
   and knowledge storage backends.

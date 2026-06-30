@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { getKnowledgeTransport, getTransport } from "./engram.js";
+import { getIngestTransport, getKnowledgeTransport, getTransport } from "./engram.js";
 
 // The backend is a thin JSON transport over the Rust memory service. It owns no
 // behavior — v1 JSON in, v1 JSON out, unchanged by Rust — so TypeScript stays
@@ -34,6 +34,10 @@ app.post("/memory/forget", async (c) => {
 });
 
 // --- Knowledge graph (manual construction; extraction arrives in Slice 2) ----
+app.post("/ingest/extract", async (c) => {
+  const request = await c.req.json();
+  return c.json(await getIngestTransport().ingestExtract(request));
+});
 app.post("/knowledge/entity", async (c) => {
   const request = await c.req.json();
   return c.json(await getKnowledgeTransport().putEntity(request));

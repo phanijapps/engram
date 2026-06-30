@@ -10,6 +10,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 engram-domain = { path = "../../core/domain" }
+engram-ingest = { path = "../../adapters/ingest" }
 engram-knowledge = { path = "../../core/knowledge" }
 engram-memory = { path = "../../core/memory" }
 engram-runtime = { path = "../../core/runtime" }

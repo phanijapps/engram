@@ -905,5 +905,6 @@ before `PHASE53`.
 - `PHASE53` — Slice 1: SQLite knowledge adapter + `TaxonomyRepository` +
   forbidden-import gate (preceded by ADR-0007). **(shipped)**
 - `PHASE54` — Slice 2: deterministic graph extractor (code-symbol + document).
+  **(shipped)**
 - `PHASE55` — Slice 3: FastEmbed passage embeddings + fused retrieval.
 - `PHASE56` — Slice 4: demo UI polish (Cytoscape graph, query, taxonomy).

@@ -32,10 +32,21 @@ export interface NativeKnowledgeEngineConstructor {
   new (): NativeKnowledgeEngineBinding;
 }
 
+/** Native class shape for the Rust-backed ingest + extract engine. */
+export interface NativeIngestEngineBinding {
+  ingestExtractJson(requestJson: string): string;
+}
+
+/** Constructor shape for the Rust-backed ingest + extract engine. */
+export interface NativeIngestEngineConstructor {
+  new (): NativeIngestEngineBinding;
+}
+
 /** Native addon surface consumed by `@engram/node`. */
 export interface NativeBinding {
   NativeMemoryEngine: NativeMemoryEngineConstructor;
   NativeKnowledgeEngine: NativeKnowledgeEngineConstructor;
+  NativeIngestEngine: NativeIngestEngineConstructor;
 }
 
 /** Function used to load a native addon, injectable for deterministic tests. */

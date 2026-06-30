@@ -1,6 +1,8 @@
 import {
+  createNativeIngestTransport,
   createNativeKnowledgeTransport,
   createNativeMemoryTransport,
+  type NativeIngestTransport,
   type NativeKnowledgeTransport,
   type NativeMemoryTransport,
 } from "@engram/node";
@@ -24,4 +26,14 @@ export function getKnowledgeTransport(): NativeKnowledgeTransport {
     knowledge = createNativeKnowledgeTransport();
   }
   return knowledge;
+}
+
+// One Rust-backed ingest + extract engine.
+let ingest: NativeIngestTransport | null = null;
+
+export function getIngestTransport(): NativeIngestTransport {
+  if (ingest === null) {
+    ingest = createNativeIngestTransport();
+  }
+  return ingest;
 }

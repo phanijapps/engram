@@ -6,9 +6,13 @@
 
 use engram_domain::{
     Concept, ConceptRelation, ConceptScheme, Id, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph,
-    KnowledgeRelationship, KnowledgeSource, Scope, SourceDocument,
+    KnowledgeRelationship, KnowledgeSource, Scope, SourceDocument, SourceDocumentKind,
 };
 use engram_domain::{ForgetRequest, RetrievalRequest, WriteMemoryRequest};
+use engram_ingest::{
+    CodeSymbolChunker, DocumentIngestRequest, GraphExtractor, KnowledgeIngestor, PlainTextChunker,
+    PlainTextChunkerOptions,
+};
 use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository, TaxonomyRepository};
 use engram_memory::{CoreError, MemoryService};
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
@@ -16,6 +20,7 @@ use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
+use serde::Serialize;
 
 /// Stateful local memory engine exposed to Node through N-API.
 ///
@@ -231,6 +236,70 @@ impl NativeKnowledgeEngine {
         let result =
             block_on(self.store.list_concepts(&scheme_id, &scope)).map_err(to_napi_error)?;
         encode(&result)
+    }
+}
+
+/// Response payload for an ingest + extract operation, returned to Node as JSON.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IngestExtractResponse {
+    graph: KnowledgeGraph,
+    entities: Vec<KnowledgeEntity>,
+    relationships: Vec<KnowledgeRelationship>,
+    chunk_count: usize,
+}
+
+/// Stateful local ingest + extract engine exposed to Node through N-API.
+///
+/// Owns one SQLite-backed knowledge store. `ingestExtractJson` runs the
+/// deterministic ingest pipeline (source -> document -> chunks) and then the
+/// `GraphExtractor`, persisting the graph and returning it for visualization.
+#[napi]
+pub struct NativeIngestEngine {
+    store: SqlKnowledgeStore,
+}
+
+#[napi]
+impl NativeIngestEngine {
+    /// Opens a local in-memory SQLite ingest engine for Node consumers.
+    #[napi(constructor)]
+    pub fn new() -> Result<Self> {
+        let store = SqlKnowledgeStore::open_in_memory().map_err(to_napi_error)?;
+        Ok(Self { store })
+    }
+
+    /// Ingests a document and extracts its knowledge graph in one pass.
+    ///
+    /// Accepts a JSON-encoded `DocumentIngestRequest`; returns a JSON-encoded
+    /// graph (graph + entities + relationships + chunk count). Code documents use
+    /// the `CodeSymbolChunker`; everything else uses the plain-text chunker.
+    #[napi(js_name = "ingestExtractJson")]
+    pub fn ingest_extract_json(&self, request_json: String) -> Result<String> {
+        let request: DocumentIngestRequest = decode(&request_json)?;
+        let is_code = matches!(request.document_kind, SourceDocumentKind::Code);
+        let ingested = if is_code {
+            block_on(KnowledgeIngestor::new(CodeSymbolChunker).ingest(&self.store, request))
+                .map_err(to_napi_error)?
+        } else {
+            let chunker =
+                PlainTextChunker::new(PlainTextChunkerOptions::default()).map_err(to_napi_error)?;
+            block_on(KnowledgeIngestor::new(chunker).ingest(&self.store, request))
+                .map_err(to_napi_error)?
+        };
+        let chunk_count = ingested.chunks.len();
+        let extracted = block_on(GraphExtractor::new().extract_into(
+            &self.store,
+            &ingested.source,
+            &ingested.document,
+            &ingested.chunks,
+        ))
+        .map_err(to_napi_error)?;
+        encode(&IngestExtractResponse {
+            graph: extracted.graph,
+            entities: extracted.entities,
+            relationships: extracted.relationships,
+            chunk_count,
+        })
     }
 }
 

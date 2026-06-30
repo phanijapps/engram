@@ -379,7 +379,7 @@
   },
   {
     "phase_id": "PHASE54",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "Demo Slice 2: deterministic knowledge-graph extractor (code-symbol + document)",
     "spec_file": "docs/specs/knowledge-graph-extractor/spec.md",
     "plan_file": "docs/specs/knowledge-graph-extractor/plan.md"

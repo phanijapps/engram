@@ -11,6 +11,7 @@ export default defineConfig({
       "/memory": "http://localhost:8787",
       "/knowledge": "http://localhost:8787",
       "/taxonomy": "http://localhost:8787",
+      "/ingest": "http://localhost:8787",
       "/health": "http://localhost:8787"
     }
   }

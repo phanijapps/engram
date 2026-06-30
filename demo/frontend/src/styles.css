@@ -158,3 +158,35 @@ button:disabled {
   font-size: 0.8rem;
   border-radius: 6px;
 }
+
+.app__ingest {
+  margin-top: 1rem;
+}
+
+.ingest__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ingest__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.ingest__meta {
+  margin: 0.5rem 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.ingest__graph {
+  height: 360px;
+  background: var(--panel-2);
+  border: 1px solid #2a3656;
+  border-radius: 8px;
+}

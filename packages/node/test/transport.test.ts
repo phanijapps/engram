@@ -56,6 +56,11 @@ describe("@engram/node", () => {
         putConceptJson(): string { return "null"; }
         putConceptRelationJson(): string { return "null"; }
         listConceptsJson(): string { return "[]"; }
+      },
+      NativeIngestEngine: class {
+        ingestExtractJson(): string {
+          return '{"graph":{},"entities":[],"relationships":[],"chunkCount":0}';
+        }
       }
     };
     const transport = createNativeMemoryTransport({ binding });

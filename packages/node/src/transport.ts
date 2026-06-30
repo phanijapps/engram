@@ -11,6 +11,7 @@ import {
   loadNativeBinding,
   type NativeBinding,
   type NativeBindingLoader,
+  type NativeIngestEngineBinding,
   type NativeKnowledgeEngineBinding,
   type NativeMemoryEngineBinding
 } from "./binding.js";
@@ -139,5 +140,40 @@ class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
 
   async listConcepts(schemeId: string, scope: unknown): Promise<unknown> {
     return decode(this.engine.listConceptsJson(encode({ schemeId, scope })));
+  }
+}
+
+/** Result of an ingest + extract pass over Rust. */
+export interface IngestExtractResult {
+  graph: unknown;
+  entities: unknown[];
+  relationships: unknown[];
+  chunkCount: number;
+}
+
+/** Transport interface for ingest + extract operations. */
+export interface NativeIngestTransport {
+  ingestExtract(request: unknown): Promise<IngestExtractResult>;
+}
+
+/** Options for constructing a native ingest transport. */
+export interface NativeIngestTransportOptions {
+  binding?: NativeBinding;
+  loader?: NativeBindingLoader;
+}
+
+/** Creates a transport that delegates ingest + extract behavior to Rust. */
+export function createNativeIngestTransport(
+  options: NativeIngestTransportOptions = {}
+): NativeIngestTransport {
+  const binding = options.binding ?? loadNativeBinding(options.loader);
+  return new JsonNativeIngestTransport(new binding.NativeIngestEngine());
+}
+
+class JsonNativeIngestTransport implements NativeIngestTransport {
+  constructor(private readonly engine: NativeIngestEngineBinding) {}
+
+  async ingestExtract(request: unknown): Promise<IngestExtractResult> {
+    return decode(this.engine.ingestExtractJson(encode(request)));
   }
 }

@@ -44,6 +44,11 @@ describe("@engram/client native transport", () => {
           putConceptJson(): string { return "null"; }
           putConceptRelationJson(): string { return "null"; }
           listConceptsJson(): string { return "[]"; }
+        },
+        NativeIngestEngine: class {
+          ingestExtractJson(): string {
+            return '{"graph":{},"entities":[],"relationships":[],"chunkCount":0}';
+          }
         }
       }
     });

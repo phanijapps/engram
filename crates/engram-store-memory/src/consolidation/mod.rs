@@ -12,6 +12,7 @@ use engram_domain::*;
 
 use crate::service::InMemoryMemoryService;
 
+mod belief_synthesis;
 mod common;
 mod compaction;
 mod decay;
@@ -75,6 +76,15 @@ impl ConsolidationMutationExecutor for InMemoryConsolidationExecutor {
                 }
                 ConsolidationTaskKind::HierarchyBuild => {
                     let result = hierarchy_build::build_base_nodes(
+                        &self.service,
+                        request,
+                        started_at,
+                        &mut stats,
+                    )?;
+                    tasks.push(result);
+                }
+                ConsolidationTaskKind::BeliefSynthesis => {
+                    let result = belief_synthesis::synthesize_assertion_beliefs(
                         &self.service,
                         request,
                         started_at,

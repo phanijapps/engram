@@ -43,7 +43,8 @@ fn hierarchy_build_creates_base_nodes_and_audit_events_for_scoped_memories() {
     assert_eq!(hierarchy.items_written, Some(1));
     assert_eq!(hierarchy.items_updated, Some(0));
     assert_eq!(hierarchy.items_skipped, Some(2));
-    assert_eq!(belief.status, ConsolidationTaskStatus::Skipped);
+    assert_eq!(belief.status, ConsolidationTaskStatus::Completed);
+    assert_eq!(belief.items_written, Some(0));
     let stats = run.stats.expect("stats");
     assert_eq!(stats.hierarchy_nodes_created, Some(1));
     assert_eq!(stats.hierarchy_relations_created, Some(0));

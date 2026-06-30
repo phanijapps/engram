@@ -180,5 +180,12 @@
     "description": "In-memory hierarchy base build",
     "spec_file": "docs/specs/in-memory-hierarchy-base-build/spec.md",
     "plan_file": "docs/specs/in-memory-hierarchy-base-build/plan.md"
+  },
+  {
+    "phase_id": "PHASE26",
+    "status": "DONE",
+    "description": "In-memory belief assertion synthesis",
+    "spec_file": "docs/specs/in-memory-belief-assertion-synthesis/spec.md",
+    "plan_file": "docs/specs/in-memory-belief-assertion-synthesis/plan.md"
   }
 ]

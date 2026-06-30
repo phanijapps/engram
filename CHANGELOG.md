@@ -67,3 +67,5 @@ This project follows a contract-first changelog while pre-1.0.
   lifecycle events.
 - Added deterministic in-memory hierarchy base-node construction with
   hierarchy-built events and path navigation coverage.
+- Added assertion-backed in-memory belief synthesis with duplicate prevention
+  and belief-synthesized lifecycle events.

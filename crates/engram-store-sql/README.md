@@ -7,6 +7,8 @@ infrastructure.
 Current scope:
 
 - SQLite schema initialization
+- in-memory SQLite construction for conformance tests and examples
+- file-backed SQLite construction for local durable smoke tests
 - memory record persistence as accepted contract JSON
 - lifecycle event persistence as accepted contract JSON
 - write idempotency through a unique SQL key
@@ -19,4 +21,6 @@ Out of scope for the first slice:
 - vector indexes
 - embedding providers
 - migrations for multiple deployed versions
-- file-backed SQLite construction
+
+See `docs/sql-adapter-design.md` for the design boundary and deferred server
+database work.

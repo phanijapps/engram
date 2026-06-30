@@ -341,5 +341,12 @@
     "description": "Evaluation report generation",
     "spec_file": "docs/specs/evaluation-report-generation/spec.md",
     "plan_file": "docs/specs/evaluation-report-generation/plan.md"
+  },
+  {
+    "phase_id": "PHASE49",
+    "status": "DONE",
+    "description": "SQL adapter design alignment",
+    "spec_file": "docs/specs/sql-adapter-design-alignment/spec.md",
+    "plan_file": "docs/specs/sql-adapter-design-alignment/plan.md"
   }
 ]

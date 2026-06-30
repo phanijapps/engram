@@ -870,6 +870,8 @@ Shipped slice:
   and archive outcomes.
 - Added serializable evaluation report summaries over executed fixture reports
   and accepted fixture sets.
+- Aligned SQL adapter design documentation with ADR-0005/ADR-0006 and current
+  in-memory/file-backed SQLite support.
 
 ## Stop Conditions
 
@@ -889,5 +891,4 @@ Do not move to a later phase when any of these are true:
 
 The next implementation loop should be:
 
-1. Start SQL adapter design from `docs/adr/0005-storage-adapter-semantics.md`.
-2. Update docs and run the full validation suite.
+1. Update docs and run the full validation suite.

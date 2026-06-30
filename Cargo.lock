@@ -756,11 +756,13 @@ dependencies = [
 name = "engram-node"
 version = "0.1.0"
 dependencies = [
+ "engram-core",
  "engram-domain",
  "engram-ingest",
  "engram-knowledge",
  "engram-memory",
  "engram-runtime",
+ "engram-store-belief-sqlite",
  "engram-store-knowledge-sqlite",
  "engram-store-sql",
  "engram-store-vector",
@@ -788,6 +790,21 @@ version = "0.1.0"
 dependencies = [
  "engram-domain",
  "thiserror",
+]
+
+[[package]]
+name = "engram-store-belief-sqlite"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-core",
+ "engram-domain",
+ "engram-runtime",
+ "futures",
+ "rusqlite",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

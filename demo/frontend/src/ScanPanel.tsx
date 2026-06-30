@@ -17,6 +17,7 @@ type ScanEvent =
       unchanged?: boolean;
       entities?: RawEntity[];
       relationships?: RawRelationship[];
+      llm?: string;
     }
   | { type: "skip"; file: string; reason?: string }
   | { type: "error"; file: string; message: string }
@@ -24,6 +25,8 @@ type ScanEvent =
 
 export function ScanPanel() {
   const [path, setPath] = useState("");
+  const [enhance, setEnhance] = useState(false);
+  const [llmState, setLlmState] = useState<"none" | "unavailable" | "on">("none");
   const [status, setStatus] = useState<Status>("idle");
   const [progress, setProgress] = useState<{ index: number; total: number; file: string } | null>(null);
   const [summary, setSummary] = useState<Record<string, number> | null>(null);
@@ -43,6 +46,7 @@ export function ScanPanel() {
     setSkips([]);
     setErrors([]);
     setGraph({ entities: [], relationships: [] });
+    setLlmState("none");
     setError("");
 
     const ents: RawEntity[] = [];
@@ -52,7 +56,7 @@ export function ScanPanel() {
       const res = await fetch("/ingest/scan", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ path }),
+        body: JSON.stringify({ path, enhance }),
       });
       if (!res.ok || !res.body) throw new Error(`${res.status} ${await res.text()}`);
 
@@ -79,6 +83,9 @@ export function ScanPanel() {
             if (Array.isArray(evt.relationships)) rels.push(...evt.relationships);
             setProgress({ index: evt.index, total: evt.total, file: evt.file });
             setGraph({ entities: [...ents], relationships: [...rels] });
+            if (evt.llm === "unavailable") setLlmState("unavailable");
+            else if (evt.llm === "ok")
+              setLlmState((prev) => (prev === "unavailable" ? prev : "on"));
           } else if (evt.type === "skip") {
             setSkips((s) => [...s, `${evt.file} (${evt.reason ?? "skipped"})`].slice(-12));
           } else if (evt.type === "error") {
@@ -116,11 +123,24 @@ export function ScanPanel() {
           value={path}
           onChange={(e) => setPath(e.target.value)}
         />
+        <label title="Enhance each file's graph with LLM-extracted entities/relationships (needs .env creds)">
+          <input
+            type="checkbox"
+            checked={enhance}
+            onChange={(e) => setEnhance(e.target.checked)}
+          />{" "}
+          LLM enhance
+        </label>
         <button onClick={scan} disabled={!path.trim() || status === "scanning"}>
           {status === "scanning" ? "Indexing…" : "Index"}
         </button>
       </div>
       {error && <div className="app__error">{error}</div>}
+      {enhance && llmState === "unavailable" && (
+        <div className="app__error">
+          LLM unavailable (set .env creds) — scan ran deterministic-only
+        </div>
+      )}
       {status === "scanning" && progress && (
         <div className="scan__progress">
           {pct}% · {progress.index}/{progress.total} · <code>{progress.file}</code>
@@ -130,6 +150,9 @@ export function ScanPanel() {
         <div className="scan__summary">
           Indexed <strong>{summary.ingested}</strong> file(s) · {summary.unchanged} unchanged ·{" "}
           {summary.skipped} skipped · {summary.entities} entities · {summary.relationships} edges
+          {summary.llmEntities || summary.llmRelationships
+            ? ` · LLM +${summary.llmEntities} entities · +${summary.llmRelationships} edges`
+            : ""}
           {summary.errors ? ` · ${summary.errors} errors` : ""}
         </div>
       )}

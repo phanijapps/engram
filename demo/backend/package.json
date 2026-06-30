@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.80.2",
     "@engram/node": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "hono": "^4.6.0",

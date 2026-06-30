@@ -414,7 +414,7 @@
   },
   {
     "phase_id": "PHASE59",
-    "status": "DRAFT",
+    "status": "DONE",
     "description": "RFC 0004 LLM relationship extraction (pi SDK -> ollama cloud -> gemma4:31b-cloud, deterministic baseline)",
     "spec_file": "docs/specs/llm-relationship-extraction/spec.md",
     "plan_file": "docs/specs/llm-relationship-extraction/plan.md"

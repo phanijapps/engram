@@ -11,6 +11,7 @@ import {
 } from "./engram.js";
 import { walk, safeReadText, type ScanFile } from "./scan.js";
 import { hashContent, isUnchanged, loadManifest, saveManifest } from "./manifest.js";
+import { enhanceWithLLM } from "./enhance.js";
 
 // Demo-local defaults for scan-ingested documents (single-user, local).
 const SCAN_SCOPE = { tenant: "tenant-demo", workspace: "engram", environment: "local" };
@@ -60,12 +61,59 @@ app.post("/ingest/extract", async (c) => {
   return c.json(await getIngestTransport().ingestExtract(request));
 });
 
+// --- LLM relationship extraction (RFC 0004 Slice 2) -------------------------
+// Runs the deterministic baseline (persisted by Rust), then optionally enhances
+// it with an LLM-extracted graph persisted into the SAME graphId. LLM creds come
+// from .env; with none, this is deterministic-only. The LLM call never crashes
+// the request — a missing/failed call reports `llm: "unavailable" | "error"`.
+app.post("/llm/extract", async (c) => {
+  const { text, documentKind, scope, policy, sourceName, actor } = await c.req.json();
+  if (!text || typeof text !== "string") return c.json({ error: "text required" }, 400);
+  const kind: "code" | "text" = documentKind === "code" ? "code" : "text";
+  const reqScope = scope ?? SCAN_SCOPE;
+  const reqPolicy = policy ?? SCAN_POLICY;
+  const reqActor = actor ?? SCAN_ACTOR;
+  const reqSource = sourceName ?? "demo:llm";
+
+  const baseline = await getIngestTransport().ingestExtract({
+    sourceKind: "filesystem",
+    sourceName: reqSource,
+    scope: reqScope,
+    documentKind: kind,
+    document: { path: reqSource },
+    text,
+    policy: reqPolicy,
+    actor: reqActor,
+  });
+  const detEntities = Array.isArray(baseline.entities) ? baseline.entities : [];
+  const detRelationships = Array.isArray(baseline.relationships) ? baseline.relationships : [];
+  const graphId =
+    baseline.graph && typeof (baseline.graph as { id?: unknown }).id === "string"
+      ? (baseline.graph as { id: string }).id
+      : "";
+
+  const enhance = graphId
+    ? await enhanceWithLLM({ text, kind, graphId, scope: reqScope, source: reqSource, actor: reqActor })
+    : { status: "error" as const, entities: [], relationships: [], error: "no graph id" };
+
+  return c.json({
+    entities: [...detEntities, ...enhance.entities],
+    relationships: [...detRelationships, ...enhance.relationships],
+    chunkCount: baseline.chunkCount ?? 0,
+    llm:
+      enhance.status === "ok"
+        ? { entities: enhance.entities.length, relationships: enhance.relationships.length }
+        : enhance.status,
+  });
+});
+
 // --- Scale ingestion: point at a folder/repo and index it (RFC 0004 Slice 1) --
 // Walks the tree (.gitignore + secret blocklist + size bound + path confinement),
 // ingests each text/code file via the existing Rust path, and streams NDJSON
 // progress. Re-scans are incremental (content-hash manifest).
 app.post("/ingest/scan", async (c) => {
-  const { path: root, scope, policy, maxBytes } = await c.req.json();
+  const { path: root, scope, policy, maxBytes, enhance } = await c.req.json();
+  const doEnhance = enhance === true;
   if (!root || typeof root !== "string") return c.json({ error: "path required" }, 400);
   let stat;
   try {
@@ -91,6 +139,8 @@ app.post("/ingest/scan", async (c) => {
     let unchanged = 0;
     let entities = 0;
     let relationships = 0;
+    let llmEntities = 0;
+    let llmRelationships = 0;
     let errors = 0;
 
     for (const f of files) {
@@ -131,6 +181,35 @@ app.post("/ingest/scan", async (c) => {
         const r = Array.isArray(result.relationships) ? result.relationships.length : 0;
         entities += e;
         relationships += r;
+
+        // Optional LLM enhancement persisted into the same graph (RFC 0004 S2).
+        let emittedEntities: unknown[] = result.entities;
+        let emittedRelationships: unknown[] = result.relationships;
+        let llm: string | { entities: number; relationships: number } | undefined;
+        if (doEnhance) {
+          const gid =
+            result.graph && typeof (result.graph as { id?: unknown }).id === "string"
+              ? (result.graph as { id: string }).id
+              : "";
+          if (gid) {
+            const enh = await enhanceWithLLM({
+              text,
+              kind: f.kind === "code" ? "code" : "text",
+              graphId: gid,
+              scope: reqScope,
+              source: `scan:${path.basename(rootAbs)}`,
+              actor: SCAN_ACTOR,
+            });
+            if (enh.status === "ok") {
+              emittedEntities = [...result.entities, ...enh.entities];
+              emittedRelationships = [...result.relationships, ...enh.relationships];
+              llmEntities += enh.entities.length;
+              llmRelationships += enh.relationships.length;
+            }
+            llm = enh.status;
+          }
+        }
+
         ingested++;
         await s.write(
           JSON.stringify({
@@ -138,8 +217,9 @@ app.post("/ingest/scan", async (c) => {
             index,
             total,
             file: f.relPath,
-            entities: result.entities,
-            relationships: result.relationships,
+            entities: emittedEntities,
+            relationships: emittedRelationships,
+            llm,
           }) + "\n"
         );
         // Persist incrementally so an aborted scan does not re-ingest files
@@ -168,6 +248,8 @@ app.post("/ingest/scan", async (c) => {
           skipped,
           entities,
           relationships,
+          llmEntities,
+          llmRelationships,
           errors,
         },
       }) + "\n"

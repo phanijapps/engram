@@ -3,16 +3,15 @@
 This log records known gaps that should not block the current implementation
 loop but must stay visible.
 
-## SQL Adapter File-Backed Construction
+## SQL Server Database Adapter
 
-Phase: `PHASE06`
+Phase: `PHASE42`
 
-`engram-store-sql` currently supports in-memory SQLite for CI conformance. That
-is enough to prove SQL semantics without provisioning infrastructure.
+`engram-store-sql` supports in-memory and file-backed SQLite for local durable
+conformance. Server database adapters remain a separate decision.
 
 Remaining work:
 
-- add file-backed SQLite construction after in-memory conformance is stable
 - decide whether server database adapters belong in this crate or sibling
   adapter crates
 

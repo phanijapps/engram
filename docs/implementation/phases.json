@@ -292,5 +292,12 @@
     "description": "Contributor validation parity",
     "spec_file": "docs/specs/contributor-validation-parity/spec.md",
     "plan_file": "docs/specs/contributor-validation-parity/plan.md"
+  },
+  {
+    "phase_id": "PHASE42",
+    "status": "DONE",
+    "description": "SQLite file-backed construction",
+    "spec_file": "docs/specs/sqlite-file-backed-construction/spec.md",
+    "plan_file": "docs/specs/sqlite-file-backed-construction/plan.md"
   }
 ]

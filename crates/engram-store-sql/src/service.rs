@@ -4,7 +4,10 @@
 //! write validation, policy gates, retrieval ranking, and forget behavior stays
 //! in service-level modules or reusable conformance runners.
 
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex, MutexGuard},
+};
 
 use async_trait::async_trait;
 use engram_core::{CoreError, CoreResult, MemoryEventRepository, MemoryRepository};
@@ -33,6 +36,21 @@ impl SqlMemoryStore {
     /// behavior.
     pub fn open_in_memory() -> CoreResult<Self> {
         let connection = Connection::open_in_memory().map_err(sql_error)?;
+        Self::from_connection(connection)
+    }
+
+    /// Opens a file-backed SQLite store and initializes the Engram schema.
+    ///
+    /// This constructor is intended for local durable smoke tests and embedded
+    /// development workflows. It preserves the same repository behavior as the
+    /// in-memory constructor; the file path remains adapter configuration, not
+    /// portable memory data.
+    pub fn open_file(path: impl AsRef<Path>) -> CoreResult<Self> {
+        let connection = Connection::open(path).map_err(sql_error)?;
+        Self::from_connection(connection)
+    }
+
+    fn from_connection(connection: Connection) -> CoreResult<Self> {
         initialize_schema(&connection)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),

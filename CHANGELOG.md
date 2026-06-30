@@ -97,3 +97,4 @@ This project follows a contract-first changelog while pre-1.0.
 - Added CI and release checklist gates for vector FastEmbed feature compilation.
 - Added top-level open-source governance documentation.
 - Aligned contributor validation documentation with PR and release gates.
+- Added file-backed SQLite construction for the SQL memory service and store.

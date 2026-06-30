@@ -15,6 +15,8 @@ use the implementation roadmap as the spec-driven execution loop.
   tests.
 - Keep evaluation fixtures executable through the Rust fixture runner.
 - Keep SQLite SQL behavior covered by write/retrieve/forget/eval service tests.
+- Keep file-backed SQLite construction behind the SQL adapter boundary for
+  local durable smoke tests.
 - Keep native bindings as a JSON transport over Rust behavior.
 - Keep source-grounded knowledge ingestion deterministic and separate from
   memory records.

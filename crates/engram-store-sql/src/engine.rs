@@ -4,7 +4,7 @@
 //! dependencies. Operation-specific behavior lives in `write`, `retrieval`, and
 //! `forget` to avoid a monolithic SQL service.
 
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use async_trait::async_trait;
 use engram_core::{
@@ -39,6 +39,20 @@ impl SqlMemoryService {
     pub fn open_in_memory() -> CoreResult<Self> {
         Self::with_dependencies(
             SqlMemoryStore::open_in_memory()?,
+            Arc::new(AllowAllPolicyAuthorizer),
+            Arc::new(SystemClock),
+            Arc::new(SequentialIdGenerator::new()),
+        )
+    }
+
+    /// Opens a file-backed SQLite service with default local dependencies.
+    ///
+    /// This constructor is intended for durable local smoke tests and embedded
+    /// development. It uses the same orchestration, policy, clock, and ID
+    /// defaults as `open_in_memory`.
+    pub fn open_file(path: impl AsRef<Path>) -> CoreResult<Self> {
+        Self::with_dependencies(
+            SqlMemoryStore::open_file(path)?,
             Arc::new(AllowAllPolicyAuthorizer),
             Arc::new(SystemClock),
             Arc::new(SequentialIdGenerator::new()),

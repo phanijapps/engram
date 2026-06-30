@@ -3,6 +3,7 @@ use engram_domain::*;
 use engram_eval::MemoryFixtureRunner;
 use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 
@@ -123,4 +124,27 @@ fn sql_service_runs_evaluation_fixture() {
     let report = block_on(runner.run_fixture(fixture)).expect("run fixture");
 
     assert!(report.cases[0].passed, "{:?}", report.cases[0].failures);
+}
+
+#[test]
+fn sql_service_file_backed_store_persists_across_reopen() {
+    let path = temp_database_path("engram-sql-service-reopen");
+    let first = SqlMemoryService::open_file(&path).expect("open file-backed sql service");
+    let response = block_on(first.write_memory(write_fixture())).expect("write memory");
+    drop(first);
+
+    let second = SqlMemoryService::open_file(&path).expect("reopen file-backed sql service");
+    let fetched = block_on(second.get_memory(&response.record.id, &response.record.scope))
+        .expect("get memory")
+        .expect("persisted memory");
+
+    assert_eq!(fetched.content.text, response.record.content.text);
+    let _ = std::fs::remove_file(path);
+}
+
+fn temp_database_path(name: &str) -> PathBuf {
+    let mut path = std::env::temp_dir();
+    path.push(format!("{name}-{}.sqlite", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    path
 }

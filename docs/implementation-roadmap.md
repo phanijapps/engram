@@ -857,6 +857,8 @@ Shipped slice:
 - Added top-level open-source governance covering maintainer decisions,
   contract changes, releases, disputes, and private escalation paths.
 - Aligned README and CONTRIBUTING validation commands with PR and release gates.
+- Added file-backed SQLite construction for local durable SQL adapter smoke
+  tests while keeping server database adapters deferred.
 
 ## Stop Conditions
 

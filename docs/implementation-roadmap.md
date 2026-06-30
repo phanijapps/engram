@@ -856,6 +856,7 @@ Shipped slice:
 - Kept provider-backed model downloads outside default CI.
 - Added top-level open-source governance covering maintainer decisions,
   contract changes, releases, disputes, and private escalation paths.
+- Aligned README and CONTRIBUTING validation commands with PR and release gates.
 
 ## Stop Conditions
 

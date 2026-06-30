@@ -285,5 +285,12 @@
     "description": "Open source governance",
     "spec_file": "docs/specs/open-source-governance/spec.md",
     "plan_file": "docs/specs/open-source-governance/plan.md"
+  },
+  {
+    "phase_id": "PHASE41",
+    "status": "DONE",
+    "description": "Contributor validation parity",
+    "spec_file": "docs/specs/contributor-validation-parity/spec.md",
+    "plan_file": "docs/specs/contributor-validation-parity/plan.md"
   }
 ]

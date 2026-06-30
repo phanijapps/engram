@@ -25,6 +25,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@engram/contracts": "workspace:*"
+    "@engram/contracts": "workspace:*",
+    "@engram/node": "workspace:*"
   }
 }

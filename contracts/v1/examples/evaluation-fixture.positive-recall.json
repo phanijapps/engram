@@ -1,0 +1,78 @@
+{
+  "id": "eval-retrieval-positive-001",
+  "name": "positive memory recall",
+  "scope": {
+    "tenant": "tenant-demo",
+    "workspace": "engram",
+    "environment": "local"
+  },
+  "setup": {
+    "memories": [
+      {
+        "kind": "fact",
+        "content": {
+          "text": "Engram positive recall fixture stores Rust 2024 memory contract facts.",
+          "format": "text"
+        },
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-eval-positive",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          }
+        },
+        "provenance": {
+          "source": "evaluation_fixture_positive_recall",
+          "actor": {
+            "id": "actor-eval-positive",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          },
+          "observedAt": "2026-06-30T12:00:00Z",
+          "method": "manual"
+        },
+        "policy": {
+          "visibility": "workspace",
+          "retention": "durable",
+          "allowedUses": ["retrieval", "evaluation"]
+        }
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "recalls-positive-memory",
+      "request": {
+        "query": "Rust 2024 memory contract",
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-eval-positive",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          }
+        },
+        "includeExplanations": true
+      },
+      "expect": {
+        "mustInclude": [
+          {
+            "targetType": "memory",
+            "targetId": "memory-001"
+          }
+        ],
+        "requiresExplanation": true
+      }
+    }
+  ],
+  "createdAt": "2026-06-30T12:01:00Z"
+}

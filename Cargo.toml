@@ -2,6 +2,13 @@
 members = [
     "crates/engram-domain",
     "crates/engram-core",
+    "crates/engram-store-memory",
+    "crates/engram-eval",
+    "crates/engram-store-sql",
+    "crates/engram-node",
+    "crates/engram-ingest",
+    "crates/engram-store-vector",
+    "crates/engram-retrieval",
 ]
 resolver = "3"
 
@@ -14,6 +21,13 @@ rust-version = "1.85"
 [workspace.dependencies]
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
+futures = "0.3"
+jsonschema = "0.40"
+napi = "3.9.4"
+napi-derive = "3.5.7"
+rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.11.0"
+sqlite-vec = "=0.1.9"
 thiserror = "2"

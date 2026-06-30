@@ -16,7 +16,13 @@ Describe the change.
 - [ ] `.codex/hooks/check-docs.sh`
 - [ ] `cargo fmt --all --check`
 - [ ] `cargo check --workspace`
+- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
 - [ ] `cargo test --workspace`
+- [ ] `cargo check -p engram-store-vector --features fastembed-tests --tests`
+- [ ] `cargo clippy -p engram-store-vector --features fastembed-tests --tests -- -D warnings`
+- [ ] `pnpm run typecheck`
+- [ ] `pnpm run test`
+- [ ] `pnpm run build`
 
 ## Notes
 

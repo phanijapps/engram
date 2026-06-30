@@ -5,9 +5,16 @@
 //! infrastructure: SQL stores, vector indexes, embedding providers, schedulers,
 //! gateways, and TypeScript bindings should implement these traits elsewhere.
 
+mod consolidation;
+
 use async_trait::async_trait;
 use engram_domain::*;
 use thiserror::Error;
+
+pub use consolidation::{
+    ConsolidationMutationExecutor, ConsolidationMutationOutcome, DryRunConsolidationService,
+    GatedConsolidationService,
+};
 
 /// Stable error surface shared by core services and adapters.
 ///
@@ -107,6 +114,29 @@ pub trait MemoryRepository: Send + Sync {
     ) -> CoreResult<MemoryRecord>;
 }
 
+/// Read port for append-only memory lifecycle events.
+///
+/// Event reads are separate from memory record writes because audit, evaluation,
+/// consolidation, and debugging need to inspect history without granting direct
+/// mutation access. Implementations must preserve event ordering as recorded by
+/// the adapter and must apply the supplied scope boundary before returning
+/// events.
+#[async_trait]
+pub trait MemoryEventRepository: Send + Sync {
+    /// Looks up a lifecycle event by ID inside the caller-provided scope.
+    async fn get_event(&self, id: &EventId, scope: &Scope) -> CoreResult<Option<MemoryEvent>>;
+
+    /// Lists lifecycle events for one memory inside the caller-provided scope.
+    async fn list_events_for_memory(
+        &self,
+        memory_id: &MemoryId,
+        scope: &Scope,
+    ) -> CoreResult<Vec<MemoryEvent>>;
+
+    /// Lists lifecycle events visible to the supplied scope.
+    async fn list_events_for_scope(&self, scope: &Scope) -> CoreResult<Vec<MemoryEvent>>;
+}
+
 /// Persistence port for source-grounded knowledge records.
 ///
 /// Knowledge sources, documents, and chunks are separate from memory records so
@@ -139,6 +169,21 @@ pub trait BeliefRepository: Send + Sync {
 
     /// Stores a reviewable contradiction between memories, beliefs, or knowledge.
     async fn put_contradiction(&self, contradiction: Contradiction) -> CoreResult<Contradiction>;
+
+    /// Looks up a contradiction review record inside the supplied scope.
+    async fn get_contradiction(
+        &self,
+        id: &ContradictionId,
+        scope: &Scope,
+    ) -> CoreResult<Option<Contradiction>>;
+
+    /// Applies an explicit reviewer resolution to a contradiction record.
+    async fn resolve_contradiction(
+        &self,
+        id: &ContradictionId,
+        scope: &Scope,
+        resolution: ContradictionResolution,
+    ) -> CoreResult<Contradiction>;
 }
 
 /// Persistence and navigation port for hierarchy structures.

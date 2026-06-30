@@ -7,12 +7,12 @@ Current packages:
 
 - `contracts`: `@engram/contracts`, generated from `contracts/v1/`.
 - `client`: `@engram/client`, a typed facade over an injected transport.
+- `node`: `@engram/node`, a Node native binding transport over Rust behavior.
+- `adapters`: `@engram/adapters`, framework-neutral integration utilities.
 
 Reserved packages:
 
-- `adapters`: framework, gateway, and tool integrations.
 - `eval`: evaluation fixture helpers and CLI wrappers.
-- `node`: native Node bindings over the Rust engine.
 
 TypeScript packages must not redefine domain truth. Public types should come
 from `@engram/contracts`.

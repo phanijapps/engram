@@ -10,6 +10,7 @@
     "build": "pnpm -r --if-present build",
     "check": "pnpm run contracts:generate && pnpm run typecheck && pnpm run test",
     "contracts:generate": "pnpm --filter @engram/contracts generate",
+    "contracts:check-generated": "pnpm run contracts:generate && git diff --exit-code -- packages/contracts/src/generated",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck"
   },

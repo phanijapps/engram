@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
-import { Graph3D, buildGraphData, type RawEntity, type RawRelationship } from "@/Graph3D";
+import { buildGraphData, type RawEntity, type RawRelationship } from "@/Graph3D";
+import { Graph3DCard } from "@/components/graph-3d-card";
 
 type Status = "idle" | "scanning" | "done" | "error";
 
@@ -176,7 +177,7 @@ export function RepoIndex() {
             </ul>
           </details>
         )}
-        <Graph3D data={graphData} />
+        <Graph3DCard data={graphData} />
       </CardContent>
     </Card>
   );

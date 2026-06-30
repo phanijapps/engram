@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
-import { Graph3D, buildGraphData, type RawEntity, type RawRelationship } from "@/Graph3D";
+import { buildGraphData, type RawEntity, type RawRelationship } from "@/Graph3D";
+import { Graph3DCard } from "@/components/graph-3d-card";
 import { ACTOR, POLICY, SCOPE } from "@/lib/constants";
 
 type LLMStatus = { entities: number; relationships: number } | "unavailable" | "error";
@@ -106,7 +107,7 @@ export function Ingest() {
             {result.chunkCount} chunks{llmHint(result.llm)}
           </p>
         )}
-        <Graph3D data={graphData} />
+        <Graph3DCard data={graphData} />
       </CardContent>
     </Card>
   );

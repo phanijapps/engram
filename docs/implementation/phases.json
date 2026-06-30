@@ -194,5 +194,12 @@
     "description": "In-memory assertion contradiction detection",
     "spec_file": "docs/specs/in-memory-assertion-contradiction-detection/spec.md",
     "plan_file": "docs/specs/in-memory-assertion-contradiction-detection/plan.md"
+  },
+  {
+    "phase_id": "PHASE28",
+    "status": "DONE",
+    "description": "In-memory belief retrieval",
+    "spec_file": "docs/specs/in-memory-belief-retrieval/spec.md",
+    "plan_file": "docs/specs/in-memory-belief-retrieval/plan.md"
   }
 ]

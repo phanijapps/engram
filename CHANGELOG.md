@@ -71,3 +71,5 @@ This project follows a contract-first changelog while pre-1.0.
   and belief-synthesized lifecycle events.
 - Added explicit assertion-pair in-memory contradiction detection with
   duplicate-open-record prevention and contradiction-detected lifecycle events.
+- Added in-memory belief retrieval with scoped active belief candidates,
+  policy omissions, explanations, and shared retrieval fusion.

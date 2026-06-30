@@ -386,8 +386,8 @@ Acceptance gate:
 
 Status: complete for in-memory belief and contradiction repository baseline,
 assertion-backed belief synthesis, and explicit assertion contradiction
-detection; semantic contradiction detection, resolution, and belief retrieval
-remain future work.
+detection, and in-memory belief retrieval; semantic contradiction detection and
+resolution remain future work.
 
 Goal: derive reviewable beliefs and contradictions from evidence without making
 beliefs indistinguishable from source facts.
@@ -472,6 +472,9 @@ Shipped slice:
 - Added explicit assertion-pair contradiction detection for scoped active
   memories, including duplicate-open-record prevention,
   `ContradictionDetected` lifecycle events, and deterministic task counters.
+- Added in-memory belief retrieval for active scoped beliefs, including
+  lifecycle, policy, confidence, time-filter, explanation, and shared-fusion
+  coverage.
 
 ## Phase 13: Integrations and Runtime Adapters
 

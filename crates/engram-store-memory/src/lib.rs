@@ -7,6 +7,7 @@
 //! separate crates and satisfy the same core contracts.
 
 mod belief;
+mod belief_retrieval;
 mod consolidation;
 mod dependencies;
 mod forget;

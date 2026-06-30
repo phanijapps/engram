@@ -107,3 +107,4 @@ This project follows a contract-first changelog while pre-1.0.
   and tombstone outcomes.
 - Added serializable evaluation report summaries in `engram-eval`.
 - Added SQL adapter design documentation aligned with current SQLite support.
+- Recorded a full roadmap validation sweep with clean generated-file drift.

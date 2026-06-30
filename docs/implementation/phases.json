@@ -348,5 +348,12 @@
     "description": "SQL adapter design alignment",
     "spec_file": "docs/specs/sql-adapter-design-alignment/spec.md",
     "plan_file": "docs/specs/sql-adapter-design-alignment/plan.md"
+  },
+  {
+    "phase_id": "PHASE50",
+    "status": "DONE",
+    "description": "Roadmap validation sweep",
+    "spec_file": "docs/specs/roadmap-validation-sweep/spec.md",
+    "plan_file": "docs/specs/roadmap-validation-sweep/plan.md"
   }
 ]

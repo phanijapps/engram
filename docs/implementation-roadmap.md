@@ -872,6 +872,8 @@ Shipped slice:
   and accepted fixture sets.
 - Aligned SQL adapter design documentation with ADR-0005/ADR-0006 and current
   in-memory/file-backed SQLite support.
+- Ran the full Rust, TypeScript, contract, documentation, and FastEmbed
+  feature-gate validation sweep with no tracked generated drift.
 
 ## Stop Conditions
 
@@ -889,6 +891,5 @@ Do not move to a later phase when any of these are true:
 
 ## Near-Term Queue
 
-The next implementation loop should be:
-
-1. Update docs and run the full validation suite.
+No queued implementation items remain in this roadmap. Open the next slice with
+a new spec or ADR before adding behavior.

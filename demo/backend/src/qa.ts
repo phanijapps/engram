@@ -151,18 +151,19 @@ export function buildEvidence(
     relCount++;
   }
 
-  // Knowledge chunks: the actual code/document text. Include chunks that
-  // reference a matched entity (entity-ref match) OR whose text contains a
-  // query term. Cap at 8 chunks / 600 chars each.
-  const matchedChunks = chunks
-    .filter((c) => {
-      const byEntity = c.entities?.some((e) => e.id && matchedEntityIds.has(e.id));
-      const byText = terms.some((t) => c.text.toLowerCase().includes(t));
-      return byEntity || byText;
-    })
-    .slice(0, 8);
+  // Knowledge chunks: the actual code text. Prioritize entity-ref-matched chunks
+  // (the code that DEFINES the matched entities) over text-term matches (which
+  // could be docs/markdown that merely mention the terms). Fall back to text-term
+  // matches only if no entity-ref chunks are found.
+  const byEntityRef = chunks.filter((c) =>
+    c.entities?.some((e) => e.id && matchedEntityIds.has(e.id)),
+  );
+  const byTextTerm = chunks.filter((c) =>
+    terms.some((t) => c.text.toLowerCase().includes(t)),
+  );
+  const matchedChunks = (byEntityRef.length > 0 ? byEntityRef : byTextTerm).slice(0, 8);
   for (const chunk of matchedChunks) {
-    const text = chunk.text.slice(0, 600);
+    const text = chunk.text.slice(0, 1200);
     blocks.push(`[chunk ${chunk.id}] ${text}`);
     sources.push({
       kind: "chunk",
@@ -179,11 +180,17 @@ export function buildEvidence(
 }
 
 const QA_SYSTEM_PROMPT =
-  "You answer questions about a knowledge graph (entities, relationships, call graphs), " +
-  "memories, and beliefs. Answer strictly from the provided context. For call-graph or " +
-  "relationship questions, trace the entities and their relationships (calls, defines, " +
-  "contains, depends_on, etc.) shown in the context. Cite sources by their [id]. " +
-  "If the context does not contain the answer, say so — do not invent records.";
+  "You are a code intelligence assistant. You answer questions about a knowledge graph " +
+  "(entities, relationships, call graphs) and source code chunks.\n\n" +
+  "When asked to EXPLAIN or UNDERSTAND something:\n" +
+  "1. Read the code from [chunk] sources to explain what it does and how it works.\n" +
+  "2. Trace the call graph from [entity] + [relationship] sources (who calls whom, data flow).\n" +
+  "3. Describe inputs, transformations, and outputs.\n\n" +
+  "When asked for a CALL GRAPH:\n" +
+  "1. List the root entity and trace outward via relationships (calls, depends_on, contains).\n" +
+  "2. Show each hop as a tree or list.\n\n" +
+  "Cite sources by their [id]. Use markdown headings, bullets, and code references. " +
+  "If the context is insufficient, say so — do not invent records.";
 
 /** Fetch knowledge-graph entities + relationships + chunks visible to `scope`. */
 async function fetchGraph(scope: unknown): Promise<{ entities: QaEntity[]; relationships: QaRelationship[]; chunks: QaChunk[] }> {

@@ -1,5 +1,14 @@
 import type { LucideIcon } from "lucide-react";
-import { BrainCircuit, LayoutDashboard } from "lucide-react";
+import {
+  BrainCircuit,
+  Database,
+  FileInput,
+  FolderTree,
+  LayoutDashboard,
+  MessageSquare,
+  Network,
+  Scale,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import {
   Sidebar,
@@ -20,9 +29,14 @@ export type NavItem = {
   icon: LucideIcon;
 };
 
-// Routes are added here as they land in T2 (one item per capability).
 export const NAV_ITEMS: NavItem[] = [
   { title: "Dashboard", to: "/", icon: LayoutDashboard },
+  { title: "Ingest", to: "/ingest", icon: FileInput },
+  { title: "Index", to: "/index", icon: FolderTree },
+  { title: "Knowledge", to: "/knowledge", icon: Network },
+  { title: "Belief", to: "/belief", icon: Scale },
+  { title: "Memory", to: "/memory", icon: Database },
+  { title: "Chat", to: "/chat", icon: MessageSquare },
 ];
 
 export function AppSidebar() {

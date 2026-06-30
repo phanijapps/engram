@@ -48,6 +48,22 @@ export interface NativeIngestEngineConstructor {
   new (path?: string | null): NativeIngestEngineBinding;
 }
 
+/** Native class shape for the Rust-backed belief + contradiction engine. */
+export interface NativeBeliefEngineBinding {
+  putBeliefJson(beliefJson: string): string;
+  listBeliefsJson(requestJson: string): string;
+  putContradictionJson(contradictionJson: string): string;
+  listContradictionsJson(requestJson: string): string;
+  getContradictionJson(requestJson: string): string;
+  resolveContradictionJson(requestJson: string): string;
+  detectContradictionsJson(beliefsJson: string): string;
+}
+
+/** Constructor shape for the Rust-backed belief + contradiction engine. */
+export interface NativeBeliefEngineConstructor {
+  new (path?: string | null): NativeBeliefEngineBinding;
+}
+
 /** Native class shape for the Rust-backed semantic-retrieval engine (FastEmbed). */
 export interface NativeRetrievalEngineBinding {
   indexJson(requestJson: string): string;
@@ -64,6 +80,7 @@ export interface NativeBinding {
   NativeMemoryEngine: NativeMemoryEngineConstructor;
   NativeKnowledgeEngine: NativeKnowledgeEngineConstructor;
   NativeIngestEngine: NativeIngestEngineConstructor;
+  NativeBeliefEngine: NativeBeliefEngineConstructor;
   NativeRetrievalEngine: NativeRetrievalEngineConstructor;
 }
 

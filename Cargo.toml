@@ -13,6 +13,7 @@ members = [
     "adapters/knowledge/inmem",
     "adapters/knowledge/sqlite",
     "adapters/retrieval/sqlite-vec",
+    "adapters/orchestration/belief-sqlite",
     "bindings/node",
 ]
 resolver = "3"

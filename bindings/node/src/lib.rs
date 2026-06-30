@@ -4,10 +4,12 @@
 //! packages own ergonomics; this crate owns serialization round trips into the
 //! Rust memory service.
 
+use engram_core::{BeliefRepository, ContradictionDetector};
 use engram_domain::{
-    Concept, ConceptRelation, ConceptScheme, Id, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph,
-    KnowledgeRelationship, KnowledgeSource, Ontology, OntologyAxiom, OntologyClass,
-    OntologyProperty, Scope, SourceDocument, SourceDocumentKind,
+    Belief, Concept, ConceptRelation, ConceptScheme, Contradiction, ContradictionResolution, Id,
+    KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeRelationship, KnowledgeSource,
+    Ontology, OntologyAxiom, OntologyClass, OntologyProperty, Scope, SourceDocument,
+    SourceDocumentKind,
 };
 use engram_domain::{ForgetRequest, RetrievalRequest, WriteMemoryRequest};
 use engram_ingest::{
@@ -18,6 +20,7 @@ use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
 };
 use engram_memory::{CoreError, MemoryService};
+use engram_store_belief_sqlite::SqlBeliefStore;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
@@ -298,6 +301,97 @@ impl NativeKnowledgeEngine {
         let scope = scope_field(&value)?;
         let result = block_on(self.store.validate_graph(&graph_id, &ontology_id, &scope))
             .map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
+
+/// Stateful belief + contradiction engine exposed to Node through N-API.
+///
+/// Owns one SQLite-backed belief store (`SqlBeliefStore`). Implements the
+/// `BeliefRepository` (put/get/resolve) + `ContradictionDetector` surface. The
+/// store is distinct from knowledge + memory storage; beliefs are derived
+/// stance, not source-grounded evidence. Focused per ADR-0007 (no god-struct).
+#[napi]
+pub struct NativeBeliefEngine {
+    store: SqlBeliefStore,
+}
+
+#[napi]
+impl NativeBeliefEngine {
+    /// Opens a SQLite belief engine. Pass a path for a durable file-backed store;
+    /// omit for in-memory.
+    #[napi(constructor)]
+    pub fn new(path: Option<String>) -> Result<Self> {
+        let store = match path {
+            Some(path) => SqlBeliefStore::open_file(path),
+            None => SqlBeliefStore::open_in_memory(),
+        }
+        .map_err(to_napi_error)?;
+        Ok(Self { store })
+    }
+
+    #[napi(js_name = "putBeliefJson")]
+    pub fn put_belief_json(&self, belief_json: String) -> Result<String> {
+        let belief: Belief = decode(&belief_json)?;
+        let result = block_on(self.store.put_belief(belief)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "listBeliefsJson")]
+    pub fn list_beliefs_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.store.list_beliefs(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "putContradictionJson")]
+    pub fn put_contradiction_json(&self, contradiction_json: String) -> Result<String> {
+        let contradiction: Contradiction = decode(&contradiction_json)?;
+        let result =
+            block_on(self.store.put_contradiction(contradiction)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "listContradictionsJson")]
+    pub fn list_contradictions_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.store.list_contradictions(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "getContradictionJson")]
+    pub fn get_contradiction_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let id = id_field(&value, "id")?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.store.get_contradiction(&id, &scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    #[napi(js_name = "resolveContradictionJson")]
+    pub fn resolve_contradiction_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let id = id_field(&value, "id")?;
+        let scope = scope_field(&value)?;
+        let resolution: ContradictionResolution = serde_json::from_value(
+            value
+                .get("resolution")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
+        )
+        .map_err(|error| Error::from_reason(error.to_string()))?;
+        let result = block_on(self.store.resolve_contradiction(&id, &scope, resolution))
+            .map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Runs advisory contradiction detection over the supplied beliefs.
+    #[napi(js_name = "detectContradictionsJson")]
+    pub fn detect_contradictions_json(&self, beliefs_json: String) -> Result<String> {
+        let beliefs: Vec<Belief> = decode(&beliefs_json)?;
+        let result = block_on(self.store.detect_contradictions(&beliefs)).map_err(to_napi_error)?;
         encode(&result)
     }
 }

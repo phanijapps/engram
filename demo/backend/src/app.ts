@@ -4,6 +4,7 @@ import { stream } from "hono/streaming";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
+  getBeliefTransport,
   getIngestTransport,
   getKnowledgeTransport,
   getRetrievalTransport,
@@ -350,4 +351,44 @@ app.post("/ontology/it-org", async (c) => {
   await transport.putConceptScheme(sample.scheme);
   for (const concept of sample.concepts) await transport.putConcept(concept);
   return c.json({ loaded: true, sample });
+});
+
+// --- Belief + contradiction (RFC 0004 Slice 5) ------------------------------
+// Durable belief/contradiction storage in the belief SQLite adapter (distinct
+// from knowledge + memory). Detection is advisory; resolution is an action.
+app.post("/belief/put", async (c) => {
+  const request = await c.req.json();
+  return c.json(await getBeliefTransport().putBelief(request));
+});
+app.post("/belief/list", async (c) => {
+  const { scope } = await c.req.json();
+  return c.json(await getBeliefTransport().listBeliefs(scope));
+});
+app.post("/belief/contradiction", async (c) => {
+  const request = await c.req.json();
+  return c.json(await getBeliefTransport().putContradiction(request));
+});
+app.post("/belief/contradictions", async (c) => {
+  const { scope } = await c.req.json();
+  return c.json(await getBeliefTransport().listContradictions(scope));
+});
+app.post("/belief/get", async (c) => {
+  const { id, scope } = await c.req.json();
+  return c.json(await getBeliefTransport().getContradiction(id, scope));
+});
+app.post("/belief/resolve", async (c) => {
+  const { id, scope, resolution } = await c.req.json();
+  return c.json(await getBeliefTransport().resolveContradiction(id, scope, resolution));
+});
+// Runs advisory detection over the beliefs visible to `scope`, persists each
+// detected contradiction (so it appears in the review queue), and returns them.
+app.post("/belief/detect", async (c) => {
+  const { scope } = await c.req.json();
+  const transport = getBeliefTransport();
+  const beliefs = await transport.listBeliefs(scope);
+  const detected = (await transport.detectContradictions(beliefs)) as unknown[];
+  for (const contradiction of detected) {
+    await transport.putContradiction(contradiction);
+  }
+  return c.json({ beliefs: (beliefs as unknown[]).length, contradictions: detected });
 });

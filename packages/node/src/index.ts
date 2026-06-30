@@ -2,6 +2,8 @@ export {
   loadNativeBinding,
   type NativeBinding,
   type NativeBindingLoader,
+  type NativeBeliefEngineBinding,
+  type NativeBeliefEngineConstructor,
   type NativeIngestEngineBinding,
   type NativeIngestEngineConstructor,
   type NativeKnowledgeEngineBinding,
@@ -12,11 +14,14 @@ export {
   type NativeRetrievalEngineConstructor
 } from "./binding.js";
 export {
+  createNativeBeliefTransport,
   createNativeIngestTransport,
   createNativeKnowledgeTransport,
   createNativeMemoryTransport,
   createNativeRetrievalTransport,
   type IngestExtractResult,
+  type NativeBeliefTransport,
+  type NativeBeliefTransportOptions,
   type NativeIngestTransport,
   type NativeIngestTransportOptions,
   type NativeKnowledgeTransport,

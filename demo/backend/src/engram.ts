@@ -1,8 +1,10 @@
 import {
+  createNativeBeliefTransport,
   createNativeIngestTransport,
   createNativeKnowledgeTransport,
   createNativeMemoryTransport,
   createNativeRetrievalTransport,
+  type NativeBeliefTransport,
   type NativeIngestTransport,
   type NativeKnowledgeTransport,
   type NativeMemoryTransport,
@@ -57,4 +59,17 @@ export function getRetrievalTransport(): NativeRetrievalTransport {
     retrieval = createNativeRetrievalTransport();
   }
   return retrieval;
+}
+
+// One Rust-backed belief + contradiction engine. Shares the durable SQLite file
+// (ENGRAM_DB) so beliefs/contradictions persist across restarts alongside memory
+// and knowledge. Belief storage is distinct from knowledge + memory (derived
+// stance, not source-grounded evidence).
+let belief: NativeBeliefTransport | null = null;
+
+export function getBeliefTransport(): NativeBeliefTransport {
+  if (belief === null) {
+    belief = createNativeBeliefTransport({ dbPath: dbPath() });
+  }
+  return belief;
 }

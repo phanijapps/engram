@@ -11,6 +11,7 @@ import {
   loadNativeBinding,
   type NativeBinding,
   type NativeBindingLoader,
+  type NativeBeliefEngineBinding,
   type NativeIngestEngineBinding,
   type NativeKnowledgeEngineBinding,
   type NativeMemoryEngineBinding,
@@ -215,6 +216,68 @@ class JsonNativeIngestTransport implements NativeIngestTransport {
 
   async ingestExtract(request: unknown): Promise<IngestExtractResult> {
     return decode(this.engine.ingestExtractJson(encode(request)));
+  }
+}
+
+/** Transport interface for belief + contradiction operations. */
+export interface NativeBeliefTransport {
+  putBelief(belief: unknown): Promise<unknown>;
+  listBeliefs(scope: unknown): Promise<unknown>;
+  putContradiction(contradiction: unknown): Promise<unknown>;
+  listContradictions(scope: unknown): Promise<unknown>;
+  getContradiction(id: string, scope: unknown): Promise<unknown>;
+  resolveContradiction(id: string, scope: unknown, resolution: unknown): Promise<unknown>;
+  detectContradictions(beliefs: unknown): Promise<unknown>;
+}
+
+/** Options for constructing a native belief transport. */
+export interface NativeBeliefTransportOptions {
+  binding?: NativeBinding;
+  loader?: NativeBindingLoader;
+  dbPath?: string | null;
+}
+
+/** Creates a transport that delegates belief + contradiction behavior to Rust. */
+export function createNativeBeliefTransport(
+  options: NativeBeliefTransportOptions = {}
+): NativeBeliefTransport {
+  const binding = options.binding ?? loadNativeBinding(options.loader);
+  return new JsonNativeBeliefTransport(new binding.NativeBeliefEngine(options.dbPath ?? null));
+}
+
+class JsonNativeBeliefTransport implements NativeBeliefTransport {
+  constructor(private readonly engine: NativeBeliefEngineBinding) {}
+
+  async putBelief(belief: unknown): Promise<unknown> {
+    return decode(this.engine.putBeliefJson(encode(belief)));
+  }
+
+  async listBeliefs(scope: unknown): Promise<unknown> {
+    return decode(this.engine.listBeliefsJson(encode({ scope })));
+  }
+
+  async putContradiction(contradiction: unknown): Promise<unknown> {
+    return decode(this.engine.putContradictionJson(encode(contradiction)));
+  }
+
+  async listContradictions(scope: unknown): Promise<unknown> {
+    return decode(this.engine.listContradictionsJson(encode({ scope })));
+  }
+
+  async getContradiction(id: string, scope: unknown): Promise<unknown> {
+    return decode(this.engine.getContradictionJson(encode({ id, scope })));
+  }
+
+  async resolveContradiction(
+    id: string,
+    scope: unknown,
+    resolution: unknown
+  ): Promise<unknown> {
+    return decode(this.engine.resolveContradictionJson(encode({ id, scope, resolution })));
+  }
+
+  async detectContradictions(beliefs: unknown): Promise<unknown> {
+    return decode(this.engine.detectContradictionsJson(encode(beliefs)));
   }
 }
 

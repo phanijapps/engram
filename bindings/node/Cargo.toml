@@ -9,11 +9,13 @@ rust-version.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+engram-core = { path = "../../core/orchestration" }
 engram-domain = { path = "../../core/domain" }
 engram-ingest = { path = "../../adapters/ingest" }
 engram-knowledge = { path = "../../core/knowledge" }
 engram-memory = { path = "../../core/memory" }
 engram-runtime = { path = "../../core/runtime" }
+engram-store-belief-sqlite = { path = "../../adapters/orchestration/belief-sqlite" }
 engram-store-knowledge-sqlite = { path = "../../adapters/knowledge/sqlite" }
 engram-store-sql = { path = "../../adapters/memory/sqlite" }
 engram-store-vector = { path = "../../adapters/retrieval/sqlite-vec" }

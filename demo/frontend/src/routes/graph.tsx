@@ -4,7 +4,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SCOPE } from "@/lib/constants";
 
-type GraphNode = { id: string; name: string; kind: string; graphId: string; degree: number };
+type GraphNode = {
+  id: string;
+  name: string;
+  kind: string;
+  graphId: string;
+  degree: number;
+  sourcePath?: string;
+  repo?: string;
+  aliases?: string[];
+  confidence?: number;
+};
 type GraphEdge = { subject: string; predicate: string; object: string };
 type GraphResponse = { nodes: GraphNode[]; edges: GraphEdge[]; total: number; capped: boolean };
 
@@ -27,6 +37,10 @@ export function Graph() {
           id: n.id,
           name: n.name,
           kind: n.kind,
+          sourcePath: n.sourcePath,
+          repo: n.repo,
+          aliases: n.aliases,
+          provenance: { source: n.repo, confidence: n.confidence },
         }));
         const relationships: RawRelationship[] = d.edges.map((e) => ({
           subject: { id: e.subject },

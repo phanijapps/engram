@@ -34,6 +34,8 @@ export type GraphEntity = {
   provenance?: GraphProvenance;
   aliases?: string[];
   sourceRefs?: GraphSourceRef[];
+  sourcePath?: string;
+  repo?: string;
 };
 
 export type GraphRelationship = {
@@ -61,6 +63,8 @@ export type RawEntity = {
   aliases?: string[];
   sourceRefs?: GraphSourceRef[];
   provenance?: GraphProvenance;
+  sourcePath?: string;
+  repo?: string;
 };
 export type RawRelationship = {
   id?: string;
@@ -100,6 +104,8 @@ export function buildGraphData(
       provenance: entity.provenance,
       aliases: entity.aliases,
       sourceRefs: entity.sourceRefs,
+      sourcePath: entity.sourcePath,
+      repo: entity.repo,
     })),
     relationships: relationships
       .filter((rel) => rel.subject.id && rel.object.id)
@@ -362,24 +368,34 @@ function DetailOverlay({
   if (selection.type === "entity") {
     const entity = data.entities.find((e) => e.id === selection.id);
     if (!entity) return null;
+    // Neighbors: incident edges → the other endpoint's name + predicate.
+    const namesById = new Map(data.entities.map((e) => [e.id, e.name]));
+    const neighbors = data.relationships
+      .filter((r) => r.subject.id === entity.id || r.object.id === entity.id)
+      .slice(0, 12)
+      .map((r) => {
+        const out = r.subject.id === entity.id;
+        const otherId = out ? r.object.id : r.subject.id;
+        return { predicate: r.predicate, name: namesById.get(otherId) ?? otherId, out };
+      });
     return (
       <div className="graph3d__detail">
         <div className="graph3d__detail-head">
           <span className="graph3d__kind">{entity.kind}</span>
+          {entity.repo && <span className="graph3d__repo">{entity.repo}</span>}
           <button className="graph3d__close" onClick={onClear} aria-label="close">
             ×
           </button>
         </div>
         <div className="graph3d__name">{entity.name}</div>
+        {entity.sourcePath && (
+          <div className="graph3d__file" title={entity.sourcePath}>
+            <code>{entity.sourcePath}</code>
+          </div>
+        )}
         <dl className="graph3d__fields">
           <div>
-            <dt>id</dt>
-            <dd>
-              <code>{entity.id}</code>
-            </dd>
-          </div>
-          <div>
-            <dt>degree</dt>
+            <dt>connections</dt>
             <dd>{entity.degree}</dd>
           </div>
           {entity.aliases && entity.aliases.length > 0 && (
@@ -389,6 +405,21 @@ function DetailOverlay({
             </div>
           )}
         </dl>
+        {neighbors.length > 0 && (
+          <div className="graph3d__neighbors">
+            <div className="graph3d__sources-head">connected to</div>
+            <ul>
+              {neighbors.map((n, i) => (
+                <li key={i}>
+                  <span className="graph3d__pred">
+                    {n.out ? "→" : "←"} {n.predicate}
+                  </span>{" "}
+                  <span className="graph3d__nbr">{n.name}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {entity.sourceRefs && entity.sourceRefs.length > 0 && (
           <div className="graph3d__sources">
             <div className="graph3d__sources-head">sources</div>

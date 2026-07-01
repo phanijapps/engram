@@ -117,6 +117,53 @@
   padding-top: 0.4rem;
 }
 
+.graph3d__repo {
+  font-size: 0.68rem;
+  color: var(--muted-foreground);
+  background: #1b2540;
+  border: 1px solid #2a3656;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+}
+
+.graph3d__file {
+  margin: 0.2rem 0 0.4rem;
+  font-size: 0.74rem;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.graph3d__file code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+}
+
+.graph3d__neighbors {
+  margin-top: 0.45rem;
+  border-top: 1px solid #2a3656;
+  padding-top: 0.4rem;
+}
+.graph3d__neighbors ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.graph3d__neighbors li {
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+.graph3d__pred {
+  color: #6ea8ff;
+  font-size: 0.72rem;
+}
+.graph3d__nbr {
+  color: var(--foreground);
+}
+
 .graph3d__sources-head {
   color: var(--muted-foreground);
   font-size: 0.72rem;

@@ -275,27 +275,48 @@ app.post("/knowledge/graph-data", async (c) => {
     if (typeof s === "string") degree.set(s, (degree.get(s) ?? 0) + 1);
     if (typeof o === "string") degree.set(o, (degree.get(o) ?? 0) + 1);
   }
-  // Top-N entities by degree.
-  const topIds = new Set(
-    [...degree.entries()].sort((a, b) => b[1] - a[1]).slice(0, maxNodes).map(([id]) => id),
-  );
-  // If fewer than maxNodes have edges, fill with isolated entities.
-  if (topIds.size < maxNodes) {
-    for (const e of filteredEnts) {
-      if (topIds.size >= maxNodes) break;
-      const eid = String(e.id ?? "");
-      if (eid) topIds.add(eid);
-    }
-  }
-  const nodes = filteredEnts
-    .filter((e) => topIds.has(String(e.id ?? "")))
+  // Display heuristic: deprioritize generic/noisy names (extraction artifacts like
+  // "implementation", "operator") so meaningful names fill the top-N first. Not
+  // deleted — they still appear if there's room.
+  const GENERIC = new Set([
+    "implementation", "operator", "detail", "details", "utility", "utilities", "util", "utils",
+    "helper", "helpers", "base", "type", "types", "value", "values", "data", "info", "default",
+    "custom", "general", "common", "unknown", "anonymous", "foo", "bar", "test", "tests",
+    "sample", "example", "item", "items", "list", "map", "set", "vec", "ptr",
+  ]);
+  const isGenericName = (name: string): boolean =>
+    name.trim().length < 3 || GENERIC.has(name.toLowerCase());
+  // Top-N: non-generic first, then by degree.
+  const ranked = filteredEnts
     .map((e) => ({
       id: String(e.id ?? ""),
-      name: String(e.name ?? ""),
-      kind: String(e.kind ?? "unknown"),
-      graphId: String(e.graphId ?? ""),
-      degree: degree.get(String(e.id ?? "")) ?? 0,
-    }));
+      deg: degree.get(String(e.id ?? "")) ?? 0,
+      gen: isGenericName(String(e.name ?? "")),
+    }))
+    .sort((a, b) => Number(a.gen) - Number(b.gen) || b.deg - a.deg);
+  const topIds = new Set(ranked.slice(0, maxNodes).map((x) => x.id));
+  const entByid = new Map(filteredEnts.map((e) => [String(e.id ?? ""), e]));
+  const nodes = [...topIds]
+    .map((id) => entByid.get(id))
+    .filter((e): e is Record<string, unknown> => !!e)
+    .map((e) => {
+      const refs = (e.sourceRefs as Array<Record<string, unknown>> | undefined) ?? [];
+      const sourcePath = refs
+        .map((r) => (r.location as Record<string, unknown> | undefined)?.path)
+        .find((p): p is string => typeof p === "string" && p.length > 0);
+      const prov = e.provenance as Record<string, unknown> | undefined;
+      return {
+        id: String(e.id ?? ""),
+        name: String(e.name ?? ""),
+        kind: String(e.kind ?? "unknown"),
+        graphId: String(e.graphId ?? ""),
+        degree: degree.get(String(e.id ?? "")) ?? 0,
+        sourcePath: sourcePath ?? "",
+        repo: typeof prov?.source === "string" ? (prov.source as string) : "",
+        aliases: Array.isArray(e.aliases) ? (e.aliases as string[]).slice(0, 8) : [],
+        confidence: typeof prov?.confidence === "number" ? (prov.confidence as number) : undefined,
+      };
+    });
   const nodeIds = new Set(nodes.map((n) => n.id));
   const edges = relList
     .filter((r) => {

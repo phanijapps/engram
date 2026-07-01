@@ -14,6 +14,7 @@ import {
 import { enhanceWithLLM } from "./enhance.js";
 import { buildItOrgOntology } from "./itOrgOntology.js";
 import { answerQuestion } from "./qa.js";
+import { runBenchmark } from "./bench.js";
 
 // Demo-local defaults for scan-ingested documents (single-user, local).
 const SCAN_SCOPE = { tenant: "tenant-demo", workspace: "engram", environment: "local" };
@@ -548,4 +549,13 @@ app.post("/mcp", async (c) => {
     }
   }
   return c.json({ jsonrpc: "2.0", id: body.id ?? null, error: { code: -32601, message: `Unknown method: ${body.method}` } });
+});
+
+// --- Benchmark (lazy-embeddings hypothesis) ---------------------------------
+app.post("/bench", async (c) => {
+  const { results, summary } = await runBenchmark(async (q) => {
+    const r = await answerQuestion(q, SCAN_SCOPE);
+    return { answer: r.answer, sources: r.sources, llm: r.llm };
+  });
+  return c.json({ results, summary });
 });

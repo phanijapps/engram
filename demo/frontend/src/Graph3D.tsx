@@ -123,6 +123,9 @@ const PALETTE: Record<string, string> = {
   trait: "#b07cff",
   module: "#b07cff",
   concept: "#7bd88f",
+  value_stream: "#ff8a65",
+  requirement: "#ff8a65",
+  api: "#4dd0e1",
   file: "#e0b34a",
   repository: "#e0b34a",
 };

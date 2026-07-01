@@ -104,6 +104,34 @@ fn chunks_php_functions_and_classes() {
 }
 
 #[test]
+fn chunks_kotlin_functions_and_classes() {
+    let code = "fun greet(name: String) {}\nclass Greeter {}\nobject Singleton {}\n";
+    let chunks = chunk(code, "kt");
+    assert!(
+        chunks.iter().any(|(a, _, _, _)| a == "fn greet"),
+        "missing fn greet: {chunks:?}"
+    );
+    assert!(
+        chunks.iter().any(|(a, _, _, _)| a == "class Greeter"),
+        "missing class Greeter"
+    );
+}
+
+#[test]
+fn chunks_apex_methods_and_classes() {
+    let code = "public class Main {\n  void run() {}\n  String getName() { return ''; }\n}\n";
+    let chunks = chunk(code, "cls");
+    assert!(
+        chunks.iter().any(|(a, _, _, _)| a == "class Main"),
+        "missing class Main: {chunks:?}"
+    );
+    assert!(
+        chunks.iter().any(|(a, _, _, _)| a == "fn run"),
+        "missing fn run"
+    );
+}
+
+#[test]
 fn unsupported_extension_returns_error() {
     let chunker = TreeSitterChunker::new().expect("chunker");
     let result = chunker.chunk_with_ext("fn x() {}", "vim");

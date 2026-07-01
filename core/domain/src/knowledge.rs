@@ -184,6 +184,8 @@ pub enum EntityKind {
     Variable,
     Api,
     Concept,
+    ValueStream,
+    Requirement,
     Task,
     Tool,
     Artifact,

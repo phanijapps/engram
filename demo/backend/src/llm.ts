@@ -17,8 +17,8 @@ import path from "node:path";
 
 const ENTITY_KINDS = new Set([
   "person", "organization", "project", "repository", "file", "module", "class",
-  "function", "method", "variable", "api", "concept", "task", "tool", "artifact",
-  "unknown",
+  "function", "method", "variable", "api", "concept", "value_stream", "requirement",
+  "task", "tool", "artifact", "unknown",
 ]);
 
 export type ParsedEntity = { name: string; kind: string };
@@ -132,7 +132,7 @@ function extractionPrompt(kind: "code" | "text"): string {
   const focus =
     kind === "code"
       ? "Focus on functions, methods, classes, modules, files, and call/define/contain relationships."
-      : "Focus on concepts, people, organizations, projects, and mentions/relates-to relationships.";
+      : "Focus on concepts, people, organizations, projects, value streams, requirements, and mentions/relates-to/satisfies/implements relationships. Identify value streams (business processes, user journeys) and requirements (features, constraints, acceptance criteria) when present.";
   return `You extract a knowledge graph from a document. Return ONLY a JSON object (no prose) of shape {"entities":[{"name":string,"kind":string}],"relationships":[{"subject":string,"predicate":string,"object":string}]}. Valid entity kinds: ${kinds}. ${focus} Every relationship subject/object MUST exactly match an entity name. Predicates are short verb phrases.`;
 }
 

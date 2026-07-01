@@ -70,10 +70,13 @@ impl TreeSitterChunker {
         reg!("py", tree_sitter_python::LANGUAGE, py_kinds());
         // Java
         reg!("java", tree_sitter_java::LANGUAGE, java_kinds());
-        // Kotlin + Apex: pending — their grammar crates use tree-sitter 0.20
-        // (old API), incompatible with 0.26. Will add when they upgrade.
-        // reg!("kt", tree_sitter_kotlin::language(), kt_kinds());
-        // reg!("cls", tree_sitter_apex::language(), java_kinds());
+        // Kotlin (tree-sitter-kotlin-ng — compatible fork)
+        reg!("kt", tree_sitter_kotlin_ng::LANGUAGE, kt_kinds());
+        reg!("kts", tree_sitter_kotlin_ng::LANGUAGE, kt_kinds());
+        // Salesforce Apex (tree-sitter-sfapex)
+        reg!("cls", tree_sitter_sfapex::apex::LANGUAGE, java_kinds());
+        reg!("apex", tree_sitter_sfapex::apex::LANGUAGE, java_kinds());
+        reg!("trigger", tree_sitter_sfapex::apex::LANGUAGE, java_kinds());
         // Perl
         reg!("pl", tree_sitter_perl::LANGUAGE, perl_kinds());
         reg!("pm", tree_sitter_perl::LANGUAGE, perl_kinds());
@@ -259,8 +262,15 @@ fn java_kinds() -> HashMap<&'static str, &'static str> {
     ]
     .into()
 }
-// Kotlin kinds — pending grammar upgrade (tree-sitter 0.20 incompatibility).
-// fn kt_kinds() { ... }
+// Kotlin kinds
+fn kt_kinds() -> HashMap<&'static str, &'static str> {
+    [
+        ("function_declaration", "fn"),
+        ("class_declaration", "class"),
+        ("object_declaration", "class"),
+    ]
+    .into()
+}
 fn perl_kinds() -> HashMap<&'static str, &'static str> {
     [("sub_declaration_statement", "fn")].into()
 }

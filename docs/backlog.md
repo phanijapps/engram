@@ -30,7 +30,23 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ---
 
-<!-- no deferred items yet -->
+## backend-agnostic-retrieval
+
+- **Durable dedup (deferred: durable-dedup):** `content_hash`-keyed `ON CONFLICT`
+  upsert so re-indexing a repo reuses unchanged embeddings, plus a dead-vector GC
+  sweep — blocked on nothing; unblocked by a `sqlite-vec` adapter slice. [spec O2]
+- **Rust composition orchestrator (deferred: rust-orchestrator):** a composition
+  orchestrator in `core/orchestration` (the demo currently orchestrates in TS) —
+  blocked on a second backend making TS-side orchestration insufficient;
+  unblocked by the Postgres or Neo4j adapter. [spec T3; option b′]
+
+## deployment-adapters (intent only — no spec yet)
+
+- **pgvector(graph+vector) adapter:** one Postgres holding graph + chunks +
+  embeddings. Documented target in RFC-0005 §Target deployments; needs an ADR +
+  spec before work.
+- **pgvector(vector) + neo4j(graph) adapter:** split deployment. Same — needs an
+  ADR + spec before work.
 
 <!-- Add one section per spec with open work, e.g.:
 

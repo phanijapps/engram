@@ -11,24 +11,34 @@ are scaffolding around it; this file is the why.
 
 ## Mission
 
-<!-- One sentence. What this project is, in language anyone could understand.
-     Example: "A monorepo template that helps small-to-medium teams ship
-     faster by giving Claude Code and other AI agents the structure they
-     need to be reliable contributors." -->
-
-<replace with one sentence>
+Engram is a contract-first agentic memory layer: a Rust core that owns
+deterministic memory, knowledge-graph, and retrieval behavior, with TypeScript
+bindings and an SDK for integration — so AI agents get reliable, structured,
+long-lived memory instead of opaque, disposable context windows.
 
 ## Scope
 
 What this project does:
 
-- <bullet>
-- <bullet>
+- Defines a portable, versioned domain model (memory, knowledge, belief,
+  hierarchy, policy, provenance, evaluation) as the contract source of truth.
+- Owns deterministic behavior in Rust: storage-neutral service + repository
+  ports, fusion, policy gates, validation.
+- Ships replaceable infrastructure adapters (SQLite, sqlite-vec, ingest) behind
+  traits, plus a Node N-API binding and a TypeScript SDK.
+- Proves the layer end-to-end in a demo: ingest polyglot code/docs, build a
+  knowledge graph, answer grounded questions, visualize the graph.
 
 What this project does **not** do:
 
-- <bullet>
-- <bullet>
+- Host or favor any particular LLM — engram is model-agnostic; LLM calls stay
+  in TypeScript behind the pi SDK and never enter the Rust core.
+- Ship production backends today — Postgres/pgvector/Neo4j are documented
+  deployment targets (RFC-0005), not built adapters.
+- Own an embedding model — embeddings live behind FastEmbed (feature-gated) and
+  are generated lazily at query time, not eagerly at index time.
+- Solve distributed cross-store write consistency — the retrieval-composition
+  seam is read-path only.
 
 The "does not" list is at least as important as the "does" list. It's how
 we — and AI agents working in the repo — know when a request is out of
@@ -40,12 +50,24 @@ either list, that's a signal to refine this section, not to drift.
 The values that resolve ties when reasonable people disagree. Five to
 seven, no more.
 
-1. **<principle>.** <one-sentence elaboration with a concrete example of
-   how we've applied it.>
-2. **<principle>.** ...
-3. **<principle>.** ...
-4. **<principle>.** ...
-5. **<principle>.** ...
+1. **Contract first.** The domain model and its JSON contracts are the source of
+   truth; Rust types and generated TypeScript conform to them, never the reverse.
+   `docs/domain-data-model.md` outranks a convenient implementation.
+2. **Rust owns the deterministic core; TypeScript owns ergonomics.** Behavior
+   that must be reproducible lives in Rust behind traits; integration glue and
+   the LLM client live in TypeScript. Neither re-implements the other.
+3. **Small crates, explicit responsibilities.** No god modules or god packages —
+   a file mixing construction, validation, state, scoring, and persistence is
+   split before handoff. Crate roots are facades; behavior lives in focused
+   modules.
+4. **Infrastructure lives behind adapters.** Storage, vectors, embeddings, and
+   models sit behind traits so tests use deterministic stubs and backends are
+   swappable (SQLite today; Postgres/pgvector/Neo4j additive).
+5. **Policy is visible on every path.** Scope, retention, and allowed-uses
+   checks appear on write, retrieve, ingest, consolidate, and forget — never
+   hidden in a generic manager.
+6. **Lazy over eager, where measured.** Embeddings generate at query time and
+   cache, not at index time — the benchmark, not intuition, justified this.
 
 ## What's NOT in this charter
 

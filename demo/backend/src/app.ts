@@ -235,56 +235,28 @@ app.post("/knowledge/overview", async (c) => {
   return c.json({ graphs, entities, relationships });
 });
 
-// Stats: per-repo summary grouped by provenance source (not per-document graph).
+// Stats: per-repo summary from KnowledgeSource records (O(repos), not O(entities)).
 app.post("/knowledge/stats", async (c) => {
   const { scope } = await c.req.json();
   const reqScope = scope ?? SCAN_SCOPE;
   const transport = getKnowledgeTransport();
-  const [entities, relationships, chunks] = await Promise.all([
-    transport.listEntities(reqScope),
-    transport.listRelationships(reqScope),
-    transport.listChunks(reqScope),
-  ]);
-  const entList = entities as Array<Record<string, unknown>>;
-  const relList = relationships as Array<Record<string, unknown>>;
-  const chunkList = chunks as Array<Record<string, unknown>>;
-  // Group by provenance.source — the repo-level name (e.g. "scan:repo [git@...@branch:sha]").
-  // Each file in a scan shares this source; graphs are per-document but provenance is per-scan.
-  type RepoAcc = { entityCount: number; relationshipCount: number; lastUpdated: string | null };
-  const bySource = new Map<string, RepoAcc>();
-  for (const e of entList) {
-    const source = String((e as { provenance?: { source?: string } }).provenance?.source ?? "unknown");
-    if (!bySource.has(source)) bySource.set(source, { entityCount: 0, relationshipCount: 0, lastUpdated: null });
-    const acc = bySource.get(source)!;
-    acc.entityCount++;
-    const created = (e as { createdAt?: string }).createdAt;
-    if (created && (!acc.lastUpdated || created > acc.lastUpdated)) acc.lastUpdated = created;
-  }
-  for (const r of relList) {
-    const source = String((r as { provenance?: { source?: string } }).provenance?.source ?? "unknown");
-    const acc = bySource.get(source);
-    if (acc) acc.relationshipCount++;
-  }
-  const repos = [...bySource.entries()].map(([source, acc]) => {
-    // Parse git metadata: "scan:repo [remote@branch:sha]"
-    const gitMatch = source.match(/\[(.+?)@(.+?):(.+?)\]/);
+  const sources = (await transport.listSources(reqScope)) as Array<Record<string, unknown>>;
+  const repos = sources.map((s) => {
+    const name = String(s.name ?? "");
+    // Parse git metadata from enriched name: "scan:repo [remote@branch:sha]"
+    const gitMatch = name.match(/\[(.+?)@(.+?):(.+?)\]/);
     return {
-      id: source,
-      name: source.replace(/\s*\[.+$/, "").replace(/^scan:/, ""),
+      id: String(s.id ?? name),
+      name: name.replace(/\s*\[.+$/, "").replace(/^scan:/, ""),
       gitRemote: gitMatch?.[1] ?? null,
       gitBranch: gitMatch?.[2] ?? null,
       gitSha: gitMatch?.[3] ?? null,
-      entityCount: acc.entityCount,
-      relationshipCount: acc.relationshipCount,
-      lastUpdated: acc.lastUpdated,
+      lastUpdated: (s.updatedAt ?? s.createdAt) ?? null,
     };
   });
   return c.json({
     tenant: reqScope,
     repos,
-    totalEntities: entList.length,
-    totalRelationships: relList.length,
-    totalChunks: chunkList.length,
     totalRepos: repos.length,
   });
 });

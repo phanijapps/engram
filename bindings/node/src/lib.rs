@@ -403,6 +403,14 @@ impl NativeKnowledgeEngine {
         encode(&result)
     }
 
+    #[napi(js_name = "listSourcesJson")]
+    pub fn list_sources_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.store.list_sources(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
     // --- OntologyRepository --------------------------------------------------
 
     #[napi(js_name = "putOntologyJson")]

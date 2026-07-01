@@ -132,6 +132,27 @@ impl SqlKnowledgeStore {
         Ok(chunks)
     }
 
+    /// Lists knowledge sources (repos) visible to `scope`. One record per scan.
+    /// Much cheaper than loading all entities to compute per-repo stats.
+    pub async fn list_sources(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeSource>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare("SELECT record_json FROM knowledge_sources ORDER BY id")
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut sources = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let source = serde_json::from_str::<KnowledgeSource>(&json).map_err(json_error)?;
+            if scope_allows(&source.scope, scope) {
+                sources.push(source);
+            }
+        }
+        Ok(sources)
+    }
+
     /// Lists knowledge relationships visible to `scope`.
     pub async fn list_relationships(
         &self,

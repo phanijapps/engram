@@ -33,6 +33,23 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 - [`ast-symbol-extraction`](ast-symbol-extraction/spec.md): tree-sitter AST
   symbol extraction for 10 languages (Java, Kotlin, Apex, Perl, Bash, PHP, COBOL,
   Rust, TS, Python) + chunk entity-ref population so Q&A finds actual code.
+- [`llm-text-extraction`](llm-text-extraction/spec.md): LLM entity/relationship
+  extraction for markdown/text docs (RFCs, ADRs, skill docs) — fixes Q&A
+  grounding on documentation.
+- [`kg-redesign`](kg-redesign/spec.md): knowledge graph as the centerpiece —
+  WebGL force-graph (70%+ viewport), node detail panel, performance
+  virtualization, indexing as popup modal.
+- [`dashboard-tenant-view`](dashboard-tenant-view/spec.md): tenant + indexed
+  repos (git remote/branch/SHA) + document/chunk counts overview.
+- [`benchmark-lazy-embeddings`](benchmark-lazy-embeddings/spec.md): prove
+  runtime embeddings (not index-time) work — benchmark vs Microsoft Terminal
+  (500K+ lines), PERFORMANCE.md with charts.
+- [`mcp-server`](mcp-server/spec.md): expose backend as MCP HTTP server —
+  index_repo, search, agentic_search, get_job tools for any MCP client.
+- [`db-adapter-skill`](db-adapter-skill/spec.md): Claude Code skill for adding
+  database backends (Postgres, Neo4j) with cloud sizing support.
+- [`tf-deploy-skill`](tf-deploy-skill/spec.md): Claude Code skill for Terraform
+  deployment to AWS/GCP/Azure with LLM + embedding model config.
 
 ## Existing Slices
 

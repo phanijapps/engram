@@ -15,6 +15,7 @@ engram-domain = { path = "../../core/domain" }
 engram-ingest = { path = "../../adapters/ingest" }
 engram-knowledge = { path = "../../core/knowledge" }
 engram-memory = { path = "../../core/memory" }
+engram-retrieval = { path = "../../core/retrieval" }
 engram-runtime = { path = "../../core/runtime" }
 engram-store-belief-sqlite = { path = "../../adapters/orchestration/belief-sqlite" }
 engram-store-knowledge-sqlite = { path = "../../adapters/knowledge/sqlite" }

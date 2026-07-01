@@ -94,6 +94,16 @@ export interface NativeKnowledgeTransport {
   putProperty(property: unknown): Promise<unknown>;
   putAxiom(axiom: unknown): Promise<unknown>;
   validateGraph(graphId: string, ontologyId: string, scope: unknown): Promise<unknown>;
+  /** Retrieval-composition seam: graph-ranked candidates for a request. */
+  graphCandidates(request: unknown): Promise<unknown[]>;
+  /** Retrieval-composition seam: RRF-fuse candidate lists (configurable). */
+  fuseRrf(request: {
+    request: unknown;
+    candidates: unknown[];
+    k?: number;
+    defaultWeight?: number;
+    weights?: Record<string, number>;
+  }): Promise<unknown[]>;
 }
 
 /** Options for constructing a native knowledge transport. */
@@ -203,6 +213,20 @@ class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
 
   async validateGraph(graphId: string, ontologyId: string, scope: unknown): Promise<unknown> {
     return decode(this.engine.validateGraphJson(encode({ graphId, ontologyId, scope })));
+  }
+
+  async graphCandidates(request: unknown): Promise<unknown[]> {
+    return decode(this.engine.graphCandidatesJson(encode(request))) as unknown[];
+  }
+
+  async fuseRrf(request: {
+    request: unknown;
+    candidates: unknown[];
+    k?: number;
+    defaultWeight?: number;
+    weights?: Record<string, number>;
+  }): Promise<unknown[]> {
+    return decode(this.engine.fuseRrfJson(encode(request))) as unknown[];
   }
 }
 
@@ -350,6 +374,8 @@ export interface NativeRetrievalTransport {
 export interface NativeRetrievalTransportOptions {
   binding?: NativeBinding;
   loader?: NativeBindingLoader;
+  /** File path for a durable vector store; omit for in-memory. */
+  embeddingsDbPath?: string;
 }
 
 /** Creates a transport that delegates semantic retrieval to Rust (FastEmbed). */
@@ -357,7 +383,9 @@ export function createNativeRetrievalTransport(
   options: NativeRetrievalTransportOptions = {}
 ): NativeRetrievalTransport {
   const binding = options.binding ?? loadNativeBinding(options.loader);
-  return new JsonNativeRetrievalTransport(new binding.NativeRetrievalEngine());
+  return new JsonNativeRetrievalTransport(
+    new binding.NativeRetrievalEngine(options.embeddingsDbPath ?? null)
+  );
 }
 
 class JsonNativeRetrievalTransport implements NativeRetrievalTransport {

@@ -11,7 +11,7 @@ use engram_domain::{
     Ontology, OntologyAxiom, OntologyClass, OntologyProperty, Policy, Scope, SourceDocument,
     SourceDocumentKind,
 };
-use engram_domain::{ForgetRequest, RetrievalRequest, WriteMemoryRequest};
+use engram_domain::{ForgetRequest, RetrievalRequest, RetrievalResult, WriteMemoryRequest};
 use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, GraphExtractor, KnowledgeIngestor, PlainTextChunker,
     PlainTextChunkerOptions, ScanOptions, scan_repository,
@@ -21,12 +21,16 @@ use engram_knowledge::{
 };
 use engram_memory::{CoreError, MemoryService};
 use engram_store_belief_sqlite::SqlBeliefStore;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_knowledge_sqlite::{GraphCandidateSource, GraphRetrievalIndex, SqlKnowledgeStore};
 use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde::Serialize;
+
+use engram_retrieval::{
+    DEFAULT_RRF_K, ReciprocalFusionConfig, ReciprocalRankFusion, RetrievalFusion, RetrievalIndex,
+};
 
 /// After a scan, connects entities that share a name across different graphs.
 /// For each entity whose name appears in multiple graphs, creates a "defined_in"
@@ -212,7 +216,7 @@ impl NativeMemoryEngine {
 /// the `engram-knowledge` ports; TypeScript owns ergonomics.
 #[napi]
 pub struct NativeKnowledgeEngine {
-    store: SqlKnowledgeStore,
+    store: std::sync::Arc<SqlKnowledgeStore>,
 }
 
 #[napi]
@@ -227,7 +231,56 @@ impl NativeKnowledgeEngine {
             None => SqlKnowledgeStore::open_in_memory(),
         }
         .map_err(to_napi_error)?;
-        Ok(Self { store })
+        Ok(Self {
+            store: std::sync::Arc::new(store),
+        })
+    }
+
+    /// Retrieval-composition seam (RFC-0005): graph-ranked Entity/Chunk
+    /// candidates for a request, as `RetrievalResult` JSON tagged
+    /// `source = "graph"`, ready to RRF-fuse with vector candidates.
+    #[napi(js_name = "graphCandidatesJson")]
+    pub fn graph_candidates_json(&self, request_json: String) -> Result<String> {
+        let request = decode::<RetrievalRequest>(&request_json)?;
+        let source: std::sync::Arc<dyn GraphCandidateSource> = self.store.clone();
+        let index = GraphRetrievalIndex::new(source);
+        let results = block_on(index.retrieve_candidates(&request)).map_err(to_napi_error)?;
+        encode(&results)
+    }
+
+    /// Retrieval-composition seam (RFC-0005): reciprocal-rank fusion of
+    /// candidate lists (graph + vector) into one ranked list. Configurable
+    /// strength (`k`, per-source `weights`) with defaults when omitted.
+    #[napi(js_name = "fuseRrfJson")]
+    pub fn fuse_rrf_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let request: RetrievalRequest = serde_json::from_value(value["request"].clone())
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let candidates: Vec<RetrievalResult> = serde_json::from_value(value["candidates"].clone())
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let k = value["k"]
+            .as_u64()
+            .map(|n| n as u32)
+            .unwrap_or(DEFAULT_RRF_K);
+        let default_weight = value["defaultWeight"]
+            .as_f64()
+            .map(|f| f as f32)
+            .unwrap_or(1.0);
+        let weights: std::collections::BTreeMap<String, f32> = value
+            .get("weights")
+            .and_then(|w| w.as_object())
+            .map(|map| {
+                map.iter()
+                    .filter_map(|(k, v)| v.as_f64().map(|f| (k.clone(), f as f32)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let config =
+            ReciprocalFusionConfig::new(k, default_weight, weights).map_err(to_napi_error)?;
+        let fused = ReciprocalRankFusion::new(config)
+            .fuse(&request, candidates)
+            .map_err(to_napi_error)?;
+        encode(&fused)
     }
 
     // --- KnowledgeRepository -------------------------------------------------
@@ -943,11 +996,17 @@ mod retrieval {
     #[napi]
     impl NativeRetrievalEngine {
         /// Opens the engine; constructs the FastEmbed BGE-small model (may
-        /// download model assets on first use).
+        /// download model assets on first use). Pass a path for a durable
+        /// file-backed vector store (embeddings persist across restarts); omit
+        /// for in-memory.
         #[napi(constructor)]
-        pub fn new() -> Result<Self> {
+        pub fn new(path: Option<String>) -> Result<Self> {
             let provider = FastEmbedBgeSmallQueryProvider::new().map_err(to_napi_error)?;
-            let index = SqliteVectorIndex::open_in_memory(DIMENSIONS).map_err(to_napi_error)?;
+            let index = match path {
+                Some(path) => SqliteVectorIndex::open(&path, DIMENSIONS),
+                None => SqliteVectorIndex::open_in_memory(DIMENSIONS),
+            }
+            .map_err(to_napi_error)?;
             Ok(Self {
                 provider,
                 state: Mutex::new(State {

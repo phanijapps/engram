@@ -36,6 +36,8 @@ export interface NativeKnowledgeEngineBinding {
   putPropertyJson(propertyJson: string): string;
   putAxiomJson(axiomJson: string): string;
   validateGraphJson(requestJson: string): string;
+  graphCandidatesJson(requestJson: string): string;
+  fuseRrfJson(requestJson: string): string;
 }
 
 /** Constructor shape for the Rust-backed knowledge + taxonomy engine. */
@@ -82,7 +84,7 @@ export interface NativeRetrievalEngineBinding {
 
 /** Constructor shape for the Rust-backed semantic-retrieval engine. */
 export interface NativeRetrievalEngineConstructor {
-  new (): NativeRetrievalEngineBinding;
+  new (path?: string | null): NativeRetrievalEngineBinding;
 }
 
 /** Native addon surface consumed by `@engram/node`. */

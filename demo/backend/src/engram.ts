@@ -57,12 +57,19 @@ export function getIngestTransport(): NativeIngestTransport {
 
 // One Rust-backed semantic-retrieval engine (FastEmbed + sqlite-vec). The first
 // call constructs the BGE-small model, which may download assets on first run.
-// Vectors stay in-memory (re-indexed each session).
+// Vectors persist to a durable sqlite-vec file (alongside the knowledge DB) so
+// embeddings survive restarts and are reused on re-index.
 let retrieval: NativeRetrievalTransport | null = null;
+
+const embeddingsDbPath = (): string | null =>
+  process.env.ENGRAM_EMBEDDINGS_DB ??
+  (process.env.ENGRAM_DB ? `${process.env.ENGRAM_DB}.embeddings.db` : null);
 
 export function getRetrievalTransport(): NativeRetrievalTransport {
   if (retrieval === null) {
-    retrieval = createNativeRetrievalTransport();
+    retrieval = createNativeRetrievalTransport({
+      embeddingsDbPath: embeddingsDbPath() ?? undefined,
+    });
   }
   return retrieval;
 }

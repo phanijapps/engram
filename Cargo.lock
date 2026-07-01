@@ -787,6 +787,7 @@ dependencies = [
  "engram-ingest",
  "engram-knowledge",
  "engram-memory",
+ "engram-retrieval",
  "engram-runtime",
  "engram-store-belief-sqlite",
  "engram-store-knowledge-sqlite",

@@ -67,6 +67,8 @@ describe("@engram/node", () => {
         listRelationshipsJson(): string { return "[]"; }
         listChunksJson(): string { return "[]"; }
         listSourcesJson(): string { return "[]"; }
+        graphCandidatesJson(): string { return "[]"; }
+        fuseRrfJson(): string { return "[]"; }
       },
       NativeIngestEngine: class {
         ingestExtractJson(): string {

@@ -842,6 +842,9 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-runtime",
+ "futures",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

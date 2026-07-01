@@ -868,6 +868,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-store-hierarchy-sqlite"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-domain",
+ "engram-hierarchy",
+ "engram-runtime",
+ "futures",
+ "rusqlite",
+ "serde_json",
+]
+
+[[package]]
 name = "engram-store-knowledge-memory"
 version = "0.1.0"
 dependencies = [

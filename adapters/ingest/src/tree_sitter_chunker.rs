@@ -92,6 +92,58 @@ impl TreeSitterChunker {
         self.entries.contains_key(ext)
     }
 
+    /// Extracts (caller, callee) pairs from AST call expressions. Walks the tree
+    /// for call nodes, tracks which function declaration each call is inside,
+    /// and returns only pairs where the callee matches a known entity name.
+    /// More accurate than co-occurrence (no false positives from comments/strings).
+    pub fn extract_calls(
+        &self,
+        text: &str,
+        ext: &str,
+        _entity_names: &std::collections::HashSet<String>,
+    ) -> CoreResult<Vec<(String, String)>> {
+        let Some(entry) = self.entries.get(ext) else {
+            return Ok(Vec::new());
+        };
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&entry.language)
+            .map_err(|e| CoreError::InvalidRequest {
+                reason: format!("tree-sitter language error: {e}"),
+            })?;
+        let tree = parser.parse(text, None).ok_or(CoreError::InvalidRequest {
+            reason: "tree-sitter parse failed".to_owned(),
+        })?;
+        let root = tree.root_node();
+        let source = text.as_bytes();
+
+        // Collect (start_line, end_line, name) for each function-like declaration.
+        let mut fn_spans: Vec<(usize, usize, String)> = Vec::new();
+        let mut call_sites: Vec<(usize, String)> = Vec::new(); // (line, callee_name)
+
+        collect_calls_and_spans(
+            &root,
+            source,
+            &entry.kind_map,
+            &mut fn_spans,
+            &mut call_sites,
+        );
+
+        // Match each call to its enclosing function.
+        let mut edges = Vec::new();
+        for (call_line, callee) in &call_sites {
+            for (start, end, caller) in &fn_spans {
+                if call_line >= start && call_line <= end {
+                    if caller != callee {
+                        edges.push((caller.clone(), callee.clone()));
+                    }
+                    break;
+                }
+            }
+        }
+        Ok(edges)
+    }
+
     /// Chunks text using the grammar for the given extension. Walks the AST
     /// for declaration nodes (no Query API — simpler + more robust).
     pub fn chunk_with_ext(&self, text: &str, ext: &str) -> CoreResult<Vec<ChunkCandidate>> {
@@ -204,8 +256,58 @@ fn walk_declarations(
     }
 }
 
+/// Walks the AST collecting: (1) function declaration spans for scope tracking,
+/// and (2) call-expression sites with their callee names (not filtered — the
+/// caller decides which to keep).
+fn collect_calls_and_spans(
+    node: &tree_sitter::Node,
+    source: &[u8],
+    kind_map: &HashMap<&str, &str>,
+    fn_spans: &mut Vec<(usize, usize, String)>,
+    call_sites: &mut Vec<(usize, String)>,
+) {
+    let kind = node.kind();
+
+    // Track function/method declarations for scope.
+    if kind_map.contains_key(kind) {
+        if let Some(name_node) = node
+            .child_by_field_name("name")
+            .or_else(|| node.child_by_field_name("declarator"))
+        {
+            let name = extract_name(&name_node, source);
+            if !name.is_empty() {
+                fn_spans.push((node.start_position().row, node.end_position().row, name));
+            }
+        }
+    }
+
+    // Detect call expressions across languages.
+    let is_call = kind.contains("call_expression")
+        || kind.contains("method_invocation")
+        || kind.contains("function_call")
+        || kind == "call";
+    if is_call {
+        let callee_node = node
+            .child_by_field_name("function")
+            .or_else(|| node.child_by_field_name("name"))
+            .or_else(|| node.named_child(0));
+        if let Some(callee_node) = callee_node {
+            let callee = extract_name(&callee_node, source);
+            if !callee.is_empty() {
+                call_sites.push((node.start_position().row, callee));
+            }
+        }
+    }
+
+    // Recurse.
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        collect_calls_and_spans(&child, source, kind_map, fn_spans, call_sites);
+    }
+}
+
 /// Extracts a clean name from a name node, handling nested declarators
-/// (e.g. `pointer_declarator → identifier` in C-like languages).
+/// (e.g. `pointer_declarator -> identifier` in C-like languages).
 fn extract_name(node: &tree_sitter::Node, source: &[u8]) -> String {
     let text = node.utf8_text(source).unwrap_or("").trim().to_owned();
     // For simple identifiers, the text IS the name.

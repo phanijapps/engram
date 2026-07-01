@@ -6,6 +6,7 @@
 //! tested; the security controls are ported from `demo/backend/src/decide.ts`
 //! and must not be relaxed.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use engram_domain::*;
@@ -347,6 +348,7 @@ where
                 return (rel.clone(), Outcome::Skipped);
             }
             let text = String::from_utf8_lossy(&bytes).into_owned();
+            let text_for_ast = text.clone(); // keep a copy for AST call extraction
             let hash = content_hash(&text);
             if opts.manifest.get(rel).is_some_and(|h| h == &hash) {
                 return (rel.clone(), Outcome::Unchanged);
@@ -400,14 +402,77 @@ where
                 Ok(i) => i,
                 Err(_) => return (rel.clone(), Outcome::Error),
             };
-            let extracted = match block_on(extractor.extract_into(
-                repo,
-                &ingested.source,
-                &ingested.document,
-                &ingested.chunks,
-            )) {
-                Ok(e) => e,
-                Err(_) => return (rel.clone(), Outcome::Error),
+            // Extract entity names from chunk anchors for AST call matching.
+            let entity_names: HashSet<String> = ingested
+                .chunks
+                .iter()
+                .filter_map(|c| {
+                    c.location
+                        .as_ref()
+                        .and_then(|l| l.anchor.as_deref())
+                        .and_then(|a| a.splitn(2, ' ').nth(1).map(|s| s.to_owned()))
+                })
+                .collect();
+            // AST-level call extraction when tree-sitter supports the extension.
+            let ast_calls = if let Some(ref ts) = ts_chunker {
+                if ts.supports(ext) && !entity_names.is_empty() {
+                    ts.extract_calls(&text_for_ast, ext, &entity_names).ok()
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            let extracted_result = if let Some(ref calls) = ast_calls {
+                extractor
+                    .extract_with_calls(
+                        &ingested.source,
+                        &ingested.document,
+                        &ingested.chunks,
+                        Some(calls),
+                    )
+                    .and_then(|graph| {
+                        // Persist manually (extract_with_calls doesn't persist).
+                        let graph2 = graph.clone();
+                        Ok((graph, graph2))
+                    })
+                    .map(|(graph, _)| graph)
+            } else {
+                core::result::Result::Err(CoreError::InvalidRequest {
+                    reason: "no ast calls".to_owned(),
+                })
+            };
+            let extracted = match extracted_result {
+                Ok(g) => {
+                    // Persist the graph + entities + relationships.
+                    let _ = block_on(async {
+                        repo.put_graph(g.graph.clone()).await?;
+                        for entity in &g.entities {
+                            repo.put_entity(entity.clone()).await?;
+                        }
+                        for rel in &g.relationships {
+                            repo.put_relationship(rel.clone()).await?;
+                        }
+                        for (chunk_idx, entity_refs) in &g.chunk_entities {
+                            if let Some(chunk) = ingested.chunks.get(*chunk_idx) {
+                                let mut updated = chunk.clone();
+                                updated.entities = entity_refs.clone();
+                                repo.put_chunk(updated).await?;
+                            }
+                        }
+                        Ok::<(), CoreError>(())
+                    });
+                    g
+                }
+                Err(_) => match block_on(extractor.extract_into(
+                    repo,
+                    &ingested.source,
+                    &ingested.document,
+                    &ingested.chunks,
+                )) {
+                    Ok(e) => e,
+                    Err(_) => return (rel.clone(), Outcome::Error),
+                },
             };
             (
                 rel.clone(),

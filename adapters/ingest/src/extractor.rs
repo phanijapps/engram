@@ -45,6 +45,19 @@ impl GraphExtractor {
         document: &SourceDocument,
         chunks: &[KnowledgeChunk],
     ) -> CoreResult<ExtractedGraph> {
+        self.extract_with_calls(source, document, chunks, None)
+    }
+
+    /// Extracts a graph, optionally using pre-computed AST call edges instead of
+    /// co-occurrence. When `ast_calls` is `Some`, relationships are formed from
+    /// real call expressions (no false positives from comments/strings).
+    pub fn extract_with_calls(
+        &self,
+        source: &KnowledgeSource,
+        document: &SourceDocument,
+        chunks: &[KnowledgeChunk],
+        ast_calls: Option<&[(String, String)]>,
+    ) -> CoreResult<ExtractedGraph> {
         let now = Utc::now();
         let graph_id = graph_id_for(document);
         let graph = KnowledgeGraph {
@@ -132,35 +145,79 @@ impl GraphExtractor {
             });
         }
 
-        // Edges from name co-occurrence in symbol bodies (calls / mentions).
+        // Edges: prefer AST-extracted calls when available; fall back to
+        // co-occurrence (comments/text mentions).
         let predicate = if is_code { "calls" } else { "mentions" };
         let mut relationships = Vec::new();
         let mut seen: HashSet<(String, String)> = HashSet::new();
-        for (subject_name, _kind, body, _chunk_idx) in &symbols {
-            let Some(&subject_index) = index.get(subject_name) else {
-                continue;
-            };
-            for object_name in index.keys() {
-                if object_name == subject_name || !mentions(body, object_name) {
+
+        if let Some(calls) = ast_calls {
+            // AST-level calls: each (caller, callee) is a real call expression.
+            for (caller, callee) in calls {
+                if caller == callee {
                     continue;
                 }
-                if !seen.insert((subject_name.clone(), object_name.clone())) {
+                if !index.contains_key(caller) {
                     continue;
                 }
-                let object_index = index[object_name];
+                if !seen.insert((caller.clone(), callee.clone())) {
+                    continue;
+                }
+                let subject_index = index[caller];
+                // Cross-file call: callee not in this document — create a
+                // name-only ref. The cross-file resolver connects it by name.
+                let object_ref = if let Some(&oi) = index.get(callee) {
+                    entity_ref(&entities[oi])
+                } else {
+                    EntityRef {
+                        id: None,
+                        kind: None,
+                        name: Some(callee.clone()),
+                        aliases: Vec::new(),
+                    }
+                };
                 relationships.push(KnowledgeRelationship {
-                    id: relationship_id(&graph_id, subject_name, object_name),
+                    id: relationship_id(&graph_id, caller, callee),
                     graph_id: Some(graph_id.clone()),
                     subject: entity_ref(&entities[subject_index]),
-                    predicate: predicate.to_owned(),
-                    object: entity_ref(&entities[object_index]),
+                    predicate: "calls".to_owned(),
+                    object: object_ref,
                     scope: source.scope.clone(),
                     evidence: Vec::new(),
-                    confidence: Some(0.5),
+                    confidence: Some(0.9),
                     provenance: source.provenance.clone(),
                     created_at: now,
                     updated_at: None,
                 });
+            }
+        } else {
+            // Co-occurrence fallback: name appears in body text.
+            for (subject_name, _kind, body, _chunk_idx) in &symbols {
+                let Some(&subject_index) = index.get(subject_name) else {
+                    continue;
+                };
+                for object_name in index.keys() {
+                    if object_name == subject_name || !mentions(body, object_name) {
+                        continue;
+                    }
+                    if !seen.insert((subject_name.clone(), object_name.clone())) {
+                        continue;
+                    }
+                    let object_index = index[object_name];
+                    relationships.push(KnowledgeRelationship {
+                        id: relationship_id(&graph_id, subject_name, object_name),
+                        graph_id: Some(graph_id.clone()),
+                        subject: entity_ref(&entities[subject_index]),
+                        predicate: predicate.to_owned(),
+                        object: entity_ref(&entities[object_index]),
+                        scope: source.scope.clone(),
+                        evidence: Vec::new(),
+                        confidence: Some(0.5),
+                        provenance: source.provenance.clone(),
+                        created_at: now,
+                        updated_at: None,
+                    });
+                }
             }
         }
 

@@ -28,6 +28,121 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde::Serialize;
 
+/// After a scan, connects entities that share a name across different graphs.
+/// For each entity whose name appears in multiple graphs, creates a "defined_in"
+/// relationship so the Q&A + explorer see cross-file edges. Best-effort — errors
+/// are silently ignored (the scan summary is already captured).
+fn resolve_cross_file_edges(store: &SqlKnowledgeStore, scope: &Scope) {
+    let entities = match block_on(store.list_entities(scope)) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    let relationships = match block_on(store.list_relationships(scope)) {
+        Ok(r) => r,
+        Err(_) => return,
+    };
+    // Group entity IDs by name (lowercased) → Vec<(entity_id, graph_id)>.
+    let mut by_name: std::collections::HashMap<String, Vec<(String, String)>> =
+        std::collections::HashMap::new();
+    for e in &entities {
+        let name = e.name.to_lowercase();
+        let gid = e
+            .graph_id
+            .as_ref()
+            .map(|g| g.to_string())
+            .unwrap_or_default();
+        by_name
+            .entry(name)
+            .or_default()
+            .push((e.id.to_string(), gid));
+    }
+    // Collect existing relationship keys to avoid duplicates.
+    let mut existing: std::collections::HashSet<(String, String, String)> =
+        std::collections::HashSet::new();
+    for r in &relationships {
+        existing.insert((
+            r.subject
+                .id
+                .as_ref()
+                .map(|i| i.to_string())
+                .unwrap_or_default(),
+            r.predicate.clone(),
+            r.object
+                .id
+                .as_ref()
+                .map(|i| i.to_string())
+                .unwrap_or_default(),
+        ));
+    }
+    // For each name that appears in multiple graphs, create cross-graph "defined_in" edges.
+    let now = chrono::Utc::now();
+    let prov = engram_domain::Provenance {
+        source: "cross-file-resolver".to_owned(),
+        actor: engram_domain::Actor {
+            id: engram_domain::Id::from("engram-cross-file"),
+            kind: engram_domain::ActorKind::System,
+            display_name: Some("Cross-file resolver".to_owned()),
+            metadata: None,
+        },
+        observed_at: now,
+        evidence: Vec::new(),
+        derivations: Vec::new(),
+        confidence: Some(0.8),
+        method: Some("name_match_resolution".to_owned()),
+    };
+    let scope_owned = scope.clone();
+    let _policy = engram_domain::Policy {
+        visibility: engram_domain::Visibility::Workspace,
+        retention: engram_domain::Retention::Durable,
+        sensitivity: Some(engram_domain::Sensitivity::Low),
+        allowed_uses: vec![engram_domain::AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: Some(engram_domain::DeleteMode::Tombstone),
+    };
+    for (_name, entries) in &by_name {
+        if entries.len() < 2 {
+            continue;
+        }
+        // Create bidirectional "defined_in" edges between all pairs.
+        for i in 0..entries.len() {
+            for j in (i + 1)..entries.len() {
+                let (id_a, graph_a) = &entries[i];
+                let (id_b, graph_b) = &entries[j];
+                if graph_a == graph_b {
+                    continue;
+                }
+                let key_ab = (id_a.clone(), "defined_in".to_owned(), id_b.clone());
+                if !existing.contains(&key_ab) {
+                    let rel = engram_domain::KnowledgeRelationship {
+                        id: engram_domain::Id::from(format!("rel-xfile-{id_a}-{id_b}")),
+                        graph_id: None,
+                        subject: engram_domain::EntityRef {
+                            id: Some(engram_domain::Id::from(id_a.clone())),
+                            kind: None,
+                            name: None,
+                            aliases: Vec::new(),
+                        },
+                        predicate: "defined_in".to_owned(),
+                        object: engram_domain::EntityRef {
+                            id: Some(engram_domain::Id::from(id_b.clone())),
+                            kind: None,
+                            name: None,
+                            aliases: Vec::new(),
+                        },
+                        scope: scope_owned.clone(),
+                        evidence: Vec::new(),
+                        confidence: Some(0.8),
+                        provenance: prov.clone(),
+                        created_at: now,
+                        updated_at: None,
+                    };
+                    let _ = block_on(store.put_relationship(rel));
+                }
+            }
+        }
+    }
+}
+
 /// Stateful local memory engine exposed to Node through N-API.
 ///
 /// Each instance owns one SQLite-backed Rust service so write, retrieve, and
@@ -541,7 +656,10 @@ impl NativeIngestEngine {
 
         // Load the prior manifest (incremental resume). Skip when force=true so
         // every file is re-ingested (e.g. after an extractor change).
-        let force = value.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+        let force = value
+            .get("force")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
         let prior = if force {
             Default::default()
         } else {
@@ -595,6 +713,14 @@ impl NativeIngestEngine {
                 }
             };
             let result = scan_repository(std::path::Path::new(&root), &opts, &store, progress);
+            // Cross-file resolution: after the parallel scan, connect entities
+            // that share a name across different graphs so the Q&A + explorer
+            // see cross-file/cross-repo edges.
+            if let Ok((ref summary, _)) = result {
+                if summary.ingested > 0 {
+                    resolve_cross_file_edges(&store, &opts.scope);
+                }
+            }
             let final_state = match result {
                 Ok((summary, new_manifest)) => {
                     if let Some(path) = manifest_path {

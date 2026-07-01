@@ -30,6 +30,9 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   [shadcn-admin](https://github.com/satnaing/shadcn-admin) shell (TanStack Router
   + Tailwind + shadcn/ui + sidebar + command palette + dark mode) — one route per
   capability, keep `Graph3D`, backend untouched.
+- [`ast-symbol-extraction`](ast-symbol-extraction/spec.md): tree-sitter AST
+  symbol extraction for 10 languages (Java, Kotlin, Apex, Perl, Bash, PHP, COBOL,
+  Rust, TS, Python) + chunk entity-ref population so Q&A finds actual code.
 
 ## Existing Slices
 

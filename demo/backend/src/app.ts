@@ -235,13 +235,12 @@ app.post("/knowledge/overview", async (c) => {
   return c.json({ graphs, entities, relationships });
 });
 
-// Stats: per-repo summary (name, git info, entity/rel counts) + aggregates.
+// Stats: per-repo summary grouped by provenance source (not per-document graph).
 app.post("/knowledge/stats", async (c) => {
   const { scope } = await c.req.json();
   const reqScope = scope ?? SCAN_SCOPE;
   const transport = getKnowledgeTransport();
-  const [graphs, entities, relationships, chunks] = await Promise.all([
-    transport.listGraphs(reqScope),
+  const [entities, relationships, chunks] = await Promise.all([
     transport.listEntities(reqScope),
     transport.listRelationships(reqScope),
     transport.listChunks(reqScope),
@@ -249,26 +248,35 @@ app.post("/knowledge/stats", async (c) => {
   const entList = entities as Array<Record<string, unknown>>;
   const relList = relationships as Array<Record<string, unknown>>;
   const chunkList = chunks as Array<Record<string, unknown>>;
-  const relByGraph = new Map<string, number>();
-  for (const r of relList) {
-    const gid = String(r.graphId ?? "");
-    relByGraph.set(gid, (relByGraph.get(gid) ?? 0) + 1);
+  // Group by provenance.source — the repo-level name (e.g. "scan:repo [git@...@branch:sha]").
+  // Each file in a scan shares this source; graphs are per-document but provenance is per-scan.
+  type RepoAcc = { entityCount: number; relationshipCount: number; lastUpdated: string | null };
+  const bySource = new Map<string, RepoAcc>();
+  for (const e of entList) {
+    const source = String((e as { provenance?: { source?: string } }).provenance?.source ?? "unknown");
+    if (!bySource.has(source)) bySource.set(source, { entityCount: 0, relationshipCount: 0, lastUpdated: null });
+    const acc = bySource.get(source)!;
+    acc.entityCount++;
+    const created = (e as { createdAt?: string }).createdAt;
+    if (created && (!acc.lastUpdated || created > acc.lastUpdated)) acc.lastUpdated = created;
   }
-  const repos = (graphs as Array<Record<string, unknown>>).map((g) => {
-    const gid = String(g.id ?? "");
-    const entCount = entList.filter((e) => String(e.graphId ?? "") === gid).length;
-    // Parse git metadata from graph name: "scan:repo [remote@branch:sha]"
-    const name = String(g.name ?? "");
-    const gitMatch = name.match(/\[(.+?)@(.+?):(.+?)\]/);
+  for (const r of relList) {
+    const source = String((r as { provenance?: { source?: string } }).provenance?.source ?? "unknown");
+    const acc = bySource.get(source);
+    if (acc) acc.relationshipCount++;
+  }
+  const repos = [...bySource.entries()].map(([source, acc]) => {
+    // Parse git metadata: "scan:repo [remote@branch:sha]"
+    const gitMatch = source.match(/\[(.+?)@(.+?):(.+?)\]/);
     return {
-      id: gid,
-      name: name.replace(/\s*\[.+$/, ""),
+      id: source,
+      name: source.replace(/\s*\[.+$/, "").replace(/^scan:/, ""),
       gitRemote: gitMatch?.[1] ?? null,
       gitBranch: gitMatch?.[2] ?? null,
       gitSha: gitMatch?.[3] ?? null,
-      entityCount: entCount,
-      relationshipCount: relByGraph.get(gid) ?? 0,
-      lastUpdated: (g as { updatedAt?: string }).updatedAt ?? (g as { createdAt?: string }).createdAt ?? null,
+      entityCount: acc.entityCount,
+      relationshipCount: acc.relationshipCount,
+      lastUpdated: acc.lastUpdated,
     };
   });
   return c.json({

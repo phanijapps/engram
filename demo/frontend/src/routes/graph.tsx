@@ -45,7 +45,7 @@ export function Graph() {
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
-      <div className="flex items-center gap-2 border-b px-4 py-2">
+      <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
         <Badge variant="outline">{data.entities.length} nodes</Badge>
         <Badge variant="outline">{data.relationships.length} edges</Badge>
         {meta?.capped && (
@@ -57,7 +57,7 @@ export function Graph() {
           </Button>
         </div>
       </div>
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1">
         <Graph3D data={graphData} />
       </div>
     </div>

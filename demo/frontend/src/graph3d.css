@@ -4,11 +4,10 @@
 
 .graph3d {
   position: relative;
-  height: 440px;
-  margin-top: 0.5rem;
+  height: 100%;
+  min-height: 400px;
+  width: 100%;
   background: radial-gradient(120% 120% at 50% 0%, #111a30 0%, #0c1124 70%);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 

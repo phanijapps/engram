@@ -17,6 +17,7 @@ import { answerQuestion } from "./qa.js";
 
 // Demo-local defaults for scan-ingested documents (single-user, local).
 const SCAN_SCOPE = { tenant: "tenant-demo", workspace: "engram", environment: "local" };
+export { SCAN_SCOPE };
 const SCAN_POLICY = {
   visibility: "workspace",
   retention: "durable",
@@ -444,4 +445,107 @@ app.post("/qa/ask", async (c) => {
   if (!question || typeof question !== "string") return c.json({ error: "question required" }, 400);
   const reqScope = scope ?? SCAN_SCOPE;
   return c.json(await answerQuestion(question, reqScope));
+});
+
+// --- MCP server ------------------------------------------------------------
+// Exposes engram as a tool for any MCP-compatible client (Claude Desktop,
+// VS Code Copilot, etc.) via JSON-RPC over HTTP.
+app.post("/mcp", async (c) => {
+  const body = await c.req.json();
+  if (body.method === "tools/list") {
+    const tools = [
+      {
+        name: "index_repo",
+        description: "Index a code repository into the knowledge graph.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "Absolute path to the repo" },
+            force: { type: "boolean", description: "Force re-index" },
+          },
+          required: ["path"],
+        },
+      },
+      {
+        name: "get_job",
+        description: "Check indexing job status.",
+        inputSchema: {
+          type: "object",
+          properties: { jobId: { type: "string" } },
+          required: ["jobId"],
+        },
+      },
+      {
+        name: "search",
+        description: "Search the knowledge graph for entities + relationships.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string" },
+            limit: { type: "number" },
+          },
+          required: ["query"],
+        },
+      },
+      {
+        name: "agentic_search",
+        description: "Ask a question — LLM explores the graph step-by-step.",
+        inputSchema: {
+          type: "object",
+          properties: { question: { type: "string" } },
+          required: ["question"],
+        },
+      },
+    ];
+    return c.json({ jsonrpc: "2.0", id: body.id, result: { tools } });
+  }
+  if (body.method === "tools/call") {
+    const { name, arguments: args } = body.params;
+    let result: unknown;
+    try {
+      if (name === "index_repo") {
+        result = await getIngestTransport().startScanJob({
+          root: args.path,
+          scope: SCAN_SCOPE,
+          force: args.force === true,
+        });
+      } else if (name === "get_job") {
+        result = await getIngestTransport().getScanJob(args.jobId);
+      } else if (name === "search") {
+        const transport = getKnowledgeTransport();
+        const [entities, relationships] = await Promise.all([
+          transport.listEntities(SCAN_SCOPE),
+          transport.listRelationships(SCAN_SCOPE),
+        ]);
+        const q = String(args.query ?? "").toLowerCase();
+        const entList = entities as Array<Record<string, unknown>>;
+        const matched = entList
+          .filter((e) => String(e.name ?? "").toLowerCase().includes(q))
+          .slice(0, args.limit ?? 20)
+          .map((e) => ({
+            name: String(e.name ?? ""),
+            kind: String(e.kind ?? ""),
+            file: String(
+              (e.sourceRefs as Array<Record<string, unknown>> | undefined)?.[0]?.location != null
+                ? ((e.sourceRefs as Array<Record<string, unknown>>)[0]
+                    .location as Record<string, unknown>)?.path ?? ""
+                : "",
+            ),
+          }));
+        result = { entities: matched, total: entList.length };
+      } else if (name === "agentic_search") {
+        result = await answerQuestion(String(args.question ?? ""), SCAN_SCOPE);
+      } else {
+        return c.json({ jsonrpc: "2.0", id: body.id, error: { code: -32601, message: `Unknown tool: ${name}` } });
+      }
+      return c.json({
+        jsonrpc: "2.0",
+        id: body.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] },
+      });
+    } catch (e) {
+      return c.json({ jsonrpc: "2.0", id: body.id, error: { code: -32603, message: String(e) } });
+    }
+  }
+  return c.json({ jsonrpc: "2.0", id: body.id ?? null, error: { code: -32601, message: `Unknown method: ${body.method}` } });
 });

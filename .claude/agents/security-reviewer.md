@@ -2,7 +2,7 @@
 name: security-reviewer
 description: Threat-model and secure-design reviewer for changes that cross a security boundary — auth, data handling, dependencies, deserialization, file/network I/O, secrets, or LLM/agent code. Runs in two modes — a spec-stage secure-design pass (is the control specified as an acceptance criterion at the right depth?) and an implementation pass on the diff. Reads AGENTS.md, CONVENTIONS.md, any docs/architecture/security.md, the diff, and the spec if one exists; reasons along a current multi-framework stack (OWASP Top 10:2025, ASVS 5.0, API Security Top 10:2023, LLM Top 10:2025, CWE Top 25) plus a STRIDE + LINDDUN open pass, with boundary-scoped depth inlined into its brief by the orchestrator from the security-checklists skill. Tags every check tool / hybrid / reason. Complements -- does not replace -- SAST/SCA scanners and adversarial-reviewer. Use at spec stage on security-boundary work, and after adversarial-reviewer is clean before merging. Re-run iteratively until the agent reports `Clean — ready to commit.`
 tools: Read, Grep, Glob, Bash
-model: haiku
+model: opus
 ---
 
 # Security reviewer

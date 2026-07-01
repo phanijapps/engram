@@ -283,6 +283,49 @@ impl NativeKnowledgeEngine {
         encode(&fused)
     }
 
+    /// Retrieval-composition seam (RFC-0005): reciprocal-rank fusion of ranked
+    /// id lists (e.g. graph chunk ids + vector chunk ids) into one fused order.
+    /// Lightweight alternative to `fuseRrfJson` for callers that have ranked id
+    /// lists, not full `RetrievalResult`s — the demo uses this to fuse graph +
+    /// vector chunk orders without marshaling Provenance/Policy per candidate.
+    /// The formula mirrors `ReciprocalRankFusion` (1/(k + rank)); the canonical,
+    /// tested impl lives in `engram-retrieval`.
+    #[napi(js_name = "fuseRrfIdsJson")]
+    pub fn fuse_rrf_ids_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let lists: Vec<Vec<String>> = serde_json::from_value(value["lists"].clone())
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let k = value["k"]
+            .as_u64()
+            .map(|n| n as u32)
+            .unwrap_or(DEFAULT_RRF_K) as f32;
+        let limit = value["limit"].as_u64().map(|n| n as usize);
+        // score(id) = Σ over lists of 1/(k + rank_in_list); first-seen order for
+        // a stable tiebreak. An id in two lists is boosted (cross-source consensus).
+        let mut scores: std::collections::BTreeMap<String, f32> = std::collections::BTreeMap::new();
+        let mut order: Vec<String> = Vec::new();
+        for list in &lists {
+            for (rank, id) in list.iter().enumerate() {
+                let contribution = 1.0 / (k + (rank + 1) as f32);
+                if scores.insert(id.clone(), 0.0).is_none() {
+                    order.push(id.clone());
+                }
+                if let Some(s) = scores.get_mut(id) {
+                    *s += contribution;
+                }
+            }
+        }
+        order.sort_by(|a, b| {
+            scores[b]
+                .partial_cmp(&scores[a])
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        if let Some(limit) = limit {
+            order.truncate(limit);
+        }
+        encode(&order)
+    }
+
     // --- KnowledgeRepository -------------------------------------------------
 
     #[napi(js_name = "putSourceJson")]

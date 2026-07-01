@@ -104,6 +104,12 @@ export interface NativeKnowledgeTransport {
     defaultWeight?: number;
     weights?: Record<string, number>;
   }): Promise<unknown[]>;
+  /** Retrieval-composition seam: RRF-fuse ranked id lists (lightweight). */
+  fuseRrfIds(request: {
+    lists: string[][];
+    k?: number;
+    limit?: number;
+  }): Promise<string[]>;
 }
 
 /** Options for constructing a native knowledge transport. */
@@ -227,6 +233,14 @@ class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
     weights?: Record<string, number>;
   }): Promise<unknown[]> {
     return decode(this.engine.fuseRrfJson(encode(request))) as unknown[];
+  }
+
+  async fuseRrfIds(request: {
+    lists: string[][];
+    k?: number;
+    limit?: number;
+  }): Promise<string[]> {
+    return decode(this.engine.fuseRrfIdsJson(encode(request))) as string[];
   }
 }
 

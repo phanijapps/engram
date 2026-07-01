@@ -38,6 +38,7 @@ export interface NativeKnowledgeEngineBinding {
   validateGraphJson(requestJson: string): string;
   graphCandidatesJson(requestJson: string): string;
   fuseRrfJson(requestJson: string): string;
+  fuseRrfIdsJson(requestJson: string): string;
 }
 
 /** Constructor shape for the Rust-backed knowledge + taxonomy engine. */

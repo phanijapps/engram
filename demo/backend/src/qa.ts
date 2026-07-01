@@ -92,6 +92,7 @@ export function buildEvidence(
   relationships: QaRelationship[],
   chunks: QaChunk[],
   semanticChunks: QaChunk[] = [],
+  fusedChunkIds: string[] = [],
 ): { context: string; sources: QaSource[] } {
   const terms = queryTerms(question);
   const sources: QaSource[] = [];
@@ -166,24 +167,33 @@ export function buildEvidence(
     relCount++;
   }
 
-  // Knowledge chunks: the actual code text. Three tiers, merged + deduped by id:
-  //   1. entity-ref-matched chunks (code that DEFINES matched entities)
-  //   2. semantic chunks (embedding-similarity rerank of lazily-embedded candidates)
-  //   3. text-term matches (fallback — docs/markdown that merely mention terms)
-  // Tiers 1 + 2 combine the graph walk with embedding similarity; tier 3 only
-  // applies when neither surfaced anything. Empty `semanticChunks` (embeddings
-  // off/unavailable, or cache cold) leaves the original KG-only behavior intact.
-  const byEntityRef = chunks.filter((c) =>
-    c.entities?.some((e) => e.id && matchedEntityIds.has(e.id)),
-  );
-  const priority: QaChunk[] = [...byEntityRef];
-  for (const sc of semanticChunks) {
-    if (!priority.some((c) => c.id === sc.id)) priority.push(sc);
+  // Knowledge chunks: the actual code text. Two selection paths:
+  //  • Hybrid (RFC-0005 seam): when `fusedChunkIds` is present, chunks are
+  //    ordered by RRF-fused graph + vector rank (the true hybrid), with any
+  //    semantic chunks the fuser missed appended.
+  //  • KG-only fallback (embeddings off/unavailable, or cache cold): entity-ref
+  //    chunks first, else text-term matches — the original behavior.
+  const byId = new Map(chunks.map((c) => [c.id, c]));
+  let matchedChunks: QaChunk[];
+  if (fusedChunkIds.length > 0) {
+    matchedChunks = fusedChunkIds.map((id) => byId.get(id)).filter((c): c is QaChunk => !!c);
+    for (const sc of semanticChunks) {
+      if (!matchedChunks.some((c) => c.id === sc.id)) matchedChunks.push(sc);
+    }
+    matchedChunks = matchedChunks.slice(0, 8);
+  } else {
+    const byEntityRef = chunks.filter((c) =>
+      c.entities?.some((e) => e.id && matchedEntityIds.has(e.id)),
+    );
+    const priority: QaChunk[] = [...byEntityRef];
+    for (const sc of semanticChunks) {
+      if (!priority.some((c) => c.id === sc.id)) priority.push(sc);
+    }
+    const byTextTerm = chunks.filter((c) =>
+      terms.some((t) => c.text.toLowerCase().includes(t)),
+    );
+    matchedChunks = (priority.length > 0 ? priority : byTextTerm).slice(0, 8);
   }
-  const byTextTerm = chunks.filter((c) =>
-    terms.some((t) => c.text.toLowerCase().includes(t)),
-  );
-  const matchedChunks = (priority.length > 0 ? priority : byTextTerm).slice(0, 8);
   for (const chunk of matchedChunks) {
     const text = chunk.text.slice(0, 1200);
     const csrc = chunk.documentId ?? "code";
@@ -433,6 +443,23 @@ export async function answerQuestion(
       semanticChunks = [];
     }
   }
+  // Hybrid retrieval (RFC-0005 seam): RRF-fuse graph chunk order + vector chunk
+  // order into one ranking. Fails closed to KG-only (empty list) on any error.
+  let fusedChunkIds: string[] = [];
+  if (useLazy) {
+    try {
+      const kt = getKnowledgeTransport();
+      const req = { query: question, scope: scope as Scope, requester: QA_REQUESTER, modes: [] };
+      const graphCands = (await kt.graphCandidates(req)) as Array<Record<string, unknown>>;
+      const graphChunkIds = graphCands
+        .filter((r) => String(r.target_type ?? r.targetType) === "chunk")
+        .map((r) => String(r.target_id ?? r.targetId));
+      const vectorChunkIds = semanticChunks.map((c) => c.id);
+      fusedChunkIds = await kt.fuseRrfIds({ lists: [graphChunkIds, vectorChunkIds], limit: 8 });
+    } catch {
+      fusedChunkIds = [];
+    }
+  }
   const { context, sources } = buildEvidence(
     question,
     memories,
@@ -441,6 +468,7 @@ export async function answerQuestion(
     graph.relationships,
     graph.chunks,
     semanticChunks,
+    fusedChunkIds,
   );
 
   const config = getLLMConfig();

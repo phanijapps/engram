@@ -74,7 +74,9 @@ pub(crate) async fn retrieve(
     };
 
     let expansion_records = records.clone();
-    let mut candidates = Vec::new();
+    let active_temporal = request.modes.contains(&RetrievalMode::Temporal);
+    let active_cue = request.modes.contains(&RetrievalMode::Cue) && !request.cues.is_empty();
+    let mut candidates: Vec<MemoryCandidate> = Vec::new();
     let mut omitted = Vec::new();
     for record in records {
         if !scope_allows(&record.scope, &request.scope) {
@@ -123,28 +125,61 @@ pub(crate) async fn retrieve(
             return Err(error);
         }
 
-        if let Some((score, matched_terms)) = keyword_score(&record, &request.query, &terms) {
-            candidates.push((score, matched_terms, record));
-        }
+        // Keyword retrieval stays always-on; Temporal and Cue are additive modes
+        // that can surface a memory even without a keyword match. A memory is a
+        // candidate if any active mode scores it; score.total is the best mode.
+        let keyword = keyword_score(&record, &request.query, &terms);
+        let temporal = if active_temporal {
+            temporal_score(&record, request.filters.as_ref(), now)
+        } else {
+            None
+        };
+        let cue = if active_cue {
+            cue_score(&record, &request.cues)
+        } else {
+            None
+        };
+        let total = [
+            keyword.as_ref().map(|(score, _)| *score),
+            temporal,
+            cue.as_ref().map(|(score, _)| *score),
+        ]
+        .into_iter()
+        .flatten()
+        .max_by(|left, right| left.total_cmp(right));
+        let Some(total) = total else {
+            continue;
+        };
+        let (relevance, matched_terms) = match keyword {
+            Some((score, terms)) => (Some(score), terms),
+            None => (None, Vec::new()),
+        };
+        let (cue_match, matched_cues) = match cue {
+            Some((score, cues)) => (Some(score), cues),
+            None => (None, Vec::new()),
+        };
+        candidates.push(MemoryCandidate {
+            total,
+            relevance,
+            recency: temporal,
+            cue_match,
+            matched_terms,
+            matched_cues,
+            record,
+        });
     }
 
     candidates.sort_by(|left, right| {
         right
-            .0
-            .total_cmp(&left.0)
-            .then_with(|| right.2.created_at.cmp(&left.2.created_at))
-            .then_with(|| left.2.id.cmp(&right.2.id))
+            .total
+            .total_cmp(&left.total)
+            .then_with(|| right.record.created_at.cmp(&left.record.created_at))
+            .then_with(|| left.record.id.cmp(&right.record.id))
     });
 
     let mut candidate_results = Vec::new();
-    for (index, (score, matched_terms, record)) in candidates.into_iter().enumerate() {
-        candidate_results.push(retrieval_result(
-            index,
-            score,
-            matched_terms,
-            record,
-            include_explanations,
-        ));
+    for (index, candidate) in candidates.into_iter().enumerate() {
+        candidate_results.push(retrieval_result(index, candidate, include_explanations));
     }
     let (mut knowledge_results, knowledge_omissions) = knowledge_candidates(
         knowledge_snapshots,
@@ -274,29 +309,51 @@ fn searchable_content(record: &MemoryRecord) -> String {
 
 fn retrieval_result(
     index: usize,
-    total_score: f32,
-    matched_terms: Vec<String>,
-    record: MemoryRecord,
+    candidate: MemoryCandidate,
     include_explanation: bool,
 ) -> RetrievalResult {
+    let MemoryCandidate {
+        total,
+        relevance,
+        recency,
+        cue_match,
+        matched_terms,
+        matched_cues,
+        record,
+    } = candidate;
     let explanation = include_explanation.then(|| RetrievalExplanation {
-        reason: "Matched memory content with in-memory keyword retrieval.".to_owned(),
-        matched_cues: Vec::new(),
+        reason: "Matched memory content with in-memory retrieval.".to_owned(),
+        matched_cues,
         matched_terms,
         path: Vec::new(),
         source_summary: record.content.summary.clone(),
     });
+    let mut matched_sources = Vec::new();
+    if relevance.is_some() {
+        matched_sources.push("memory.keyword");
+    }
+    if recency.is_some() {
+        matched_sources.push("memory.temporal");
+    }
+    if cue_match.is_some() {
+        matched_sources.push("memory.cue");
+    }
+    let source = if matched_sources.is_empty() {
+        "memory.keyword".to_owned()
+    } else {
+        matched_sources.join("+")
+    };
     RetrievalResult {
         id: format!("result-{}", record.id),
         target_type: RetrievalTargetType::Memory,
         target_id: record.id.to_string(),
         content: record.content.text,
         score: RetrievalScore {
-            total: total_score,
-            relevance: Some(total_score),
-            recency: None,
+            total,
+            relevance,
+            recency,
             confidence: record.provenance.confidence,
-            cue_match: None,
+            cue_match,
             hierarchical_fit: None,
             policy_fit: Some(1.0),
         },
@@ -304,16 +361,113 @@ fn retrieval_result(
         policy: record.policy,
         explanation,
         fusion_trace: Some(FusionTrace {
-            source: "memory.keyword".to_owned(),
+            source,
             source_rank: Some((index + 1) as u32),
-            source_score: Some(total_score),
+            source_score: Some(total),
             fusion_strategy: Some(FusionStrategy::None),
-            fusion_score: Some(total_score),
+            fusion_score: Some(total),
             rerank_strategy: Some(RerankStrategy::None),
-            rerank_score: Some(total_score),
+            rerank_score: Some(total),
             deduplicated_with: Vec::new(),
         }),
         metadata: None,
+    }
+}
+
+struct MemoryCandidate {
+    total: f32,
+    relevance: Option<f32>,
+    recency: Option<f32>,
+    cue_match: Option<f32>,
+    matched_terms: Vec<String>,
+    matched_cues: Vec<Cue>,
+    record: MemoryRecord,
+}
+
+/// Recency score for temporal retrieval within the requested time window.
+///
+/// The memory is already in-window (`memory_filter_allows` applied `since`/`until`).
+/// With a full window the score ramps linearly from the `since` edge (0.0) to the
+/// `until` edge (1.0); without a full window every in-window memory scores 1.0 and
+/// ordering falls back to `created_at`.
+fn temporal_score(
+    record: &MemoryRecord,
+    filters: Option<&QueryFilter>,
+    now: Timestamp,
+) -> Option<f32> {
+    // Window-relative recency when both edges are set (0.0 at `since`, 1.0 at `until`).
+    if let Some(filters) = filters
+        && let (Some(since), Some(until)) = (filters.since, filters.until)
+        && until > since
+    {
+        let span = (until - since).num_seconds().max(1) as f32;
+        let offset = (record.created_at - since).num_seconds().max(0) as f32;
+        return Some((offset / span).clamp(0.0, 1.0));
+    }
+    // Otherwise age-based decay from `now` so newer memories rank higher even
+    // without an explicit window.
+    let age_seconds = (now - record.created_at).num_seconds().max(0) as f32;
+    Some(1.0 / (1.0 + age_seconds))
+}
+
+/// Weighted cue-match ratio for cue retrieval against the memory's links.
+///
+/// A cue matches a link whose `rel == cue.slot` and whose `target_id` satisfies
+/// the cue operator. Returns the matched-weight fraction and the matched cues, or
+/// `None` when no cue matches.
+fn cue_score(record: &MemoryRecord, cues: &[Cue]) -> Option<(f32, Vec<Cue>)> {
+    let total_weight: f32 = cues
+        .iter()
+        .map(|cue| cue.weight.unwrap_or(1.0).max(0.0))
+        .sum();
+    if total_weight <= 0.0 {
+        return None;
+    }
+    let mut matched = Vec::new();
+    let mut matched_weight = 0.0_f32;
+    for cue in cues {
+        if cue_matches_link(record, cue) {
+            matched.push(cue.clone());
+            matched_weight += cue.weight.unwrap_or(1.0).max(0.0);
+        }
+    }
+    if matched.is_empty() {
+        return None;
+    }
+    Some((matched_weight / total_weight, matched))
+}
+
+fn cue_matches_link(record: &MemoryRecord, cue: &Cue) -> bool {
+    let operator = cue.operator.clone().unwrap_or(CueOperator::Equals);
+    record
+        .links
+        .iter()
+        .any(|link| link.rel == cue.slot && cue_satisfies(&operator, &link.target_id, &cue.value))
+}
+
+fn cue_satisfies(operator: &CueOperator, target_id: &str, value: &Scalar) -> bool {
+    let value_str = value.as_str();
+    match operator {
+        CueOperator::Equals => value_str.is_some_and(|value| target_id == value),
+        CueOperator::Contains => value_str.is_some_and(|value| target_id.contains(value)),
+        CueOperator::StartsWith => value_str.is_some_and(|value| target_id.starts_with(value)),
+        CueOperator::EndsWith => value_str.is_some_and(|value| target_id.ends_with(value)),
+        CueOperator::Exists => true,
+        CueOperator::In => value
+            .as_array()
+            .is_some_and(|array| array.iter().any(|item| item.as_str() == Some(target_id))),
+        CueOperator::Range => {
+            if let Some(array) = value.as_array()
+                && let (Some(lower), Some(upper)) = (
+                    array.first().and_then(|item| item.as_str()),
+                    array.get(1).and_then(|item| item.as_str()),
+                )
+            {
+                target_id >= lower && target_id <= upper
+            } else {
+                false
+            }
+        }
     }
 }
 

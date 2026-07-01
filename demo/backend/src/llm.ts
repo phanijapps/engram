@@ -138,13 +138,15 @@ function extractionPrompt(kind: "code" | "text"): string {
 
 let modelsJsonCache: string | null = null;
 
+export { modelsJsonCache };
+
 /**
  * Writes a process-local pi `models.json` describing ollama cloud as a custom
  * OpenAI-compatible provider, generated from the demo `.env`. The API key is
  * referenced (not embedded) via `$ENGRAM_LLM_API_KEY`; pi resolves it from the
  * environment at request time. No secret is written to disk.
  */
-async function ensureModelsJson(config: LLMConfig): Promise<string> {
+export async function ensureModelsJson(config: LLMConfig): Promise<string> {
   if (modelsJsonCache) return modelsJsonCache;
   const file = path.join(os.tmpdir(), `engram-pi-models-${process.pid}.json`);
   const doc = {

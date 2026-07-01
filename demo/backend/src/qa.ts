@@ -6,7 +6,8 @@
 // the graph (search_entities, get_neighbors, get_call_graph). Sources come from
 // deterministic retrieval, never from LLM-invented text. Never throws.
 
-import { getLLMConfig, runLLM } from "./llm.js";
+import os from "node:os";
+import { extractJsonObject, ensureModelsJson, getLLMConfig, runLLM } from "./llm.js";
 import { getBeliefTransport, getKnowledgeTransport, getTransport } from "./engram.js";
 import type { Scope } from "@engram/contracts";
 
@@ -182,7 +183,6 @@ export function buildEvidence(
       kind: "chunk",
       id: chunk.id,
       text: chunk.text.slice(0, 120),
-      source: csrc,
       source: "code",
     });
   }
@@ -225,6 +225,166 @@ async function fetchGraph(scope: unknown): Promise<{ entities: QaEntity[]; relat
   }
 }
 
+// --- Agentic Q&A: LLM explores the graph step-by-step via tools ---
+
+const AGENTIC_SYSTEM_PROMPT = [
+  "You are a code intelligence assistant with tools to explore a knowledge graph.",
+  "The graph contains entities (functions, classes, concepts, requirements, value streams)",
+  "and relationships (calls, mentions, defines, contains, satisfies, implements).",
+  "",
+  "Available tools — respond with ONLY a JSON object to call one:",
+  '  {"tool":"search_entities","query":"<keyword>"}',
+  "    Find up to 15 entities whose name contains the keyword. Returns name, kind, source file.",
+  '  {"tool":"get_neighbors","entity":"<exact entity name>"}',
+  "    Get up to 20 relationships involving that entity. Returns subject predicate object.",
+  '  {"tool":"get_code","entity":"<exact entity name>"}',
+  "    Get the source code text of the chunk that defines that entity.",
+  "",
+  "Workflow: search for relevant entities → trace their neighbors → read code → answer.",
+  "When you have enough information, respond with your answer in markdown prose (no JSON).",
+  "Format rules: plain text arrows (->), no LaTeX. Cite source file in parentheses.",
+  "Max 8 tool calls. If the graph is insufficient, say so.",
+].join("\n");
+
+type ToolResult = { tool: string; query?: string; entity?: string };
+
+function executeTool(
+  call: ToolResult,
+  entities: QaEntity[],
+  relationships: QaRelationship[],
+  chunks: QaChunk[],
+): string {
+  switch (call.tool) {
+    case "search_entities": {
+      const q = (call.query ?? "").toLowerCase().trim();
+      if (!q) return "Missing 'query' parameter.";
+      const matched = entities
+        .filter((e) => e.name?.toLowerCase().includes(q))
+        .slice(0, 15)
+        .map(
+          (e) =>
+            `${e.name} (${e.kind ?? "entity"}) — ${e.sourceRefs?.[0]?.location?.path ?? "unknown file"}`,
+        );
+      return matched.length ? matched.join("\n") : `No entities matching "${q}".`;
+    }
+    case "get_neighbors": {
+      const name = (call.entity ?? "").toLowerCase().trim();
+      if (!name) return "Missing 'entity' parameter.";
+      const edges = relationships
+        .filter(
+          (r) =>
+            r.subject?.name?.toLowerCase() === name ||
+            r.object?.name?.toLowerCase() === name,
+        )
+        .slice(0, 20)
+        .map((r) => `${r.subject?.name ?? "?"} ${r.predicate} ${r.object?.name ?? "?"}`);
+      return edges.length ? edges.join("\n") : `No relationships for "${name}".`;
+    }
+    case "get_code": {
+      const name = (call.entity ?? "").toLowerCase().trim();
+      if (!name) return "Missing 'entity' parameter.";
+      const entity = entities.find((e) => e.name?.toLowerCase() === name);
+      if (!entity) return `Entity "${name}" not found.`;
+      const chunk = chunks.find((c) => c.entities?.some((e) => e.id === entity.id));
+      return chunk ? chunk.text.slice(0, 1500) : `No code chunk for "${name}".`;
+    }
+    default:
+      return `Unknown tool: ${call.tool}`;
+  }
+}
+
+/**
+ * Runs an agentic Q&A loop: the LLM calls graph-search tools to explore the
+ * knowledge graph step-by-step, then synthesizes a final answer. Uses the pi
+ * SDK session in multi-turn mode — the session persists across tool calls.
+ */
+async function runAgenticQA(
+  question: string,
+  graph: { entities: QaEntity[]; relationships: QaRelationship[]; chunks: QaChunk[] },
+  config: { baseUrl: string; apiKey: string; model: string },
+): Promise<string> {
+  const modelsJsonPath = await ensureModelsJson(config);
+  const pi = await import("@earendil-works/pi-coding-agent");
+  const authStorage = pi.AuthStorage.inMemory();
+  const modelRegistry = pi.ModelRegistry.create(authStorage, modelsJsonPath);
+  const model = modelRegistry.find("ollama-cloud", config.model);
+  if (!model) throw new Error(`pi model not configured: ollama-cloud/${config.model}`);
+
+  const { session } = await pi.createAgentSession({
+    model,
+    authStorage,
+    modelRegistry,
+    sessionManager: pi.SessionManager.inMemory(),
+    noTools: "all",
+    cwd: os.tmpdir(),
+  });
+
+  let collected = "";
+  let capped = false;
+  const stop = () => {
+    if (capped) return;
+    capped = true;
+    void session.abort().catch(() => {});
+  };
+  const off = session.subscribe((event) => {
+    if (capped) return;
+    if (
+      event.type === "message_update" &&
+      event.assistantMessageEvent.type === "text_delta"
+    ) {
+      collected += event.assistantMessageEvent.delta;
+      if (collected.length > 100_000) stop();
+    }
+  });
+
+  const MAX_TURNS = 9;
+  let turnResult = "";
+
+  try {
+    // Turn 0: send the question.
+    const timer = setTimeout(stop, 30_000);
+    collected = "";
+    await session.prompt(
+      `${AGENTIC_SYSTEM_PROMPT}\n\nQuestion: ${question}\n\nUse the tools to explore the knowledge graph and answer. Start by searching for entities related to the question.`,
+    );
+    clearTimeout(timer);
+    turnResult = collected.trim();
+    collected = "";
+
+    // Turns 1-N: parse tool calls, execute, feed back.
+    for (let turn = 1; turn < MAX_TURNS; turn++) {
+      // Check if this is a final answer (prose, not a JSON tool call).
+      let isToolCall = false;
+      try {
+        const json = JSON.parse(extractJsonObject(turnResult)) as ToolResult;
+        if (json.tool) {
+          isToolCall = true;
+          const toolOutput = executeTool(json, graph.entities, graph.relationships, graph.chunks);
+          const timer2 = setTimeout(stop, 30_000);
+          collected = "";
+          await session.prompt(`Tool result:\n${toolOutput}`);
+          clearTimeout(timer2);
+          turnResult = collected.trim();
+          collected = "";
+        }
+      } catch {
+        // Not JSON → this is the final prose answer.
+      }
+      if (!isToolCall) break;
+    }
+  } catch {
+    // Abort/timeout/provider error: fall through with whatever was captured.
+  } finally {
+    off();
+    session.dispose();
+  }
+
+  if (!turnResult.trim()) {
+    throw new Error("LLM returned no content");
+  }
+  return turnResult;
+}
+
 /** Answers a question over knowledge graph + memory + beliefs. Never throws. */
 export async function answerQuestion(question: string, scope: unknown): Promise<QaResult> {
   const [memoryResponse, beliefs, graph] = await Promise.all([
@@ -259,13 +419,7 @@ export async function answerQuestion(question: string, scope: unknown): Promise<
   }
 
   try {
-    const answer = (
-      await runLLM(
-        QA_SYSTEM_PROMPT,
-        `Question:\n${question}\n\nKnowledge graph + memory + belief context:\n${context}`,
-        config,
-      )
-    ).trim();
+    const answer = await runAgenticQA(question, graph, config);
     return { answer, sources, llm: "ok" };
   } catch (err) {
     return {

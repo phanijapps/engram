@@ -75,6 +75,9 @@ export interface NativeBeliefEngineConstructor {
 export interface NativeRetrievalEngineBinding {
   indexJson(requestJson: string): string;
   searchJson(requestJson: string): string;
+  indexChunkJson(requestJson: string): string;
+  cacheStatsJson(): string;
+  clearJson(): string;
 }
 
 /** Constructor shape for the Rust-backed semantic-retrieval engine. */

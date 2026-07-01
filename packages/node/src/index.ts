@@ -30,5 +30,7 @@ export {
   type NativeMemoryTransportOptions,
   type NativeRetrievalTransport,
   type NativeRetrievalTransportOptions,
+  type RetrievalCacheStats,
+  type RetrievalIndexChunkResult,
   type RetrievalSearchHit
 } from "./transport.js";

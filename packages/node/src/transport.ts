@@ -323,10 +323,27 @@ export interface RetrievalSearchHit {
   score: number;
 }
 
+/** Result of an idempotent lazy-embed call (was inference run, or cache hit?). */
+export interface RetrievalIndexChunkResult {
+  embedded: boolean;
+  total: number;
+}
+
+/** Cache-coverage snapshot for the lazy-embedding warm-up benchmark. */
+export interface RetrievalCacheStats {
+  embedded: number;
+}
+
 /** Transport interface for FastEmbed semantic retrieval. */
 export interface NativeRetrievalTransport {
   index(text: string): Promise<{ indexed: number }>;
   search(query: string, topK?: number): Promise<RetrievalSearchHit[]>;
+  /** Idempotently embed one chunk by stable id (lazy-embedding primitive). */
+  indexChunk(chunkId: string, text: string): Promise<RetrievalIndexChunkResult>;
+  /** Number of chunks currently embedded (cache-coverage numerator). */
+  cacheStats(): Promise<RetrievalCacheStats>;
+  /** Clear the embedded-chunk cache + vector index (cold start). */
+  clear(): Promise<{ cleared: boolean }>;
 }
 
 /** Options for constructing a native retrieval transport. */
@@ -352,5 +369,20 @@ class JsonNativeRetrievalTransport implements NativeRetrievalTransport {
 
   async search(query: string, topK?: number): Promise<RetrievalSearchHit[]> {
     return decode(this.engine.searchJson(encode({ query, topK })));
+  }
+
+  async indexChunk(
+    chunkId: string,
+    text: string
+  ): Promise<RetrievalIndexChunkResult> {
+    return decode(this.engine.indexChunkJson(encode({ chunkId, text })));
+  }
+
+  async cacheStats(): Promise<RetrievalCacheStats> {
+    return decode(this.engine.cacheStatsJson());
+  }
+
+  async clear(): Promise<{ cleared: boolean }> {
+    return decode(this.engine.clearJson());
   }
 }

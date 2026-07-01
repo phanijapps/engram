@@ -113,6 +113,10 @@ improvement on broad-concept questions.
   showed it found the right entity, but the formatting needs fixing.
 
 ## See also
+- [Lazy-embeddings companion study](./lazy-embeddings.md) — the follow-on
+  benchmark: query-time (lazy) embeddings + KG, with a warm-up curve. Tests the
+  *opposite* hypothesis (that embeddings, generated lazily at query time, *do*
+  help and amortize across queries).
 - [8-question eval](./eval-8-question.md) — fast pilot (strict subset of the 50Q)
 - [50-question eval](./eval-50-question.md) — larger, trend-tracking suite
 - [Benchmark spec](../specs/benchmark-lazy-embeddings/spec.md)

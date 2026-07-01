@@ -41,9 +41,10 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   virtualization, indexing as popup modal.
 - [`dashboard-tenant-view`](dashboard-tenant-view/spec.md): tenant + indexed
   repos (git remote/branch/SHA) + document/chunk counts overview.
-- [`benchmark-lazy-embeddings`](benchmark-lazy-embeddings/spec.md): prove
-  runtime embeddings (not index-time) work — benchmark vs Microsoft Terminal
-  (500K+ lines), PERFORMANCE.md with charts.
+- [`benchmark-lazy-embeddings`](benchmark-lazy-embeddings/spec.md): query-time
+  (lazy) embeddings + KG, with a warm-up benchmark — quality vs the KG-only
+  baseline + latency/coverage across passes. Shipped; results in
+  `docs/perf/lazy-embeddings.md`.
 - [`mcp-server`](mcp-server/spec.md): expose backend as MCP HTTP server —
   index_repo, search, agentic_search, get_job tools for any MCP client.
 - [`db-adapter-skill`](db-adapter-skill/spec.md): Claude Code skill for adding

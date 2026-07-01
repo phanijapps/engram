@@ -9,6 +9,7 @@
 import os from "node:os";
 import { extractJsonObject, ensureModelsJson, getLLMConfig, runLLM } from "./llm.js";
 import { getBeliefTransport, getKnowledgeTransport, getTransport } from "./engram.js";
+import { lazyEmbeddingsEnabled, semanticChunksFor } from "./lazy_embeddings.js";
 import type { Scope } from "@engram/contracts";
 
 export type QaSource = {
@@ -90,6 +91,7 @@ export function buildEvidence(
   entities: QaEntity[],
   relationships: QaRelationship[],
   chunks: QaChunk[],
+  semanticChunks: QaChunk[] = [],
 ): { context: string; sources: QaSource[] } {
   const terms = queryTerms(question);
   const sources: QaSource[] = [];
@@ -164,17 +166,24 @@ export function buildEvidence(
     relCount++;
   }
 
-  // Knowledge chunks: the actual code text. Prioritize entity-ref-matched chunks
-  // (the code that DEFINES the matched entities) over text-term matches (which
-  // could be docs/markdown that merely mention the terms). Fall back to text-term
-  // matches only if no entity-ref chunks are found.
+  // Knowledge chunks: the actual code text. Three tiers, merged + deduped by id:
+  //   1. entity-ref-matched chunks (code that DEFINES matched entities)
+  //   2. semantic chunks (embedding-similarity rerank of lazily-embedded candidates)
+  //   3. text-term matches (fallback — docs/markdown that merely mention terms)
+  // Tiers 1 + 2 combine the graph walk with embedding similarity; tier 3 only
+  // applies when neither surfaced anything. Empty `semanticChunks` (embeddings
+  // off/unavailable, or cache cold) leaves the original KG-only behavior intact.
   const byEntityRef = chunks.filter((c) =>
     c.entities?.some((e) => e.id && matchedEntityIds.has(e.id)),
   );
+  const priority: QaChunk[] = [...byEntityRef];
+  for (const sc of semanticChunks) {
+    if (!priority.some((c) => c.id === sc.id)) priority.push(sc);
+  }
   const byTextTerm = chunks.filter((c) =>
     terms.some((t) => c.text.toLowerCase().includes(t)),
   );
-  const matchedChunks = (byEntityRef.length > 0 ? byEntityRef : byTextTerm).slice(0, 8);
+  const matchedChunks = (priority.length > 0 ? priority : byTextTerm).slice(0, 8);
   for (const chunk of matchedChunks) {
     const text = chunk.text.slice(0, 1200);
     const csrc = chunk.documentId ?? "code";
@@ -302,6 +311,7 @@ async function runAgenticQA(
   question: string,
   graph: { entities: QaEntity[]; relationships: QaRelationship[]; chunks: QaChunk[] },
   config: { baseUrl: string; apiKey: string; model: string },
+  context: string,
 ): Promise<string> {
   const modelsJsonPath = await ensureModelsJson(config);
   const pi = await import("@earendil-works/pi-coding-agent");
@@ -341,11 +351,18 @@ async function runAgenticQA(
   let turnResult = "";
 
   try {
-    // Turn 0: send the question.
+    // Turn 0: send the question with retrieved evidence as grounding. The
+    // grounding carries entity-ref + semantic chunks (when lazy embeddings are
+    // on), so semantic retrieval shapes the answer even though the LLM may also
+    // explore via tools. Empty grounding (no records) falls back to tools-only.
+    const grounding =
+      context && context.trim() && context !== "(no relevant records found)"
+        ? `\n\nRetrieved evidence (entities, relationships, code chunks — cite these):\n${context}\n`
+        : "";
     const timer = setTimeout(stop, 30_000);
     collected = "";
     await session.prompt(
-      `${AGENTIC_SYSTEM_PROMPT}\n\nQuestion: ${question}\n\nUse the tools to explore the knowledge graph and answer. Start by searching for entities related to the question.`,
+      `${AGENTIC_SYSTEM_PROMPT}${grounding}\n\nQuestion: ${question}\n\nAnswer using the retrieved evidence above and/or the tools. Start by searching for entities related to the question if the evidence is insufficient.`,
     );
     clearTimeout(timer);
     turnResult = collected.trim();
@@ -385,8 +402,15 @@ async function runAgenticQA(
   return turnResult;
 }
 
-/** Answers a question over knowledge graph + memory + beliefs. Never throws. */
-export async function answerQuestion(question: string, scope: unknown): Promise<QaResult> {
+/** Answers a question over knowledge graph + memory + beliefs. Never throws.
+ *  `useLazyEmbeddings` overrides the env default so the benchmark can force a
+ *  clean KG-only (false) vs hybrid (true) A/B. */
+export async function answerQuestion(
+  question: string,
+  scope: unknown,
+  opts?: { useLazyEmbeddings?: boolean },
+): Promise<QaResult> {
+  const useLazy = opts?.useLazyEmbeddings ?? lazyEmbeddingsEnabled();
   const [memoryResponse, beliefs, graph] = await Promise.all([
     getTransport().retrieve({
       query: question,
@@ -400,6 +424,15 @@ export async function answerQuestion(question: string, scope: unknown): Promise<
     fetchGraph(scope),
   ]);
   const memories = ((memoryResponse as { items?: MemoryItem[] }).items ?? []);
+  // Lazy embeddings: semantic-rerank graph candidates (no-op when off/unavailable).
+  let semanticChunks: QaChunk[] = [];
+  if (useLazy) {
+    try {
+      semanticChunks = await semanticChunksFor(question, graph.chunks, 8, true);
+    } catch {
+      semanticChunks = [];
+    }
+  }
   const { context, sources } = buildEvidence(
     question,
     memories,
@@ -407,6 +440,7 @@ export async function answerQuestion(question: string, scope: unknown): Promise<
     graph.entities,
     graph.relationships,
     graph.chunks,
+    semanticChunks,
   );
 
   const config = getLLMConfig();
@@ -419,7 +453,7 @@ export async function answerQuestion(question: string, scope: unknown): Promise<
   }
 
   try {
-    const answer = await runAgenticQA(question, graph, config);
+    const answer = await runAgenticQA(question, graph, config, context);
     return { answer, sources, llm: "ok" };
   } catch (err) {
     return {

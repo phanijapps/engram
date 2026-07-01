@@ -885,19 +885,47 @@ mod retrieval {
         indexed: usize,
     }
 
-    #[derive(Deserialize)]
+    #[derive(Deserialize, Serialize)]
     #[serde(rename_all = "camelCase")]
     struct SearchRequest {
         query: String,
         top_k: Option<u32>,
     }
 
-    #[derive(Serialize)]
+    #[derive(Deserialize, Serialize)]
     #[serde(rename_all = "camelCase")]
     struct SearchHit {
         id: String,
         text: String,
         score: f32,
+    }
+
+    /// Lazy (query-time) embedding primitive: embed one named chunk idempotently.
+    /// Repeated calls for the same `chunkId` skip inference entirely (cache hit).
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct IndexChunkRequest {
+        chunk_id: String,
+        text: String,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct IndexChunkResponse {
+        embedded: bool,
+        total: usize,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct CacheStatsResponse {
+        embedded: usize,
+    }
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ClearResponse {
+        cleared: bool,
     }
 
     struct State {
@@ -1005,6 +1033,167 @@ mod retrieval {
                 })
                 .collect();
             encode(&results)
+        }
+
+        /// Idempotently embeds one chunk (BGE-small passage) by its stable id.
+        ///
+        /// The lazy-embedding primitive: a cache hit (chunkId already present)
+        /// returns without running inference; a miss embeds the passage, inserts
+        /// it into the sqlite-vec index keyed by `chunkId`, and records the text.
+        /// Double-checks under the lock so concurrent callers can't double-embed.
+        /// Embedding happens outside the state lock so cache hits (reads) aren't
+        /// blocked by a miss's inference.
+        #[napi(js_name = "indexChunkJson")]
+        pub fn index_chunk_json(&self, request_json: String) -> Result<String> {
+            let IndexChunkRequest { chunk_id, text } = decode(&request_json)?;
+            // Fast path: cache hit — no inference, no write.
+            {
+                let state = self
+                    .state
+                    .lock()
+                    .map_err(|_| Error::from_reason("retrieval state lock poisoned"))?;
+                if state.chunks.contains_key(&chunk_id) {
+                    return encode(&IndexChunkResponse {
+                        embedded: false,
+                        total: state.chunks.len(),
+                    });
+                }
+            }
+            // Cache miss: embed without holding the lock so reads stay responsive.
+            let embedding = self.provider.embed_passage(&text).map_err(to_napi_error)?;
+            let model = self.provider.model_name().to_owned();
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| Error::from_reason("retrieval state lock poisoned"))?;
+            // Double-check: another caller may have embedded this id meanwhile.
+            if state.chunks.contains_key(&chunk_id) {
+                return encode(&IndexChunkResponse {
+                    embedded: false,
+                    total: state.chunks.len(),
+                });
+            }
+            state
+                .index
+                .insert(VectorEntry {
+                    id: chunk_id.clone(),
+                    target_type: EmbeddingTargetType::Chunk,
+                    target_id: chunk_id.clone(),
+                    model,
+                    dimensions: DIMENSIONS,
+                    content_hash: chunk_id.clone(),
+                    embedding,
+                })
+                .map_err(to_napi_error)?;
+            state.chunks.insert(chunk_id, text);
+            encode(&IndexChunkResponse {
+                embedded: true,
+                total: state.chunks.len(),
+            })
+        }
+
+        /// Reports how many chunks are currently embedded (cache coverage numerator).
+        #[napi(js_name = "cacheStatsJson")]
+        pub fn cache_stats_json(&self) -> Result<String> {
+            let state = self
+                .state
+                .lock()
+                .map_err(|_| Error::from_reason("retrieval state lock poisoned"))?;
+            encode(&CacheStatsResponse {
+                embedded: state.chunks.len(),
+            })
+        }
+
+        /// Clears the embedded-chunk cache + vector index (cold start for the
+        /// warm-up benchmark).
+        #[napi(js_name = "clearJson")]
+        pub fn clear_json(&self) -> Result<String> {
+            let mut state = self
+                .state
+                .lock()
+                .map_err(|_| Error::from_reason("retrieval state lock poisoned"))?;
+            state.index.clear().map_err(to_napi_error)?;
+            state.chunks.clear();
+            encode(&ClearResponse { cleared: true })
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        // These exercise the full engine, which loads the BGE-small model on
+        // construction. They are `#[ignore]` so `cargo test` stays hermetic;
+        // run them explicitly when the FastEmbed model cache is populated:
+        //   cargo test -p engram-node --features fastembed --lib retrieval:: --ignored
+        #[test]
+        #[ignore]
+        fn index_chunk_is_idempotent() {
+            let engine = NativeRetrievalEngine::new().expect("engine");
+            let req = encode(&IndexChunkRequest {
+                chunk_id: "chunk-1".to_owned(),
+                text: "The renderer paints text to the screen.".to_owned(),
+            })
+            .expect("encode req");
+            let first: IndexChunkResponse =
+                serde_json::from_str(&engine.index_chunk_json(req.clone()).expect("first"))
+                    .expect("decode first");
+            let second: IndexChunkResponse =
+                serde_json::from_str(&engine.index_chunk_json(req).expect("second"))
+                    .expect("decode second");
+            assert!(first.embedded, "first call should embed");
+            assert!(!second.embedded, "second call should be a cache hit");
+            assert_eq!(first.total, second.total, "total must not grow on hit");
+        }
+
+        #[test]
+        #[ignore]
+        fn cache_stats_and_clear_track_coverage() {
+            let engine = NativeRetrievalEngine::new().expect("engine");
+            for i in 0..3 {
+                let req = encode(&IndexChunkRequest {
+                    chunk_id: format!("c{i}"),
+                    text: format!("passage number {i} about rendering text"),
+                })
+                .expect("encode req");
+                let resp: IndexChunkResponse =
+                    serde_json::from_str(&engine.index_chunk_json(req).expect("index"))
+                        .expect("decode");
+                assert_eq!(resp.total, (i + 1) as usize);
+            }
+            let stats: CacheStatsResponse =
+                serde_json::from_str(&engine.cache_stats_json().expect("stats"))
+                    .expect("decode stats");
+            assert_eq!(stats.embedded, 3);
+
+            let _: ClearResponse =
+                serde_json::from_str(&engine.clear_json().expect("clear")).expect("decode clear");
+            let after: CacheStatsResponse =
+                serde_json::from_str(&engine.cache_stats_json().expect("stats"))
+                    .expect("decode stats");
+            assert_eq!(after.embedded, 0, "clear must empty the cache");
+        }
+
+        #[test]
+        #[ignore]
+        fn search_returns_stored_chunk_ids() {
+            let engine = NativeRetrievalEngine::new().expect("engine");
+            let req = encode(&IndexChunkRequest {
+                chunk_id: "real-chunk-42".to_owned(),
+                text: "TerminalHandle wraps the connection handle.".to_owned(),
+            })
+            .expect("encode req");
+            let _: IndexChunkResponse =
+                serde_json::from_str(&engine.index_chunk_json(req).expect("index"))
+                    .expect("decode");
+            let sreq = encode(&SearchRequest {
+                query: "what is the terminal handle".to_owned(),
+                top_k: Some(3),
+            })
+            .expect("encode search");
+            let hits: Vec<SearchHit> =
+                serde_json::from_str(&engine.search_json(sreq).expect("search")).expect("decode");
+            assert!(hits.iter().any(|h| h.id == "real-chunk-42"));
         }
     }
 }

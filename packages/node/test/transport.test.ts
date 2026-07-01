@@ -66,6 +66,7 @@ describe("@engram/node", () => {
         listEntitiesJson(): string { return "[]"; }
         listRelationshipsJson(): string { return "[]"; }
         listChunksJson(): string { return "[]"; }
+        listSourcesJson(): string { return "[]"; }
       },
       NativeIngestEngine: class {
         ingestExtractJson(): string {
@@ -88,6 +89,9 @@ describe("@engram/node", () => {
       NativeRetrievalEngine: class {
         indexJson(): string { return '{"indexed":0}'; }
         searchJson(): string { return "[]"; }
+        indexChunkJson(): string { return '{"embedded":false,"total":0}'; }
+        cacheStatsJson(): string { return '{"embedded":0}'; }
+        clearJson(): string { return '{"cleared":true}'; }
       }
     };
     const transport = createNativeMemoryTransport({ binding });

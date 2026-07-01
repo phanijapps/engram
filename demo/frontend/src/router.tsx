@@ -34,12 +34,12 @@ const rootRoute = createRootRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: Graph,
-});
-const dashRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/dashboard",
   component: Dashboard,
+});
+const graphRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/graph",
+  component: Graph,
 });
 const explorerRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -79,7 +79,7 @@ const chatRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
-  dashRoute,
+  graphRoute,
   explorerRoute,
   ingestRoute,
   indexRoute,

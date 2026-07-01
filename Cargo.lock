@@ -853,6 +853,7 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-knowledge",
+ "engram-retrieval",
  "engram-runtime",
  "futures",
  "rusqlite",

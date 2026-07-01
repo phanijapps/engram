@@ -1,0 +1,31 @@
+{
+  "name": "demo-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.80.2",
+    "@engram/contracts": "workspace:*",
+    "@engram/node": "workspace:*",
+    "@hono/node-server": "^1.13.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "hono": "^4.6.0",
+    "ignore": "^7.0.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

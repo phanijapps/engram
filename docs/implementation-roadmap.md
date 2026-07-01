@@ -892,5 +892,56 @@ Do not move to a later phase when any of these are true:
 
 ## Near-Term Queue
 
-No queued implementation items remain in this roadmap. Open the next slice with
-a new spec or ADR before adding behavior.
+Demo application program — RFC 0003 (`docs/rfcs/0003-durable-knowledge-demo.md`):
+build a Vite/React demo over durable SQLite knowledge, delivered as five vertical
+slices tracked as `PHASE52`–`PHASE56` in `docs/implementation/phases.json` on
+branch `demo/engram-ui`. Taxonomy-only (ontology out of scope); FastEmbed on for
+the demo; shared SQLite file kept swappable to Postgres + pgvector via the
+Slice 1 forbidden-import gate. ADR-0007 (N-API binding surface extension) lands
+before `PHASE53`.
+
+- `PHASE52` — Slice 0: N-API build pipeline + real memory bridge + Node backend
+  + frontend shell. **(shipped)**
+- `PHASE53` — Slice 1: SQLite knowledge adapter + `TaxonomyRepository` +
+  forbidden-import gate (preceded by ADR-0007). **(shipped)**
+- `PHASE54` — Slice 2: deterministic graph extractor (code-symbol + document).
+  **(shipped)**
+- `PHASE55` — Slice 3: FastEmbed passage embeddings + fused retrieval. **(shipped)**
+- `PHASE56` — Slice 4: demo UI polish (Cytoscape graph, query, taxonomy).
+  **(shipped)**
+
+All five demo slices (PHASE52–PHASE56) are shipped: the demo runs end-to-end
+(memory, taxonomy, graph extraction + Cytoscape, FastEmbed semantic search) over
+the `engram-node` N-API bridge with durable shared SQLite. Open the next slice
+with a new spec or ADR before adding behavior.
+
+Enterprise knowledge-platform demo — RFC 0004
+(`docs/rfcs/0004-enterprise-knowledge-platform.md`), **Accepted 2026-06-30**:
+escalate the RFC 0003 demo to enterprise-grade — durable at repo scale,
+LLM-extracted, with belief / contradiction / bi-temporal surfaced, a
+minimalist enterprise-ready 3D UI with navigable links, IT-org ontology +
+taxonomy, and query/answer over knowledge + memory. Seven slices tracked as
+`PHASE57`–`PHASE63` in `docs/implementation/phases.json` on `demo/engram-ui`.
+`ollama cloud` / `gemma4:31b-cloud` has two LLM jobs (extract on ingest D2;
+query/answer D7); retrieval stays deterministic (FastEmbed). Ontology reverses
+RFC 0003's deferral (ADR-0008 before `PHASE60`); belief/contradiction go in a
+new belief SQLite adapter (distinct from knowledge); **hierarchy deferred to
+TBD** (documented). Lighter adversarial review per slice.
+
+- `PHASE57` — Slice 0: minimalist enterprise-ready 3D graph (navigable links),
+  replacing Cytoscape. **(shipped)**
+- `PHASE58` — Slice 1: scale ingestion + repo indexing (scan job + incremental).
+  **(shipped)**
+- `PHASE59` — Slice 2: LLM relationship extraction (pi SDK → ollama cloud →
+  gemma4:31b-cloud) + deterministic baseline. **(shipped)**
+- `PHASE60` — Slice 3: ontology + taxonomy (IT org); ADR-0008. **(shipped)**
+- `PHASE61` — Slice 4: provenance + confidence viz. **(shipped)**
+- `PHASE62` — Slice 5: belief + contradiction + bi-temporal (new belief adapter
+  + `NativeBeliefEngine`). **(shipped)**
+- `PHASE63` — Slice 6: query + answer over knowledge + memory. **(shipped)**
+
+All seven RFC 0004 slices (`PHASE57`–`PHASE63`) are shipped on `demo/engram-ui`:
+the demo runs end-to-end — deterministic + LLM-enhanced ingestion, an IT-org
+ontology + taxonomy, belief/contradiction with bi-temporal display, and Q&A over
+knowledge + memory. The only path not exercised without creds is the live LLM
+call (ollama cloud); every other path is validated + smoke-tested.

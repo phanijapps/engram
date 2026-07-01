@@ -63,6 +63,25 @@ impl FastEmbedBgeSmallQueryProvider {
             message: "FastEmbed returned no query embedding".to_owned(),
         })
     }
+
+    /// Embeds one passage (chunk) text without the BGE query prefix.
+    ///
+    /// Passages are embedded asymmetrically from queries for BGE models: no
+    /// `query:` prefix. This is used to vectorize ingested knowledge chunks so
+    /// sqlite-vec nearest-neighbor search can match query embeddings.
+    pub fn embed_passage(&self, text: &str) -> CoreResult<Vec<f32>> {
+        let mut model = self.model.lock().map_err(|_| CoreError::Adapter {
+            adapter: ADAPTER_NAME.to_owned(),
+            message: "FastEmbed model lock poisoned".to_owned(),
+        })?;
+        let mut embeddings = model
+            .embed(vec![text.trim().to_owned()], None)
+            .map_err(adapter_error)?;
+        embeddings.pop().ok_or_else(|| CoreError::Adapter {
+            adapter: ADAPTER_NAME.to_owned(),
+            message: "FastEmbed returned no passage embedding".to_owned(),
+        })
+    }
 }
 
 impl VectorQueryProvider for FastEmbedBgeSmallQueryProvider {

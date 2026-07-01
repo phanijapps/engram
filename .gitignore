@@ -25,9 +25,24 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
+# Native addon build artifacts (engram_node.node etc.)
+*.node
+
+# FastEmbed model cache (BGE-small etc., downloaded at runtime)
+.fastembed_cache/
+
 # Local databases and artifacts
 *.db
+*.db-wal
+*.db-shm
+*.db.scan-manifest.json
 *.sqlite
 *.sqlite3
 *.parquet
 artifacts/
+
+# agentbundle / adapt-to-project local state (per-repo; not shared)
+.agentbundle-state.toml
+.adapt-discovery.toml
+.adapt-pending.md
+.adapt-install-marker.toml

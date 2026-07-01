@@ -6,16 +6,25 @@
 
 mod chunker;
 mod code_symbol;
+mod extractor;
 mod filesystem;
 mod git;
 mod hash;
 mod ingestor;
 mod request;
+mod scanner;
+mod tree_sitter_chunker;
 
 pub use chunker::{ChunkCandidate, Chunker, PlainTextChunker, PlainTextChunkerOptions};
 pub use code_symbol::CodeSymbolChunker;
+pub use extractor::{ExtractedGraph, GraphExtractor};
 pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
 pub use git::GitSourceReader;
 pub use hash::content_hash;
 pub use ingestor::{IngestedKnowledge, KnowledgeIngestor};
 pub use request::{DocumentIngestRequest, DocumentMetadata};
+pub use scanner::{
+    FileKind, ScanOptions, ScanProgress, ScanSummary, classify_file, is_denylisted, is_secret_file,
+    is_within_root, scan_repository,
+};
+pub use tree_sitter_chunker::TreeSitterChunker;

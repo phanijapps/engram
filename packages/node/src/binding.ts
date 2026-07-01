@@ -9,12 +9,92 @@ export interface NativeMemoryEngineBinding {
 
 /** Constructor shape for the Rust-backed local memory engine. */
 export interface NativeMemoryEngineConstructor {
-  new (): NativeMemoryEngineBinding;
+  new (path?: string | null): NativeMemoryEngineBinding;
+}
+
+/** Native class shape for the Rust-backed knowledge + taxonomy engine. */
+export interface NativeKnowledgeEngineBinding {
+  putEntityJson(entityJson: string): string;
+  putRelationshipJson(relationshipJson: string): string;
+  getEntityJson(requestJson: string): string;
+  putGraphJson(graphJson: string): string;
+  getGraphJson(requestJson: string): string;
+  neighborsJson(requestJson: string): string;
+  putConceptSchemeJson(schemeJson: string): string;
+  getConceptSchemeJson(requestJson: string): string;
+  putConceptJson(conceptJson: string): string;
+  putConceptRelationJson(relationJson: string): string;
+  listConceptsJson(requestJson: string): string;
+  listGraphsJson(requestJson: string): string;
+  listEntitiesJson(requestJson: string): string;
+  listRelationshipsJson(requestJson: string): string;
+  listChunksJson(requestJson: string): string;
+  listSourcesJson(requestJson: string): string;
+  putOntologyJson(ontologyJson: string): string;
+  getOntologyJson(requestJson: string): string;
+  putClassJson(classJson: string): string;
+  putPropertyJson(propertyJson: string): string;
+  putAxiomJson(axiomJson: string): string;
+  validateGraphJson(requestJson: string): string;
+  graphCandidatesJson(requestJson: string): string;
+  fuseRrfJson(requestJson: string): string;
+  fuseRrfIdsJson(requestJson: string): string;
+}
+
+/** Constructor shape for the Rust-backed knowledge + taxonomy engine. */
+export interface NativeKnowledgeEngineConstructor {
+  new (path?: string | null): NativeKnowledgeEngineBinding;
+}
+
+/** Native class shape for the Rust-backed ingest + extract engine. */
+export interface NativeIngestEngineBinding {
+  ingestExtractJson(requestJson: string): string;
+  startScanJobJson(requestJson: string): string;
+  getScanJobJson(requestJson: string): string;
+}
+
+/** Constructor shape for the Rust-backed ingest + extract engine. */
+export interface NativeIngestEngineConstructor {
+  new (path?: string | null): NativeIngestEngineBinding;
+}
+
+/** Native class shape for the Rust-backed belief + contradiction engine. */
+export interface NativeBeliefEngineBinding {
+  putBeliefJson(beliefJson: string): string;
+  listBeliefsJson(requestJson: string): string;
+  putContradictionJson(contradictionJson: string): string;
+  listContradictionsJson(requestJson: string): string;
+  getContradictionJson(requestJson: string): string;
+  resolveContradictionJson(requestJson: string): string;
+  detectContradictionsJson(beliefsJson: string): string;
+}
+
+/** Constructor shape for the Rust-backed belief + contradiction engine. */
+export interface NativeBeliefEngineConstructor {
+  new (path?: string | null): NativeBeliefEngineBinding;
+}
+
+/** Native class shape for the Rust-backed semantic-retrieval engine (FastEmbed). */
+export interface NativeRetrievalEngineBinding {
+  indexJson(requestJson: string): string;
+  searchJson(requestJson: string): string;
+  indexChunkJson(requestJson: string): string;
+  cacheStatsJson(): string;
+  clearJson(): string;
+}
+
+/** Constructor shape for the Rust-backed semantic-retrieval engine. */
+export interface NativeRetrievalEngineConstructor {
+  new (path?: string | null): NativeRetrievalEngineBinding;
 }
 
 /** Native addon surface consumed by `@engram/node`. */
 export interface NativeBinding {
   NativeMemoryEngine: NativeMemoryEngineConstructor;
+  NativeKnowledgeEngine: NativeKnowledgeEngineConstructor;
+  NativeIngestEngine: NativeIngestEngineConstructor;
+  NativeBeliefEngine: NativeBeliefEngineConstructor;
+  NativeRetrievalEngine: NativeRetrievalEngineConstructor;
 }
 
 /** Function used to load a native addon, injectable for deterministic tests. */

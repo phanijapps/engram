@@ -5,9 +5,11 @@
 //! and actor information without introducing filesystem or Git dependencies.
 
 use engram_domain::{Actor, Policy, Scope, SourceDocumentKind, SourceKind, SourceLocation};
+use serde::{Deserialize, Serialize};
 
 /// Optional document metadata supplied by a source reader or caller.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DocumentMetadata {
     pub uri: Option<String>,
     pub path: Option<String>,
@@ -19,7 +21,8 @@ pub struct DocumentMetadata {
 }
 
 /// Text document input for the first deterministic ingestion slice.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DocumentIngestRequest {
     pub source_kind: SourceKind,
     pub source_name: String,

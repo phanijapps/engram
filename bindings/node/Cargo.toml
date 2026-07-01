@@ -9,14 +9,29 @@ rust-version.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+chrono.workspace = true
+engram-core = { path = "../../core/orchestration" }
 engram-domain = { path = "../../core/domain" }
+engram-ingest = { path = "../../adapters/ingest" }
+engram-knowledge = { path = "../../core/knowledge" }
 engram-memory = { path = "../../core/memory" }
+engram-retrieval = { path = "../../core/retrieval" }
+engram-runtime = { path = "../../core/runtime" }
+engram-store-belief-sqlite = { path = "../../adapters/orchestration/belief-sqlite" }
+engram-store-knowledge-sqlite = { path = "../../adapters/knowledge/sqlite" }
 engram-store-sql = { path = "../../adapters/memory/sqlite" }
+engram-store-vector = { path = "../../adapters/retrieval/sqlite-vec" }
 futures.workspace = true
 napi.workspace = true
 napi-derive.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[features]
+# Enables NativeRetrievalEngine (FastEmbed passage + query embeddings). The demo
+# build turns this on; default builds stay free of model-bearing code.
+default = []
+fastembed = ["engram-store-vector/fastembed-provider"]
 
 [build-dependencies]
 napi-build = "2.3.2"

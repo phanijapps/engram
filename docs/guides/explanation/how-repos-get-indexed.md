@@ -25,9 +25,10 @@ repo root
   ├─ 4. Classification       → code vs. text (by extension)
   │
   ├─ 5. Parallel ingest      → rayon (one core per file)
-  │    ├─ Chunk             → CodeSymbolChunker or PlainTextChunker
+  │    ├─ Chunk             → TreeSitterChunker (8 langs) or CodeSymbolChunker (fallback)
   │    ├─ Persist           → KnowledgeSource, SourceDocument, KnowledgeChunk
   │    ├─ Extract entities  → GraphExtractor (symbols + concepts)
+  │    ├─ Stamp chunk refs  → entity IDs written back onto chunks
   │    ├─ Extract edges     → co-occurrence → "calls" / "mentions"
   │    └─ Persist graph     → KnowledgeEntity, KnowledgeRelationship
   │
@@ -46,7 +47,7 @@ Every file that survives the walk becomes a chain of records:
 |---|---|---|
 | **KnowledgeSource** | The repo itself (name, scope, git provenance) | `knowledge_sources` table |
 | **SourceDocument** | One file (path, kind, content hash) | `knowledge_documents` table |
-| **KnowledgeChunk** | A slice of the file's text (for retrieval) | `knowledge_chunks` table |
+| **KnowledgeChunk** | A slice of the file's text (for retrieval + Q&A) | `knowledge_chunks` table |
 | **KnowledgeGraph** | A named graph boundary for the document's entities | `knowledge_graphs` table |
 | **KnowledgeEntity** | A function, class, concept, etc. (name, kind, source file path) | `knowledge_entities` table |
 | **KnowledgeRelationship** | An edge: entity A `calls` entity B | `knowledge_relationships` table |
@@ -72,6 +73,12 @@ Each entity carries a `source_refs` array with an `EvidenceRef` pointing back to
 the `SourceDocument` path (e.g., `src/intent.rs`). This is how the Q&A can cite
 *which file* an entity came from, not just *which repo*.
 
+### Chunk entity refs
+
+After extraction, each chunk carries the entity refs of the symbols extracted
+from it (`chunk.entities`). This reverse link lets the Q&A find the exact code
+that defines an entity — not just text that mentions the entity's name.
+
 ## How files are walked
 
 The scanner uses the [`ignore`](https://docs.rs/ignore) crate — the same walker
@@ -95,50 +102,44 @@ After the walk, each file passes through four filters before it's ingested:
 
 ## How code is chunked
 
-### CodeSymbolChunker (code files)
+The scanner dispatches chunking by file extension:
 
-The code chunker is a **dependency-free line scanner**, not a tree-sitter parser.
-It recognizes declaration starts in Rust, TypeScript/JavaScript, and Python by
-matching line prefixes:
+- **TreeSitterChunker** for 8 supported languages (14 extensions).
+- **CodeSymbolChunker** (line-based fallback) for everything else.
+- **PlainTextChunker** for text/markdown files.
 
-| Language | Patterns recognized |
-|---|---|
-| Rust | `fn`, `struct`, `enum`, `trait`, `impl` (strips `pub`, `async`, `unsafe`) |
-| TypeScript/JS | `function`, `class`, `interface`, `enum`, `type` (strips `export`, `async`) |
-| Python | `def`, `class` |
+### TreeSitterChunker (8 languages, AST-level)
 
-Each declaration becomes a chunk spanning from its line to the next declaration
-(or end of file). The chunk carries the symbol text + line range + an anchor
-string like `"fn remember"` or `"class MemoryRecord"`.
+Uses tree-sitter to build an AST and walk for declaration nodes. This gives
+accurate symbol spans (no bleeding into the next declaration), correct kind
+classification, and scoped names.
 
-When no declaration is recognized, the entire file becomes one chunk so text is
-never dropped silently.
+| Language | Extensions | Declarations detected |
+|---|---|---|
+| Rust | `.rs` | `fn`, `struct`, `enum`, `trait` |
+| TypeScript / JS | `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs` | `function`, `class`, `interface`, `type`, `method` |
+| Python | `.py` | `def`, `class` |
+| Java | `.java` | `method`, `class`, `interface`, `constructor` |
+| Perl | `.pl`, `.pm` | `sub` |
+| Bash | `.sh`, `.bash` | `function` |
+| PHP | `.php` | `function`, `class`, `method` |
 
-### PlainTextChunker (text/markdown files)
+Each declaration becomes a `ChunkCandidate` with the node's text, line span,
+and an anchor like `"fn alpha"` or `"class Widget"`. When no declaration is
+found, the entire file becomes one chunk so text is never dropped silently.
+
+### CodeSymbolChunker (fallback)
+
+A dependency-free line scanner that recognizes declaration starts by line-prefix
+matching. Covers 30+ language extensions (Go, C/C++, Scala, Elixir, Lua, etc.)
+with the same pattern set. Used for any code file the TreeSitterChunker doesn't
+support.
+
+### PlainTextChunker (text/markdown)
 
 A line-aware chunker that accumulates lines until the chunk reaches
 `max_chars_per_chunk` (default 1,200), then starts a new chunk. Each chunk
 carries its text + line span.
-
-### What tree-sitter would add
-
-The current chunker is **not** tree-sitter-based. It doesn't build an AST. It
-recognizes declarations by line-prefix matching — fast and dependency-free, but
-limited:
-
-- **No import resolution** — it can't tell that `use crate::memory` in Rust
-  connects to the `memory` module.
-- **No scope awareness** — a local variable named `parse` and a function named
-  `parse` are indistinguishable.
-- **No type inference** — parameter types, return types, and generics are not
-  parsed.
-- **Language-agnostic extraction** — the same declaration patterns work across
-  languages, but language-specific constructs (Go interfaces, Elixir macros, Lua
-  metatables) are missed.
-
-Tree-sitter would give real AST-level extraction: scoped symbol tables, import
-graph edges, accurate call targets, type information. It's the biggest
-improvement opportunity in the pipeline.
 
 ## How relationships form
 
@@ -206,33 +207,22 @@ When you ask a question in `/chat`:
    the assembled context. The system prompt instructs the model to trace call
    graphs, read code, and describe data flow — no LaTeX, plain arrows.
 
-### Known limitation: chunk entity refs
-
-The deterministic extractor stamps `source_refs` on entities but does **not**
-populate `entities` on chunks — the reverse link is missing. So the Q&A's
-chunk-entity-ref matching (`chunk.entities.includes(matchedEntityId)`) falls
-back to text-term matching, which can surface documentation that mentions the
-entity name rather than the code that implements it. Fixing this requires the
-extractor to stamp entity IDs back onto chunks during extraction.
-
 ## Design choices and tradeoffs
 
-### Why line-based chunking instead of tree-sitter?
+### Why tree-sitter + line-based fallback?
 
-The line-based scanner is zero-dependency, works across 30+ languages with the
-same patterns, and runs fast on large repos. It's deliberately simple: get
-symbols + their bodies into the graph, let the LLM do the deep semantic work.
-Tree-sitter would add accuracy but also add per-language grammar dependencies,
-slower scanning, and more maintenance surface. The current design prioritizes
-breadth (any language, any repo) over depth (precise call analysis).
+Tree-sitter gives AST-level accuracy for the 8 most common languages (correct
+spans, no bleeding between declarations). The line-based `CodeSymbolChunker`
+covers 30+ other languages where a tree-sitter grammar isn't available. The
+scanner dispatches by extension at runtime — no configuration needed.
 
 ### Why co-occurrence for relationships?
 
-True call-graph analysis requires AST-level parsing + cross-file resolution — a
-much heavier pipeline. Co-occurrence is a pragmatic heuristic that catches the
-common case (direct function calls) with zero language-specific logic. The
-false-positive rate is acceptable for a Q&A-assisted demo where the LLM can
-read the actual code and correct the graph's claims.
+True call-graph analysis requires AST-level call-expression queries + cross-file
+resolution — a much heavier pipeline. Co-occurrence is a pragmatic heuristic
+that catches the common case (direct function calls) with zero language-specific
+logic. The false-positive rate is acceptable for a Q&A-assisted demo where the
+LLM can read the actual code and correct the graph's claims.
 
 ### Why no embeddings during indexing?
 
@@ -251,44 +241,48 @@ journal blocks readers during writes. WAL lets readers + the writer coexist;
 
 ## Areas for improvement
 
-1. **Tree-sitter integration** — the single biggest win. Real AST-level symbol
-   extraction with scoped names, import resolution, and accurate call targets.
-   Would eliminate false positives in the call graph and enable cross-file
-   edges.
+1. **AST-level call edges** — tree-sitter now drives symbol extraction, but
+   relationship edges still use co-occurrence. Querying `call_expression` /
+   `method_invocation` nodes would give accurate call targets + eliminate false
+   positives.
 
-2. **Chunk entity-ref population** — stamp entity IDs back onto chunks during
-   extraction so Q&A can find the exact code that defines an entity, not just
-   text that mentions it.
-
-3. **Embeddings during indexing** — index chunk embeddings at ingest time so
+2. **Embeddings during indexing** — index chunk embeddings at ingest time so
    Q&A can do semantic chunk retrieval automatically (not just keyword +
    entity-name matching).
 
-4. **Cross-file + cross-repo relationship edges** — the extractor works within
+3. **Cross-file + cross-repo relationship edges** — the extractor works within
    one document. A post-extraction pass that resolves entity-name matches across
    documents (within a scan) would create cross-file call-graph edges.
 
-5. **Value-stream / requirement / API-endpoint extraction** — the LLM extractor
+4. **Value-stream / requirement / API-endpoint extraction** — the LLM extractor
    (pi SDK) currently uses a generic entity-kind set. Enriching it with
    domain-specific kinds (value stream, requirement, API endpoint) would let the
-   graph capture `valuestream → requirement → code` chains.
+   graph capture `valuestream -> requirement -> code` chains.
 
-6. **Agentic Q&A tool-use** — instead of pre-assembling a filtered context,
+5. **Agentic Q&A tool-use** — instead of pre-assembling a filtered context,
    give the LLM tools (`search_entities`, `get_neighbors`, `traverse`) to explore
    the graph step-by-step. The pi SDK supports custom tools via `ToolDefinition`
    + TypeBox schemas.
+
+6. **More tree-sitter languages** — Kotlin + Apex + COBOL grammar crates are
+   incompatible with the current tree-sitter version (0.26). Will add when they
+   publish compatible versions.
 
 ## See also
 
 - [Scanner source](../../adapters/ingest/src/scanner.rs) — the parallel walk +
   filter + ingest implementation.
-- [Extractor source](../../adapters/ingest/src/extractor.rs) — entity extraction
-  + co-occurrence relationship formation.
+- [Tree-sitter chunker](../../adapters/ingest/src/tree_sitter_chunker.rs) — the
+  AST-level symbol extraction for 8 languages.
 - [Code symbol chunker](../../adapters/ingest/src/code_symbol.rs) — the
-  declaration-pattern scanner.
+  line-based fallback for unsupported extensions.
+- [Extractor source](../../adapters/ingest/src/extractor.rs) — entity extraction,
+  co-occurrence relationship formation, + chunk entity-ref stamping.
 - [Q&A logic](../../demo/backend/src/qa.ts) — entity ranking, chunk grounding,
   context assembly.
 - [Background repo indexer spec](../../docs/specs/background-repo-indexer/spec.md)
   — the spec that introduced the Rust parallel scanner.
+- [AST symbol extraction spec](../../docs/specs/ast-symbol-extraction/spec.md) —
+  the spec that introduced tree-sitter + chunk entity-refs.
 - [ADR-0007](../../docs/adr/0007-napi-binding-surface-extension.md) — the N-API
   binding surface decision.

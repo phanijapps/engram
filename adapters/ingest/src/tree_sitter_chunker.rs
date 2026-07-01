@@ -334,8 +334,7 @@ fn extract_name(node: &tree_sitter::Node, source: &[u8]) -> String {
         }
     }
     text.split(|c: char| !c.is_alphanumeric() && c != '_')
-        .filter(|s| !s.is_empty() && s.len() > 1)
-        .next()
+        .find(|s| !s.is_empty() && s.len() > 1)
         .unwrap_or(&text)
         .to_owned()
 }

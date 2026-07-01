@@ -103,7 +103,7 @@ fn resolve_cross_file_edges(store: &SqlKnowledgeStore, scope: &Scope) {
         expires_at: None,
         delete_mode: Some(engram_domain::DeleteMode::Tombstone),
     };
-    for (_name, entries) in &by_name {
+    for entries in by_name.values() {
         if entries.len() < 2 {
             continue;
         }

@@ -54,6 +54,10 @@ describe("@engram/client native transport", () => {
           listEntitiesJson(): string { return "[]"; }
           listRelationshipsJson(): string { return "[]"; }
           listChunksJson(): string { return "[]"; }
+          listSourcesJson(): string { return "[]"; }
+          graphCandidatesJson(): string { return "[]"; }
+          fuseRrfJson(): string { return "[]"; }
+          fuseRrfIdsJson(): string { return "[]"; }
         },
         NativeIngestEngine: class {
           ingestExtractJson(): string {
@@ -76,6 +80,9 @@ describe("@engram/client native transport", () => {
         NativeRetrievalEngine: class {
           indexJson(): string { return '{"indexed":0}'; }
           searchJson(): string { return "[]"; }
+          indexChunkJson(): string { return "{}"; }
+          cacheStatsJson(): string { return "{}"; }
+          clearJson(): string { return "{}"; }
         }
       }
     });

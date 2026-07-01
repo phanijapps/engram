@@ -206,10 +206,10 @@ pub fn classify_file(name: &str) -> Option<FileKind> {
         Some((_, e)) => e,
         None => "",
     };
-    if CODE_EXTENSIONS.iter().any(|e| *e == ext) {
+    if CODE_EXTENSIONS.contains(&ext) {
         return Some(FileKind::Code);
     }
-    if TEXT_EXTENSIONS.iter().any(|e| *e == ext) {
+    if TEXT_EXTENSIONS.contains(&ext) {
         return Some(FileKind::Text);
     }
     None
@@ -410,7 +410,7 @@ where
                     c.location
                         .as_ref()
                         .and_then(|l| l.anchor.as_deref())
-                        .and_then(|a| a.splitn(2, ' ').nth(1).map(|s| s.to_owned()))
+                        .and_then(|a| a.split_once(' ').map(|x| x.1).map(|s| s.to_owned()))
                 })
                 .collect();
             // AST-level call extraction when tree-sitter supports the extension.
@@ -431,10 +431,10 @@ where
                         &ingested.chunks,
                         Some(calls),
                     )
-                    .and_then(|graph| {
+                    .map(|graph| {
                         // Persist manually (extract_with_calls doesn't persist).
                         let graph2 = graph.clone();
-                        Ok((graph, graph2))
+                        (graph, graph2)
                     })
                     .map(|(graph, _)| graph)
             } else {

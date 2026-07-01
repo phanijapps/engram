@@ -333,26 +333,6 @@ fn is_ident_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'$'
 }
 
-#[cfg(test)]
-mod tests {
-    use super::mentions;
-
-    #[test]
-    fn mentions_is_multibyte_safe() {
-        // Regression: the scan used to advance one byte past a match (`from =
-        // start + 1`), which lands inside a multi-byte UTF-8 char and panics the
-        // `body[from..]` slice. The agentzero repo (box-drawing art) hit this.
-        // A name starting with a 3-byte char, matched first at a non-word-boundary,
-        // forces the scan to advance — the old code panicked here.
-        assert!(mentions("x│ token │", "│"));
-        // Scanning a body full of 3-byte box chars for an absent name must walk
-        // the whole body without panicking.
-        let body = "┌───────────┼───────────┐\n▼           ▼           ▼\n";
-        assert!(!mentions(body, "│")); // body has corners/cross/down-arrow, no vertical bar
-        assert!(mentions(body, "▼")); // present
-    }
-}
-
 fn entity_ref(entity: &KnowledgeEntity) -> EntityRef {
     EntityRef {
         id: Some(entity.id.clone()),
@@ -392,4 +372,24 @@ fn relationship_id(graph_id: &KnowledgeGraphId, subject: &str, object: &str) -> 
         content_hash(format!("{graph_id}\u{1f}{subject}\u{1f}{object}"))
             .trim_start_matches("sha256:")
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mentions;
+
+    #[test]
+    fn mentions_is_multibyte_safe() {
+        // Regression: the scan used to advance one byte past a match (`from =
+        // start + 1`), which lands inside a multi-byte UTF-8 char and panics the
+        // `body[from..]` slice. The agentzero repo (box-drawing art) hit this.
+        // A name starting with a 3-byte char, matched first at a non-word-boundary,
+        // forces the scan to advance — the old code panicked here.
+        assert!(mentions("x│ token │", "│"));
+        // Scanning a body full of 3-byte box chars for an absent name must walk
+        // the whole body without panicking.
+        let body = "┌───────────┼───────────┐\n▼           ▼           ▼\n";
+        assert!(!mentions(body, "│")); // body has corners/cross/down-arrow, no vertical bar
+        assert!(mentions(body, "▼")); // present
+    }
 }

@@ -120,6 +120,8 @@ classification, and scoped names.
 | TypeScript / JS | `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs` | `function`, `class`, `interface`, `type`, `method` |
 | Python | `.py` | `def`, `class` |
 | Java | `.java` | `method`, `class`, `interface`, `constructor` |
+| Kotlin | `.kt`, `.kts` | `function`, `class`, `object` |
+| Salesforce Apex | `.cls`, `.apex`, `.trigger` | `method`, `class`, `interface` |
 | Perl | `.pl`, `.pm` | `sub` |
 | Bash | `.sh`, `.bash` | `function` |
 | PHP | `.php` | `function`, `class`, `method` |
@@ -254,19 +256,13 @@ journal blocks readers during writes. WAL lets readers + the writer coexist;
    one document. A post-extraction pass that resolves entity-name matches across
    documents (within a scan) would create cross-file call-graph edges.
 
-4. **Value-stream / requirement / API-endpoint extraction** — the LLM extractor
-   (pi SDK) currently uses a generic entity-kind set. Enriching it with
-   domain-specific kinds (value stream, requirement, API endpoint) would let the
-   graph capture `valuestream -> requirement -> code` chains.
-
-5. **Agentic Q&A tool-use** — instead of pre-assembling a filtered context,
+4. **Agentic Q&A tool-use** — instead of pre-assembling a filtered context,
    give the LLM tools (`search_entities`, `get_neighbors`, `traverse`) to explore
    the graph step-by-step. The pi SDK supports custom tools via `ToolDefinition`
    + TypeBox schemas.
 
-6. **More tree-sitter languages** — Kotlin + Apex + COBOL grammar crates are
-   incompatible with the current tree-sitter version (0.26). Will add when they
-   publish compatible versions.
+5. **COBOL grammar** — `tree-sitter-cobol` (0.1.0) has no Rust lib target.
+   A compatible grammar crate needs to be found or built.
 
 ## See also
 

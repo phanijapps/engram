@@ -43,6 +43,18 @@ impl TreeSitterChunker {
         }
         // Rust
         reg!("rs", tree_sitter_rust::LANGUAGE, rust_kinds());
+        // C
+        reg!("c", tree_sitter_c::LANGUAGE, c_kinds());
+        reg!("h", tree_sitter_c::LANGUAGE, c_kinds());
+        // C++
+        reg!("cpp", tree_sitter_cpp::LANGUAGE, cpp_kinds());
+        reg!("cc", tree_sitter_cpp::LANGUAGE, cpp_kinds());
+        reg!("cxx", tree_sitter_cpp::LANGUAGE, cpp_kinds());
+        reg!("hpp", tree_sitter_cpp::LANGUAGE, cpp_kinds());
+        reg!("hxx", tree_sitter_cpp::LANGUAGE, cpp_kinds());
+        // C#
+        reg!("cs", tree_sitter_c_sharp::LANGUAGE, csharp_kinds());
+        reg!("csx", tree_sitter_c_sharp::LANGUAGE, csharp_kinds());
         // TypeScript / TSX (the crate has no separate JS grammar; TS covers JS)
         reg!(
             "ts",
@@ -352,6 +364,41 @@ fn py_kinds() -> HashMap<&'static str, &'static str> {
     [
         ("function_definition", "def"),
         ("class_definition", "class"),
+    ]
+    .into()
+}
+fn c_kinds() -> HashMap<&'static str, &'static str> {
+    [
+        ("function_definition", "fn"),
+        ("struct_specifier", "struct"),
+        ("enum_specifier", "enum"),
+        ("union_specifier", "struct"),
+        ("type_definition", "type"),
+    ]
+    .into()
+}
+fn cpp_kinds() -> HashMap<&'static str, &'static str> {
+    [
+        ("function_definition", "fn"),
+        ("function_declaration", "fn"),
+        ("class_specifier", "class"),
+        ("struct_specifier", "struct"),
+        ("enum_specifier", "enum"),
+        ("namespace_definition", "module"),
+        ("template_declaration", "fn"),
+    ]
+    .into()
+}
+fn csharp_kinds() -> HashMap<&'static str, &'static str> {
+    [
+        ("method_declaration", "fn"),
+        ("class_declaration", "class"),
+        ("interface_declaration", "interface"),
+        ("struct_declaration", "struct"),
+        ("enum_declaration", "enum"),
+        ("constructor_declaration", "fn"),
+        ("namespace_declaration", "module"),
+        ("record_declaration", "class"),
     ]
     .into()
 }

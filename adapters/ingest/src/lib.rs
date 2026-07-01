@@ -13,6 +13,7 @@ mod hash;
 mod ingestor;
 mod request;
 mod scanner;
+mod tree_sitter_chunker;
 
 pub use chunker::{ChunkCandidate, Chunker, PlainTextChunker, PlainTextChunkerOptions};
 pub use code_symbol::CodeSymbolChunker;
@@ -26,3 +27,4 @@ pub use scanner::{
     FileKind, ScanOptions, ScanProgress, ScanSummary, classify_file, is_denylisted, is_secret_file,
     is_within_root, scan_repository,
 };
+pub use tree_sitter_chunker::TreeSitterChunker;

@@ -16,6 +16,14 @@ rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tree-sitter = "0.26"
+tree-sitter-bash = "0.25"
+tree-sitter-java = "0.23"
+tree-sitter-perl = "1.1"
+tree-sitter-php = "0.24"
+tree-sitter-python = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
 
 [dev-dependencies]
 engram-store-knowledge-memory = { path = "../knowledge/inmem" }

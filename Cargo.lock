@@ -690,18 +690,41 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-belief"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "engram-domain",
+ "engram-runtime",
+]
+
+[[package]]
+name = "engram-consolidation"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "engram-domain",
+ "engram-eval",
+ "engram-runtime",
+ "serde_json",
+]
+
+[[package]]
 name = "engram-core"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "engram-belief",
+ "engram-consolidation",
  "engram-domain",
+ "engram-eval",
+ "engram-hierarchy",
  "engram-knowledge",
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
  "futures",
- "serde_json",
 ]
 
 [[package]]
@@ -720,12 +743,22 @@ name = "engram-eval"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "engram-core",
  "engram-domain",
+ "engram-memory",
+ "engram-runtime",
  "engram-store-memory",
  "futures",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "engram-hierarchy"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "engram-domain",
+ "engram-runtime",
 ]
 
 [[package]]

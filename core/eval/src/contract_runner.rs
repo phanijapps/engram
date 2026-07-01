@@ -8,8 +8,9 @@
 
 use std::sync::Arc;
 
-use engram_core::{CoreError, CoreResult, MemoryService};
 use engram_domain::*;
+use engram_memory::MemoryService;
+use engram_runtime::{CoreError, CoreResult};
 
 use crate::accepted_examples;
 

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use engram_core::EvaluationRunner;
 use engram_domain::*;
+use engram_eval::EvaluationRunner;
 use engram_eval::{MemoryFixtureRunner, summarize_reports};
 use engram_store_memory::InMemoryMemoryService;
 use futures::executor::block_on;

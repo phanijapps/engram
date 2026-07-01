@@ -8,10 +8,9 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use engram_core::{
-    CoreResult, EvaluationCaseReport, EvaluationReport, EvaluationRunner, MemoryService,
-};
 use engram_domain::*;
+use engram_memory::MemoryService;
+use engram_runtime::CoreResult;
 
 pub mod accepted_examples;
 mod contract_runner;
@@ -22,6 +21,32 @@ pub use report_summary::{
     CaseReportSummary, FixtureReportSummary, FixtureSetReportSummary, summarize_report,
     summarize_reports,
 };
+
+/// Executes evaluation fixtures against a memory implementation.
+///
+/// Runners should report positive recall failures, forbidden recall leaks,
+/// missing explanations, and score/ranking regressions separately so quality
+/// failures are actionable.
+#[async_trait]
+pub trait EvaluationRunner: Send + Sync {
+    /// Runs a fixture and returns per-case pass/fail details.
+    async fn run_fixture(&self, fixture: EvaluationFixture) -> CoreResult<EvaluationReport>;
+}
+
+/// Result of running one evaluation fixture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvaluationReport {
+    pub fixture_id: EvaluationId,
+    pub cases: Vec<EvaluationCaseReport>,
+}
+
+/// Result of one case inside an evaluation fixture.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EvaluationCaseReport {
+    pub case_id: String,
+    pub passed: bool,
+    pub failures: Vec<String>,
+}
 
 /// Runs evaluation fixtures against a supplied memory service.
 ///

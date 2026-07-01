@@ -21,13 +21,13 @@
 - **Affected surface:** `core/retrieval`, `core/orchestration`, `adapters/{knowledge/sqlite, retrieval/sqlite-vec}`, `bindings/node`, `demo/backend`, `docs/`.
 - **Stakes:** costly-to-reverse (this seam is what every future backend conforms to) but not one-way — adapters are additive, and the read-path-only scope bounds blast radius.
 - **Review focus:** (1) the **target-type/mechanism-agnostic principle** is not violated anywhere; (2) the write-path boundary (this RFC is read-path only) is held.
-- **Not in scope:** Postgres / Neo4j / pgvector adapter implementations; distributed cross-store write consistency; learned reranker; entity-embedding semantic graph.
+- **Not in scope:** any non-SQLite backend — **implementation is SQLite-only**; the two scale targets (**pgvector(graph+vector)** all-in-Postgres; **pgvector(vector)+neo4j(graph)** split) are *documented* as deployment shapes, not built here. Also out: distributed cross-store write consistency; learned reranker; entity-embedding semantic graph.
 
 ## The ask
 
-**Recommendation (BLUF):** adopt the retrieval-composition seam as the contract every store plugs into, so scaling to Postgres / Neo4j / pgvector is *additive adapter work*, not rework. Deliver it now via RRF fusion, a durable sqlite-vec backend, graph-retrieval-behind-the-port, an orchestrator + backend config, and a demo rewired to true RRF-fused hybrid.
+**Recommendation (BLUF):** adopt the retrieval-composition seam as the contract every store plugs into, so reaching the two documented scale targets — **pgvector(graph+vector)** (all-in-Postgres) and **pgvector(vector)+neo4j(graph)** (split) — is *additive adapter work*, not rework. **This RFC implements SQLite only**; the two Postgres/Neo4j deployments are documented as the target shapes. Deliver SQLite now via RRF fusion, a durable sqlite-vec backend, graph-retrieval-behind-the-port, an orchestrator + backend config, and a demo rewired to true RRF-fused hybrid.
 
-**Why now (SCQA):** The demo already proves two things — the KG-only path answers code questions at 87.5% (`docs/perf/PERFORMANCE.md`), and lazy query-time embeddings warm up correctly (`docs/perf/lazy-embeddings.md`). **But both bypass the storage-neutral ports**: Q&A grounding lives in a bespoke TypeScript `buildEvidence` that ranks entities by exact/prefix/substring and merges chunks in tiers — it is not a `RetrievalIndex`, it does not fuse with scores, and it is wired to one SQLite graph store. The complication: the stated scale target is Postgres (chunks ± graph ± pgvector) and Neo4j (graph), including "pgvector for graph." If the bespoke path stays, every backend swap reworks the demo, "hybrid" is never genuinely fused, and embeddings don't persist. The question: **what is the one seam that makes a backend swap an adapter addition instead of a refactor?**
+**Why now (SCQA):** The demo already proves two things — the KG-only path answers code questions at 87.5% (`docs/perf/PERFORMANCE.md`), and lazy query-time embeddings warm up correctly (`docs/perf/lazy-embeddings.md`). **But both bypass the storage-neutral ports**: Q&A grounding lives in a bespoke TypeScript `buildEvidence` that ranks entities by exact/prefix/substring and merges chunks in tiers — it is not a `RetrievalIndex`, it does not fuse with scores, and it is wired to one SQLite graph store. The complication: the stated scale targets are two specific deployments — pgvector holding graph+vector in one Postgres, or pgvector(vectors)+Neo4j(graph) split (the "pgvector for graph" case included). If the bespoke path stays, reaching either target reworks the demo, "hybrid" is never genuinely fused, and embeddings don't persist. The question: **what is the one seam that makes either deployment an adapter addition instead of a refactor?**
 
 **Decisions requested:**
 
@@ -38,7 +38,8 @@
 | D3 | Ports are **target-type-oriented, mechanism-agnostic** (stated rule) | Accept | Guarantees "pgvector for graph" is an adapter choice, not an architecture change | Acceptance | Confirm the rule; flag any violation |
 | D4 | Durable `sqlite-vec` (file-backed) as first vector backend | Accept | Persistence asked for; the spike proves file-backed reopen-survival. `content_hash`-keyed upsert (re-index dedup) + dead-vector GC are follow-on (O2), not claimed by the spike | Acceptance | Confirm separate-file; upsert/GC deferred (O2) |
 | D5 | Orchestrator + per-plane backend config in `core/orchestration`; `core/retrieval` keeps fusion+ports | Accept | Matches the boundary rule (engram-core = orchestration facade) | Acceptance | Confirm home + config shape |
-| D6 | Postgres/Neo4j/pgvector/external-embedder = follow-on adapter ADRs; this RFC = seam + SQLite delivery | Accept | One coherent RFC, not a monolith | Acceptance | Confirm scope boundary |
+| D6 | **SQLite-only implementation**; the two scale targets — **pgvector(graph+vector)** and **pgvector(vector)+neo4j(graph)** — are documented as deployment shapes, not built here | Accept | One coherent RFC; the seam is what makes the two targets additive later | Acceptance | Confirm SQLite-only scope + the two documented deployments |
+| D7 | Reranking strength is **configurable** (RRF `k` + per-source weights) with **defaults when config is absent** (`k=60`, equal weights = pure RRF) | Accept | Deployments need to tune graph-vs-vector bias and rank sharpness without code changes; absent config must still work out of the box | Acceptance | Confirm the config surface + defaults |
 
 ## Problem & goals
 
@@ -50,7 +51,7 @@
 - Backend selection by config, not code.
 
 **Non-goals.**
-- Build Postgres / Neo4j / pgvector adapters now (follow-on ADRs).
+- Build any non-SQLite backend now. **Implementation is SQLite-only.** The two scale targets — pgvector(graph+vector) and pgvector(vector)+neo4j(graph) — are *documented* deployment shapes (see Target deployments), realized by follow-on adapter ADRs.
 - Solve distributed cross-store **write** consistency (sagas/outbox) — this RFC is read-path only.
 - A learned/cross-encoder reranker (`RerankStrategy` variants stay available but unused).
 - Move *all* graph ranking to Rust — relationships remain complementary evidence; only the chunk/entity retrieval that competes with semantic goes behind the port.
@@ -61,8 +62,8 @@
 The pipeline every backend plugs into:
 
 ```
- GraphRetrievalIndex   VectorRetrievalIndex   (future: lexical, external vector, …)
-   (SQLite → Neo4j)     (sqlite-vec → pgvector → Pinecone)
+ GraphRetrievalIndex   VectorRetrievalIndex
+   (SQLite; later: Neo4j / pgvector-graph)   (sqlite-vec; later: pgvector)
         \                    /
    each yields ranked, policy-checked RetrievalResult[]   ← backend-agnostic
                 |
@@ -74,12 +75,18 @@ The pipeline every backend plugs into:
 ```
 
 **Layer ownership.**
-- `core/retrieval`: the ports (`RetrievalIndex`, `RetrievalFusion`, `ContextComposer`) + fusion algorithms (`WeightedRetrievalFusion`, `ReciprocalRankFusion`) + `compose_context`. No store/provider/policy imports (unchanged).
+- `core/retrieval`: the ports (`RetrievalIndex`, `RetrievalFusion`, `ContextComposer`) + fusion algorithms (`WeightedRetrievalFusion`, `ReciprocalRankFusion`) + `compose_context`. Owns the **reranking config** (D7: RRF `k` + per-source weights, with defaults). No store/provider/policy imports (unchanged).
 - `core/orchestration` (engram-core): the orchestrator that runs the wired indexes → fuses → composes, plus the **backend-selection config** (per plane: graph/chunk/vector → adapter + dsn). The facade owns wiring; the algorithm stays in `core/retrieval`.
-- Adapters: each backend implements `RetrievalIndex`. sqlite-vec gains `open(path)` (durable). A new graph `RetrievalIndex` in the knowledge adapter yields ranked entity/chunk `RetrievalResult`s. pgvector/Neo4j/Postgres are future adapters behind the same port.
+- Adapters: each backend implements `RetrievalIndex`. sqlite-vec gains `open(path)` (durable). A new graph `RetrievalIndex` in the knowledge adapter yields ranked entity/chunk `RetrievalResult`s. **Implemented now:** SQLite (graph + sqlite-vec). **Documented targets, not built:** the two deployments below.
 - Binding + demo: the demo wires indexes per config, calls the orchestrator, and feeds the RRF-fused context to Q&A.
 
 **The principle (D3), stated for posterity:** a `RetrievalIndex` is defined by **what it returns** (`RetrievalTargetType`: Entity/Relationship/Chunk/…), never by **how** it retrieves (traversal vs vector vs lexical). Therefore "pgvector for graph" is an adapter selection: a graph index may be backed by Neo4j traversal *or* pgvector semantics *or* both (two `Entity`-target indexes, RRF-fused). The orchestrator and ports must never assume a mechanism.
+
+**Target deployments (documented, not built — D6).** The seam is justified by these two scale targets; both are reachable by adding adapters behind the existing ports, with no change to fusion/composition:
+1. **pgvector(graph+vector)** — one Postgres holds the graph (entities/relationships), chunks, and embeddings (pgvector). One DSN, three adapter impls (or one multi-plane adapter) behind `RetrievalIndex`.
+2. **pgvector(vector) + neo4j(graph)** — split: Neo4j serves graph traversal (entity/relationship results), Postgres+pgvector serves chunks + embeddings. Two DSNs; the orchestrator wires both indexes and RRF-fuses their results.
+
+Either deployment is a config + adapter change, not an architecture change — which is the whole point of D3.
 
 ## Options considered
 
@@ -103,7 +110,7 @@ Prior art grounding: the domain already names `FusionStrategy::ReciprocalRankFus
   - RRF over [graph, vector] ≥ bespoke tiered merge on the 8Q/50Q evals (tested in Experiment).
   - File-backed vec0 is concurrent-safe under demo load with WAL + `busy_timeout`.
   - A SQLite-backed graph `RetrievalIndex` can rank entities/chunks well enough to preserve the 87.5% baseline.
-- **Drawbacks:** more moving parts; demo rewire carries short-term regression risk; RRF discards raw scores (could underweight a strong signal — mitigated by per-source weights as a later knob, not by abandoning RRF).
+- **Drawbacks:** more moving parts; demo rewire carries short-term regression risk; RRF discards raw scores (could underweight a strong single-source signal — mitigated by the configurable per-source weights, D7, not by abandoning RRF).
 
 ## Evidence & prior art
 
@@ -129,10 +136,11 @@ Prior art grounding: the domain already names `FusionStrategy::ReciprocalRankFus
 
 ## Follow-on artifacts
 
-- **ADR-0009 — Retrieval-composition seam** (the architecture decision this RFC asks to adopt).
-- **ADR-0010 — Durable vector store** (sqlite-vec file-backed now, pgvector later) — or folded into ADR-0009.
-- **Spec `backend-agnostic-retrieval`** — the multi-slice implementation plan (graph index, orchestrator, config, durable engine wiring, demo rewire, benchmark re-run).
-- **Future adapter ADRs** (non-blocking): postgres-chunks, pgvector, neo4j-graph, external-embedder.
+- **ADR-0009 — Retrieval-composition seam** (the architecture decision this RFC asks to adopt; includes the D7 reranking-config contract).
+- **Spec `backend-agnostic-retrieval`** — the multi-slice implementation plan, **SQLite-only** (graph `RetrievalIndex`, orchestrator, backend config, durable engine wiring, configurable RRF, demo rewire, benchmark re-run).
+- **Follow-on deployment ADRs (non-blocking, documented targets only):**
+  - **pgvector(graph+vector)** — one Postgres for graph + chunks + embeddings.
+  - **pgvector(vector) + neo4j(graph)** — split deployment.
 
 ## Errata
 

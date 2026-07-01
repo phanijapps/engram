@@ -539,14 +539,20 @@ impl NativeIngestEngine {
         )
         .map_err(|e| Error::from_reason(e.to_string()))?;
 
-        // Load the prior manifest (incremental resume), keyed by source/relpath.
-        let prior = manifest_path
-            .as_ref()
-            .and_then(|p| std::fs::read_to_string(p).ok())
-            .and_then(|s| {
-                serde_json::from_str::<std::collections::HashMap<String, String>>(&s).ok()
-            })
-            .unwrap_or_default();
+        // Load the prior manifest (incremental resume). Skip when force=true so
+        // every file is re-ingested (e.g. after an extractor change).
+        let force = value.get("force").and_then(|v| v.as_bool()).unwrap_or(false);
+        let prior = if force {
+            Default::default()
+        } else {
+            manifest_path
+                .as_ref()
+                .and_then(|p| std::fs::read_to_string(p).ok())
+                .and_then(|s| {
+                    serde_json::from_str::<std::collections::HashMap<String, String>>(&s).ok()
+                })
+                .unwrap_or_default()
+        };
 
         let job_id = format!(
             "job-{}",

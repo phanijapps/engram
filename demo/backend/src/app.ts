@@ -113,7 +113,7 @@ app.post("/llm/extract", async (c) => {
 // Starts a Rust rayon-parallel scan on a background thread; returns a job id.
 // Progress is polled via GET /ingest/jobs/:id. Deterministic extraction only.
 app.post("/ingest/jobs", async (c) => {
-  const { root, scope, policy, sourceName, maxBytes } = await c.req.json();
+  const { root, scope, policy, sourceName, maxBytes, force } = await c.req.json();
   if (!root || typeof root !== "string") return c.json({ error: "root required" }, 400);
   const reqScope = scope ?? SCAN_SCOPE;
   const reqPolicy = policy ?? SCAN_POLICY;
@@ -126,6 +126,7 @@ app.post("/ingest/jobs", async (c) => {
     sourceName: reqSource,
     maxBytes: typeof maxBytes === "number" ? maxBytes : 0,
     manifestPath: scanManifestPath() ?? undefined,
+    force: force === true,
   });
   return c.json(result);
 });

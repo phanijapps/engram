@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   buildGraphData,
   type GraphData,
@@ -39,6 +41,7 @@ type Overview = {
 
 export function RepoIndex() {
   const [root, setRoot] = useState("");
+  const [force, setForce] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<JobState | null>(null);
   const [graph, setGraph] = useState<GraphData | null>(null);
@@ -93,7 +96,7 @@ export function RepoIndex() {
       const res = await fetch("/ingest/jobs", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ root: root.trim() }),
+        body: JSON.stringify({ root: root.trim(), force }),
       });
       if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
       setJobId(((await res.json()) as { jobId: string }).jobId);
@@ -118,6 +121,12 @@ export function RepoIndex() {
             onChange={(e) => setRoot(e.target.value)}
             className="min-w-[24rem]"
           />
+          <div className="flex items-center gap-2">
+            <Switch checked={force} onCheckedChange={setForce} id="force" />
+            <Label htmlFor="force" className="text-xs text-muted-foreground">
+              Force re-index
+            </Label>
+          </div>
           <Button onClick={start} disabled={!root.trim() || running}>
             {running ? "Indexing…" : "Index"}
           </Button>

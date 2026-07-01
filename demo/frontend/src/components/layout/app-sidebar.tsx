@@ -31,10 +31,10 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: NavItem[] = [
-  { title: "Dashboard", to: "/", icon: LayoutDashboard },
+  { title: "Graph", to: "/", icon: Waypoints },
+  { title: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
   { title: "Explorer", to: "/explorer", icon: Waypoints },
   { title: "Ingest", to: "/ingest", icon: FileInput },
-  { title: "Index", to: "/index", icon: FolderTree },
   { title: "Knowledge", to: "/knowledge", icon: Network },
   { title: "Belief", to: "/belief", icon: Scale },
   { title: "Memory", to: "/memory", icon: Database },

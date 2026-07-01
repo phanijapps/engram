@@ -9,6 +9,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Header } from "@/components/layout/header";
 import { Dashboard } from "@/routes/dashboard";
 import { Explorer } from "@/routes/explorer";
+import { Graph } from "@/routes/graph";
 import { Ingest } from "@/routes/ingest";
 import { RepoIndex } from "@/routes/repo-index";
 import { Knowledge } from "@/routes/knowledge";
@@ -33,6 +34,11 @@ const rootRoute = createRootRoute({
 const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
+  component: Graph,
+});
+const dashRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/dashboard",
   component: Dashboard,
 });
 const explorerRoute = createRoute({
@@ -73,6 +79,7 @@ const chatRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   dashboardRoute,
+  dashRoute,
   explorerRoute,
   ingestRoute,
   indexRoute,

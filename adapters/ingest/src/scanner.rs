@@ -103,6 +103,29 @@ pub struct ScanSummary {
     pub entities: usize,
     pub relationships: usize,
     pub errors: usize,
+    pub git_remote: Option<String>,
+    pub git_branch: Option<String>,
+    pub git_sha: Option<String>,
+}
+
+/// Detect git metadata (remote URL, branch, short SHA) if the root is a git repo.
+fn detect_git(root: &Path) -> Option<(String, String, String)> {
+    let run = |args: &[&str]| -> Option<String> {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(root)
+            .output()
+            .ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let s = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+        if s.is_empty() { None } else { Some(s) }
+    };
+    let remote = run(&["remote", "get-url", "origin"])?;
+    let branch = run(&["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let sha = run(&["rev-parse", "--short=10", "HEAD"])?;
+    Some((remote, branch, sha))
 }
 
 /// Per-file progress emitted during a scan.
@@ -223,6 +246,25 @@ where
         reason: format!("cannot canonicalize scan root {}: {e}", root.display()),
     })?;
 
+    let mut summary = ScanSummary::default();
+
+    // Detect git metadata (remote, branch, SHA) if the root is a git repo.
+    let git = detect_git(&root_canonical);
+    if let Some((ref remote, ref branch, ref sha)) = git {
+        summary.git_remote = Some(remote.clone());
+        summary.git_branch = Some(branch.clone());
+        summary.git_sha = Some(sha.clone());
+    }
+
+    // Enrich the source name with git info so it flows to every entity's
+    // provenance + the Q&A citations.
+    let source_name = match &git {
+        Some((remote, branch, sha)) => {
+            format!("{} [{}@{}:{}]", opts.source_name, remote, branch, sha)
+        }
+        None => opts.source_name.clone(),
+    };
+
     let code_ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
     let text_ingestor =
         KnowledgeIngestor::new(PlainTextChunker::new(PlainTextChunkerOptions::default())?);
@@ -233,7 +275,6 @@ where
         .follow_links(false)
         .build();
     let mut readable: Vec<(PathBuf, FileKind, String)> = Vec::new();
-    let mut summary = ScanSummary::default();
     for entry in walker {
         let entry = match entry {
             Ok(e) => e,
@@ -315,7 +356,7 @@ where
             };
             let request = DocumentIngestRequest {
                 source_kind: SourceKind::Filesystem,
-                source_name: opts.source_name.clone(),
+                source_name: source_name.clone(),
                 scope: opts.scope.clone(),
                 document_kind,
                 document: DocumentMetadata {

@@ -1,6 +1,9 @@
 use chrono::Utc;
 use engram_domain::*;
-use engram_retrieval::{DEFAULT_RRF_K, ReciprocalRankFusion, RetrievalFusion};
+use engram_retrieval::{
+    DEFAULT_RRF_K, ReciprocalFusionConfig, ReciprocalRankFusion, RetrievalFusion,
+};
+use std::collections::BTreeMap;
 
 #[test]
 fn consensus_outranks_single_source() {
@@ -106,6 +109,55 @@ fn respects_limit() {
 fn default_k_is_60() {
     assert_eq!(DEFAULT_RRF_K, 60);
     assert_eq!(ReciprocalRankFusion::default().k(), 60);
+}
+
+#[test]
+fn weighted_rrf_biases_higher_weight_source() {
+    // Two single-source candidates, both rank 1 in their own list. With graph
+    // weight 3.0 vs vector 1.0, the graph item must outrank the vector item.
+    let config = ReciprocalFusionConfig::new(60, 1.0, BTreeMap::from([("graph".to_owned(), 3.0)]))
+        .expect("config");
+    let fused = ReciprocalRankFusion::new(config)
+        .fuse(
+            &request(None),
+            vec![
+                result("graph-1", "G", 0.0, "graph"),
+                result("vector-1", "V", 0.0, "vector"),
+            ],
+        )
+        .expect("fuse");
+    assert_eq!(fused[0].target_id, "G", "higher-weight source leads");
+    assert_eq!(fused[1].target_id, "V");
+    let g = fused.iter().find(|r| r.target_id == "G").unwrap();
+    let v = fused.iter().find(|r| r.target_id == "V").unwrap();
+    assert!(g.score.total > v.score.total, "graph score > vector score");
+}
+
+#[test]
+fn default_config_is_pure_rrf() {
+    // Default config (equal weights) must match pure RRF: two rank-1 items from
+    // different sources get equal scores.
+    let fused = ReciprocalRankFusion::default()
+        .fuse(
+            &request(None),
+            vec![
+                result("graph-1", "G", 0.0, "graph"),
+                result("vector-1", "V", 0.0, "vector"),
+            ],
+        )
+        .expect("fuse");
+    let g = fused.iter().find(|r| r.target_id == "G").unwrap();
+    let v = fused.iter().find(|r| r.target_id == "V").unwrap();
+    assert!(
+        (g.score.total - v.score.total).abs() < 1e-9,
+        "default config = pure RRF, equal scores"
+    );
+}
+
+#[test]
+fn config_rejects_zero_k_and_negative_weight() {
+    assert!(ReciprocalFusionConfig::new(0, 1.0, BTreeMap::new()).is_err());
+    assert!(ReciprocalFusionConfig::new(60, -1.0, BTreeMap::new()).is_err());
 }
 
 #[test]

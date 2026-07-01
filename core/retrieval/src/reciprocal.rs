@@ -17,37 +17,43 @@ use engram_domain::{
 };
 use engram_runtime::CoreResult;
 
-use crate::RetrievalFusion;
+use crate::{RetrievalFusion, config::ReciprocalFusionConfig};
 
 /// Conventional RRF constant (Cormack et al. 2009).
 pub const DEFAULT_RRF_K: u32 = 60;
 
 /// Reciprocal-rank fusion implementation of [`RetrievalFusion`].
 ///
-/// Stateless after construction; safe to share across retrieval flows. Callers
-/// pass already policy-filtered candidates whose `fusion_trace.source` names the
-/// retriever that produced them. Rank is computed per source so interleaved or
-/// concatenated lists fuse correctly.
+/// Reranking strength is configurable via [`ReciprocalFusionConfig`] (RRF `k`
+/// plus optional per-source weights); [`Default`] uses `k = 60` and equal
+/// weights (pure RRF). Stateless after construction; safe to share across
+/// retrieval flows. Rank is computed per source so interleaved or concatenated
+/// lists fuse correctly.
 #[derive(Debug, Clone)]
 pub struct ReciprocalRankFusion {
-    k: u32,
+    config: ReciprocalFusionConfig,
 }
 
 impl ReciprocalRankFusion {
-    /// Creates a fuser with RRF constant `k` (clamped to `>= 1`).
-    pub fn new(k: u32) -> Self {
-        Self { k: k.max(1) }
+    /// Creates a fuser from a reranking config (k + per-source weights).
+    pub fn new(config: ReciprocalFusionConfig) -> Self {
+        Self { config }
     }
 
     /// The configured RRF constant.
     pub fn k(&self) -> u32 {
-        self.k
+        self.config.k()
+    }
+
+    /// The configured per-source weight (override or default).
+    pub fn source_weight(&self, source: &str) -> f32 {
+        self.config.source_weight(source)
     }
 }
 
 impl Default for ReciprocalRankFusion {
     fn default() -> Self {
-        Self { k: DEFAULT_RRF_K }
+        Self::new(ReciprocalFusionConfig::default())
     }
 }
 
@@ -60,7 +66,7 @@ impl RetrievalFusion for ReciprocalRankFusion {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
-        let k = self.k as f32;
+        let k = self.config.k() as f32;
         let mut source_ranks: BTreeMap<String, u32> = BTreeMap::new();
         let mut groups: BTreeMap<CandidateKey, Group> = BTreeMap::new();
 
@@ -71,7 +77,8 @@ impl RetrievalFusion for ReciprocalRankFusion {
                 *entry += 1;
                 *entry
             };
-            let contribution = 1.0 / (k + rank as f32);
+            // Weighted RRF: the per-source weight scales the rank contribution.
+            let contribution = self.config.source_weight(&source) / (k + rank as f32);
             let key = CandidateKey::from(&candidate);
             match groups.entry(key) {
                 std::collections::btree_map::Entry::Occupied(mut occupied) => {

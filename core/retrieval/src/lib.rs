@@ -11,7 +11,7 @@ mod reciprocal;
 mod weighted;
 
 pub use composer::{RetrievalCompositionInput, compose_context};
-pub use config::WeightedFusionConfig;
+pub use config::{ReciprocalFusionConfig, WeightedFusionConfig};
 pub use ports::{ContextComposer, RetrievalFusion, RetrievalIndex};
 pub use reciprocal::{DEFAULT_RRF_K, ReciprocalRankFusion};
 pub use weighted::WeightedRetrievalFusion;

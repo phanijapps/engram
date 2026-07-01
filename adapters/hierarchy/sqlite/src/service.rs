@@ -5,14 +5,13 @@
 //! as the in-memory adapter, so the durable backend is behaviorally identical.
 
 use std::{
-    collections::BTreeSet,
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
 };
 
 use async_trait::async_trait;
 use engram_domain::*;
-use engram_hierarchy::HierarchyRepository;
+use engram_hierarchy::{HierarchyRepository, navigation};
 use engram_runtime::{CoreError, CoreResult};
 use rusqlite::{Connection, params};
 
@@ -129,50 +128,17 @@ impl HierarchyRepository for SqlHierarchyStore {
         max_layer: Option<u32>,
     ) -> CoreResult<HierarchyPath> {
         let connection = self.lock()?;
-        let all_nodes = load_nodes(&connection)?;
-        let visible_nodes: Vec<&HierarchyNode> = all_nodes
-            .iter()
+        let nodes = load_nodes(&connection)?
+            .into_iter()
             .filter(|node| scope_allows(&node.scope, scope))
-            .collect();
-        let mut chains = Vec::new();
-        for seed_id in seed_ids {
-            if let Some(seed) = find_seed_node(&visible_nodes, seed_id, max_layer) {
-                chains.push(parent_chain(&visible_nodes, seed, max_layer));
-            }
-        }
-
-        let lca_id = common_ancestor(&chains);
-        let mut included_ids = BTreeSet::new();
-        let mut nodes = Vec::new();
-        for chain in chains {
-            for node in chain {
-                if included_ids.insert(node.id.to_string()) {
-                    nodes.push(node.clone());
-                }
-            }
-        }
-        nodes.sort_by(|left, right| {
-            left.layer
-                .cmp(&right.layer)
-                .then_with(|| left.id.cmp(&right.id))
-        });
-
+            .collect::<Vec<_>>();
         let relations = load_relations(&connection)?
             .into_iter()
-            .filter(|relation| {
-                scope_allows(&relation.scope, scope)
-                    && included_ids.contains(relation.source_id.as_str())
-                    && included_ids.contains(relation.target_id.as_str())
-            })
-            .collect();
-
-        Ok(HierarchyPath {
-            seed_ids: seed_ids.to_vec(),
-            lca_id,
-            nodes,
-            relations,
-            max_layer,
-        })
+            .filter(|relation| scope_allows(&relation.scope, scope))
+            .collect::<Vec<_>>();
+        Ok(navigation::navigate(
+            &nodes, &relations, seed_ids, max_layer,
+        ))
     }
 }
 
@@ -206,47 +172,5 @@ fn load_relations(connection: &Connection) -> CoreResult<Vec<HierarchyRelation>>
     Ok(relations)
 }
 
-fn find_seed_node<'a>(
-    nodes: &'a [&'a HierarchyNode],
-    seed_id: &str,
-    max_layer: Option<u32>,
-) -> Option<&'a HierarchyNode> {
-    nodes
-        .iter()
-        .copied()
-        .filter(|node| max_layer.is_none_or(|limit| node.layer <= limit))
-        .find(|node| {
-            node.id.as_str() == seed_id || node.source_target_id.as_deref() == Some(seed_id)
-        })
-}
-
-fn parent_chain<'a>(
-    nodes: &'a [&'a HierarchyNode],
-    seed: &'a HierarchyNode,
-    max_layer: Option<u32>,
-) -> Vec<&'a HierarchyNode> {
-    let mut chain = Vec::new();
-    let mut current = Some(seed);
-    while let Some(node) = current {
-        if max_layer.is_none_or(|limit| node.layer <= limit) {
-            chain.push(node);
-        }
-        current = node.parent_id.as_ref().and_then(|parent_id| {
-            nodes
-                .iter()
-                .copied()
-                .find(|candidate| candidate.id == *parent_id)
-        });
-    }
-    chain
-}
-
-fn common_ancestor(chains: &[Vec<&HierarchyNode>]) -> Option<HierarchyNodeId> {
-    let first = chains.first()?;
-    first.iter().find_map(|candidate| {
-        chains
-            .iter()
-            .all(|chain| chain.iter().any(|node| node.id == candidate.id))
-            .then(|| candidate.id.clone())
-    })
-}
+// Path navigation (seed resolution, parent-chain walk, LCA) lives in
+// `engram_hierarchy::navigation` and is shared with the in-memory adapter.

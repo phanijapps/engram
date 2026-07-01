@@ -1,7 +1,10 @@
 //! Hierarchy ports for the engram engine.
 //!
 //! Hierarchy navigation and build behavior contracts that adapters implement.
-//! Domain types live in `engram-domain`; this crate owns only the ports.
+//! Domain types live in `engram-domain`; this crate owns the ports and the
+//! shared navigation traversal adapters reuse.
+
+pub mod navigation;
 
 use async_trait::async_trait;
 use engram_domain::*;

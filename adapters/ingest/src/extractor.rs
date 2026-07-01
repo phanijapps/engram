@@ -21,6 +21,10 @@ pub struct ExtractedGraph {
     pub graph: KnowledgeGraph,
     pub entities: Vec<KnowledgeEntity>,
     pub relationships: Vec<KnowledgeRelationship>,
+    /// (chunk_index, entity_refs) — which entities were extracted from which
+    /// chunk. Used by `extract_into` to stamp entity refs back onto chunks so
+    /// Q&A can find the actual code that defines an entity.
+    pub chunk_entities: Vec<(usize, Vec<EntityRef>)>,
 }
 
 /// Deterministic extractor that turns ingested chunks into a scoped graph.
@@ -62,10 +66,10 @@ impl GraphExtractor {
 
         let is_code = matches!(document.kind, SourceDocumentKind::Code);
 
-        // (name, kind, body) per detected symbol, in document order.
-        let mut symbols: Vec<(String, EntityKind, String)> = Vec::new();
+        // (name, kind, body, chunk_index) per detected symbol, in document order.
+        let mut symbols: Vec<(String, EntityKind, String, usize)> = Vec::new();
         if is_code {
-            for chunk in chunks {
+            for (chunk_idx, chunk) in chunks.iter().enumerate() {
                 let Some(anchor) = chunk
                     .location
                     .as_ref()
@@ -79,22 +83,22 @@ impl GraphExtractor {
                 if name.is_empty() {
                     continue;
                 }
-                symbols.push((name, kind, chunk.text.clone()));
+                symbols.push((name, kind, chunk.text.clone(), chunk_idx));
             }
         } else {
-            for chunk in chunks {
+            for (chunk_idx, chunk) in chunks.iter().enumerate() {
                 let name = concept_name(&chunk.text);
                 if name.is_empty() {
                     continue;
                 }
-                symbols.push((name, EntityKind::Concept, chunk.text.clone()));
+                symbols.push((name, EntityKind::Concept, chunk.text.clone(), chunk_idx));
             }
         }
 
         // Dedupe by name (first wins), build entities + a name->index map.
         let mut entities: Vec<KnowledgeEntity> = Vec::new();
         let mut index: HashMap<String, usize> = HashMap::new();
-        for (name, kind, _body) in &symbols {
+        for (name, kind, _body, _chunk_idx) in &symbols {
             if index.contains_key(name) {
                 continue;
             }
@@ -132,7 +136,7 @@ impl GraphExtractor {
         let predicate = if is_code { "calls" } else { "mentions" };
         let mut relationships = Vec::new();
         let mut seen: HashSet<(String, String)> = HashSet::new();
-        for (subject_name, _kind, body) in &symbols {
+        for (subject_name, _kind, body, _chunk_idx) in &symbols {
             let Some(&subject_index) = index.get(subject_name) else {
                 continue;
             };
@@ -160,10 +164,25 @@ impl GraphExtractor {
             }
         }
 
+        // Build chunk→entity mapping: stamp entity refs back onto the chunks
+        // they came from so Q&A can find the actual code (not just text that
+        // mentions the entity name).
+        let mut chunk_entities_map: HashMap<usize, Vec<EntityRef>> = HashMap::new();
+        for (name, _kind, _body, chunk_idx) in &symbols {
+            if let Some(&entity_idx) = index.get(name) {
+                chunk_entities_map
+                    .entry(*chunk_idx)
+                    .or_default()
+                    .push(entity_ref(&entities[entity_idx]));
+            }
+        }
+        let chunk_entities = chunk_entities_map.into_iter().collect::<Vec<_>>();
+
         Ok(ExtractedGraph {
             graph,
             entities,
             relationships,
+            chunk_entities,
         })
     }
 
@@ -186,6 +205,14 @@ impl GraphExtractor {
         }
         for relationship in &extracted.relationships {
             repository.put_relationship(relationship.clone()).await?;
+        }
+        // Re-persist chunks with their entity refs stamped (Part A).
+        for (chunk_idx, entity_refs) in &extracted.chunk_entities {
+            if let Some(chunk) = chunks.get(*chunk_idx) {
+                let mut updated = chunk.clone();
+                updated.entities = entity_refs.clone();
+                repository.put_chunk(updated).await?;
+            }
         }
         Ok(extracted)
     }

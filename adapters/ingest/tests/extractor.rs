@@ -95,4 +95,22 @@ fn extracts_code_symbols_and_calls_edges() {
             .iter()
             .any(|r| r.object.name.as_deref() == Some("beta"))
     );
+
+    // Chunks carry the entity refs of the symbols extracted from them (Part A).
+    assert!(
+        !extracted.chunk_entities.is_empty(),
+        "expected chunk_entities to be populated"
+    );
+    let total_refs: usize = extracted
+        .chunk_entities
+        .iter()
+        .map(|(_, refs)| refs.len())
+        .sum();
+    assert_eq!(total_refs, 3, "3 symbols → 3 chunk-entity refs");
+    // Each ref has the entity name.
+    for (_idx, refs) in &extracted.chunk_entities {
+        for r in refs {
+            assert!(r.name.is_some(), "entity ref should have a name");
+        }
+    }
 }

@@ -235,6 +235,52 @@ app.post("/knowledge/overview", async (c) => {
   return c.json({ graphs, entities, relationships });
 });
 
+// Stats: per-repo summary (name, git info, entity/rel counts) + aggregates.
+app.post("/knowledge/stats", async (c) => {
+  const { scope } = await c.req.json();
+  const reqScope = scope ?? SCAN_SCOPE;
+  const transport = getKnowledgeTransport();
+  const [graphs, entities, relationships, chunks] = await Promise.all([
+    transport.listGraphs(reqScope),
+    transport.listEntities(reqScope),
+    transport.listRelationships(reqScope),
+    transport.listChunks(reqScope),
+  ]);
+  const entList = entities as Array<Record<string, unknown>>;
+  const relList = relationships as Array<Record<string, unknown>>;
+  const chunkList = chunks as Array<Record<string, unknown>>;
+  const relByGraph = new Map<string, number>();
+  for (const r of relList) {
+    const gid = String(r.graphId ?? "");
+    relByGraph.set(gid, (relByGraph.get(gid) ?? 0) + 1);
+  }
+  const repos = (graphs as Array<Record<string, unknown>>).map((g) => {
+    const gid = String(g.id ?? "");
+    const entCount = entList.filter((e) => String(e.graphId ?? "") === gid).length;
+    // Parse git metadata from graph name: "scan:repo [remote@branch:sha]"
+    const name = String(g.name ?? "");
+    const gitMatch = name.match(/\[(.+?)@(.+?):(.+?)\]/);
+    return {
+      id: gid,
+      name: name.replace(/\s*\[.+$/, ""),
+      gitRemote: gitMatch?.[1] ?? null,
+      gitBranch: gitMatch?.[2] ?? null,
+      gitSha: gitMatch?.[3] ?? null,
+      entityCount: entCount,
+      relationshipCount: relByGraph.get(gid) ?? 0,
+      lastUpdated: (g as { updatedAt?: string }).updatedAt ?? (g as { createdAt?: string }).createdAt ?? null,
+    };
+  });
+  return c.json({
+    tenant: reqScope,
+    repos,
+    totalEntities: entList.length,
+    totalRelationships: relList.length,
+    totalChunks: chunkList.length,
+    totalRepos: repos.length,
+  });
+});
+
 // --- Taxonomy (maintain concept schemes + concepts) -------------------------
 app.post("/taxonomy/scheme", async (c) => {
   const request = await c.req.json();

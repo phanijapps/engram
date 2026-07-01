@@ -45,6 +45,11 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   (lazy) embeddings + KG, with a warm-up benchmark — quality vs the KG-only
   baseline + latency/coverage across passes. Shipped; results in
   `docs/perf/lazy-embeddings.md`.
+- [`backend-agnostic-retrieval`](backend-agnostic-retrieval/spec.md): RRF-fused
+  hybrid over the composition seam — graph + vector behind `RetrievalIndex`,
+  durable sqlite-vec, configurable RRF, orchestrator + backend config.
+  SQLite-only; the two Postgres/Neo4j deployments are documented targets
+  (RFC-0005 / ADR-0009). Draft.
 - [`mcp-server`](mcp-server/spec.md): expose backend as MCP HTTP server —
   index_repo, search, agentic_search, get_job tools for any MCP client.
 - [`db-adapter-skill`](db-adapter-skill/spec.md): Claude Code skill for adding

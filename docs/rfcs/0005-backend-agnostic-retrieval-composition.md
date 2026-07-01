@@ -1,10 +1,10 @@
 # RFC-0005: Backend-agnostic retrieval composition (graph + vector fusion)
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Author:** phanijapps
-- **Approver:** phanijapps
+- **Approver:** phanijapps (signed off 2026-07-01)
 - **Date opened:** 2026-07-01
-- **Date closed:**
+- **Date closed:** 2026-07-01
 - **Decision weight:** heavy
 - **Related:** ADR-0003 (implementation-stack — Accepted; the stack gate AGENTS.md makes mandatory is in place, so the two de-risk spikes are compliant), ADR-0005 (storage-adapter-semantics), ADR-0006 (first-sql-adapter-sqlite), ADR-0007 (napi-binding-surface-extension); spec [`benchmark-lazy-embeddings`](../specs/benchmark-lazy-embeddings/spec.md); RFC-0003 (durable demo), RFC-0004 (enterprise platform)
 

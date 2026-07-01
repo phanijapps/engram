@@ -1,54 +1,39 @@
 import { useEffect, useState } from "react";
 import { Graph3D, buildGraphData, type RawEntity, type RawRelationship } from "@/Graph3D";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SCOPE } from "@/lib/constants";
 
-type Overview = {
-  entities: RawEntity[];
-  relationships: RawRelationship[];
-};
+type GraphNode = { id: string; name: string; kind: string; graphId: string; degree: number };
+type GraphEdge = { subject: string; predicate: string; object: string };
+type GraphResponse = { nodes: GraphNode[]; edges: GraphEdge[]; total: number; capped: boolean };
 
 export function Graph() {
-  const [data, setData] = useState<Overview | null>(null);
-  const [capped, setCapped] = useState(false);
+  const [data, setData] = useState<{ entities: RawEntity[]; relationships: RawRelationship[] } | null>(null);
+  const [meta, setMeta] = useState<{ total: number; capped: boolean } | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/knowledge/overview", {
+    fetch("/knowledge/graph-data", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ scope: SCOPE }),
+      body: JSON.stringify({ scope: SCOPE, limit: 500 }),
     })
-      .then((r) => r.json() as Promise<Overview>)
+      .then((r) => r.json() as Promise<GraphResponse>)
       .then((d) => {
-        // Client-side cap: top 500 entities by degree, edges between them.
-        // Prevents rendering 26K nodes (the force-graph death scenario).
-        const degree = new Map<string, number>();
-        for (const r of d.relationships) {
-          const s = r.subject?.id;
-          const o = r.object?.id;
-          if (s) degree.set(s, (degree.get(s) ?? 0) + 1);
-          if (o) degree.set(o, (degree.get(o) ?? 0) + 1);
-        }
-        const topIds = new Set(
-          [...degree.entries()]
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 500)
-            .map(([id]) => id),
-        );
-        if (d.entities.length > 500) {
-          const cappedEntities = d.entities.filter((e) => topIds.has(e.id));
-          const cappedRels = d.relationships.filter(
-            (r) => topIds.has(r.subject?.id ?? "") && topIds.has(r.object?.id ?? ""),
-          );
-          setData({ entities: cappedEntities, relationships: cappedRels });
-          setCapped(true);
-        } else {
-          setData(d);
-          setCapped(false);
-        }
+        setMeta({ total: d.total, capped: d.capped });
+        // Map lightweight graph data to the shapes Graph3D expects.
+        const entities: RawEntity[] = d.nodes.map((n) => ({
+          id: n.id,
+          name: n.name,
+          kind: n.kind,
+        }));
+        const relationships: RawRelationship[] = d.edges.map((e) => ({
+          subject: { id: e.subject },
+          predicate: e.predicate,
+          object: { id: e.object },
+        }));
+        setData({ entities, relationships });
       })
       .catch((e) => setError(String(e)));
   }, []);
@@ -61,10 +46,10 @@ export function Graph() {
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
       <div className="flex items-center gap-2 border-b px-4 py-2">
-        <Badge variant="outline">{data.entities.length} entities</Badge>
+        <Badge variant="outline">{data.entities.length} nodes</Badge>
         <Badge variant="outline">{data.relationships.length} edges</Badge>
-        {capped && (
-          <Badge variant="secondary">top 500 by degree (of full graph)</Badge>
+        {meta?.capped && (
+          <Badge variant="secondary">top 500 of {meta.total.toLocaleString()}</Badge>
         )}
         <div className="ml-auto">
           <Button variant="ghost" size="sm" onClick={() => window.location.reload()}>

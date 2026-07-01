@@ -235,6 +235,70 @@ app.post("/knowledge/overview", async (c) => {
   return c.json({ graphs, entities, relationships });
 });
 
+// Lightweight graph data for rendering: only id/name/kind/graphId for entities
+// and subject/predicate/object for relationships. No chunks, no provenance, no
+// metadata. Server-side degree computation + top-N filtering for performance.
+app.post("/knowledge/graph-data", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const reqScope = body.scope ?? SCAN_SCOPE;
+  const maxNodes = typeof body.limit === "number" ? body.limit : 500;
+  const transport = getKnowledgeTransport();
+  // Load entities + relationships. These can be large — handle errors gracefully.
+  let entList: Array<Record<string, unknown>> = [];
+  let relList: Array<Record<string, unknown>> = [];
+  try {
+    [entList, relList] = (await Promise.all([
+      transport.listEntities(reqScope),
+      transport.listRelationships(reqScope),
+    ])) as Array<Record<string, unknown>>[];
+  } catch (e) {
+    return c.json({ nodes: [], edges: [], total: 0, capped: false, error: String(e) });
+  }
+  // Compute degree per entity.
+  const degree = new Map<string, number>();
+  for (const r of relList) {
+    const s = (r.subject as Record<string, unknown> | undefined)?.id;
+    const o = (r.object as Record<string, unknown> | undefined)?.id;
+    if (typeof s === "string") degree.set(s, (degree.get(s) ?? 0) + 1);
+    if (typeof o === "string") degree.set(o, (degree.get(o) ?? 0) + 1);
+  }
+  // Top-N entities by degree.
+  const topIds = new Set(
+    [...degree.entries()].sort((a, b) => b[1] - a[1]).slice(0, maxNodes).map(([id]) => id),
+  );
+  // If fewer than maxNodes have edges, fill with isolated entities.
+  if (topIds.size < maxNodes) {
+    for (const e of entList) {
+      if (topIds.size >= maxNodes) break;
+      const eid = String(e.id ?? "");
+      if (eid) topIds.add(eid);
+    }
+  }
+  const nodes = entList
+    .filter((e) => topIds.has(String(e.id ?? "")))
+    .map((e) => ({
+      id: String(e.id ?? ""),
+      name: String(e.name ?? ""),
+      kind: String(e.kind ?? "unknown"),
+      graphId: String(e.graphId ?? ""),
+      degree: degree.get(String(e.id ?? "")) ?? 0,
+    }));
+  const nodeIds = new Set(nodes.map((n) => n.id));
+  const edges = relList
+    .filter((r) => {
+      const s = String((r.subject as Record<string, unknown> | undefined)?.id ?? "");
+      const o = String((r.object as Record<string, unknown> | undefined)?.id ?? "");
+      return s && o && nodeIds.has(s) && nodeIds.has(o);
+    })
+    .slice(0, 2000)
+    .map((r) => ({
+      subject: String((r.subject as Record<string, unknown> | undefined)?.id ?? ""),
+      predicate: String(r.predicate ?? ""),
+      object: String((r.object as Record<string, unknown> | undefined)?.id ?? ""),
+    }));
+  return c.json({ nodes, edges, total: entList.length, capped: entList.length > maxNodes });
+});
+
 // Stats: per-repo summary from KnowledgeSource records (O(repos), not O(entities)).
 app.post("/knowledge/stats", async (c) => {
   const { scope } = await c.req.json();

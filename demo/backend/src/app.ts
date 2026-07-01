@@ -244,6 +244,12 @@ app.post("/knowledge/graph-data", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const reqScope = body.scope ?? SCAN_SCOPE;
   const maxNodes = typeof body.limit === "number" ? body.limit : 500;
+  // Default to structural kinds (repo/module/class/function) — less noisy.
+  // Pass kinds: ["*"] or omit to see everything.
+  const DEFAULT_KINDS = ["function", "method", "class", "struct", "module", "repository", "project", "organization", "trait", "enum", "interface"];
+  const kinds: string[] | null = Array.isArray(body.kinds) && body.kinds.length > 0
+    ? (body.kinds as string[]).includes("*") ? null : (body.kinds as string[])
+    : DEFAULT_KINDS;
   const transport = getKnowledgeTransport();
   // Load entities + relationships. These can be large — handle errors gracefully.
   let entList: Array<Record<string, unknown>> = [];
@@ -256,7 +262,11 @@ app.post("/knowledge/graph-data", async (c) => {
   } catch (e) {
     return c.json({ nodes: [], edges: [], total: 0, capped: false, error: String(e) });
   }
-  // Compute degree per entity.
+  // Filter entities by kind if specified.
+  const filteredEnts = kinds
+    ? entList.filter((e) => kinds.includes(String(e.kind ?? "unknown")))
+    : entList;
+  // Compute degree per entity (from filtered set).
   const degree = new Map<string, number>();
   for (const r of relList) {
     const s = (r.subject as Record<string, unknown> | undefined)?.id;
@@ -270,13 +280,13 @@ app.post("/knowledge/graph-data", async (c) => {
   );
   // If fewer than maxNodes have edges, fill with isolated entities.
   if (topIds.size < maxNodes) {
-    for (const e of entList) {
+    for (const e of filteredEnts) {
       if (topIds.size >= maxNodes) break;
       const eid = String(e.id ?? "");
       if (eid) topIds.add(eid);
     }
   }
-  const nodes = entList
+  const nodes = filteredEnts
     .filter((e) => topIds.has(String(e.id ?? "")))
     .map((e) => ({
       id: String(e.id ?? ""),
@@ -298,7 +308,7 @@ app.post("/knowledge/graph-data", async (c) => {
       predicate: String(r.predicate ?? ""),
       object: String((r.object as Record<string, unknown> | undefined)?.id ?? ""),
     }));
-  return c.json({ nodes, edges, total: entList.length, capped: entList.length > maxNodes });
+  return c.json({ nodes, edges, total: filteredEnts.length, capped: filteredEnts.length > maxNodes });
 });
 
 // Stats: per-repo summary from KnowledgeSource records (O(repos), not O(entities)).

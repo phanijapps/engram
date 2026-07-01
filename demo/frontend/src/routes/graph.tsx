@@ -12,17 +12,17 @@ export function Graph() {
   const [data, setData] = useState<{ entities: RawEntity[]; relationships: RawRelationship[] } | null>(null);
   const [meta, setMeta] = useState<{ total: number; capped: boolean } | null>(null);
   const [error, setError] = useState("");
+  const [showAllKinds, setShowAllKinds] = useState(false);
 
   useEffect(() => {
     fetch("/knowledge/graph-data", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ scope: SCOPE, limit: 500 }),
+      body: JSON.stringify({ scope: SCOPE, limit: 500, kinds: showAllKinds ? ["*"] : undefined }),
     })
       .then((r) => r.json() as Promise<GraphResponse>)
       .then((d) => {
         setMeta({ total: d.total, capped: d.capped });
-        // Map lightweight graph data to the shapes Graph3D expects.
         const entities: RawEntity[] = d.nodes.map((n) => ({
           id: n.id,
           name: n.name,
@@ -36,7 +36,7 @@ export function Graph() {
         setData({ entities, relationships });
       })
       .catch((e) => setError(String(e)));
-  }, []);
+  }, [showAllKinds]);
 
   if (error) return <div className="p-4 text-sm text-destructive">{error}</div>;
   if (!data) return <div className="p-4 text-sm text-muted-foreground">Loading graph…</div>;
@@ -51,7 +51,15 @@ export function Graph() {
         {meta?.capped && (
           <Badge variant="secondary">top 500 of {meta.total.toLocaleString()}</Badge>
         )}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant={showAllKinds ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setShowAllKinds((v) => !v)}
+            title={showAllKinds ? "Showing all entity kinds" : "Showing structural kinds only (repo/module/function/class/…)"}
+          >
+            {showAllKinds ? "All kinds" : "Structural only"}
+          </Button>
           <Button variant="ghost" size="sm" onClick={() => window.location.reload()}>
             Refresh
           </Button>

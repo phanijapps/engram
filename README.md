@@ -153,6 +153,108 @@ cargo run -p engram-store-memory --example benchmark_local
 Benchmark output is local observation only. See `docs/benchmarks.md` for claim
 boundaries.
 
+## Demo: build & run on a new machine
+
+The demo (`demo/`) is an enterprise knowledge-platform UI over the Rust core:
+index a polyglot repo or docs folder, build a knowledge graph, ask grounded +
+agentic questions, and explore the graph. It needs the **FastEmbed** native
+build (BGE-small embeddings) plus the TypeScript workspace.
+
+### Prerequisites
+
+- **Rust 1.85+** (edition 2024) — `cargo`.
+- **Node 22+** and **pnpm 10** (`corepack enable && corepack prepare pnpm@10 --activate`).
+- Optional, for LLM extraction + Q&A: an OpenAI-compatible endpoint reachable as
+  `ollama-cloud` (e.g. ollama cloud `gemma4:31b-cloud`). Without it the demo
+  runs deterministic-only (no LLM calls).
+
+### Build (first time, in order)
+
+```bash
+# 1. Install JS dependencies (workspace root)
+pnpm install
+
+# 2. Build the native addon WITH the fastembed feature (Rust + BGE-small).
+#    The BGE-small model downloads on the first embedding call — one-time.
+pnpm --filter @engram/node build:native
+
+# 3. Generate TypeScript contracts + build all packages (contracts, node, demo)
+pnpm run contracts:generate
+pnpm -r --if-present build
+```
+
+### Configure + run
+
+```bash
+# 4. LLM creds (optional). Copy the template and fill in real values.
+cp demo/backend/.env.example demo/backend/.env
+#   ENGRAM_LLM_BASE_URL=https://your-host/v1
+#   ENGRAM_LLM_API_KEY=...
+#   ENGRAM_LLM_MODEL=gemma4:31b-cloud
+# Leave the placeholder to run deterministic-only.
+
+# 5. Start the backend (Hono on :8787 — serves the API + /mcp)
+pnpm --filter demo-backend dev
+
+# 6. In another shell, start the frontend (Vite on :5173, proxies API routes
+#    to :8787)
+pnpm --filter demo-frontend dev
+```
+
+Open **http://localhost:5173**. From the dashboard, point **Index** at a local
+repo (or docs folder) and let it scan; then open the graph or chat. Re-indexing
+reuses durable embeddings (`${ENGRAM_DB}.embeddings.db`).
+
+> The native addon must be rebuilt after any `bindings/node` change — re-run
+> `pnpm --filter @engram/node build:native`. `tsx watch` reloads the backend on
+> TS edits, but the `.node` is picked up only when the backend restarts.
+
+## Connect via MCP
+
+The backend exposes engram as **JSON-RPC 2.0 over HTTP** at `POST /mcp` — four
+tools any MCP-compatible client can call:
+
+| Tool | What it does |
+| --- | --- |
+| `index_repo` | Scan + ingest a repo (or docs folder) into the knowledge graph. |
+| `get_job` | Poll an indexing job's status. |
+| `search` | Keyword/entity search over the graph. |
+| `agentic_search` | Grounded + agentic Q&A over the graph (LLM, if configured). |
+
+With the backend running on `:8787`, call it directly with curl:
+
+```bash
+# List the tools
+curl -s -X POST http://localhost:8787/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# Index a repo, then ask a question
+curl -s -X POST http://localhost:8787/mcp \
+  -H 'content-type: application/json' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"index_repo","arguments":{"path":"/abs/path/to/repo"}}}'
+```
+
+To use it from a standard MCP client (Claude Desktop / Claude Code / VS Code
+Copilot), point an **HTTP JSON-RPC transport** at `http://localhost:8787/mcp`.
+For clients that speak stdio, bridge with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
+
+```jsonc
+// Claude Desktop / Code mcpServers entry (stdio client bridged to the HTTP endpoint)
+{
+  "mcpServers": {
+    "engram": { "command": "npx", "args": ["-y", "mcp-remote", "http://localhost:8787/mcp"] }
+  }
+}
+```
+
+> **Handshake gap (honest):** the demo's `/mcp` implements only `tools/list` and
+> `tools/call` over plain request/response JSON-RPC — it does **not** implement
+> the full MCP `initialize` / `notifications` / SSE handshake. Direct curl +
+> custom JSON-RPC HTTP clients work today; a strict client (Claude Desktop via
+> `mcp-remote`) will fail at `initialize` until that handshake is added. Driving
+> it from scripts is the supported path for now.
+
 ## Contracts
 
 The accepted v1 contract package lives in `contracts/v1/`.

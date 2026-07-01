@@ -33,6 +33,9 @@ keeping indexing fast and dependency-free.
 ### Eval suite
 8 questions across 5 categories (entity lookup, concept, relationship,
 structural, call graph). Each scored: correct / partial / wrong / no_answer.
+The question set, scoring rubric, and last-known results live in the
+[8-question eval](./eval-8-question.md); a larger, trend-tracking
+[50-question eval](./eval-50-question.md) is defined but not yet run.
 
 ## Results
 
@@ -110,6 +113,8 @@ improvement on broad-concept questions.
   showed it found the right entity, but the formatting needs fixing.
 
 ## See also
+- [8-question eval](./eval-8-question.md) — fast pilot (strict subset of the 50Q)
+- [50-question eval](./eval-50-question.md) — larger, trend-tracking suite
 - [Benchmark spec](../specs/benchmark-lazy-embeddings/spec.md)
 - [Scanner source](../../adapters/ingest/src/scanner.rs)
 - [Tree-sitter chunker](../../adapters/ingest/src/tree_sitter_chunker.rs)

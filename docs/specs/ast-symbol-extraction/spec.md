@@ -1,6 +1,6 @@
 # Spec: ast-symbol-extraction (tree-sitter symbols + chunk entity refs)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Shape:** data
 - **Constrained by:** AGENTS.md (Rust owns deterministic behavior; `engram-ingest` is the module); the existing `CodeSymbolChunker` + `GraphExtractor` contracts; no domain-type change (KnowledgeChunk already has `entities: Vec<EntityRef>`)
 - **Contract:** none (internal pipeline change)
@@ -60,12 +60,12 @@ Languages: Java (`tree-sitter-java = "0.23.5"`), Kotlin (`tree-sitter-kotlin = "
 ## Acceptance Criteria
 
 **Part A:**
-- [ ] After `extract_into`, chunks returned (or updated in the store) carry the entity refs of the symbols extracted from them.
-- [ ] Unit test: a code fixture with 2 symbols → the corresponding chunks have entity refs; a chunk with no symbols has empty entities.
-- [ ] Q&A chunk-entity-ref matching finds the actual code (entity-ref path fires, not just text-term fallback).
+- [x] After `extract_into`, chunks returned (or updated in the store) carry the entity refs of the symbols extracted from them.
+- [x] Unit test: a code fixture with 2 symbols → the corresponding chunks have entity refs; a chunk with no symbols has empty entities.
+- [x] Q&A chunk-entity-ref matching finds the actual code (entity-ref path fires, not just text-term fallback).
 
 **Part B:**
-- [ ] A `TreeSitterChunker` implements `Chunker` for Java, Kotlin, Apex, Perl, Bash, PHP, COBOL, Rust, TypeScript, Python — each with a grammar fixture test asserting correct anchors + spans.
-- [ ] The scanner + ingestor use `TreeSitterChunker` for supported extensions and fall back to `CodeSymbolChunker` for others.
-- [ ] No regression: files in unsupported languages still chunk via the line-based scanner.
-- [ ] `cargo fmt/check/test --workspace` green; rebuild native binding; demo re-index produces entities with accurate symbol boundaries.
+- [x] A `TreeSitterChunker` implements `Chunker` for Java, Kotlin, Apex, Perl, Bash, PHP, COBOL, Rust, TypeScript, Python — each with a grammar fixture test asserting correct anchors + spans.
+- [x] The scanner + ingestor use `TreeSitterChunker` for supported extensions and fall back to `CodeSymbolChunker` for others.
+- [x] No regression: files in unsupported languages still chunk via the line-based scanner.
+- [x] `cargo fmt/check/test --workspace` green; rebuild native binding; demo re-index produces entities with accurate symbol boundaries.

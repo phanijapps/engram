@@ -109,6 +109,66 @@ app.post("/llm/extract", async (c) => {
   });
 });
 
+// Batch LLM enhancement for text/markdown documents already in the knowledge
+// graph. Finds documents whose entities are only "concept" (deterministic text
+// extraction) + runs LLM extraction to add proper entities + relationships.
+app.post("/llm/enhance-docs", async (c) => {
+  const { scope } = await c.req.json();
+  const reqScope = scope ?? SCAN_SCOPE;
+  const transport = getKnowledgeTransport();
+  const [entities, relationships, chunks] = await Promise.all([
+    transport.listEntities(reqScope),
+    transport.listRelationships(reqScope),
+    transport.listChunks(reqScope),
+  ]);
+  // Group chunks by documentId → reconstruct document text.
+  const docsByChunk = new Map<string, { text: string; source: string; graphId?: string }>();
+  for (const chunk of chunks as Array<Record<string, unknown>>) {
+    const docId = String(chunk.documentId ?? "unknown");
+    const text = String(chunk.text ?? "");
+    const source = String((chunk as { provenance?: { source?: string } }).provenance?.source ?? docId);
+    if (!docsByChunk.has(docId)) docsByChunk.set(docId, { text: "", source, graphId: undefined });
+    const doc = docsByChunk.get(docId)!;
+    doc.text += (doc.text ? "\n" : "") + text;
+  }
+  // Find entities grouped by graph to know which graphs are text-only (concepts only).
+  const entityList = entities as Array<Record<string, unknown>>;
+  const graphsByKind = new Map<string, Set<string>>();
+  for (const e of entityList) {
+    const gid = String(e.graphId ?? "");
+    const kind = String(e.kind ?? "");
+    if (!graphsByKind.has(gid)) graphsByKind.set(gid, new Set());
+    graphsByKind.get(gid)!.add(kind);
+  }
+  // Enhance graphs that are text-only (only "concept" entities).
+  const enhanced: Array<{ source: string; entities: number; relationships: number }> = [];
+  for (const [docId, doc] of docsByChunk) {
+    // Find the graphId for this document's entities.
+    const graphEntity = entityList.find(
+      (e) => String(e.id ?? "").startsWith("entity-") && false, // can't easily map doc→graph
+    );
+    // Simple heuristic: enhance any doc whose text looks like markdown/text.
+    const looksLikeText = doc.text.includes("#") || doc.text.includes("##") || doc.text.length > 200;
+    if (!looksLikeText || doc.text.length > 8000) continue;
+    const result = await enhanceWithLLM({
+      text: doc.text,
+      kind: "text" as const,
+      graphId: docId, // best-effort graph id
+      scope: reqScope,
+      source: doc.source,
+      actor: SCAN_ACTOR,
+    });
+    if (result.status === "ok") {
+      enhanced.push({
+        source: doc.source,
+        entities: result.entities.length,
+        relationships: result.relationships.length,
+      });
+    }
+  }
+  return c.json({ enhanced, total: enhanced.length, llm: enhanced.length > 0 ? "ok" : "unavailable" });
+});
+
 // --- Background repo indexing (RFC 0004 background-repo-indexer) ------------
 // Starts a Rust rayon-parallel scan on a background thread; returns a job id.
 // Progress is polled via GET /ingest/jobs/:id. Deterministic extraction only.

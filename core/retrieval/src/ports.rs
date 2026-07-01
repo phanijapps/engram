@@ -11,9 +11,13 @@ use engram_runtime::CoreResult;
 
 /// Candidate retrieval port for one source or strategy.
 ///
-/// A `RetrievalIndex` might be lexical, vector, graph, temporal, hierarchical,
-/// or hybrid. It returns candidates with provenance and policy attached; final
-/// fusion and context-budget decisions are handled later in the pipeline.
+/// A `RetrievalIndex` is defined by **what it returns** — candidates of some
+/// `RetrievalTargetType` (Memory, Chunk, Entity, Relationship, …) with
+/// provenance and policy attached — never by **how** it retrieves. Traversal,
+/// vector similarity, lexical match, or any hybrid are the adapter's private
+/// choice; the trait stays mechanism-agnostic so backends are interchangeable
+/// (a graph index may be backed by Neo4j traversal or pgvector semantics).
+/// Final fusion and context-budget decisions are handled later in the pipeline.
 #[async_trait]
 pub trait RetrievalIndex: Send + Sync {
     /// Retrieves candidates for the request without composing the final context.

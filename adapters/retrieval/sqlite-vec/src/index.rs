@@ -34,24 +34,30 @@ impl SqliteVectorIndex {
         }
         register_sqlite_vec();
         let connection = Connection::open_in_memory().map_err(sql_error)?;
-        connection
-            .execute(
-                &format!(
-                    r#"
-                    CREATE VIRTUAL TABLE vectors USING vec0(
-                        id text primary key,
-                        embedding float[{dimensions}],
-                        target_type text,
-                        target_id text,
-                        model text,
-                        dimensions integer,
-                        content_hash text
-                    )
-                    "#
-                ),
-                [],
-            )
-            .map_err(sql_error)?;
+        create_vectors_table(&connection, dimensions)?;
+        Ok(Self {
+            connection,
+            dimensions,
+        })
+    }
+
+    /// Opens a file-backed sqlite-vec index whose vectors persist across
+    /// processes.
+    ///
+    /// The vec0 virtual table and its shadow tables live in the SQLite file at
+    /// `path`, so embeddings survive restarts — the durable backing for lazy
+    /// query-time embeddings. The sqlite-vec extension is registered on every
+    /// open; re-opening an existing file skips table creation (`IF NOT EXISTS`)
+    /// and reads the existing shadow tables.
+    pub fn open(path: &str, dimensions: u32) -> CoreResult<Self> {
+        if dimensions == 0 {
+            return Err(CoreError::InvalidRequest {
+                reason: "dimensions must be greater than zero".to_owned(),
+            });
+        }
+        register_sqlite_vec();
+        let connection = Connection::open(path).map_err(sql_error)?;
+        create_vectors_table(&connection, dimensions)?;
         Ok(Self {
             connection,
             dimensions,
@@ -144,6 +150,32 @@ impl SqliteVectorIndex {
     }
 }
 
+/// Creates the `vectors` vec0 virtual table if it does not already exist.
+///
+/// Shared by the in-memory and file-backed constructors so the schema stays in
+/// one place. `IF NOT EXISTS` makes reopen idempotent for the persistent path.
+fn create_vectors_table(connection: &Connection, dimensions: u32) -> CoreResult<()> {
+    connection
+        .execute(
+            &format!(
+                r#"
+                CREATE VIRTUAL TABLE IF NOT EXISTS vectors USING vec0(
+                    id text primary key,
+                    embedding float[{dimensions}],
+                    target_type text,
+                    target_id text,
+                    model text,
+                    dimensions integer,
+                    content_hash text
+                )
+                "#
+            ),
+            [],
+        )
+        .map_err(sql_error)?;
+    Ok(())
+}
+
 fn validate_dimensions(expected: u32, declared: u32, actual: usize) -> CoreResult<()> {
     if declared != expected || actual != expected as usize {
         return Err(CoreError::InvalidRequest {
@@ -178,5 +210,43 @@ fn sql_error(error: rusqlite::Error) -> CoreError {
     CoreError::Adapter {
         adapter: "engram-store-vector".to_owned(),
         message: error.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::entry::VectorEntry;
+    use engram_domain::EmbeddingTargetType;
+
+    #[test]
+    fn file_backed_index_survives_reopen() {
+        let dir = std::env::temp_dir().join("engram-vec-persist-test.sqlite");
+        let _ = std::fs::remove_file(&dir);
+        let path = dir.to_str().expect("path");
+
+        let dims = 4u32;
+        // Write a vector, then drop the handle (simulating a process restart).
+        {
+            let index = SqliteVectorIndex::open(path, dims).expect("open");
+            index
+                .insert(VectorEntry {
+                    id: "chunk-1".to_owned(),
+                    target_type: EmbeddingTargetType::Chunk,
+                    target_id: "chunk-1".to_owned(),
+                    model: "test".to_owned(),
+                    dimensions: dims,
+                    content_hash: "chunk-1".to_owned(),
+                    embedding: vec![0.1, 0.2, 0.3, 0.4],
+                })
+                .expect("insert");
+        }
+        // Reopen: the vector must persist.
+        let reopened = SqliteVectorIndex::open(path, dims).expect("reopen");
+        let hits = reopened.search(&[0.1, 0.2, 0.3, 0.4], 1).expect("search");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].target_id, "chunk-1", "vector must survive reopen");
+
+        let _ = std::fs::remove_file(&dir);
     }
 }

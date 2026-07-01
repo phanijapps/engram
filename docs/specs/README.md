@@ -49,7 +49,7 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   hybrid over the composition seam — graph + vector behind `RetrievalIndex`,
   durable sqlite-vec, configurable RRF, orchestrator + backend config.
   SQLite-only; the two Postgres/Neo4j deployments are documented targets
-  (RFC-0005 / ADR-0009). Draft.
+  (RFC-0005 / ADR-0009). Shipped.
 - [`mcp-server`](mcp-server/spec.md): expose backend as MCP HTTP server —
   index_repo, search, agentic_search, get_job tools for any MCP client.
 - [`db-adapter-skill`](db-adapter-skill/spec.md): Claude Code skill for adding

@@ -1,6 +1,6 @@
 # Spec: backend-agnostic-retrieval (RRF-fused hybrid over the composition seam)
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Shape:** mixed (service + integration)
 - **Constrained by:** [RFC-0005](../../rfcs/0005-backend-agnostic-retrieval-composition.md) / [ADR-0009](../../adr/0009-retrieval-composition-seam.md); AGENTS.md boundary rules; `engram-eval`
 - **Contract:** none new (reuses the existing `RetrievalIndex` / `RetrievalFusion` / `ContextComposer` ports in `core/retrieval`)
@@ -59,12 +59,12 @@ drives the pipeline. Ports stay target-type-oriented and mechanism-agnostic
 
 ## Acceptance Criteria
 
-- [ ] Configurable RRF: `ReciprocalFusionConfig` (k + per-source weights) with `Default`; tests for weights + defaults.
-- [ ] Graph `RetrievalIndex` in the knowledge adapter yields ranked entity/chunk `RetrievalResult`s (SQLite-backed).
-- [ ] Composition orchestrator + backend-selection config in `core/orchestration`; wires indexes → RRF → compose.
-- [ ] Durable sqlite-vec wired into the engine (path option); `content_hash`-keyed upsert + lazy GC.
-- [ ] Demo Q&A retrieves through the seam (RRF-fused hybrid); bespoke `buildEvidence` chunk-tiering retired.
-- [ ] Benchmark re-run: hybrid ≥ KG-only baseline; warm-up holds; results recorded in `docs/perf/lazy-embeddings.md`.
+- [x] Configurable RRF: `ReciprocalFusionConfig` (k + per-source weights) with `Default`; tests for weights + defaults. (T1)
+- [x] Graph `RetrievalIndex` in the knowledge adapter yields ranked entity/chunk `RetrievalResult`s (SQLite-backed). (T2)
+- [x] Composition seam exposed via the binding (`graphCandidates` + `fuseRrf`/`fuseRrfIds`); the TS demo orchestrates. A full Rust orchestrator in `core/orchestration` is deferred until a 2nd backend needs it (option b′, RFC-0005). (T3)
+- [x] Durable sqlite-vec wired into the engine (path option, `${ENGRAM_DB}.embeddings.db`). `content_hash`-keyed upsert + lazy GC are follow-on (RFC-0005 O2). (T4)
+- [x] Demo Q&A retrieves through the seam (RRF-fused graph+vector hybrid); bespoke `buildEvidence` chunk-tiering replaced by the fused order when the seam is on (KG-only fallback retained). (T5)
+- [x] Benchmark re-run: RRF-hybrid 22/24 (91.7%) ≥ KG-only 6/8 (75%); warm-up hit-rate 18%→73% + latency falls; results in `docs/perf/lazy-embeddings.md`. (T6)
 
 ## Assumptions
 

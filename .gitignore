@@ -40,3 +40,9 @@ __pycache__/
 *.sqlite3
 *.parquet
 artifacts/
+
+# agentbundle / adapt-to-project local state (per-repo; not shared)
+.agentbundle-state.toml
+.adapt-discovery.toml
+.adapt-pending.md
+.adapt-install-marker.toml

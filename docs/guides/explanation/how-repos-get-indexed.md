@@ -196,18 +196,19 @@ significant improvement opportunity.
 
 When you ask a question in `/chat`:
 
-1. **Entity matching** — entities are ranked by how well their names match the
-   question's terms (exact > prefix > substring), capped at 20.
-2. **Call-graph expansion** — relationships whose endpoints are matched entities
-   are included (capped at 30). This gives the LLM the local call graph.
-3. **Chunk text** — chunks that reference matched entities (via entity refs) or
-   whose text contains query terms are included (capped at 8, 1,200 chars each).
-   This gives the LLM the actual code to explain.
-4. **Memory + beliefs** — keyword retrieval over written memories + query-term
-   matching over beliefs.
-5. **LLM synthesis** — the pi SDK drives ollama cloud (`gemma4:31b-cloud`) with
-   the assembled context. The system prompt instructs the model to trace call
-   graphs, read code, and describe data flow — no LaTeX, plain arrows.
+1. **Pre-fetch** — entities, relationships, and chunks are loaded once from
+   the knowledge store (scope-filtered).
+2. **Agentic loop** (when LLM creds present) — the LLM gets 3 tools and
+   explores the graph itself:
+   - `search_entities(query)` — find entities by name keyword
+   - `get_neighbors(entity)` — trace relationships (calls/mentions/defines)
+   - `get_code(entity)` — read the source code text
+   The LLM decides what to search, follows call chains across hops, reads
+   code, and synthesizes a final answer. Max 9 turns. The pi SDK session
+   persists across turns (multi-turn conversation).
+3. **Evidence fallback** (no creds) — a pre-filtered evidence summary: entities
+   ranked by name match quality (exact > prefix > substring, capped at 20) +
+   their call-graph relationships (capped at 30) + chunk text (capped at 8).
 
 ## Design choices and tradeoffs
 
@@ -256,12 +257,7 @@ journal blocks readers during writes. WAL lets readers + the writer coexist;
    one document. A post-extraction pass that resolves entity-name matches across
    documents (within a scan) would create cross-file call-graph edges.
 
-4. **Agentic Q&A tool-use** — instead of pre-assembling a filtered context,
-   give the LLM tools (`search_entities`, `get_neighbors`, `traverse`) to explore
-   the graph step-by-step. The pi SDK supports custom tools via `ToolDefinition`
-   + TypeBox schemas.
-
-5. **COBOL grammar** — `tree-sitter-cobol` (0.1.0) has no Rust lib target.
+4. **COBOL grammar** — `tree-sitter-cobol` (0.1.0) has no Rust lib target.
    A compatible grammar crate needs to be found or built.
 
 ## See also

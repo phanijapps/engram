@@ -268,6 +268,7 @@ where
     let code_ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
     let text_ingestor =
         KnowledgeIngestor::new(PlainTextChunker::new(PlainTextChunkerOptions::default())?);
+    let ts_chunker = crate::tree_sitter_chunker::TreeSitterChunker::new().ok();
     let extractor = GraphExtractor::new();
 
     // Walk + filter (sequential).
@@ -363,13 +364,37 @@ where
                     path: Some(rel.clone()),
                     ..Default::default()
                 },
-                text,
+                text: String::new(), // placeholder — real text used for chunking below
                 policy: opts.policy.clone(),
                 actor: opts.actor.clone(),
             };
-            let ingested = match kind {
-                FileKind::Code => block_on(code_ingestor.ingest(repo, request)),
-                FileKind::Text => block_on(text_ingestor.ingest(repo, request)),
+            // Tree-sitter chunking for supported extensions; fallback to the
+            // ingestor's internal chunker for others.
+            let ext = rel.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
+            let ingested = if let Some(ref ts) = ts_chunker {
+                if ts.supports(ext) {
+                    let candidates = match ts.chunk_with_ext(&text, ext) {
+                        Ok(c) => c,
+                        Err(_) => return (rel.clone(), Outcome::Error),
+                    };
+                    let mut req = request;
+                    req.text = text;
+                    block_on(code_ingestor.ingest_with_candidates(repo, req, candidates))
+                } else {
+                    let mut req = request;
+                    req.text = text;
+                    match kind {
+                        FileKind::Code => block_on(code_ingestor.ingest(repo, req)),
+                        FileKind::Text => block_on(text_ingestor.ingest(repo, req)),
+                    }
+                }
+            } else {
+                let mut req = request;
+                req.text = text;
+                match kind {
+                    FileKind::Code => block_on(code_ingestor.ingest(repo, req)),
+                    FileKind::Text => block_on(text_ingestor.ingest(repo, req)),
+                }
             };
             let ingested = match ingested {
                 Ok(i) => i,

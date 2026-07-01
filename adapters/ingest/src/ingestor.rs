@@ -54,6 +54,23 @@ where
         R: KnowledgeRepository + ?Sized,
     {
         validate_request(&request)?;
+        let candidates = self.chunker.chunk(&request.text)?;
+        self.ingest_with_candidates(repository, request, candidates)
+            .await
+    }
+
+    /// Ingests a document using pre-chunked candidates (skips the internal
+    /// chunker). Used by the scanner when it chunks with TreeSitterChunker.
+    pub async fn ingest_with_candidates<R>(
+        &self,
+        repository: &R,
+        request: DocumentIngestRequest,
+        candidates: Vec<crate::ChunkCandidate>,
+    ) -> CoreResult<IngestedKnowledge>
+    where
+        R: KnowledgeRepository + ?Sized,
+    {
+        validate_request(&request)?;
 
         let document_hash = content_hash(&request.text);
         let source_id = source_id(&request);
@@ -104,9 +121,7 @@ where
             updated_at: None,
             metadata: None,
         };
-        let chunks = self
-            .chunker
-            .chunk(&request.text)?
+        let chunks = candidates
             .into_iter()
             .enumerate()
             .map(|(index, candidate)| {

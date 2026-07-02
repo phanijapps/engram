@@ -12,6 +12,9 @@ import {
   type NativeBinding,
   type NativeBindingLoader,
   type NativeBeliefEngineBinding,
+  type NativeConsolidationEngineBinding,
+  type NativeEvalEngineBinding,
+  type NativeHierarchyEngineBinding,
   type NativeIngestEngineBinding,
   type NativeKnowledgeEngineBinding,
   type NativeMemoryEngineBinding,
@@ -94,6 +97,11 @@ export interface NativeKnowledgeTransport {
   putProperty(property: unknown): Promise<unknown>;
   putAxiom(axiom: unknown): Promise<unknown>;
   validateGraph(graphId: string, ontologyId: string, scope: unknown): Promise<unknown>;
+  validateTaxonomyProposal(request: {
+    proposal: unknown;
+    concepts: unknown[];
+    relations?: unknown[];
+  }): Promise<unknown>;
   /** Retrieval-composition seam: graph-ranked candidates for a request. */
   graphCandidates(request: unknown): Promise<unknown[]>;
   /** Retrieval-composition seam: RRF-fuse candidate lists (configurable). */
@@ -219,6 +227,14 @@ class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
 
   async validateGraph(graphId: string, ontologyId: string, scope: unknown): Promise<unknown> {
     return decode(this.engine.validateGraphJson(encode({ graphId, ontologyId, scope })));
+  }
+
+  async validateTaxonomyProposal(request: {
+    proposal: unknown;
+    concepts: unknown[];
+    relations?: unknown[];
+  }): Promise<unknown> {
+    return decode(this.engine.validateTaxonomyProposalJson(encode(request)));
   }
 
   async graphCandidates(request: unknown): Promise<unknown[]> {
@@ -351,6 +367,87 @@ class JsonNativeBeliefTransport implements NativeBeliefTransport {
 
   async detectContradictions(beliefs: unknown): Promise<unknown> {
     return decode(this.engine.detectContradictionsJson(encode(beliefs)));
+  }
+}
+
+/** Transport interface for hierarchy validation. */
+export interface NativeHierarchyTransport {
+  validateParentage(nodes: unknown[]): Promise<{ valid: boolean }>;
+}
+
+/** Options for constructing a native hierarchy transport. */
+export interface NativeHierarchyTransportOptions {
+  binding?: NativeBinding;
+  loader?: NativeBindingLoader;
+}
+
+/** Creates a transport that delegates hierarchy validation to Rust. */
+export function createNativeHierarchyTransport(
+  options: NativeHierarchyTransportOptions = {}
+): NativeHierarchyTransport {
+  const binding = options.binding ?? loadNativeBinding(options.loader);
+  return new JsonNativeHierarchyTransport(new binding.NativeHierarchyEngine());
+}
+
+class JsonNativeHierarchyTransport implements NativeHierarchyTransport {
+  constructor(private readonly engine: NativeHierarchyEngineBinding) {}
+
+  async validateParentage(nodes: unknown[]): Promise<{ valid: boolean }> {
+    return decode(this.engine.validateParentageJson(encode(nodes)));
+  }
+}
+
+/** Transport interface for consolidation planning. */
+export interface NativeConsolidationTransport {
+  plan(request: { request: unknown; plannedAt?: string }): Promise<unknown>;
+}
+
+/** Options for constructing a native consolidation transport. */
+export interface NativeConsolidationTransportOptions {
+  binding?: NativeBinding;
+  loader?: NativeBindingLoader;
+}
+
+/** Creates a transport that delegates consolidation planning to Rust. */
+export function createNativeConsolidationTransport(
+  options: NativeConsolidationTransportOptions = {}
+): NativeConsolidationTransport {
+  const binding = options.binding ?? loadNativeBinding(options.loader);
+  return new JsonNativeConsolidationTransport(new binding.NativeConsolidationEngine());
+}
+
+class JsonNativeConsolidationTransport implements NativeConsolidationTransport {
+  constructor(private readonly engine: NativeConsolidationEngineBinding) {}
+
+  async plan(request: { request: unknown; plannedAt?: string }): Promise<unknown> {
+    return decode(this.engine.planJson(encode(request)));
+  }
+}
+
+/** Transport interface for architecture evaluation coverage. */
+export interface NativeEvalTransport {
+  architectureCoverage(cases: unknown[]): Promise<unknown>;
+}
+
+/** Options for constructing a native eval transport. */
+export interface NativeEvalTransportOptions {
+  binding?: NativeBinding;
+  loader?: NativeBindingLoader;
+}
+
+/** Creates a transport that delegates evaluation coverage summaries to Rust. */
+export function createNativeEvalTransport(
+  options: NativeEvalTransportOptions = {}
+): NativeEvalTransport {
+  const binding = options.binding ?? loadNativeBinding(options.loader);
+  return new JsonNativeEvalTransport(new binding.NativeEvalEngine());
+}
+
+class JsonNativeEvalTransport implements NativeEvalTransport {
+  constructor(private readonly engine: NativeEvalEngineBinding) {}
+
+  async architectureCoverage(cases: unknown[]): Promise<unknown> {
+    return decode(this.engine.architectureCoverageJson(encode(cases)));
   }
 }
 

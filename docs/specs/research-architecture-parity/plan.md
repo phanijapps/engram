@@ -95,6 +95,13 @@ research requires separate interfaces, not specific database brands.
   lifecycle, contradiction review, consolidation gates, and adapter readiness;
   tests prove complete coverage, missing-capability detection, failing-capability
   detection, and repeatable report output.
+- 2026-07-02: T10 complete. `engram-node` now exposes Rust-backed JSON
+  transports for taxonomy proposal validation, hierarchy parentage validation,
+  consolidation planning, and evaluation architecture coverage in addition to
+  the existing memory, knowledge, retrieval, ingest, and belief transports;
+  TypeScript wrappers delegate to those native calls, demo backend endpoints
+  smoke them through the app layer, and `check_ts_native_delegation.py` guards
+  representative Rust-owned behavior from being reimplemented in TypeScript.
 
 ## Construction Tests
 

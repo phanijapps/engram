@@ -9,6 +9,9 @@ package scripts, and release checks.
   `tools/research-parity/doc-drift-registry.json`; run
   `python3 tools/scripts/test_check_research_parity_docs.py` for its focused
   regression tests.
+- `check_ts_native_delegation.py`: verifies representative TypeScript package
+  surfaces delegate Rust-owned behavior through native JSON transports instead
+  of reimplementing core algorithms.
 - `validate_contracts.py`: validates accepted examples and invalid fixtures
   against the v1 schema package.
 - `update_roadmap_phase.py`: updates roadmap phase metadata.

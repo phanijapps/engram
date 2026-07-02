@@ -36,6 +36,7 @@ export interface NativeKnowledgeEngineBinding {
   putPropertyJson(propertyJson: string): string;
   putAxiomJson(axiomJson: string): string;
   validateGraphJson(requestJson: string): string;
+  validateTaxonomyProposalJson(requestJson: string): string;
   graphCandidatesJson(requestJson: string): string;
   fuseRrfJson(requestJson: string): string;
   fuseRrfIdsJson(requestJson: string): string;
@@ -74,6 +75,36 @@ export interface NativeBeliefEngineConstructor {
   new (path?: string | null): NativeBeliefEngineBinding;
 }
 
+/** Native class shape for Rust-backed hierarchy validation. */
+export interface NativeHierarchyEngineBinding {
+  validateParentageJson(nodesJson: string): string;
+}
+
+/** Constructor shape for Rust-backed hierarchy validation. */
+export interface NativeHierarchyEngineConstructor {
+  new (): NativeHierarchyEngineBinding;
+}
+
+/** Native class shape for Rust-backed consolidation planning. */
+export interface NativeConsolidationEngineBinding {
+  planJson(requestJson: string): string;
+}
+
+/** Constructor shape for Rust-backed consolidation planning. */
+export interface NativeConsolidationEngineConstructor {
+  new (): NativeConsolidationEngineBinding;
+}
+
+/** Native class shape for Rust-backed evaluation coverage summaries. */
+export interface NativeEvalEngineBinding {
+  architectureCoverageJson(casesJson: string): string;
+}
+
+/** Constructor shape for Rust-backed evaluation coverage summaries. */
+export interface NativeEvalEngineConstructor {
+  new (): NativeEvalEngineBinding;
+}
+
 /** Native class shape for the Rust-backed semantic-retrieval engine (FastEmbed). */
 export interface NativeRetrievalEngineBinding {
   indexJson(requestJson: string): string;
@@ -94,6 +125,9 @@ export interface NativeBinding {
   NativeKnowledgeEngine: NativeKnowledgeEngineConstructor;
   NativeIngestEngine: NativeIngestEngineConstructor;
   NativeBeliefEngine: NativeBeliefEngineConstructor;
+  NativeHierarchyEngine: NativeHierarchyEngineConstructor;
+  NativeConsolidationEngine: NativeConsolidationEngineConstructor;
+  NativeEvalEngine: NativeEvalEngineConstructor;
   NativeRetrievalEngine: NativeRetrievalEngineConstructor;
 }
 

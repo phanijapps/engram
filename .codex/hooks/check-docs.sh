@@ -38,6 +38,7 @@ else
 fi
 
 .codex/hooks/check-code-docs.sh
+python3 tools/scripts/check_ts_native_delegation.py
 .codex/hooks/check-research-parity-docs.sh
 
 echo "documentation checks passed"

@@ -44,6 +44,7 @@ describe("@engram/client native transport", () => {
           putConceptJson(): string { return "null"; }
           putConceptRelationJson(): string { return "null"; }
           listConceptsJson(): string { return "[]"; }
+          validateTaxonomyProposalJson(): string { return '{"status":"passed","findings":[]}'; }
           putOntologyJson(): string { return "null"; }
           getOntologyJson(): string { return "null"; }
           putClassJson(): string { return "null"; }
@@ -76,6 +77,15 @@ describe("@engram/client native transport", () => {
           getContradictionJson(): string { return "null"; }
           resolveContradictionJson(): string { return "null"; }
           detectContradictionsJson(): string { return "[]"; }
+        },
+        NativeHierarchyEngine: class {
+          validateParentageJson(): string { return '{"valid":true}'; }
+        },
+        NativeConsolidationEngine: class {
+          planJson(): string { return '{"operations":[]}'; }
+        },
+        NativeEvalEngine: class {
+          architectureCoverageJson(): string { return '{"missing":[],"failing":[]}'; }
         },
         NativeRetrievalEngine: class {
           indexJson(): string { return '{"indexed":0}'; }

@@ -4,12 +4,16 @@
 //! packages own ergonomics; this crate owns serialization round trips into the
 //! Rust memory service.
 
-use engram_core::{BeliefRepository, ContradictionDetector};
+use engram_core::{
+    ArchitectureEvalCase, BeliefRepository, ContradictionDetector, plan_consolidation_operations,
+    required_architecture_capabilities, summarize_architecture_coverage,
+    validate_hierarchy_parentage,
+};
 use engram_domain::{
-    Actor, Belief, Concept, ConceptRelation, ConceptScheme, Contradiction, ContradictionResolution,
-    Id, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeRelationship, KnowledgeSource,
-    Ontology, OntologyAxiom, OntologyClass, OntologyProperty, Policy, Scope, SourceDocument,
-    SourceDocumentKind,
+    Actor, Belief, Concept, ConceptRelation, ConceptScheme, ConsolidationRequest, Contradiction,
+    ContradictionResolution, HierarchyNode, Id, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph,
+    KnowledgeRelationship, KnowledgeSource, Ontology, OntologyAxiom, OntologyClass,
+    OntologyProperty, Policy, Scope, SourceDocument, SourceDocumentKind, TaxonomyProposal,
 };
 use engram_domain::{ForgetRequest, RetrievalRequest, RetrievalResult, WriteMemoryRequest};
 use engram_ingest::{
@@ -18,6 +22,7 @@ use engram_ingest::{
 };
 use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
+    validate_taxonomy_proposal,
 };
 use engram_memory::{CoreError, MemoryService};
 use engram_store_belief_sqlite::SqlBeliefStore;
@@ -26,11 +31,28 @@ use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use engram_retrieval::{
     DEFAULT_RRF_K, ReciprocalFusionConfig, ReciprocalRankFusion, RetrievalFusion, RetrievalIndex,
 };
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct TaxonomyValidationRequest {
+    proposal: TaxonomyProposal,
+    concepts: Vec<Concept>,
+    #[serde(default)]
+    relations: Vec<ConceptRelation>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConsolidationPlanRequest {
+    request: ConsolidationRequest,
+    #[serde(default)]
+    planned_at: Option<chrono::DateTime<chrono::Utc>>,
+}
 
 /// After a scan, connects entities that share a name across different graphs.
 /// For each entity whose name appears in multiple graphs, creates a "defined_in"
@@ -465,6 +487,18 @@ impl NativeKnowledgeEngine {
         encode(&result)
     }
 
+    /// Validates a governed taxonomy proposal using Rust-owned taxonomy rules.
+    ///
+    /// The input is `{ proposal, concepts, relations }`; the result is a
+    /// `TaxonomyValidationReport` JSON payload. No store mutation occurs.
+    #[napi(js_name = "validateTaxonomyProposalJson")]
+    pub fn validate_taxonomy_proposal_json(&self, request_json: String) -> Result<String> {
+        let request = decode::<TaxonomyValidationRequest>(&request_json)?;
+        let report =
+            validate_taxonomy_proposal(&request.proposal, &request.concepts, &request.relations);
+        encode(&report)
+    }
+
     // --- Whole-graph exploration (store-specific list methods) ----------------
 
     #[napi(js_name = "listGraphsJson")]
@@ -555,6 +589,81 @@ impl NativeKnowledgeEngine {
         let result = block_on(self.store.validate_graph(&graph_id, &ontology_id, &scope))
             .map_err(to_napi_error)?;
         encode(&result)
+    }
+}
+
+/// Stateless hierarchy behavior exposed to Node through N-API.
+///
+/// This transport validates hierarchy build outputs with Rust-owned rules. It
+/// does not persist nodes or replace the SQLite hierarchy adapter.
+#[napi]
+pub struct NativeHierarchyEngine;
+
+#[napi]
+impl NativeHierarchyEngine {
+    /// Creates a stateless hierarchy validation engine.
+    #[napi(constructor)]
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Validates hierarchy parentage for a JSON array of `HierarchyNode`.
+    #[napi(js_name = "validateParentageJson")]
+    pub fn validate_parentage_json(&self, nodes_json: String) -> Result<String> {
+        let nodes = decode::<Vec<HierarchyNode>>(&nodes_json)?;
+        validate_hierarchy_parentage(&nodes).map_err(to_napi_error)?;
+        encode(&serde_json::json!({ "valid": true }))
+    }
+}
+
+/// Stateless consolidation behavior exposed to Node through N-API.
+///
+/// Planning stays in Rust so TypeScript can display or submit consolidation
+/// plans without duplicating strategy-to-operation rules.
+#[napi]
+pub struct NativeConsolidationEngine;
+
+#[napi]
+impl NativeConsolidationEngine {
+    /// Creates a stateless consolidation planning engine.
+    #[napi(constructor)]
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Plans consolidation operations for `{ request, plannedAt? }`.
+    #[napi(js_name = "planJson")]
+    pub fn plan_json(&self, request_json: String) -> Result<String> {
+        let request = decode::<ConsolidationPlanRequest>(&request_json)?;
+        let planned_at = request.planned_at.unwrap_or_else(chrono::Utc::now);
+        let plan =
+            plan_consolidation_operations(&request.request, planned_at).map_err(to_napi_error)?;
+        encode(&plan)
+    }
+}
+
+/// Stateless evaluation coverage behavior exposed to Node through N-API.
+///
+/// The engine summarizes executed case reports already produced by Rust-backed
+/// fixtures; it does not reimplement recall, leakage, or ranking checks in JS.
+#[napi]
+pub struct NativeEvalEngine;
+
+#[napi]
+impl NativeEvalEngine {
+    /// Creates a stateless evaluation coverage engine.
+    #[napi(constructor)]
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Summarizes architecture coverage for a JSON array of `ArchitectureEvalCase`.
+    #[napi(js_name = "architectureCoverageJson")]
+    pub fn architecture_coverage_json(&self, cases_json: String) -> Result<String> {
+        let cases = decode::<Vec<ArchitectureEvalCase>>(&cases_json)?;
+        let coverage =
+            summarize_architecture_coverage(cases, &required_architecture_capabilities());
+        encode(&coverage)
     }
 }
 

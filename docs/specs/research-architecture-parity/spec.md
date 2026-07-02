@@ -139,7 +139,7 @@ without switching AgentZero to Engram.
 - [x] Evaluation fixtures cover accepted recall, forbidden recall, leakage,
   policy filtering, ranking, hierarchy granularity, taxonomy drift, belief
   lifecycle, contradiction review, and adapter-readiness scenarios.
-- [ ] Node bindings and TypeScript packages expose narrow, generated-contract
+- [x] Node bindings and TypeScript packages expose narrow, generated-contract
   aligned surfaces over Rust behavior for memory, knowledge, retrieval, belief,
   hierarchy, taxonomy, consolidation, and evaluation without duplicating domain
   logic; an architecture check and fixtures fail if representative behavior is

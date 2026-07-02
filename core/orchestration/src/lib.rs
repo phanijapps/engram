@@ -10,7 +10,11 @@
 
 pub use engram_belief::*;
 pub use engram_consolidation::*;
-pub use engram_eval::{EvaluationCaseReport, EvaluationReport, EvaluationRunner};
+pub use engram_eval::{
+    ArchitectureEvalCapability, ArchitectureEvalCase, ArchitectureEvalCoverage,
+    EvaluationCaseReport, EvaluationReport, EvaluationRunner, required_architecture_capabilities,
+    summarize_architecture_coverage,
+};
 pub use engram_hierarchy::*;
 pub use engram_knowledge::*;
 pub use engram_memory::*;

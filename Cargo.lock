@@ -704,9 +704,11 @@ name = "engram-consolidation"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "engram-domain",
  "engram-eval",
  "engram-runtime",
+ "futures",
  "serde_json",
 ]
 

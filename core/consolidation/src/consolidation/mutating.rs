@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use engram_domain::{
-    ConsolidationError, ConsolidationRequest, ConsolidationRun, ConsolidationRunStatus,
-    ConsolidationStats, ConsolidationTaskKind, ConsolidationTaskResult, EvaluationFixture,
-    Metadata, Scalar, Timestamp,
+    ConsolidationError, ConsolidationPlan, ConsolidationRequest, ConsolidationRun,
+    ConsolidationRunStatus, ConsolidationStats, ConsolidationTaskKind, ConsolidationTaskResult,
+    EvaluationFixture, Metadata, Scalar, Timestamp,
 };
 use serde_json::json;
 
@@ -18,7 +18,7 @@ use crate::{
     Clock, ConsolidationService, CoreError, CoreResult, EvaluationRunner, IdGenerator,
     consolidation::{
         evaluation_gate::{adapter_error, evaluation_errors, evaluation_task},
-        planner::{planned_task_kinds, trigger_for},
+        planner::{build_plan, trigger_for},
         validation::validate_mutating_request,
     },
 };
@@ -69,6 +69,39 @@ pub trait ConsolidationMutationExecutor: Send + Sync {
     ) -> CoreResult<ConsolidationMutationOutcome>;
 }
 
+/// Authorizes a planned mutating consolidation cycle before durable work runs.
+///
+/// Implementations should perform policy, tenancy, idempotency, and operational
+/// gate checks that are independent of the concrete mutation executor. Returning
+/// an error prevents executor work and produces an auditable failed run.
+#[async_trait]
+pub trait ConsolidationApplyGate: Send + Sync {
+    /// Authorizes the planned operations for this request.
+    async fn authorize(
+        &self,
+        request: &ConsolidationRequest,
+        plan: &ConsolidationPlan,
+    ) -> CoreResult<()>;
+}
+
+/// Apply gate that allows all validated plans.
+///
+/// This is the default so existing embedders can keep using the service while
+/// stricter adapters inject policy-aware gates.
+#[derive(Debug, Default)]
+pub struct AllowAllConsolidationApplyGate;
+
+#[async_trait]
+impl ConsolidationApplyGate for AllowAllConsolidationApplyGate {
+    async fn authorize(
+        &self,
+        _request: &ConsolidationRequest,
+        _plan: &ConsolidationPlan,
+    ) -> CoreResult<()> {
+        Ok(())
+    }
+}
+
 /// Mutating consolidation service protected by pre/post evaluation gates.
 ///
 /// This service refuses ambiguous mutation requests, runs the protected fixture
@@ -81,6 +114,7 @@ pub struct GatedConsolidationService {
     evaluator: Arc<dyn EvaluationRunner>,
     protected_fixture: EvaluationFixture,
     executor: Arc<dyn ConsolidationMutationExecutor>,
+    apply_gate: Arc<dyn ConsolidationApplyGate>,
 }
 
 impl GatedConsolidationService {
@@ -102,7 +136,23 @@ impl GatedConsolidationService {
             evaluator,
             protected_fixture,
             executor,
+            apply_gate: Arc::new(AllowAllConsolidationApplyGate),
         }
+    }
+
+    /// Replaces the default allow-all apply gate with an explicit policy gate.
+    pub fn with_apply_gate(mut self, apply_gate: Arc<dyn ConsolidationApplyGate>) -> Self {
+        self.apply_gate = apply_gate;
+        self
+    }
+}
+
+impl GatedConsolidationService {
+    fn planned_tasks(plan: &ConsolidationPlan) -> Vec<ConsolidationTaskKind> {
+        plan.operations
+            .iter()
+            .map(|operation| operation.task.clone())
+            .collect()
     }
 }
 
@@ -112,7 +162,8 @@ impl ConsolidationService for GatedConsolidationService {
         validate_mutating_request(&request)?;
 
         let started_at = self.clock.now();
-        let planned_tasks = planned_task_kinds(&request);
+        let plan = build_plan(&request, started_at);
+        let planned_tasks = Self::planned_tasks(&plan);
         let pre_report = self
             .evaluator
             .run_fixture(self.protected_fixture.clone())
@@ -137,6 +188,16 @@ impl ConsolidationService for GatedConsolidationService {
                 request,
                 started_at,
                 pre_errors,
+                vec![pre_task],
+                Some(empty_stats()),
+            ));
+        }
+
+        if let Err(error) = self.apply_gate.authorize(&request, &plan).await {
+            return Ok(self.failed_run(
+                request,
+                started_at,
+                vec![apply_gate_error(error)],
                 vec![pre_task],
                 Some(empty_stats()),
             ));
@@ -258,6 +319,24 @@ fn executor_error(error: CoreError) -> ConsolidationError {
         target_type: None,
         target_id: None,
         recoverable: true,
+    }
+}
+
+fn apply_gate_error(error: CoreError) -> ConsolidationError {
+    let (code, recoverable) = match error {
+        CoreError::PolicyDenied { .. } => ("policy_denied", false),
+        CoreError::Conflict { .. } => ("apply_gate_conflict", true),
+        CoreError::InvalidRequest { .. } => ("apply_gate_invalid_request", false),
+        CoreError::NotFound { .. } => ("apply_gate_missing_target", true),
+        CoreError::Adapter { .. } => ("apply_gate_adapter_failed", true),
+    };
+    ConsolidationError {
+        task: None,
+        code: code.to_owned(),
+        message: error.to_string(),
+        target_type: None,
+        target_id: None,
+        recoverable,
     }
 }
 

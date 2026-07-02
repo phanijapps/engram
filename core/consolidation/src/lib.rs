@@ -15,8 +15,9 @@ use engram_eval::{EvaluationReport, EvaluationRunner};
 use engram_runtime::{Clock, CoreError, CoreResult, IdGenerator};
 
 pub use consolidation::{
-    ConsolidationMutationExecutor, ConsolidationMutationOutcome, DryRunConsolidationService,
-    GatedConsolidationService,
+    AllowAllConsolidationApplyGate, ConsolidationApplyGate, ConsolidationMutationExecutor,
+    ConsolidationMutationOutcome, DryRunConsolidationService, GatedConsolidationService,
+    plan_consolidation_operations,
 };
 
 /// Runs auditable consolidation cycles over memory and knowledge state.

@@ -125,7 +125,7 @@ without switching AgentZero to Engram.
 - [x] Taxonomy supports governed `Discovery -> Proposal -> Validation -> Merge`
   with provenance, validation findings, cross-scheme mappings, advisory semantic
   drift reporting, and no autonomous merge by default.
-- [ ] Consolidation is a separately owned pipeline with explicit inputs,
+- [x] Consolidation is a separately owned pipeline with explicit inputs,
   dry-run output, gated apply, conflict handling, provenance, policy checks, and
   evaluation reports for memory-to-fact, memory-to-belief, hierarchy, taxonomy,
   and graph candidate operations.

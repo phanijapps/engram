@@ -11,6 +11,8 @@ mod service;
 mod validation;
 
 pub use mutating::{
-    ConsolidationMutationExecutor, ConsolidationMutationOutcome, GatedConsolidationService,
+    AllowAllConsolidationApplyGate, ConsolidationApplyGate, ConsolidationMutationExecutor,
+    ConsolidationMutationOutcome, GatedConsolidationService,
 };
+pub use planner::plan_consolidation_operations;
 pub use service::DryRunConsolidationService;

@@ -171,6 +171,8 @@ Operations
   RetrieveRequest
   ForgetRequest
   ConsolidationRequest
+  ConsolidationPlan
+  ConsolidationPlannedOperation
   ConsolidationRun
   ConsolidationTaskResult
   IngestRequest
@@ -1867,6 +1869,56 @@ Fields:
 | `strategy` | no | enum | `manual`, `time_window`, `event_count`, `retrieval_failure`, `hybrid` |
 | `dryRun` | no | boolean | Whether to produce proposals only |
 
+### ConsolidationPlan
+
+Deterministic operation plan for a consolidation request. Plans are produced
+before dry-run rendering or mutating apply so hosts can inspect which candidate
+operations would run without invoking a scheduler.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `scope` | yes | Scope | Consolidation scope |
+| `requester` | yes | Requester | Caller context |
+| `strategy` | no | ConsolidationStrategy | Requested strategy |
+| `dryRun` | yes | boolean | Whether the plan is non-mutating |
+| `plannedAt` | yes | Timestamp | Planning timestamp |
+| `operations` | no | ConsolidationPlannedOperation[] | Ordered operation candidates |
+
+### ConsolidationPlannedOperation
+
+One candidate operation inside a consolidation plan.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable identifier within the plan |
+| `kind` | yes | ConsolidationOperationKind | Operation kind |
+| `task` | yes | ConsolidationTaskKind | Run task emitted when executed or rendered |
+| `description` | yes | string | Human-readable operation summary |
+| `mutates` | yes | boolean | Whether apply may change durable state |
+| `requiresPolicy` | yes | boolean | Whether apply must pass a policy gate |
+| `requiresEvaluation` | yes | boolean | Whether apply must pass evaluation gates |
+| `inputRefs` | no | EvidenceRef[] | Candidate inputs |
+| `outputRefs` | no | EvidenceRef[] | Expected or produced outputs |
+
+### ConsolidationOperationKind
+
+Enum:
+
+- `compaction`
+- `memory_to_fact`
+- `memory_to_belief`
+- `contradiction_review`
+- `hierarchy_candidate`
+- `taxonomy_candidate`
+- `graph_candidate`
+- `semantic_drift_review`
+- `decay_review`
+- `evaluation_gate`
+
 ### ConsolidationRun
 
 Auditable execution record for a consolidation cycle.
@@ -1940,12 +1992,14 @@ Fields:
 Enum:
 
 - `compaction`
+- `fact_extraction`
 - `memory_synthesis`
 - `belief_synthesis`
 - `belief_contradiction_detection`
 - `belief_propagation`
 - `hierarchy_build`
 - `taxonomy_evolution`
+- `graph_evolution`
 - `semantic_drift_detection`
 - `conflict_resolution`
 - `decay`
@@ -2247,6 +2301,8 @@ defer their schemas and storage until after the first vertical slice:
 - `HierarchyMembership`
 - `HierarchyRelation`
 - `HierarchyPath`
+- `ConsolidationPlan`
+- `ConsolidationPlannedOperation`
 - `ConsolidationRun`
 - `ConsolidationTaskResult`
 - `MemoryRole`

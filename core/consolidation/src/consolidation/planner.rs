@@ -6,10 +6,13 @@
 //! mutation policy.
 
 use engram_domain::{
-    ConsolidationError, ConsolidationRequest, ConsolidationStats, ConsolidationStrategy,
+    ConsolidationError, ConsolidationOperationKind, ConsolidationPlan,
+    ConsolidationPlannedOperation, ConsolidationRequest, ConsolidationStats, ConsolidationStrategy,
     ConsolidationTaskKind, ConsolidationTaskResult, ConsolidationTaskStatus, ConsolidationTrigger,
     Timestamp,
 };
+
+use crate::{CoreResult, consolidation::validation::validate_planning_request};
 
 /// Chooses the audit trigger that best explains why the dry-run was requested.
 ///
@@ -36,10 +39,21 @@ pub(crate) fn plan_tasks(
     request: &ConsolidationRequest,
     started_at: Timestamp,
 ) -> Vec<ConsolidationTaskResult> {
-    planned_task_kinds(request)
+    build_plan(request, started_at)
+        .operations
         .into_iter()
-        .map(|task| completed_dry_run_task(task, started_at))
+        .map(|operation| completed_dry_run_task(operation, started_at))
         .collect()
+}
+
+/// Builds a deterministic operation plan for callers that need to inspect a
+/// consolidation cycle before choosing dry-run rendering or mutating apply.
+pub fn plan_consolidation_operations(
+    request: &ConsolidationRequest,
+    planned_at: Timestamp,
+) -> CoreResult<ConsolidationPlan> {
+    validate_planning_request(request)?;
+    Ok(build_plan(request, planned_at))
 }
 
 /// Returns aggregate counters that prove the dry-run performed no mutations.
@@ -61,49 +75,161 @@ pub(crate) fn empty_stats() -> ConsolidationStats {
     }
 }
 
-/// Returns planned task kinds for a consolidation strategy without executing.
-///
-/// Mutating services use these kinds as executor input. Dry-run planning turns
-/// the same kinds into zero-mutation task reports.
-pub(crate) fn planned_task_kinds(request: &ConsolidationRequest) -> Vec<ConsolidationTaskKind> {
+pub(crate) fn build_plan(
+    request: &ConsolidationRequest,
+    planned_at: Timestamp,
+) -> ConsolidationPlan {
+    ConsolidationPlan {
+        scope: request.scope.clone(),
+        requester: request.requester.clone(),
+        strategy: request.strategy.clone(),
+        dry_run: !matches!(request.dry_run, Some(false)),
+        planned_at,
+        operations: operation_specs(request)
+            .into_iter()
+            .enumerate()
+            .map(|(index, spec)| planned_operation(index, spec))
+            .collect(),
+    }
+}
+
+fn operation_specs(request: &ConsolidationRequest) -> Vec<OperationSpec> {
     match request.strategy {
         Some(ConsolidationStrategy::TimeWindow) => {
             vec![
-                ConsolidationTaskKind::SemanticDriftDetection,
-                ConsolidationTaskKind::Decay,
+                OperationSpec::new(
+                    ConsolidationOperationKind::SemanticDriftReview,
+                    ConsolidationTaskKind::SemanticDriftDetection,
+                    "review taxonomy and graph candidates for semantic drift",
+                    true,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::DecayReview,
+                    ConsolidationTaskKind::Decay,
+                    "review expired or stale records for confidence decay",
+                    true,
+                ),
             ]
         }
         Some(ConsolidationStrategy::EventCount) => {
             vec![
-                ConsolidationTaskKind::Compaction,
-                ConsolidationTaskKind::MemorySynthesis,
+                OperationSpec::new(
+                    ConsolidationOperationKind::Compaction,
+                    ConsolidationTaskKind::Compaction,
+                    "compact high-volume episodic records into bounded summaries",
+                    true,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::MemoryToFact,
+                    ConsolidationTaskKind::FactExtraction,
+                    "extract candidate semantic facts from accumulated episodic memory",
+                    true,
+                ),
             ]
         }
         Some(ConsolidationStrategy::RetrievalFailure) => {
             vec![
-                ConsolidationTaskKind::Evaluation,
-                ConsolidationTaskKind::HierarchyBuild,
+                OperationSpec::new(
+                    ConsolidationOperationKind::EvaluationGate,
+                    ConsolidationTaskKind::Evaluation,
+                    "evaluate missed retrieval targets before proposing repair work",
+                    false,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::HierarchyCandidate,
+                    ConsolidationTaskKind::HierarchyBuild,
+                    "propose hierarchy candidates that improve failed retrieval paths",
+                    true,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::GraphCandidate,
+                    ConsolidationTaskKind::GraphEvolution,
+                    "propose graph edges that explain failed retrieval neighborhoods",
+                    true,
+                ),
             ]
         }
         Some(ConsolidationStrategy::Hybrid) => {
             vec![
-                ConsolidationTaskKind::Compaction,
-                ConsolidationTaskKind::BeliefSynthesis,
-                ConsolidationTaskKind::BeliefContradictionDetection,
-                ConsolidationTaskKind::HierarchyBuild,
-                ConsolidationTaskKind::Evaluation,
+                OperationSpec::new(
+                    ConsolidationOperationKind::Compaction,
+                    ConsolidationTaskKind::Compaction,
+                    "compact episodic records before durable synthesis",
+                    true,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::MemoryToFact,
+                    ConsolidationTaskKind::FactExtraction,
+                    "extract candidate semantic facts from episodic memory",
+                    true,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::MemoryToBelief,
+                    ConsolidationTaskKind::BeliefSynthesis,
+                    "synthesize belief candidates from supported semantic facts",
+                    true,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::ContradictionReview,
+                    ConsolidationTaskKind::BeliefContradictionDetection,
+                    "detect contradictions among new and existing belief candidates",
+                    true,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::HierarchyCandidate,
+                    ConsolidationTaskKind::HierarchyBuild,
+                    "propose hierarchy build candidates from consolidated records",
+                    true,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::TaxonomyCandidate,
+                    ConsolidationTaskKind::TaxonomyEvolution,
+                    "propose governed taxonomy changes with validation before merge",
+                    true,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::GraphCandidate,
+                    ConsolidationTaskKind::GraphEvolution,
+                    "propose knowledge graph relationships from consolidated facts",
+                    true,
+                ),
+                OperationSpec::new(
+                    ConsolidationOperationKind::EvaluationGate,
+                    ConsolidationTaskKind::Evaluation,
+                    "evaluate recall, leakage, ranking, and policy before apply",
+                    false,
+                ),
             ]
         }
-        Some(ConsolidationStrategy::Manual) | None => vec![ConsolidationTaskKind::Evaluation],
+        Some(ConsolidationStrategy::Manual) | None => vec![OperationSpec::new(
+            ConsolidationOperationKind::EvaluationGate,
+            ConsolidationTaskKind::Evaluation,
+            "evaluate the requested consolidation scope without scheduling mutations",
+            false,
+        )],
+    }
+}
+
+fn planned_operation(index: usize, spec: OperationSpec) -> ConsolidationPlannedOperation {
+    ConsolidationPlannedOperation {
+        id: format!("operation-{:02}", index + 1),
+        kind: spec.kind,
+        task: spec.task,
+        description: spec.description.to_owned(),
+        mutates: spec.mutates,
+        requires_policy: spec.mutates,
+        requires_evaluation: true,
+        input_refs: Vec::new(),
+        output_refs: Vec::new(),
     }
 }
 
 fn completed_dry_run_task(
-    task: ConsolidationTaskKind,
+    operation: ConsolidationPlannedOperation,
     timestamp: Timestamp,
 ) -> ConsolidationTaskResult {
     ConsolidationTaskResult {
-        task,
+        task: operation.task,
         status: ConsolidationTaskStatus::Completed,
         started_at: timestamp,
         completed_at: Some(timestamp),
@@ -114,5 +240,28 @@ fn completed_dry_run_task(
         model_calls: Some(0),
         errors: Vec::<ConsolidationError>::new(),
         output_refs: Vec::new(),
+    }
+}
+
+struct OperationSpec {
+    kind: ConsolidationOperationKind,
+    task: ConsolidationTaskKind,
+    description: &'static str,
+    mutates: bool,
+}
+
+impl OperationSpec {
+    fn new(
+        kind: ConsolidationOperationKind,
+        task: ConsolidationTaskKind,
+        description: &'static str,
+        mutates: bool,
+    ) -> Self {
+        Self {
+            kind,
+            task,
+            description,
+            mutates,
+        }
     }
 }

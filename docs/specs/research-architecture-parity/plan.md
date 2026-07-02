@@ -78,6 +78,11 @@ research requires separate interfaces, not specific database brands.
   validates proposals for duplicate labels, missing relation endpoints,
   broader/narrower cycles, and reviewer-gated merge; SQLite taxonomy tests prove
   validated proposals merge into the durable store without autonomous merge.
+- 2026-07-02: T7 complete at the core pipeline boundary. `engram-domain` now
+  documents consolidation plans and planned operations; `engram-consolidation`
+  produces deterministic memory-to-fact, memory-to-belief, hierarchy, taxonomy,
+  graph, compaction, and evaluation-gate operation plans; mutating runs now
+  pass an injectable apply/policy gate between pre-evaluation and executor work.
 
 ## Construction Tests
 

@@ -132,12 +132,14 @@ pub enum ConsolidationRunStatus {
 #[serde(rename_all = "snake_case")]
 pub enum ConsolidationTaskKind {
     Compaction,
+    FactExtraction,
     MemorySynthesis,
     BeliefSynthesis,
     BeliefContradictionDetection,
     BeliefPropagation,
     HierarchyBuild,
     TaxonomyEvolution,
+    GraphEvolution,
     SemanticDriftDetection,
     ConflictResolution,
     Decay,
@@ -145,6 +147,50 @@ pub enum ConsolidationTaskKind {
     OrphanArchival,
     ProcedureExtraction,
     Evaluation,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConsolidationOperationKind {
+    Compaction,
+    MemoryToFact,
+    MemoryToBelief,
+    ContradictionReview,
+    HierarchyCandidate,
+    TaxonomyCandidate,
+    GraphCandidate,
+    SemanticDriftReview,
+    DecayReview,
+    EvaluationGate,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsolidationPlannedOperation {
+    pub id: String,
+    pub kind: ConsolidationOperationKind,
+    pub task: ConsolidationTaskKind,
+    pub description: String,
+    pub mutates: bool,
+    pub requires_policy: bool,
+    pub requires_evaluation: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub input_refs: Vec<EvidenceRef>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub output_refs: Vec<EvidenceRef>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsolidationPlan {
+    pub scope: Scope,
+    pub requester: Requester,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub strategy: Option<ConsolidationStrategy>,
+    pub dry_run: bool,
+    pub planned_at: Timestamp,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub operations: Vec<ConsolidationPlannedOperation>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

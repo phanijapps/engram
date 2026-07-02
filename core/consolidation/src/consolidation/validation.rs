@@ -36,6 +36,10 @@ pub(crate) fn validate_mutating_request(request: &ConsolidationRequest) -> CoreR
     Ok(())
 }
 
+pub(crate) fn validate_planning_request(request: &ConsolidationRequest) -> CoreResult<()> {
+    validate_request_shape(request)
+}
+
 fn validate_request_shape(request: &ConsolidationRequest) -> CoreResult<()> {
     if request.scope.tenant.trim().is_empty() {
         return invalid("scope.tenant is required");

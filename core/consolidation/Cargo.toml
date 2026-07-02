@@ -11,3 +11,7 @@ engram-domain = { path = "../domain" }
 engram-eval = { path = "../eval" }
 engram-runtime = { path = "../runtime" }
 serde_json.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true
+futures.workspace = true

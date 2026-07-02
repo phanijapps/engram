@@ -63,6 +63,11 @@ research requires separate interfaces, not specific database brands.
   memory service now has role fixtures covering write, retrieve, archive forget,
   and eval-report recall for working, episodic, semantic, and procedural
   records.
+- 2026-07-02: T4 complete at the storage-neutral retrieval layer.
+  `engram-retrieval` now has a mode-aware `RetrievalRouter` for temporal, cue,
+  hierarchical, semantic, graph, keyword, and vector-as-semantic routes, with
+  unsupported-mode/source-error reporting and composition tests for budget
+  omissions and degraded source failures.
 
 ## Construction Tests
 

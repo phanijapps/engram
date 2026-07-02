@@ -112,7 +112,7 @@ without switching AgentZero to Engram.
 - [x] Domain and contract docs define explicit working, episodic, semantic, and
   procedural memory roles, with storage-neutral Rust ports or existing domain
   mappings for each role.
-- [ ] Retrieval supports temporal, cue-based, hierarchical, semantic, graph, and
+- [x] Retrieval supports temporal, cue-based, hierarchical, semantic, graph, and
   vector modes through `engram-retrieval` without making retrieval fusion call
   storage adapters, embedding providers, policy engines, or model rerankers
   directly.

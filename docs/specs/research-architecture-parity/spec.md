@@ -129,7 +129,7 @@ without switching AgentZero to Engram.
   dry-run output, gated apply, conflict handling, provenance, policy checks, and
   evaluation reports for memory-to-fact, memory-to-belief, hierarchy, taxonomy,
   and graph candidate operations.
-- [ ] Belief valid-time behavior is complete for live reads, stale state,
+- [x] Belief valid-time behavior is complete for live reads, stale state,
   supersession, retraction, source references, contradiction idempotency,
   contradiction resolution, and embedding/ranking helpers; record-time history is
   either implemented behind an accepted contract or explicitly rejected at the

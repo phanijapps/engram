@@ -203,6 +203,40 @@ fn lifecycle_methods_and_source_reference_queries_match_live_beliefs() {
 }
 
 #[test]
+fn source_reference_queries_respect_source_valid_interval() {
+    let store = SqlBeliefStore::open_in_memory().expect("open store");
+    let mut belief = belief("belief-source-window", "tenant-a", "svc-a", "up", 0.7);
+    belief.valid_from = Some(ts(10));
+    belief.sources = vec![BeliefSource {
+        target_type: BeliefSourceTargetType::Memory,
+        target_id: "fact-1".to_owned(),
+        weight: None,
+        confidence: None,
+        valid_from: Some(ts(12)),
+        valid_until: Some(ts(20)),
+    }];
+    block_on(store.put_belief(belief)).expect("put");
+
+    let live = block_on(store.beliefs_referencing_source(BeliefReferenceQuery {
+        scope: scope("tenant-a"),
+        source_type: BeliefSourceTargetType::Memory,
+        source_id: "fact-1".to_owned(),
+        valid_at: Some(ts(15)),
+    }))
+    .expect("live source refs");
+    assert_eq!(live.len(), 1);
+
+    let expired = block_on(store.beliefs_referencing_source(BeliefReferenceQuery {
+        scope: scope("tenant-a"),
+        source_type: BeliefSourceTargetType::Memory,
+        source_id: "fact-1".to_owned(),
+        valid_at: Some(ts(20)),
+    }))
+    .expect("expired source refs");
+    assert!(expired.is_empty());
+}
+
+#[test]
 fn beliefs_round_trip_and_list_scoped() {
     let store = SqlBeliefStore::open_in_memory().expect("open store");
     block_on(store.put_belief(belief("belief-1", "tenant-a", "svc-a", "up", 0.9))).expect("put");

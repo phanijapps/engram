@@ -60,10 +60,11 @@ pub fn belief_references_source(
 ) -> bool {
     is_live_belief(belief)
         && live_at(belief.valid_from, belief.valid_until, as_of)
-        && belief
-            .sources
-            .iter()
-            .any(|source| source.target_type == *source_type && source.target_id == source_id)
+        && belief.sources.iter().any(|source| {
+            source.target_type == *source_type
+                && source.target_id == source_id
+                && live_at(source.valid_from, source.valid_until, as_of)
+        })
 }
 
 #[cfg(test)]
@@ -192,6 +193,16 @@ mod tests {
             &BeliefSourceTargetType::Memory,
             "fact-1",
             ts(9)
+        ));
+
+        let mut source_expired = original;
+        source_expired.sources[0].valid_from = Some(ts(10));
+        source_expired.sources[0].valid_until = Some(ts(20));
+        assert!(!belief_references_source(
+            &source_expired,
+            &BeliefSourceTargetType::Memory,
+            "fact-1",
+            ts(20)
         ));
     }
 }

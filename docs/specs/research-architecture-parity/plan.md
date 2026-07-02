@@ -83,6 +83,12 @@ research requires separate interfaces, not specific database brands.
   produces deterministic memory-to-fact, memory-to-belief, hierarchy, taxonomy,
   graph, compaction, and evaluation-gate operation plans; mutating runs now
   pass an injectable apply/policy gate between pre-evaluation and executor work.
+- 2026-07-02: T8 complete. `engram-belief` already owned valid-time predicates,
+  lifecycle transitions, contradiction canonicalization, and embedding ranking
+  helpers; this slice tightened source-reference validity so source links obey
+  their own valid intervals, and SQLite belief tests cover live reads, stale
+  state, supersede/retract, record-time rejection, contradiction resolution, and
+  source interval filtering.
 
 ## Construction Tests
 

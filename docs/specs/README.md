@@ -69,6 +69,11 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   define the AgentZero-side `zbot-engram-adapter` provider contract, parity
   fixtures, gateway wiring, migration dry-run, and rollout gates for running
   AgentZero memory jobs against Engram-backed storage and operations.
+- [`research-architecture-parity`](research-architecture-parity/spec.md):
+  close the remaining gaps between `docs/research/` and implementation so
+  Engram reaches research-architecture parity as a pristine local Rust library
+  and TypeScript integration surface, excluding the actual AgentZero provider
+  cutover.
 
 ## Existing Slices
 

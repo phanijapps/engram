@@ -38,5 +38,6 @@ else
 fi
 
 .codex/hooks/check-code-docs.sh
+.codex/hooks/check-research-parity-docs.sh
 
 echo "documentation checks passed"

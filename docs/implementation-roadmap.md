@@ -945,3 +945,12 @@ the demo runs end-to-end — deterministic + LLM-enhanced ingestion, an IT-org
 ontology + taxonomy, belief/contradiction with bi-temporal display, and Q&A over
 knowledge + memory. The only path not exercised without creds is the live LLM
 call (ollama cloud); every other path is validated + smoke-tested.
+
+Research architecture parity — `docs/specs/research-architecture-parity`
+(`PHASE64`): close the remaining gap between `docs/research/` and current
+implementation, then implement the missing research-backed library capabilities
+as focused slices. AgentZero provider cutover remains out of scope; Engram must
+still expose adapter-readiness probes for scope mapping, valid-time behavior,
+capability reporting, and migration diagnostics.
+
+- `PHASE64` — Research architecture parity. **(in progress)**

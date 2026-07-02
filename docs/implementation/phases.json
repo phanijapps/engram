@@ -446,5 +446,12 @@
     "description": "RFC 0004 Query + answer over knowledge and memory (LLM synthesis + grounded citations)",
     "spec_file": "docs/specs/qa-over-knowledge/spec.md",
     "plan_file": "docs/specs/qa-over-knowledge/plan.md"
+  },
+  {
+    "phase_id": "PHASE64",
+    "status": "IN_PROGRESS",
+    "description": "Research architecture parity: close docs/research gaps against implementation and add executable parity guards",
+    "spec_file": "docs/specs/research-architecture-parity/spec.md",
+    "plan_file": "docs/specs/research-architecture-parity/plan.md"
   }
 ]

@@ -41,10 +41,11 @@ research and implementation contract live in
 [`zbot-engram-belief-bitemporal-cutover.md`](zbot-engram-belief-bitemporal-cutover.md)
 and
 [`docs/specs/zbot-engram-belief-bitemporal-cutover`](../specs/zbot-engram-belief-bitemporal-cutover/spec.md).
-The key finding is that Agent Zero currently exposes valid-time `as_of`
-behavior, while Engram's shipped belief SQLite adapter stores valid intervals
-for display only. Cutover therefore requires adapter-owned valid-time filtering
-or an explicitly accepted Engram repository extension before the provider switch.
+The current implementation note is that Agent Zero exposes valid-time `as_of`
+behavior and Engram's shipped belief SQLite adapter now supports valid-time
+belief reads. The remaining temporal gap is record-time history: Engram rejects
+record-time belief history for the current SQLite store rather than pretending
+current rows are a full bitemporal audit log.
 
 The broader build-and-integrate contract for Agent Zero is
 [`docs/specs/agentzero-engram-adapter-integration`](../specs/agentzero-engram-adapter-integration/spec.md).
@@ -438,10 +439,13 @@ should be proposed only after fixtures prove an Agent Zero behavior cannot be
 represented without losing semantics.
 
 0. **Belief valid-time reads:** Agent Zero's `BeliefStore::get_belief` is a
-   valid-time `as_of` query. Engram's current belief SQLite adapter persists
-   `valid_from` / `valid_until` but does not implement as-of reads. Implement
-   compatibility filtering in `zbot-engram-adapter` first; propose an Engram
-   repository extension only if fixtures show adapter filtering is insufficient.
+   valid-time `as_of` query. Engram's current belief SQLite adapter implements
+   valid-time reads over `valid_from` / `valid_until` and rejects record-time
+   history because it stores current rows, not historical versions. Keep
+   AgentZero API projection, ID translation, embedding-byte compatibility, and
+   scheduler integration in `zbot-engram-adapter`; propose a new Engram
+   repository extension only if fixtures prove the library still cannot preserve
+   a required behavior.
 1. **Fact truth interval:** map Agent Zero `valid_from` / `valid_until` into
    Engram assertions or adapter metadata first. Do not add top-level Engram
    memory fields unless compatibility fixtures prove assertion mapping is

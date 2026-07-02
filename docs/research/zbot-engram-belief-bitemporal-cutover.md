@@ -10,17 +10,18 @@
 The cutover should be adapter-first. AgentZero already has a stable memory API,
 UI wire shape, sleep-cycle scheduler, and store traits. Engram already has
 belief, contradiction, source, scope, provenance, and valid interval fields.
-The missing piece is not a new Engram ontology; it is a compatibility adapter
-that implements AgentZero's store traits over Engram while preserving
-AgentZero's valid-time query behavior and lifecycle rules.
+Engram now also has storage-neutral valid-time belief query/lifecycle ports and
+SQLite-backed valid-time `as_of` reads. The missing piece is not a new Engram
+ontology; it is a compatibility adapter that implements AgentZero's store traits
+over Engram while preserving AgentZero's public API and UI contracts.
 
-The highest-risk gap is temporal behavior. AgentZero's `BeliefStore::get_belief`
-is an `as_of` valid-time query. Engram's current belief SQLite adapter stores
-`valid_from` / `valid_until` in JSON but explicitly treats them as display-only:
-there is no transaction-time field and no as-of query behavior. The cutover
-therefore needs either an AgentZero-side compatibility query layer over Engram
-records or a deliberately accepted Engram repository extension. The first
-implementation should keep that logic in `zbot-engram-adapter`.
+Current implementation note: AgentZero's `BeliefStore::get_belief` is still an
+`as_of` valid-time query, and Engram's `BeliefRepository::get_belief` now
+supports valid-time filters over `valid_from` / `valid_until`. The remaining
+temporal gap is record-time history, not valid-time lookup. Engram's SQLite
+belief adapter stores current rows, so it rejects record-time history queries
+instead of pretending `created_at` / `updated_at` are a full bitemporal audit
+log.
 
 ## Evidence From AgentZero
 
@@ -91,13 +92,15 @@ Engram has the right domain vocabulary for the cutover:
   derived stances over evidence, not source truth, and includes valid intervals,
   stale/supersession semantics, provenance, and source evidence.
 
-The current Engram SQLite belief adapter is durable but not AgentZero-compatible
-by itself:
+The current Engram SQLite belief adapter is durable and supports the
+valid-time subset AgentZero needs, but it is still not a complete AgentZero
+provider by itself:
 
 - [`adapters/orchestration/belief-sqlite/src/service.rs`](../../adapters/orchestration/belief-sqlite/src/service.rs)
-  persists belief and contradiction payloads as JSON with scope columns.
-- That same file documents that `valid_from` / `valid_until` are stored and
-  surfaced for display only, with no `transaction_time` and no as-of queries.
+  persists belief and contradiction payloads as JSON with scope columns and
+  implements valid-time `as_of` reads over `valid_from` / `valid_until`.
+- That same file rejects record-time history queries because it stores current
+  rows, not historical versions.
 - Detection is advisory and simple: active beliefs on the same subject with
   differing content produce a logical contradiction. AgentZero's detector is
   budgeted, LLM-judged, and scheduled by the sleep worker.

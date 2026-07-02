@@ -141,6 +141,7 @@ Hierarchy
   HierarchyRelation
   HierarchyBuildConfig
   HierarchyBuildRecord
+  HierarchyBuildStatus
   HierarchyPath
 
 Policy and Provenance
@@ -1396,7 +1397,7 @@ Fields:
 | `id` | yes | string | Stable build id |
 | `scope` | yes | Scope | Build scope |
 | `config` | yes | HierarchyBuildConfig | Configuration used |
-| `status` | yes | enum | `running`, `completed`, `completed_with_errors`, `failed`, `cancelled` |
+| `status` | yes | HierarchyBuildStatus | Build lifecycle state |
 | `inputRefs` | no | EvidenceRef[] | Memories, chunks, entities, or concepts considered |
 | `outputNodeIds` | no | HierarchyNodeId[] | Nodes produced or updated |
 | `outputRelationIds` | no | string[] | Relations produced or updated |
@@ -1405,6 +1406,16 @@ Fields:
 | `provenance` | yes | Provenance | Builder method, actor, and inputs |
 | `startedAt` | yes | Timestamp | Build start time |
 | `completedAt` | no | Timestamp | Build completion time |
+
+### HierarchyBuildStatus
+
+Enum:
+
+- `running`
+- `completed`
+- `completed_with_errors`
+- `failed`
+- `cancelled`
 
 Rules:
 

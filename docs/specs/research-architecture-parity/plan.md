@@ -68,6 +68,11 @@ research requires separate interfaces, not specific database brands.
   hierarchical, semantic, graph, keyword, and vector-as-semantic routes, with
   unsupported-mode/source-error reporting and composition tests for budget
   omissions and degraded source failures.
+- 2026-07-02: T5 complete. `engram-domain` now has typed
+  `HierarchyBuildRecord` / `HierarchyBuildStatus`, `engram-hierarchy` validates
+  parentage before build outputs are accepted, and the SQLite hierarchy fixture
+  persists explainable raw-event, episode, schema, and domain layers with build
+  metadata and bounded path navigation.
 
 ## Construction Tests
 

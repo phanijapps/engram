@@ -5,10 +5,13 @@
 //! shared navigation traversal adapters reuse.
 
 pub mod navigation;
+mod validation;
 
 use async_trait::async_trait;
 use engram_domain::*;
 use engram_runtime::CoreResult;
+
+pub use validation::validate_hierarchy_parentage;
 
 /// Persistence and navigation port for hierarchy structures.
 ///

@@ -119,7 +119,7 @@ without switching AgentZero to Engram.
 - [ ] SQLite-backed memory, knowledge, hierarchy, belief, taxonomy, graph, and
   vector fixtures prove the local conformance path without any active broad
   in-memory adapter.
-- [ ] Hierarchy has durable construction and navigation behavior with provenance,
+- [x] Hierarchy has durable construction and navigation behavior with provenance,
   algorithm metadata, and eval coverage for raw event, episode, schema, and
   domain-level navigation.
 - [ ] Taxonomy supports governed `Discovery -> Proposal -> Validation -> Merge`

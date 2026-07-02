@@ -7,8 +7,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    EmbeddingRef, EvidenceRef, HierarchyNodeId, Metadata, Policy, Provenance, RetrievalTargetType,
-    Scope, Timestamp,
+    ConsolidationError, EmbeddingRef, EvidenceRef, HierarchyNodeId, Metadata, Policy, Provenance,
+    RetrievalTargetType, Scope, Timestamp,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,6 +125,45 @@ pub struct HierarchyBuildConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_budget: Option<u32>,
     pub created_at: Timestamp,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HierarchyBuildStatus {
+    Running,
+    Completed,
+    CompletedWithErrors,
+    Failed,
+    Cancelled,
+}
+
+/// Auditable record for one hierarchy construction run.
+///
+/// This draft extension model documents builder inputs and outputs without
+/// prescribing a storage table or build algorithm. Adapters may persist it
+/// directly later; today nodes and relations carry enough provenance to link
+/// back to a build record id.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HierarchyBuildRecord {
+    pub id: String,
+    pub scope: Scope,
+    pub config: HierarchyBuildConfig,
+    pub status: HierarchyBuildStatus,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub input_refs: Vec<EvidenceRef>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub output_node_ids: Vec<HierarchyNodeId>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub output_relation_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stats: Option<Metadata>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub errors: Vec<ConsolidationError>,
+    pub provenance: Provenance,
+    pub started_at: Timestamp,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<Timestamp>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

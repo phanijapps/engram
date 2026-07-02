@@ -35,7 +35,7 @@ Apply this loop to every feature slice.
 Required checks before a slice is considered done:
 
 ```bash
-python3 scripts/validate_contracts.py
+python3 tools/scripts/validate_contracts.py
 .codex/hooks/check-contracts.sh
 .codex/hooks/check-docs.sh
 .codex/hooks/pre-implementation-check.sh

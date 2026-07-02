@@ -50,13 +50,13 @@ fields carry the expansion signal.
 
 ### Component / module decomposition
 
-- `adapters/memory/inmem/src/hierarchy_retrieval.rs` owns expansion lookup,
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) owns expansion lookup,
   memory candidate conversion, deduplication, and hierarchy context annotation.
-- `adapters/memory/inmem/src/retrieval.rs` snapshots memory records and
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) snapshots memory records and
   hierarchy nodes, invokes expansion before hierarchy annotation, and keeps
   final fusion/truncation unchanged.
 - Tests live in
-  `adapters/memory/inmem/tests/hierarchy_retrieval_expansion.rs`.
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`).
 
 ### Failure, edge cases & resilience
 

@@ -22,7 +22,7 @@ Dispatch `RetrievalMode::Temporal` and `RetrievalMode::Cue` in the in-memory ada
 
 ## Testing Strategy
 
-- TDD: new tests under `adapters/memory/inmem/tests/` — temporal recall (within window / outside window / no window), cue recall (each `CueOperator`, weighted), combined `Keyword + Temporal + Cue`, and a policy/scope denial still omits. The existing suite is the regression gate.
+- TDD: new tests under the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) — temporal recall (within window / outside window / no window), cue recall (each `CueOperator`, weighted), combined `Keyword + Temporal + Cue`, and a policy/scope denial still omits. The existing suite is the regression gate.
 - Single adversarial pass (user preference); a Blocker earns one re-review.
 
 ## Slices

@@ -76,7 +76,7 @@ No portable v1 schema change is part of this slice. Existing
 - `core/retrieval/src/composer.rs`: storage-neutral composition from
   candidate groups to `ContextPayload`.
 - `core/retrieval/src/weighted.rs`: weighted fusion implementation.
-- `adapters/memory/inmem/src/retrieval.rs`: quick fixture candidate
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`): quick fixture candidate
   extraction only, calling the retrieval composer for shared fan-in and fusion.
 - `adapters/retrieval/sqlite-vec/src/retrieval.rs`: vector index implementation
   imports retrieval traits directly from `engram-retrieval`.
@@ -183,11 +183,7 @@ store crates.
 
 **Depends on:** T2
 
-**Touches:** `adapters/memory/inmem/src/retrieval.rs`,
-`adapters/memory/inmem/src/service.rs`,
-`adapters/memory/inmem/tests/retrieve_context.rs`,
-`adapters/memory/inmem/tests/knowledge_retrieval.rs`,
-`adapters/memory/inmem/tests/retrieval_indexes.rs`
+**Touches:** retired memory in-memory adapter files (see `docs/specs/retire-memory-inmem/spec.md`)
 
 **Tests:**
 - `cargo test -p engram-store-memory --test retrieve_context` verifies memory
@@ -211,13 +207,13 @@ store crates.
 
 **Depends on:** T1-T3
 
-**Touches:** `adapters/memory/inmem/**/*.rs`,
+**Touches:** the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`),
 `adapters/retrieval/sqlite-vec/**/*.rs`, `core/retrieval/**/*.rs`,
 `docs/arch_divergence.md`
 
 **Tests:**
 - `cargo check --workspace` verifies compile-time compatibility for AC6.
-- `rg -n "engram_core::.*Retrieval(Index|Fusion)" adapters/memory/inmem adapters/retrieval/sqlite-vec`
+- `rg -n "engram_core::.*Retrieval(Index|Fusion)" adapters/retrieval/sqlite-vec core/retrieval`
   returns no production imports and verifies AC5 and AC6.
 
 **Approach:**

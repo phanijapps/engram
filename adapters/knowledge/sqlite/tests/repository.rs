@@ -65,6 +65,40 @@ fn graph(graph_id: &str, tenant: &str) -> KnowledgeGraph {
 }
 
 #[test]
+fn graph_round_trip_preserves_metadata_and_scope() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let graph = KnowledgeGraph {
+        id: Id::from("graph-metadata"),
+        scope: scope("tenant-a"),
+        name: "Code Graph".to_owned(),
+        uri: Some("urn:graph:code".to_owned()),
+        version: Some("1.0.0".to_owned()),
+        ontology_refs: vec![OntologyRef {
+            id: Some(Id::from("ontology-1")),
+            uri: Some("urn:ontology:code".to_owned()),
+            version: Some("1.0.0".to_owned()),
+        }],
+        policy: policy(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    };
+
+    let stored = block_on(store.put_graph(graph.clone())).expect("put graph");
+    let visible = block_on(store.get_graph(&graph.id, &scope("tenant-a"))).expect("get graph");
+    let hidden = block_on(store.get_graph(&graph.id, &scope("tenant-b"))).expect("get graph");
+
+    assert_eq!(stored.id, graph.id);
+    let visible = visible.expect("visible graph");
+    assert_eq!(visible.name, "Code Graph");
+    assert_eq!(visible.uri.as_deref(), Some("urn:graph:code"));
+    assert_eq!(visible.version.as_deref(), Some("1.0.0"));
+    assert_eq!(visible.ontology_refs, graph.ontology_refs);
+    assert!(hidden.is_none());
+}
+
+#[test]
 fn round_trips_scoped_graph_entities_and_neighbors() {
     let store = SqlKnowledgeStore::open_in_memory().expect("open store");
     let graph_id = Id::from("graph-1");

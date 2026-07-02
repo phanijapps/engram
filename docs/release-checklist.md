@@ -14,7 +14,7 @@ It does not publish crates, npm packages, GitHub Releases, or tags.
 - `cargo test --workspace`
 - `cargo check -p engram-store-vector --features fastembed-tests --tests`
 - `cargo clippy -p engram-store-vector --features fastembed-tests --tests -- -D warnings`
-- `python3 scripts/validate_contracts.py`
+- `python3 tools/scripts/validate_contracts.py`
 - `.codex/hooks/check-contracts.sh`
 - `.codex/hooks/check-docs.sh`
 - `pnpm run contracts:check-generated`

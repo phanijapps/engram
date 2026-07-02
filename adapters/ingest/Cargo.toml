@@ -31,6 +31,5 @@ tree-sitter-sfapex = "3.0"
 tree-sitter-typescript = "0.23"
 
 [dev-dependencies]
-engram-store-knowledge-memory = { path = "../knowledge/inmem" }
-engram-store-memory = { path = "../memory/inmem" }
+engram-store-knowledge-sqlite = { path = "../knowledge/sqlite" }
 futures.workspace = true

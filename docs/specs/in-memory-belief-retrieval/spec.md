@@ -79,6 +79,6 @@ returned only when their scope, lifecycle, policy, and filters allow retrieval.
   `core/domain/src/belief.rs`).
 - Technical: the in-memory retrieval path already fuses memory and knowledge
   candidates through `RetrievalFusion` before final truncation (source:
-  `adapters/memory/inmem/src/retrieval.rs`).
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Process: belief results must remain distinct from source truth (source:
   `docs/domain-data-model.md`).

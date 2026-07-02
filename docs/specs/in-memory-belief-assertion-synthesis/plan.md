@@ -49,11 +49,11 @@ contract is introduced.
 
 ### Component / module decomposition
 
-- `adapters/memory/inmem/src/consolidation/belief_synthesis.rs` owns
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) owns
   assertion-to-belief mapping and event creation.
-- `adapters/memory/inmem/src/consolidation/mod.rs` only routes the planned
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) only routes the planned
   task kind to the focused module.
-- Tests live in `adapters/memory/inmem/tests/consolidation_belief_synthesis.rs`.
+- Tests live in the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`).
 
 ### Failure, edge cases & resilience
 

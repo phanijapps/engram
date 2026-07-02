@@ -21,39 +21,9 @@ use the implementation roadmap as the spec-driven execution loop.
 - Keep source-grounded knowledge ingestion deterministic and separate from
   memory records.
 - Keep sqlite-vec vector tests available without making embeddings canonical.
-- Keep hierarchy navigation scoped and provenance-preserving.
-- Keep belief and contradiction records distinct from source truth.
-- Keep dry-run consolidation reports auditable before adding mutating sleep
-  tasks.
-- Keep mutating consolidation behind explicit evaluation gates and injected
-  executor ports.
-- Keep the in-memory consolidation executor scoped, auditable, and conservative:
-  exact duplicate compaction archives later records and records consolidated
-  events.
-- Keep in-memory decay policy-driven: due active memories expire, legal hold
-  wins over expiry, and expired lifecycle events carry the audit trail.
-- Keep hierarchy construction incremental: base memory nodes are deterministic
-  and auditable before aggregate clustering or retrieval expansion exists.
-- Keep hierarchy retrieval expansion opt-in through hierarchical mode and
-  bounded to scoped sibling memory base nodes until aggregate construction has
-  its own spec.
-- Keep aggregate hierarchy construction deterministic and entity-backed until
-  semantic clustering and model summaries have quality specs.
-- Keep aggregate hierarchy summaries deterministic and member-derived until
-  model-assisted summaries have quality specs.
-- Keep belief synthesis evidence-bound: explicit memory assertions can produce
-  beliefs, while inference and semantic contradiction work stay separate.
-- Keep explicit assertion contradiction detection review-only: new
-  contradictions create open records and source events without mutating source
-  truth.
-- Keep contradiction resolution explicit and review-record-only until target
-  mutation policy has its own spec.
-- Keep belief retrieval explicit in result type: derived beliefs can be recalled
-  through shared fusion without pretending to be source memories or chunks.
-- Keep contradiction-aware belief ranking advisory: open review records reduce
-  rank and explain why without hiding or mutating beliefs.
-- Keep semantic drift detection deterministic: explicit time-ordered assertion
-  changes create review records without choosing winners.
+- Keep hierarchy and belief persistence in focused SQLite adapters; mutating
+  consolidation algorithms are deferred until they have durable adapter-backed
+  specs instead of a process-local catch-all fixture.
 - Keep runtime adapters as wrappers over client transports.
 - Keep public repository docs honest about pre-1.0 readiness and release gates.
 - Keep governance lightweight and contract-first while the project is pre-1.0.
@@ -67,14 +37,13 @@ use the implementation roadmap as the spec-driven execution loop.
   parser contracts are specified.
 - Keep hybrid retrieval fusion deterministic, traceable, and independent of
   concrete stores or embedding providers.
-- Keep in-memory retrieval wired through the fusion port before final context
-  truncation.
-- Keep in-memory knowledge chunks retrievable as chunks through the same fusion
+- Keep SQLite-backed knowledge chunks retrievable as chunks through the same fusion
   path as memory candidates.
 - Keep sqlite-vec retrieval exposed through injected query-vector and target
   resolver ports.
-- Keep injected retrieval indexes composed through in-memory fusion and
-  source-failure reporting without making vector providers canonical.
+- Keep injected retrieval indexes composed through the storage-neutral retrieval
+  boundary and source-failure reporting without making vector providers
+  canonical.
 - Keep FastEmbed BGE-small query-vector generation opt-in behind the vector
   crate feature.
 - Keep vector provider feature gates visible in CI without running model

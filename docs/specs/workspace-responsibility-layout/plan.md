@@ -187,8 +187,8 @@ guessing.
 **Depends on:** T2
 
 **Touches:** `core/AGENTS.md`, `adapters/AGENTS.md`, `bindings/AGENTS.md`,
-`adapters/ingest/AGENTS.md`, `adapters/memory/inmem/AGENTS.md`,
-`adapters/memory/sqlite/AGENTS.md`, `adapters/knowledge/inmem/AGENTS.md`,
+`adapters/ingest/AGENTS.md`, the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`),
+`adapters/memory/sqlite/AGENTS.md`, the retired knowledge in-memory adapter (see `docs/specs/retire-knowledge-inmem/spec.md`),
 `adapters/retrieval/sqlite-vec/AGENTS.md`
 
 **Tests:**

@@ -70,6 +70,6 @@ beliefs in conflict.
 - Technical: `BeliefRepository` is the existing core port for belief and
   contradiction persistence (source: `core/orchestration/src/lib.rs`).
 - Technical: in-memory state already stores contradictions separately from
-  beliefs and memories (source: `adapters/memory/inmem/src/state.rs`).
+  beliefs and memories (source: the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Process: semantic contradiction detection remains future work until a quality
   spec exists (source: `docs/implementation-roadmap.md`).

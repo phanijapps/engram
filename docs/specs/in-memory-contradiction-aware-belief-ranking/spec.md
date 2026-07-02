@@ -65,10 +65,10 @@ score and explain why the rank changed.
 ## Assumptions
 
 - Technical: beliefs and contradictions are stored separately in in-memory state
-  (source: `adapters/memory/inmem/src/state.rs`).
+  (source: the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Technical: belief retrieval already creates `RetrievalTargetType::Belief`
   candidates through shared fusion (source:
-  `adapters/memory/inmem/src/belief_retrieval.rs`).
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Technical: explicit contradiction resolution now updates review records
   without target mutation (source:
   `docs/specs/in-memory-contradiction-resolution/spec.md`).

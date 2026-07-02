@@ -86,7 +86,7 @@ if rg -n '"training_export"' contracts/v1/schemas docs/domain-data-model.md; the
 fi
 
 if command -v python3 >/dev/null 2>&1; then
-  python3 scripts/validate_contracts.py
+  python3 tools/scripts/validate_contracts.py
 else
   echo "python3 is required for contract validation" >&2
   exit 1

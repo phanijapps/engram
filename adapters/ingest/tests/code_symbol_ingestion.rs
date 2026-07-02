@@ -3,12 +3,12 @@ use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, KnowledgeIngestor,
 };
 use engram_knowledge::KnowledgeRepository;
-use engram_store_memory::InMemoryMemoryService;
+use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 #[test]
 fn ingestor_persists_code_symbol_chunks_with_source_paths() {
-    let repository = InMemoryMemoryService::new();
+    let repository = SqlKnowledgeStore::open_in_memory().expect("open knowledge store");
     let ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
 
     let ingested =

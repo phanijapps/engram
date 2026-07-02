@@ -22,8 +22,8 @@ integration collapse into one service. Engram keeps those concerns separate:
 - Rust 2024 core traits and deterministic adapter behavior.
 - TypeScript packages generated from the accepted contracts.
 - SQLite persistence and sqlite-vec retrieval test surfaces.
-- In-memory hierarchy, belief, contradiction, consolidation, and evaluation
-  slices.
+- Focused SQLite-backed memory, knowledge, hierarchy, belief, and retrieval
+  adapter slices.
 - Local-first examples, benchmark smoke paths, and release gates.
 
 ## Status
@@ -36,8 +36,8 @@ Current validated surface includes:
 - memory write, retrieve, forget, and lifecycle events
 - accepted v1 JSON schemas and TypeScript contract generation
 - reusable Rust evaluation fixtures and report summaries
-- in-memory and SQLite-backed memory services
-- separate in-memory knowledge graph and ontology test adapter
+- SQLite-backed memory service and local in-memory SQLite conformance tests
+- SQLite-backed knowledge graph, taxonomy, and ontology adapter
 - storage-neutral retrieval composition and weighted fusion
 - file-backed SQLite local smoke support
 - sqlite-vec candidate retrieval with opt-in FastEmbed BGE-small test wiring
@@ -83,7 +83,7 @@ Before publishing crates, npm packages, release tags, or benchmark claims, use
           v                             v                             v
 +--------------------+        +--------------------+        +--------------------+
 | Memory adapters    |        | Knowledge adapters |        | Retrieval adapters |
-| quick memory, SQL  |        | ingest, graph test |        | sqlite-vec, fusion |
+| SQLite memory SQL  |        | SQLite graph/store |        | sqlite-vec, fusion |
 +---------+----------+        +---------+----------+        +---------+----------+
           |                             |                             |
           v                             v                             v
@@ -139,7 +139,6 @@ pnpm run check
 Run local adapter examples:
 
 ```bash
-cargo run -p engram-store-memory --example local_memory
 cargo run -p engram-store-sql --example sql_memory
 pnpm --filter @engram/client test
 ```
@@ -147,7 +146,7 @@ pnpm --filter @engram/client test
 Run the local benchmark smoke path:
 
 ```bash
-cargo run -p engram-store-memory --example benchmark_local
+cargo run -p engram-store-sql --example benchmark_sql
 ```
 
 Benchmark output is local observation only. See `docs/benchmarks.md` for claim
@@ -262,14 +261,15 @@ The accepted v1 contract package lives in `contracts/v1/`.
 Useful commands:
 
 ```bash
-python3 scripts/validate_contracts.py
+python3 tools/scripts/validate_contracts.py
 pnpm run contracts:generate
 pnpm run contracts:check-generated
 .codex/hooks/check-contracts.sh
 ```
 
 Generated TypeScript types are emitted under `packages/contracts/src/generated/`
-and should not be edited by hand.
+and should not be edited by hand. Repository automation scripts live under
+`tools/scripts/`.
 
 ## Development Workflow
 
@@ -304,7 +304,8 @@ models.
 
 ## Documentation
 
-- `docs/architecture.md` - module map and system architecture.
+- `docs/architecture/reference.md` - normative architecture and design rules.
+- `docs/architecture/overview.md` - current module map.
 - `docs/domain-data-model.md` - domain model source of truth.
 - `docs/implementation-roadmap.md` - completed roadmap loop and next-slice
   policy.

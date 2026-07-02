@@ -4,12 +4,12 @@ Engram does not publish performance claims yet. Benchmark commands in this file
 are local smoke paths for collecting observations while correctness fixtures and
 adapter contracts continue to stabilize.
 
-## Local In-Memory Smoke
+## Local SQLite Smoke
 
 Run:
 
 ```bash
-cargo run -p engram-store-memory --example benchmark_local
+cargo run -p engram-store-sql --example benchmark_sql
 ```
 
 The example writes a fixed number of synthetic memories through
@@ -20,7 +20,7 @@ Example output shape:
 
 ```text
 engram local benchmark smoke
-adapter=in-memory
+adapter=sqlite-in-memory
 memories_written=250
 write_elapsed_ms=...
 retrieved_items=...

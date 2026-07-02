@@ -56,6 +56,15 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   database backends (Postgres, Neo4j) with cloud sizing support.
 - [`tf-deploy-skill`](tf-deploy-skill/spec.md): Claude Code skill for Terraform
   deployment to AWS/GCP/Azure with LLM + embedding model config.
+- [`retire-knowledge-inmem`](retire-knowledge-inmem/spec.md): retire the
+  dedicated in-memory knowledge adapter and use SQLite-backed knowledge tests as
+  the executable local conformance surface.
+- [`retire-memory-inmem`](retire-memory-inmem/spec.md): retire the broad
+  in-memory memory adapter and use focused SQLite-backed stores as the
+  executable local conformance surface.
+- [`workspace-architecture-alignment`](workspace-architecture-alignment/spec.md):
+  align architecture docs, planning references, and shared tooling with the
+  research-backed v2 architecture direction.
 
 ## Existing Slices
 

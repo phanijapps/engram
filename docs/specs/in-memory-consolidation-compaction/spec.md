@@ -82,6 +82,6 @@ each archived duplicate.
   `core/domain/src/memory.rs`).
 - Technical: scope matching already exists in the in-memory adapter and should
   be reused for mutation boundaries (source:
-  `adapters/memory/inmem/src/scope.rs`).
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Process: concrete consolidation algorithms remain outside `engram-core`
   (source: `docs/implementation-roadmap.md`).

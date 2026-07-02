@@ -74,7 +74,7 @@ scope, lifecycle, policy, and filter checks as directly matched memory results.
   `sourceTargetType` and `sourceTargetId` (source:
   `core/domain/src/hierarchy.rs`).
 - Technical: in-memory retrieval already snapshots memories and hierarchy nodes
-  before fusion (source: `adapters/memory/inmem/src/retrieval.rs`).
+  before fusion (source: the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Technical: weighted fusion can rank mixed direct and expanded candidates
   using existing `FusionTrace` and `RetrievalScore` fields (source:
   `core/retrieval/src/lib.rs`).

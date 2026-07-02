@@ -746,7 +746,7 @@ dependencies = [
  "engram-domain",
  "engram-memory",
  "engram-runtime",
- "engram-store-memory",
+ "engram-store-sql",
  "futures",
  "serde",
  "serde_json",
@@ -769,8 +769,7 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-knowledge",
- "engram-store-knowledge-memory",
- "engram-store-memory",
+ "engram-store-knowledge-sqlite",
  "futures",
  "ignore",
  "rayon",
@@ -885,18 +884,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "engram-store-knowledge-memory"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "engram-domain",
- "engram-knowledge",
- "engram-runtime",
- "futures",
-]
-
-[[package]]
 name = "engram-store-knowledge-sqlite"
 version = "0.1.0"
 dependencies = [
@@ -908,23 +895,6 @@ dependencies = [
  "engram-runtime",
  "futures",
  "rusqlite",
- "serde_json",
-]
-
-[[package]]
-name = "engram-store-memory"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "engram-core",
- "engram-domain",
- "engram-eval",
- "engram-knowledge",
- "engram-memory",
- "engram-retrieval",
- "engram-runtime",
- "futures",
  "serde_json",
 ]
 

@@ -167,19 +167,18 @@ build (BGE-small embeddings) plus the TypeScript workspace.
   `ollama-cloud` (e.g. ollama cloud `gemma4:31b-cloud`). Without it the demo
   runs deterministic-only (no LLM calls).
 
-### Build (first time, in order)
+### Build and run
 
 ```bash
 # 1. Install JS dependencies (workspace root)
 pnpm install
 
-# 2. Build the native addon WITH the fastembed feature (Rust + BGE-small).
-#    The BGE-small model downloads on the first embedding call — one-time.
-pnpm --filter @engram/node build:native
+# 2. Clean generated JS/native build outputs when needed.
+pnpm run clean
 
-# 3. Generate TypeScript contracts + build all packages (contracts, node, demo)
-pnpm run contracts:generate
-pnpm -r --if-present build
+# 3. Build the native addon WITH fastembed, then build all packages/demos.
+#    The BGE-small model downloads on the first embedding call — one-time.
+pnpm run build
 ```
 
 ### Configure + run
@@ -193,7 +192,7 @@ cp demo/backend/.env.example demo/backend/.env
 # Leave the placeholder to run deterministic-only.
 
 # 5. Start the backend (Hono on :8787 — serves the API + /mcp)
-pnpm --filter demo-backend dev
+pnpm run backend
 
 # 6. In another shell, start the frontend (Vite on :5173, proxies API routes
 #    to :8787)

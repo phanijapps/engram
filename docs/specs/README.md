@@ -65,6 +65,10 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 - [`workspace-architecture-alignment`](workspace-architecture-alignment/spec.md):
   align architecture docs, planning references, and shared tooling with the
   research-backed v2 architecture direction.
+- [`agentzero-engram-adapter-integration`](agentzero-engram-adapter-integration/spec.md):
+  define the AgentZero-side `zbot-engram-adapter` provider contract, parity
+  fixtures, gateway wiring, migration dry-run, and rollout gates for running
+  AgentZero memory jobs against Engram-backed storage and operations.
 
 ## Existing Slices
 

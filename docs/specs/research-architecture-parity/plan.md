@@ -102,6 +102,9 @@ research requires separate interfaces, not specific database brands.
   TypeScript wrappers delegate to those native calls, demo backend endpoints
   smoke them through the app layer, and `check_ts_native_delegation.py` guards
   representative Rust-owned behavior from being reimplemented in TypeScript.
+- 2026-07-02: T11 complete. Final repository gates passed, PHASE64 is done, and
+  docs hooks now include architecture root/entry-point guardrails plus native
+  delegation checks alongside retired-adapter and research-drift checks.
 
 ## Construction Tests
 

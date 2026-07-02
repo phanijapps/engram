@@ -1,6 +1,6 @@
 # Spec: Research Architecture Parity
 
-- **Status:** Implementing
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0003, ADR-0004, ADR-0005, ADR-0007, ADR-0008, ADR-0009, ADR-0010, ADR-0011, RFC-0001, RFC-0002, `docs/architecture/reference.md`, `docs/research/synthesis.md`, `docs/research/architecture-design-v2.md`
@@ -116,7 +116,7 @@ without switching AgentZero to Engram.
   vector modes through `engram-retrieval` without making retrieval fusion call
   storage adapters, embedding providers, policy engines, or model rerankers
   directly.
-- [ ] SQLite-backed memory, knowledge, hierarchy, belief, taxonomy, graph, and
+- [x] SQLite-backed memory, knowledge, hierarchy, belief, taxonomy, graph, and
   vector fixtures prove the local conformance path without any active broad
   in-memory adapter.
 - [x] Hierarchy has durable construction and navigation behavior with provenance,
@@ -134,7 +134,7 @@ without switching AgentZero to Engram.
   contradiction resolution, and embedding/ranking helpers; record-time history is
   either implemented behind an accepted contract or explicitly rejected at the
   repository boundary.
-- [ ] Policy and provenance are visible on write, retrieve, ingest, consolidate,
+- [x] Policy and provenance are visible on write, retrieve, ingest, consolidate,
   taxonomy merge, hierarchy build, belief mutation, and forget paths.
 - [x] Evaluation fixtures cover accepted recall, forbidden recall, leakage,
   policy filtering, ranking, hierarchy granularity, taxonomy drift, belief
@@ -144,14 +144,14 @@ without switching AgentZero to Engram.
   hierarchy, taxonomy, consolidation, and evaluation without duplicating domain
   logic; an architecture check and fixtures fail if representative behavior is
   reimplemented in TypeScript instead of delegated to Rust transports.
-- [ ] AgentZero can build an adapter against Engram using documented library
+- [x] AgentZero can build an adapter against Engram using documented library
   ports, compatibility fixtures, scope mapping, valid-time probes, capability
   reports, and migration diagnostics; this spec does not switch AgentZero to
   Engram or require AgentZero route/UI changes.
-- [ ] Architecture and validation hooks fail if a crate/package grows into a god
+- [x] Architecture and validation hooks fail if a crate/package grows into a god
   module, if retired in-memory adapters return, or if active docs drift from the
   shipped implementation.
-- [ ] Required repository gates pass:
+- [x] Required repository gates pass:
   `cargo fmt --all --check`, `cargo check --workspace`, `cargo test --workspace`,
   `pnpm run contracts:generate`, `pnpm run typecheck`, `pnpm run test`,
   `pnpm run build`, `.codex/hooks/check-contracts.sh`, and

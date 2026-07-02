@@ -953,4 +953,4 @@ as focused slices. AgentZero provider cutover remains out of scope; Engram must
 still expose adapter-readiness probes for scope mapping, valid-time behavior,
 capability reporting, and migration diagnostics.
 
-- `PHASE64` — Research architecture parity. **(in progress)**
+- `PHASE64` — Research architecture parity. **(done)**

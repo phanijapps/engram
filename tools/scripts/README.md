@@ -12,6 +12,8 @@ package scripts, and release checks.
 - `check_ts_native_delegation.py`: verifies representative TypeScript package
   surfaces delegate Rust-owned behavior through native JSON transports instead
   of reimplementing core algorithms.
+- `check_architecture_guards.py`: keeps core crate roots and TypeScript package
+  entry points as facades instead of behavior-heavy god modules.
 - `validate_contracts.py`: validates accepted examples and invalid fixtures
   against the v1 schema package.
 - `update_roadmap_phase.py`: updates roadmap phase metadata.

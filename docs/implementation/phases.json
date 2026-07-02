@@ -449,7 +449,7 @@
   },
   {
     "phase_id": "PHASE64",
-    "status": "IN_PROGRESS",
+    "status": "DONE",
     "description": "Research architecture parity: close docs/research gaps against implementation and add executable parity guards",
     "spec_file": "docs/specs/research-architecture-parity/spec.md",
     "plan_file": "docs/specs/research-architecture-parity/plan.md"

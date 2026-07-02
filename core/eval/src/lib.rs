@@ -13,9 +13,14 @@ use engram_memory::MemoryService;
 use engram_runtime::CoreResult;
 
 pub mod accepted_examples;
+mod architecture_coverage;
 mod contract_runner;
 mod report_summary;
 
+pub use architecture_coverage::{
+    ArchitectureEvalCapability, ArchitectureEvalCase, ArchitectureEvalCoverage,
+    required_architecture_capabilities, summarize_architecture_coverage,
+};
 pub use contract_runner::{MemoryContractRunner, RetrievalContractOutcome};
 pub use report_summary::{
     CaseReportSummary, FixtureReportSummary, FixtureSetReportSummary, summarize_report,

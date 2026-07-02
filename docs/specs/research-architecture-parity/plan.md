@@ -89,6 +89,12 @@ research requires separate interfaces, not specific database brands.
   their own valid intervals, and SQLite belief tests cover live reads, stale
   state, supersede/retract, record-time rejection, contradiction resolution, and
   source interval filtering.
+- 2026-07-02: T9 complete. `engram-eval` now exposes deterministic architecture
+  capability coverage summaries for accepted recall, forbidden recall, leakage,
+  policy filtering, ranking, hierarchy granularity, taxonomy drift, belief
+  lifecycle, contradiction review, consolidation gates, and adapter readiness;
+  tests prove complete coverage, missing-capability detection, failing-capability
+  detection, and repeatable report output.
 
 ## Construction Tests
 

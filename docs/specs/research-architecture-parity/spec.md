@@ -136,7 +136,7 @@ without switching AgentZero to Engram.
   repository boundary.
 - [ ] Policy and provenance are visible on write, retrieve, ingest, consolidate,
   taxonomy merge, hierarchy build, belief mutation, and forget paths.
-- [ ] Evaluation fixtures cover accepted recall, forbidden recall, leakage,
+- [x] Evaluation fixtures cover accepted recall, forbidden recall, leakage,
   policy filtering, ranking, hierarchy granularity, taxonomy drift, belief
   lifecycle, contradiction review, and adapter-readiness scenarios.
 - [ ] Node bindings and TypeScript packages expose narrow, generated-contract

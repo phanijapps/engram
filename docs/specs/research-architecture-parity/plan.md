@@ -58,6 +58,11 @@ research requires separate interfaces, not specific database brands.
   proposals, hierarchy build records, capability reports, adapter-readiness
   probes, migration diagnostics, and vector retrieval's v1 compatibility
   classification without changing accepted v1 schemas.
+- 2026-07-02: T3 complete. `engram-domain` exposes derived `MemoryRole`
+  classification without adding a v1 `MemoryRecord.role` field, and the SQLite
+  memory service now has role fixtures covering write, retrieve, archive forget,
+  and eval-report recall for working, episodic, semantic, and procedural
+  records.
 
 ## Construction Tests
 

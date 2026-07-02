@@ -2,12 +2,17 @@
 //!
 //! `MemoryRecord` is the canonical agent-memory unit. It carries content,
 //! scope, provenance, policy, status, links, and optional assertions while
-//! remaining independent of how a store persists or indexes it.
+//! remaining independent of how a store persists or indexes it. Memory roles
+//! are derived helpers over accepted v1 fields; they do not add a `role` wire
+//! field to `MemoryRecord`.
 
 use serde::{Deserialize, Serialize};
 
-use crate::{EntityRef, EventId, MemoryId, Metadata, Policy, Provenance, Scalar, Scope, Timestamp};
+use crate::{
+    EntityRef, EventId, MemoryId, Metadata, Policy, Provenance, Retention, Scalar, Scope, Timestamp,
+};
 
+/// Portable category for a stored memory record.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryKind {
@@ -20,6 +25,62 @@ pub enum MemoryKind {
     Procedure,
 }
 
+impl MemoryKind {
+    /// Returns the default architecture role implied by this v1 memory kind.
+    ///
+    /// Working memory is intentionally absent from this mapping because live
+    /// working context is host-owned. Use [`MemoryRole::for_record`] when scope
+    /// and retention policy are available; it can classify session-bounded
+    /// observations and episodes as working-memory evictions/traces.
+    pub fn default_role(&self) -> MemoryRole {
+        match self {
+            Self::Observation | Self::Episode => MemoryRole::Episodic,
+            Self::Fact | Self::Preference | Self::Artifact | Self::Relationship => {
+                MemoryRole::Semantic
+            }
+            Self::Procedure => MemoryRole::Procedural,
+        }
+    }
+}
+
+/// Draft architecture role derived from accepted v1 memory fields.
+///
+/// This enum lets Rust code and tests align with the research architecture's
+/// working/episodic/semantic/procedural taxonomy without changing the accepted
+/// v1 wire contract. Adapters should not persist this as hidden metadata; if a
+/// future wire field is needed, it must go through contract review.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryRole {
+    Working,
+    Episodic,
+    Semantic,
+    Procedural,
+}
+
+impl MemoryRole {
+    /// Classifies a memory record using kind, retention policy, and session
+    /// scope.
+    ///
+    /// Session-bounded ephemeral/session observations and episodes represent
+    /// persisted working-memory traces or evictions. All other records fall
+    /// back to the role implied by their `MemoryKind`.
+    pub fn for_record(record: &MemoryRecord) -> Self {
+        if matches!(record.kind, MemoryKind::Observation | MemoryKind::Episode)
+            && matches!(
+                record.policy.retention,
+                Retention::Ephemeral | Retention::Session
+            )
+            && record.scope.session.is_some()
+        {
+            Self::Working
+        } else {
+            record.kind.default_role()
+        }
+    }
+}
+
+/// Lifecycle state for a memory record.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryStatus {
@@ -116,6 +177,13 @@ pub struct MemoryRecord {
     pub updated_at: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Metadata>,
+}
+
+impl MemoryRecord {
+    /// Returns the architecture role derived from accepted v1 fields.
+    pub fn role(&self) -> MemoryRole {
+        MemoryRole::for_record(self)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

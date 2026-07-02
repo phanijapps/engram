@@ -12,6 +12,112 @@ fn write_fixture() -> WriteMemoryRequest {
     accepted_examples::write_memory_request().expect("deserialize write fixture")
 }
 
+fn role_actor() -> Actor {
+    Actor {
+        id: Id::from("role-agent"),
+        kind: ActorKind::Agent,
+        display_name: Some("Role Agent".to_owned()),
+        metadata: None,
+    }
+}
+
+fn role_request(
+    kind: MemoryKind,
+    retention: Retention,
+    session: Option<&str>,
+    text: &str,
+    key: &str,
+) -> WriteMemoryRequest {
+    let now = chrono::Utc::now();
+    let actor = role_actor();
+    WriteMemoryRequest {
+        kind,
+        content: MemoryContent {
+            text: text.to_owned(),
+            summary: Some(format!("summary for {key}")),
+            entities: Vec::new(),
+            language: Some("en".to_owned()),
+            format: Some(MemoryContentFormat::Text),
+            structured: None,
+            hash: None,
+        },
+        scope: Scope {
+            tenant: "tenant-roles".to_owned(),
+            subject: Some("subject-roles".to_owned()),
+            workspace: Some("workspace-roles".to_owned()),
+            session: session.map(str::to_owned),
+            environment: Some("test".to_owned()),
+        },
+        requester: Requester {
+            actor: actor.clone(),
+            roles: vec!["maintainer".to_owned()],
+            permissions: vec!["memory.write".to_owned(), "memory.retrieve".to_owned()],
+            on_behalf_of: None,
+        },
+        provenance: Provenance {
+            source: "role_sql_fixture".to_owned(),
+            actor,
+            observed_at: now,
+            evidence: Vec::new(),
+            derivations: Vec::new(),
+            confidence: Some(0.95),
+            method: Some("fixture".to_owned()),
+        },
+        policy: Policy {
+            visibility: Visibility::Workspace,
+            retention,
+            sensitivity: Some(Sensitivity::Low),
+            allowed_uses: vec![AllowedUse::Retrieval, AllowedUse::Evaluation],
+            expires_at: None,
+            delete_mode: Some(DeleteMode::Archive),
+        },
+        links: Vec::new(),
+        idempotency_key: Some(key.to_owned()),
+    }
+}
+
+fn requester(actor: Actor) -> Requester {
+    Requester {
+        actor,
+        roles: vec!["maintainer".to_owned()],
+        permissions: vec!["memory.retrieve".to_owned(), "memory.forget".to_owned()],
+        on_behalf_of: None,
+    }
+}
+
+fn role_retrieval_case(id: &str, query: &str, alias: &str) -> EvaluationCase {
+    EvaluationCase {
+        id: id.to_owned(),
+        request: RetrievalRequest {
+            query: query.to_owned(),
+            scope: Scope {
+                tenant: "tenant-roles".to_owned(),
+                subject: Some("subject-roles".to_owned()),
+                workspace: Some("workspace-roles".to_owned()),
+                session: None,
+                environment: Some("test".to_owned()),
+            },
+            requester: requester(role_actor()),
+            modes: vec![RetrievalMode::Keyword],
+            filters: None,
+            cues: Vec::new(),
+            limit: Some(1),
+            budget: None,
+            include_explanations: Some(true),
+        },
+        expect: EvaluationExpectation {
+            must_include: vec![ExpectedTarget {
+                target_type: RetrievalTargetType::Memory,
+                target_id: alias.to_owned(),
+            }],
+            must_exclude: Vec::new(),
+            min_score: Some(0.5),
+            max_results: Some(1),
+            requires_explanation: Some(true),
+        },
+    }
+}
+
 #[test]
 fn sql_service_reuses_idempotent_write_without_duplicate_event() {
     let service = SqlMemoryService::open_in_memory().expect("open sql service");
@@ -132,6 +238,191 @@ fn sql_service_file_backed_store_persists_across_reopen() {
 
     assert_eq!(fetched.content.text, response.record.content.text);
     let _ = std::fs::remove_file(path);
+}
+
+#[test]
+fn sql_service_round_trips_memory_roles_without_role_wire_field() {
+    let service = SqlMemoryService::open_in_memory().expect("open sql service");
+    let fixtures = [
+        (
+            MemoryRole::Working,
+            role_request(
+                MemoryKind::Observation,
+                Retention::Session,
+                Some("session-role"),
+                "working role active context",
+                "role-working",
+            ),
+        ),
+        (
+            MemoryRole::Episodic,
+            role_request(
+                MemoryKind::Episode,
+                Retention::Durable,
+                Some("session-role"),
+                "episodic role remembered event",
+                "role-episodic",
+            ),
+        ),
+        (
+            MemoryRole::Semantic,
+            role_request(
+                MemoryKind::Fact,
+                Retention::Durable,
+                None,
+                "semantic role durable fact",
+                "role-semantic",
+            ),
+        ),
+        (
+            MemoryRole::Procedural,
+            role_request(
+                MemoryKind::Procedure,
+                Retention::Durable,
+                None,
+                "procedural role learned workflow",
+                "role-procedural",
+            ),
+        ),
+    ];
+
+    for (expected_role, request) in fixtures {
+        let response = block_on(service.write_memory(request.clone())).expect("write role memory");
+        assert_eq!(response.record.role(), expected_role);
+        assert_eq!(response.record.provenance.source, "role_sql_fixture");
+        assert_eq!(response.record.policy, request.policy);
+        assert!(
+            serde_json::to_value(&response.record)
+                .expect("serialize memory record")
+                .get("role")
+                .is_none()
+        );
+
+        let context = block_on(service.retrieve(RetrievalRequest {
+            query: response.record.content.text.clone(),
+            scope: response.record.scope.clone(),
+            requester: requester(response.event.actor.clone()),
+            modes: vec![RetrievalMode::Keyword],
+            filters: Some(QueryFilter {
+                memory_kinds: vec![response.record.kind.clone()],
+                source_kinds: Vec::new(),
+                chunk_kinds: Vec::new(),
+                concept_ids: Vec::new(),
+                entity_ids: Vec::new(),
+                since: None,
+                until: None,
+                min_confidence: Some(0.9),
+                include_archived: Some(false),
+            }),
+            cues: Vec::new(),
+            limit: Some(1),
+            budget: None,
+            include_explanations: Some(true),
+        }))
+        .expect("retrieve role memory");
+        assert_eq!(context.items.len(), 1);
+        assert_eq!(context.items[0].target_id, response.record.id.to_string());
+
+        let forget = block_on(service.forget(ForgetRequest {
+            target_type: ForgetTargetType::Memory,
+            target_id: response.record.id.to_string(),
+            scope: response.record.scope.clone(),
+            requester: requester(response.event.actor),
+            mode: DeleteMode::Archive,
+            reason: Some("role fixture archive".to_owned()),
+        }))
+        .expect("archive role memory");
+        assert_eq!(forget.status, ForgetStatus::Archived);
+
+        let archived = block_on(service.get_memory(&response.record.id, &response.record.scope))
+            .expect("get archived memory")
+            .expect("archived memory remains stored");
+        assert_eq!(archived.status, MemoryStatus::Archived);
+        assert_eq!(archived.role(), expected_role);
+    }
+}
+
+#[test]
+fn sql_service_reports_role_eval_fixture_results() {
+    let service = Arc::new(SqlMemoryService::open_in_memory().expect("open sql service"));
+    let runner = MemoryFixtureRunner::new(service);
+    let now = chrono::Utc::now();
+    let fixture = EvaluationFixture {
+        id: Id::from("eval-memory-roles"),
+        name: "Memory role retrieval fixture".to_owned(),
+        scope: Scope {
+            tenant: "tenant-roles".to_owned(),
+            subject: Some("subject-roles".to_owned()),
+            workspace: Some("workspace-roles".to_owned()),
+            session: None,
+            environment: Some("test".to_owned()),
+        },
+        setup: EvaluationSetup {
+            memories: vec![
+                role_request(
+                    MemoryKind::Observation,
+                    Retention::Session,
+                    Some("session-role"),
+                    "eval working role active context",
+                    "eval-role-working",
+                ),
+                role_request(
+                    MemoryKind::Episode,
+                    Retention::Durable,
+                    Some("session-role"),
+                    "eval episodic role remembered event",
+                    "eval-role-episodic",
+                ),
+                role_request(
+                    MemoryKind::Fact,
+                    Retention::Durable,
+                    None,
+                    "eval semantic role durable fact",
+                    "eval-role-semantic",
+                ),
+                role_request(
+                    MemoryKind::Procedure,
+                    Retention::Durable,
+                    None,
+                    "eval procedural role learned workflow",
+                    "eval-role-procedural",
+                ),
+            ],
+            sources: Vec::new(),
+            documents: Vec::new(),
+            chunks: Vec::new(),
+        },
+        cases: vec![
+            role_retrieval_case(
+                "working-role-recall",
+                "eval working role active context",
+                "memory-1",
+            ),
+            role_retrieval_case(
+                "episodic-role-recall",
+                "eval episodic role remembered event",
+                "memory-2",
+            ),
+            role_retrieval_case(
+                "semantic-role-recall",
+                "eval semantic role durable fact",
+                "memory-3",
+            ),
+            role_retrieval_case(
+                "procedural-role-recall",
+                "eval procedural role learned workflow",
+                "memory-4",
+            ),
+        ],
+        created_at: now,
+    };
+
+    let report = block_on(runner.run_fixture(fixture)).expect("run role fixture");
+
+    assert_eq!(report.cases.len(), 4);
+    for case in report.cases {
+        assert!(case.passed, "{}: {:?}", case.case_id, case.failures);
+    }
 }
 
 fn temp_database_path(name: &str) -> PathBuf {

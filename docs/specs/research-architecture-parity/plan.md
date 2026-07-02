@@ -73,6 +73,11 @@ research requires separate interfaces, not specific database brands.
   parentage before build outputs are accepted, and the SQLite hierarchy fixture
   persists explainable raw-event, episode, schema, and domain layers with build
   metadata and bounded path navigation.
+- 2026-07-02: T6 complete. `engram-domain` now has taxonomy proposal,
+  validation report/finding, and semantic-drift types; `engram-knowledge`
+  validates proposals for duplicate labels, missing relation endpoints,
+  broader/narrower cycles, and reviewer-gated merge; SQLite taxonomy tests prove
+  validated proposals merge into the durable store without autonomous merge.
 
 ## Construction Tests
 

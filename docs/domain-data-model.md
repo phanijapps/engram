@@ -133,6 +133,7 @@ Taxonomy
   TaxonomyChange
   TaxonomyProposal
   TaxonomyValidationReport
+  TaxonomyValidationFinding
   SemanticDriftFinding
 
 Hierarchy
@@ -1224,10 +1225,35 @@ Fields:
 |-------|----------|------|---------|
 | `id` | yes | string | Stable report id |
 | `proposalId` | yes | string | Validated proposal |
-| `status` | yes | enum | `passed`, `passed_with_warnings`, `failed` |
-| `findings` | no | OntologyValidationFinding[] | Structural or semantic validation findings |
+| `status` | yes | TaxonomyValidationStatus | Validation outcome |
+| `findings` | no | TaxonomyValidationFinding[] | Structural or semantic validation findings |
 | `checkedAt` | yes | Timestamp | Validation time |
 | `provenance` | yes | Provenance | Validation method and actor |
+
+### TaxonomyValidationStatus
+
+Enum:
+
+- `passed`
+- `passed_with_warnings`
+- `failed`
+
+### TaxonomyValidationFinding
+
+Finding produced while validating a taxonomy proposal.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable finding id |
+| `severity` | yes | enum | `info`, `warning`, `error` |
+| `code` | yes | string | Machine-readable finding code |
+| `message` | yes | string | Human-readable explanation |
+| `targetType` | no | string | Affected taxonomy object type |
+| `targetId` | no | string | Affected taxonomy object id |
+| `provenance` | yes | Provenance | Validation provenance |
+| `detectedAt` | yes | Timestamp | Detection time |
 
 ### SemanticDriftFinding
 
@@ -2226,6 +2252,7 @@ defer their schemas and storage until after the first vertical slice:
 - `MemoryRole`
 - `TaxonomyProposal`
 - `TaxonomyValidationReport`
+- `TaxonomyValidationFinding`
 - `SemanticDriftFinding`
 - `HierarchyBuildRecord`
 - `CapabilityReport`

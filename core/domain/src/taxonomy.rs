@@ -6,7 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Actor, ConceptId, ConceptSchemeId, Policy, Provenance, Scalar, Scope, Timestamp};
+use crate::{
+    Actor, ConceptId, ConceptSchemeId, EvidenceRef, Metadata, Policy, Provenance, Scalar, Scope,
+    Timestamp,
+};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -155,4 +158,114 @@ pub struct TaxonomyChange {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub applied_at: Option<Timestamp>,
     pub payload: Scalar,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaxonomyProposalStatus {
+    Discovered,
+    Proposed,
+    Validated,
+    Approved,
+    Rejected,
+    Merged,
+    RolledBack,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaxonomyProposal {
+    pub id: String,
+    pub scheme_id: ConceptSchemeId,
+    pub status: TaxonomyProposalStatus,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub changes: Vec<TaxonomyChange>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub validation: Option<TaxonomyValidationReport>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub semantic_drift: Vec<SemanticDriftFinding>,
+    pub proposer: Actor,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reviewer: Option<Actor>,
+    pub provenance: Provenance,
+    pub created_at: Timestamp,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reviewed_at: Option<Timestamp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<Metadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaxonomyValidationStatus {
+    Passed,
+    PassedWithWarnings,
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaxonomyFindingSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaxonomyValidationFinding {
+    pub id: String,
+    pub severity: TaxonomyFindingSeverity,
+    pub code: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_id: Option<String>,
+    pub provenance: Provenance,
+    pub detected_at: Timestamp,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaxonomyValidationReport {
+    pub id: String,
+    pub proposal_id: String,
+    pub status: TaxonomyValidationStatus,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub findings: Vec<TaxonomyValidationFinding>,
+    pub checked_at: Timestamp,
+    pub provenance: Provenance,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SemanticDriftTargetType {
+    Concept,
+    ConceptRelation,
+    ConceptMapping,
+    Scheme,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SemanticDriftSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticDriftFinding {
+    pub id: String,
+    pub target_type: SemanticDriftTargetType,
+    pub target_id: String,
+    pub severity: SemanticDriftSeverity,
+    pub reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub evidence: Vec<EvidenceRef>,
+    pub detected_at: Timestamp,
 }

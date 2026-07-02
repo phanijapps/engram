@@ -122,7 +122,7 @@ without switching AgentZero to Engram.
 - [x] Hierarchy has durable construction and navigation behavior with provenance,
   algorithm metadata, and eval coverage for raw event, episode, schema, and
   domain-level navigation.
-- [ ] Taxonomy supports governed `Discovery -> Proposal -> Validation -> Merge`
+- [x] Taxonomy supports governed `Discovery -> Proposal -> Validation -> Merge`
   with provenance, validation findings, cross-scheme mappings, advisory semantic
   drift reporting, and no autonomous merge by default.
 - [ ] Consolidation is a separately owned pipeline with explicit inputs,

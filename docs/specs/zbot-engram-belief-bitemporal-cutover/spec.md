@@ -51,8 +51,8 @@ idempotency, and semantic belief search compatibility.
 
 ### Never do
 
-- Treat Engram's current belief SQLite adapter as sufficient when it only stores
-  valid intervals for display and does not implement `as_of` queries.
+- Treat Engram's current valid-time `as_of` support as full bitemporality; the
+  remaining gap is record-time history, not live valid-time lookup.
 - Collapse beliefs into memory facts, knowledge chunks, hierarchy nodes, or
   source truth.
 - Drop or rewrite `source_fact_ids` during mapping.
@@ -114,9 +114,9 @@ idempotency, and semantic belief search compatibility.
   record-time audit queries are not currently exposed (source:
   `/home/videogamer/projects/agentzero/stores/zbot-stores-sqlite/src/belief_store.rs`).
 - Technical: Engram belief domain fields can represent AgentZero belief and
-  contradiction records, but the current SQLite belief adapter does not provide
-  AgentZero's as-of query semantics (source:
-  `adapters/orchestration/belief-sqlite/src/service.rs`).
+  contradiction records, and the current SQLite belief adapter provides
+  valid-time `as_of` query semantics. It does not provide record-time audit
+  history (source: `adapters/orchestration/belief-sqlite/src/service.rs`).
 - Product: AgentZero API and UI continuity matters more than exposing Engram DTOs
   directly during cutover (source: user direction 2026-07-02).
 - Process: Engram core changes require a separate accepted spec or ADR; this

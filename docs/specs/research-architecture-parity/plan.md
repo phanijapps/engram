@@ -53,6 +53,11 @@ research requires separate interfaces, not specific database brands.
   belief/in-memory research claims are refreshed, PHASE64 tracks the remaining
   parity work, and `check-docs.sh` now runs the registry-backed research parity
   drift check with focused regression tests.
+- 2026-07-02: T2 complete as a compatible draft-extension contract update.
+  `docs/domain-data-model.md` now names memory roles, governed taxonomy
+  proposals, hierarchy build records, capability reports, adapter-readiness
+  probes, migration diagnostics, and vector retrieval's v1 compatibility
+  classification without changing accepted v1 schemas.
 
 ## Construction Tests
 

@@ -109,7 +109,7 @@ without switching AgentZero to Engram.
 - [x] `.codex/hooks/pre-implementation-check.sh` passes before any task that
   changes runtime manifests, Rust code, TypeScript package code, adapters,
   bindings, generated contracts, or demo implementation begins.
-- [ ] Domain and contract docs define explicit working, episodic, semantic, and
+- [x] Domain and contract docs define explicit working, episodic, semantic, and
   procedural memory roles, with storage-neutral Rust ports or existing domain
   mappings for each role.
 - [ ] Retrieval supports temporal, cue-based, hierarchical, semantic, graph, and

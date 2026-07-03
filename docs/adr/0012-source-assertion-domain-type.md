@@ -1,6 +1,6 @@
 # ADR-0012: Federated facts as a SourceAssertion type over authority-tiered belief sources
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-03
 - **Decision-makers:** phanijapps
 - **Supersedes:** none
@@ -20,6 +20,8 @@ Engram's knowledge ingestion is replicative and trusting: [`adapters/ingest`](..
 
 The belief layer already models the *stance* over evidence: [`core/domain/src/belief.rs`](../../core/domain/src/belief.rs) has `Belief` with bitemporal `valid_from/valid_until`, a `BeliefStatus` lifecycle (`Active/Stale/Superseded/Retracted/Archived`), a `sources: Vec<BeliefSource>`, and `Contradiction` records; `BeliefSourceTargetType` already includes an `Assertion` variant that is currently unused. What is missing is the *input*: a first-class record of "source S asserts claim C, with this authority, valid over this interval," distinct from the canonical fact and from the belief. Without it, nothing feeds the belief layer federated facts, and there is no place to attach source-level authority for conflict resolution.
 
+This is distinct from the existing [`MemoryAssertion`](../../core/domain/src/memory.rs) (subject/predicate/object + confidence + `valid_from/valid_until`), which is a claim the *agent* asserts from its own experience, embedded in `MemoryRecord.assertions` and synthesized into beliefs citing `BeliefSource(Memory)` (the Shipped `in-memory-belief-assertion-synthesis`). A `SourceAssertion` is a claim from an *external system of record*: it stands alone (not embedded in a memory), carries federation and authority metadata `MemoryAssertion` lacks, and is cited via the `BeliefSource(Assertion)` variant. The memory/knowledge boundary (AGENTS.md) is why these are two types, not one: an agent's memory is not a federated fact. They share a subject-predicate-object core, which the implementation may factor.
+
 Constraints: `engram-domain` must not depend on SQL, vector stores, async runtimes, or Node (AGENTS.md); public contract changes must be classified compatible or breaking; the change must be additive over serialized beliefs already written by the belief adapter.
 
 ## Decision
@@ -28,6 +30,7 @@ We will introduce a `SourceAssertion` domain type in `engram-domain` and referen
 
 `SourceAssertion` carries:
 
+- identity and scope: `id` (a new `AssertionId` alias) and `scope`, so a derived belief can cite it and inherit its scope;
 - the claim: `subject` (a `BeliefSubject` key), `predicate`, `object`;
 - federation, not replication: `source_system`, `source_record_id`, `source_uri` (a link back to the authoritative system — volatile field values are not copied into a durable canonical store);
 - `authority_level` — an authority *tier*;

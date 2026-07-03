@@ -1,6 +1,6 @@
 # ADR-0013: Promotion via a caller-invoked validation-event trigger family
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-03
 - **Decision-makers:** phanijapps
 - **Supersedes:** none

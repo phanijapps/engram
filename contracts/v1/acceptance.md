@@ -51,7 +51,7 @@ Accepted on 2026-06-29.
 Before changing accepted v1 artifacts, run:
 
 ```bash
-python3 scripts/validate_contracts.py
+python3 tools/scripts/validate_contracts.py
 .codex/hooks/check-contracts.sh
 .codex/hooks/check-docs.sh
 ```

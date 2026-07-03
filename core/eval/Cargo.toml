@@ -7,11 +7,12 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
-engram-core = { path = "../orchestration" }
 engram-domain = { path = "../domain" }
+engram-memory = { path = "../memory" }
+engram-runtime = { path = "../runtime" }
 serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
-engram-store-memory = { path = "../../adapters/memory/inmem" }
+engram-store-sql = { path = "../../adapters/memory/sqlite" }
 futures.workspace = true

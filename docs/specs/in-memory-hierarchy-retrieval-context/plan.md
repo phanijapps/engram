@@ -49,12 +49,12 @@ the new explanatory signal.
 
 ### Component / module decomposition
 
-- `adapters/memory/inmem/src/hierarchy_retrieval.rs` owns hierarchy-path
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) owns hierarchy-path
   annotation.
-- `adapters/memory/inmem/src/retrieval.rs` snapshots hierarchy nodes and
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) snapshots hierarchy nodes and
   invokes the helper before fusion.
 - Tests live in
-  `adapters/memory/inmem/tests/hierarchy_retrieval.rs`.
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`).
 
 ### Failure, edge cases & resilience
 

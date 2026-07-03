@@ -54,11 +54,11 @@ introduced.
 
 - `core/orchestration/src/consolidation/planner.rs` adds the task to hybrid
   planning.
-- `adapters/memory/inmem/src/consolidation/contradiction_detection.rs`
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)
   owns assertion grouping, duplicate detection, contradiction construction, and
   event creation.
 - Tests live in `core/orchestration/tests/consolidation_dry_run.rs` and
-  `adapters/memory/inmem/tests/consolidation_contradiction_detection.rs`.
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`).
 
 ### Failure, edge cases & resilience
 

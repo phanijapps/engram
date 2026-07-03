@@ -96,6 +96,7 @@ Memory
   MemoryEvent
   MemoryLink
   MemoryAssertion
+  MemoryRole
 
 Belief Network
   Belief
@@ -130,12 +131,18 @@ Taxonomy
   ConceptCollection
   ConceptMapping
   TaxonomyChange
+  TaxonomyProposal
+  TaxonomyValidationReport
+  TaxonomyValidationFinding
+  SemanticDriftFinding
 
 Hierarchy
   HierarchyNode
   HierarchyMembership
   HierarchyRelation
   HierarchyBuildConfig
+  HierarchyBuildRecord
+  HierarchyBuildStatus
   HierarchyPath
 
 Policy and Provenance
@@ -164,10 +171,18 @@ Operations
   RetrieveRequest
   ForgetRequest
   ConsolidationRequest
+  ConsolidationPlan
+  ConsolidationPlannedOperation
   ConsolidationRun
   ConsolidationTaskResult
   IngestRequest
   EvaluationFixture
+
+Compatibility
+  CapabilityReport
+  Capability
+  AdapterReadinessProbe
+  MigrationDiagnostic
 ```
 
 ## Shared Value Objects
@@ -302,6 +317,41 @@ Enum:
 - `artifact`: produced artifact or reference to an artifact.
 - `relationship`: relationship between entities.
 - `procedure`: learned action pattern or skill.
+
+### MemoryRole
+
+Draft extension classification for the role a memory plays in an agent
+architecture. A role is a storage-neutral behavioral classification, not a
+backend, table, or product API.
+
+Enum:
+
+- `working`: active bounded context used during the current task/session.
+- `episodic`: remembered event, episode, or time-bound experience.
+- `semantic`: durable fact, preference, relationship, or generalized knowledge.
+- `procedural`: learned action pattern, tool-use rule, workflow, or skill.
+
+Current v1 mapping:
+
+| Role | Accepted v1 mapping |
+|------|---------------------|
+| `working` | Live context is host-owned. Evicted context may be recorded as `MemoryEvent` plus `MemoryRecord.kind = observation` or `episode` with `Policy.retention = ephemeral` or `session` and a `Scope.session`. |
+| `episodic` | `MemoryRecord.kind = episode` and lifecycle `MemoryEvent` records. |
+| `semantic` | `MemoryRecord.kind = fact`, `preference`, or `relationship`; optional `MemoryAssertion`; source-grounded knowledge remains `KnowledgeChunk`, `KnowledgeEntity`, and `KnowledgeRelationship`. |
+| `procedural` | `MemoryRecord.kind = procedure` or an `artifact` linked to a tool/workflow record. |
+
+Rules:
+
+- The accepted v1 `MemoryRecord` schema does not contain a `role` field. Role is
+  derived from `kind`, `policy`, `scope`, provenance, and operation context until
+  a later contract version promotes an optional typed field.
+- Working memory is volatile by default. Persisted working-memory records
+  represent eviction, archival, or trace events, not the live context window
+  itself.
+- Semantic memory may reference knowledge records, but memory and knowledge
+  records remain distinct domain entities.
+- Procedural memory records describe what was learned; they do not own tool
+  execution, scheduling, or policy bypass behavior.
 
 ### MemoryStatus
 
@@ -1134,6 +1184,105 @@ Enum:
 - `applied`
 - `rolled_back`
 
+### TaxonomyProposal
+
+Draft extension record for governed taxonomy evolution.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable proposal id |
+| `schemeId` | yes | ConceptSchemeId | Affected concept scheme |
+| `status` | yes | TaxonomyProposalStatus | Review lifecycle |
+| `changes` | yes | TaxonomyChange[] | Proposed changes |
+| `validation` | no | TaxonomyValidationReport | Latest validation result |
+| `semanticDrift` | no | SemanticDriftFinding[] | Advisory drift findings |
+| `proposer` | yes | Actor | Actor or agent that proposed the change |
+| `reviewer` | no | Actor | Actor that approved or rejected the proposal |
+| `provenance` | yes | Provenance | Discovery/proposal provenance |
+| `createdAt` | yes | Timestamp | Proposal creation time |
+| `reviewedAt` | no | Timestamp | Review time |
+| `metadata` | no | object | Non-contract attributes |
+
+### TaxonomyProposalStatus
+
+Enum:
+
+- `discovered`
+- `proposed`
+- `validated`
+- `approved`
+- `rejected`
+- `merged`
+- `rolled_back`
+
+### TaxonomyValidationReport
+
+Draft extension report produced before taxonomy changes can merge.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable report id |
+| `proposalId` | yes | string | Validated proposal |
+| `status` | yes | TaxonomyValidationStatus | Validation outcome |
+| `findings` | no | TaxonomyValidationFinding[] | Structural or semantic validation findings |
+| `checkedAt` | yes | Timestamp | Validation time |
+| `provenance` | yes | Provenance | Validation method and actor |
+
+### TaxonomyValidationStatus
+
+Enum:
+
+- `passed`
+- `passed_with_warnings`
+- `failed`
+
+### TaxonomyValidationFinding
+
+Finding produced while validating a taxonomy proposal.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable finding id |
+| `severity` | yes | enum | `info`, `warning`, `error` |
+| `code` | yes | string | Machine-readable finding code |
+| `message` | yes | string | Human-readable explanation |
+| `targetType` | no | string | Affected taxonomy object type |
+| `targetId` | no | string | Affected taxonomy object id |
+| `provenance` | yes | Provenance | Validation provenance |
+| `detectedAt` | yes | Timestamp | Detection time |
+
+### SemanticDriftFinding
+
+Advisory finding that a concept, relation, or mapping may have changed meaning.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable finding id |
+| `targetType` | yes | enum | `concept`, `concept_relation`, `concept_mapping`, `scheme` |
+| `targetId` | yes | string | Affected taxonomy object |
+| `severity` | yes | enum | `info`, `warning`, `error` |
+| `reason` | yes | string | Machine-readable reason |
+| `message` | no | string | Human-readable detail |
+| `evidence` | no | EvidenceRef[] | Supporting records |
+| `detectedAt` | yes | Timestamp | Detection time |
+
+Rules:
+
+- Discovery and proposal may be automated, but merge requires an explicit actor
+  and an approved proposal.
+- Drift findings are advisory until policy or a later contract makes them write
+  blockers.
+- Taxonomy proposal payloads remain storage-neutral; graph labels, SQL tables,
+  and vector namespaces stay adapter-local.
+
 ## Hierarchy Model
 
 Hierarchy models multi-level aggregation and navigation. It is related to
@@ -1264,6 +1413,45 @@ Fields:
 | `interClusterThreshold` | no | number | Minimum strength for inter-cluster edges |
 | `llmBudget` | no | integer | Max model calls per run |
 | `createdAt` | yes | Timestamp | Config creation time |
+
+### HierarchyBuildRecord
+
+Draft extension record for one hierarchy construction run.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable build id |
+| `scope` | yes | Scope | Build scope |
+| `config` | yes | HierarchyBuildConfig | Configuration used |
+| `status` | yes | HierarchyBuildStatus | Build lifecycle state |
+| `inputRefs` | no | EvidenceRef[] | Memories, chunks, entities, or concepts considered |
+| `outputNodeIds` | no | HierarchyNodeId[] | Nodes produced or updated |
+| `outputRelationIds` | no | string[] | Relations produced or updated |
+| `stats` | no | object | Builder counters such as items read, nodes created, and model calls |
+| `errors` | no | ConsolidationError[] | Non-fatal or fatal build errors |
+| `provenance` | yes | Provenance | Builder method, actor, and inputs |
+| `startedAt` | yes | Timestamp | Build start time |
+| `completedAt` | no | Timestamp | Build completion time |
+
+### HierarchyBuildStatus
+
+Enum:
+
+- `running`
+- `completed`
+- `completed_with_errors`
+- `failed`
+- `cancelled`
+
+Rules:
+
+- Construction and navigation are separate contracts. `HierarchyBuildRecord`
+  explains how nodes were produced; `HierarchyPath` explains how nodes were
+  traversed.
+- A failed build must not be represented as active hierarchy state unless the
+  produced nodes are explicitly marked active by policy and provenance.
 
 ### HierarchyPath
 
@@ -1420,6 +1608,14 @@ Enum:
 - `semantic`
 - `graph`
 - `keyword`
+
+Draft extension note:
+
+- Vector retrieval is represented in accepted v1 as semantic retrieval over
+  records with `EmbeddingRef` values and adapter-local vector indexes. A future
+  contract may promote `vector` to an explicit `RetrievalMode` only with an enum
+  compatibility review, because accepted v1 schemas currently reject unknown
+  retrieval mode values.
 
 ### QueryFilter
 
@@ -1673,6 +1869,56 @@ Fields:
 | `strategy` | no | enum | `manual`, `time_window`, `event_count`, `retrieval_failure`, `hybrid` |
 | `dryRun` | no | boolean | Whether to produce proposals only |
 
+### ConsolidationPlan
+
+Deterministic operation plan for a consolidation request. Plans are produced
+before dry-run rendering or mutating apply so hosts can inspect which candidate
+operations would run without invoking a scheduler.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `scope` | yes | Scope | Consolidation scope |
+| `requester` | yes | Requester | Caller context |
+| `strategy` | no | ConsolidationStrategy | Requested strategy |
+| `dryRun` | yes | boolean | Whether the plan is non-mutating |
+| `plannedAt` | yes | Timestamp | Planning timestamp |
+| `operations` | no | ConsolidationPlannedOperation[] | Ordered operation candidates |
+
+### ConsolidationPlannedOperation
+
+One candidate operation inside a consolidation plan.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable identifier within the plan |
+| `kind` | yes | ConsolidationOperationKind | Operation kind |
+| `task` | yes | ConsolidationTaskKind | Run task emitted when executed or rendered |
+| `description` | yes | string | Human-readable operation summary |
+| `mutates` | yes | boolean | Whether apply may change durable state |
+| `requiresPolicy` | yes | boolean | Whether apply must pass a policy gate |
+| `requiresEvaluation` | yes | boolean | Whether apply must pass evaluation gates |
+| `inputRefs` | no | EvidenceRef[] | Candidate inputs |
+| `outputRefs` | no | EvidenceRef[] | Expected or produced outputs |
+
+### ConsolidationOperationKind
+
+Enum:
+
+- `compaction`
+- `memory_to_fact`
+- `memory_to_belief`
+- `contradiction_review`
+- `hierarchy_candidate`
+- `taxonomy_candidate`
+- `graph_candidate`
+- `semantic_drift_review`
+- `decay_review`
+- `evaluation_gate`
+
 ### ConsolidationRun
 
 Auditable execution record for a consolidation cycle.
@@ -1746,12 +1992,14 @@ Fields:
 Enum:
 
 - `compaction`
+- `fact_extraction`
 - `memory_synthesis`
 - `belief_synthesis`
 - `belief_contradiction_detection`
 - `belief_propagation`
 - `hierarchy_build`
 - `taxonomy_evolution`
+- `graph_evolution`
 - `semantic_drift_detection`
 - `conflict_resolution`
 - `decay`
@@ -1862,6 +2110,15 @@ Fields:
 | `maxResults` | no | integer | Maximum result count |
 | `requiresExplanation` | no | boolean | Whether explanation is required |
 
+Draft extension assertions:
+
+- Later evaluation contracts may add explicit assertions for hierarchy paths,
+  taxonomy proposal outcomes, belief lifecycle transitions, consolidation plans,
+  and adapter-readiness diagnostics.
+- Until those assertions are accepted, fixtures should express expectations
+  through existing `mustInclude`, `mustExclude`, `minScore`, `maxResults`, and
+  `requiresExplanation` fields or through spec-local deterministic checks.
+
 ### ExpectedTarget
 
 Fields:
@@ -1870,6 +2127,99 @@ Fields:
 |-------|----------|------|---------|
 | `targetType` | yes | RetrievalTargetType | Expected target type |
 | `targetId` | yes | string | Expected target id |
+
+## Compatibility and Capability Model
+
+These draft extension records let adapters and host applications discover what
+an Engram-backed implementation supports without importing product-specific
+route names, UI DTOs, scheduler settings, or storage schemas.
+
+### CapabilityReport
+
+Snapshot of supported behavior for a library build, adapter, or host
+integration.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable report id |
+| `scope` | no | Scope | Scope if capability differs by tenant/workspace |
+| `producer` | yes | string | Library, adapter, or binding that produced the report |
+| `capabilities` | yes | Capability[] | Individual capability statuses |
+| `diagnostics` | no | MigrationDiagnostic[] | Relevant warnings or blockers |
+| `provenance` | yes | Provenance | Report method, producer, and evidence |
+| `generatedAt` | yes | Timestamp | Report creation time |
+
+### Capability
+
+Single behavior capability.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `key` | yes | string | Stable capability key such as `belief.valid_time_as_of` |
+| `status` | yes | CapabilityStatus | Current support status |
+| `targetTypes` | no | RetrievalTargetType[] | Affected target types, if applicable |
+| `modes` | no | RetrievalMode[] | Affected retrieval modes, if applicable |
+| `reason` | no | string | Machine-readable unsupported/degraded reason |
+| `message` | no | string | Human-readable detail |
+| `evidence` | no | EvidenceRef[] | Specs, fixtures, or reports supporting this status |
+
+### CapabilityStatus
+
+Enum:
+
+- `active`: supported and eligible for normal use.
+- `inactive`: intentionally unavailable or retired.
+- `degraded`: available with documented limitations.
+- `unsupported`: not implemented by this adapter or build.
+- `deferred`: intentionally postponed behind a future spec or ADR.
+
+### AdapterReadinessProbe
+
+Draft extension request/record for compatibility probes.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable probe id |
+| `scope` | yes | Scope | Probe scope |
+| `requester` | yes | Requester | Caller context |
+| `checks` | yes | string[] | Capability keys or fixture names to exercise |
+| `report` | no | CapabilityReport | Resulting capability report |
+| `provenance` | no | Provenance | Probe setup provenance |
+| `createdAt` | yes | Timestamp | Probe creation time |
+
+### MigrationDiagnostic
+
+Portable diagnostic for adapter cutover and migration rehearsals.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `code` | yes | string | Machine-readable diagnostic code |
+| `severity` | yes | enum | `info`, `warning`, `error`, `blocker` |
+| `targetType` | no | string | Source object type or capability key |
+| `targetId` | no | string | Source object id |
+| `message` | yes | string | Human-readable detail |
+| `action` | no | string | Suggested operator or migration action |
+| `recoverable` | yes | boolean | Whether cutover can continue after handling |
+| `detectedAt` | yes | Timestamp | Diagnostic creation time |
+
+Rules:
+
+- Capability keys are portable Engram concepts, not AgentZero route names,
+  settings keys, or UI component names.
+- A host such as AgentZero may translate its provider settings into capability
+  probes, but Engram does not read host settings files.
+- Unsupported record-time history must be reported as unsupported or deferred;
+  valid-time `as_of` support must not be described as full bitemporality.
+- Retired in-memory adapters should be reported as inactive if a host asks about
+  them; they must not re-enter as active conformance surfaces.
 
 ## Invariants
 
@@ -1890,8 +2240,13 @@ Fields:
   `ConsolidationRun`.
 - Hierarchy nodes must preserve enough provenance to explain their source
   members or source algorithm.
+- Hierarchy construction runs must be auditable when they create or update
+  durable hierarchy state.
 - Taxonomy `broader` and `narrower` relations represent direct links only.
+- Taxonomy proposals must not merge without explicit approval.
 - Embedding vectors are not required in portable contract payloads.
+- Capability reports must not encode host-specific routes, UI DTOs, or storage
+  schema names as domain truth.
 - Storage adapters may add indexes and internal tables but must preserve the
   portable domain model.
 
@@ -1946,8 +2301,20 @@ defer their schemas and storage until after the first vertical slice:
 - `HierarchyMembership`
 - `HierarchyRelation`
 - `HierarchyPath`
+- `ConsolidationPlan`
+- `ConsolidationPlannedOperation`
 - `ConsolidationRun`
 - `ConsolidationTaskResult`
+- `MemoryRole`
+- `TaxonomyProposal`
+- `TaxonomyValidationReport`
+- `TaxonomyValidationFinding`
+- `SemanticDriftFinding`
+- `HierarchyBuildRecord`
+- `CapabilityReport`
+- `Capability`
+- `AdapterReadinessProbe`
+- `MigrationDiagnostic`
 
 ## V1 Acceptance Decisions
 
@@ -1969,6 +2336,9 @@ defer their schemas and storage until after the first vertical slice:
 - Hierarchy nodes are deferred from v1 accepted schemas.
 - Consolidation runs are deferred from v1 accepted schemas. Manual write,
   retrieve, and forget operations do not require consolidation records.
+- `MemoryRole`, taxonomy proposals, hierarchy build records, capability
+  reports, adapter-readiness probes, and migration diagnostics are draft
+  extension contracts. They do not change accepted v1 wire payloads.
 - `KnowledgeSource`, `SourceDocument`, and `KnowledgeChunk` are included in v1
   only as source-grounded setup and retrieval targets needed by evaluation and
   future code/document knowledge ingestion. Ingestion behavior is specified
@@ -1984,4 +2354,7 @@ defer their schemas and storage until after the first vertical slice:
 - Which hierarchy build algorithms and versioning model should be accepted?
 - Which consolidation tasks are mandatory for background sleep-cycle behavior?
 - Which taxonomy evolution operations are safe to automate?
+- Should `MemoryRole` become an optional accepted wire field, remain a derived
+  classification, or be exposed only through higher-level SDK helpers?
+- What compatibility guarantees should capability keys carry across versions?
 - Should future policy contracts add a governance model for training export?

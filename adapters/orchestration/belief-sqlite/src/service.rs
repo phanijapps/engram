@@ -3,23 +3,25 @@
 //! Storage-only: this module persists belief and contradiction payloads as JSON
 //! with scope indexing. Detection (`ContradictionDetector`) is advisory — it
 //! surfaces tension between active beliefs on the same subject; resolution is a
-//! deliberate action, never an automatic overwrite. Bi-temporal `valid_from`/
-//! `valid_until` are stored as part of the payload and surfaced for display only
-//! (no `transaction_time`, no as-of queries).
+//! deliberate action, never an automatic overwrite. Valid-time `as_of` queries
+//! are implemented over `valid_from`/`valid_until`; record-time history is
+//! rejected because this adapter stores current rows, not historical versions.
 
 use std::{
-    collections::{HashMap, HashSet},
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
 };
 
 use async_trait::async_trait;
 use chrono::Utc;
-use engram_core::{BeliefRepository, ContradictionDetector};
+use engram_core::{
+    BeliefQuery, BeliefQueryOrder, BeliefReferenceQuery, BeliefRepository,
+    belief_references_source, canonical_pair_key, canonicalize_pair, clear_stale_state, mark_stale,
+    retract_belief, supersede_belief,
+};
 use engram_domain::*;
 use engram_runtime::{CoreError, CoreResult};
 use rusqlite::{Connection, OptionalExtension, params};
-use sha2::{Digest, Sha256};
 
 use crate::{
     schema::{initialize_schema, json_error, sql_error},
@@ -32,7 +34,7 @@ use crate::{
 /// identifiers and scope columns for repository reads.
 #[derive(Clone)]
 pub struct SqlBeliefStore {
-    connection: Arc<Mutex<Connection>>,
+    pub(crate) connection: Arc<Mutex<Connection>>,
 }
 
 impl SqlBeliefStore {
@@ -53,116 +55,174 @@ impl SqlBeliefStore {
         })
     }
 
-    fn lock(&self) -> CoreResult<MutexGuard<'_, Connection>> {
+    pub(crate) fn lock(&self) -> CoreResult<MutexGuard<'_, Connection>> {
         self.connection.lock().map_err(|_| CoreError::Adapter {
             adapter: "engram-store-belief-sqlite".to_owned(),
             message: "connection lock poisoned".to_owned(),
         })
     }
 
+    fn visible_belief_or_not_found(&self, id: &BeliefId, scope: &Scope) -> CoreResult<Belief> {
+        self.load_belief_by_id(id)?
+            .filter(|belief| scope_allows(&belief.scope, scope))
+            .ok_or_else(|| CoreError::NotFound {
+                target_type: "belief",
+                target_id: id.to_string(),
+            })
+    }
+
     /// Lists beliefs visible to `scope` (store-specific; not on the port). Used
     /// by the demo UI and as detector input.
     pub async fn list_beliefs(&self, scope: &Scope) -> CoreResult<Vec<Belief>> {
-        let connection = self.lock()?;
-        let mut statement = connection
-            .prepare("SELECT record_json FROM beliefs ORDER BY id")
-            .map_err(sql_error)?;
-        let rows = statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(sql_error)?;
-        let mut beliefs = Vec::new();
-        for row in rows {
-            let json = row.map_err(sql_error)?;
-            let belief = serde_json::from_str::<Belief>(&json).map_err(json_error)?;
-            if scope_allows(&belief.scope, scope) {
-                beliefs.push(belief);
-            }
-        }
-        Ok(beliefs)
+        Ok(self
+            .load_all_beliefs()?
+            .into_iter()
+            .filter(|belief| scope_allows(&belief.scope, scope))
+            .collect())
     }
 
     /// Lists contradictions visible to `scope` (store-specific; not on the port).
     pub async fn list_contradictions(&self, scope: &Scope) -> CoreResult<Vec<Contradiction>> {
-        let connection = self.lock()?;
-        let mut statement = connection
-            .prepare("SELECT record_json FROM contradictions ORDER BY id")
-            .map_err(sql_error)?;
-        let rows = statement
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(sql_error)?;
-        let mut contradictions = Vec::new();
-        for row in rows {
-            let json = row.map_err(sql_error)?;
-            let contradiction = serde_json::from_str::<Contradiction>(&json).map_err(json_error)?;
-            if scope_allows(&contradiction.scope, scope) {
-                contradictions.push(contradiction);
-            }
-        }
-        Ok(contradictions)
+        Ok(self
+            .load_all_contradictions()?
+            .into_iter()
+            .filter(|contradiction| scope_allows(&contradiction.scope, scope))
+            .collect())
     }
 }
 
 #[async_trait]
 impl BeliefRepository for SqlBeliefStore {
     async fn put_belief(&self, belief: Belief) -> CoreResult<Belief> {
-        let json = serde_json::to_string(&belief).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO beliefs
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                ON CONFLICT(id) DO UPDATE SET
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    belief.id.to_string(),
-                    belief.scope.tenant,
-                    belief.scope.subject,
-                    belief.scope.workspace,
-                    belief.scope.session,
-                    belief.scope.environment,
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
+        self.write_belief_row(&belief)?;
         Ok(belief)
     }
 
-    async fn put_contradiction(&self, contradiction: Contradiction) -> CoreResult<Contradiction> {
-        let json = serde_json::to_string(&contradiction).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO contradictions
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                ON CONFLICT(id) DO UPDATE SET
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    contradiction.id.to_string(),
-                    contradiction.scope.tenant,
-                    contradiction.scope.subject,
-                    contradiction.scope.workspace,
-                    contradiction.scope.session,
-                    contradiction.scope.environment,
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
+    async fn upsert_belief(&self, mut belief: Belief) -> CoreResult<Belief> {
+        if let Some(existing) = self.load_all_beliefs()?.into_iter().find(|existing| {
+            existing.scope == belief.scope
+                && existing.subject.key == belief.subject.key
+                && existing.valid_from == belief.valid_from
+        }) {
+            belief.id = existing.id;
+        }
+        self.write_belief_row(&belief)?;
+        Ok(belief)
+    }
+
+    async fn get_belief(&self, query: BeliefQuery) -> CoreResult<Option<Belief>> {
+        if query.requires_record_time_history() {
+            return Err(CoreError::InvalidRequest {
+                reason: "record-time belief history is not supported by engram-store-belief-sqlite"
+                    .to_owned(),
+            });
+        }
+
+        let now = Utc::now();
+        let mut matches = self
+            .load_all_beliefs()?
+            .into_iter()
+            .filter(|belief| scope_allows(&belief.scope, &query.scope))
+            .filter(|belief| query.matches_after_scope(belief, now))
+            .collect::<Vec<_>>();
+        sort_beliefs_for_query(&mut matches, query.order);
+        Ok(matches.into_iter().next())
+    }
+
+    async fn get_belief_by_id(&self, id: &BeliefId, scope: &Scope) -> CoreResult<Option<Belief>> {
+        Ok(self
+            .load_belief_by_id(id)?
+            .filter(|belief| scope_allows(&belief.scope, scope)))
+    }
+
+    async fn mark_stale(&self, id: &BeliefId, scope: &Scope, at: Timestamp) -> CoreResult<Belief> {
+        let belief = self.visible_belief_or_not_found(id, scope)?;
+        let belief = mark_stale(belief, at);
+        self.write_belief_row(&belief)?;
+        Ok(belief)
+    }
+
+    async fn clear_stale(&self, id: &BeliefId, scope: &Scope, at: Timestamp) -> CoreResult<Belief> {
+        let belief = self.visible_belief_or_not_found(id, scope)?;
+        let belief = clear_stale_state(belief, at);
+        self.write_belief_row(&belief)?;
+        Ok(belief)
+    }
+
+    async fn supersede_belief(
+        &self,
+        id: &BeliefId,
+        scope: &Scope,
+        replacement_id: BeliefId,
+        at: Timestamp,
+    ) -> CoreResult<Belief> {
+        let belief = self.visible_belief_or_not_found(id, scope)?;
+        let belief = supersede_belief(belief, replacement_id, at);
+        self.write_belief_row(&belief)?;
+        Ok(belief)
+    }
+
+    async fn retract_belief(
+        &self,
+        id: &BeliefId,
+        scope: &Scope,
+        at: Timestamp,
+    ) -> CoreResult<Belief> {
+        let belief = self.visible_belief_or_not_found(id, scope)?;
+        let belief = retract_belief(belief, at);
+        self.write_belief_row(&belief)?;
+        Ok(belief)
+    }
+
+    async fn list_stale(&self, scope: &Scope) -> CoreResult<Vec<Belief>> {
+        Ok(self
+            .load_all_beliefs()?
+            .into_iter()
+            .filter(|belief| scope_allows(&belief.scope, scope))
+            .filter(|belief| belief.status == BeliefStatus::Stale || belief.stale == Some(true))
+            .collect())
+    }
+
+    async fn beliefs_referencing_source(
+        &self,
+        query: BeliefReferenceQuery,
+    ) -> CoreResult<Vec<Belief>> {
+        let as_of = query.valid_at.unwrap_or_else(Utc::now);
+        Ok(self
+            .load_all_beliefs()?
+            .into_iter()
+            .filter(|belief| scope_allows(&belief.scope, &query.scope))
+            .filter(|belief| {
+                belief_references_source(belief, &query.source_type, &query.source_id, as_of)
+            })
+            .collect())
+    }
+
+    async fn put_contradiction(
+        &self,
+        mut contradiction: Contradiction,
+    ) -> CoreResult<Contradiction> {
+        if contradiction.targets.len() == 2 {
+            let pair = canonicalize_pair(
+                contradiction.targets[0].clone(),
+                contradiction.targets[1].clone(),
+            );
+            contradiction.targets = vec![pair.left, pair.right];
+            let pair_key = canonical_pair_key(&contradiction.targets[0], &contradiction.targets[1]);
+            if let Some(existing) = self
+                .load_all_contradictions()?
+                .into_iter()
+                .find(|existing| {
+                    existing.scope == contradiction.scope
+                        && existing.targets.len() == 2
+                        && canonical_pair_key(&existing.targets[0], &existing.targets[1])
+                            == pair_key
+                })
+            {
+                return Ok(existing);
+            }
+        }
+        self.write_contradiction_row(&contradiction)?;
         Ok(contradiction)
     }
 
@@ -224,68 +284,6 @@ impl BeliefRepository for SqlBeliefStore {
     }
 }
 
-#[async_trait]
-impl ContradictionDetector for SqlBeliefStore {
-    /// Advisory detection: groups ACTIVE beliefs by subject key and flags any
-    /// group whose members do not all share the same content. Each such group
-    /// yields one Logical contradiction (severity = the group's max confidence).
-    async fn detect_contradictions(&self, beliefs: &[Belief]) -> CoreResult<Vec<Contradiction>> {
-        let mut groups: HashMap<String, Vec<&Belief>> = HashMap::new();
-        for belief in beliefs {
-            if belief.status == BeliefStatus::Active {
-                groups
-                    .entry(belief.subject.key.clone())
-                    .or_default()
-                    .push(belief);
-            }
-        }
-
-        let now = Utc::now();
-        let mut findings = Vec::new();
-        for (key, group) in groups {
-            if group.len() < 2 {
-                continue;
-            }
-            let distinct: HashSet<&str> = group.iter().map(|b| b.content.as_str()).collect();
-            if distinct.len() < 2 {
-                continue;
-            }
-            let severity = group
-                .iter()
-                .map(|b| b.confidence)
-                .fold(0.0_f32, f32::max)
-                .clamp(0.0, 1.0);
-            let targets = group
-                .iter()
-                .map(|b| ContradictionTarget {
-                    target_type: ContradictionTargetType::Belief,
-                    target_id: b.id.to_string(),
-                    role: None,
-                })
-                .collect::<Vec<_>>();
-            findings.push(Contradiction {
-                id: contradiction_id_for(&key),
-                scope: group[0].scope.clone(),
-                kind: ContradictionKind::Logical,
-                targets,
-                severity,
-                status: ContradictionStatus::Open,
-                reasoning: Some(format!(
-                    "{} active beliefs on `{key}` disagree",
-                    group.len()
-                )),
-                detected_by: None,
-                resolution: None,
-                provenance: detector_provenance(&key, now),
-                detected_at: now,
-                updated_at: None,
-            });
-        }
-        findings.sort_by(|left, right| left.id.to_string().cmp(&right.id.to_string()));
-        Ok(findings)
-    }
-}
-
 fn status_for_resolution(kind: &ContradictionResolutionKind) -> ContradictionStatus {
     match kind {
         ContradictionResolutionKind::ManualIgnore => ContradictionStatus::Ignored,
@@ -297,38 +295,18 @@ fn status_for_resolution(kind: &ContradictionResolutionKind) -> ContradictionSta
     }
 }
 
-/// Deterministic contradiction id from the subject key (one contradiction per
-/// subject at a time; re-detection upserts the same row).
-fn contradiction_id_for(key: &str) -> ContradictionId {
-    let hash = Sha256::digest(key.as_bytes());
-    ContradictionId::from(format!("contradiction-{}", hex(&hash[..8])))
-}
-
-/// Builds the advisory provenance stamped on detected contradictions.
-fn detector_provenance(key: &str, now: chrono::DateTime<Utc>) -> Provenance {
-    Provenance {
-        source: format!("belief-detector:{key}"),
-        actor: Actor {
-            id: Id::from("engram-contradiction-detector"),
-            kind: ActorKind::System,
-            display_name: Some("Contradiction detector".to_owned()),
-            metadata: None,
-        },
-        observed_at: now,
-        evidence: Vec::new(),
-        derivations: Vec::new(),
-        confidence: Some(1.0),
-        method: Some("contradiction_detection".to_owned()),
-    }
-}
-
-/// Lowercase hex encoding (avoids pulling a `hex` crate for 8 bytes).
-fn hex(bytes: &[u8]) -> String {
-    const TABLE: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        out.push(TABLE[(byte >> 4) as usize] as char);
-        out.push(TABLE[(byte & 0x0f) as usize] as char);
-    }
-    out
+fn sort_beliefs_for_query(beliefs: &mut [Belief], order: BeliefQueryOrder) {
+    beliefs.sort_by(|left, right| match order {
+        BeliefQueryOrder::LatestValidFirst => right
+            .valid_from
+            .cmp(&left.valid_from)
+            .then_with(|| right.created_at.cmp(&left.created_at))
+            .then_with(|| right.id.to_string().cmp(&left.id.to_string())),
+        BeliefQueryOrder::LatestRecordedFirst => right
+            .updated_at
+            .unwrap_or(right.created_at)
+            .cmp(&left.updated_at.unwrap_or(left.created_at))
+            .then_with(|| right.valid_from.cmp(&left.valid_from))
+            .then_with(|| right.id.to_string().cmp(&left.id.to_string())),
+    });
 }

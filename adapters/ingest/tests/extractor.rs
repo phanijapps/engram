@@ -3,7 +3,7 @@ use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
 };
 use engram_knowledge::KnowledgeGraphRepository;
-use engram_store_knowledge_memory::InMemoryKnowledgeStore;
+use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 fn scope() -> Scope {
@@ -29,7 +29,7 @@ fn policy() -> Policy {
 
 #[test]
 fn extracts_code_symbols_and_calls_edges() {
-    let store = InMemoryKnowledgeStore::new();
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
     let ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
     let request = DocumentIngestRequest {
         source_kind: SourceKind::Filesystem,

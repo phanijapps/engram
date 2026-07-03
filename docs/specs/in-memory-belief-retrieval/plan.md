@@ -52,12 +52,12 @@ to implement `MemoryService::retrieve`.
 
 ### Component / module decomposition
 
-- `adapters/memory/inmem/src/belief_retrieval.rs` owns belief candidate
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) owns belief candidate
   construction.
-- `adapters/memory/inmem/src/retrieval.rs` snapshots beliefs and appends
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) snapshots beliefs and appends
   their candidates before shared fusion.
 - Tests live in
-  `adapters/memory/inmem/tests/belief_retrieval.rs`.
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`).
 
 ### Failure, edge cases & resilience
 

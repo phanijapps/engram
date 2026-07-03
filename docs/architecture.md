@@ -1,171 +1,22 @@
 # Architecture
 
-The memory layer is designed as a composable system with stable ports and
-replaceable adapters.
+This file is kept as a compatibility entry point for older specs and hooks.
 
-The domain contract is drafted separately in `docs/domain-data-model.md`. Once
-accepted, implementation types, JSON schemas, bindings, and storage schemas
-should derive from that model.
+Use the architecture docs under `docs/architecture/` for current work:
 
-## System Responsibilities
+- [`docs/architecture/reference.md`](architecture/reference.md) is normative.
+  It defines the architecture and clean-design rules new implementation must
+  conform to.
+- [`docs/architecture/overview.md`](architecture/overview.md) is descriptive.
+  It maps the current repository layout and should be updated when directories,
+  crates, packages, or major dependencies move.
 
-- Ingest observations, user facts, task traces, artifacts, and feedback.
-- Normalize memories into durable records with provenance and permissions.
-- Retrieve relevant memories for an agent context with explainable ranking.
-- Consolidate noisy event history into durable knowledge.
-- Forget, redact, or downgrade memories according to policy.
-- Evaluate quality and safety across realistic agent workflows.
+The research target this implementation is converging on is
+[`docs/research/architecture-design-v2.md`](research/architecture-design-v2.md),
+with divergence tracked in [`docs/arch_divergence.md`](arch_divergence.md).
 
-## Core Modules
-
-### Domain Contract
-
-Owns portable data shapes and storage-neutral semantics.
-
-- `MemoryRecord` and `MemoryEvent`: agent state and lifecycle.
-- `KnowledgeSource`, `SourceDocument`, and `KnowledgeChunk`: source-grounded
-  corpus content.
-- `KnowledgeGraph`, `KnowledgeEntity`, and `KnowledgeRelationship`: typed graph
-  content.
-- `Ontology`, `OntologyClass`, `OntologyProperty`, and `OntologyAxiom`: graph
-  governance and validation vocabulary.
-- `Provenance` and `Policy`: source, actor, confidence, permission, retention,
-  and sensitivity controls.
-
-### Memory Ports
-
-Own memory service and repository interfaces.
-
-- `MemoryRecord`: canonical persisted memory unit.
-- `MemoryEvent`: append-only event describing creation, update, access, or
-  deletion.
-- `MemoryService`: write, retrieve, and forget operations.
-- `MemoryRepository`: memory record persistence.
-- `MemoryEventRepository`: lifecycle event reads.
-
-### Knowledge Ports
-
-Own source-grounded knowledge, graph, ontology, and ingestion interfaces.
-
-- `KnowledgeRepository`: sources, documents, chunks, entities, and
-  relationships.
-- `KnowledgeGraphRepository`: named graph identity and graph traversal.
-- `OntologyRepository`: ontology classes, properties, axioms, and validation.
-- `SourceReader`, `Chunker`, and `IngestionService`: source extraction and
-  normalization.
-
-### Ingestion
-
-Transforms external events into candidate memories.
-
-- Agent messages and tool calls.
-- User profile facts and preferences.
-- Project artifacts and code context.
-- Feedback signals and corrections.
-
-### Retrieval
-
-Returns context for a task using multiple retrieval strategies.
-
-- Semantic vector search.
-- Keyword and structured metadata filters.
-- Graph traversal for related entities and episodes.
-- Recency, confidence, and policy-aware ranking.
-- Shared fan-in, fusion, final context limits, omissions, and degraded-source
-  reporting through the retrieval boundary.
-
-### Consolidation
-
-Turns traces into durable knowledge.
-
-- Deduplicate overlapping facts.
-- Merge repeated preferences and stable behavior.
-- Decay or archive stale memories.
-- Track confidence changes over time.
-
-### Storage Adapters
-
-Storage should be swappable behind ports.
-
-- Memory stores for records, lifecycle events, idempotency, and replay.
-- Knowledge stores for documents, chunks, entities, relationships, and
-  ontologies.
-- Vector index for semantic recall.
-- Graph index for relationships, ontology-backed graph traversal, and GraphRAG.
-- Process-local in-memory adapters are conformance fixtures only. Memory,
-  knowledge graph, and ontology fixtures stay in separate crates so production
-  backends can diverge by technology.
-
-### Knowledge Source Extension
-
-Code repositories and unstructured documents should enter the system as
-knowledge sources, not as special cases inside core memory. Source connectors
-scan and read content; ingestion adapters normalize that content into
-source-grounded knowledge chunks; retrieval can then compose memories and
-knowledge together with provenance.
-
-See `docs/rfcs/0002-knowledge-source-extension.md`.
-
-### Connectors
-
-Connectors adapt external runtimes without leaking framework-specific concepts
-into core.
-
-- Agent runtime connector.
-- API connector.
-- CLI connector.
-- Evaluation harness connector.
-
-## Initial Crate Boundaries
-
-```text
-core/domain
-  Portable domain types and serialization contracts.
-
-core/runtime
-  Shared errors, result type, clocks, id generation, scope matching, policy gates.
-
-core/memory
-  Memory service, memory repository, lifecycle event repository.
-
-core/knowledge
-  Knowledge repositories, graph repositories, ontology repositories, source
-  readers, chunkers, ingestion.
-
-core/orchestration
-  Orchestration facade, consolidation, hierarchy, belief, evaluation, and
-  compatibility re-exports.
-
-core/retrieval
-  Storage-neutral retrieval traits, context composition, and fusion algorithms.
-
-adapters/memory/inmem
-  Quick in-memory memory fixture for tests and examples only.
-
-adapters/knowledge/inmem
-  Quick in-memory knowledge, graph, and ontology fixture for tests and examples.
-
-adapters/memory/sqlite
-  SQLite-backed memory persistence adapter.
-
-adapters/retrieval/sqlite-vec
-  sqlite-vec backed retrieval index adapter.
-
-adapters/ingest
-  Current mixed filesystem/Git source reader and deterministic ingestion crate;
-  deterministic ingestion orchestration can move to core after source readers
-  split into dedicated adapters.
-
-bindings/node
-  N-API bridge exposing Rust behavior to TypeScript.
-```
-
-## First Vertical Slice
-
-The first implementation slice should prove the end-to-end contract:
-
-1. Accept a memory write request.
-2. Persist the record with provenance and policy metadata.
-3. Retrieve relevant records for a query.
-4. Explain why each result was selected.
-5. Run a small evaluation fixture against expected recall behavior.
+In short: Engram is a contract-first, layered memory/knowledge system. Domain
+contracts stay portable, deterministic behavior stays in focused Rust core
+crates, infrastructure stays behind adapters, TypeScript owns integration
+ergonomics, and no crate or package should mix unrelated responsibilities into
+a god module.

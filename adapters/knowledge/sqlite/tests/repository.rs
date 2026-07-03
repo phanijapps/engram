@@ -2,6 +2,7 @@ use chrono::Utc;
 use engram_domain::*;
 use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
+    validate_taxonomy_proposal,
 };
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
@@ -62,6 +63,40 @@ fn graph(graph_id: &str, tenant: &str) -> KnowledgeGraph {
         updated_at: None,
         metadata: None,
     }
+}
+
+#[test]
+fn graph_round_trip_preserves_metadata_and_scope() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let graph = KnowledgeGraph {
+        id: Id::from("graph-metadata"),
+        scope: scope("tenant-a"),
+        name: "Code Graph".to_owned(),
+        uri: Some("urn:graph:code".to_owned()),
+        version: Some("1.0.0".to_owned()),
+        ontology_refs: vec![OntologyRef {
+            id: Some(Id::from("ontology-1")),
+            uri: Some("urn:ontology:code".to_owned()),
+            version: Some("1.0.0".to_owned()),
+        }],
+        policy: policy(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    };
+
+    let stored = block_on(store.put_graph(graph.clone())).expect("put graph");
+    let visible = block_on(store.get_graph(&graph.id, &scope("tenant-a"))).expect("get graph");
+    let hidden = block_on(store.get_graph(&graph.id, &scope("tenant-b"))).expect("get graph");
+
+    assert_eq!(stored.id, graph.id);
+    let visible = visible.expect("visible graph");
+    assert_eq!(visible.name, "Code Graph");
+    assert_eq!(visible.uri.as_deref(), Some("urn:graph:code"));
+    assert_eq!(visible.version.as_deref(), Some("1.0.0"));
+    assert_eq!(visible.ontology_refs, graph.ontology_refs);
+    assert!(hidden.is_none());
 }
 
 #[test]
@@ -259,6 +294,106 @@ fn taxonomy_round_trips_scoped_scheme_and_concepts() {
     assert_eq!(concepts.len(), 2);
     assert_eq!(concepts[0].id, Id::from("concept-rust"));
     assert!(hidden_concepts.is_empty());
+}
+
+#[test]
+fn governed_taxonomy_proposal_validates_before_sqlite_merge() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let scheme_id = Id::from("scheme-governed");
+    let proposal = TaxonomyProposal {
+        id: "proposal-governed".to_owned(),
+        scheme_id: scheme_id.clone(),
+        status: TaxonomyProposalStatus::Merged,
+        changes: Vec::new(),
+        validation: None,
+        semantic_drift: vec![SemanticDriftFinding {
+            id: "drift-runtime-label".to_owned(),
+            target_type: SemanticDriftTargetType::Concept,
+            target_id: "concept-runtime".to_owned(),
+            severity: SemanticDriftSeverity::Warning,
+            reason: "label_shift".to_owned(),
+            message: Some("runtime label changed during proposal review".to_owned()),
+            evidence: Vec::new(),
+            detected_at: Utc::now(),
+        }],
+        proposer: actor(),
+        reviewer: Some(actor()),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        reviewed_at: Some(Utc::now()),
+        metadata: None,
+    };
+    let concepts = vec![
+        Concept {
+            id: Id::from("concept-runtime"),
+            uri: "urn:concept:runtime".to_owned(),
+            scheme_id: scheme_id.clone(),
+            pref_label: ConceptLabel {
+                value: "Runtime".to_owned(),
+                language: Some("en".to_owned()),
+            },
+            alt_labels: Vec::new(),
+            definition: Some("Execution boundary".to_owned()),
+            notation: None,
+            status: ConceptStatus::Active,
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+        },
+        Concept {
+            id: Id::from("concept-adapter"),
+            uri: "urn:concept:adapter".to_owned(),
+            scheme_id: scheme_id.clone(),
+            pref_label: ConceptLabel {
+                value: "Adapter".to_owned(),
+                language: Some("en".to_owned()),
+            },
+            alt_labels: Vec::new(),
+            definition: Some("Replaceable infrastructure boundary".to_owned()),
+            notation: None,
+            status: ConceptStatus::Active,
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+        },
+    ];
+    let relations = vec![ConceptRelation {
+        id: "runtime-related-adapter".to_owned(),
+        scheme_id: scheme_id.clone(),
+        subject_id: Id::from("concept-runtime"),
+        predicate: ConceptRelationKind::Related,
+        object_id: Id::from("concept-adapter"),
+        provenance: provenance(),
+        created_at: Utc::now(),
+    }];
+    let validation = validate_taxonomy_proposal(&proposal, &concepts, &relations);
+    assert_eq!(validation.status, TaxonomyValidationStatus::Passed);
+    assert_eq!(proposal.semantic_drift[0].reason, "label_shift");
+
+    block_on(store.put_concept_scheme(ConceptScheme {
+        id: scheme_id.clone(),
+        uri: "urn:scheme:governed".to_owned(),
+        name: "Governed taxonomy".to_owned(),
+        scope: scope("tenant-a"),
+        version: "1.0.0".to_owned(),
+        provenance: provenance(),
+        policy: policy(),
+        created_at: Utc::now(),
+        updated_at: None,
+    }))
+    .expect("put scheme");
+    for concept in concepts {
+        block_on(store.put_concept(concept)).expect("put concept");
+    }
+    for relation in relations {
+        block_on(store.put_concept_relation(relation)).expect("put relation");
+    }
+
+    let stored =
+        block_on(store.list_concepts(&scheme_id, &scope("tenant-a"))).expect("list concepts");
+    assert_eq!(stored.len(), 2);
+    assert_eq!(stored[0].pref_label.value, "Adapter");
+    assert_eq!(stored[1].pref_label.value, "Runtime");
 }
 
 fn ontology(ontology_id: &str, tenant: &str) -> Ontology {

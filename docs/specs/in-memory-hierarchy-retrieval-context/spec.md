@@ -68,8 +68,8 @@ clustering.
 
 - Technical: base hierarchy nodes already record `sourceTargetType` and
   `sourceTargetId` for memory records (source:
-  `adapters/memory/inmem/src/consolidation/hierarchy_build.rs`).
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Technical: retrieval explanations already carry a string `path` field (source:
   `core/domain/src/retrieval.rs`).
 - Technical: hierarchy path navigation is repository-local and scoped (source:
-  `adapters/memory/inmem/src/hierarchy.rs`).
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).

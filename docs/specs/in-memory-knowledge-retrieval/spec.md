@@ -63,8 +63,8 @@ truncation.
 ## Assumptions
 
 - Technical: knowledge sources, documents, and chunks are already stored in the
-  in-memory adapter (source: `adapters/memory/inmem/src/knowledge.rs`).
+  in-memory adapter (source: the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Technical: retrieval already composes candidates through `RetrievalFusion`
-  (source: `adapters/memory/inmem/src/retrieval.rs`).
+  (source: the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Process: knowledge remains distinct from memory (source:
   `docs/implementation-roadmap.md`).

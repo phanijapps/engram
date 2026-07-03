@@ -15,7 +15,7 @@ Durable belief/contradiction storage lives in a distinct new adapter (`engram-st
 
 ## Assumptions
 
-- Technical: `BeliefRepository`/`ContradictionDetector` ports + `Belief`/`Contradiction` types already exist in `engram-core`/`engram-domain`; the in-memory impl (`adapters/memory/inmem/src/belief.rs`) is the template. (verified)
+- Technical: `BeliefRepository`/`ContradictionDetector` ports + `Belief`/`Contradiction` types already exist in `engram-core`/`engram-domain`; the in-memory impl (the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)) is the template. (verified)
 - Technical: NO `transaction_time` field exists; `valid_from`/`valid_until` are display-only. (grep-verified)
 - Technical: new adapter mirrors `engram-store-knowledge-sqlite` (table-per-record + `record_json`, scope on parent, idempotent schema, `ON CONFLICT` upsert). (verified)
 - Process: lighter single-pass adversarial review. (user standing preference)

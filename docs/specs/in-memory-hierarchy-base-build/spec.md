@@ -75,7 +75,7 @@ policy, and is auditable through a `MemoryEventKind::HierarchyBuilt` event.
   `source_target_type` and `source_target_id` (source:
   `core/domain/src/hierarchy.rs`).
 - Technical: in-memory hierarchy repository and path navigation already exist
-  (source: `adapters/memory/inmem/src/hierarchy.rs`).
+  (source: the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Technical: mutating consolidation is already gated by
   `GatedConsolidationService` and an injected `ConsolidationMutationExecutor`
   (source: `core/orchestration/src/consolidation/mutating.rs`).

@@ -6,6 +6,8 @@
 //! distinct from knowledge and memory storage: source-grounded evidence and
 //! derived stance remain separate contract concepts.
 
+mod detector;
+mod rows;
 mod schema;
 mod scope;
 mod service;

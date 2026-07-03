@@ -5,12 +5,6 @@ Runtime examples live next to the crate or package that owns the public API.
 
 ## Local Rust Adapters
 
-Run the process-local adapter example:
-
-```bash
-cargo run -p engram-store-memory --example local_memory
-```
-
 Run the SQLite adapter example:
 
 ```bash

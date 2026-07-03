@@ -1,10 +1,16 @@
 import {
   createNativeBeliefTransport,
+  createNativeConsolidationTransport,
+  createNativeEvalTransport,
+  createNativeHierarchyTransport,
   createNativeIngestTransport,
   createNativeKnowledgeTransport,
   createNativeMemoryTransport,
   createNativeRetrievalTransport,
   type NativeBeliefTransport,
+  type NativeConsolidationTransport,
+  type NativeEvalTransport,
+  type NativeHierarchyTransport,
   type NativeIngestTransport,
   type NativeKnowledgeTransport,
   type NativeMemoryTransport,
@@ -85,4 +91,31 @@ export function getBeliefTransport(): NativeBeliefTransport {
     belief = createNativeBeliefTransport({ dbPath: dbPath() });
   }
   return belief;
+}
+
+let hierarchy: NativeHierarchyTransport | null = null;
+
+export function getHierarchyTransport(): NativeHierarchyTransport {
+  if (hierarchy === null) {
+    hierarchy = createNativeHierarchyTransport();
+  }
+  return hierarchy;
+}
+
+let consolidation: NativeConsolidationTransport | null = null;
+
+export function getConsolidationTransport(): NativeConsolidationTransport {
+  if (consolidation === null) {
+    consolidation = createNativeConsolidationTransport();
+  }
+  return consolidation;
+}
+
+let evalTransport: NativeEvalTransport | null = null;
+
+export function getEvalTransport(): NativeEvalTransport {
+  if (evalTransport === null) {
+    evalTransport = createNativeEvalTransport();
+  }
+  return evalTransport;
 }

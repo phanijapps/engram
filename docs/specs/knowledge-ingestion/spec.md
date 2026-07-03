@@ -77,7 +77,7 @@ retrievable units, and persist the resulting `KnowledgeSource`,
   and chunk persistence (source: `core/orchestration/src/lib.rs`).
 - Technical: in-memory state needs a focused knowledge state path because it
   currently stores memories, events, and idempotency only (source:
-  `adapters/memory/inmem/src/state.rs`).
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Process: crate roots remain facades and behavior lives in focused modules
   (source: `AGENTS.md`).
 - Product: code and unstructured documents are stored as knowledge, not memory

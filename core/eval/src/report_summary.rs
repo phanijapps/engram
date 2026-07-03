@@ -5,7 +5,7 @@
 //! does not execute fixtures, format terminal output, write files, or make
 //! adapter-specific quality decisions.
 
-use engram_core::EvaluationReport;
+use crate::EvaluationReport;
 use serde::{Deserialize, Serialize};
 
 /// Summary for a set of executed evaluation fixtures.

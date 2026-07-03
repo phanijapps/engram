@@ -81,6 +81,6 @@ fields.
   membership entries (source: `core/domain/src/hierarchy.rs`).
 - Technical: `HierarchyBuild` is already part of hybrid consolidation and
   adapter-local algorithms live under `engram-store-memory` (source:
-  `adapters/memory/inmem/src/consolidation/mod.rs`).
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)).
 - Process: no god modules; aggregate construction belongs in a focused module
   separate from base-node construction (source: `AGENTS.md`).

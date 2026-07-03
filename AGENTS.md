@@ -32,9 +32,8 @@ core/                      Storage-neutral Rust crates.
 
 adapters/                  Replaceable infrastructure crates.
   ingest/                  Filesystem/Git ingestion adapter until split.
-  memory/inmem/            In-memory memory adapter for quick tests only.
   memory/sqlite/           SQLite memory persistence adapter.
-  knowledge/inmem/         In-memory knowledge/graph/ontology test adapter.
+  knowledge/sqlite/        SQLite knowledge, graph, taxonomy, and ontology adapter.
   retrieval/sqlite-vec/    sqlite-vec retrieval index adapter.
 
 bindings/                  Native language bridges.
@@ -68,11 +67,13 @@ the stack ADR is accepted.
 - `engram-core` is an orchestration facade and compatibility re-export layer
   above split behavior crates. It must not become the canonical owner of memory
   or knowledge ports again.
-- `engram-store-memory` is a quick memory fixture. Do not add graph, ontology,
-  embedding provider, durable document, or production cache behavior to it.
-- `engram-store-knowledge-memory` is a quick knowledge, graph, and ontology
-  fixture. It must not own memory writes, memory lifecycle events, or memory
-  forget semantics.
+- `engram-store-sql` is the active local memory adapter. It owns memory records,
+  lifecycle events, idempotency, write/retrieve/forget behavior, and local
+  in-memory/file-backed SQLite construction only.
+- `engram-store-knowledge-sqlite` is the active local knowledge, graph,
+  taxonomy, and ontology adapter. It must not own memory writes, memory
+  lifecycle events, memory forget semantics, vector indexes, or sibling store
+  internals.
 - Store, vector, embedding, model, and gateway integrations belong in adapter
   crates or TypeScript packages.
 - TypeScript must not redefine domain truth. It may wrap, validate, compose, and

@@ -1,47 +1,76 @@
 # Planned Crate And Package Map
 
-This map is a planning baseline, not an implementation lock. Change it through an ADR when the stack is accepted.
+This map reflects the current post-inmem workspace and the architecture target
+from `docs/research/architecture-design-v2.md`. Change public boundaries through
+an ADR or a spec that names the affected crates.
 
 ## Rust Workspace
 
 ### Core
 
-- `engram-domain`: accepted domain types, invariants, serialization, version markers.
-- `engram-runtime`: shared portable errors, result type, clocks, id generation, scope matching, and policy gates.
-- `engram-memory`: memory service and repository ports for write, retrieve, forget, and lifecycle events.
-- `engram-knowledge`: source-grounded knowledge, knowledge graph, ontology, source reader, chunker, and ingestion ports.
-- `engram-core`: orchestration facade, retrieval pipeline, consolidation, hierarchy, belief, and evaluation ports.
-- `engram-eval`: fixtures, deterministic harness, recall/leakage/ranking assertions.
-- `engram-hierarchy`: hierarchy build/maintenance algorithms, paths, expansion strategies.
-- `engram-belief`: belief derivation, contradiction detection, consolidation tasks.
+- `engram-domain`: portable domain types, invariants, serde, and version
+  markers. No infrastructure dependencies.
+- `engram-runtime`: shared portable errors, result type, clocks, id generation,
+  scope matching, and policy authorizer traits.
+- `engram-memory`: memory service and repository ports for write, retrieve,
+  forget, idempotency, and lifecycle events.
+- `engram-knowledge`: source-grounded knowledge, graph, ontology, taxonomy,
+  source reader, chunker, and ingestion ports.
+- `engram-retrieval`: storage-neutral retrieval indexes, fusion, context
+  composition, and prediction helpers.
+- `engram-belief`: belief and contradiction ports.
+- `engram-hierarchy`: hierarchy repository, construction, and navigation ports.
+- `engram-consolidation`: dry-run and gated consolidation services, executor
+  port, planning, evaluation gate, and validation helpers.
+- `engram-eval`: fixtures, deterministic harness, recall/leakage/ranking
+  assertions, and report summaries.
+- `engram-core`: compatibility facade and re-export layer only. It must not
+  become the canonical owner of memory, knowledge, retrieval, belief,
+  hierarchy, consolidation, or eval behavior again.
 
 ### Adapters
 
-- `engram-ingest`: current mixed filesystem/Git source reader and deterministic ingestion crate; split pure ingestion into core later.
-- `engram-store-memory`: in-memory memory adapter for quick tests and first vertical slices only.
-- `engram-store-knowledge-memory`: in-memory knowledge, graph, and ontology adapter for conformance tests and examples only.
-- `engram-store-sql`: SQL persistence adapter after the domain and ports are stable.
-- `engram-store-vector`: vector index adapter after retrieval interfaces stabilize.
-- `engram-provider-embed`: embedding provider adapter traits and selected provider implementations.
+- `engram-ingest`: current mixed filesystem/Git source reader and deterministic
+  ingestion crate. Split source adapters and pure ingestion orchestration when
+  those boundaries need independent release/test cycles.
+- `engram-store-sql`: SQLite memory persistence and `MemoryService`
+  conformance adapter.
+- `engram-store-knowledge-sqlite`: SQLite knowledge, graph, taxonomy, ontology,
+  and graph retrieval index adapter.
+- `engram-store-vector`: sqlite-vec retrieval index and optional FastEmbed query
+  provider.
+- `engram-store-belief-sqlite`: SQLite belief and contradiction repository
+  adapter. Target path: `adapters/belief/sqlite`.
+- `engram-store-hierarchy-sqlite`: SQLite hierarchy repository adapter.
+
+The retired `engram-store-memory` and `engram-store-knowledge-memory` crates
+must not re-enter the workspace without a new ADR/spec.
 
 ### Bindings
 
-- `engram-node`: N-API bridge exposing stable Rust APIs to TypeScript.
+- `engram-node`: N-API bridge exposing stable Rust behavior to TypeScript as a
+  JSON transport, not a second implementation.
 
 ## TypeScript Workspace
 
+- `@engram/contracts`: generated types and JSON schemas from accepted contracts.
 - `@engram/client`: ergonomic TypeScript SDK for application callers.
-- `@engram/contracts`: generated types and JSON schemas from Rust/domain contracts.
 - `@engram/node`: native binding package wrapping `engram-node`.
-- `@engram/adapters`: optional JS-side integrations for frameworks, tools, and gateway code.
-- `@engram/eval`: fixture authoring helpers and CLI wrappers around the Rust eval harness.
+- `@engram/adapters`: optional JS-side integrations for frameworks, tools, and
+  gateway code.
+- `@engram/eval`: fixture authoring helpers and CLI wrappers around the Rust
+  eval harness.
 
 ## Boundary Rules
 
-- The Rust domain crate must not depend on storage adapters, model providers, or TypeScript bindings.
-- Memory and knowledge ports live in their own crates so memory storage and knowledge graph storage can use different backends.
-- In-memory memory and in-memory knowledge fixtures stay in separate crates so quick tests do not normalize mixed production storage.
-- The Rust core crate composes ports, not concrete SQL/vector/graph/provider implementations.
-- TypeScript may compose application workflows, but deterministic domain behavior should live in Rust.
-- Adapters may translate infrastructure-specific errors into stable domain errors.
-- Generated contracts should be reproducible from source, not edited manually.
+- Domain contracts stay independent of storage engines, model providers,
+  language bindings, and runtime frameworks.
+- Memory, knowledge, retrieval, belief, hierarchy, consolidation, and evaluation
+  remain distinct unless an ADR explicitly changes the model.
+- Adapters implement core ports and translate infrastructure-specific failures
+  into stable runtime errors; they do not define domain truth.
+- Retrieval composition stays store-free. New retrieval sources implement
+  `RetrievalIndex`; fusion remains in `engram-retrieval`.
+- TypeScript composes application workflows and exposes ergonomic APIs; Rust
+  owns deterministic behavior.
+- Generated contracts are reproducible from source and must not be hand-edited.

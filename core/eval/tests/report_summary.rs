@@ -1,5 +1,5 @@
-use engram_core::{EvaluationCaseReport, EvaluationReport};
 use engram_domain::Id;
+use engram_eval::{EvaluationCaseReport, EvaluationReport};
 use engram_eval::{summarize_report, summarize_reports};
 
 #[test]

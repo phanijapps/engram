@@ -48,9 +48,9 @@ contract is introduced.
 
 ### Component / module decomposition
 
-- `adapters/memory/inmem/src/consolidation.rs` owns decay execution,
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) owns decay execution,
   policy-expiry checks, event construction, and audit counters.
-- `adapters/memory/inmem/tests/consolidation_decay.rs` exercises the real
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) exercises the real
   gated mutating consolidation service.
 
 ### Failure, edge cases & resilience

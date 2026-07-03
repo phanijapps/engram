@@ -26,7 +26,7 @@ pnpm run contracts:check-generated
 pnpm run typecheck
 pnpm run test
 pnpm run build
-python3 scripts/validate_contracts.py
+python3 tools/scripts/validate_contracts.py
 .codex/hooks/check-contracts.sh
 .codex/hooks/pre-implementation-check.sh
 .codex/hooks/check-code-docs.sh

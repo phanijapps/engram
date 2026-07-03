@@ -5,6 +5,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   getBeliefTransport,
+  getConsolidationTransport,
+  getEvalTransport,
+  getHierarchyTransport,
   getIngestTransport,
   getKnowledgeTransport,
   getRetrievalTransport,
@@ -375,6 +378,25 @@ app.post("/taxonomy/relation", async (c) => {
 app.post("/taxonomy/concepts", async (c) => {
   const { schemeId, scope } = await c.req.json();
   return c.json(await getKnowledgeTransport().listConcepts(schemeId, scope));
+});
+app.post("/taxonomy/validate", async (c) => {
+  const request = await c.req.json();
+  return c.json(await getKnowledgeTransport().validateTaxonomyProposal(request));
+});
+
+app.post("/hierarchy/validate-parentage", async (c) => {
+  const { nodes } = await c.req.json();
+  return c.json(await getHierarchyTransport().validateParentage(nodes ?? []));
+});
+
+app.post("/consolidation/plan", async (c) => {
+  const request = await c.req.json();
+  return c.json(await getConsolidationTransport().plan(request));
+});
+
+app.post("/eval/architecture-coverage", async (c) => {
+  const { cases } = await c.req.json();
+  return c.json(await getEvalTransport().architectureCoverage(cases ?? []));
 });
 
 // --- Ontology (govern graphs with classes, properties, axioms; RFC 0004 S3) -

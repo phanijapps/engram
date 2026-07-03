@@ -4,9 +4,13 @@
 //! document stores, vector indexes, RDF stores, property graphs, or graph
 //! databases without depending on memory persistence.
 
+mod taxonomy_validation;
+
 use async_trait::async_trait;
 use engram_domain::*;
 pub use engram_runtime::{CoreError, CoreResult};
+
+pub use taxonomy_validation::validate_taxonomy_proposal;
 
 /// Persistence port for source-grounded knowledge records.
 ///

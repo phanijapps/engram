@@ -690,18 +690,44 @@ dependencies = [
 ]
 
 [[package]]
-name = "engram-core"
+name = "engram-belief"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
  "engram-domain",
+ "engram-runtime",
+]
+
+[[package]]
+name = "engram-consolidation"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-domain",
+ "engram-eval",
+ "engram-runtime",
+ "futures",
+ "serde_json",
+]
+
+[[package]]
+name = "engram-core"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-belief",
+ "engram-consolidation",
+ "engram-domain",
+ "engram-eval",
+ "engram-hierarchy",
  "engram-knowledge",
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
  "futures",
- "serde_json",
 ]
 
 [[package]]
@@ -720,12 +746,22 @@ name = "engram-eval"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "engram-core",
  "engram-domain",
- "engram-store-memory",
+ "engram-memory",
+ "engram-runtime",
+ "engram-store-sql",
  "futures",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "engram-hierarchy"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "engram-domain",
+ "engram-runtime",
 ]
 
 [[package]]
@@ -736,8 +772,7 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-knowledge",
- "engram-store-knowledge-memory",
- "engram-store-memory",
+ "engram-store-knowledge-sqlite",
  "futures",
  "ignore",
  "rayon",
@@ -809,6 +844,9 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-runtime",
+ "futures",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -835,15 +873,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "engram-store-knowledge-memory"
+name = "engram-store-hierarchy-sqlite"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
  "engram-domain",
- "engram-knowledge",
+ "engram-hierarchy",
  "engram-runtime",
  "futures",
+ "rusqlite",
+ "serde_json",
 ]
 
 [[package]]
@@ -858,23 +898,6 @@ dependencies = [
  "engram-runtime",
  "futures",
  "rusqlite",
- "serde_json",
-]
-
-[[package]]
-name = "engram-store-memory"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "engram-core",
- "engram-domain",
- "engram-eval",
- "engram-knowledge",
- "engram-memory",
- "engram-retrieval",
- "engram-runtime",
- "futures",
  "serde_json",
 ]
 

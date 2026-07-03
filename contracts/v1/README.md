@@ -64,11 +64,11 @@ remain the canonical tombstone examples.
 
 Invalid examples under `examples/invalid/` are negative contract fixtures. They
 must fail schema validation or explicit semantic checks in
-`scripts/validate_contracts.py`.
+`tools/scripts/validate_contracts.py`.
 
 ## Validation
 
 ```bash
-python3 scripts/validate_contracts.py
+python3 tools/scripts/validate_contracts.py
 .codex/hooks/check-contracts.sh
 ```

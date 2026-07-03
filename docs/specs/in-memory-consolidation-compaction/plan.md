@@ -50,10 +50,10 @@ contract is introduced.
 
 ### Component / module decomposition
 
-- `adapters/memory/inmem/src/consolidation.rs` owns compaction execution,
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) owns compaction execution,
   duplicate grouping, event construction, and audit counters.
-- `adapters/memory/inmem/src/lib.rs` re-exports only the executor type.
-- Tests live in `adapters/memory/inmem/tests/consolidation_compaction.rs`
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) re-exports only the executor type.
+- Tests live in the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`)
   and use `GatedConsolidationService` to exercise the real mutating envelope.
 
 ### Failure, edge cases & resilience

@@ -49,15 +49,15 @@ the behavior.
 
 ### Component / module decomposition
 
-- `adapters/memory/inmem/src/consolidation/hierarchy_build.rs` remains
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) remains
   focused on base-node construction.
-- `adapters/memory/inmem/src/consolidation/hierarchy_aggregate.rs` owns
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) owns
   entity grouping, aggregate node creation, base-node parent assignment,
   membership construction, audit events, and aggregate counters.
-- `adapters/memory/inmem/src/consolidation/mod.rs` composes both helpers
+- the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`) composes both helpers
   under the existing `HierarchyBuild` task.
 - Tests live in
-  `adapters/memory/inmem/tests/consolidation_hierarchy_aggregate.rs`.
+  the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`).
 
 ### Failure, edge cases & resilience
 

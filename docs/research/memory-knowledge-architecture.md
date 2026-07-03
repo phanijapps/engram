@@ -117,6 +117,27 @@ Recent research (arXiv:2605.17625) proposes dual-process memory for long-horizon
 
 This mirrors ACT-R's declarative/episodic distinction and enables agents to both remember specific events and generalize from them. Source: [Episodic-Semantic Architecture on arXiv](https://arxiv.org/html/2605.17625v1)
 
+### 2.10 Beliefs, Contradictions, and Temporal Truth
+
+Beliefs are derived stances over evidence, not source truth. They belong above
+episodic events and semantic facts: facts provide evidence, beliefs summarize a
+current stance, and contradictions preserve reviewable tension without silently
+overwriting either source facts or prior beliefs.
+
+Temporal behavior needs two distinct concepts:
+
+- **Valid time**: when a fact or belief is true in the modeled world.
+- **Record/system time**: when the system recorded or knew that version.
+
+AgentZero's current belief-network contract exposes valid-time behavior through
+`as_of` queries, stale flags, supersession, and retraction. It does not yet
+expose a full two-axis bitemporal API with both valid-time and record-time
+parameters. The Engram cutover should therefore preserve AgentZero's valid-time
+semantics first, record write-time/provenance metadata for future audit needs,
+and avoid claiming full bitemporality until record-time queries are part of the
+contract. The applied cutover mapping is captured in
+[`zbot-engram-belief-bitemporal-cutover.md`](zbot-engram-belief-bitemporal-cutover.md).
+
 ---
 
 ## 3. Philosophical and Cognitive Science Context

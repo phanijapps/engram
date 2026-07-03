@@ -4,7 +4,7 @@ use engram_ingest::{
     PlainTextChunkerOptions,
 };
 use engram_knowledge::KnowledgeRepository;
-use engram_store_memory::InMemoryMemoryService;
+use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 fn actor() -> Actor {
@@ -55,7 +55,7 @@ fn request() -> DocumentIngestRequest {
 
 #[test]
 fn ingests_text_document_into_source_document_and_chunks() {
-    let repository = InMemoryMemoryService::new();
+    let repository = SqlKnowledgeStore::open_in_memory().expect("open knowledge store");
     let ingestor = KnowledgeIngestor::new(
         PlainTextChunker::new(PlainTextChunkerOptions {
             max_chars_per_chunk: 48,
@@ -99,8 +99,8 @@ fn ingests_text_document_into_source_document_and_chunks() {
 
 #[test]
 fn unchanged_reingestion_produces_stable_ids_and_hashes() {
-    let first_repository = InMemoryMemoryService::new();
-    let second_repository = InMemoryMemoryService::new();
+    let first_repository = SqlKnowledgeStore::open_in_memory().expect("open first store");
+    let second_repository = SqlKnowledgeStore::open_in_memory().expect("open second store");
     let ingestor = KnowledgeIngestor::new(PlainTextChunker::default());
 
     let first = block_on(ingestor.ingest(&first_repository, request())).expect("first ingest");

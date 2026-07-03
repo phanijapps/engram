@@ -24,7 +24,7 @@ accepted v1 sections of `docs/domain-data-model.md`.
 - Every accepted operation has a schema.
 - Every accepted operation has at least one valid example.
 - Invalid examples fail validation for the intended reason.
-- `scripts/validate_contracts.py` passes.
+- `tools/scripts/validate_contracts.py` passes.
 
 ## Extension Boundaries
 

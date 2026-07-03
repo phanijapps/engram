@@ -7,7 +7,7 @@ facade. Keep examples contract-backed and focused on write/retrieve flows.
 
 ## Steps
 
-- [x] Add `adapters/memory/inmem/examples/local_memory.rs`.
+- [x] Add the retired memory in-memory adapter (see `docs/specs/retire-memory-inmem/spec.md`).
 - [x] Add `adapters/memory/sqlite/examples/sql_memory.rs`.
 - [x] Add `packages/client/examples/injected-transport.ts`.
 - [x] Include client examples in TypeScript typechecking.
@@ -28,7 +28,7 @@ pnpm run contracts:check-generated
 pnpm run typecheck
 pnpm run test
 pnpm run build
-python3 scripts/validate_contracts.py
+python3 tools/scripts/validate_contracts.py
 .codex/hooks/check-contracts.sh
 .codex/hooks/check-docs.sh
 git diff --check

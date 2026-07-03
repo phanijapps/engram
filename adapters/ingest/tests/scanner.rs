@@ -2,7 +2,7 @@ use std::fs;
 
 use engram_domain::*;
 use engram_ingest::{ScanOptions, scan_repository};
-use engram_store_knowledge_memory::InMemoryKnowledgeStore;
+use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 
 fn scope() -> Scope {
     Scope {
@@ -58,7 +58,7 @@ fn scans_fixture_skipping_secrets_oversized_and_denylist() {
     // Denied directory.
     fs::write(root.join("node_modules/x.js"), "console.log(1)\n").expect("write nm");
 
-    let store = InMemoryKnowledgeStore::new();
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
     let opts = ScanOptions {
         scope: scope(),
         policy: policy(),

@@ -44,7 +44,7 @@ examples make lifecycle outcomes explicit for future adapters and bindings.
 
 ## Testing Strategy
 
-- Schema: `scripts/validate_contracts.py` validates all accepted forget
+- Schema: `tools/scripts/validate_contracts.py` validates all accepted forget
   request/result examples.
 - Rust serde: domain tests deserialize every accepted forget example.
 - Regression: existing in-memory and SQL forget tests remain unchanged.

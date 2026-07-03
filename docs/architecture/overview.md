@@ -20,8 +20,10 @@
 │   └── eval/             # deterministic fixtures + regression harness
 ├── adapters/             # replaceable infrastructure crates (behind traits)
 │   ├── ingest/           # filesystem/git ingestion + tree-sitter AST chunking
-│   ├── memory/{inmem,sqlite}/
-│   ├── knowledge/inmem/ + knowledge/sqlite/
+│   ├── memory/sqlite/    # memory records/events + write/retrieve/forget
+│   ├── knowledge/sqlite/ # graph/chunk/taxonomy/ontology persistence
+│   ├── orchestration/belief-sqlite/ # belief persistence (path migration pending)
+│   ├── hierarchy/sqlite/ # hierarchy persistence + navigation repository
 │   └── retrieval/sqlite-vec/   # sqlite-vec index + feature-gated FastEmbed
 ├── bindings/node/        # N-API JSON transport (engram-node) — a transport, not a second impl
 ├── packages/             # TypeScript workspace
@@ -44,8 +46,9 @@
 │   ├── guides/           # user-facing docs (Diátaxis)
 │   ├── perf/             # performance benchmarks + eval suites
 │   └── research/         # research notes, excerpts, links
-├── tools/                # build, dev, and ops tooling (hooks) — not shipped
-└── .claude/              # skills, agents, commands for AI contributors
+├── tools/                # shared repo automation (hooks + scripts) — not shipped
+├── .codex/               # Codex skills, agents, and validation hooks
+└── .claude/              # Claude skills, agents, commands for AI contributors
 ```
 
 ## Crates, packages, and apps
@@ -59,8 +62,13 @@
   `RetrievalFusion` (`ReciprocalRankFusion`, `WeightedRetrievalFusion`) →
   `ContextComposer`. Store-free. **Look first:** `core/retrieval/src/reciprocal.rs`.
 - `engram-{memory,knowledge,orchestration,eval}` — service + ports per concern.
+- `engram-store-sql` — SQLite memory service and repository adapter for local
+  in-memory conformance and file-backed smoke paths.
 - `engram-store-knowledge-sqlite` — SQLite graph/chunk store; also implements
   `RetrievalIndex` (`GraphRetrievalIndex`) so KG results fuse with vectors.
+- `engram-store-belief-sqlite` — SQLite belief and contradiction repository.
+- `engram-store-hierarchy-sqlite` — SQLite hierarchy repository and path
+  navigation persistence.
 - `engram-store-vector` (sqlite-vec) — vector index + the feature-gated
   `FastEmbedBgeSmallQueryProvider`. **Look first:** `adapters/retrieval/sqlite-vec/src/`.
 - `engram-node` (`bindings/node`) — N-API bridge; JSON in/out over Rust behavior.

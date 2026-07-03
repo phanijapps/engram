@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use engram_core::EvaluationRunner;
 use engram_domain::*;
+use engram_eval::EvaluationRunner;
 use engram_eval::{MemoryFixtureRunner, summarize_reports};
-use engram_store_memory::InMemoryMemoryService;
+use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
 
 const ACCEPTED_RETRIEVAL_FIXTURES: &[&str] = &[
@@ -15,7 +15,7 @@ const ACCEPTED_RETRIEVAL_FIXTURES: &[&str] = &[
 
 #[test]
 fn runner_passes_contract_evaluation_fixture() {
-    let service = Arc::new(InMemoryMemoryService::new());
+    let service = Arc::new(SqlMemoryService::open_in_memory().expect("open sql service"));
     let runner = MemoryFixtureRunner::new(service);
     let fixture: EvaluationFixture = serde_json::from_str(include_str!(
         "../../../contracts/v1/examples/evaluation-fixture.json"
@@ -33,7 +33,7 @@ fn runner_passes_contract_evaluation_fixture() {
 fn runner_passes_accepted_retrieval_fixtures() {
     let mut reports = Vec::new();
     for fixture_json in ACCEPTED_RETRIEVAL_FIXTURES {
-        let service = Arc::new(InMemoryMemoryService::new());
+        let service = Arc::new(SqlMemoryService::open_in_memory().expect("open sql service"));
         let runner = MemoryFixtureRunner::new(service);
         let fixture: EvaluationFixture =
             serde_json::from_str(fixture_json).expect("deserialize accepted retrieval fixture");
@@ -58,7 +58,7 @@ fn runner_passes_accepted_retrieval_fixtures() {
 
 #[test]
 fn runner_reports_forbidden_target_leak() {
-    let service = Arc::new(InMemoryMemoryService::new());
+    let service = Arc::new(SqlMemoryService::open_in_memory().expect("open sql service"));
     let runner = MemoryFixtureRunner::new(service);
     let mut fixture: EvaluationFixture = serde_json::from_str(include_str!(
         "../../../contracts/v1/examples/evaluation-fixture.json"

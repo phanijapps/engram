@@ -7,11 +7,15 @@
 mod composer;
 mod config;
 mod ports;
+mod predict;
 mod reciprocal;
+mod router;
 mod weighted;
 
 pub use composer::{RetrievalCompositionInput, compose_context};
 pub use config::{ReciprocalFusionConfig, WeightedFusionConfig};
 pub use ports::{ContextComposer, RetrievalFusion, RetrievalIndex};
+pub use predict::{AgentState, PredictiveRetriever, RecentActivityPredictor, RetrievalHints};
 pub use reciprocal::{DEFAULT_RRF_K, ReciprocalRankFusion};
+pub use router::{RetrievalRoute, RetrievalRouteMode, RetrievalRouter, RoutedRetrieval};
 pub use weighted::WeightedRetrievalFusion;

@@ -80,7 +80,7 @@ not depend on the memory or vector adapters.
   index; `open_in_memory`/`open_file`; `scope_allows`) (source:
   `adapters/memory/sqlite/src/{schema,service,scope}.rs`).
 - Technical: knowledge port method shapes and scope semantics are defined by the
-  in-memory reference adapter (source: `adapters/knowledge/inmem/src/lib.rs`).
+  in-memory reference adapter (source: the retired knowledge in-memory adapter (see `docs/specs/retire-knowledge-inmem/spec.md`)).
 - Technical: `Concept`/`ConceptRelation` have no own scope; visibility is the
   scheme's (source: `core/domain/src/taxonomy.rs`).
 - Process: `TaxonomyRepository` is an additive core port; ADR-0007 authorizes the

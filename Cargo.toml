@@ -7,13 +7,15 @@ members = [
     "core/retrieval",
     "core/orchestration",
     "core/eval",
+    "core/belief",
+    "core/consolidation",
+    "core/hierarchy",
     "adapters/ingest",
-    "adapters/memory/inmem",
     "adapters/memory/sqlite",
-    "adapters/knowledge/inmem",
     "adapters/knowledge/sqlite",
     "adapters/retrieval/sqlite-vec",
     "adapters/orchestration/belief-sqlite",
+    "adapters/hierarchy/sqlite",
     "bindings/node",
 ]
 resolver = "3"

@@ -20,7 +20,7 @@ pnpm run contracts:check-generated
 pnpm run typecheck
 pnpm run test
 pnpm run build
-python3 scripts/validate_contracts.py
+python3 tools/scripts/validate_contracts.py
 cargo check --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace

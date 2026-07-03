@@ -1,7 +1,7 @@
 # Plan: source-assertion-reconciliation
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting
+- **Status:** Done
 
 > **Plan contract:** this is the implementation strategy. Unlike the spec, this
 > document is allowed to change as you learn. When it changes substantially
@@ -248,3 +248,9 @@ integration. Reversible by removing the new type/function.
 ## Changelog
 
 - 2026-07-03: initial plan.
+- 2026-07-03: implemented T1–T5; all gates green. Post-review fixes: derived-record
+  ids use the full scope discriminator (not just tenant) to avoid cross-workspace
+  collisions; contradiction reasoning reports distinct-claim count; documented the
+  absent-confidence asymmetry (ordering vs magnitude); clarified in ADR-0012 that
+  the belief-source `authority_level` is `Option`/`None` while `SourceAssertion`
+  defaults to `Primary`.

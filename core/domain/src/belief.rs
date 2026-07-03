@@ -7,8 +7,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Actor, BeliefId, ConceptRef, ContradictionId, DerivationRef, EmbeddingRef, EntityRef, Metadata,
-    Policy, Provenance, Scope, Timestamp,
+    Actor, AuthorityTier, BeliefId, ConceptRef, ContradictionId, DerivationRef, EmbeddingRef,
+    EntityRef, Metadata, Policy, Provenance, Scope, Timestamp,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -41,6 +41,8 @@ pub enum BeliefSourceTargetType {
 pub struct BeliefSource {
     pub target_type: BeliefSourceTargetType,
     pub target_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority_level: Option<AuthorityTier>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub weight: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]

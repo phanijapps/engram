@@ -41,7 +41,12 @@ We will introduce a `SourceAssertion` domain type in `engram-domain` and referen
 
 Authority tiers are a small ordered set — `{ primary, secondary, inferred }` by default — sharing **no tokens** with `review_status`, so "how trusted a source is" (authority) never collides with "how far a claim has progressed" (state). Profiles may overlay their own tiers (e.g. `enterprise-gate` uses `semantic/record/policy`).
 
-`authority_level` is added to the belief-source relation as an **optional `#[serde(default)]` field**; absent, it defaults to `primary`, reproducing today's single-source-is-authoritative behavior. This makes the change **compatible/additive** — existing serialized beliefs deserialize unchanged, and no existing belief is rewritten.
+The two authority fields default differently, by design:
+
+- On `SourceAssertion`, `authority_level` is a non-optional `AuthorityTier` with `#[serde(default)]` = `Primary`: a source that declares no tier is treated as `Primary`, reproducing today's single-source-is-authoritative behavior.
+- On the belief-source relation, `authority_level` is `Option<AuthorityTier>` with `#[serde(default)]` = `None`: the field is meaningful only for assertion-backed sources, so a source pointing at a memory/event/chunk carries `None` rather than a spurious tier.
+
+Either way the change is **compatible/additive** — existing serialized beliefs deserialize unchanged (their belief-sources get `None`), and no existing belief is rewritten.
 
 Boundary: `SourceAssertion` is a domain type only. How it is produced (a Registry-style source adapter) and how it is reconciled (a survivorship `BeliefSynthesizer`) are separate concerns recorded elsewhere — this ADR fixes the contract, not the behavior.
 

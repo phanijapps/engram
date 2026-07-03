@@ -6,6 +6,7 @@
 //! value objects. It must not define persistence, vector indexing, model
 //! provider calls, gateway behavior, or TypeScript binding logic.
 
+pub mod assertion;
 pub mod belief;
 pub mod evaluation;
 pub mod hierarchy;
@@ -20,6 +21,7 @@ pub mod retrieval;
 pub mod taxonomy;
 pub mod types;
 
+pub use assertion::*;
 pub use belief::*;
 pub use evaluation::*;
 pub use hierarchy::*;

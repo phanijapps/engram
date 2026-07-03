@@ -144,6 +144,7 @@ fn lifecycle_methods_and_source_reference_queries_match_live_beliefs() {
     first.sources = vec![BeliefSource {
         target_type: BeliefSourceTargetType::Memory,
         target_id: "fact-1".to_owned(),
+        authority_level: None,
         weight: None,
         confidence: None,
         valid_from: None,
@@ -210,6 +211,7 @@ fn source_reference_queries_respect_source_valid_interval() {
     belief.sources = vec![BeliefSource {
         target_type: BeliefSourceTargetType::Memory,
         target_id: "fact-1".to_owned(),
+        authority_level: None,
         weight: None,
         confidence: None,
         valid_from: Some(ts(12)),

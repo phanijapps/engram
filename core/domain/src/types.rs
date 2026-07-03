@@ -70,6 +70,7 @@ pub enum DomainValidationError {
 }
 
 pub type ActorId = Id;
+pub type AssertionId = Id;
 pub type BeliefId = Id;
 pub type ChunkId = Id;
 pub type ConceptId = Id;

@@ -1,6 +1,6 @@
 # Spec: source-assertion-reconciliation
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0012, ADR-0013, RFC-0007
@@ -99,26 +99,27 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 
 ## Acceptance Criteria
 
-- [ ] `SourceAssertion` exists in `engram-domain` with fields: id (`AssertionId`),
+- [x] `SourceAssertion` exists in `engram-domain` with fields: id (`AssertionId`),
   scope, subject, predicate, object, source_system, source_record_id, source_uri,
-  authority_level (optional, `#[serde(default)]`), confidence, valid_from,
+  authority_level (`#[serde(default)]` = `primary`), confidence, valid_from,
   valid_until, asserted_at, review_status, policy, provenance — and serde
   round-trips.
-- [ ] A pre-existing serialized belief (no `authority_level`) deserializes
-  unchanged; absent `authority_level` defaults to `primary` (compatible/additive).
-- [ ] The authority-tier set (`{ primary, secondary, inferred }` default) shares
+- [x] A pre-existing serialized belief deserializes unchanged: `SourceAssertion`'s
+  absent `authority_level` defaults to `primary`, while the belief-source
+  `authority_level` is `Option` defaulting to `None` (compatible/additive).
+- [x] The authority-tier set (`{ primary, secondary, inferred }` default) shares
   no token with the `review_status` lifecycle (`source | candidate | reviewed |
   authoritative | disputed | deprecated | rejected`).
-- [ ] The survivorship synthesizer accepts an authority policy as a parameter;
+- [x] The survivorship synthesizer accepts an authority policy as a parameter;
   swapping the policy value changes the winner with no code change.
-- [ ] Given competing live `SourceAssertion`s for one `(subject, predicate)`, the
+- [x] Given competing live `SourceAssertion`s for one `(subject, predicate)`, the
   derived `Belief` reflects the highest-authority assertion and cites it via
   `BeliefSource { target_type: Assertion }`.
-- [ ] An assertion outside its valid interval at the query instant does not win.
-- [ ] Equal-top-authority disagreement over overlapping validity produces no
+- [x] An assertion outside its valid interval at the query instant does not win.
+- [x] Equal-top-authority disagreement over overlapping validity produces no
   trusted belief winner and exactly one advisory `Contradiction`; neither
   assertion is mutated.
-- [ ] `engram-domain` gains no SQL/vector/runtime/Node/embedding dependency
+- [x] `engram-domain` gains no SQL/vector/runtime/Node/embedding dependency
   (`cargo check` clean; boundary preserved).
 
 ## Assumptions

@@ -100,6 +100,7 @@ mod tests {
             sources: vec![BeliefSource {
                 target_type: BeliefSourceTargetType::Memory,
                 target_id: "fact-1".to_owned(),
+                authority_level: None,
                 weight: None,
                 confidence: None,
                 valid_from: None,

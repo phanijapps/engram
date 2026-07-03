@@ -14,6 +14,7 @@ pub mod contradiction;
 pub mod embedding;
 pub mod lifecycle;
 pub mod query;
+pub mod reconcile;
 pub mod temporal;
 
 pub use contradiction::{CanonicalContradictionPair, canonical_pair_key, canonicalize_pair};
@@ -26,6 +27,7 @@ pub use lifecycle::{
     supersede_belief,
 };
 pub use query::{BeliefQuery, BeliefQueryOrder, BeliefReferenceQuery};
+pub use reconcile::{AuthorityPolicy, Reconciled, TieRule, reconcile};
 pub use temporal::{interval_contains, live_at};
 
 /// Persistence port for derived beliefs and contradiction records.

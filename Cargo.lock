@@ -697,6 +697,7 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-runtime",
+ "serde_json",
 ]
 
 [[package]]

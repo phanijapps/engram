@@ -32,4 +32,11 @@ pub struct DocumentIngestRequest {
     pub text: String,
     pub policy: Policy,
     pub actor: Actor,
+    /// SHA-free stable identity key for the source (e.g. `host/org/repo` for a
+    /// git remote). Derived by the scanner when a git remote is detected; `None`
+    /// for sources that do not carry a remote. Carried through to
+    /// `KnowledgeSource.metadata` so the extractor can stamp each
+    /// `KnowledgeGraph` and emit the per-source `EntityKind::Repository` node.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stable_source_key: Option<String>,
 }

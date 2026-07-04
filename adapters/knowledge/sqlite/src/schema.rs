@@ -51,6 +51,7 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 workspace TEXT,
                 session TEXT,
                 environment TEXT,
+                graph_id TEXT,
                 record_json TEXT NOT NULL
             );
 
@@ -73,6 +74,8 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 workspace TEXT,
                 session TEXT,
                 environment TEXT,
+                stable_source_key TEXT,
+                path TEXT,
                 record_json TEXT NOT NULL
             );
 
@@ -138,7 +141,43 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
             CREATE INDEX IF NOT EXISTS idx_ontology_axioms ON ontology_axioms(ontology_id);
             "#,
         )
-        .map_err(sql_error)
+        .map_err(sql_error)?;
+
+    // Migration: add attribution columns to existing DB files that were created
+    // before the structured-repo-identity spec. SQLite does not support
+    // `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, so we run each statement
+    // separately and silently swallow the "duplicate column name" error that
+    // fires when the column already exists (new databases created above).
+    // NOTE: the repo-identity indexes below MUST run after this loop — on an
+    // existing DB those columns do not exist until the ALTER TABLE succeeds,
+    // and SQLite will return "no such column" if the index is created first.
+    for sql in &[
+        "ALTER TABLE knowledge_graphs ADD COLUMN stable_source_key TEXT",
+        "ALTER TABLE knowledge_graphs ADD COLUMN path TEXT",
+        "ALTER TABLE knowledge_entities ADD COLUMN graph_id TEXT",
+    ] {
+        match connection.execute_batch(sql) {
+            Ok(_) => {}
+            Err(e) if e.to_string().contains("duplicate column name") => {}
+            Err(e) => return Err(sql_error(e)),
+        }
+    }
+
+    // Repo-identity attribution indexes — run AFTER the ALTER TABLE loop so they
+    // can reference the columns whether this is a fresh DB or a migrated one.
+    connection
+        .execute_batch(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_graphs_stable_source_key
+                ON knowledge_graphs(stable_source_key);
+            CREATE INDEX IF NOT EXISTS idx_graphs_path ON knowledge_graphs(path);
+            CREATE INDEX IF NOT EXISTS idx_entities_graph_id
+                ON knowledge_entities(graph_id);
+            "#,
+        )
+        .map_err(sql_error)?;
+
+    Ok(())
 }
 
 /// Converts SQLite errors into the stable core adapter error surface.

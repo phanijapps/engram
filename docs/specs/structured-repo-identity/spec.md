@@ -1,6 +1,6 @@
 # Spec: structured-repo-identity
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0017, ADR-0018, RFC-0008, RFC-0009
@@ -78,13 +78,13 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 
 ## Acceptance Criteria
 
-- [ ] A git-backed scanned source is recorded as `SourceKind::GitRepository`, and its document graphs carry a normalized stable-source-key (`host/org/name`, scheme/credentials/`.git` stripped) + the document `path` in `KnowledgeGraph.metadata`, lifted into indexed columns on `knowledge_graphs`.
-- [ ] Re-deriving the stable-source-key from two different commit SHAs of the same remote yields the **same** key (commit-stable).
-- [ ] Every `KnowledgeEntity` (except the per-source `EntityKind::Repository` node, which has `graph_id = None`) and every `KnowledgeRelationship` carries its owning `graph_id` in an indexed column (entities gain the column; relationships already have it), so each is reachable from its repo via its graph. The Repository node is reached by kind / its `belongs_to` edges, not the `graph_id` join.
-- [ ] A query filtered by stable-source-key returns exactly the graphs emitted by that repository, and — joined via `graph_id` — exactly that repository's document entities and relationships (the per-source Repository node is reached via its `belongs_to` edges, not this join).
-- [ ] The source is represented by exactly one `EntityKind::Repository` node (keyed by stable-source-key, `graph_id = None`) with a `belongs_to` edge from each of its document graphs; each `belongs_to` edge carries that document graph's `graph_id` (so it is reachable via the join and retracts with the graph); the Repository node and `belongs_to` edges carry no `path` (they are not file-scoped).
-- [ ] A non-git source falls back to the un-enriched source name / repo root as its stable-source-key.
-- [ ] No domain contract change: `pnpm run contracts:generate` yields no diff and `docs/domain-data-model.md` is unchanged.
+- [x] A git-backed scanned source is recorded as `SourceKind::GitRepository`, and its document graphs carry a normalized stable-source-key (`host/org/name`, scheme/credentials/`.git` stripped) + the document `path` in `KnowledgeGraph.metadata`, lifted into indexed columns on `knowledge_graphs`.
+- [x] Re-deriving the stable-source-key from two different commit SHAs of the same remote yields the **same** key (commit-stable).
+- [x] Every `KnowledgeEntity` (except the per-source `EntityKind::Repository` node, which has `graph_id = None`) and every `KnowledgeRelationship` carries its owning `graph_id` in an indexed column (entities gain the column; relationships already have it), so each is reachable from its repo via its graph. The Repository node is reached by kind / its `belongs_to` edges, not the `graph_id` join.
+- [x] A query filtered by stable-source-key returns exactly the graphs emitted by that repository, and — joined via `graph_id` — exactly that repository's document entities and relationships (the per-source Repository node is reached via its `belongs_to` edges, not this join).
+- [x] The source is represented by exactly one `EntityKind::Repository` node (keyed by stable-source-key, `graph_id = None`) with a `belongs_to` edge from each of its document graphs; each `belongs_to` edge carries that document graph's `graph_id` (so it is reachable via the join and retracts with the graph); the Repository node and `belongs_to` edges carry no `path` (they are not file-scoped).
+- [x] A non-git source falls back to the un-enriched source name / repo root as its stable-source-key.
+- [x] No domain contract change: `pnpm run contracts:generate` yields no diff and `docs/domain-data-model.md` is unchanged.
 
 ## Assumptions
 

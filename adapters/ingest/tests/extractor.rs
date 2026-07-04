@@ -48,6 +48,7 @@ fn extracts_code_symbols_and_calls_edges() {
             display_name: None,
             metadata: None,
         },
+        stable_source_key: None,
     };
 
     let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");

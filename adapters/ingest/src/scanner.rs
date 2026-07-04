@@ -16,7 +16,7 @@ use rayon::prelude::*;
 
 use crate::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
-    PlainTextChunker, PlainTextChunkerOptions, content_hash,
+    PlainTextChunker, PlainTextChunkerOptions, content_hash, stable_source_key,
 };
 
 const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
@@ -266,6 +266,19 @@ where
         None => opts.source_name.clone(),
     };
 
+    // Tag git-backed sources as GitRepository and derive a SHA-free stable key
+    // (does not change across commits) so each per-document KnowledgeGraph can
+    // be attributed to its repository without embedding the commit SHA.
+    let doc_source_kind = if git.is_some() {
+        SourceKind::GitRepository
+    } else {
+        SourceKind::Filesystem
+    };
+    let source_key = {
+        let remote = git.as_ref().map(|(r, _, _)| r.as_str());
+        stable_source_key(remote, &opts.source_name)
+    };
+
     let code_ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
     let text_ingestor =
         KnowledgeIngestor::new(PlainTextChunker::new(PlainTextChunkerOptions::default())?);
@@ -358,7 +371,7 @@ where
                 FileKind::Text => SourceDocumentKind::Text,
             };
             let request = DocumentIngestRequest {
-                source_kind: SourceKind::Filesystem,
+                source_kind: doc_source_kind.clone(),
                 source_name: source_name.clone(),
                 scope: opts.scope.clone(),
                 document_kind,
@@ -369,6 +382,7 @@ where
                 text: String::new(), // placeholder — real text used for chunking below
                 policy: opts.policy.clone(),
                 actor: opts.actor.clone(),
+                stable_source_key: Some(source_key.clone()),
             };
             // Tree-sitter chunking for supported extensions; fallback to the
             // ingestor's internal chunker for others.

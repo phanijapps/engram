@@ -153,6 +153,102 @@ impl SqlKnowledgeStore {
         Ok(sources)
     }
 
+    /// Lists `KnowledgeGraph`s belonging to a specific repository, identified by
+    /// `stable_source_key`, visible to `scope`. Mirrors the `scope_allows` filter
+    /// used by `list_graphs`; filters by the indexed `stable_source_key` column.
+    pub async fn list_graphs_by_source(
+        &self,
+        scope: &Scope,
+        stable_source_key: &str,
+    ) -> CoreResult<Vec<KnowledgeGraph>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT record_json FROM knowledge_graphs \
+                 WHERE stable_source_key = ?1 ORDER BY id",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map(params![stable_source_key], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut graphs = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let graph = serde_json::from_str::<KnowledgeGraph>(&json).map_err(json_error)?;
+            if scope_allows(&graph.scope, scope) {
+                graphs.push(graph);
+            }
+        }
+        Ok(graphs)
+    }
+
+    /// Lists `KnowledgeEntity` records belonging to a specific repository (via
+    /// `graph_id IN (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?)`),
+    /// visible to `scope`. The per-source `EntityKind::Repository` node has
+    /// `graph_id = None` and is NOT included in this result set; reach it via its
+    /// `belongs_to` edges returned by `list_relationships_by_source`.
+    pub async fn list_entities_by_source(
+        &self,
+        scope: &Scope,
+        stable_source_key: &str,
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT record_json FROM knowledge_entities \
+                 WHERE graph_id IN \
+                     (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?1) \
+                 ORDER BY id",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map(params![stable_source_key], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut entities = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let entity = serde_json::from_str::<KnowledgeEntity>(&json).map_err(json_error)?;
+            if scope_allows(&entity.scope, scope) {
+                entities.push(entity);
+            }
+        }
+        Ok(entities)
+    }
+
+    /// Lists `KnowledgeRelationship` records belonging to a specific repository
+    /// (via `graph_id IN (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?)`),
+    /// visible to `scope`. This includes the `belongs_to` edges that link document
+    /// graphs to the per-source `EntityKind::Repository` node (those edges carry
+    /// the document graph's `graph_id`).
+    pub async fn list_relationships_by_source(
+        &self,
+        scope: &Scope,
+        stable_source_key: &str,
+    ) -> CoreResult<Vec<KnowledgeRelationship>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT record_json FROM knowledge_relationships \
+                 WHERE graph_id IN \
+                     (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?1) \
+                 ORDER BY id",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map(params![stable_source_key], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut relationships = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let relationship =
+                serde_json::from_str::<KnowledgeRelationship>(&json).map_err(json_error)?;
+            if scope_allows(&relationship.scope, scope) {
+                relationships.push(relationship);
+            }
+        }
+        Ok(relationships)
+    }
+
     /// Lists knowledge relationships visible to `scope`.
     pub async fn list_relationships(
         &self,
@@ -281,19 +377,24 @@ impl KnowledgeRepository for SqlKnowledgeStore {
 
     async fn put_entity(&self, entity: KnowledgeEntity) -> CoreResult<KnowledgeEntity> {
         let json = serde_json::to_string(&entity).map_err(json_error)?;
+        // Lift graph_id into an indexed column for the graph-id join queries
+        // (list_entities_by_source). The Repository entity has graph_id = None.
+        let lifted_graph_id = entity.graph_id.as_ref().map(|id| id.to_string());
         let connection = self.lock()?;
         connection
             .execute(
                 r#"
                 INSERT INTO knowledge_entities
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                    (id, tenant, subject, workspace, session, environment,
+                     graph_id, record_json)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                 ON CONFLICT(id) DO UPDATE SET
                     tenant = excluded.tenant,
                     subject = excluded.subject,
                     workspace = excluded.workspace,
                     session = excluded.session,
                     environment = excluded.environment,
+                    graph_id = excluded.graph_id,
                     record_json = excluded.record_json
                 "#,
                 params![
@@ -303,6 +404,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                     entity.scope.workspace,
                     entity.scope.session,
                     entity.scope.environment,
+                    lifted_graph_id,
                     json
                 ],
             )
@@ -392,19 +494,44 @@ impl KnowledgeRepository for SqlKnowledgeStore {
 impl KnowledgeGraphRepository for SqlKnowledgeStore {
     async fn put_graph(&self, graph: KnowledgeGraph) -> CoreResult<KnowledgeGraph> {
         let json = serde_json::to_string(&graph).map_err(json_error)?;
+        // Lift stable_source_key and path from the graph's metadata into indexed
+        // columns so they can be filtered without deserializing record_json.
+        //
+        // CROSS-CRATE CONTRACT: the literal keys "stableSourceKey" and "path" are
+        // the canonical metadata keys defined in `engram-ingest` as
+        // `STABLE_SOURCE_KEY` / `SOURCE_PATH_KEY`. This crate intentionally does
+        // NOT depend on `engram-ingest`, so the literals must match those constants
+        // exactly. The `list_graphs_by_source` integration test in
+        // `adapters/ingest/tests/repo_identity.rs` will fail with an empty result
+        // if they drift.  If the keys ever change, update both sites together.
+        let lifted_key = graph
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("stableSourceKey")) // must match engram-ingest STABLE_SOURCE_KEY
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
+        let lifted_path = graph
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("path")) // must match engram-ingest SOURCE_PATH_KEY
+            .and_then(|v| v.as_str())
+            .map(str::to_owned);
         let connection = self.lock()?;
         connection
             .execute(
                 r#"
                 INSERT INTO knowledge_graphs
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                    (id, tenant, subject, workspace, session, environment,
+                     stable_source_key, path, record_json)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                 ON CONFLICT(id) DO UPDATE SET
                     tenant = excluded.tenant,
                     subject = excluded.subject,
                     workspace = excluded.workspace,
                     session = excluded.session,
                     environment = excluded.environment,
+                    stable_source_key = excluded.stable_source_key,
+                    path = excluded.path,
                     record_json = excluded.record_json
                 "#,
                 params![
@@ -414,6 +541,8 @@ impl KnowledgeGraphRepository for SqlKnowledgeStore {
                     graph.scope.workspace,
                     graph.scope.session,
                     graph.scope.environment,
+                    lifted_key,
+                    lifted_path,
                     json
                 ],
             )

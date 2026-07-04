@@ -615,3 +615,219 @@ fn list_graphs_entities_relationships_are_scope_filtered() {
     assert_eq!(hidden_graphs.len(), 1);
     assert_eq!(hidden_graphs[0].id, Id::from("graph-tenant-b"));
 }
+
+// ---------------------------------------------------------------------------
+// Structured-repo-identity: metadata-key lift and migration path
+// ---------------------------------------------------------------------------
+
+/// Verifies that `put_graph` lifts the literal metadata keys "stableSourceKey"
+/// and "path" (the cross-crate contract with `engram-ingest`) into the indexed
+/// columns, and that `list_graphs_by_source` returns only the matching graph.
+/// An empty result here means the key literals have drifted — fix both crates.
+#[test]
+fn put_graph_lifts_stable_source_key_and_path_columns() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+
+    let mut meta = Metadata::default();
+    meta.insert(
+        "stableSourceKey".to_owned(),
+        serde_json::Value::String("github.com/acme/repo".to_owned()),
+    );
+    meta.insert(
+        "path".to_owned(),
+        serde_json::Value::String("src/lib.rs".to_owned()),
+    );
+    let g = KnowledgeGraph {
+        id: Id::from("graph-lift-test"),
+        scope: scope("tenant-lift"),
+        name: "Lift Test".to_owned(),
+        uri: None,
+        version: None,
+        ontology_refs: Vec::new(),
+        policy: policy(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: Some(meta),
+    };
+    block_on(store.put_graph(g)).expect("put graph");
+
+    // Query via the lifted column — must return exactly the one graph.
+    let by_source =
+        block_on(store.list_graphs_by_source(&scope("tenant-lift"), "github.com/acme/repo"))
+            .expect("list_graphs_by_source");
+    assert_eq!(
+        by_source.len(),
+        1,
+        "list_graphs_by_source must return the graph via the lifted stable_source_key column"
+    );
+    let returned = &by_source[0];
+    assert_eq!(returned.id, Id::from("graph-lift-test"));
+    assert_eq!(
+        returned
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("path"))
+            .and_then(|v| v.as_str()),
+        Some("src/lib.rs"),
+        "path must survive the round-trip"
+    );
+
+    // A different key returns nothing.
+    let empty =
+        block_on(store.list_graphs_by_source(&scope("tenant-lift"), "github.com/other/repo"))
+            .expect("list empty");
+    assert!(empty.is_empty(), "unknown key must return no graphs");
+}
+
+/// Verifies the migration path: a DB that was created WITHOUT the attribution
+/// columns (simulating a pre-spec DB file) successfully gains the columns when
+/// `initialize_schema` is called again, and subsequent writes + reads work.
+#[test]
+fn initialize_schema_migrates_pre_existing_db_without_columns() {
+    use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+    use rusqlite::Connection;
+
+    // Build a pre-spec schema by hand (no stable_source_key / path / graph_id
+    // columns) and write one graph + one entity row the old way.
+    let conn = Connection::open_in_memory().expect("open conn");
+    conn.execute_batch(
+        r#"
+        PRAGMA journal_mode = WAL;
+        CREATE TABLE knowledge_graphs (
+            id TEXT PRIMARY KEY,
+            tenant TEXT NOT NULL,
+            subject TEXT,
+            workspace TEXT,
+            session TEXT,
+            environment TEXT,
+            record_json TEXT NOT NULL
+        );
+        CREATE TABLE knowledge_entities (
+            id TEXT PRIMARY KEY,
+            tenant TEXT NOT NULL,
+            subject TEXT,
+            workspace TEXT,
+            session TEXT,
+            environment TEXT,
+            record_json TEXT NOT NULL
+        );
+        "#,
+    )
+    .expect("create pre-spec schema");
+
+    // Insert a row in the old schema (no attribution columns) to confirm
+    // existing rows survive the migration.
+    conn.execute(
+        "INSERT INTO knowledge_graphs (id, tenant, record_json) VALUES ('g-old', 'ta', '{}')",
+        [],
+    )
+    .expect("insert old graph");
+    conn.execute(
+        "INSERT INTO knowledge_entities (id, tenant, record_json) VALUES ('e-old', 'ta', '{}')",
+        [],
+    )
+    .expect("insert old entity");
+
+    // Persist the connection to a temp file so SqlKnowledgeStore::open_file can
+    // re-open it and run initialize_schema (which runs the migration).
+    let path =
+        std::env::temp_dir().join(format!("engram-migration-test-{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let file_conn = Connection::open(&path).expect("open file db");
+    file_conn
+        .execute_batch(
+            r#"
+            PRAGMA journal_mode = WAL;
+            CREATE TABLE knowledge_graphs (
+                id TEXT PRIMARY KEY,
+                tenant TEXT NOT NULL,
+                subject TEXT,
+                workspace TEXT,
+                session TEXT,
+                environment TEXT,
+                record_json TEXT NOT NULL
+            );
+            CREATE TABLE knowledge_entities (
+                id TEXT PRIMARY KEY,
+                tenant TEXT NOT NULL,
+                subject TEXT,
+                workspace TEXT,
+                session TEXT,
+                environment TEXT,
+                record_json TEXT NOT NULL
+            );
+            CREATE TABLE knowledge_sources (id TEXT PRIMARY KEY, tenant TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE knowledge_documents (id TEXT PRIMARY KEY, source_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE knowledge_chunks (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, source_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE knowledge_relationships (id TEXT PRIMARY KEY, graph_id TEXT, subject_id TEXT, tenant TEXT NOT NULL, subject TEXT, workspace TEXT, session TEXT, environment TEXT, record_json TEXT NOT NULL);
+            CREATE TABLE concept_schemes (id TEXT PRIMARY KEY, tenant TEXT NOT NULL, subject TEXT, workspace TEXT, session TEXT, environment TEXT, record_json TEXT NOT NULL);
+            CREATE TABLE concepts (id TEXT PRIMARY KEY, scheme_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE concept_relations (id TEXT PRIMARY KEY, scheme_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE ontologies (id TEXT PRIMARY KEY, tenant TEXT NOT NULL, subject TEXT, workspace TEXT, session TEXT, environment TEXT, record_json TEXT NOT NULL);
+            CREATE TABLE ontology_classes (id TEXT PRIMARY KEY, ontology_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE ontology_properties (id TEXT PRIMARY KEY, ontology_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE ontology_axioms (id TEXT PRIMARY KEY, ontology_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            "#,
+        )
+        .expect("create pre-spec file schema");
+    file_conn
+        .execute(
+            "INSERT INTO knowledge_graphs (id, tenant, record_json) VALUES ('g-old', 'ta', '{\"id\":\"g-old\",\"scope\":{\"tenant\":\"ta\"},\"name\":\"old\",\"ontologyRefs\":[],\"policy\":{\"visibility\":\"private\",\"retention\":\"durable\"},\"provenance\":{\"source\":\"t\",\"actor\":{\"id\":\"a\",\"kind\":\"agent\"},\"observedAt\":\"2024-01-01T00:00:00Z\",\"evidence\":[],\"derivations\":[]},\"createdAt\":\"2024-01-01T00:00:00Z\"}')",
+            [],
+        )
+        .expect("insert pre-migration graph");
+    drop(file_conn); // flush
+
+    // open_file runs initialize_schema which includes the ALTER TABLE migration.
+    let store = SqlKnowledgeStore::open_file(&path).expect("open migrated store");
+    let mig_scope = Scope {
+        tenant: "ta".to_owned(),
+        subject: None,
+        workspace: None,
+        session: None,
+        environment: None,
+    };
+
+    // Old row is still readable.
+    let graphs = block_on(store.list_graphs(&mig_scope)).expect("list migrated graphs");
+    assert_eq!(graphs.len(), 1, "pre-migration row must survive");
+
+    // New writes with attribution columns work after migration.
+    let mut meta = Metadata::default();
+    meta.insert(
+        "stableSourceKey".to_owned(),
+        serde_json::Value::String("github.com/acme/migrated".to_owned()),
+    );
+    let new_g = KnowledgeGraph {
+        id: Id::from("g-new"),
+        scope: mig_scope.clone(),
+        name: "New Post-Migration".to_owned(),
+        uri: None,
+        version: None,
+        ontology_refs: Vec::new(),
+        policy: Policy {
+            visibility: Visibility::Private,
+            retention: Retention::Durable,
+            sensitivity: None,
+            allowed_uses: Vec::new(),
+            expires_at: None,
+            delete_mode: None,
+        },
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: Some(meta),
+    };
+    block_on(store.put_graph(new_g)).expect("put post-migration graph");
+
+    let by_source = block_on(store.list_graphs_by_source(&mig_scope, "github.com/acme/migrated"))
+        .expect("list_graphs_by_source post-migration");
+    assert_eq!(
+        by_source.len(),
+        1,
+        "list_graphs_by_source must work on a migrated DB"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}

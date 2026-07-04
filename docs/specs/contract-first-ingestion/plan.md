@@ -35,6 +35,13 @@ cross-repo merge over the ingest→store path.
   separate foundation spec).
 - **RFC-0008** — OpenAPI is the first, highest-reliability rung; consumer-side
   and AsyncAPI/`.proto` are later phases. Edge-level authority is OQ1 (not here).
+- **BLOCKER — no retraction capability.** The knowledge layer has no
+  entity/relationship/graph deletion and re-ingest is add-only, so the
+  continuous-convergence acceptance criteria (idempotent re-ingest, update,
+  retraction of removed operations, orphan-node deletion) **cannot** be met on
+  the current ports. Convergence (T8) is blocked on a knowledge-layer retraction
+  prerequisite (its own ADR + spec). T1–T7 (initial extraction, merge-by-add,
+  malformed handling) can proceed; the spec does not ship "up to date" until T8.
 
 ## Construction tests
 
@@ -211,6 +218,30 @@ with `errors` unchanged.
 
 **Done when:** the check passes and is recorded as the AC-6 artifact.
 
+### T8: Per-source convergence on re-ingest (BLOCKED on retraction prerequisite)
+
+**Depends on:** T5, spec:knowledge-graph-retraction/* (a not-yet-authored
+knowledge-layer retraction capability — delete ports + source-scoped lookup)
+
+**Tests:**
+- Integration: re-ingesting an unchanged doc is idempotent — no duplicate
+  entities/edges/`source_refs` (AC: idempotent re-ingest).
+- Integration: re-ingesting a changed doc updates modified operations and adds
+  new ones (AC: update on change).
+- Integration: an operation removed from a re-ingested doc loses that source's
+  `exposes` edge + `source_ref`; a node with no remaining `source_refs` is
+  deleted (AC: retraction / converge to declared state).
+
+**Approach:**
+- On re-ingest, compute the source's current declared key set; diff against what
+  the source declared before (via the source-scoped lookup from the prerequisite);
+  add new, update changed, and retract removed via the new delete ports; delete
+  orphaned nodes.
+
+**Done when:** the three convergence integration tests are green — **only after**
+the retraction prerequisite lands. Until then this task is blocked and the spec
+does not ship "up to date".
+
 ## Rollout
 
 Pure library/ingestion-logic change inside `adapters/ingest`. No infra, no flag,
@@ -231,7 +262,17 @@ records are new and additive; removing the extractor stops producing them.
   over an overwrite-on-conflict `put_entity`, so it must run inside the store's
   connection-lock critical section (or ingestion be serialized per scope) to
   avoid a lost update. Flagged in T5.
+- **No retraction capability (blocker)** — the knowledge layer cannot delete
+  entities/relationships and re-ingest is add-only, so removed/renamed operations
+  and dropped declarations leave stale nodes and `source_refs`. The graph cannot
+  stay up to date until a retraction prerequisite (delete ports + source-scoped
+  lookup + per-source declared-set reconciliation) lands. Convergence (T8) is
+  blocked on it; this is a platform gap that also affects the code-symbol graph.
 
 ## Changelog
 
 - 2026-07-04: initial plan.
+- 2026-07-04: added continuous-convergence requirement (T8) and recorded the
+  blocker — the knowledge layer has no retraction/delete and re-ingest is
+  add-only, so keeping the graph up to date needs a retraction prerequisite
+  first. T1–T7 proceed; T8 and the convergence ACs are blocked on it.

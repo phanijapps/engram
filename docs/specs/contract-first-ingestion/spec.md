@@ -32,6 +32,16 @@ part of the existing scan/ingest pipeline. This is the highest-reliability rung
 of RFC-0008's reliability gradient: the OpenAPI document states the contract
 explicitly, so the join key is unambiguous.
 
+Because ingestion is **continuous**, the contract graph must **converge to each
+source's current declared state** on every re-scan: new operations appear,
+changed operations update in place, and operations a source no longer declares
+are **retracted** (its `source_ref` and `exposes` edge removed; a contract node
+with no remaining `source_refs` deleted). Convergence requires a knowledge-layer
+**retraction capability** — entity/relationship deletion plus a source-scoped
+lookup of what a source previously declared — which **does not exist today** (no
+`delete`/`prune` on the knowledge ports; re-ingest is add-only). This spec is
+therefore **Blocked** on that prerequisite; see Assumptions.
+
 ## Boundaries
 
 The three-tier guard that keeps an implementing agent inside the lines.
@@ -52,6 +62,11 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
   `source_refs`.
 - Skip malformed or unparseable OpenAPI documents with a recorded warning and
   continue the scan; a bad spec never fails the job.
+- On each re-ingest of a source, reconcile that source's **full** declared
+  contract set against what it declared before: add new, update changed, and
+  retract keys it no longer declares (remove the source's `source_ref` +
+  `exposes` edge; delete a node with no remaining `source_refs`) — never
+  add-only.
 
 ### Ask first
 
@@ -61,6 +76,9 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
   reuses `EntityKind::Api`; a new kind is out of scope here.
 - Adding an `authority_level` field to `KnowledgeRelationship` — edge-level
   authority representation is RFC-0008 OQ1 and is not decided here.
+- Adding deletion/retraction ports to the knowledge layer (none exist today) —
+  the convergence prerequisite this spec is blocked on is its own ADR/spec, not
+  invented ad hoc here.
 
 ### Never do
 
@@ -102,6 +120,14 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
   declaring repository's source, with a populated `confidence`.
 - [ ] Two sources declaring the same normalized contract key resolve to a single
   contract entity whose `source_refs` include both sources.
+- [ ] Re-ingesting an **unchanged** OpenAPI document is idempotent: no duplicate
+  contract entities, `exposes` edges, or `source_refs` result.
+- [ ] Re-ingesting a **changed** document updates modified operations' detail in
+  place and adds newly-declared operations.
+- [ ] An operation **removed** from a re-ingested document no longer has an
+  `exposes` edge or `source_ref` from that source, and a contract node left with
+  no remaining `source_refs` is deleted (graph converges to the current declared
+  state). (Blocked: needs knowledge-layer retraction — see Assumptions.)
 - [ ] A malformed or unparseable OpenAPI document is skipped: it increments
   `ScanSummary.skipped` and emits a logged warning, does **not** increment
   `ScanSummary.errors`, and the scan job completes successfully.
@@ -132,6 +158,15 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
   `Proposed` and RFC-0008 is `Draft`; this spec stays `Draft` and does not move
   to `Implementing` until ADR-0016/0017 are accepted (source: docs' status
   headers, 2026-07-04).
+- Technical (BLOCKER): the knowledge layer has **no** deletion/retraction — no
+  `delete`/`prune` for entities/relationships/graphs in `core/knowledge` ports or
+  the SQLite adapter, and re-ingest is add-only (`ingestor.rs`/`scanner.rs` never
+  delete prior records; the manifest only skips unchanged files). Continuous
+  convergence (the retraction ACs above) is therefore **blocked** on a
+  knowledge-layer retraction capability that must land first — a platform gap
+  that also affects the existing code-symbol graph (source: grep of
+  core/knowledge/src, adapters/knowledge/sqlite/src, adapters/ingest/src,
+  2026-07-04).
 - Product: the first slice is OpenAPI (REST) only, producer/declared side, with
   code-level consumer detection and AsyncAPI/`.proto` deferred to later phases;
   edges attach to the existing `KnowledgeSource` rather than a

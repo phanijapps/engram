@@ -4,15 +4,16 @@ A local, end-to-end demo of Engram memory: a browser UI (Vite + React) talks to 
 Node backend (Hono), which loads the Rust core through the `engram-node` N-API
 binding. **Browser → Node → Rust** — real behavior, no mocks.
 
-This is the demo program (RFC 0003) — all five slices shipped. The UI has four
-panels, all backed by real Rust over the N-API bridge:
+The UI is five views, all backed by real Rust over the N-API bridge:
 
+- **Dashboard** — index a repository and see indexed repos with git metadata.
+- **Graph** — the hero view: a 2D force-directed knowledge graph, community-clustered
+  and readable at the class level (module/class hubs labeled, methods as small
+  satellites, colored by cluster).
+- **Chat** — grounded + agentic Q&A over knowledge and memory, plus a semantic
+  context composer.
 - **Memory** — write / retrieve / forget observations.
-- **Taxonomy** — maintain a concept scheme and its concepts.
-- **Ingest & extract graph** — paste code or prose; a deterministic extractor
-  builds entities + `calls`/`mentions` edges, rendered in Cytoscape.
-- **Semantic search** — index a corpus with FastEmbed (BGE-small) and query it
-  over sqlite-vec for nearest chunks.
+- **Belief** — record beliefs with confidence, detect and resolve contradictions.
 
 State is **durable and shared**: the running backend opens one SQLite file
 (`demo-engram.db`, set via `ENGRAM_DB`) for memory, knowledge, and ingest, so

@@ -40,6 +40,17 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   blocked on a second backend making TS-side orchestration insufficient;
   unblocked by the Postgres or Neo4j adapter. [spec T3; option b′]
 
+## demo-reimagine-manual-qa
+
+- **Manual QA (deferred: demo-reimagine-manual-qa):** two human-in-the-loop
+  checks the automated gates can't cover — (1) render `/graph` against an indexed
+  repo and confirm it reads at the class level (module/class hubs labeled, methods
+  small until hover, colored clusters); (2) add the built stdio server to GitHub
+  Copilot via the documented `bin` command and confirm `tools/list` + a
+  `tools/call` succeed end-to-end. Blocked on nothing; needs a browser + a Copilot
+  client. Mechanical proxies already green: graph-model unit tests, MCP in-memory
+  protocol tests, and a stdout-clean `initialize` smoke. [spec manual-QA ACs]
+
 ## deployment-adapters (intent only — no spec yet)
 
 - **pgvector(graph+vector) adapter:** one Postgres holding graph + chunks +

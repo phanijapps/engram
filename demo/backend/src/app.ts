@@ -17,20 +17,16 @@ import {
 import { enhanceWithLLM } from "./enhance.js";
 import { buildItOrgOntology } from "./itOrgOntology.js";
 import { answerQuestion } from "./qa.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { registerEngramTools } from "./mcp-tools.js";
+import { buildToolDeps } from "./mcp-deps.js";
+import { SCAN_ACTOR, SCAN_POLICY, SCAN_SCOPE } from "./scan-defaults.js";
 import { QUESTIONS_50, runBenchmark } from "./bench.js";
 import { embeddedCount, resetCache, resetWarmupCounters, warmupSnapshot } from "./lazy_embeddings.js";
 
-// Demo-local defaults for scan-ingested documents (single-user, local).
-const SCAN_SCOPE = { tenant: "tenant-demo", workspace: "engram", environment: "local" };
+// Demo-local scan defaults are shared with the MCP path — see scan-defaults.ts.
 export { SCAN_SCOPE };
-const SCAN_POLICY = {
-  visibility: "workspace",
-  retention: "durable",
-  sensitivity: "low",
-  allowedUses: ["retrieval"],
-  deleteMode: "tombstone",
-};
-const SCAN_ACTOR = { id: "actor-demo", kind: "agent", displayName: "Demo Scan" };
 
 // The backend is a thin JSON transport over the Rust memory service. It owns no
 // behavior — v1 JSON in, v1 JSON out, unchanged by Rust — so TypeScript stays
@@ -43,7 +39,10 @@ app.use(
   cors({ origin: ["http://localhost:5173", "http://127.0.0.1:5173"] })
 );
 
+// `/health` is the canonical route; `/healthz` is an alias for clients/probes
+// that assume the `-z` convention.
 app.get("/health", (c) => c.json({ status: "ok" }));
+app.get("/healthz", (c) => c.json({ status: "ok" }));
 
 app.post("/memory/write", async (c) => {
   const request = await c.req.json();
@@ -503,106 +502,18 @@ app.post("/qa/ask", async (c) => {
 });
 
 // --- MCP server ------------------------------------------------------------
-// Exposes engram as a tool for any MCP-compatible client (Claude Desktop,
-// VS Code Copilot, etc.) via JSON-RPC over HTTP.
-app.post("/mcp", async (c) => {
-  const body = await c.req.json();
-  if (body.method === "tools/list") {
-    const tools = [
-      {
-        name: "index_repo",
-        description: "Index a code repository into the knowledge graph.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            path: { type: "string", description: "Absolute path to the repo" },
-            force: { type: "boolean", description: "Force re-index" },
-          },
-          required: ["path"],
-        },
-      },
-      {
-        name: "get_job",
-        description: "Check indexing job status.",
-        inputSchema: {
-          type: "object",
-          properties: { jobId: { type: "string" } },
-          required: ["jobId"],
-        },
-      },
-      {
-        name: "search",
-        description: "Search the knowledge graph for entities + relationships.",
-        inputSchema: {
-          type: "object",
-          properties: {
-            query: { type: "string" },
-            limit: { type: "number" },
-          },
-          required: ["query"],
-        },
-      },
-      {
-        name: "agentic_search",
-        description: "Ask a question — LLM explores the graph step-by-step.",
-        inputSchema: {
-          type: "object",
-          properties: { question: { type: "string" } },
-          required: ["question"],
-        },
-      },
-    ];
-    return c.json({ jsonrpc: "2.0", id: body.id, result: { tools } });
-  }
-  if (body.method === "tools/call") {
-    const { name, arguments: args } = body.params;
-    let result: unknown;
-    try {
-      if (name === "index_repo") {
-        result = await getIngestTransport().startScanJob({
-          root: args.path,
-          scope: SCAN_SCOPE,
-          force: args.force === true,
-        });
-      } else if (name === "get_job") {
-        result = await getIngestTransport().getScanJob(args.jobId);
-      } else if (name === "search") {
-        const transport = getKnowledgeTransport();
-        const [entities, relationships] = await Promise.all([
-          transport.listEntities(SCAN_SCOPE),
-          transport.listRelationships(SCAN_SCOPE),
-        ]);
-        const q = String(args.query ?? "").toLowerCase();
-        const entList = entities as Array<Record<string, unknown>>;
-        const matched = entList
-          .filter((e) => String(e.name ?? "").toLowerCase().includes(q))
-          .slice(0, args.limit ?? 20)
-          .map((e) => ({
-            name: String(e.name ?? ""),
-            kind: String(e.kind ?? ""),
-            file: String(
-              (e.sourceRefs as Array<Record<string, unknown>> | undefined)?.[0]?.location != null
-                ? ((e.sourceRefs as Array<Record<string, unknown>>)[0]
-                    .location as Record<string, unknown>)?.path ?? ""
-                : "",
-            ),
-          }));
-        result = { entities: matched, total: entList.length };
-      } else if (name === "agentic_search") {
-        result = await answerQuestion(String(args.question ?? ""), SCAN_SCOPE);
-      } else {
-        return c.json({ jsonrpc: "2.0", id: body.id, error: { code: -32601, message: `Unknown tool: ${name}` } });
-      }
-      return c.json({
-        jsonrpc: "2.0",
-        id: body.id,
-        result: { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] },
-      });
-    } catch (e) {
-      return c.json({ jsonrpc: "2.0", id: body.id, error: { code: -32603, message: String(e) } });
-    }
-  }
-  return c.json({ jsonrpc: "2.0", id: body.id ?? null, error: { code: -32601, message: `Unknown method: ${body.method}` } });
+// Spec-compliant Streamable HTTP MCP endpoint via the SDK's Web-standard
+// transport. Stateless: each request gets a fresh McpServer + transport (no
+// session store). Any HTTP MCP client — GitHub Copilot's `http` transport —
+// connects at POST/GET /mcp and gets the full initialize/tools handshake.
+app.all("/mcp", async (c) => {
+  const server = new McpServer({ name: "engram", version: "0.1.0" });
+  registerEngramTools(server, buildToolDeps(SCAN_SCOPE));
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+  });
+  await server.connect(transport);
+  return transport.handleRequest(c.req.raw);
 });
 
 // --- Benchmark (lazy-embeddings hypothesis) ---------------------------------

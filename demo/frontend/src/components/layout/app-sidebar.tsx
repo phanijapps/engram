@@ -2,11 +2,8 @@ import type { LucideIcon } from "lucide-react";
 import {
   BrainCircuit,
   Database,
-  FileInput,
-  FolderTree,
   LayoutDashboard,
   MessageSquare,
-  Network,
   Scale,
   Waypoints,
 } from "lucide-react";
@@ -33,12 +30,9 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { title: "Dashboard", to: "/", icon: LayoutDashboard },
   { title: "Graph", to: "/graph", icon: Waypoints },
-  { title: "Explorer", to: "/explorer", icon: Network },
-  { title: "Ingest", to: "/ingest", icon: FileInput },
-  { title: "Knowledge", to: "/knowledge", icon: FolderTree },
-  { title: "Belief", to: "/belief", icon: Scale },
-  { title: "Memory", to: "/memory", icon: Database },
   { title: "Chat", to: "/chat", icon: MessageSquare },
+  { title: "Memory", to: "/memory", icon: Database },
+  { title: "Belief", to: "/belief", icon: Scale },
 ];
 
 export function AppSidebar() {

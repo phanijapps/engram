@@ -5,6 +5,10 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 
 ## Active
 
+- [`demo-reimagine`](demo-reimagine/spec.md): prune the demo to 5 views
+  (Dashboard, hero Graph, Chat, Memory, Belief); rebuild the graph as a 2D
+  community-clustered force graph readable at the class level; add a
+  spec-compliant stdio MCP server GitHub Copilot can spawn. Draft.
 - [`memory-cue-anchors`](memory-cue-anchors/spec.md): entity extraction at write
   time populates `MemoryContent.entities`; SQLite adapter dispatches
   `RetrievalMode::Cue` against stored entity anchors for multi-hop retrieval

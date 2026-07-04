@@ -1,6 +1,6 @@
 # RFC-0008: Cross-repo linkage
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Author:** phanijapps
 - **Approver:** phanijapps
 - **Date opened:** 2026-07-04

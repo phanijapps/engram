@@ -1,6 +1,6 @@
 # ADR-0016: Cross-repo linkage: shared contract nodes over symbol matching
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-04
 - **Decision-makers:** phanijapps
 - **Supersedes:** none

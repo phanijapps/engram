@@ -1,6 +1,6 @@
 # ADR-0017: Repository model: KnowledgeSource + Repository node in one shared scope
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-07-04
 - **Decision-makers:** phanijapps
 - **Supersedes:** none

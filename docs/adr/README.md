@@ -17,5 +17,6 @@
 | [0013](0013-consolidation-validation-event-trigger-family.md) | Consolidation validation event trigger family | Accepted |
 | [0014](0014-memory-record-embedding-surface.md) | Memory record embedding surface: summary over full text | Proposed |
 | [0015](0015-memory-content-entities-as-cue-anchor-surface.md) | Memory cue anchor surface: MemoryContent.entities | Accepted |
-| [0016](0016-cross-repo-linkage-shared-contract-nodes.md) | Cross-repo linkage: shared contract nodes over symbol matching | Proposed |
-| [0017](0017-repository-model-source-and-node-in-one-scope.md) | Repository model: KnowledgeSource + Repository node in one shared scope | Proposed |
+| [0016](0016-cross-repo-linkage-shared-contract-nodes.md) | Cross-repo linkage: shared contract nodes over symbol matching | Accepted |
+| [0017](0017-repository-model-source-and-node-in-one-scope.md) | Repository model: KnowledgeSource + Repository node in one shared scope | Accepted |
+| [0018](0018-knowledge-graph-retraction-and-convergence.md) | Knowledge-graph retraction and convergence on re-ingest | Accepted |

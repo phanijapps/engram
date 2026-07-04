@@ -1,6 +1,6 @@
 # RFC-0009: Knowledge-graph retraction and convergence
 
-- **Status:** Draft
+- **Status:** Accepted
 - **Author:** phanijapps
 - **Approver:** phanijapps
 - **Date opened:** 2026-07-04

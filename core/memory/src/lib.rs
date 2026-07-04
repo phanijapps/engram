@@ -1,8 +1,11 @@
-//! Memory behavior ports.
+//! Memory behavior ports and write-path enrichment helpers.
 //!
 //! This crate owns the canonical memory-facing service and repository
 //! contracts. It deliberately does not know how knowledge graphs, ontologies,
 //! vector indexes, or source ingestion are stored.
+
+pub mod extraction;
+pub use extraction::{extract, merge_entities};
 
 use async_trait::async_trait;
 use engram_domain::*;

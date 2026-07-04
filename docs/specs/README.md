@@ -5,6 +5,10 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 
 ## Active
 
+- [`memory-cue-anchors`](memory-cue-anchors/spec.md): entity extraction at write
+  time populates `MemoryContent.entities`; SQLite adapter dispatches
+  `RetrievalMode::Cue` against stored entity anchors for multi-hop retrieval
+  (ADR-0015). Shipped.
 - [`source-assertion-reconciliation`](source-assertion-reconciliation/spec.md):
   reconciliation core — a federated `SourceAssertion` domain type + an in-memory
   authority-aware survivorship synthesizer (injected authority policy, advisory

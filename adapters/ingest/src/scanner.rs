@@ -16,7 +16,7 @@ use rayon::prelude::*;
 
 use crate::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
-    PlainTextChunker, PlainTextChunkerOptions, content_hash, stable_source_key,
+    PlainTextChunker, PlainTextChunkerOptions, content_hash, reconcile, stable_source_key,
 };
 
 const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
@@ -222,7 +222,9 @@ enum Outcome {
         relationships: usize,
         hash: (String, String),
     },
-    Unchanged,
+    /// Produced only by the TOCTOU defense-in-depth guard inside the parallel
+    /// phase.  `Unchanged` detection now happens in the serial pre-pass and is
+    /// never emitted by the parallel closure.
     Skipped,
     Error,
 }
@@ -290,6 +292,12 @@ where
         .follow_links(false)
         .build();
     let mut readable: Vec<(PathBuf, FileKind, String)> = Vec::new();
+    // FIX 3: Track every rel path observed during the walk — including files
+    // that pass canonicalization but are subsequently skipped by the denylist,
+    // classifier, or size-bound filters.  Removed-path detection uses this set
+    // so that a transiently-filtered or newly-oversize file present on disk is
+    // NOT mistaken for a genuinely-absent removal (adversarial Concern 4).
+    let mut observed_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
     for entry in walker {
         let entry = match entry {
             Ok(e) => e,
@@ -326,6 +334,9 @@ where
             })?
             .to_string_lossy()
             .to_string();
+        // Observe the path BEFORE any filter that could skip it so that
+        // skipped-but-present files are never classified as removals (FIX 3).
+        observed_paths.insert(rel.clone());
         if is_denylisted(&rel) || is_secret_file(&rel) {
             summary.skipped += 1;
             continue;
@@ -348,24 +359,88 @@ where
         readable.push((canonical, kind, rel));
     }
 
-    // Parallel ingest (rayon).
+    // FIX 1(a) + FIX 2: Serial pre-pass — read each file, detect changed vs
+    // unchanged, and for changed/new files delete their prior graph(s) BEFORE
+    // the parallel write pass (serializes the reconcile to eliminate the
+    // list→delete→recount→delete-repo-node race).
+    //
+    // On delete failure: increment `summary.errors` and do NOT forward the
+    // path to ingest — keeping the prior graph intact prevents duplicates
+    // (AC-4).  The old hash is preserved in the manifest below so the path is
+    // retried next scan (adversarial Concern 2 / FIX 2).
     let max_bytes = opts.max_bytes();
-    let outcomes: Vec<(String, Outcome)> = readable
+
+    // File content read in this pass is carried through to the parallel phase
+    // so bytes are not read twice.
+    struct ReadyToIngest {
+        kind: FileKind,
+        rel: String,
+        content: Vec<u8>,
+        hash: String,
+    }
+
+    let mut unchanged_rels: Vec<String> = Vec::new();
+    let mut delete_failed: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut to_ingest: Vec<ReadyToIngest> = Vec::new();
+
+    for (canonical, kind, rel) in &readable {
+        let bytes = match std::fs::read(canonical) {
+            Ok(b) => b,
+            Err(_) => {
+                summary.errors += 1;
+                continue;
+            }
+        };
+        if bytes.len() as u64 > max_bytes {
+            // File grew between the stat-based walk check and the read
+            // (TOCTOU edge).  Treat as skipped; prior graph persists.
+            summary.skipped += 1;
+            continue;
+        }
+        let text = String::from_utf8_lossy(&bytes).into_owned();
+        let hash = content_hash(&text);
+        if opts.manifest.get(rel.as_str()).is_some_and(|h| h == &hash) {
+            unchanged_rels.push(rel.clone());
+            continue;
+        }
+        // File is new or changed — delete prior graph(s) before writing.
+        match block_on(reconcile::delete_prior_graphs_for_path(
+            repo,
+            &opts.scope,
+            &source_key,
+            rel,
+        )) {
+            Ok(()) => to_ingest.push(ReadyToIngest {
+                kind: *kind,
+                rel: rel.clone(),
+                content: bytes,
+                hash,
+            }),
+            Err(_) => {
+                // Delete failed: surface the error, skip the write (no
+                // duplicate graph), retain old hash in manifest for retry.
+                summary.errors += 1;
+                delete_failed.insert(rel.clone());
+            }
+        }
+    }
+
+    // FIX 1(b): Parallel ingest — no reconcile / delete calls inside this
+    // closure.  Content was already read and prior graphs were already deleted
+    // in the serial pre-pass above.
+    let outcomes: Vec<(String, Outcome)> = to_ingest
         .par_iter()
-        .map(|(path, kind, rel)| {
-            let bytes = match std::fs::read(path) {
-                Ok(b) => b,
-                Err(_) => return (rel.clone(), Outcome::Error),
-            };
-            if bytes.len() as u64 > max_bytes {
+        .map(|item| {
+            let rel = &item.rel;
+            let kind = item.kind;
+            if item.content.len() as u64 > max_bytes {
+                // Defense-in-depth TOCTOU guard (shouldn't fire; pre-pass
+                // already checked).
                 return (rel.clone(), Outcome::Skipped);
             }
-            let text = String::from_utf8_lossy(&bytes).into_owned();
+            let text = String::from_utf8_lossy(&item.content).into_owned();
             let text_for_ast = text.clone(); // keep a copy for AST call extraction
-            let hash = content_hash(&text);
-            if opts.manifest.get(rel).is_some_and(|h| h == &hash) {
-                return (rel.clone(), Outcome::Unchanged);
-            }
+            let hash = item.hash.clone();
             let document_kind = match kind {
                 FileKind::Code => SourceDocumentKind::Code,
                 FileKind::Text => SourceDocumentKind::Text,
@@ -499,7 +574,50 @@ where
         })
         .collect();
 
-    let mut new_manifest = opts.manifest.clone();
+    // FIX 1(c): Serial post-pass — delete graphs for paths that were in the
+    // prior manifest but were never observed during this scan (genuinely-absent
+    // files).  Uses `observed_paths` (FIX 3) rather than `readable` so that
+    // oversize / denylisted / unclassifiable files that are still present on
+    // disk are not treated as removals.
+    let removed_paths: Vec<String> = opts
+        .manifest
+        .keys()
+        .filter(|k| !observed_paths.contains(*k))
+        .cloned()
+        .collect();
+    let mut removed_delete_failed: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
+    for removed_path in &removed_paths {
+        match block_on(reconcile::delete_prior_graphs_for_path(
+            repo,
+            &opts.scope,
+            &source_key,
+            removed_path,
+        )) {
+            Ok(()) => {}
+            Err(_) => {
+                // Surface the error and keep the path in the manifest so it
+                // is retried next scan rather than silently orphaned (FIX 2).
+                summary.errors += 1;
+                removed_delete_failed.insert(removed_path.clone());
+            }
+        }
+    }
+    // GC: check whether the per-source Repository node can be pruned now that
+    // all removed-path deletions are complete.  Run once here — never before a
+    // replacement write — because a replacement write re-puts the repo node via
+    // upsert so pre-write GC would only widen the transient-absence window
+    // (FIX 1 / adversarial Nit 6).  Errors are ignored; orphaned repo nodes
+    // survive until the next scan.
+    let _ = block_on(reconcile::maybe_delete_repo_node(
+        repo,
+        &opts.scope,
+        &source_key,
+    ));
+
+    // Build the emitted manifest from this scan's outcomes.
+    let mut new_manifest = std::collections::HashMap::new();
+
     for (rel, outcome) in outcomes {
         match outcome {
             Outcome::Ingested {
@@ -516,14 +634,9 @@ where
                     status: "ingested",
                 });
             }
-            Outcome::Unchanged => {
-                summary.unchanged += 1;
-                progress(ScanProgress {
-                    file: rel,
-                    status: "unchanged",
-                });
-            }
             Outcome::Skipped => {
+                // TOCTOU defense-in-depth path; increments skipped, not errors.
+                summary.skipped += 1;
                 progress(ScanProgress {
                     file: rel,
                     status: "skipped",
@@ -536,6 +649,35 @@ where
                     status: "error",
                 });
             }
+        }
+    }
+
+    // Carry forward hashes for files whose content did not change this scan.
+    for rel in unchanged_rels {
+        summary.unchanged += 1;
+        if let Some(h) = opts.manifest.get(&rel) {
+            new_manifest.insert(rel.clone(), h.clone());
+        }
+        progress(ScanProgress {
+            file: rel,
+            status: "unchanged",
+        });
+    }
+
+    // FIX 2: Files where the pre-pass delete failed — keep the old hash so
+    // the path is retried next scan.  The prior graph was NOT deleted, so no
+    // duplicate graph exists and the state is consistent.
+    for rel in &delete_failed {
+        if let Some(h) = opts.manifest.get(rel.as_str()) {
+            new_manifest.insert(rel.clone(), h.clone());
+        }
+    }
+
+    // FIX 2: Removed paths where the post-pass delete failed — keep in the
+    // manifest so they are retried rather than being silently pruned.
+    for rel in &removed_delete_failed {
+        if let Some(h) = opts.manifest.get(rel.as_str()) {
+            new_manifest.insert(rel.clone(), h.clone());
         }
     }
 

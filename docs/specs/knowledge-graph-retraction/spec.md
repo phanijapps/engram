@@ -1,6 +1,6 @@
 # Spec: knowledge-graph-retraction
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0009, ADR-0018, ADR-0017, docs/specs/structured-repo-identity
@@ -102,14 +102,14 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 
 ## Acceptance Criteria
 
-- [ ] `KnowledgeRepository` exposes `delete_entity` and `delete_relationship`, and `KnowledgeGraphRepository` exposes `delete_graph`, each scope-checked and returning whether a row was deleted; `SqlKnowledgeStore` implements all three.
-- [ ] `delete_graph(id, scope)` removes the graph row and every entity and relationship with that `graph_id` (and no records of other graphs) in a single transaction.
-- [ ] A fine-grained delete issued under a scope that does not match the record's scope does not delete it and returns `false`.
-- [ ] Re-ingesting the same `(stable_source_key, path)` with changed content deletes the prior graph and its entities/relationships before writing the new ones — no orphaned prior **graph records** (entities/relationships/graph) remain, and the graph count for that `(key, path)` is 1. (Prior `SourceDocument`/`KnowledgeChunk`/embedding retraction is deferred — see Assumptions.)
-- [ ] A path present in the previous scan's manifest but absent from the current scan has its graph (and entities/relationships) deleted after the scan.
-- [ ] The per-source `EntityKind::Repository` node remains while at least one document graph for its `stable_source_key` exists, and is deleted once the last one is removed.
-- [ ] Deletion is hard (rows are removed; no tombstone column is added).
-- [ ] No domain or generated-contract change: `pnpm run contracts:generate` yields no diff.
+- [x] `KnowledgeRepository` exposes `delete_entity` and `delete_relationship`, and `KnowledgeGraphRepository` exposes `delete_graph`, each scope-checked and returning whether a row was deleted; `SqlKnowledgeStore` implements all three.
+- [x] `delete_graph(id, scope)` removes the graph row and every entity and relationship with that `graph_id` (and no records of other graphs) in a single transaction.
+- [x] A fine-grained delete issued under a scope that does not match the record's scope does not delete it and returns `false`.
+- [x] Re-ingesting the same `(stable_source_key, path)` with changed content deletes the prior graph and its entities/relationships before writing the new ones — no orphaned prior **graph records** (entities/relationships/graph) remain, and the graph count for that `(key, path)` is 1. (Prior `SourceDocument`/`KnowledgeChunk`/embedding retraction is deferred — see Assumptions.)
+- [x] A path present in the previous scan's manifest but **not observed** during the current scan's walk (genuinely absent — not merely skipped, denylisted, or oversize) has its graph (and entities/relationships) deleted after the scan.
+- [x] The per-source `EntityKind::Repository` node remains while at least one document graph for its `stable_source_key` exists, and is deleted once the last one is removed.
+- [x] Deletion is hard (rows are removed; no tombstone column is added).
+- [x] No domain or generated-contract change: `pnpm run contracts:generate` yields no diff.
 
 ## Assumptions
 

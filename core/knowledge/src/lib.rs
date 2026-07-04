@@ -72,6 +72,30 @@ pub trait KnowledgeRepository: Send + Sync {
     ) -> CoreResult<Option<KnowledgeRelationship>> {
         Ok(None)
     }
+
+    /// Deletes an entity by ID within the caller-provided scope boundary.
+    ///
+    /// Returns `true` if a row was deleted, `false` if the entity was not found
+    /// or the caller's scope does not match the record's scope (hard delete; no
+    /// tombstone). Default implementation returns a not-supported error.
+    async fn delete_entity(&self, _id: &EntityId, _scope: &Scope) -> CoreResult<bool> {
+        Err(CoreError::Adapter {
+            adapter: "knowledge_repository".to_owned(),
+            message: "entity deletes are not supported".to_owned(),
+        })
+    }
+
+    /// Deletes a relationship by ID within the caller-provided scope boundary.
+    ///
+    /// Returns `true` if a row was deleted, `false` if the relationship was not
+    /// found or the caller's scope does not match the record's scope (hard delete;
+    /// no tombstone). Default implementation returns a not-supported error.
+    async fn delete_relationship(&self, _id: &RelationshipId, _scope: &Scope) -> CoreResult<bool> {
+        Err(CoreError::Adapter {
+            adapter: "knowledge_repository".to_owned(),
+            message: "relationship deletes are not supported".to_owned(),
+        })
+    }
 }
 
 /// Persistence and traversal port for ontology-backed knowledge graphs.
@@ -100,6 +124,37 @@ pub trait KnowledgeGraphRepository: Send + Sync {
         scope: &Scope,
         limit: Option<u32>,
     ) -> CoreResult<Vec<KnowledgeRelationship>>;
+
+    /// Deletes a graph and cascades to every entity and relationship carrying
+    /// that `graph_id`, all in a single transaction. Returns `true` if the
+    /// graph existed and was deleted. A delete under a non-matching scope is a
+    /// no-op returning `false` (hard delete; no tombstone). Default
+    /// implementation returns a not-supported error.
+    async fn delete_graph(&self, _id: &KnowledgeGraphId, _scope: &Scope) -> CoreResult<bool> {
+        Err(CoreError::Adapter {
+            adapter: "knowledge_repository".to_owned(),
+            message: "graph deletes are not supported".to_owned(),
+        })
+    }
+
+    /// Lists knowledge graphs belonging to `stable_source_key`, visible to
+    /// `scope`. Used by the ingest reconciler to find prior graphs for a
+    /// `(stable_source_key, path)` pair before writing a replacement.
+    ///
+    /// Default implementation returns a not-supported error so that a future
+    /// adapter that overrides the delete methods but forgets to override this
+    /// query fails loudly rather than silently reconciling nothing.
+    /// `SqlKnowledgeStore` overrides this — no behavior change on the real path.
+    async fn list_graphs_by_source(
+        &self,
+        _scope: &Scope,
+        _stable_source_key: &str,
+    ) -> CoreResult<Vec<KnowledgeGraph>> {
+        Err(CoreError::Adapter {
+            adapter: "knowledge_repository".to_owned(),
+            message: "list_graphs_by_source is not supported".to_owned(),
+        })
+    }
 }
 
 /// Persistence and validation port for graph ontologies.

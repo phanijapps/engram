@@ -11,6 +11,7 @@ mod filesystem;
 mod git;
 mod hash;
 mod ingestor;
+mod reconcile;
 mod request;
 mod scanner;
 mod source_key;

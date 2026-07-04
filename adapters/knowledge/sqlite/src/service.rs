@@ -153,35 +153,6 @@ impl SqlKnowledgeStore {
         Ok(sources)
     }
 
-    /// Lists `KnowledgeGraph`s belonging to a specific repository, identified by
-    /// `stable_source_key`, visible to `scope`. Mirrors the `scope_allows` filter
-    /// used by `list_graphs`; filters by the indexed `stable_source_key` column.
-    pub async fn list_graphs_by_source(
-        &self,
-        scope: &Scope,
-        stable_source_key: &str,
-    ) -> CoreResult<Vec<KnowledgeGraph>> {
-        let connection = self.lock()?;
-        let mut statement = connection
-            .prepare(
-                "SELECT record_json FROM knowledge_graphs \
-                 WHERE stable_source_key = ?1 ORDER BY id",
-            )
-            .map_err(sql_error)?;
-        let rows = statement
-            .query_map(params![stable_source_key], |row| row.get::<_, String>(0))
-            .map_err(sql_error)?;
-        let mut graphs = Vec::new();
-        for row in rows {
-            let json = row.map_err(sql_error)?;
-            let graph = serde_json::from_str::<KnowledgeGraph>(&json).map_err(json_error)?;
-            if scope_allows(&graph.scope, scope) {
-                graphs.push(graph);
-            }
-        }
-        Ok(graphs)
-    }
-
     /// Lists `KnowledgeEntity` records belonging to a specific repository (via
     /// `graph_id IN (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?)`),
     /// visible to `scope`. The per-source `EntityKind::Repository` node has
@@ -488,6 +459,62 @@ impl KnowledgeRepository for SqlKnowledgeStore {
             .transpose()?;
         Ok(relationship.filter(|relationship| scope_allows(&relationship.scope, scope)))
     }
+
+    async fn delete_entity(&self, id: &EntityId, scope: &Scope) -> CoreResult<bool> {
+        let connection = self.lock()?;
+        // Read the row first to scope-check before deleting.
+        let entity = connection
+            .query_row(
+                "SELECT record_json FROM knowledge_entities WHERE id = ?1",
+                params![id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(sql_error)?
+            .map(|json| serde_json::from_str::<KnowledgeEntity>(&json).map_err(json_error))
+            .transpose()?;
+        let Some(entity) = entity else {
+            return Ok(false);
+        };
+        if !scope_allows(&entity.scope, scope) {
+            return Ok(false);
+        }
+        let deleted = connection
+            .execute(
+                "DELETE FROM knowledge_entities WHERE id = ?1",
+                params![id.to_string()],
+            )
+            .map_err(sql_error)?;
+        Ok(deleted > 0)
+    }
+
+    async fn delete_relationship(&self, id: &RelationshipId, scope: &Scope) -> CoreResult<bool> {
+        let connection = self.lock()?;
+        // Read the row first to scope-check before deleting.
+        let relationship = connection
+            .query_row(
+                "SELECT record_json FROM knowledge_relationships WHERE id = ?1",
+                params![id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(sql_error)?
+            .map(|json| serde_json::from_str::<KnowledgeRelationship>(&json).map_err(json_error))
+            .transpose()?;
+        let Some(relationship) = relationship else {
+            return Ok(false);
+        };
+        if !scope_allows(&relationship.scope, scope) {
+            return Ok(false);
+        }
+        let deleted = connection
+            .execute(
+                "DELETE FROM knowledge_relationships WHERE id = ?1",
+                params![id.to_string()],
+            )
+            .map_err(sql_error)?;
+        Ok(deleted > 0)
+    }
 }
 
 #[async_trait]
@@ -567,6 +594,78 @@ impl KnowledgeGraphRepository for SqlKnowledgeStore {
             .map(|json| serde_json::from_str::<KnowledgeGraph>(&json).map_err(json_error))
             .transpose()?;
         Ok(graph.filter(|graph| scope_allows(&graph.scope, scope)))
+    }
+
+    async fn delete_graph(&self, id: &KnowledgeGraphId, scope: &Scope) -> CoreResult<bool> {
+        let mut connection = self.lock()?;
+        // Read the graph first to scope-check before cascading.
+        let graph = connection
+            .query_row(
+                "SELECT record_json FROM knowledge_graphs WHERE id = ?1",
+                params![id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(sql_error)?
+            .map(|json| serde_json::from_str::<KnowledgeGraph>(&json).map_err(json_error))
+            .transpose()?;
+        let Some(graph) = graph else {
+            return Ok(false);
+        };
+        if !scope_allows(&graph.scope, scope) {
+            return Ok(false);
+        }
+        // Cascade in a single transaction: entities → relationships → graph row.
+        // Members are matched by `graph_id` alone, without re-checking scope,
+        // because the extractor writes every entity and relationship with the
+        // same scope as the graph at ingest time.  A member carrying a
+        // different scope would be cascade-deleted here without a scope guard —
+        // flag this if the ingestion contract ever allows heterogeneous member
+        // scopes within one graph.
+        let tx = connection.transaction().map_err(sql_error)?;
+        tx.execute(
+            "DELETE FROM knowledge_entities WHERE graph_id = ?1",
+            params![id.to_string()],
+        )
+        .map_err(sql_error)?;
+        tx.execute(
+            "DELETE FROM knowledge_relationships WHERE graph_id = ?1",
+            params![id.to_string()],
+        )
+        .map_err(sql_error)?;
+        tx.execute(
+            "DELETE FROM knowledge_graphs WHERE id = ?1",
+            params![id.to_string()],
+        )
+        .map_err(sql_error)?;
+        tx.commit().map_err(sql_error)?;
+        Ok(true)
+    }
+
+    async fn list_graphs_by_source(
+        &self,
+        scope: &Scope,
+        stable_source_key: &str,
+    ) -> CoreResult<Vec<KnowledgeGraph>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT record_json FROM knowledge_graphs \
+                 WHERE stable_source_key = ?1 ORDER BY id",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map(params![stable_source_key], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut graphs = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let graph = serde_json::from_str::<KnowledgeGraph>(&json).map_err(json_error)?;
+            if scope_allows(&graph.scope, scope) {
+                graphs.push(graph);
+            }
+        }
+        Ok(graphs)
     }
 
     async fn neighbors(

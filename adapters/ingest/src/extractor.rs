@@ -470,7 +470,10 @@ fn relationship_id(graph_id: &KnowledgeGraphId, subject: &str, object: &str) -> 
 /// to one entity (idempotent upsert), while the same repo under a different
 /// scope (e.g. different workspace) produces a distinct entity whose
 /// `scope_allows` filter is consistent with the id.
-fn repo_entity_id(scope: &Scope, key: &str) -> EntityId {
+///
+/// Exposed as `pub(crate)` so the ingest reconciler can compute the same id
+/// when deciding whether to delete the per-source Repository node.
+pub(crate) fn repo_entity_id(scope: &Scope, key: &str) -> EntityId {
     Id::from(format!(
         "repo-{}",
         content_hash(format!(

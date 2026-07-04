@@ -2,6 +2,7 @@ use std::fs;
 
 use engram_domain::*;
 use engram_ingest::{STABLE_SOURCE_KEY, ScanOptions, scan_repository};
+use engram_knowledge::KnowledgeGraphRepository;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 

@@ -59,6 +59,22 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 - **pgvector(vector) + neo4j(graph) adapter:** split deployment. Same — needs an
   ADR + spec before work.
 
+## knowledge-graph-retraction (deferred nits — self-healing, demo-scale)
+
+- **Repo-node GC error swallowed:** `maybe_delete_repo_node`'s error is discarded
+  in the serial post-pass (scanner.rs); a failed GC leaves a harmless orphan
+  Repository node that converges on the next scan. Optionally count it into
+  `summary.errors` for observability.
+- **Transient graph-drop on ingest-error-after-delete:** a file whose prior graph
+  is deleted in the pre-pass but then hits `Outcome::Error` in the parallel write
+  has its graph absent until the next scan (self-healing; inherent to
+  delete-before-write).
+- **Canonicalize-failure treated as removal:** a previously-ingested file hit by a
+  transient canonicalize/I/O error is not added to `observed_paths`, so its graph
+  is deleted as a "removal" and re-ingested next scan (self-healing availability
+  edge, caller-scope-bounded). Fix: treat canonicalize failure on a prior-manifest
+  path as retain, not remove.
+
 ## knowledge-source-retraction (intent only — no spec yet)
 
 - **Document/chunk/embedding retraction on re-ingest:** `knowledge-graph-retraction`

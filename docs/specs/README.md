@@ -17,6 +17,11 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   reconciliation core — a federated `SourceAssertion` domain type + an in-memory
   authority-aware survivorship synthesizer (injected authority policy, advisory
   contradiction on tie) (ADR-0012, ADR-0013, RFC-0007). Draft.
+- [`contract-first-ingestion`](contract-first-ingestion/spec.md): Phase A of
+  cross-repo linkage — parse OpenAPI documents in scanned repos into
+  `EntityKind::Api` contract nodes keyed by a normalized `METHOD /path` identifier
+  with `exposes` edges; two repos declaring the same key merge into one node
+  (ADR-0016, ADR-0017, RFC-0008). Draft.
 - [`napi-bridge-completion`](napi-bridge-completion/spec.md): demo Slice 0 — make
   the `engram-node` N-API binding loadable from Node and ship a Hono + Vite/React
   demo proving a browser→Node→Rust memory round-trip (RFC-0003, PHASE52). Shipped.

@@ -151,7 +151,7 @@ flowchart LR
 - [OpenTelemetry Collector — Service Graph Connector](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/connector/servicegraphconnector) — builds a service dependency map by pairing client/server spans at runtime. Grounds D-deferred runtime complement.
 - [Sourcegraph scip-clang — CrossRepo](https://github.com/sourcegraph/scip-clang/blob/main/docs/CrossRepo.md) — cross-repo symbol id = (package, version, qualified symbol). The direct-linkage (Option B) contrast.
 
-**Promoted research.** Full current-state analysis and diagrams live in `docs/research/cross-repo-linkage.md` (to be updated to reflect this contract-linkage framing).
+**Promoted research.** Full current-state analysis and diagrams live in `docs/research/cross-repo-linkage.md` (contract-linkage framing).
 
 ## Open questions
 

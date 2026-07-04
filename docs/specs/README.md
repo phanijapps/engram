@@ -27,6 +27,10 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   each `KnowledgeGraph` (metadata + lifted columns), `graph_id` attribution on
   entities, `SourceKind::GitRepository` tagging, and one `EntityKind::Repository`
   node with `belongs_to` edges (ADR-0017, ADR-0018, RFC-0008/0009). Draft.
+- [`knowledge-graph-retraction`](knowledge-graph-retraction/spec.md): re-ingest
+  converges the knowledge graph to current state — `delete_*` ports on
+  KnowledgeRepository/KnowledgeGraphRepository (cascade + scope-checked) and a
+  per-(stable_source_key,path) reconcile in ingest (RFC-0009, ADR-0018). Draft.
 - [`napi-bridge-completion`](napi-bridge-completion/spec.md): demo Slice 0 — make
   the `engram-node` N-API binding loadable from Node and ship a Hono + Vite/React
   demo proving a browser→Node→Rust memory round-trip (RFC-0003, PHASE52). Shipped.

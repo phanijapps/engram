@@ -59,6 +59,17 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 - **pgvector(vector) + neo4j(graph) adapter:** split deployment. Same — needs an
   ADR + spec before work.
 
+## knowledge-source-retraction (intent only — no spec yet)
+
+- **Document/chunk/embedding retraction on re-ingest:** `knowledge-graph-retraction`
+  converges the knowledge *graph* (entities/relationships/graphs + Repository node),
+  but not the underlying `SourceDocument`s, `KnowledgeChunk`s, or their sqlite-vec
+  embeddings (keyed by `document_id`/`source_id`, not `graph_id`). A changed/removed
+  file's prior document + chunks + vectors currently linger. Needs `delete_document`/
+  `delete_chunk` ports, a vec-index delete-by-target-id, and a stable-key handle on
+  documents so the reconcile can find prior documents by `(stable_source_key, path)`.
+  RFC-0009 flagged the embedding cascade (OQ2). Needs a spec before work.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

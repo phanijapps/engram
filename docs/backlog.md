@@ -75,6 +75,22 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   edge, caller-scope-bounded). Fix: treat canonicalize failure on a prior-manifest
   path as retain, not remove.
 
+## contract-first-ingestion (deferred hardening)
+
+- **Contract manifest namespace fragility:** contract-op manifest entries live under
+  `contract:<rel>` keys in the same flat `HashMap` as raw file-path keys; a repo
+  file literally named `contract:...` at its root would collide. It fails safe
+  today (`unwrap_or_default` → empty, no mis-retraction), so this is a robustness
+  Nit. Fix: use a separate manifest map for contract keys, or a delimiter/prefix
+  that cannot appear in a relative path.
+- **Rust SCA gate + YAML crate re-eval:** `serde_yml` (a fork of the deprecated
+  `serde_yaml`, RUSTSEC-2024-0320) parses untrusted OpenAPI docs, but CI runs only
+  fmt/check/clippy/test — no `cargo audit`/`cargo deny`. Wire an advisory SCA gate
+  in CI + a pre-handoff hook, and re-evaluate whether a maintained YAML crate with
+  built-in parser limits (e.g. depth budget) is preferable for untrusted input.
+  (A code-level YAML-bomb depth/alias guard ships with the feature; this is the
+  dependency-hygiene follow-up.)
+
 ## knowledge-source-retraction (intent only — no spec yet)
 
 - **Document/chunk/embedding retraction on re-ingest:** `knowledge-graph-retraction`

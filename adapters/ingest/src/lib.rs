@@ -6,6 +6,7 @@
 
 mod chunker;
 mod code_symbol;
+mod contract;
 mod extractor;
 mod filesystem;
 mod git;
@@ -19,6 +20,7 @@ mod tree_sitter_chunker;
 
 pub use chunker::{ChunkCandidate, Chunker, PlainTextChunker, PlainTextChunkerOptions};
 pub use code_symbol::CodeSymbolChunker;
+pub use contract::{ParsedOperation, detect_and_parse_openapi, normalize_contract_key};
 pub use extractor::{ExtractedGraph, GraphExtractor};
 pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
 pub use git::GitSourceReader;

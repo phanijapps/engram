@@ -16,7 +16,8 @@ use rayon::prelude::*;
 
 use crate::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
-    PlainTextChunker, PlainTextChunkerOptions, content_hash, reconcile, stable_source_key,
+    PlainTextChunker, PlainTextChunkerOptions, content_hash, contract, reconcile,
+    stable_source_key,
 };
 
 const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
@@ -221,6 +222,17 @@ enum Outcome {
         entities: usize,
         relationships: usize,
         hash: (String, String),
+        /// Normalized contract keys emitted for this file when it was detected
+        /// as a valid OpenAPI document. Empty for non-OpenAPI files.
+        contract_keys: Vec<String>,
+        /// True when the file contained an `openapi:`/`swagger:` version marker
+        /// but failed to parse (malformed/truncated document). The caller
+        /// increments `ScanSummary.skipped` and logs a warning.
+        contract_parse_failed: bool,
+        /// True when at least one entity or edge write failed during contract
+        /// extraction. Keys for failed ops are not recorded in the manifest.
+        /// The caller increments `ScanSummary.skipped` and logs a warning.
+        contract_had_write_error: bool,
     },
     /// Produced only by the TOCTOU defense-in-depth guard inside the parallel
     /// phase.  `Unchanged` detection now happens in the serial pre-pass and is
@@ -563,12 +575,29 @@ where
                     Err(_) => return (rel.clone(), Outcome::Error),
                 },
             };
+            // Contract extraction (T4/T5/T6): for YAML/JSON files, attempt
+            // OpenAPI detection and emit EntityKind::Api entities + exposes edges.
+            // Uses `text_for_ast` (a pre-move clone of the file text) so we do
+            // not need to read the content a second time.
+            let (contract_keys, contract_parse_failed, contract_had_write_error) =
+                extract_contract_entities(
+                    repo,
+                    &opts.scope,
+                    &source_key,
+                    &text_for_ast,
+                    ext,
+                    &ingested.source.provenance,
+                );
+
             (
                 rel.clone(),
                 Outcome::Ingested {
                     entities: extracted.entities.len(),
                     relationships: extracted.relationships.len(),
                     hash: (rel.clone(), hash),
+                    contract_keys,
+                    contract_parse_failed,
+                    contract_had_write_error,
                 },
             )
         })
@@ -579,10 +608,13 @@ where
     // files).  Uses `observed_paths` (FIX 3) rather than `readable` so that
     // oversize / denylisted / unclassifiable files that are still present on
     // disk are not treated as removals.
+    // Exclude `contract:*` manifest entries — they are metadata keys, not file
+    // paths, so they must never be treated as "removed files" and must not
+    // trigger a `delete_prior_graphs_for_path` call.
     let removed_paths: Vec<String> = opts
         .manifest
         .keys()
-        .filter(|k| !observed_paths.contains(*k))
+        .filter(|k| !k.starts_with("contract:") && !observed_paths.contains(*k))
         .cloned()
         .collect();
     let mut removed_delete_failed: std::collections::HashSet<String> =
@@ -618,17 +650,57 @@ where
     // Build the emitted manifest from this scan's outcomes.
     let mut new_manifest = std::collections::HashMap::new();
 
+    // Accumulate contract keys emitted during the parallel phase so we can do
+    // T8 retraction and update the contract manifest in the serial post-pass.
+    let mut current_contract_ops: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    // Files whose contract entity/edge write failed this scan: their hash is not
+    // recorded (reprocess next scan) and their prior declarations carry forward,
+    // so a transient write failure cannot permanently retract a still-declared op.
+    let mut write_error_rels: Vec<String> = Vec::new();
+
     for (rel, outcome) in outcomes {
         match outcome {
             Outcome::Ingested {
                 entities,
                 relationships,
                 hash: (r, h),
+                contract_keys,
+                contract_parse_failed,
+                contract_had_write_error,
             } => {
                 summary.ingested += 1;
                 summary.entities += entities;
                 summary.relationships += relationships;
-                new_manifest.insert(r, h);
+                // On a contract write error, do NOT record the file hash — the
+                // file is reprocessed next scan so the still-declared op re-emits
+                // (its prior keys are also folded into current_union below, so no
+                // transient retraction occurs either).
+                if contract_had_write_error {
+                    write_error_rels.push(rel.clone());
+                } else {
+                    new_manifest.insert(r, h);
+                }
+                // T6: malformed OpenAPI — increment skipped + warn.
+                if contract_parse_failed {
+                    summary.skipped += 1;
+                    eprintln!(
+                        "[engram-ingest] warning: malformed/truncated OpenAPI document skipped during contract extraction: {rel}"
+                    );
+                }
+                // Surface write errors: at least one entity/edge persist failed.
+                if contract_had_write_error {
+                    summary.skipped += 1;
+                    eprintln!(
+                        "[engram-ingest] warning: one or more contract entity/edge writes failed for: {rel}"
+                    );
+                }
+                // Collect contract keys for T8 retraction + manifest. On a write
+                // error, skip this file's (partial) keys — its prior declarations
+                // carry forward via write_error_rels instead of being emitted.
+                if !contract_had_write_error && !contract_keys.is_empty() {
+                    current_contract_ops.insert(rel.clone(), contract_keys);
+                }
                 progress(ScanProgress {
                     file: rel,
                     status: "ingested",
@@ -652,16 +724,119 @@ where
         }
     }
 
+    // T8: Per-source full-declared-set retraction.
+    //
+    // Contract entity and edge identities are keyed per-SOURCE (not per-file),
+    // so retraction must compare the source's FULL declared-key set across scans.
+    //
+    // prior_union  = union of all manifest["contract:<rel>"] entries from the
+    //                previous scan (every file that declared ops last time).
+    //
+    // current_union = freshly-parsed files' keys (current_contract_ops)
+    //               ∪ unchanged files' keys from manifest (still declared)
+    //               ∪ delete_failed files' keys from manifest (not re-processed;
+    //                 kept for retry — their prior declarations still stand)
+    //               ∪ removed_delete_failed files' keys from manifest (removal
+    //                 failed; kept in manifest for retry — treat as still present)
+    //
+    // Keys in (prior_union − current_union) represent operations that no file in
+    // this source still declares. They are retracted exactly once per source,
+    // covering both intra-source file changes and genuine file removals.
+    let prior_union: HashSet<String> = opts
+        .manifest
+        .iter()
+        .filter(|(k, _)| k.starts_with("contract:"))
+        .flat_map(|(_, v)| serde_json::from_str::<Vec<String>>(v).unwrap_or_default())
+        .collect();
+
+    // Start with freshly-parsed keys.
+    let mut current_union: HashSet<String> = current_contract_ops
+        .values()
+        .flat_map(|keys| keys.iter().cloned())
+        .collect();
+    // Keys from unchanged files (still present and declared).
+    for rel in &unchanged_rels {
+        let mk = format!("contract:{rel}");
+        if let Some(json) = opts.manifest.get(&mk) {
+            current_union.extend(serde_json::from_str::<Vec<String>>(json).unwrap_or_default());
+        }
+    }
+    // Keys from files whose graph-delete failed (not re-processed this scan;
+    // declarations carry forward until the retry succeeds).
+    for rel in &delete_failed {
+        let mk = format!("contract:{rel}");
+        if let Some(json) = opts.manifest.get(&mk) {
+            current_union.extend(serde_json::from_str::<Vec<String>>(json).unwrap_or_default());
+        }
+    }
+    // Keys from removed paths where delete failed (kept in manifest for retry).
+    for rel in &removed_delete_failed {
+        let mk = format!("contract:{rel}");
+        if let Some(json) = opts.manifest.get(&mk) {
+            current_union.extend(serde_json::from_str::<Vec<String>>(json).unwrap_or_default());
+        }
+    }
+    // Keys from files whose contract write failed this scan: not re-emitted, but
+    // their prior declarations still stand (the file reprocesses next scan), so a
+    // transient write failure cannot retract a still-declared op.
+    for rel in &write_error_rels {
+        let mk = format!("contract:{rel}");
+        if let Some(json) = opts.manifest.get(&mk) {
+            current_union.extend(serde_json::from_str::<Vec<String>>(json).unwrap_or_default());
+        }
+    }
+
+    for removed_key in prior_union.difference(&current_union) {
+        match block_on(contract::retract_contract_op(
+            repo,
+            &opts.scope,
+            &source_key,
+            removed_key,
+        )) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!(
+                    "[engram-ingest] warning: failed to retract contract op '{removed_key}': {e}"
+                );
+                summary.skipped += 1;
+            }
+        }
+    }
+
     // Carry forward hashes for files whose content did not change this scan.
     for rel in unchanged_rels {
         summary.unchanged += 1;
         if let Some(h) = opts.manifest.get(&rel) {
             new_manifest.insert(rel.clone(), h.clone());
         }
+        // Carry forward contract manifest entry for unchanged files.
+        let ck = format!("contract:{rel}");
+        if let Some(j) = opts.manifest.get(&ck) {
+            new_manifest.insert(ck, j.clone());
+        }
         progress(ScanProgress {
             file: rel,
             status: "unchanged",
         });
+    }
+
+    // Emit contract manifest entries for files processed in this scan.
+    for (rel, keys) in &current_contract_ops {
+        if !keys.is_empty() {
+            if let Ok(json) = serde_json::to_string(keys) {
+                new_manifest.insert(format!("contract:{rel}"), json);
+            }
+        }
+    }
+
+    // Carry forward the prior contract manifest entry for write-error files (their
+    // file hash was not recorded, so they reprocess next scan; keep the prior
+    // declaration meanwhile so prior_union stays consistent).
+    for rel in &write_error_rels {
+        let ck = format!("contract:{rel}");
+        if let Some(j) = opts.manifest.get(&ck) {
+            new_manifest.insert(ck, j.clone());
+        }
     }
 
     // FIX 2: Files where the pre-pass delete failed — keep the old hash so
@@ -671,6 +846,11 @@ where
         if let Some(h) = opts.manifest.get(rel.as_str()) {
             new_manifest.insert(rel.clone(), h.clone());
         }
+        // Also carry forward contract manifest entries for these files.
+        let ck = format!("contract:{rel}");
+        if let Some(j) = opts.manifest.get(&ck) {
+            new_manifest.insert(ck, j.clone());
+        }
     }
 
     // FIX 2: Removed paths where the post-pass delete failed — keep in the
@@ -679,9 +859,92 @@ where
         if let Some(h) = opts.manifest.get(rel.as_str()) {
             new_manifest.insert(rel.clone(), h.clone());
         }
+        // Also carry forward contract manifest entries for these files.
+        let ck = format!("contract:{rel}");
+        if let Some(j) = opts.manifest.get(&ck) {
+            new_manifest.insert(ck, j.clone());
+        }
     }
 
     Ok((summary, new_manifest))
+}
+
+/// Attempts OpenAPI contract extraction for a single file during the parallel
+/// ingest phase (T4 entity emission, T5 source-ref union, T6 skip-and-warn).
+///
+/// Returns `(contract_keys, parse_failed, had_write_error)`:
+/// - `contract_keys`: normalized keys for operations whose entity AND edge were
+///   successfully persisted; empty for non-OpenAPI files or total-parse-failure.
+///   Keys for individual write failures are excluded so the manifest does not
+///   record unpersisted ops.
+/// - `parse_failed`: `true` when the file had an OpenAPI marker but could not
+///   be parsed; the caller increments `ScanSummary.skipped`.
+/// - `had_write_error`: `true` when at least one entity or edge persist failed;
+///   the caller increments `ScanSummary.skipped` and logs a warning.
+fn extract_contract_entities<R>(
+    repo: &R,
+    scope: &Scope,
+    stable_source_key: &str,
+    text: &str,
+    ext: &str,
+    provenance: &Provenance,
+) -> (Vec<String>, bool, bool)
+where
+    R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,
+{
+    use chrono::Utc;
+
+    match contract::detect_and_parse_openapi(text, ext) {
+        Ok(None) => (Vec::new(), false, false),
+        Err(_) => (Vec::new(), true, false), // malformed OpenAPI: caller increments skipped
+        Ok(Some(ops)) => {
+            let now = Utc::now();
+            let mut keys = Vec::with_capacity(ops.len());
+            let mut had_write_error = false;
+            for op in &ops {
+                let entity =
+                    contract::build_api_entity(scope, stable_source_key, op, provenance, now);
+                // Read-modify-write union for cross-repo merge (T5).
+                match block_on(contract::upsert_api_entity_with_source_ref(
+                    repo, scope, entity,
+                )) {
+                    Ok(()) => {
+                        let rel = contract::build_exposes_rel(
+                            scope,
+                            stable_source_key,
+                            op,
+                            provenance,
+                            now,
+                        );
+                        match block_on(repo.put_relationship(rel)) {
+                            Ok(_) => {
+                                // Both entity and edge persisted — record the key.
+                                keys.push(op.normalized_key.clone());
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "[engram-ingest] warning: failed to persist exposes edge \
+                                     for '{}': {e}",
+                                    op.normalized_key
+                                );
+                                had_write_error = true;
+                                // Do NOT push key — manifest must not record an
+                                // unpersisted op.
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[engram-ingest] warning: failed to persist Api entity for '{}': {e}",
+                            op.normalized_key
+                        );
+                        had_write_error = true;
+                    }
+                }
+            }
+            (keys, false, had_write_error)
+        }
+    }
 }
 
 #[cfg(test)]

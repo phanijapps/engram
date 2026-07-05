@@ -1,9 +1,9 @@
 # Spec: contract-first-ingestion
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
-- **Constrained by:** ADR-0016, ADR-0017, RFC-0008
+- **Constrained by:** ADR-0016, ADR-0017, ADR-0018, RFC-0008, RFC-0009, docs/specs/structured-repo-identity, docs/specs/knowledge-graph-retraction
 - **Brief:** none
 - **Contract:** none (parses *external* OpenAPI files found in scanned repos; exposes no engram interface surface)
 - **Shape:** service
@@ -36,11 +36,10 @@ Because ingestion is **continuous**, the contract graph must **converge to each
 source's current declared state** on every re-scan: new operations appear,
 changed operations update in place, and operations a source no longer declares
 are **retracted** (its `source_ref` and `exposes` edge removed; a contract node
-with no remaining `source_refs` deleted). Convergence requires a knowledge-layer
-**retraction capability** — entity/relationship deletion plus a source-scoped
-lookup of what a source previously declared — which **does not exist today** (no
-`delete`/`prune` on the knowledge ports; re-ingest is add-only). This spec is
-therefore **Blocked** on that prerequisite; see Assumptions.
+with no remaining `source_refs` deleted). Convergence uses the knowledge-layer
+retraction capability (`delete_entity`/`delete_relationship` + `list_*_by_source`)
+delivered by knowledge-graph-retraction, and a per-source contract manifest that
+diffs the source's full declared-key set across scans.
 
 ## Boundaries
 
@@ -57,9 +56,10 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 - Carry the participation edge as a `KnowledgeRelationship` with predicate
   `exposes` and a `confidence` value, following the existing `GraphExtractor` →
   `KnowledgeRepository::put_entity`/`put_relationship` path.
-- Attach the `exposes` edge to the repository's existing `KnowledgeSource`
-  identity, and record each declaring source in the contract entity's
-  `source_refs`.
+- Anchor the `exposes` edge and each `source_ref` on the repository's **stable
+  identity** (the `Repository` node / `stable_source_key`), not the ephemeral
+  commit-varying `source_id`, so edges and refs stay idempotent across commits;
+  record each declaring source in the contract entity's `source_refs`.
 - Skip malformed or unparseable OpenAPI documents with a recorded warning and
   continue the scan; a bad spec never fails the job.
 - On each re-ingest of a source, reconcile that source's **full** declared
@@ -70,15 +70,12 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 
 ### Ask first
 
-- Adding any new crate dependency (a YAML parser and/or an OpenAPI model crate)
-  — confirm the specific crate before adding it.
+- Adding a new crate dependency beyond the YAML parser (`serde_yml`, chosen for
+  the minimal OpenAPI model) — confirm any further crate before adding it.
 - Introducing a new `EntityKind` variant (e.g. for event channels) — this slice
   reuses `EntityKind::Api`; a new kind is out of scope here.
 - Adding an `authority_level` field to `KnowledgeRelationship` — edge-level
   authority representation is RFC-0008 OQ1 and is not decided here.
-- Adding deletion/retraction ports to the knowledge layer (none exist today) —
-  the convergence prerequisite this spec is blocked on is its own ADR/spec, not
-  invented ad hoc here.
 
 ### Never do
 
@@ -110,28 +107,28 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 
 ## Acceptance Criteria
 
-- [ ] An ingested repository containing an OpenAPI document produces one
+- [x] An ingested repository containing an OpenAPI document produces one
   `EntityKind::Api` contract entity per REST operation, keyed by
   `METHOD /path/template` with path parameters folded to positional placeholders.
-- [ ] Each contract entity carries operation detail from the spec (method, path,
+- [x] Each contract entity carries operation detail from the spec (method, path,
   summary if present, request/response media types) and a `source_ref` to the
   declaring `KnowledgeSource`.
-- [ ] Each contract entity has an `exposes` `KnowledgeRelationship` from the
+- [x] Each contract entity has an `exposes` `KnowledgeRelationship` from the
   declaring repository's source, with a populated `confidence`.
-- [ ] Two sources declaring the same normalized contract key resolve to a single
+- [x] Two sources declaring the same normalized contract key resolve to a single
   contract entity whose `source_refs` include both sources.
-- [ ] Re-ingesting an **unchanged** OpenAPI document is idempotent: no duplicate
+- [x] Re-ingesting an **unchanged** OpenAPI document is idempotent: no duplicate
   contract entities, `exposes` edges, or `source_refs` result.
-- [ ] Re-ingesting a **changed** document updates modified operations' detail in
+- [x] Re-ingesting a **changed** document updates modified operations' detail in
   place and adds newly-declared operations.
-- [ ] An operation **removed** from a re-ingested document no longer has an
+- [x] An operation **removed** from a re-ingested document no longer has an
   `exposes` edge or `source_ref` from that source, and a contract node left with
   no remaining `source_refs` is deleted (graph converges to the current declared
-  state). (Blocked: needs knowledge-layer retraction — see Assumptions.)
-- [ ] A malformed or unparseable OpenAPI document is skipped: it increments
+  state), using the knowledge-layer delete ports from knowledge-graph-retraction.
+- [x] A malformed or unparseable OpenAPI document is skipped: it increments
   `ScanSummary.skipped` and emits a logged warning, does **not** increment
   `ScanSummary.errors`, and the scan job completes successfully.
-- [ ] Extraction performs no model/LLM calls and adds no new top-level crate or
+- [x] Extraction performs no model/LLM calls and adds no new top-level crate or
   module boundary.
 
 ## Assumptions
@@ -145,29 +142,25 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 - Technical: `KnowledgeRelationship` has a free-string `predicate` and
   `confidence: Option<f32>`, so the `exposes` edge needs no contract change
   (source: core/domain/src/knowledge.rs:218-236).
-- Technical: no OpenAPI/YAML parser exists in the workspace (ingest has only
-  `serde_json`; no `serde_yaml`/`openapiv3` in Cargo.lock), so a new dependency
-  is required (source: adapters/ingest/Cargo.toml; Cargo.lock grep).
+- Technical: no OpenAPI/YAML parser existed in the workspace, so `serde_yml`
+  (maintained `serde_yaml` fork) was added for a minimal hand-rolled OpenAPI
+  model; untrusted YAML is gated by a `check_yaml_safety` pre-scan (per-line byte
+  cap + single-digit anchor/alias caps + flow-depth counter) before parsing
+  (source: adapters/ingest/Cargo.toml; adapters/ingest/src/contract.rs).
 - Technical: `.yaml`/`.yml`/`.json` files are already scanned but classified as
   generic `Code`/`Text`, so contract-aware parsing is additive (source:
   adapters/ingest/src/scanner.rs:62-93).
 - Process: this feature parses external contract files and exposes no engram
   interface surface, so no `contracts/` artifact is authored (source:
   new-spec step 4b; CONVENTIONS §4).
-- Process: the constraining docs are not yet accepted — ADR-0016/0017 are
-  `Proposed` and RFC-0008 is `Draft`; this spec stays `Draft` and does not move
-  to `Implementing` until ADR-0016/0017 are accepted (source: docs' status
-  headers, 2026-07-04).
-- Technical (BLOCKER): the knowledge layer has **no** deletion/retraction — no
-  `delete`/`prune` for entities/relationships/graphs in `core/knowledge` ports or
-  the SQLite adapter, and re-ingest is add-only (`ingestor.rs`/`scanner.rs` never
-  delete prior records; the manifest only skips unchanged files). Continuous
-  convergence (the retraction ACs above) is therefore **blocked** on a
-  knowledge-layer retraction capability that must land first — a platform gap
-  that also affects the existing code-symbol graph (source: grep of
-  core/knowledge/src, adapters/knowledge/sqlite/src, adapters/ingest/src,
-  2026-07-04).
+- Process: the constraining docs are accepted — ADR-0016/0017/0018 Accepted,
+  RFC-0008/0009 Accepted (source: docs' status headers, 2026-07-04).
+- Technical: the knowledge-layer retraction capability this feature's convergence
+  depends on is provided by knowledge-graph-retraction (`delete_entity`/
+  `delete_relationship` + `list_*_by_source`), which shipped; the per-source
+  contract manifest diffs the full declared-key set across scans (source:
+  core/knowledge/src/lib.rs; adapters/ingest/src/{contract,scanner}.rs).
 - Product: the first slice is OpenAPI (REST) only, producer/declared side, with
   code-level consumer detection and AsyncAPI/`.proto` deferred to later phases;
-  edges attach to the existing `KnowledgeSource` rather than a
-  not-yet-built Repository node (source: user confirmation 2026-07-04).
+  edges/refs anchor on the stable `Repository`/`stable_source_key` identity from
+  structured-repo-identity (source: user confirmation 2026-07-04).

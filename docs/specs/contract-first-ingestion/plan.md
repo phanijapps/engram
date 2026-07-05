@@ -1,7 +1,7 @@
 # Plan: contract-first-ingestion
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting
+- **Status:** Done
 
 > **Plan contract:** this is the implementation strategy. Unlike the spec, this
 > document is allowed to change as you learn. When it changes substantially
@@ -35,13 +35,11 @@ cross-repo merge over the ingest→store path.
   separate foundation spec).
 - **RFC-0008** — OpenAPI is the first, highest-reliability rung; consumer-side
   and AsyncAPI/`.proto` are later phases. Edge-level authority is OQ1 (not here).
-- **BLOCKER — no retraction capability.** The knowledge layer has no
-  entity/relationship/graph deletion and re-ingest is add-only, so the
-  continuous-convergence acceptance criteria (idempotent re-ingest, update,
-  retraction of removed operations, orphan-node deletion) **cannot** be met on
-  the current ports. Convergence (T8) is blocked on a knowledge-layer retraction
-  prerequisite (its own ADR + spec). T1–T7 (initial extraction, merge-by-add,
-  malformed handling) can proceed; the spec does not ship "up to date" until T8.
+- **Retraction prerequisite — satisfied.** Continuous convergence (idempotent
+  re-ingest, update, retraction of removed operations, orphan-node deletion) uses
+  the knowledge-layer delete ports (`delete_entity`/`delete_relationship`) and
+  `list_*_by_source` delivered by **knowledge-graph-retraction** (RFC-0009 /
+  ADR-0018), which shipped. T8 is implemented on top of it.
 
 ## Construction tests
 
@@ -218,10 +216,10 @@ with `errors` unchanged.
 
 **Done when:** the check passes and is recorded as the AC-6 artifact.
 
-### T8: Per-source convergence on re-ingest (BLOCKED on retraction prerequisite)
+### T8: Per-source convergence on re-ingest
 
-**Depends on:** T5, spec:knowledge-graph-retraction/* (a not-yet-authored
-knowledge-layer retraction capability — delete ports + source-scoped lookup)
+**Depends on:** T5, spec:knowledge-graph-retraction/* (shipped — provides the
+delete ports + `list_*_by_source` source-scoped lookup)
 
 **Tests:**
 - Integration: re-ingesting an unchanged doc is idempotent — no duplicate
@@ -238,9 +236,8 @@ knowledge-layer retraction capability — delete ports + source-scoped lookup)
   add new, update changed, and retract removed via the new delete ports; delete
   orphaned nodes.
 
-**Done when:** the three convergence integration tests are green — **only after**
-the retraction prerequisite lands. Until then this task is blocked and the spec
-does not ship "up to date".
+**Done when:** the three convergence integration tests are green (they are —
+knowledge-graph-retraction shipped the delete ports this task composes).
 
 ## Rollout
 
@@ -262,17 +259,22 @@ records are new and additive; removing the extractor stops producing them.
   over an overwrite-on-conflict `put_entity`, so it must run inside the store's
   connection-lock critical section (or ingestion be serialized per scope) to
   avoid a lost update. Flagged in T5.
-- **No retraction capability (blocker)** — the knowledge layer cannot delete
-  entities/relationships and re-ingest is add-only, so removed/renamed operations
-  and dropped declarations leave stale nodes and `source_refs`. The graph cannot
-  stay up to date until a retraction prerequisite (delete ports + source-scoped
-  lookup + per-source declared-set reconciliation) lands. Convergence (T8) is
-  blocked on it; this is a platform gap that also affects the code-symbol graph.
+- **Untrusted-YAML DoS** — external OpenAPI docs are parsed with `serde_yml`; a
+  `check_yaml_safety` pre-scan (per-line byte cap, single-digit anchor/alias caps,
+  running flow-depth cap, per-line compact block-entry cap) bounds every
+  single-line nesting form to ≤128 before parsing, and multi-line nesting stays
+  bounded by the indent cap. Dependency-hygiene (SCA gate + crate re-eval) is
+  deferred (backlog).
+- **Concurrent same-scope scans** — the `source_refs` read-modify-write union is
+  not atomic across the two lock acquisitions; safe under the per-scope
+  single-writer assumption (documented), out of scope at demo scale.
 
 ## Changelog
 
 - 2026-07-04: initial plan.
-- 2026-07-04: added continuous-convergence requirement (T8) and recorded the
-  blocker — the knowledge layer has no retraction/delete and re-ingest is
-  add-only, so keeping the graph up to date needs a retraction prerequisite
-  first. T1–T7 proceed; T8 and the convergence ACs are blocked on it.
+- 2026-07-04: added continuous-convergence requirement (T8), initially blocked on
+  a knowledge-layer retraction prerequisite.
+- 2026-07-04: retraction prerequisite (knowledge-graph-retraction) shipped; T8
+  implemented on its delete ports. Landed T1–T8 with per-source union retraction,
+  a hardened untrusted-YAML guard, and stable (`Repository`/`stable_source_key`)
+  edge/ref anchoring. Status → Done.

@@ -15,3 +15,4 @@ specs under `docs/specs/`. See `docs/CONVENTIONS.md` for the RFC lifecycle.
 | [0007](0007-federated-assertion-reconciliation.md) | Federated assertion reconciliation | Accepted | 2026-07-03 |
 | [0008](0008-cross-repo-linkage.md) | Cross-repo linkage | Accepted | 2026-07-04 |
 | [0009](0009-knowledge-graph-retraction.md) | Knowledge-graph retraction and convergence | Accepted | 2026-07-04 |
+| [0010](0010-decompose-god-modules.md) | Decompose god modules by responsibility | Draft | 2026-07-05 |

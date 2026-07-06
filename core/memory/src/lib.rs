@@ -68,7 +68,7 @@ pub trait MemoryEventRepository: Send + Sync {
 /// delegating storage to memory repositories and retrieval composition to higher
 /// layers. Knowledge graph storage belongs behind knowledge ports, not here.
 #[async_trait]
-pub trait MemoryService: Send + Sync {
+pub trait MemoryService: MemoryRepository + MemoryEventRepository + Send + Sync {
     /// Writes a memory and records the corresponding lifecycle event.
     async fn write_memory(&self, request: WriteMemoryRequest) -> CoreResult<WriteMemoryResponse>;
 

@@ -10,7 +10,9 @@ use engram_knowledge::KnowledgeGraphRepository;
 use engram_runtime::{CoreError, CoreResult};
 use rusqlite::OptionalExtension;
 
-use crate::{scope::scope_allows, schema::json_error, schema::sql_error, service::SqlKnowledgeStore};
+use crate::{
+    schema::json_error, schema::sql_error, scope::scope_allows, service::SqlKnowledgeStore,
+};
 
 #[async_trait]
 impl KnowledgeGraphRepository for SqlKnowledgeStore {
@@ -150,7 +152,9 @@ impl KnowledgeGraphRepository for SqlKnowledgeStore {
             )
             .map_err(sql_error)?;
         let rows = statement
-            .query_map(rusqlite::params![stable_source_key], |row| row.get::<_, String>(0))
+            .query_map(rusqlite::params![stable_source_key], |row| {
+                row.get::<_, String>(0)
+            })
             .map_err(sql_error)?;
         let mut graphs = Vec::new();
         for row in rows {
@@ -198,9 +202,10 @@ impl KnowledgeGraphRepository for SqlKnowledgeStore {
             )
             .map_err(sql_error)?;
         let rows = statement
-            .query_map(rusqlite::params![graph_id.to_string(), node_id.to_string()], |row| {
-                row.get::<_, String>(0)
-            })
+            .query_map(
+                rusqlite::params![graph_id.to_string(), node_id.to_string()],
+                |row| row.get::<_, String>(0),
+            )
             .map_err(sql_error)?;
         let mut relationships = Vec::new();
         for row in rows {

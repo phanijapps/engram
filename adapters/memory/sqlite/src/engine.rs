@@ -49,13 +49,20 @@ impl SqlMemoryService {
     ///
     /// This constructor is intended for durable local smoke tests and embedded
     /// development. It uses the same orchestration, policy, clock, and ID
-    /// defaults as `open_in_memory`.
+    /// defaults as `open_in_memory`. The local ID generator is seeded past the
+    /// highest existing ID on disk so reopening an existing database never
+    /// collides with rows a previous process wrote.
     pub fn open_file(path: impl AsRef<Path>) -> CoreResult<Self> {
+        let store = SqlMemoryStore::open_file(path)?;
+        let ids = SequentialIdGenerator::new();
+        if let Ok(used) = store.max_used_id_suffix() {
+            ids.advance_past(used);
+        }
         Self::with_dependencies(
-            SqlMemoryStore::open_file(path)?,
+            store,
             Arc::new(AllowAllPolicyAuthorizer),
             Arc::new(SystemClock),
-            Arc::new(SequentialIdGenerator::new()),
+            Arc::new(ids),
         )
     }
 

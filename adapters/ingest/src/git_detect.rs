@@ -72,7 +72,12 @@ mod tests {
 
         // Add a remote
         Command::new("git")
-            .args(["remote", "add", "origin", "https://github.com/test/test.git"])
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/test/test.git",
+            ])
             .current_dir(repo_path)
             .output()
             .unwrap();

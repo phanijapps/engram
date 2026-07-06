@@ -202,6 +202,33 @@ impl SqlMemoryStore {
         Ok(records)
     }
 
+    /// Returns the highest numeric suffix among existing memory and event IDs.
+    ///
+    /// Generated IDs have the form `<entity>-<n>`; reopening a file-backed
+    /// database seeds the local ID generator past this value so new writes never
+    /// collide with rows a previous process already wrote. Returns `0` when the
+    /// database holds no parseable IDs.
+    pub(crate) fn max_used_id_suffix(&self) -> CoreResult<u64> {
+        let connection = self.lock_connection()?;
+        let mut max_suffix = 0u64;
+        for sql in ["SELECT id FROM memories", "SELECT id FROM memory_events"] {
+            let mut statement = connection.prepare(sql).map_err(sql_error)?;
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(sql_error)?;
+            for row in rows {
+                let id = row.map_err(sql_error)?;
+                if let Some(suffix) = id
+                    .rsplit_once('-')
+                    .and_then(|(_, digits)| digits.parse::<u64>().ok())
+                {
+                    max_suffix = max_suffix.max(suffix);
+                }
+            }
+        }
+        Ok(max_suffix)
+    }
+
     /// Removes a scoped memory record for hard-delete behavior.
     ///
     /// The method first verifies the stored record is visible to the supplied

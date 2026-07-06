@@ -380,7 +380,10 @@ pub(crate) const VALIDATE_RELATIONSHIP_LIMIT: usize = 5_000;
 
 /// Builds the advisory provenance stamped on every validation finding. Validation
 /// is deterministic and carries no input evidence, so a fixed system actor is used.
-pub(crate) fn validation_provenance(ontology_id: &OntologyId, now: chrono::DateTime<Utc>) -> Provenance {
+pub(crate) fn validation_provenance(
+    ontology_id: &OntologyId,
+    now: chrono::DateTime<Utc>,
+) -> Provenance {
     Provenance {
         source: format!("ontology:{ontology_id}"),
         actor: Actor {

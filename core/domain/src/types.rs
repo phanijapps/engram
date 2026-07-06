@@ -91,6 +91,16 @@ pub type OntologyPropertyId = Id;
 pub type RelationshipId = Id;
 pub type SourceId = Id;
 
+/// Scope mapping strategy for tenant/workspace/session/environment boundaries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScopeMappingStrategy {
+    /// Strict scope isolation — no cross-scope access.
+    Strict,
+
+    /// Permissive scope mapping — allow cross-scope with authorization.
+    Permissive,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EntityRef {

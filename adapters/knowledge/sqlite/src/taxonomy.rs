@@ -10,7 +10,9 @@ use engram_knowledge::TaxonomyRepository;
 use engram_runtime::CoreResult;
 use rusqlite::OptionalExtension;
 
-use crate::{scope::scope_allows, schema::json_error, schema::sql_error, service::SqlKnowledgeStore};
+use crate::{
+    schema::json_error, schema::sql_error, scope::scope_allows, service::SqlKnowledgeStore,
+};
 
 #[async_trait]
 impl TaxonomyRepository for SqlKnowledgeStore {

@@ -123,28 +123,82 @@ pub fn check_yaml_safety(text: &str) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    /// A real billion-laughs bomb: the alias references (`*a`) far exceed the
+    /// single-digit alias budget, so the pre-scan rejects it before serde_yml
+    /// can expand it.
     #[test]
     fn yaml_bomb_is_rejected() {
-        let malicious = "x:\n  - - - - - - - - - - - - x";
-        assert!(check_yaml_safety(malicious).is_err());
+        let bomb = "a: &a [\"x\",\"x\"]\n\
+                    b: &b [*a,*a,*a,*a,*a,*a,*a,*a,*a,*a]\n\
+                    c: &c [*b,*b,*b,*b,*b,*b,*b,*b,*b,*b]\n";
+        assert!(
+            check_yaml_safety(bomb).is_err(),
+            "billion-laughs alias bomb must be rejected"
+        );
     }
 
+    /// Deeply nested flow collections on one line exceed the flow-depth cap
+    /// (`[` count > `YAML_MAX_FLOW_DEPTH`), regardless of zero leading indent.
     #[test]
     fn flow_nested_yaml_is_rejected() {
-        let malicious = "x: [[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]";
-        assert!(check_yaml_safety(malicious).is_err());
+        let malicious = format!("x: {}", "[".repeat(YAML_MAX_FLOW_DEPTH + 1));
+        assert!(
+            check_yaml_safety(&malicious).is_err(),
+            "flow-nested depth beyond the cap must be rejected"
+        );
     }
 
+    /// Compact nested block sequences (`- - - … x`) recurse one level per `- `
+    /// with no leading indent and no flow tokens; the per-line block-entry cap
+    /// rejects them when the count exceeds `YAML_MAX_FLOW_DEPTH`.
+    #[test]
+    fn compact_block_seq_yaml_is_rejected() {
+        let malicious = format!("- {}", "- ".repeat(YAML_MAX_FLOW_DEPTH + 1));
+        assert!(
+            check_yaml_safety(&malicious).is_err(),
+            "compact block-sequence depth beyond the cap must be rejected"
+        );
+    }
+
+    /// One large anchored base referenced by many aliases (fat-base
+    /// expansion): the alias count exceeds the budget.
     #[test]
     fn fat_base_yaml_is_rejected() {
         let malicious = "anchor: &huge\nalias1: *anchor\nalias2: *anchor\nalias3: *anchor\nalias4: *anchor\nalias5: *anchor";
         assert!(check_yaml_safety(malicious).is_err());
     }
 
+    /// Anchor count above the single-digit budget is rejected.
     #[test]
-    fn compact_block_seq_yaml_is_rejected() {
-        let malicious = "- - - - - - - - - - - - - - - - - - - - - x";
+    fn excess_anchors_are_rejected() {
+        let malicious = "&a x\n&b y\n&c z\n&d w\n&e v\n&f u";
         assert!(check_yaml_safety(malicious).is_err());
+    }
+
+    /// Leading-whitespace indent above the cap signals pathological block depth.
+    #[test]
+    fn excess_indent_is_rejected() {
+        let malicious = format!("{}value", " ".repeat(YAML_MAX_INDENT + 1));
+        assert!(check_yaml_safety(&malicious).is_err());
+    }
+
+    /// A single physical line beyond the byte cap closes the single-line-bomb
+    /// family (minified pathological payloads).
+    #[test]
+    fn excess_line_bytes_are_rejected() {
+        let malicious = format!("x: {}", "a".repeat(YAML_MAX_LINE_BYTES + 1));
+        assert!(check_yaml_safety(&malicious).is_err());
+    }
+
+    /// Modest nesting well under every cap is legitimate and must pass — the
+    /// guard rejects pathological depth, not ordinary structure.
+    #[test]
+    fn modest_nesting_is_accepted() {
+        let doc = "x:\n  - - - - - - - - - - - - x\ny: [[[[[[[[[[[[[[[]]]]]]]]]]]]]]";
+        assert!(
+            check_yaml_safety(doc).is_ok(),
+            "modest nesting under the caps must not be a false positive"
+        );
     }
 
     #[test]

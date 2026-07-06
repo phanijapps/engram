@@ -75,15 +75,17 @@ impl KnowledgeRepository for SqlKnowledgeStore {
             .execute(
                 r#"
                 INSERT INTO knowledge_chunks
-                    (id, document_id, record_json)
-                VALUES (?1, ?2, ?3)
+                    (id, document_id, source_id, record_json)
+                VALUES (?1, ?2, ?3, ?4)
                 ON CONFLICT(id) DO UPDATE SET
                     document_id = excluded.document_id,
+                    source_id = excluded.source_id,
                     record_json = excluded.record_json
                 "#,
                 rusqlite::params![
                     chunk.id.to_string(),
                     chunk.document_id.to_string(),
+                    chunk.source_id.to_string(),
                     json
                 ],
             )
@@ -92,23 +94,22 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     }
 
     async fn get_chunk(&self, id: &ChunkId, scope: &Scope) -> CoreResult<Option<KnowledgeChunk>> {
+        // Chunks have no scope of their own; they inherit the source's scope.
+        // Resolve visibility by joining chunk → source and filtering on the
+        // source's scope columns.
         let connection = self.lock()?;
         let json: Option<String> = connection
             .query_row(
                 r#"
-                SELECT record_json
-                FROM knowledge_chunks
-                WHERE id = ?1
-                    AND tenant = ?2
-                    AND (subject IS NULL OR subject = ?3)
-                    AND (workspace IS NULL OR workspace = ?4)
+                SELECT c.record_json
+                FROM knowledge_chunks c
+                JOIN knowledge_sources s ON c.source_id = s.id
+                WHERE c.id = ?1
+                    AND s.tenant = ?2
+                    AND (s.subject IS NULL OR s.subject = ?3)
+                    AND (s.workspace IS NULL OR s.workspace = ?4)
                 "#,
-                rusqlite::params![
-                    id.to_string(),
-                    scope.tenant,
-                    scope.subject,
-                    scope.workspace,
-                ],
+                rusqlite::params![id.to_string(), scope.tenant, scope.subject, scope.workspace,],
                 |row| row.get(0),
             )
             .optional()
@@ -125,13 +126,19 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     async fn put_entity(&self, entity: KnowledgeEntity) -> CoreResult<KnowledgeEntity> {
         let json = serde_json::to_string(&entity).map_err(crate::schema::json_error)?;
         let connection = self.lock()?;
+        let graph_id = entity
+            .graph_id
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
         connection
             .execute(
                 r#"
                 INSERT INTO knowledge_entities
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                    (id, graph_id, tenant, subject, workspace, session, environment, record_json)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
                 ON CONFLICT(id) DO UPDATE SET
+                    graph_id = excluded.graph_id,
                     tenant = excluded.tenant,
                     subject = excluded.subject,
                     workspace = excluded.workspace,
@@ -141,6 +148,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                 "#,
                 rusqlite::params![
                     entity.id.to_string(),
+                    graph_id,
                     entity.scope.tenant,
                     entity.scope.subject,
                     entity.scope.workspace,
@@ -159,13 +167,26 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     ) -> CoreResult<KnowledgeRelationship> {
         let json = serde_json::to_string(&relationship).map_err(crate::schema::json_error)?;
         let connection = self.lock()?;
+        let graph_id = relationship
+            .graph_id
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        let subject_id = relationship
+            .subject
+            .id
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
         connection
             .execute(
                 r#"
                 INSERT INTO knowledge_relationships
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                    (id, graph_id, subject_id, tenant, subject, workspace, session, environment, record_json)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                 ON CONFLICT(id) DO UPDATE SET
+                    graph_id = excluded.graph_id,
+                    subject_id = excluded.subject_id,
                     tenant = excluded.tenant,
                     subject = excluded.subject,
                     workspace = excluded.workspace,
@@ -175,6 +196,8 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                 "#,
                 rusqlite::params![
                     relationship.id.to_string(),
+                    graph_id,
+                    subject_id,
                     relationship.scope.tenant,
                     relationship.scope.subject,
                     relationship.scope.workspace,
@@ -187,7 +210,11 @@ impl KnowledgeRepository for SqlKnowledgeStore {
         Ok(relationship)
     }
 
-    async fn get_entity(&self, id: &EntityId, scope: &Scope) -> CoreResult<Option<KnowledgeEntity>> {
+    async fn get_entity(
+        &self,
+        id: &EntityId,
+        scope: &Scope,
+    ) -> CoreResult<Option<KnowledgeEntity>> {
         let connection = self.lock()?;
         let json: Option<String> = connection
             .query_row(
@@ -199,12 +226,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                     AND (subject IS NULL OR subject = ?3)
                     AND (workspace IS NULL OR workspace = ?4)
                 "#,
-                rusqlite::params![
-                    id.to_string(),
-                    scope.tenant,
-                    scope.subject,
-                    scope.workspace,
-                ],
+                rusqlite::params![id.to_string(), scope.tenant, scope.subject, scope.workspace,],
                 |row| row.get(0),
             )
             .optional()
@@ -234,19 +256,15 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                     AND (subject IS NULL OR subject = ?3)
                     AND (workspace IS NULL OR workspace = ?4)
                 "#,
-                rusqlite::params![
-                    id.to_string(),
-                    scope.tenant,
-                    scope.subject,
-                    scope.workspace,
-                ],
+                rusqlite::params![id.to_string(), scope.tenant, scope.subject, scope.workspace,],
                 |row| row.get(0),
             )
             .optional()
             .map_err(sql_error)?;
         match json {
             Some(json) => {
-                let relationship = serde_json::from_str(&json).map_err(crate::schema::json_error)?;
+                let relationship =
+                    serde_json::from_str(&json).map_err(crate::schema::json_error)?;
                 Ok(Some(relationship))
             }
             None => Ok(None),
@@ -264,12 +282,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                     AND (subject IS NULL OR subject = ?3)
                     AND (workspace IS NULL OR workspace = ?4)
                 "#,
-                rusqlite::params![
-                    id.to_string(),
-                    scope.tenant,
-                    scope.subject,
-                    scope.workspace,
-                ],
+                rusqlite::params![id.to_string(), scope.tenant, scope.subject, scope.workspace,],
             )
             .map_err(sql_error)?;
         Ok(affected > 0)
@@ -286,12 +299,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                     AND (subject IS NULL OR subject = ?3)
                     AND (workspace IS NULL OR workspace = ?4)
                 "#,
-                rusqlite::params![
-                    id.to_string(),
-                    scope.tenant,
-                    scope.subject,
-                    scope.workspace,
-                ],
+                rusqlite::params![id.to_string(), scope.tenant, scope.subject, scope.workspace,],
             )
             .map_err(sql_error)?;
         Ok(affected > 0)

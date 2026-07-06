@@ -5,38 +5,14 @@
 //! otherwise create circular dependencies between independently stored memory
 //! and knowledge systems.
 
+pub mod error;
 pub mod options;
+pub mod redaction;
 
 use engram_domain::{Id, Policy, Requester, Scope, Timestamp};
-use thiserror::Error;
 
+pub use error::{CoreError, CoreResult, DiagnosticError};
 pub use options::{SqliteJournalMode, SqliteOpenOptions, SqlitePath};
-
-/// Stable error surface shared by services and adapters.
-///
-/// Adapter implementations should translate infrastructure-specific failures
-/// into these categories at the boundary. Detailed diagnostics can be logged by
-/// the adapter, but callers should be able to make portable decisions from this
-/// enum without knowing which store, index, or provider was used.
-#[derive(Debug, Error)]
-pub enum CoreError {
-    #[error("record not found: {target_type}:{target_id}")]
-    NotFound {
-        target_type: &'static str,
-        target_id: String,
-    },
-    #[error("policy denied: {reason}")]
-    PolicyDenied { reason: String },
-    #[error("invalid request: {reason}")]
-    InvalidRequest { reason: String },
-    #[error("adapter failed: {adapter}: {message}")]
-    Adapter { adapter: String, message: String },
-    #[error("conflict: {reason}")]
-    Conflict { reason: String },
-}
-
-/// Result type used by Engram behavior ports.
-pub type CoreResult<T> = Result<T, CoreError>;
 
 /// Supplies timestamps to services without binding them to system time.
 ///

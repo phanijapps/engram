@@ -1,0 +1,29 @@
+[package]
+name = "engram-integration"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+engram-domain = { path = "../domain" }
+engram-runtime = { path = "../runtime" }
+engram-memory = { path = "../memory" }
+engram-knowledge = { path = "../knowledge" }
+engram-hierarchy = { path = "../hierarchy" }
+engram-belief = { path = "../belief" }
+engram-retrieval = { path = "../retrieval" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2.workspace = true
+
+[dependencies.reqwest]
+version = "0.12"
+default-features = false
+features = ["blocking", "json", "rustls-tls"]
+optional = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[features]
+default = []
+ollama = ["dep:reqwest"]

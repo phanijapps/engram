@@ -135,6 +135,42 @@ fn sql_service_reuses_idempotent_write_without_duplicate_event() {
 }
 
 #[test]
+fn file_backed_service_seeds_ids_past_existing_rows_on_reopen() {
+    // A reopened file-backed database must not regenerate IDs that collide with
+    // rows a previous process already wrote. Without seeding, the second open
+    // resets the counter and the event insert fails with a UNIQUE constraint
+    // violation (memories survive via ON CONFLICT, memory_events does not).
+    let dir = std::env::temp_dir().join(format!(
+        "engram-reopen-id-test-{}-{}.db",
+        std::process::id(),
+        std::cell::Cell::new(0usize).get() // pin a per-test path
+    ));
+    let _ = std::fs::remove_file(&dir);
+
+    let first_id = {
+        let service = SqlMemoryService::open_file(&dir).expect("open file service");
+        let mut request = write_fixture();
+        request.idempotency_key = None; // force a genuine new write, not a dedupe
+        let written = block_on(service.write_memory(request)).expect("first write");
+        written.record.id
+    };
+
+    // Reopen the same database file and write again. This must not error.
+    let service = SqlMemoryService::open_file(&dir).expect("reopen file service");
+    let mut second_request = write_fixture();
+    second_request.idempotency_key = None;
+    second_request.content.text = "second distinct memory after reopen".to_owned();
+    let second = block_on(service.write_memory(second_request)).expect("second write after reopen");
+
+    assert_ne!(
+        second.record.id, first_id,
+        "reopened service must produce a fresh memory id, not collide"
+    );
+
+    let _ = std::fs::remove_file(&dir);
+}
+
+#[test]
 fn sql_service_serializes_concurrent_idempotent_writes() {
     let service = Arc::new(SqlMemoryService::open_in_memory().expect("open sql service"));
     let request = write_fixture();

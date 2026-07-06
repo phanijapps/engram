@@ -160,13 +160,20 @@ impl Group {
         let mut result = self.representative;
         result.score = with_fused_score(result.score, self.rrf_score);
         result.fusion_trace = Some(FusionTrace {
+            query_id: None,
+            vector_index: None,
+            embedding_time_ms: None,
+            search_time_ms: None,
             source: self.sources.join("+"),
             source_rank: Some(self.best_rank),
             source_score: Some(self.best_contribution),
+            score: None,
+            rank: None,
             fusion_strategy: Some(FusionStrategy::ReciprocalRankFusion),
             fusion_score: Some(self.rrf_score),
             rerank_strategy: None,
             rerank_score: None,
+            discard_reason: None,
             deduplicated_with: self.dedup_ids,
         });
         result

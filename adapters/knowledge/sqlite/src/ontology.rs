@@ -11,7 +11,10 @@ use engram_knowledge::OntologyRepository;
 use engram_runtime::CoreResult;
 use rusqlite::OptionalExtension;
 
-use crate::{scope::scope_allows, schema::json_error, schema::sql_error, service::SqlKnowledgeStore, service::VALIDATE_RELATIONSHIP_LIMIT, service::validation_provenance};
+use crate::{
+    schema::json_error, schema::sql_error, scope::scope_allows, service::SqlKnowledgeStore,
+    service::VALIDATE_RELATIONSHIP_LIMIT, service::validation_provenance,
+};
 
 #[async_trait]
 impl OntologyRepository for SqlKnowledgeStore {

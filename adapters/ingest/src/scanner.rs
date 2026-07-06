@@ -15,11 +15,12 @@ use futures::executor::block_on;
 use rayon::prelude::*;
 
 use crate::{
-    classifier::{classify_file, is_denylisted, is_secret_file, is_within_root},
-    git_detect::detect_git,
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
-    PlainTextChunker, PlainTextChunkerOptions, content_hash, contract, reconcile,
-    stable_source_key,
+    PlainTextChunker, PlainTextChunkerOptions,
+    classifier::{classify_file, is_denylisted, is_secret_file, is_within_root},
+    content_hash, contract,
+    git_detect::detect_git,
+    reconcile, stable_source_key,
 };
 
 pub use crate::classifier::FileKind;

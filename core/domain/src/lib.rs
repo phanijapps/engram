@@ -8,6 +8,8 @@
 
 pub mod assertion;
 pub mod belief;
+pub mod capability;
+pub mod embedding;
 pub mod evaluation;
 pub mod hierarchy;
 pub mod identity;
@@ -23,6 +25,8 @@ pub mod types;
 
 pub use assertion::*;
 pub use belief::*;
+pub use capability::*;
+pub use embedding::*;
 pub use evaluation::*;
 pub use hierarchy::*;
 pub use identity::*;
@@ -34,4 +38,4 @@ pub use policy::*;
 pub use provenance::*;
 pub use retrieval::*;
 pub use taxonomy::*;
-pub use types::*;
+pub use types::{ScopeMappingStrategy, *};

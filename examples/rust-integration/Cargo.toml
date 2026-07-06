@@ -1,0 +1,12 @@
+[package]
+name = "engram-integration-example"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+engram-domain = { path = "../../core/domain" }
+engram-conformance = { path = "../../adapters/integration" }
+engram-integration = { path = "../../core/integration" }
+engram-memory = { path = "../../core/memory" }
+chrono = "0.4"
+tokio = { version = "1", features = ["full"] }

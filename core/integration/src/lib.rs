@@ -46,7 +46,9 @@ pub mod ollama_provider;
 pub mod provider;
 
 pub use capability::{CapabilityReport, CapabilityReportBuilder};
-pub use config::{CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode};
+pub use config::{
+    CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode, SqliteStorageLayout,
+};
 pub use embedding::EmbeddingProvider;
 pub use migration::{
     compute_manifest_fingerprint, record_key_hash, BeliefImportRecord, ConceptImportRecord,

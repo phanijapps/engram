@@ -6,12 +6,15 @@
 //! here (in the adapters crate), while the provider struct and trait handles
 //! live in the port-only core crate.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use engram_belief::BeliefRepository;
 use engram_domain::{CapabilityReason, CapabilityState};
 use engram_hierarchy::HierarchyRepository;
-use engram_integration::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder};
+use engram_integration::{
+    CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder, SqliteStorageLayout,
+};
 use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
 };
@@ -29,6 +32,51 @@ const SCHEMA_VERSION: &str = "2026.01";
 
 /// Adapter version reported by provider diagnostics.
 const ADAPTER_VERSION: &str = "0.1.0";
+
+/// Resolved SQLite file paths for each store, honoring the configured layout.
+///
+/// In `MultiFileDirectory` (the default) each store gets its own file. In
+/// `SingleFile` every store opens the same path; the store schemas use disjoint
+/// table names (verified disjoint across memory, knowledge, belief, hierarchy,
+/// and the vector index) so a single database holds all of them without
+/// collisions.
+struct SqliteLayoutPaths {
+    memory: PathBuf,
+    knowledge: PathBuf,
+    belief: PathBuf,
+    hierarchy: PathBuf,
+    vectors: PathBuf,
+}
+
+impl SqliteLayoutPaths {
+    /// Resolves paths from a validated config. The single-file `file_name` is
+    /// validated by `EngramConfig::validate` (run before this), guaranteeing it
+    /// is a bare name that cannot escape `storage_path`.
+    fn from_config(config: &EngramConfig) -> Self {
+        match &config.sqlite_storage_layout {
+            SqliteStorageLayout::MultiFileDirectory => {
+                let storage = &config.storage_path;
+                Self {
+                    memory: storage.join("memory.db"),
+                    knowledge: storage.join("knowledge.db"),
+                    belief: storage.join("belief.db"),
+                    hierarchy: storage.join("hierarchy.db"),
+                    vectors: storage.join("vectors.db"),
+                }
+            }
+            SqliteStorageLayout::SingleFile { file_name } => {
+                let shared = config.storage_path.join(file_name);
+                Self {
+                    memory: shared.clone(),
+                    knowledge: shared.clone(),
+                    belief: shared.clone(),
+                    hierarchy: shared.clone(),
+                    vectors: shared,
+                }
+            }
+        }
+    }
+}
 
 /// Bootstraps a fully-wired provider from configuration.
 ///
@@ -52,6 +100,10 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         adapter: "engram-conformance.wiring".to_string(),
         message: format!("create storage dir: {e}"),
     })?;
+
+    // Resolve per-store SQLite paths once, honoring the configured layout
+    // (multi-file directory by default; single shared file when opted in).
+    let paths = SqliteLayoutPaths::from_config(config);
 
     let failed = || CapabilityState::Unsupported {
         reason: CapabilityReason::ConformanceFailed,
@@ -81,8 +133,8 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // Memory: run the fixture (capability conformance), then attach a durable
     // file-backed handle.
     if fixtures::memory::run_memory_fixture().is_ok() {
-        let path = storage.join("memory.db");
-        if let Ok(svc) = SqlMemoryService::open_file(&path) {
+        let path = &paths.memory;
+        if let Ok(svc) = SqlMemoryService::open_file(path) {
             memory = Some(Arc::new(svc));
             memory_state = CapabilityState::Supported;
         }
@@ -94,8 +146,8 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let ontology_ok = fixtures::knowledge::run_ontology_fixture().is_ok();
     let taxonomy_ok = fixtures::knowledge::run_taxonomy_fixture().is_ok();
     if knowledge_ok || graph_ok || ontology_ok || taxonomy_ok {
-        let path = storage.join("knowledge.db");
-        if let Ok(store) = SqlKnowledgeStore::open_file(&path) {
+        let path = &paths.knowledge;
+        if let Ok(store) = SqlKnowledgeStore::open_file(path) {
             let store: Arc<SqlKnowledgeStore> = Arc::new(store);
             if knowledge_ok {
                 knowledge = Some(store.clone());
@@ -118,8 +170,8 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
 
     // Beliefs.
     if fixtures::belief::run_belief_fixture().is_ok() {
-        let path = storage.join("belief.db");
-        if let Ok(store) = SqlBeliefStore::open_file(&path) {
+        let path = &paths.belief;
+        if let Ok(store) = SqlBeliefStore::open_file(path) {
             beliefs = Some(Arc::new(store));
             beliefs_state = CapabilityState::Supported;
         }
@@ -127,8 +179,8 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
 
     // Hierarchy.
     if fixtures::hierarchy::run_hierarchy_fixture().is_ok() {
-        let path = storage.join("hierarchy.db");
-        if let Ok(store) = SqlHierarchyStore::open_file(&path) {
+        let path = &paths.hierarchy;
+        if let Ok(store) = SqlHierarchyStore::open_file(path) {
             hierarchy = Some(Arc::new(store));
             hierarchy_state = CapabilityState::Supported;
         }
@@ -139,7 +191,7 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // the VectorIndex contract; the attached index is the usable instance.
     if fixtures::vector::run_vector_fixture().is_ok() {
         let dims = config.embedding_provider.dimensions;
-        let path = storage.join("vectors.db");
+        let path = &paths.vectors;
         let space = engram_domain::EmbeddingSpace::new(
             &config.embedding_provider.provider_type,
             &config.embedding_provider.model,
@@ -323,5 +375,314 @@ mod tests {
         assert!(!report.retrieval.is_supported());
         assert!(provider.retrieval().is_none());
         let _ = report; // silence unused on partial-failure builds
+    }
+
+    // ---- single-file SQLite layout ----
+
+    fn fresh_dir(label: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "engram-layout-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos(),
+        ));
+        dir
+    }
+
+    fn count_db_files(dir: &std::path::Path) -> usize {
+        std::fs::read_dir(dir)
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| {
+                        e.path()
+                            .extension()
+                            .is_some_and(|x| x == "db" || x == "sqlite" || x == "sqlite3")
+                    })
+                    .count()
+            })
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn multi_file_default_creates_separate_databases() {
+        let dir = fresh_dir("multi");
+        let config = cfg_with_storage(dir.clone());
+        bootstrap_provider(&config).expect("bootstrap");
+        // Default layout: one .db file per store family.
+        assert!(
+            count_db_files(&dir) >= 5,
+            "expected at least 5 separate DB files, found {}: {:?}",
+            count_db_files(&dir),
+            std::fs::read_dir(&dir)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .collect::<Vec<_>>()
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn single_file_layout_creates_one_database() {
+        let dir = fresh_dir("single");
+        let config = cfg_with_storage(dir.clone()).with_sqlite_storage_layout(
+            SqliteStorageLayout::SingleFile {
+                file_name: "engram_data.db".to_string(),
+            },
+        );
+        bootstrap_provider(&config).expect("bootstrap");
+        // Exactly one database file in the storage directory.
+        assert_eq!(count_db_files(&dir), 1, "expected exactly one DB file");
+        assert!(dir.join("engram_data.db").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn single_file_layout_bootstraps_all_repositories() {
+        let dir = fresh_dir("single-all");
+        let config = cfg_with_storage(dir.clone()).with_sqlite_storage_layout(
+            SqliteStorageLayout::SingleFile {
+                file_name: "engram_data.db".to_string(),
+            },
+        );
+        let provider = bootstrap_provider(&config).expect("bootstrap");
+        let report = provider.capabilities();
+        // Every file-backed family must still bootstrap against the shared file.
+        assert!(report.memory.is_supported(), "memory: {:?}", report.memory);
+        assert!(report.knowledge.is_supported());
+        assert!(report.beliefs.is_supported());
+        assert!(report.hierarchy.is_supported());
+        assert!(provider.memory().is_some());
+        assert!(provider.knowledge().is_some());
+        assert!(provider.beliefs().is_some());
+        assert!(provider.hierarchy().is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn single_file_layout_writes_and_reads_across_stores() {
+        use engram_domain::*;
+        use futures::executor::block_on;
+
+        let dir = fresh_dir("single-rw");
+        let config = cfg_with_storage(dir.clone()).with_sqlite_storage_layout(
+            SqliteStorageLayout::SingleFile {
+                file_name: "engram_data.db".to_string(),
+            },
+        );
+        let provider = bootstrap_provider(&config).expect("bootstrap");
+
+        // Memory: write + retrieve through the shared file-backed handle.
+        let scope = Scope {
+            tenant: "tenant-single".to_string(),
+            subject: Some("subject-single".to_string()),
+            workspace: None,
+            session: None,
+            environment: Some("test".to_string()),
+        };
+        let requester = Requester {
+            actor: Actor {
+                id: Id::from("agent-single"),
+                kind: ActorKind::Agent,
+                display_name: Some("Single".to_string()),
+                metadata: None,
+            },
+            roles: Vec::new(),
+            permissions: vec!["memory.write".to_string(), "memory.retrieve".to_string()],
+            on_behalf_of: None,
+        };
+        let memory = provider.memory().expect("memory handle");
+        let written = block_on(memory.write_memory(WriteMemoryRequest {
+            kind: MemoryKind::Observation,
+            content: MemoryContent {
+                text: "single-file memory".to_string(),
+                summary: None,
+                entities: Vec::new(),
+                language: None,
+                format: None,
+                structured: None,
+                hash: None,
+            },
+            scope: scope.clone(),
+            requester: requester.clone(),
+            provenance: Provenance {
+                source: "single-file-test".to_string(),
+                actor: requester.actor.clone(),
+                observed_at: chrono::Utc::now(),
+                evidence: Vec::new(),
+                derivations: Vec::new(),
+                confidence: None,
+                method: None,
+            },
+            policy: Policy {
+                visibility: Visibility::Workspace,
+                retention: Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: None,
+            },
+            links: Vec::new(),
+            idempotency_key: None,
+        }))
+        .expect("write memory");
+        let id = written.record.id.clone();
+        let context = block_on(memory.retrieve(RetrievalRequest {
+            query: "single-file".to_string(),
+            scope: scope.clone(),
+            requester: requester.clone(),
+            modes: Vec::new(),
+            filters: None,
+            cues: Vec::new(),
+            limit: Some(5),
+            budget: None,
+            include_explanations: None,
+        }))
+        .expect("retrieve memory");
+        assert!(
+            context.items.iter().any(|i| i.target_id == id.to_string()),
+            "memory written to the shared file must be retrievable"
+        );
+
+        // Knowledge: put a source + list it back through the shared file.
+        let knowledge = provider.knowledge().expect("knowledge handle");
+        block_on(knowledge.put_source(KnowledgeSource {
+            id: Id::from("single-source"),
+            kind: SourceKind::Filesystem,
+            scope: scope.clone(),
+            name: "single-file source".to_string(),
+            uri: None,
+            version: None,
+            policy: Policy {
+                visibility: Visibility::Workspace,
+                retention: Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: None,
+            },
+            provenance: Provenance {
+                source: "single-file-test".to_string(),
+                actor: requester.actor.clone(),
+                observed_at: chrono::Utc::now(),
+                evidence: Vec::new(),
+                derivations: Vec::new(),
+                confidence: None,
+                method: None,
+            },
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }))
+        .expect("put source");
+
+        // Belief: put a belief + list it back through the shared file.
+        let belief = provider.beliefs().expect("belief handle");
+        block_on(belief.put_belief(Belief {
+            id: Id::from("single-belief"),
+            scope: scope.clone(),
+            subject: BeliefSubject {
+                key: "svc-single".to_string(),
+                entity_ref: None,
+                concept_ref: None,
+                aliases: Vec::new(),
+            },
+            content: "single-file belief".to_string(),
+            status: BeliefStatus::Active,
+            confidence: 0.9,
+            sources: Vec::new(),
+            valid_from: Some(chrono::Utc::now()),
+            valid_until: None,
+            superseded_by: None,
+            stale: None,
+            synthesizer: None,
+            reasoning: None,
+            embedding_refs: Vec::new(),
+            policy: Policy {
+                visibility: Visibility::Workspace,
+                retention: Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: None,
+            },
+            provenance: Provenance {
+                source: "single-file-test".to_string(),
+                actor: requester.actor.clone(),
+                observed_at: chrono::Utc::now(),
+                evidence: Vec::new(),
+                derivations: Vec::new(),
+                confidence: None,
+                method: None,
+            },
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }))
+        .expect("put belief");
+
+        // Hierarchy: put a node through the shared file.
+        let hierarchy = provider.hierarchy().expect("hierarchy handle");
+        block_on(hierarchy.put_node(HierarchyNode {
+            id: HierarchyNodeId::from("single-node"),
+            scope: scope.clone(),
+            kind: HierarchyNodeKind::Base,
+            layer: 0,
+            name: "single-file node".to_string(),
+            summary: None,
+            parent_id: None,
+            members: Vec::new(),
+            source_target_type: None,
+            source_target_id: None,
+            embedding_refs: Vec::new(),
+            status: HierarchyNodeStatus::Active,
+            policy: Policy {
+                visibility: Visibility::Workspace,
+                retention: Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: None,
+            },
+            provenance: Provenance {
+                source: "single-file-test".to_string(),
+                actor: requester.actor.clone(),
+                observed_at: chrono::Utc::now(),
+                evidence: Vec::new(),
+                derivations: Vec::new(),
+                confidence: None,
+                method: None,
+            },
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }))
+        .expect("put node");
+
+        // If we got here, memory + knowledge + belief + hierarchy all wrote to
+        // the SAME SQLite file without colliding — the single-file contract.
+        let _ = (scope, knowledge, belief, hierarchy);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Helper: cfg() but with an explicit (fresh) storage directory.
+    fn cfg_with_storage(dir: std::path::PathBuf) -> EngramConfig {
+        EngramConfig::new(
+            dir,
+            std::env::temp_dir(),
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "test".to_string(),
+                model: "test_model".to_string(),
+                dimensions: 384,
+                prompt_profile: "query".to_string(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        )
     }
 }

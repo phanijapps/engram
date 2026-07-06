@@ -31,6 +31,38 @@ pub enum MigrationMode {
     Apply,
 }
 
+/// SQLite storage layout for the provider's backing databases.
+///
+/// Controls whether each store opens its own file under `storage_path`
+/// (`memory.db`, `knowledge.db`, …) or every SQLite-backed store shares one
+/// file. The store schemas use disjoint table names, so a single file holds
+/// memory, knowledge, belief, hierarchy, and vector tables side by side
+/// without collisions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SqliteStorageLayout {
+    /// One database file per store (the default; backward compatible).
+    /// Creates `memory.db`, `knowledge.db`, `belief.db`, `hierarchy.db`, and
+    /// `vectors.db` under `storage_path`.
+    MultiFileDirectory,
+
+    /// All SQLite-backed stores open the same file under `storage_path`.
+    /// Useful for desktop/local-first hosts that prefer one file (plus its
+    /// `-wal`/`-shm` sidecars) for backup, debug, and delete simplicity.
+    SingleFile {
+        /// Bare file name for the shared database, e.g. `"engram_data.db"`.
+        /// Validated to be a single path component with a `.db`/`.sqlite`/
+        /// `.sqlite3` extension — no separators, no `..`, no drive letters.
+        file_name: String,
+    },
+}
+
+impl Default for SqliteStorageLayout {
+    fn default() -> Self {
+        Self::MultiFileDirectory
+    }
+}
+
 /// Embedding provider configuration.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EmbeddingProviderConfig {
@@ -75,6 +107,12 @@ pub struct EngramConfig {
 
     /// Capability policy determining how unsupported capabilities are handled.
     pub capability_policy: CapabilityPolicy,
+
+    /// SQLite storage layout (multi-file directory by default; opt-in single
+    /// file). Defaults via `#[serde(default)]` so existing configs without the
+    /// field deserialize to `MultiFileDirectory`.
+    #[serde(default)]
+    pub sqlite_storage_layout: SqliteStorageLayout,
 }
 
 impl EngramConfig {
@@ -94,7 +132,22 @@ impl EngramConfig {
             embedding_provider,
             migration_mode,
             capability_policy,
+            sqlite_storage_layout: SqliteStorageLayout::MultiFileDirectory,
         }
+    }
+
+    /// Builder for opting into the single-file SQLite layout.
+    ///
+    /// ```ignore
+    /// let config = EngramConfig::new(/* ... */)
+    ///     .with_sqlite_storage_layout(SqliteStorageLayout::SingleFile {
+    ///         file_name: "engram_data.db".to_string(),
+    ///     });
+    /// ```
+    #[must_use]
+    pub fn with_sqlite_storage_layout(mut self, layout: SqliteStorageLayout) -> Self {
+        self.sqlite_storage_layout = layout;
+        self
     }
 
     /// Validates the configuration for correctness and security.
@@ -108,6 +161,14 @@ impl EngramConfig {
         // Check storage_path is not empty
         if self.storage_path.as_os_str().is_empty() {
             return Err("storage_path cannot be empty".to_string());
+        }
+
+        // Validate the single-file layout's file_name before any path is built
+        // from it. A bare, validated name guarantees storage_path.join(name)
+        // stays within the trusted root, so the storage_path confinement check
+        // below also covers the shared database path.
+        if let SqliteStorageLayout::SingleFile { file_name } = &self.sqlite_storage_layout {
+            validate_single_file_name(file_name)?;
         }
 
         // Check trusted_root exists
@@ -159,6 +220,41 @@ impl EngramConfig {
 
         Ok(())
     }
+}
+
+/// Validates a single-file layout `file_name`.
+///
+/// Guarantees `storage_path.join(file_name)` stays inside the trusted root: a
+/// bare name with no separators, no `..`, and no drive letter cannot escape.
+fn validate_single_file_name(file_name: &str) -> Result<(), String> {
+    if file_name.trim().is_empty() {
+        return Err("single-file layout file_name cannot be empty".to_string());
+    }
+    if file_name.contains('/') || file_name.contains('\\') {
+        return Err("single-file layout file_name must not contain path separators".to_string());
+    }
+    // `..` (exact) escapes via join; `.` is a directory, not a file name.
+    if file_name == ".." || file_name == "." {
+        return Err(format!(
+            "single-file layout file_name must be a real file name, not '{file_name}'"
+        ));
+    }
+    // Reject Windows drive-relative names like "C:foo".
+    let bytes = file_name.as_bytes();
+    if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
+        return Err(
+            "single-file layout file_name must not be an absolute or drive path".to_string(),
+        );
+    }
+    let lower = file_name.to_ascii_lowercase();
+    let has_valid_ext =
+        lower.ends_with(".db") || lower.ends_with(".sqlite") || lower.ends_with(".sqlite3");
+    if !has_valid_ext {
+        return Err(
+            "single-file layout file_name must end in .db, .sqlite, or .sqlite3".to_string(),
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -299,6 +395,155 @@ mod tests {
 
         let result = config.validate();
         assert!(result.is_ok());
+    }
+
+    fn single_file_config(file_name: &str, trusted_root: &std::path::Path) -> EngramConfig {
+        EngramConfig::new(
+            trusted_root.join("engram"),
+            trusted_root,
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "fastembed".to_string(),
+                model: "bge-small-en-v1.5".to_string(),
+                dimensions: 384,
+                prompt_profile: "query".to_string(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        )
+        .with_sqlite_storage_layout(SqliteStorageLayout::SingleFile {
+            file_name: file_name.to_string(),
+        })
+    }
+
+    #[test]
+    fn single_file_layout_accepts_valid_file_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = single_file_config("engram_data.db", temp_dir.path());
+        assert!(config.validate().is_ok(), "{:?}", config.validate());
+    }
+
+    #[test]
+    fn single_file_layout_rejects_empty_file_name() {
+        let temp_dir = TempDir::new().unwrap();
+        let err = single_file_config("  ", temp_dir.path())
+            .validate()
+            .unwrap_err();
+        assert!(err.contains("empty"), "{err}");
+    }
+
+    #[test]
+    fn single_file_layout_rejects_path_separators() {
+        let temp_dir = TempDir::new().unwrap();
+        for bad in ["evil/x.db", "evil\\x.db", "../escape.db", "a/../b.db"] {
+            let err = single_file_config(bad, temp_dir.path())
+                .validate()
+                .unwrap_err();
+            assert!(
+                err.contains("separator") || err.contains(".."),
+                "accepted {bad}: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn single_file_layout_rejects_directory_names() {
+        let temp_dir = TempDir::new().unwrap();
+        for bad in [".", ".."] {
+            let err = single_file_config(bad, temp_dir.path())
+                .validate()
+                .unwrap_err();
+            assert!(err.contains("real file name"), "accepted {bad}: {err}");
+        }
+    }
+
+    #[test]
+    fn single_file_layout_rejects_drive_paths() {
+        let temp_dir = TempDir::new().unwrap();
+        let err = single_file_config("C:engram.db", temp_dir.path())
+            .validate()
+            .unwrap_err();
+        assert!(err.contains("absolute or drive"), "{err}");
+    }
+
+    #[test]
+    fn single_file_layout_rejects_bad_extension() {
+        let temp_dir = TempDir::new().unwrap();
+        let err = single_file_config("engram_data.txt", temp_dir.path())
+            .validate()
+            .unwrap_err();
+        assert!(err.contains("must end in"), "{err}");
+    }
+
+    #[test]
+    fn single_file_layout_rejects_traversal_file_name() {
+        // A bare ".." would join to the parent of storage_path and escape the
+        // trusted root. The validator must reject it before any path is built.
+        let temp_dir = TempDir::new().unwrap();
+        let err = single_file_config("..", temp_dir.path())
+            .validate()
+            .unwrap_err();
+        assert!(err.contains("real file name"), "{err}");
+    }
+
+    #[test]
+    fn default_layout_is_multi_file() {
+        // new() without with_sqlite_storage_layout must default to multi-file so
+        // existing configs/hosts are unaffected.
+        let temp_dir = TempDir::new().unwrap();
+        let config = EngramConfig::new(
+            temp_dir.path().join("engram"),
+            temp_dir.path(),
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "fastembed".to_string(),
+                model: "m".to_string(),
+                dimensions: 384,
+                prompt_profile: "query".to_string(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        );
+        assert_eq!(
+            config.sqlite_storage_layout,
+            SqliteStorageLayout::MultiFileDirectory
+        );
+    }
+
+    #[test]
+    fn single_file_layout_round_trips_through_serde_with_default() {
+        // An existing JSON config without the layout field must deserialize to
+        // the default multi-file layout (backward compatibility).
+        let temp_dir = TempDir::new().unwrap();
+        let config = EngramConfig::new(
+            temp_dir.path().join("engram"),
+            temp_dir.path(),
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "fastembed".to_string(),
+                model: "m".to_string(),
+                dimensions: 384,
+                prompt_profile: "query".to_string(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        );
+        let json = serde_json::to_string(&config).unwrap();
+        // Strip the layout field to simulate a pre-existing config.
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value
+            .as_object_mut()
+            .unwrap()
+            .remove("sqlite_storage_layout");
+        let legacy = serde_json::to_string(&value).unwrap();
+        let parsed: EngramConfig = serde_json::from_str(&legacy).unwrap();
+        assert_eq!(
+            parsed.sqlite_storage_layout,
+            SqliteStorageLayout::MultiFileDirectory
+        );
     }
 
     #[test]

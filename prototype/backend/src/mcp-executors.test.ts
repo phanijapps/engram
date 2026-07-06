@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { indexRepo, type ToolDeps } from "./mcp-executors.js";
+import { indexRepo, type ToolDeps } from "./mcp/executors.js";
 
 // Regression: index_repo must forward a non-null Policy (and actor) to
 // startScanJob. The Rust ingest engine requires a struct Policy; the HTTP

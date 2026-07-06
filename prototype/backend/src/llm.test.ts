@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { extractJsonObject, getLLMConfig, parseLLMGraph } from "./llm.js";
+import { extractJsonObject, getLLMConfig, parseLLMGraph } from "./adapters/llm.client.js";
 
 describe("parseLLMGraph", () => {
   it("parses a well-formed graph", () => {

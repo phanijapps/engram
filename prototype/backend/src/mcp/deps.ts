@@ -3,10 +3,10 @@
 // Isolated from mcp-tools.ts so the protocol test can stub deps without pulling
 // in the @engram/node native binding.
 
-import { getIngestTransport, getKnowledgeTransport, scanManifestPath } from "./engram.js";
-import { answerQuestion } from "./qa.js";
-import { SCAN_ACTOR, SCAN_POLICY, SCAN_SCOPE } from "./scan-defaults.js";
-import type { ToolDeps, ToolScope } from "./mcp-executors.js";
+import { getIngestTransport, getKnowledgeTransport, scanManifestPath } from "../adapters/engram.client.js";
+import { answerQuestion } from "../services/qa.service.js";
+import { SCAN_ACTOR, SCAN_POLICY, SCAN_SCOPE } from "../data/scan-defaults.js";
+import type { ToolDeps, ToolScope } from "./executors.js";
 
 export function buildToolDeps(scope: ToolScope = SCAN_SCOPE): ToolDeps {
   return {

@@ -32,7 +32,7 @@ session; the FastEmbed model downloads on first retrieval use, then is cached.)
 From the repository root:
 
 ```bash
-# 1. Install workspace dependencies (links demo/backend and demo/frontend).
+# 1. Install workspace dependencies (links prototype/backend and prototype/frontend).
 pnpm install
 
 # 2. Build the native addon: cargo build --release -> packages/node/engram_node.node
@@ -42,10 +42,10 @@ pnpm --filter @engram/node build:native
 pnpm --filter @engram/node build
 
 # 4. Run the backend (Hono on :8787).
-pnpm --filter demo-backend dev
+pnpm --filter prototype-backend dev
 
 # 5. In another terminal, run the frontend (Vite on :5173).
-pnpm --filter demo-frontend dev
+pnpm --filter prototype-frontend dev
 ```
 
 Open <http://localhost:5173>.
@@ -59,10 +59,10 @@ Open <http://localhost:5173>.
 ## How it works
 
 ```text
-Browser (demo/frontend, Vite + React)
+Browser (prototype/frontend, Vite + React)
   │  fetch /memory/* (proxied to the backend by Vite in dev)
   ▼
-demo/backend (Hono)  ──loads──▶  @engram/node (engram_node.node)
+prototype/backend (Hono)  ──loads──▶  @engram/node (engram_node.node)
                                       │  N-API JSON round-trip
                                       ▼
                                 engram-store-sql (SqlMemoryService, Rust)

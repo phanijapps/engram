@@ -24,7 +24,33 @@ importers:
         specifier: ^3.0.5
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.20.0)(lightningcss@1.32.0)
 
-  demo/backend:
+  packages/adapters:
+    dependencies:
+      '@engram/client':
+        specifier: workspace:*
+        version: link:../client
+      '@engram/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
+  packages/client:
+    dependencies:
+      '@engram/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@engram/node':
+        specifier: workspace:*
+        version: link:../node
+
+  packages/contracts: {}
+
+  packages/node:
+    dependencies:
+      '@engram/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+
+  prototype/backend:
     dependencies:
       '@earendil-works/pi-coding-agent':
         specifier: ^0.80.2
@@ -64,7 +90,7 @@ importers:
         specifier: ^3.0.5
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.20.0)(lightningcss@1.32.0)
 
-  demo/frontend:
+  prototype/frontend:
     dependencies:
       '@tailwindcss/vite':
         specifier: ^4.3.2
@@ -145,32 +171,6 @@ importers:
       vitest:
         specifier: ^3.0.5
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.20.0)(lightningcss@1.32.0)
-
-  packages/adapters:
-    dependencies:
-      '@engram/client':
-        specifier: workspace:*
-        version: link:../client
-      '@engram/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-
-  packages/client:
-    dependencies:
-      '@engram/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@engram/node':
-        specifier: workspace:*
-        version: link:../node
-
-  packages/contracts: {}
-
-  packages/node:
-    dependencies:
-      '@engram/contracts':
-        specifier: workspace:*
-        version: link:../contracts
 
 packages:
 
@@ -3839,7 +3839,7 @@ snapshots:
       '@aws-sdk/types': 3.973.14
       '@smithy/core': 3.28.0
       '@smithy/fetch-http-handler': 5.6.1
-      '@smithy/node-http-handler': 4.7.3
+      '@smithy/node-http-handler': 4.9.1
       '@smithy/types': 4.15.0
       tslib: 2.8.1
 

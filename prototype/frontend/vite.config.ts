@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
 // Dev proxy: the frontend calls relative routes and Vite forwards them to the
-// demo backend so the UI is a pure client (no CORS in dev).
+// prototype backend so the UI is a pure client (no CORS in dev).
 const BACKEND = "http://localhost:8787";
 const proxied = [
   "/memory",

@@ -11,7 +11,7 @@ import {
   indexRepo,
   search,
   type ToolDeps,
-} from "./mcp-executors.js";
+} from "./executors.js";
 
 function textResult(result: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };

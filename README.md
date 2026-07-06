@@ -154,7 +154,7 @@ boundaries.
 
 ## Demo: build & run on a new machine
 
-The demo (`demo/`) is an enterprise knowledge-platform UI over the Rust core:
+The demo (`prototype/`) is an enterprise knowledge-platform UI over the Rust core:
 index a polyglot repo or docs folder, build a knowledge graph, ask grounded +
 agentic questions, and explore the graph. It needs the **FastEmbed** native
 build (BGE-small embeddings) plus the TypeScript workspace.
@@ -185,7 +185,7 @@ pnpm run build
 
 ```bash
 # 4. LLM creds (optional). Copy the template and fill in real values.
-cp demo/backend/.env.example demo/backend/.env
+cp prototype/backend/.env.example prototype/backend/.env
 #   ENGRAM_LLM_BASE_URL=https://your-host/v1
 #   ENGRAM_LLM_API_KEY=...
 #   ENGRAM_LLM_MODEL=gemma4:31b-cloud
@@ -196,7 +196,7 @@ pnpm run backend
 
 # 6. In another shell, start the frontend (Vite on :5173, proxies API routes
 #    to :8787)
-pnpm --filter demo-frontend dev
+pnpm --filter prototype-frontend dev
 ```
 
 Open **http://localhost:5173**. From the dashboard, point **Index** at a local

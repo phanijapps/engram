@@ -10,8 +10,8 @@
 // deterministic result.
 
 import { createHash } from "node:crypto";
-import { extractGraph, getLLMConfig } from "./llm.js";
-import { getKnowledgeTransport } from "./engram.js";
+import { extractGraph, getLLMConfig } from "../adapters/llm.client.js";
+import { getKnowledgeTransport } from "../adapters/engram.client.js";
 
 export type EnhanceStatus = "unavailable" | "ok" | "error";
 

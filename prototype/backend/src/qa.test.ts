@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildEvidence, type MemoryItem, type QaBelief, type QaEntity, type QaRelationship, type QaChunk } from "./qa.js";
+import { buildEvidence } from "./services/evidence.service.js";
+import type { MemoryItem, QaBelief, QaEntity, QaRelationship, QaChunk } from "./services/qa.types.js";
 
 const memory = (id: string, text: string): MemoryItem => ({
   targetId: id,

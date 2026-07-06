@@ -10,8 +10,8 @@
 // Every entry point fails closed — on any error (or when the native addon lacks
 // the FastEmbed feature) it returns empty, so Q&A degrades to the KG-only path.
 
-import { getRetrievalTransport } from "./engram.js";
-import type { QaChunk } from "./qa.js";
+import { getRetrievalTransport } from "./engram.client.js";
+import type { QaChunk } from "../services/qa.types.js";
 
 /** Per-query candidate pool: how many chunks the graph surfaces for embedding. */
 const POOL = Number(process.env.ENGRAM_LAZY_POOL ?? "16");

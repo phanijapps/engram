@@ -2,8 +2,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { describe, expect, it } from "vitest";
-import { registerEngramTools } from "./mcp-tools.js";
-import type { ToolDeps } from "./mcp-executors.js";
+import { registerEngramTools } from "./mcp/tools.js";
+import type { ToolDeps } from "./mcp/executors.js";
 
 function stubDeps(): ToolDeps {
   return {

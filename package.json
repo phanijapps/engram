@@ -7,8 +7,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "backend": "pnpm --filter demo-backend dev",
-    "backend:start": "pnpm --filter demo-backend start",
+    "backend": "pnpm --filter prototype-backend dev",
+    "backend:start": "pnpm --filter prototype-backend start",
     "build": "pnpm run build:native && pnpm -r --if-present build",
     "build:native": "pnpm --filter @engram/node build:native",
     "check": "pnpm run contracts:generate && pnpm run typecheck && pnpm run test",

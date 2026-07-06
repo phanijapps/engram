@@ -12,10 +12,6 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
     connection
         .execute_batch(
             r#"
-            PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
-            PRAGMA busy_timeout = 5000;
-
             CREATE TABLE IF NOT EXISTS hierarchy_nodes (
                 id TEXT PRIMARY KEY,
                 tenant TEXT NOT NULL,

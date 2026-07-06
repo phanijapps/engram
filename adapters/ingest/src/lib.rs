@@ -5,31 +5,37 @@
 //! context; those responsibilities belong to adapter and retrieval crates.
 
 mod chunker;
+mod classifier;
 mod code_symbol;
 mod contract;
+mod contract_entities;
 mod extractor;
+mod extractors;
 mod filesystem;
 mod git;
+mod git_detect;
 mod hash;
 mod ingestor;
+mod openapi_types;
 mod reconcile;
 mod request;
 mod scanner;
 mod source_key;
 mod tree_sitter_chunker;
+mod yaml_safety;
 
 pub use chunker::{ChunkCandidate, Chunker, PlainTextChunker, PlainTextChunkerOptions};
 pub use code_symbol::CodeSymbolChunker;
-pub use contract::{ParsedOperation, detect_and_parse_openapi, normalize_contract_key};
+pub use contract::{detect_and_parse_openapi, normalize_contract_key};
+pub use contract_entities::ParsedOperation;
 pub use extractor::{ExtractedGraph, GraphExtractor};
 pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
 pub use git::GitSourceReader;
 pub use hash::content_hash;
 pub use ingestor::{IngestedKnowledge, KnowledgeIngestor};
 pub use request::{DocumentIngestRequest, DocumentMetadata};
-pub use scanner::{
-    FileKind, ScanOptions, ScanProgress, ScanSummary, classify_file, is_denylisted, is_secret_file,
-    is_within_root, scan_repository,
-};
+pub use classifier::{FileKind, classify_file, is_denylisted, is_secret_file, is_within_root};
+pub use git_detect::detect_git;
+pub use scanner::{ScanOptions, ScanProgress, ScanSummary, scan_repository};
 pub use source_key::{SOURCE_PATH_KEY, STABLE_SOURCE_KEY, stable_source_key};
 pub use tree_sitter_chunker::TreeSitterChunker;

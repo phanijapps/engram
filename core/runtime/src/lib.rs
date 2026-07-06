@@ -5,8 +5,12 @@
 //! otherwise create circular dependencies between independently stored memory
 //! and knowledge systems.
 
+pub mod options;
+
 use engram_domain::{Id, Policy, Requester, Scope, Timestamp};
 use thiserror::Error;
+
+pub use options::{SqliteJournalMode, SqliteOpenOptions, SqlitePath};
 
 /// Stable error surface shared by services and adapters.
 ///

@@ -15,85 +15,16 @@ use futures::executor::block_on;
 use rayon::prelude::*;
 
 use crate::{
+    classifier::{classify_file, is_denylisted, is_secret_file, is_within_root},
+    git_detect::detect_git,
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
     PlainTextChunker, PlainTextChunkerOptions, content_hash, contract, reconcile,
     stable_source_key,
 };
 
+pub use crate::classifier::FileKind;
+
 const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
-
-const DENY_DIRS: &[&str] = &[
-    ".git",
-    "node_modules",
-    "target",
-    "dist",
-    "build",
-    "coverage",
-    ".fastembed_cache",
-    "__pycache__",
-    ".venv",
-    "venv",
-    ".next",
-    ".cache",
-    ".idea",
-    ".vscode",
-];
-const DENY_FILE_EXT: &[&str] = &["db", "sqlite", "sqlite3", "node", "log", "pyc", "lock"];
-const SECRET_EXT: &[&str] = &[".key", ".pem", ".cert", ".crt", ".p12", ".pfx"];
-const SECRET_NAMES: &[&str] = &["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"];
-const SAFE_TEMPLATES: &[&str] = &[
-    ".env.example",
-    ".env.sample",
-    ".env.template",
-    ".env.defaults",
-    ".env.schema",
-];
-const CODE_NAMES: &[&str] = &[
-    "dockerfile",
-    "makefile",
-    "rakefile",
-    "gemfile",
-    "cmake",
-    "justfile",
-];
-const CODE_EXTENSIONS: &[&str] = &[
-    "rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "java", "kt", "kts", "scala", "clj",
-    "cljs", "ex", "exs", "erl", "hs", "ml", "mli", "lua", "php", "pl", "pm", "r", "rb", "sh",
-    "bash", "zsh", "fish", "ps1", "c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "cs", "swift",
-    "dart", "vue", "svelte", "sql", "proto", "graphql", "gradle", "groovy", "vim",
-];
-const TEXT_EXTENSIONS: &[&str] = &[
-    "md",
-    "markdown",
-    "txt",
-    "rst",
-    "org",
-    "tex",
-    "adoc",
-    "yml",
-    "yaml",
-    "json",
-    "toml",
-    "xml",
-    "html",
-    "htm",
-    "css",
-    "scss",
-    "sass",
-    "less",
-    "ini",
-    "cfg",
-    "conf",
-    "properties",
-    "csv",
-    "tsv",
-];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FileKind {
-    Code,
-    Text,
-}
 
 /// Summary returned by a scan.
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -108,26 +39,6 @@ pub struct ScanSummary {
     pub git_remote: Option<String>,
     pub git_branch: Option<String>,
     pub git_sha: Option<String>,
-}
-
-/// Detect git metadata (remote URL, branch, short SHA) if the root is a git repo.
-fn detect_git(root: &Path) -> Option<(String, String, String)> {
-    let run = |args: &[&str]| -> Option<String> {
-        let out = std::process::Command::new("git")
-            .args(args)
-            .current_dir(root)
-            .output()
-            .ok()?;
-        if !out.status.success() {
-            return None;
-        }
-        let s = String::from_utf8_lossy(&out.stdout).trim().to_owned();
-        if s.is_empty() { None } else { Some(s) }
-    };
-    let remote = run(&["remote", "get-url", "origin"])?;
-    let branch = run(&["rev-parse", "--abbrev-ref", "HEAD"])?;
-    let sha = run(&["rev-parse", "--short=10", "HEAD"])?;
-    Some((remote, branch, sha))
 }
 
 /// Per-file progress emitted during a scan.
@@ -157,63 +68,6 @@ impl ScanOptions {
             self.max_bytes
         }
     }
-}
-
-fn file_base(name: &str) -> &str {
-    name.rsplit(['/', '\\']).next().unwrap_or(name)
-}
-
-/// True if `target` is `root` or inside it (callers canonicalize both first).
-pub fn is_within_root(target: &Path, root: &Path) -> bool {
-    target.starts_with(root)
-}
-
-/// True if any path segment is a deny dir, or the file suffix is denylisted.
-pub fn is_denylisted(rel_path: &str) -> bool {
-    let segs: Vec<&str> = rel_path.split(['/', '\\']).collect();
-    if segs.iter().any(|s| DENY_DIRS.contains(s)) {
-        return true;
-    }
-    let base = segs.last().copied().unwrap_or("");
-    let ext = match base.rsplit_once('.') {
-        Some((_, e)) => e.to_lowercase(),
-        None => String::new(),
-    };
-    DENY_FILE_EXT.iter().any(|e| *e == ext)
-}
-
-/// True if the file name looks like a credential/secret carrier.
-pub fn is_secret_file(name: &str) -> bool {
-    let base = file_base(name).to_lowercase();
-    if SAFE_TEMPLATES.iter().any(|t| *t == base) {
-        return false;
-    }
-    if base == ".env" || base.starts_with(".env.") {
-        return true;
-    }
-    if SECRET_EXT.iter().any(|e| base.ends_with(e)) {
-        return true;
-    }
-    SECRET_NAMES.iter().any(|n| *n == base)
-}
-
-/// Classify a file by name; `None` means "not included".
-pub fn classify_file(name: &str) -> Option<FileKind> {
-    let base = file_base(name).to_lowercase();
-    if CODE_NAMES.iter().any(|n| *n == base) {
-        return Some(FileKind::Code);
-    }
-    let ext = match base.rsplit_once('.') {
-        Some((_, e)) => e,
-        None => "",
-    };
-    if CODE_EXTENSIONS.contains(&ext) {
-        return Some(FileKind::Code);
-    }
-    if TEXT_EXTENSIONS.contains(&ext) {
-        return Some(FileKind::Text);
-    }
-    None
 }
 
 #[derive(Debug)]
@@ -958,37 +812,5 @@ mod tests {
         assert!(is_within_root(Path::new("/tmp/repo/src/a.rs"), root));
         assert!(!is_within_root(Path::new("/tmp/other"), root));
         assert!(!is_within_root(Path::new("/tmp/repo-evil"), root));
-    }
-
-    #[test]
-    fn denylisted_dirs_and_extensions() {
-        assert!(is_denylisted("node_modules/x.js"));
-        assert!(is_denylisted("a/.git/config"));
-        assert!(is_denylisted("data.db"));
-        assert!(is_denylisted("lockfile.lock"));
-        assert!(!is_denylisted("src/main.rs"));
-        assert!(!is_denylisted("README.md"));
-    }
-
-    #[test]
-    fn secret_files_detected_but_templates_safe() {
-        assert!(is_secret_file(".env"));
-        assert!(is_secret_file(".env.local"));
-        assert!(is_secret_file("id_rsa"));
-        assert!(is_secret_file("certs/server.pem"));
-        assert!(is_secret_file("key.crt"));
-        // Templates document variables without secrets — not flagged.
-        assert!(!is_secret_file(".env.example"));
-        assert!(!is_secret_file(".env.sample"));
-        assert!(!is_secret_file("src/main.rs"));
-    }
-
-    #[test]
-    fn classify_by_name_and_extension() {
-        assert_eq!(classify_file("main.rs"), Some(FileKind::Code));
-        assert_eq!(classify_file("Dockerfile"), Some(FileKind::Code));
-        assert_eq!(classify_file("README.md"), Some(FileKind::Text));
-        assert_eq!(classify_file("config.yaml"), Some(FileKind::Text));
-        assert_eq!(classify_file("binary"), None);
     }
 }

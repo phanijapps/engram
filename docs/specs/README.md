@@ -5,6 +5,7 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 
 ## Active
 
+- [`sqlite-open-options`](sqlite-open-options/spec.md): common `SqliteOpenOptions` configuration for all SQLite adapters (WAL mode, busy timeout, foreign keys, migrations, directory creation) with `open_with_options` constructors. Shipped.
 - [`demo-reimagine`](demo-reimagine/spec.md): prune the demo to 5 views
   (Dashboard, hero Graph, Chat, Memory, Belief); rebuild the graph as a 2D
   community-clustered force graph readable at the class level; add a

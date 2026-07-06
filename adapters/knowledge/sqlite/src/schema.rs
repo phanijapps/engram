@@ -14,13 +14,6 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
     connection
         .execute_batch(
             r#"
-            -- WAL allows concurrent readers + one writer (rayon scan workers write
-            -- while the UI polls reads). busy_timeout makes a contended connection
-            -- wait instead of failing immediately with "database is locked".
-            PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
-            PRAGMA busy_timeout = 5000;
-
             CREATE TABLE IF NOT EXISTS knowledge_sources (
                 id TEXT PRIMARY KEY,
                 tenant TEXT NOT NULL,

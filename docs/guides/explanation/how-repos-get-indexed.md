@@ -262,6 +262,7 @@ journal blocks readers during writes. WAL lets readers + the writer coexist;
 
 ## See also
 
+- [Integrating Engram as a Rust Library](../tutorials/integrating-engram-rust-library.md) — complete tutorial for using Engram as a library dependency with SQLite storage
 - [Scanner source](../../adapters/ingest/src/scanner.rs) — the parallel walk +
   filter + ingest implementation.
 - [Tree-sitter chunker](../../adapters/ingest/src/tree_sitter_chunker.rs) — the

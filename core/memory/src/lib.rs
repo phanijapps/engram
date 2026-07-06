@@ -1,8 +1,11 @@
-//! Memory behavior ports.
+//! Memory behavior ports and write-path enrichment helpers.
 //!
 //! This crate owns the canonical memory-facing service and repository
 //! contracts. It deliberately does not know how knowledge graphs, ontologies,
 //! vector indexes, or source ingestion are stored.
+
+pub mod extraction;
+pub use extraction::{extract, merge_entities};
 
 use async_trait::async_trait;
 use engram_domain::*;
@@ -65,7 +68,7 @@ pub trait MemoryEventRepository: Send + Sync {
 /// delegating storage to memory repositories and retrieval composition to higher
 /// layers. Knowledge graph storage belongs behind knowledge ports, not here.
 #[async_trait]
-pub trait MemoryService: Send + Sync {
+pub trait MemoryService: MemoryRepository + MemoryEventRepository + Send + Sync {
     /// Writes a memory and records the corresponding lifecycle event.
     async fn write_memory(&self, request: WriteMemoryRequest) -> CoreResult<WriteMemoryResponse>;
 

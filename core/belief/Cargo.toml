@@ -12,3 +12,4 @@ engram-runtime = { path = "../runtime" }
 
 [dev-dependencies]
 chrono.workspace = true
+serde_json.workspace = true

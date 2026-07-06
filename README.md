@@ -154,7 +154,7 @@ boundaries.
 
 ## Demo: build & run on a new machine
 
-The demo (`demo/`) is an enterprise knowledge-platform UI over the Rust core:
+The demo (`prototype/`) is an enterprise knowledge-platform UI over the Rust core:
 index a polyglot repo or docs folder, build a knowledge graph, ask grounded +
 agentic questions, and explore the graph. It needs the **FastEmbed** native
 build (BGE-small embeddings) plus the TypeScript workspace.
@@ -185,7 +185,7 @@ pnpm run build
 
 ```bash
 # 4. LLM creds (optional). Copy the template and fill in real values.
-cp demo/backend/.env.example demo/backend/.env
+cp prototype/backend/.env.example prototype/backend/.env
 #   ENGRAM_LLM_BASE_URL=https://your-host/v1
 #   ENGRAM_LLM_API_KEY=...
 #   ENGRAM_LLM_MODEL=gemma4:31b-cloud
@@ -196,7 +196,7 @@ pnpm run backend
 
 # 6. In another shell, start the frontend (Vite on :5173, proxies API routes
 #    to :8787)
-pnpm --filter demo-frontend dev
+pnpm --filter prototype-frontend dev
 ```
 
 Open **http://localhost:5173**. From the dashboard, point **Index** at a local
@@ -209,8 +209,10 @@ reuses durable embeddings (`${ENGRAM_DB}.embeddings.db`).
 
 ## Connect via MCP
 
-The backend exposes engram as **JSON-RPC 2.0 over HTTP** at `POST /mcp` — four
-tools any MCP-compatible client can call:
+The demo backend serves a spec-compliant **Streamable HTTP** MCP endpoint at
+`/mcp`, built on the official `@modelcontextprotocol/sdk`. It completes the full
+`initialize` handshake, so any HTTP MCP client — **GitHub Copilot**, Claude
+Desktop, Cursor — can connect. Four tools:
 
 | Tool | What it does |
 | --- | --- |
@@ -219,26 +221,31 @@ tools any MCP-compatible client can call:
 | `search` | Keyword/entity search over the graph. |
 | `agentic_search` | Grounded + agentic Q&A over the graph (LLM, if configured). |
 
-With the backend running on `:8787`, call it directly with curl:
+**Start the backend** (it loads the Rust core through the native binding):
 
 ```bash
-# List the tools
-curl -s -X POST http://localhost:8787/mcp \
-  -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-
-# Index a repo, then ask a question
-curl -s -X POST http://localhost:8787/mcp \
-  -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"index_repo","arguments":{"path":"/abs/path/to/repo"}}}'
+pnpm --filter @engram/node build:native   # if not already built
+pnpm run backend                           # serves http://localhost:8787
 ```
 
-To use it from a standard MCP client (Claude Desktop / Claude Code / VS Code
-Copilot), point an **HTTP JSON-RPC transport** at `http://localhost:8787/mcp`.
-For clients that speak stdio, bridge with [`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
+**GitHub Copilot** (VS Code `mcp.json`, or `.vscode/mcp.json` in a workspace):
 
 ```jsonc
-// Claude Desktop / Code mcpServers entry (stdio client bridged to the HTTP endpoint)
+{
+  "servers": {
+    "engram": {
+      "type": "http",
+      "url": "http://localhost:8787/mcp"
+    }
+  }
+}
+```
+
+**Claude Desktop / Cursor** — point their HTTP/streamable-HTTP transport at the
+same URL, or bridge a stdio-only client with
+[`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
+
+```jsonc
 {
   "mcpServers": {
     "engram": { "command": "npx", "args": ["-y", "mcp-remote", "http://localhost:8787/mcp"] }
@@ -246,12 +253,16 @@ For clients that speak stdio, bridge with [`mcp-remote`](https://www.npmjs.com/p
 }
 ```
 
-> **Handshake gap (honest):** the demo's `/mcp` implements only `tools/list` and
-> `tools/call` over plain request/response JSON-RPC — it does **not** implement
-> the full MCP `initialize` / `notifications` / SSE handshake. Direct curl +
-> custom JSON-RPC HTTP clients work today; a strict client (Claude Desktop via
-> `mcp-remote`) will fail at `initialize` until that handshake is added. Driving
-> it from scripts is the supported path for now.
+The endpoint is **stateless** — no session store; each request is
+self-contained. It reads whatever the backend's `ENGRAM_DB` points at, so it
+shares the graphs you index in the demo UI. Quick check with curl:
+
+```bash
+curl -s -X POST http://localhost:8787/mcp \
+  -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
+```
 
 ## Contracts
 

@@ -329,6 +329,12 @@ fn apply_gate_error(error: CoreError) -> ConsolidationError {
         CoreError::InvalidRequest { .. } => ("apply_gate_invalid_request", false),
         CoreError::NotFound { .. } => ("apply_gate_missing_target", true),
         CoreError::Adapter { .. } => ("apply_gate_adapter_failed", true),
+        CoreError::ProviderUnavailable { .. } => ("provider_unavailable", true),
+        CoreError::MigrationPending { .. } => ("migration_pending", true),
+        CoreError::DryRunMode { .. } => ("dry_run_mode", false),
+        CoreError::CapabilityUnsupported { .. } => ("capability_unsupported", false),
+        CoreError::EmbeddingSpaceMismatch { .. } => ("embedding_space_mismatch", true),
+        CoreError::MigrationManifestStale { .. } => ("migration_manifest_stale", true),
     };
     ConsolidationError {
         task: None,

@@ -7,18 +7,13 @@
 //! concepts, and relations inherit visibility from their owning source or scheme.
 
 use std::{
-    collections::HashSet,
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
 };
 
-use async_trait::async_trait;
 use chrono::Utc;
 use engram_domain::*;
-use engram_knowledge::{
-    KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
-};
-use engram_runtime::{CoreError, CoreResult};
+use engram_runtime::{CoreError, CoreResult, SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
@@ -49,14 +44,148 @@ impl SqlKnowledgeStore {
         Self::from_connection(connection)
     }
 
+    /// Opens a SQLite knowledge store with explicit configuration options.
+    ///
+    /// This constructor allows hosts like AgentZero's adapter to control WAL mode,
+    /// busy timeout, foreign keys, migrations, and directory creation explicitly.
+    ///
+    /// # Arguments
+    ///
+    /// * `options` - SQLite configuration options including path, journal mode, and
+    ///   pragma settings
+    ///
+    /// # Returns
+    ///
+    /// Returns a configured `SqlKnowledgeStore` instance with schema initialized.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use engram_runtime::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
+    /// use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+    ///
+    /// let options = SqliteOpenOptions {
+    ///     path: SqlitePath::File("/path/to/knowledge.db".into()),
+    ///     create_parent_dirs: true,
+    ///     journal_mode: SqliteJournalMode::Wal,
+    ///     busy_timeout_ms: Some(5000),
+    ///     foreign_keys: true,
+    ///     run_migrations: true,
+    /// };
+    ///
+    /// let store = SqlKnowledgeStore::open_with_options(options)?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn open_with_options(options: SqliteOpenOptions) -> CoreResult<Self> {
+        let connection = match &options.path {
+            SqlitePath::File(path) => {
+                if options.create_parent_dirs {
+                    if let Some(parent) = path.parent() {
+                        std::fs::create_dir_all(parent).map_err(|e| CoreError::Adapter {
+                            adapter: "engram-store-knowledge-sqlite".to_owned(),
+                            message: format!("failed to create parent directory: {}", e),
+                        })?;
+                    }
+                }
+                Connection::open(path)
+            }
+            SqlitePath::InMemory => Connection::open_in_memory(),
+        }
+        .map_err(|e| CoreError::Adapter {
+            adapter: "engram-store-knowledge-sqlite".to_owned(),
+            message: e.to_string(),
+        })?;
+
+        // Apply pragmas from options
+        Self::apply_pragmas(&connection, &options)?;
+
+        // Initialize schema
+        initialize_schema(&connection)?;
+
+        Ok(Self {
+            connection: Arc::new(Mutex::new(connection)),
+        })
+    }
+
     fn from_connection(connection: Connection) -> CoreResult<Self> {
+        // Apply default pragmas for backward compatibility
+        let options = SqliteOpenOptions::in_memory();
+        Self::apply_pragmas(&connection, &options)?;
+
         initialize_schema(&connection)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
         })
     }
 
-    fn lock(&self) -> CoreResult<MutexGuard<'_, Connection>> {
+    /// Applies SQLite PRAGMAs based on configuration options.
+    ///
+    /// This centralizes pragma application so both `open_with_options` and legacy
+    /// constructors can use the same logic.
+    fn apply_pragmas(connection: &Connection, options: &SqliteOpenOptions) -> CoreResult<()> {
+        // Journal mode (returns result set, so we use query_row and ignore the result)
+        let journal_pragma = format!(
+            "PRAGMA journal_mode = {}",
+            options.journal_mode.as_pragma_value()
+        );
+        connection
+            .query_row(&journal_pragma, [], |_row| Ok(()))
+            .optional()
+            .map_err(|e| CoreError::Adapter {
+                adapter: "engram-store-knowledge-sqlite".to_owned(),
+                message: e.to_string(),
+            })?;
+
+        // Synchronous mode (NORMAL for WAL mode)
+        connection
+            .query_row("PRAGMA synchronous = NORMAL", [], |_row| Ok(()))
+            .optional()
+            .map_err(|e| CoreError::Adapter {
+                adapter: "engram-store-knowledge-sqlite".to_owned(),
+                message: e.to_string(),
+            })?;
+
+        // Busy timeout
+        if let Some(timeout_ms) = options.busy_timeout_ms {
+            let timeout_pragma = format!("PRAGMA busy_timeout = {}", timeout_ms);
+            connection
+                .query_row(&timeout_pragma, [], |_row| Ok(()))
+                .optional()
+                .map_err(|e| CoreError::Adapter {
+                    adapter: "engram-store-knowledge-sqlite".to_owned(),
+                    message: e.to_string(),
+                })?;
+        }
+
+        // Foreign keys
+        if options.foreign_keys {
+            connection
+                .query_row("PRAGMA foreign_keys = ON", [], |_row| Ok(()))
+                .optional()
+                .map_err(|e| CoreError::Adapter {
+                    adapter: "engram-store-knowledge-sqlite".to_owned(),
+                    message: e.to_string(),
+                })?;
+        }
+
+        // Cache size (64MB default for better performance)
+        connection
+            .query_row("PRAGMA cache_size = 64000", [], |_row| Ok(()))
+            .optional()
+            .map_err(|e| CoreError::Adapter {
+                adapter: "engram-store-knowledge-sqlite".to_owned(),
+                message: e.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    /// Public lock method used by repository trait implementations.
+    ///
+    /// This method is public so that separate modules (knowledge, graph,
+    /// taxonomy, ontology) can access the SQLite connection. Each module
+    /// implements a specific repository trait and needs database access.
+    pub fn lock(&self) -> CoreResult<MutexGuard<'_, Connection>> {
         self.connection.lock().map_err(|_| CoreError::Adapter {
             adapter: "engram-store-knowledge-sqlite".to_owned(),
             message: "connection lock poisoned".to_owned(),
@@ -153,6 +282,73 @@ impl SqlKnowledgeStore {
         Ok(sources)
     }
 
+    /// Lists `KnowledgeEntity` records belonging to a specific repository (via
+    /// `graph_id IN (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?)`),
+    /// visible to `scope`. The per-source `EntityKind::Repository` node has
+    /// `graph_id = None` and is NOT included in this result set; reach it via its
+    /// `belongs_to` edges returned by `list_relationships_by_source`.
+    pub async fn list_entities_by_source(
+        &self,
+        scope: &Scope,
+        stable_source_key: &str,
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT record_json FROM knowledge_entities \
+                 WHERE graph_id IN \
+                     (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?1) \
+                 ORDER BY id",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map(params![stable_source_key], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut entities = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let entity = serde_json::from_str::<KnowledgeEntity>(&json).map_err(json_error)?;
+            if scope_allows(&entity.scope, scope) {
+                entities.push(entity);
+            }
+        }
+        Ok(entities)
+    }
+
+    /// Lists `KnowledgeRelationship` records belonging to a specific repository
+    /// (via `graph_id IN (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?)`),
+    /// visible to `scope`. This includes the `belongs_to` edges that link document
+    /// graphs to the per-source `EntityKind::Repository` node (those edges carry
+    /// the document graph's `graph_id`).
+    pub async fn list_relationships_by_source(
+        &self,
+        scope: &Scope,
+        stable_source_key: &str,
+    ) -> CoreResult<Vec<KnowledgeRelationship>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT record_json FROM knowledge_relationships \
+                 WHERE graph_id IN \
+                     (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?1) \
+                 ORDER BY id",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map(params![stable_source_key], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut relationships = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let relationship =
+                serde_json::from_str::<KnowledgeRelationship>(&json).map_err(json_error)?;
+            if scope_allows(&relationship.scope, scope) {
+                relationships.push(relationship);
+            }
+        }
+        Ok(relationships)
+    }
+
     /// Lists knowledge relationships visible to `scope`.
     pub async fn list_relationships(
         &self,
@@ -178,689 +374,16 @@ impl SqlKnowledgeStore {
     }
 }
 
-#[async_trait]
-impl KnowledgeRepository for SqlKnowledgeStore {
-    async fn put_source(&self, source: KnowledgeSource) -> CoreResult<KnowledgeSource> {
-        let json = serde_json::to_string(&source).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_sources
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                ON CONFLICT(id) DO UPDATE SET
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    source.id.to_string(),
-                    source.scope.tenant,
-                    source.scope.subject,
-                    source.scope.workspace,
-                    source.scope.session,
-                    source.scope.environment,
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(source)
-    }
-
-    async fn put_document(&self, document: SourceDocument) -> CoreResult<SourceDocument> {
-        let json = serde_json::to_string(&document).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_documents (id, source_id, record_json)
-                VALUES (?1, ?2, ?3)
-                ON CONFLICT(id) DO UPDATE SET
-                    source_id = excluded.source_id,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    document.id.to_string(),
-                    document.source_id.to_string(),
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(document)
-    }
-
-    async fn put_chunk(&self, chunk: KnowledgeChunk) -> CoreResult<KnowledgeChunk> {
-        let json = serde_json::to_string(&chunk).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_chunks (id, document_id, source_id, record_json)
-                VALUES (?1, ?2, ?3, ?4)
-                ON CONFLICT(id) DO UPDATE SET
-                    document_id = excluded.document_id,
-                    source_id = excluded.source_id,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    chunk.id.to_string(),
-                    chunk.document_id.to_string(),
-                    chunk.source_id.to_string(),
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(chunk)
-    }
-
-    async fn get_chunk(&self, id: &ChunkId, scope: &Scope) -> CoreResult<Option<KnowledgeChunk>> {
-        let connection = self.lock()?;
-        let chunk = connection
-            .query_row(
-                "SELECT record_json FROM knowledge_chunks WHERE id = ?1",
-                params![id.to_string()],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .map(|json| serde_json::from_str::<KnowledgeChunk>(&json).map_err(json_error))
-            .transpose()?;
-        let Some(chunk) = chunk else {
-            return Ok(None);
-        };
-        // Chunks inherit visibility from their source.
-        let source = source_for_chunk(&connection, &chunk)?;
-        Ok(source
-            .filter(|source| scope_allows(&source.scope, scope))
-            .map(|_| chunk))
-    }
-
-    async fn put_entity(&self, entity: KnowledgeEntity) -> CoreResult<KnowledgeEntity> {
-        let json = serde_json::to_string(&entity).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_entities
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                ON CONFLICT(id) DO UPDATE SET
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    entity.id.to_string(),
-                    entity.scope.tenant,
-                    entity.scope.subject,
-                    entity.scope.workspace,
-                    entity.scope.session,
-                    entity.scope.environment,
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(entity)
-    }
-
-    async fn put_relationship(
-        &self,
-        relationship: KnowledgeRelationship,
-    ) -> CoreResult<KnowledgeRelationship> {
-        let json = serde_json::to_string(&relationship).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_relationships
-                    (id, graph_id, subject_id, tenant, subject, workspace, session,
-                     environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-                ON CONFLICT(id) DO UPDATE SET
-                    graph_id = excluded.graph_id,
-                    subject_id = excluded.subject_id,
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    relationship.id.to_string(),
-                    relationship.graph_id.as_ref().map(ToString::to_string),
-                    relationship.subject.id.as_ref().map(ToString::to_string),
-                    relationship.scope.tenant,
-                    relationship.scope.subject,
-                    relationship.scope.workspace,
-                    relationship.scope.session,
-                    relationship.scope.environment,
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(relationship)
-    }
-
-    async fn get_entity(
-        &self,
-        id: &EntityId,
-        scope: &Scope,
-    ) -> CoreResult<Option<KnowledgeEntity>> {
-        let connection = self.lock()?;
-        let entity = connection
-            .query_row(
-                "SELECT record_json FROM knowledge_entities WHERE id = ?1",
-                params![id.to_string()],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .map(|json| serde_json::from_str::<KnowledgeEntity>(&json).map_err(json_error))
-            .transpose()?;
-        Ok(entity.filter(|entity| scope_allows(&entity.scope, scope)))
-    }
-
-    async fn get_relationship(
-        &self,
-        id: &RelationshipId,
-        scope: &Scope,
-    ) -> CoreResult<Option<KnowledgeRelationship>> {
-        let connection = self.lock()?;
-        let relationship = connection
-            .query_row(
-                "SELECT record_json FROM knowledge_relationships WHERE id = ?1",
-                params![id.to_string()],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .map(|json| serde_json::from_str::<KnowledgeRelationship>(&json).map_err(json_error))
-            .transpose()?;
-        Ok(relationship.filter(|relationship| scope_allows(&relationship.scope, scope)))
-    }
-}
-
-#[async_trait]
-impl KnowledgeGraphRepository for SqlKnowledgeStore {
-    async fn put_graph(&self, graph: KnowledgeGraph) -> CoreResult<KnowledgeGraph> {
-        let json = serde_json::to_string(&graph).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_graphs
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                ON CONFLICT(id) DO UPDATE SET
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    graph.id.to_string(),
-                    graph.scope.tenant,
-                    graph.scope.subject,
-                    graph.scope.workspace,
-                    graph.scope.session,
-                    graph.scope.environment,
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(graph)
-    }
-
-    async fn get_graph(
-        &self,
-        id: &KnowledgeGraphId,
-        scope: &Scope,
-    ) -> CoreResult<Option<KnowledgeGraph>> {
-        let connection = self.lock()?;
-        let graph = connection
-            .query_row(
-                "SELECT record_json FROM knowledge_graphs WHERE id = ?1",
-                params![id.to_string()],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .map(|json| serde_json::from_str::<KnowledgeGraph>(&json).map_err(json_error))
-            .transpose()?;
-        Ok(graph.filter(|graph| scope_allows(&graph.scope, scope)))
-    }
-
-    async fn neighbors(
-        &self,
-        graph_id: &KnowledgeGraphId,
-        node_id: &EntityId,
-        scope: &Scope,
-        limit: Option<u32>,
-    ) -> CoreResult<Vec<KnowledgeRelationship>> {
-        let connection = self.lock()?;
-        let graph = connection
-            .query_row(
-                "SELECT record_json FROM knowledge_graphs WHERE id = ?1",
-                params![graph_id.to_string()],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .map(|json| serde_json::from_str::<KnowledgeGraph>(&json).map_err(json_error))
-            .transpose()?;
-        let Some(graph) = graph else {
-            return Err(CoreError::NotFound {
-                target_type: "knowledge_graph",
-                target_id: graph_id.to_string(),
-            });
-        };
-        if !scope_allows(&graph.scope, scope) {
-            return Ok(Vec::new());
-        }
-
-        let mut statement = connection
-            .prepare(
-                "SELECT record_json FROM knowledge_relationships \
-                 WHERE graph_id = ?1 AND subject_id = ?2",
-            )
-            .map_err(sql_error)?;
-        let rows = statement
-            .query_map(params![graph_id.to_string(), node_id.to_string()], |row| {
-                row.get::<_, String>(0)
-            })
-            .map_err(sql_error)?;
-        let mut relationships = Vec::new();
-        for row in rows {
-            let json = row.map_err(sql_error)?;
-            let relationship =
-                serde_json::from_str::<KnowledgeRelationship>(&json).map_err(json_error)?;
-            if scope_allows(&relationship.scope, scope) {
-                relationships.push(relationship);
-            }
-        }
-        relationships.sort_by(|left, right| left.id.to_string().cmp(&right.id.to_string()));
-        if let Some(limit) = limit {
-            relationships.truncate(limit as usize);
-        }
-        Ok(relationships)
-    }
-}
-
-#[async_trait]
-impl TaxonomyRepository for SqlKnowledgeStore {
-    async fn put_concept_scheme(&self, scheme: ConceptScheme) -> CoreResult<ConceptScheme> {
-        let json = serde_json::to_string(&scheme).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO concept_schemes
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                ON CONFLICT(id) DO UPDATE SET
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    scheme.id.to_string(),
-                    scheme.scope.tenant,
-                    scheme.scope.subject,
-                    scheme.scope.workspace,
-                    scheme.scope.session,
-                    scheme.scope.environment,
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(scheme)
-    }
-
-    async fn get_concept_scheme(
-        &self,
-        id: &ConceptSchemeId,
-        scope: &Scope,
-    ) -> CoreResult<Option<ConceptScheme>> {
-        let connection = self.lock()?;
-        let scheme = connection
-            .query_row(
-                "SELECT record_json FROM concept_schemes WHERE id = ?1",
-                params![id.to_string()],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .map(|json| serde_json::from_str::<ConceptScheme>(&json).map_err(json_error))
-            .transpose()?;
-        Ok(scheme.filter(|scheme| scope_allows(&scheme.scope, scope)))
-    }
-
-    async fn put_concept(&self, concept: Concept) -> CoreResult<Concept> {
-        let json = serde_json::to_string(&concept).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO concepts (id, scheme_id, record_json)
-                VALUES (?1, ?2, ?3)
-                ON CONFLICT(id) DO UPDATE SET
-                    scheme_id = excluded.scheme_id,
-                    record_json = excluded.record_json
-                "#,
-                params![concept.id.to_string(), concept.scheme_id.to_string(), json],
-            )
-            .map_err(sql_error)?;
-        Ok(concept)
-    }
-
-    async fn put_concept_relation(&self, relation: ConceptRelation) -> CoreResult<ConceptRelation> {
-        let json = serde_json::to_string(&relation).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO concept_relations (id, scheme_id, record_json)
-                VALUES (?1, ?2, ?3)
-                ON CONFLICT(id) DO UPDATE SET
-                    scheme_id = excluded.scheme_id,
-                    record_json = excluded.record_json
-                "#,
-                params![relation.id, relation.scheme_id.to_string(), json],
-            )
-            .map_err(sql_error)?;
-        Ok(relation)
-    }
-
-    async fn list_concepts(
-        &self,
-        scheme_id: &ConceptSchemeId,
-        scope: &Scope,
-    ) -> CoreResult<Vec<Concept>> {
-        let connection = self.lock()?;
-        let scheme = connection
-            .query_row(
-                "SELECT record_json FROM concept_schemes WHERE id = ?1",
-                params![scheme_id.to_string()],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .map(|json| serde_json::from_str::<ConceptScheme>(&json).map_err(json_error))
-            .transpose()?;
-        let Some(scheme) = scheme else {
-            return Ok(Vec::new());
-        };
-        if !scope_allows(&scheme.scope, scope) {
-            return Ok(Vec::new());
-        }
-
-        let mut statement = connection
-            .prepare("SELECT record_json FROM concepts WHERE scheme_id = ?1")
-            .map_err(sql_error)?;
-        let rows = statement
-            .query_map(params![scheme_id.to_string()], |row| {
-                row.get::<_, String>(0)
-            })
-            .map_err(sql_error)?;
-        let mut concepts = Vec::new();
-        for row in rows {
-            let json = row.map_err(sql_error)?;
-            concepts.push(serde_json::from_str::<Concept>(&json).map_err(json_error)?);
-        }
-        concepts.sort_by(|left, right| left.id.to_string().cmp(&right.id.to_string()));
-        Ok(concepts)
-    }
-}
-
-#[async_trait]
-impl OntologyRepository for SqlKnowledgeStore {
-    async fn put_ontology(&self, ontology: Ontology) -> CoreResult<Ontology> {
-        let json = serde_json::to_string(&ontology).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO ontologies
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                ON CONFLICT(id) DO UPDATE SET
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    ontology.id.to_string(),
-                    ontology.scope.tenant,
-                    ontology.scope.subject,
-                    ontology.scope.workspace,
-                    ontology.scope.session,
-                    ontology.scope.environment,
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(ontology)
-    }
-
-    async fn get_ontology(&self, id: &OntologyId, scope: &Scope) -> CoreResult<Option<Ontology>> {
-        let connection = self.lock()?;
-        let ontology = connection
-            .query_row(
-                "SELECT record_json FROM ontologies WHERE id = ?1",
-                params![id.to_string()],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .map(|json| serde_json::from_str::<Ontology>(&json).map_err(json_error))
-            .transpose()?;
-        Ok(ontology.filter(|ontology| scope_allows(&ontology.scope, scope)))
-    }
-
-    // Classes, properties, and axioms carry no scope of their own — they inherit
-    // visibility from their owning ontology (mirroring concepts ↔ concept
-    // scheme). `put_*` does not re-verify the caller owns `ontology_id`; reads
-    // (`get_ontology`, `validate_graph`) enforce scope on the parent ontology.
-    async fn put_class(&self, class: OntologyClass) -> CoreResult<OntologyClass> {
-        let json = serde_json::to_string(&class).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO ontology_classes (id, ontology_id, record_json)
-                VALUES (?1, ?2, ?3)
-                ON CONFLICT(id) DO UPDATE SET
-                    ontology_id = excluded.ontology_id,
-                    record_json = excluded.record_json
-                "#,
-                params![class.id.to_string(), class.ontology_id.to_string(), json],
-            )
-            .map_err(sql_error)?;
-        Ok(class)
-    }
-
-    async fn put_property(&self, property: OntologyProperty) -> CoreResult<OntologyProperty> {
-        let json = serde_json::to_string(&property).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO ontology_properties (id, ontology_id, record_json)
-                VALUES (?1, ?2, ?3)
-                ON CONFLICT(id) DO UPDATE SET
-                    ontology_id = excluded.ontology_id,
-                    record_json = excluded.record_json
-                "#,
-                params![
-                    property.id.to_string(),
-                    property.ontology_id.to_string(),
-                    json
-                ],
-            )
-            .map_err(sql_error)?;
-        Ok(property)
-    }
-
-    async fn put_axiom(&self, axiom: OntologyAxiom) -> CoreResult<OntologyAxiom> {
-        let json = serde_json::to_string(&axiom).map_err(json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO ontology_axioms (id, ontology_id, record_json)
-                VALUES (?1, ?2, ?3)
-                ON CONFLICT(id) DO UPDATE SET
-                    ontology_id = excluded.ontology_id,
-                    record_json = excluded.record_json
-                "#,
-                params![axiom.id.to_string(), axiom.ontology_id.to_string(), json],
-            )
-            .map_err(sql_error)?;
-        Ok(axiom)
-    }
-
-    /// Advisory validation: warns on relationships whose predicate is not declared
-    /// as an ontology property (by label or URI). It never rejects writes — the
-    /// port is advisory by contract. A missing or scope-hidden ontology, or a
-    /// scope-hidden relationship, contributes no findings.
-    async fn validate_graph(
-        &self,
-        graph_id: &KnowledgeGraphId,
-        ontology_id: &OntologyId,
-        scope: &Scope,
-    ) -> CoreResult<Vec<OntologyValidationFinding>> {
-        let connection = self.lock()?;
-        let ontology = connection
-            .query_row(
-                "SELECT record_json FROM ontologies WHERE id = ?1",
-                params![ontology_id.to_string()],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .map_err(sql_error)?
-            .map(|json| serde_json::from_str::<Ontology>(&json).map_err(json_error))
-            .transpose()?;
-        let Some(ontology) = ontology else {
-            return Ok(Vec::new());
-        };
-        if !scope_allows(&ontology.scope, scope) {
-            return Ok(Vec::new());
-        }
-
-        // Declared vocabulary = property labels + URIs (lowercased).
-        let mut declared: HashSet<String> = HashSet::new();
-        let mut property_statement = connection
-            .prepare("SELECT record_json FROM ontology_properties WHERE ontology_id = ?1")
-            .map_err(sql_error)?;
-        let property_rows = property_statement
-            .query_map(params![ontology_id.to_string()], |row| {
-                row.get::<_, String>(0)
-            })
-            .map_err(sql_error)?;
-        for row in property_rows {
-            let json = row.map_err(sql_error)?;
-            let property = serde_json::from_str::<OntologyProperty>(&json).map_err(json_error)?;
-            declared.insert(property.label.to_lowercase());
-            declared.insert(property.uri.to_lowercase());
-        }
-        drop(property_statement);
-
-        let now = Utc::now();
-        // Bound the scan so an oversized graph cannot make advisory validation
-        // unbounded: read LIMIT+1 rows, and if that many come back, report
-        // truncation instead of scanning further. `drop` the statement before
-        // reusing the connection (rusqlite borrow lifetime).
-        let mut relationship_statement = connection
-            .prepare(
-                "SELECT record_json FROM knowledge_relationships \
-                 WHERE graph_id = ?1 ORDER BY id LIMIT ?2",
-            )
-            .map_err(sql_error)?;
-        let relationship_rows: Vec<String> = relationship_statement
-            .query_map(
-                params![
-                    graph_id.to_string(),
-                    (VALIDATE_RELATIONSHIP_LIMIT + 1) as i64
-                ],
-                |row| row.get::<_, String>(0),
-            )
-            .map_err(sql_error)?
-            .collect::<Result<_, _>>()
-            .map_err(sql_error)?;
-        drop(relationship_statement);
-        let truncated = relationship_rows.len() > VALIDATE_RELATIONSHIP_LIMIT;
-
-        let mut findings = Vec::new();
-        for json in relationship_rows
-            .into_iter()
-            .take(VALIDATE_RELATIONSHIP_LIMIT)
-        {
-            let relationship =
-                serde_json::from_str::<KnowledgeRelationship>(&json).map_err(json_error)?;
-            if !scope_allows(&relationship.scope, scope) {
-                continue;
-            }
-            if declared.contains(&relationship.predicate.to_lowercase()) {
-                continue;
-            }
-            findings.push(OntologyValidationFinding {
-                id: format!("finding-{ontology_id}-{}", relationship.id),
-                ontology_id: ontology_id.clone(),
-                severity: OntologyValidationSeverity::Warning,
-                code: "undeclared_predicate".to_owned(),
-                message: format!(
-                    "relationship predicate `{}` is not declared by ontology `{ontology_id}`",
-                    relationship.predicate
-                ),
-                target: Some(relationship.subject.clone()),
-                axiom_id: None,
-                provenance: validation_provenance(ontology_id, now),
-                detected_at: now,
-            });
-        }
-        if truncated {
-            findings.push(OntologyValidationFinding {
-                id: format!("finding-{ontology_id}-truncated"),
-                ontology_id: ontology_id.clone(),
-                severity: OntologyValidationSeverity::Info,
-                code: "validation_truncated".to_owned(),
-                message: format!(
-                    "graph has more than {VALIDATE_RELATIONSHIP_LIMIT} relationships; validation truncated"
-                ),
-                target: None,
-                axiom_id: None,
-                provenance: validation_provenance(ontology_id, now),
-                detected_at: now,
-            });
-        }
-        findings.sort_by(|left, right| left.id.cmp(&right.id));
-        Ok(findings)
-    }
-}
-
 /// Caps the number of relationships `validate_graph` scans, so advisory
 /// validation over an oversized graph stays bounded.
-const VALIDATE_RELATIONSHIP_LIMIT: usize = 5_000;
+pub(crate) const VALIDATE_RELATIONSHIP_LIMIT: usize = 5_000;
 
 /// Builds the advisory provenance stamped on every validation finding. Validation
 /// is deterministic and carries no input evidence, so a fixed system actor is used.
-fn validation_provenance(ontology_id: &OntologyId, now: chrono::DateTime<Utc>) -> Provenance {
+pub(crate) fn validation_provenance(
+    ontology_id: &OntologyId,
+    now: chrono::DateTime<Utc>,
+) -> Provenance {
     Provenance {
         source: format!("ontology:{ontology_id}"),
         actor: Actor {

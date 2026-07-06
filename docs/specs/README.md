@@ -5,6 +5,34 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 
 ## Active
 
+- [`rust-crate-integration`](rust-crate-integration/spec.md): stable Rust crate integration contract for embedding Engram as a library — provider facade with capability reporting, typed repository handles, embedding provider abstraction (FastEmbed + Ollama), embedding-space validation, migration/import API with dry-run/apply gating, retrieval trace contract, and conformance harness. Draft.
+- [`sqlite-open-options`](sqlite-open-options/spec.md): common `SqliteOpenOptions` configuration for all SQLite adapters (WAL mode, busy timeout, foreign keys, migrations, directory creation) with `open_with_options` constructors. Shipped.
+- [`demo-reimagine`](demo-reimagine/spec.md): prune the demo to 5 views
+  (Dashboard, hero Graph, Chat, Memory, Belief); rebuild the graph as a 2D
+  community-clustered force graph readable at the class level; add a
+  spec-compliant stdio MCP server GitHub Copilot can spawn. Draft.
+- [`memory-cue-anchors`](memory-cue-anchors/spec.md): entity extraction at write
+  time populates `MemoryContent.entities`; SQLite adapter dispatches
+  `RetrievalMode::Cue` against stored entity anchors for multi-hop retrieval
+  (ADR-0015). Shipped.
+- [`source-assertion-reconciliation`](source-assertion-reconciliation/spec.md):
+  reconciliation core — a federated `SourceAssertion` domain type + an in-memory
+  authority-aware survivorship synthesizer (injected authority policy, advisory
+  contradiction on tie) (ADR-0012, ADR-0013, RFC-0007). Draft.
+- [`contract-first-ingestion`](contract-first-ingestion/spec.md): Phase A of
+  cross-repo linkage — parse OpenAPI documents in scanned repos into
+  `EntityKind::Api` contract nodes keyed by a normalized `METHOD /path` identifier
+  with `exposes` edges; two repos declaring the same key merge into one node
+  (ADR-0016, ADR-0017, RFC-0008). Shipped.
+- [`structured-repo-identity`](structured-repo-identity/spec.md): foundation for
+  cross-repo linkage — a SHA-free stable-source-key (normalized git remote) on
+  each `KnowledgeGraph` (metadata + lifted columns), `graph_id` attribution on
+  entities, `SourceKind::GitRepository` tagging, and one `EntityKind::Repository`
+  node with `belongs_to` edges (ADR-0017, ADR-0018, RFC-0008/0009). Shipped.
+- [`knowledge-graph-retraction`](knowledge-graph-retraction/spec.md): re-ingest
+  converges the knowledge graph to current state — `delete_*` ports on
+  KnowledgeRepository/KnowledgeGraphRepository (cascade + scope-checked) and a
+  per-(stable_source_key,path) reconcile in ingest (RFC-0009, ADR-0018). Shipped.
 - [`napi-bridge-completion`](napi-bridge-completion/spec.md): demo Slice 0 — make
   the `engram-node` N-API binding loadable from Node and ship a Hono + Vite/React
   demo proving a browser→Node→Rust memory round-trip (RFC-0003, PHASE52). Shipped.

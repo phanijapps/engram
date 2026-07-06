@@ -91,6 +91,17 @@ where
             confidence: Some(1.0),
             method: Some("deterministic_text_ingestion".to_owned()),
         };
+        // Carry the stable-source-key (if present) onto the source's metadata so
+        // the downstream extractor can stamp each KnowledgeGraph and emit the
+        // per-source Repository entity without additional plumbing.
+        let source_metadata = request.stable_source_key.as_deref().map(|key| {
+            let mut m = Metadata::default();
+            m.insert(
+                crate::source_key::STABLE_SOURCE_KEY.to_owned(),
+                serde_json::Value::String(key.to_owned()),
+            );
+            m
+        });
         let source = KnowledgeSource {
             id: source_id.clone(),
             kind: request.source_kind,
@@ -102,7 +113,7 @@ where
             provenance: provenance.clone(),
             created_at: now,
             updated_at: None,
-            metadata: None,
+            metadata: source_metadata,
         };
         let document = SourceDocument {
             id: document_id.clone(),

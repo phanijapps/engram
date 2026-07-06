@@ -4,7 +4,7 @@
 //! events, and idempotency responses through SQLite repository helpers.
 
 use engram_domain::*;
-use engram_memory::CoreResult;
+use engram_memory::{self, CoreResult};
 use serde_json::json;
 
 use crate::{
@@ -37,10 +37,22 @@ pub(crate) async fn write_memory(
 
     let now = service.clock.now();
     let memory_id = service.ids.new_id("memory");
+
+    // Enrich content.entities with extracted cue anchors before persisting.
+    let content = {
+        let extracted = engram_memory::extract(&request.content.text);
+        let caller_entities = request.content.entities;
+        let entities = engram_memory::merge_entities(extracted, caller_entities);
+        MemoryContent {
+            entities,
+            ..request.content
+        }
+    };
+
     let record = MemoryRecord {
         id: memory_id.clone(),
         kind: request.kind,
-        content: request.content,
+        content,
         scope: request.scope.clone(),
         provenance: request.provenance.clone(),
         policy: request.policy,

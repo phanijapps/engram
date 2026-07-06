@@ -36,6 +36,27 @@ impl SequentialIdGenerator {
             value: AtomicU64::new(1),
         }
     }
+
+    /// Advances the counter past `used` so subsequent IDs never collide with
+    /// rows a previous process already wrote to a reopened database.
+    ///
+    /// Monotonic but race-free: if another caller already advanced past `used`,
+    /// this is a no-op. Used by file-backed opens to seed the generator from the
+    /// highest existing ID suffix on disk.
+    pub fn advance_past(&self, used: u64) {
+        let mut current = self.value.load(Ordering::Relaxed);
+        while current <= used {
+            match self.value.compare_exchange(
+                current,
+                used + 1,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(actual) => current = actual,
+            }
+        }
+    }
 }
 
 impl IdGenerator for SequentialIdGenerator {

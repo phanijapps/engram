@@ -50,6 +50,7 @@ fn request() -> DocumentIngestRequest {
             .to_owned(),
         policy: policy(),
         actor: actor(),
+        stable_source_key: None,
     }
 }
 

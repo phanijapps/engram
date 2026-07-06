@@ -12,6 +12,8 @@ crate-type = ["cdylib", "rlib"]
 chrono.workspace = true
 engram-core = { path = "../../core/orchestration" }
 engram-domain = { path = "../../core/domain" }
+engram-conformance = { path = "../../adapters/integration" }
+engram-integration = { path = "../../core/integration" }
 engram-ingest = { path = "../../adapters/ingest" }
 engram-knowledge = { path = "../../core/knowledge" }
 engram-memory = { path = "../../core/memory" }

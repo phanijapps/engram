@@ -1,0 +1,30 @@
+[package]
+name = "engram-conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+engram-domain = { path = "../../core/domain" }
+engram-runtime = { path = "../../core/runtime" }
+engram-integration = { path = "../../core/integration" }
+engram-memory = { path = "../../core/memory" }
+engram-knowledge = { path = "../../core/knowledge" }
+engram-hierarchy = { path = "../../core/hierarchy" }
+engram-belief = { path = "../../core/belief" }
+engram-retrieval = { path = "../../core/retrieval" }
+engram-store-sql = { path = "../memory/sqlite" }
+engram-store-knowledge-sqlite = { path = "../knowledge/sqlite" }
+engram-store-hierarchy-sqlite = { path = "../hierarchy/sqlite" }
+engram-store-belief-sqlite = { path = "../orchestration/belief-sqlite" }
+engram-store-vector = { path = "../retrieval/sqlite-vec" }
+async-trait.workspace = true
+chrono.workspace = true
+futures.workspace = true
+serde_json.workspace = true
+
+[features]
+default = []
+# Enables the FastEmbed EmbeddingProvider wrapper (pulls model-bearing code).
+fastembed = ["engram-store-vector/fastembed-provider"]

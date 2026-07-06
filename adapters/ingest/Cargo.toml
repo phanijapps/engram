@@ -15,6 +15,7 @@ ignore.workspace = true
 rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_yml = "0.0.12"
 sha2.workspace = true
 tree-sitter = "0.26"
 tree-sitter-bash = "0.25"
@@ -33,3 +34,4 @@ tree-sitter-typescript = "0.23"
 [dev-dependencies]
 engram-store-knowledge-sqlite = { path = "../knowledge/sqlite" }
 futures.workspace = true
+tempfile = "3"

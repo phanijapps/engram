@@ -12,8 +12,12 @@ use std::collections::{HashMap, HashSet};
 use chrono::Utc;
 use engram_domain::*;
 use engram_knowledge::{CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
+use serde_json::Value as JsonValue;
 
-use crate::hash::content_hash;
+use crate::{
+    hash::content_hash,
+    source_key::{SOURCE_PATH_KEY, STABLE_SOURCE_KEY},
+};
 
 /// The graph records produced by one extraction pass.
 #[derive(Debug, Clone, PartialEq)]
@@ -60,6 +64,30 @@ impl GraphExtractor {
     ) -> CoreResult<ExtractedGraph> {
         let now = Utc::now();
         let graph_id = graph_id_for(document);
+
+        // T4: Stamp the graph's metadata with the stable-source-key (from the
+        // source's metadata, threaded there by the ingestor from the request)
+        // and the document's source-relative path. Both are lifted into indexed
+        // columns by the SQLite adapter on write.
+        let graph_metadata = {
+            let mut m = Metadata::default();
+            if let Some(key) = source
+                .metadata
+                .as_ref()
+                .and_then(|meta| meta.get(STABLE_SOURCE_KEY))
+                .and_then(|v| v.as_str())
+            {
+                m.insert(
+                    STABLE_SOURCE_KEY.to_owned(),
+                    JsonValue::String(key.to_owned()),
+                );
+            }
+            if let Some(path) = &document.path {
+                m.insert(SOURCE_PATH_KEY.to_owned(), JsonValue::String(path.clone()));
+            }
+            if m.is_empty() { None } else { Some(m) }
+        };
+
         let graph = KnowledgeGraph {
             id: graph_id.clone(),
             scope: source.scope.clone(),
@@ -74,7 +102,7 @@ impl GraphExtractor {
             provenance: source.provenance.clone(),
             created_at: now,
             updated_at: None,
-            metadata: None,
+            metadata: graph_metadata,
         };
 
         let is_code = matches!(document.kind, SourceDocumentKind::Code);
@@ -235,6 +263,67 @@ impl GraphExtractor {
         }
         let chunk_entities = chunk_entities_map.into_iter().collect::<Vec<_>>();
 
+        // T5: Emit exactly one EntityKind::Repository node per source (keyed by
+        // (scope.tenant, stable_source_key) so idempotent upserts converge across
+        // documents and re-scans), plus a belongs_to relationship from this
+        // document graph to the Repository node. The Repository entity has
+        // graph_id = None (not file-scoped). The belongs_to edge carries the
+        // document graph's graph_id so it retracts with the graph.
+        let graph_name_for_bt = graph.name.clone();
+        if let Some(key) = source
+            .metadata
+            .as_ref()
+            .and_then(|meta| meta.get(STABLE_SOURCE_KEY))
+            .and_then(|v| v.as_str())
+        {
+            let repo_id = repo_entity_id(&source.scope, key);
+            let rel_id = belongs_to_rel_id(&graph_id, &repo_id);
+
+            let mut repo_meta = Metadata::default();
+            repo_meta.insert(
+                STABLE_SOURCE_KEY.to_owned(),
+                JsonValue::String(key.to_owned()),
+            );
+            entities.push(KnowledgeEntity {
+                id: repo_id.clone(),
+                graph_id: None, // per spec: Repository node is not file-scoped
+                kind: EntityKind::Repository,
+                name: key.to_owned(),
+                aliases: Vec::new(),
+                scope: source.scope.clone(),
+                source_refs: Vec::new(),
+                concept_refs: Vec::new(),
+                provenance: source.provenance.clone(),
+                created_at: now,
+                updated_at: None,
+                metadata: Some(repo_meta),
+            });
+
+            relationships.push(KnowledgeRelationship {
+                id: rel_id,
+                graph_id: Some(graph_id.clone()), // edge retracts with the document graph
+                subject: EntityRef {
+                    id: Some(graph_id.clone()),
+                    kind: Some("graph".to_owned()),
+                    name: Some(graph_name_for_bt),
+                    aliases: Vec::new(),
+                },
+                predicate: "belongs_to".to_owned(),
+                object: EntityRef {
+                    id: Some(repo_id),
+                    kind: Some("repository".to_owned()),
+                    name: Some(key.to_owned()),
+                    aliases: Vec::new(),
+                },
+                scope: source.scope.clone(),
+                evidence: Vec::new(),
+                confidence: Some(1.0),
+                provenance: source.provenance.clone(),
+                created_at: now,
+                updated_at: None,
+            });
+        }
+
         Ok(ExtractedGraph {
             graph,
             entities,
@@ -371,6 +460,41 @@ fn relationship_id(graph_id: &KnowledgeGraphId, subject: &str, object: &str) -> 
         "rel-{}",
         content_hash(format!("{graph_id}\u{1f}{subject}\u{1f}{object}"))
             .trim_start_matches("sha256:")
+    ))
+}
+
+/// Derives a stable, deterministic `EntityId` for the per-source Repository
+/// node. Keyed on the FULL scope discriminator `(tenant, subject, workspace,
+/// session, environment, stable_source_key)` so that the id matches the stored
+/// scope exactly — two documents of the same repo under the same scope converge
+/// to one entity (idempotent upsert), while the same repo under a different
+/// scope (e.g. different workspace) produces a distinct entity whose
+/// `scope_allows` filter is consistent with the id.
+///
+/// Exposed as `pub(crate)` so the ingest reconciler can compute the same id
+/// when deciding whether to delete the per-source Repository node.
+pub(crate) fn repo_entity_id(scope: &Scope, key: &str) -> EntityId {
+    Id::from(format!(
+        "repo-{}",
+        content_hash(format!(
+            "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{key}",
+            scope.tenant,
+            scope.subject.as_deref().unwrap_or(""),
+            scope.workspace.as_deref().unwrap_or(""),
+            scope.session.as_deref().unwrap_or(""),
+            scope.environment.as_deref().unwrap_or(""),
+        ))
+        .trim_start_matches("sha256:")
+    ))
+}
+
+/// Derives a stable `RelationshipId` for the `belongs_to` edge from a document
+/// graph to its Repository node. Keyed on `(graph_id, repo_entity_id)` so the
+/// edge is idempotent and retracts when the graph is removed.
+fn belongs_to_rel_id(graph_id: &KnowledgeGraphId, repo_entity_id: &EntityId) -> RelationshipId {
+    Id::from(format!(
+        "belongs-{}",
+        content_hash(format!("{graph_id}\u{1f}{repo_entity_id}")).trim_start_matches("sha256:")
     ))
 }
 

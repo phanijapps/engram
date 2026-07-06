@@ -170,19 +170,62 @@ pub enum RerankStrategy {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FusionTrace {
+    /// Unique identifier for this retrieval query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query_id: Option<String>,
+
+    /// Name of the vector index used (if applicable).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vector_index: Option<String>,
+
+    /// Time taken to generate embeddings in milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub embedding_time_ms: Option<u64>,
+
+    /// Time taken for vector search in milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search_time_ms: Option<u64>,
+
+    /// Source that produced this result.
     pub source: String,
+
+    /// Rank of this result in the source output.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_rank: Option<u32>,
+
+    /// Score from the source.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_score: Option<f32>,
+
+    /// Final score after fusion and reranking.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub score: Option<f32>,
+
+    /// Final rank after fusion and reranking.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rank: Option<u32>,
+
+    /// Fusion strategy used.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fusion_strategy: Option<FusionStrategy>,
+
+    /// Score after fusion.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fusion_score: Option<f32>,
+
+    /// Rerank strategy used.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rerank_strategy: Option<RerankStrategy>,
+
+    /// Score after reranking.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rerank_score: Option<f32>,
+
+    /// Reason why this result was discarded (if applicable).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub discard_reason: Option<String>,
+
+    /// IDs of results this was deduplicated with.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub deduplicated_with: Vec<String>,
 }

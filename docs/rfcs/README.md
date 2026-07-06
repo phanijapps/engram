@@ -12,3 +12,7 @@ specs under `docs/specs/`. See `docs/CONVENTIONS.md` for the RFC lifecycle.
 | [0004](0004-enterprise-knowledge-platform.md) | Enterprise knowledge platform demo | Draft | 2026-06-30 |
 | [0005](0005-backend-agnostic-retrieval-composition.md) | Backend-agnostic retrieval composition (graph + vector fusion) | Accepted | 2026-07-01 |
 | [0006](0006-split-behavior-ports-from-core.md) | Split behavior ports from engram-core | Accepted | 2026-07-01 |
+| [0007](0007-federated-assertion-reconciliation.md) | Federated assertion reconciliation | Accepted | 2026-07-03 |
+| [0008](0008-cross-repo-linkage.md) | Cross-repo linkage | Accepted | 2026-07-04 |
+| [0009](0009-knowledge-graph-retraction.md) | Knowledge-graph retraction and convergence | Accepted | 2026-07-04 |
+| [0010](0010-decompose-god-modules.md) | Decompose god modules by responsibility | Draft | 2026-07-05 |

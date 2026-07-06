@@ -15,6 +15,7 @@ engram-domain = { path = "../../../core/domain" }
 engram-retrieval = { path = "../../../core/retrieval" }
 engram-runtime = { path = "../../../core/runtime" }
 rusqlite.workspace = true
+sha2.workspace = true
 sqlite-vec.workspace = true
 
 [dependencies.fastembed]

@@ -81,6 +81,7 @@ fn remember() {
         .to_owned(),
         policy: policy(),
         actor: actor(),
+        stable_source_key: None,
     }
 }
 

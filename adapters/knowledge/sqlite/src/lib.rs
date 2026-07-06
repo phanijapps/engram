@@ -11,10 +11,14 @@
 //! storage concern stays behind its own crate boundary so a durable knowledge
 //! backend can evolve (or move to Postgres / a graph store) without coupling.
 
+mod graph;
+mod knowledge;
+mod ontology;
 mod retrieval;
 mod schema;
 mod scope;
 mod service;
+mod taxonomy;
 
 pub use retrieval::{GraphCandidateSource, GraphRetrievalIndex};
 pub use service::SqlKnowledgeStore;

@@ -116,13 +116,20 @@ fn fuse_group(mut group: Vec<ScoredCandidate>) -> RetrievalResult {
     let mut result = winner.candidate;
     result.score = fused_score(result.score, fusion_score);
     result.fusion_trace = Some(FusionTrace {
+        query_id: None,
+        vector_index: None,
+        embedding_time_ms: None,
+        search_time_ms: None,
         source: source_summary,
         source_rank: Some(winner.source_rank),
         source_score: Some(winner.weighted_score),
+        score: None,
+        rank: None,
         fusion_strategy: Some(FusionStrategy::WeightedSum),
         fusion_score: Some(fusion_score),
         rerank_strategy: None,
         rerank_score: None,
+        discard_reason: None,
         deduplicated_with,
     });
     result

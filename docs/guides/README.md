@@ -14,6 +14,9 @@ This directory contains user-facing guides organized by the [Diátaxis framework
 ### Tutorials
 - [Add memory to a Rust agent with Engram](tutorials/use-engram-as-memory-layer.md) — Getting started: configure, bootstrap, write, and retrieve memories, with an Ollama embeddings configuration step
 
+### How-to Guides
+- [Use SurrealDB as the Engram store](how-to/build-a-surrealdb-store.md) — Build a new storage backend by implementing the port traits the SQLite adapter does
+
 ### Explanations
 - [How repos get indexed](explanation/how-repos-get-indexed.md) — Understanding Engram's code repository indexing
 

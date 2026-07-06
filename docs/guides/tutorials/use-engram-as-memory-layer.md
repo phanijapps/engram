@@ -74,7 +74,7 @@ let provider = bootstrap_provider(&config)?;
 
 The configuration carries five things that shape every later operation:
 
-- **`storage_path`** — where the SQLite databases live. Each capability family gets its own file (`memory.db`, `knowledge.db`, …).
+- **`storage_path`** — where the SQLite databases live. Each capability family gets its own file by default (`memory.db`, `knowledge.db`, …); see Step 6 to collapse them into one file.
 - **`trusted_root`** — Engram refuses any storage path that escapes this directory. It is a confinement guard, not a suggestion.
 - **`ScopeMappingStrategy`** — `Strict` means a query in one tenant never sees another tenant's records.
 - **`EmbeddingProviderConfig`** — which embedding model the vector index is built for. Dimensions are part of the identity, not just a size check; see Step 5.
@@ -254,18 +254,88 @@ With Ollama running on `http://localhost:11434`, `bootstrap_provider` constructs
 
 Engram identifies an embedding space by provider + model + dimensions + prompt profile, not dimensions alone. Two 768-dimensional models are not interchangeable; the guard prevents silently searching one model's vectors with another's queries.
 
+## Step 6 — Use one SQLite file instead of five
+
+By default Engram writes one database file per store family. Desktop and local-first hosts often prefer a single file — one thing to back up, copy, or delete. Opt in with the storage-layout builder on the config:
+
+```rust
+use engram_integration::SqliteStorageLayout;
+
+let config = EngramConfig::new(
+    storage_path,
+    std::env::temp_dir(),
+    ScopeMappingStrategy::Strict,
+    EmbeddingProviderConfig {
+        provider_type: "fastembed".to_string(),
+        model: "bge-small-en-v1.5".to_string(),
+        dimensions: 384,
+        prompt_profile: "query".to_string(),
+        normalization: None,
+    },
+    MigrationMode::DryRun,
+    CapabilityPolicy::FailClosed,
+)
+.with_sqlite_storage_layout(SqliteStorageLayout::SingleFile {
+    file_name: "engram_data.db".to_string(),
+});
+```
+
+After `bootstrap_provider`, your storage directory holds one database plus its WAL sidecars:
+
+```
+engram-getting-started/
+  engram_data.db
+  engram_data.db-wal
+  engram_data.db-shm
+```
+
+Every store — memory, knowledge, belief, hierarchy, vectors — opens that same file. Their table names are disjoint, so the schemas coexist without collisions.
+
+The `file_name` is validated at bootstrap: it must be a bare name (no path separators, no `..`, no drive letters) with a `.db`, `.sqlite`, or `.sqlite3` extension. A bad name fails `bootstrap_provider` with an error rather than writing outside your storage path.
+
+> Multi-file remains the default. Nothing changes for existing configs that don't set a layout — the field defaults to `MultiFileDirectory`, and configs serialized without it deserialize to the default.
+
+## Reference: provider handles
+
+Once bootstrapped, the provider exposes one typed handle per capability family. Every handle is `Option<&Arc<dyn Trait>>` — `None` when that family reported `Unsupported`, so check `provider.capabilities()` first, or `.expect()` after confirming the family is `Supported`.
+
+| Handle | Trait | Operations |
+| --- | --- | --- |
+| `provider.memory()` | `MemoryService` | `write_memory`, `retrieve`, `forget` |
+| `provider.knowledge()` | `KnowledgeRepository` | `put_source`, `put_document`, `put_chunk` / `get_chunk`, `put_entity` / `get_entity`, `put_relationship` / `get_relationship`, `delete_entity`, `delete_relationship` |
+| `provider.graph()` | `KnowledgeGraphRepository` | `put_graph` / `get_graph`, `neighbors`, `delete_graph`, `list_graphs_by_source` |
+| `provider.ontology()` | `OntologyRepository` | `put_ontology`, `put_class`, `put_property`, `put_axiom`, `get_ontology`, `validate_graph` |
+| `provider.taxonomy()` | `TaxonomyRepository` | `put_concept_scheme` / `get_concept_scheme`, `put_concept`, `put_concept_relation`, `list_concepts` |
+| `provider.beliefs()` | `BeliefRepository` | `put_belief` / `upsert_belief`, `get_belief`, `retract_belief`, `list_stale`, `put_contradiction` / `get_contradiction`, `resolve_contradiction`, `detect_contradictions` |
+| `provider.hierarchy()` | `HierarchyRepository` | `put_node`, `put_relation`, `path_for`, `build_hierarchy` |
+| `provider.vectors()` | `VectorIndex` | `embedding_space`, `insert`, `search`, `delete_target`, `clear` |
+| `provider.migration()` | `MigrationService` | `dry_run_import`, `apply_import`, `schema_version`, `adapter_version` |
+
+Diagnostics that don't belong to one family:
+
+| Method | Returns |
+| --- | --- |
+| `provider.capabilities()` | `&CapabilityReport` — per-family `Supported` / `Unsupported` / `Degraded` / `RequiresMigration` / `RequiresReindex` / `Misconfigured` |
+| `provider.schema_version()` | storage schema version string |
+| `provider.adapter_version()` | adapter version string |
+| `provider.embedding_provider()` | `Option<&Arc<dyn EmbeddingProvider>>` |
+
+The operations are `async`; call them with `.await`. Scope, policy, and provenance travel with every write the same way they do for memory in Step 3 — the same `Scope`/`Policy`/`Provenance` shapes, just attached to a knowledge entity or belief instead of a memory.
+
 ## What you built
 
-You have a Rust program that configures Engram, bootstraps it through one facade, writes a scoped memory, and reads it back. The data persists in SQLite under your storage path, confined to the trusted root, with scope isolation enforced on every read. Swap the embedding provider in configuration and the vector index follows.
+You have a Rust program that configures Engram, bootstraps it through one facade, writes a scoped memory, and reads it back. The data persists in SQLite under your storage path, confined to the trusted root, with scope isolation enforced on every read. You can swap the embedding provider in configuration, and choose one file or five.
 
 ## Next steps
 
-- To store structured knowledge — entities, relationships, graphs: <!-- TODO: link to knowledge-graph how-to -->
-- To track beliefs and detect contradictions: <!-- TODO: link to beliefs how-to -->
-- To organize memories hierarchically: <!-- TODO: link to hierarchy how-to -->
+- Pick a handle from the [Reference](#reference-provider-handles) table and start writing — knowledge entities, beliefs, hierarchy nodes all follow the same scope/policy/provenance pattern as the memory you wrote.
+- To store structured knowledge: use `provider.knowledge()` and `provider.graph()` (entities, relationships, graphs).
+- To track beliefs and detect contradictions: use `provider.beliefs()`.
+- To organize memories hierarchically: use `provider.hierarchy()`.
+- To import existing data with dry-run validation: use `provider.migration()`.
 - To understand how Engram turns a code repository into a knowledge graph automatically: [How repos get indexed](../explanation/how-repos-get-indexed.md)
-- To import existing data with dry-run validation: <!-- TODO: link to migration how-to -->
 
 ## See also
 
 - The runnable example this tutorial is built from: `examples/rust-integration/` in the Engram repo
+- [Use SurrealDB as the Engram store](../how-to/build-a-surrealdb-store.md) — build a different storage backend by implementing the port traits

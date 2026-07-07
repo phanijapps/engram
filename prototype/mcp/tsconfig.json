@@ -10,7 +10,6 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
-    "declaration": true,
     "outDir": "dist",
     "rootDir": "src"
   },

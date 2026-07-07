@@ -34,3 +34,19 @@ pub fn list_entities_json(store: &Arc<SqlKnowledgeStore>, request_json: String) 
     let result = block_on(store.list_entities(&scope)).map_err(to_napi_error)?;
     encode(&result)
 }
+
+/// Lists entities belonging to a specific source graph (by stable_source_key).
+pub fn list_entities_by_source_json(
+    store: &Arc<SqlKnowledgeStore>,
+    request_json: String,
+) -> Result<String> {
+    let value = decode::<serde_json::Value>(&request_json)?;
+    let scope = scope_field(&value)?;
+    let source_key = value["stableSourceKey"]
+        .as_str()
+        .ok_or_else(|| Error::from_reason("missing stableSourceKey"))?
+        .to_owned();
+    let result = block_on(store.list_entities_by_source(&scope, &source_key))
+        .map_err(to_napi_error)?;
+    encode(&result)
+}

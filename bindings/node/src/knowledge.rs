@@ -17,7 +17,9 @@ use crate::knowledge_concepts::{
     put_concept_scheme_json, validate_taxonomy_proposal_json,
 };
 use crate::knowledge_documents::put_document_json;
-use crate::knowledge_entities::{get_entity_json, list_entities_json, put_entity_json};
+use crate::knowledge_entities::{
+    get_entity_json, list_entities_by_source_json, list_entities_json, put_entity_json,
+};
 use crate::knowledge_fusion::{fuse_rrf_ids_json, fuse_rrf_json, graph_candidates_json};
 use crate::knowledge_graph::{
     get_graph_json, list_graphs_json, neighbors_json, put_graph_json, validate_graph_json,
@@ -26,7 +28,8 @@ use crate::knowledge_ontology::{
     get_ontology_json, put_axiom_json, put_class_json, put_ontology_json, put_property_json,
 };
 use crate::knowledge_relationships::{
-    get_relationship_json, list_relationships_json, put_relationship_json,
+    get_relationship_json, list_relationships_by_source_json, list_relationships_json,
+    put_relationship_json,
 };
 use crate::knowledge_sources::{list_sources_json, put_source_json};
 
@@ -140,6 +143,11 @@ impl NativeKnowledgeEngine {
         list_entities_json(&self.store, request_json)
     }
 
+    #[napi(js_name = "listEntitiesBySourceJson")]
+    pub fn list_entities_by_source_json(&self, request_json: String) -> Result<String> {
+        list_entities_by_source_json(&self.store, request_json)
+    }
+
     // --- Relationship operations ---
 
     #[napi(js_name = "putRelationshipJson")]
@@ -155,6 +163,11 @@ impl NativeKnowledgeEngine {
     #[napi(js_name = "listRelationshipsJson")]
     pub fn list_relationships_json(&self, request_json: String) -> Result<String> {
         list_relationships_json(&self.store, request_json)
+    }
+
+    #[napi(js_name = "listRelationshipsBySourceJson")]
+    pub fn list_relationships_by_source_json(&self, request_json: String) -> Result<String> {
+        list_relationships_by_source_json(&self.store, request_json)
     }
 
     // --- Graph operations ---

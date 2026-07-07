@@ -1,0 +1,53 @@
+{
+  "items": [
+    {
+      "id": "result-001",
+      "targetType": "memory",
+      "targetId": "memory-001",
+      "content": "engram v1 uses Rust 2024 for the deterministic core and TypeScript for bindings.",
+      "score": {
+        "total": 0.97,
+        "relevance": 0.95,
+        "confidence": 1,
+        "policyFit": 1
+      },
+      "provenance": {
+        "source": "manual_contract_example",
+        "actor": {
+          "id": "actor-agent-1",
+          "kind": "agent",
+          "displayName": "Contract Agent"
+        },
+        "observedAt": "2026-06-29T12:00:00Z",
+        "confidence": 1,
+        "method": "manual"
+      },
+      "policy": {
+        "visibility": "workspace",
+        "retention": "durable",
+        "sensitivity": "low",
+        "allowedUses": ["retrieval", "evaluation", "debugging"],
+        "deleteMode": "tombstone"
+      },
+      "explanation": {
+        "reason": "Matched stack terms and workspace scope.",
+        "matchedTerms": ["Rust 2024", "TypeScript", "bindings"]
+      },
+      "fusionTrace": {
+        "source": "memory.keyword",
+        "sourceRank": 1,
+        "sourceScore": 0.95,
+        "fusionStrategy": "weighted_sum",
+        "fusionScore": 0.97,
+        "rerankStrategy": "none"
+      }
+    }
+  ],
+  "budget": {
+    "maxItems": 3,
+    "maxTokens": 1200
+  },
+  "omitted": [],
+  "sourceFailures": [],
+  "createdAt": "2026-06-29T12:01:00Z"
+}

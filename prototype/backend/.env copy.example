@@ -1,0 +1,17 @@
+# LLM provider for relationship extraction (RFC 0004 Slice 2) and Q&A (Slice 6).
+# Copy this file to `.env` and fill in real values. `.env` is gitignored.
+#
+# These three values register your OpenAI-compatible endpoint as a custom
+# provider ("ollama-cloud") in a process-local pi `models.json`, generated from
+# this file. The pi SDK (`@earendil-works/pi-coding-agent`) then drives the
+# model headless. The API key is referenced via `$ENGRAM_LLM_API_KEY` (never
+# written to disk); pi resolves it from the environment at request time.
+#
+# Set ENGRAM_LLM_BASE_URL INCLUDING the version segment, e.g.
+# https://host.example.com/v1
+# When these are absent (or the key is the placeholder), the demo runs
+# deterministic-only — no LLM calls are made.
+
+ENGRAM_LLM_BASE_URL=https://api.example.com/v1
+ENGRAM_LLM_API_KEY=replace-me
+ENGRAM_LLM_MODEL=gemma4:31b-cloud

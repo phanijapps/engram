@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engram Code Docs"
+  short_description: "Document and review Engram code surfaces."
+  default_prompt: "Use this skill when adding or reviewing Rust or TypeScript code documentation for engram."

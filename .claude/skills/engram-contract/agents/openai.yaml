@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engram Contract"
+  short_description: "Maintain the Engram domain contract and schemas."
+  default_prompt: "Use this skill when editing Engram contracts, domain data models, schemas, ADRs, or compatibility rules."

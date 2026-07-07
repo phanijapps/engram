@@ -1,0 +1,31 @@
+{
+  "name": "@engram/client",
+  "version": "0.1.0",
+  "description": "Typed Engram client facade over an injected transport.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engram/contracts": "workspace:*",
+    "@engram/node": "workspace:*"
+  }
+}

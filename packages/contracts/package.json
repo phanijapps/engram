@@ -1,0 +1,28 @@
+{
+  "name": "@engram/contracts",
+  "version": "0.1.0",
+  "description": "TypeScript projections of the accepted Engram contracts.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "pnpm run generate && tsup",
+    "generate": "python3 ../../tools/scripts/generate_ts_contracts.py && json2ts -i src/generated/types.schema.generated.json -o src/generated/types.generated.ts --bannerComment \"/* Generated from contracts/v1/schemas/engram-v1.schema.json. Do not edit. */\"",
+    "test": "vitest run",
+    "typecheck": "pnpm run generate && tsc --noEmit"
+  }
+}

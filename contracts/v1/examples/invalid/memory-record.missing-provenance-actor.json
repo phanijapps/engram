@@ -1,0 +1,21 @@
+{
+  "id": "memory-invalid-002",
+  "kind": "fact",
+  "content": {
+    "text": "This memory is invalid because provenance.actor is required.",
+    "format": "text"
+  },
+  "scope": {
+    "tenant": "tenant-demo"
+  },
+  "provenance": {
+    "source": "invalid_example",
+    "observedAt": "2026-06-29T12:00:00Z"
+  },
+  "policy": {
+    "visibility": "workspace",
+    "retention": "durable"
+  },
+  "status": "active",
+  "createdAt": "2026-06-29T12:00:01Z"
+}

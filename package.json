@@ -1,0 +1,33 @@
+{
+  "name": "engram-repo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "backend": "pnpm --filter prototype-backend dev",
+    "backend:start": "pnpm --filter prototype-backend start",
+    "build": "pnpm run build:native && pnpm -r --if-present build",
+    "build:native": "pnpm --filter @engram/node build:native",
+    "check": "pnpm run contracts:generate && pnpm run typecheck && pnpm run test",
+    "clean": "node tools/scripts/clean-workspace.mjs",
+    "contracts:generate": "pnpm --filter @engram/contracts generate",
+    "contracts:check-generated": "pnpm run contracts:generate && git diff --exit-code -- packages/contracts/src/generated",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.0",
+    "json-schema-to-typescript": "^15.0.4",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

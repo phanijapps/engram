@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engram.local/contracts/v1/schemas/memory-record.schema.json",
+  "title": "MemoryRecord",
+  "$ref": "engram-v1.schema.json#/$defs/MemoryRecord"
+}

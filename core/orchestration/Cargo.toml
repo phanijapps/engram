@@ -1,0 +1,22 @@
+[package]
+name = "engram-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+engram-belief = { path = "../belief" }
+engram-consolidation = { path = "../consolidation" }
+engram-eval = { path = "../eval" }
+engram-hierarchy = { path = "../hierarchy" }
+engram-knowledge = { path = "../knowledge" }
+engram-memory = { path = "../memory" }
+engram-retrieval = { path = "../retrieval" }
+engram-runtime = { path = "../runtime" }
+
+[dev-dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+engram-domain = { path = "../domain" }
+futures.workspace = true

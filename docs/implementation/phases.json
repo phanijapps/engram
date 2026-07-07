@@ -1,0 +1,457 @@
+[
+  {
+    "phase_id": "PHASE00",
+    "status": "DONE",
+    "description": "Repository contract baseline",
+    "spec_file": "docs/implementation/phase-00-contract-baseline.md",
+    "plan_file": "docs/implementation/phase-00-contract-baseline.md"
+  },
+  {
+    "phase_id": "PHASE01",
+    "status": "DONE",
+    "description": "Core crate boundaries",
+    "spec_file": "docs/implementation/phase-01-core-boundaries.md",
+    "plan_file": "docs/implementation/phase-01-core-boundaries.md"
+  },
+  {
+    "phase_id": "PHASE02",
+    "status": "DONE",
+    "description": "Write memory completion",
+    "spec_file": "docs/implementation/phase-02-write-memory.md",
+    "plan_file": "docs/implementation/phase-02-write-memory.md"
+  },
+  {
+    "phase_id": "PHASE03",
+    "status": "DONE",
+    "description": "Retrieve context slice",
+    "spec_file": "docs/implementation/phase-03-retrieve-context.md",
+    "plan_file": "docs/implementation/phase-03-retrieve-context.md"
+  },
+  {
+    "phase_id": "PHASE04",
+    "status": "DONE",
+    "description": "Forget, redact, archive, and tombstone",
+    "spec_file": "docs/implementation/phase-04-forget-lifecycle.md",
+    "plan_file": "docs/implementation/phase-04-forget-lifecycle.md"
+  },
+  {
+    "phase_id": "PHASE05",
+    "status": "DONE",
+    "description": "Evaluation harness",
+    "spec_file": "docs/implementation/phase-05-evaluation-harness.md",
+    "plan_file": "docs/implementation/phase-05-evaluation-harness.md"
+  },
+  {
+    "phase_id": "PHASE06",
+    "status": "DONE",
+    "description": "SQL persistence adapter",
+    "spec_file": "docs/specs/sql-service-conformance/spec.md",
+    "plan_file": "docs/specs/sql-service-conformance/plan.md"
+  },
+  {
+    "phase_id": "PHASE07",
+    "status": "DONE",
+    "description": "TypeScript client and native binding",
+    "spec_file": "docs/specs/typescript-native-surface/spec.md",
+    "plan_file": "docs/specs/typescript-native-surface/plan.md"
+  },
+  {
+    "phase_id": "PHASE08",
+    "status": "DONE",
+    "description": "Knowledge ingestion for code and documents",
+    "spec_file": "docs/specs/knowledge-ingestion/spec.md",
+    "plan_file": "docs/specs/knowledge-ingestion/plan.md"
+  },
+  {
+    "phase_id": "PHASE09",
+    "status": "DONE",
+    "description": "Vector and hybrid retrieval",
+    "spec_file": "docs/specs/sqlite-vector-retrieval/spec.md",
+    "plan_file": "docs/specs/sqlite-vector-retrieval/plan.md"
+  },
+  {
+    "phase_id": "PHASE10",
+    "status": "DONE",
+    "description": "Hierarchy navigation",
+    "spec_file": "docs/specs/hierarchy-navigation/spec.md",
+    "plan_file": "docs/specs/hierarchy-navigation/plan.md"
+  },
+  {
+    "phase_id": "PHASE11",
+    "status": "DONE",
+    "description": "Belief network",
+    "spec_file": "docs/specs/belief-network/spec.md",
+    "plan_file": "docs/specs/belief-network/plan.md"
+  },
+  {
+    "phase_id": "PHASE12",
+    "status": "DONE",
+    "description": "Consolidation and sleep cycle",
+    "spec_file": "docs/specs/consolidation-sleep/spec.md",
+    "plan_file": "docs/specs/consolidation-sleep/plan.md"
+  },
+  {
+    "phase_id": "PHASE13",
+    "status": "DONE",
+    "description": "Integrations and runtime adapters",
+    "spec_file": "docs/specs/runtime-adapters/spec.md",
+    "plan_file": "docs/specs/runtime-adapters/plan.md"
+  },
+  {
+    "phase_id": "PHASE14",
+    "status": "DONE",
+    "description": "Production hardening",
+    "spec_file": "docs/specs/production-hardening/spec.md",
+    "plan_file": "docs/specs/production-hardening/plan.md"
+  },
+  {
+    "phase_id": "PHASE15",
+    "status": "DONE",
+    "description": "Filesystem source reader",
+    "spec_file": "docs/specs/filesystem-source-reader/spec.md",
+    "plan_file": "docs/specs/filesystem-source-reader/plan.md"
+  },
+  {
+    "phase_id": "PHASE16",
+    "status": "DONE",
+    "description": "Git source reader",
+    "spec_file": "docs/specs/git-source-reader/spec.md",
+    "plan_file": "docs/specs/git-source-reader/plan.md"
+  },
+  {
+    "phase_id": "PHASE17",
+    "status": "DONE",
+    "description": "Code symbol chunker",
+    "spec_file": "docs/specs/code-symbol-chunker/spec.md",
+    "plan_file": "docs/specs/code-symbol-chunker/plan.md"
+  },
+  {
+    "phase_id": "PHASE18",
+    "status": "DONE",
+    "description": "Hybrid retrieval fusion",
+    "spec_file": "docs/specs/hybrid-retrieval-fusion/spec.md",
+    "plan_file": "docs/specs/hybrid-retrieval-fusion/plan.md"
+  },
+  {
+    "phase_id": "PHASE19",
+    "status": "DONE",
+    "description": "Mutating consolidation gates",
+    "spec_file": "docs/specs/mutating-consolidation-gates/spec.md",
+    "plan_file": "docs/specs/mutating-consolidation-gates/plan.md"
+  },
+  {
+    "phase_id": "PHASE20",
+    "status": "DONE",
+    "description": "In-memory retrieval fusion wiring",
+    "spec_file": "docs/specs/in-memory-retrieval-fusion-wiring/spec.md",
+    "plan_file": "docs/specs/in-memory-retrieval-fusion-wiring/plan.md"
+  },
+  {
+    "phase_id": "PHASE21",
+    "status": "DONE",
+    "description": "In-memory knowledge retrieval",
+    "spec_file": "docs/specs/in-memory-knowledge-retrieval/spec.md",
+    "plan_file": "docs/specs/in-memory-knowledge-retrieval/plan.md"
+  },
+  {
+    "phase_id": "PHASE22",
+    "status": "DONE",
+    "description": "Vector retrieval candidates",
+    "spec_file": "docs/specs/vector-retrieval-candidates/spec.md",
+    "plan_file": "docs/specs/vector-retrieval-candidates/plan.md"
+  },
+  {
+    "phase_id": "PHASE23",
+    "status": "DONE",
+    "description": "In-memory consolidation compaction",
+    "spec_file": "docs/specs/in-memory-consolidation-compaction/spec.md",
+    "plan_file": "docs/specs/in-memory-consolidation-compaction/plan.md"
+  },
+  {
+    "phase_id": "PHASE24",
+    "status": "DONE",
+    "description": "In-memory consolidation decay",
+    "spec_file": "docs/specs/in-memory-consolidation-decay/spec.md",
+    "plan_file": "docs/specs/in-memory-consolidation-decay/plan.md"
+  },
+  {
+    "phase_id": "PHASE25",
+    "status": "DONE",
+    "description": "In-memory hierarchy base build",
+    "spec_file": "docs/specs/in-memory-hierarchy-base-build/spec.md",
+    "plan_file": "docs/specs/in-memory-hierarchy-base-build/plan.md"
+  },
+  {
+    "phase_id": "PHASE26",
+    "status": "DONE",
+    "description": "In-memory belief assertion synthesis",
+    "spec_file": "docs/specs/in-memory-belief-assertion-synthesis/spec.md",
+    "plan_file": "docs/specs/in-memory-belief-assertion-synthesis/plan.md"
+  },
+  {
+    "phase_id": "PHASE27",
+    "status": "DONE",
+    "description": "In-memory assertion contradiction detection",
+    "spec_file": "docs/specs/in-memory-assertion-contradiction-detection/spec.md",
+    "plan_file": "docs/specs/in-memory-assertion-contradiction-detection/plan.md"
+  },
+  {
+    "phase_id": "PHASE28",
+    "status": "DONE",
+    "description": "In-memory belief retrieval",
+    "spec_file": "docs/specs/in-memory-belief-retrieval/spec.md",
+    "plan_file": "docs/specs/in-memory-belief-retrieval/plan.md"
+  },
+  {
+    "phase_id": "PHASE29",
+    "status": "DONE",
+    "description": "In-memory hierarchy retrieval context",
+    "spec_file": "docs/specs/in-memory-hierarchy-retrieval-context/spec.md",
+    "plan_file": "docs/specs/in-memory-hierarchy-retrieval-context/plan.md"
+  },
+  {
+    "phase_id": "PHASE30",
+    "status": "DONE",
+    "description": "In-memory hierarchy retrieval expansion",
+    "spec_file": "docs/specs/in-memory-hierarchy-retrieval-expansion/spec.md",
+    "plan_file": "docs/specs/in-memory-hierarchy-retrieval-expansion/plan.md"
+  },
+  {
+    "phase_id": "PHASE31",
+    "status": "DONE",
+    "description": "In-memory hierarchy aggregate build",
+    "spec_file": "docs/specs/in-memory-hierarchy-aggregate-build/spec.md",
+    "plan_file": "docs/specs/in-memory-hierarchy-aggregate-build/plan.md"
+  },
+  {
+    "phase_id": "PHASE32",
+    "status": "DONE",
+    "description": "In-memory retrieval index composition",
+    "spec_file": "docs/specs/in-memory-retrieval-index-composition/spec.md",
+    "plan_file": "docs/specs/in-memory-retrieval-index-composition/plan.md"
+  },
+  {
+    "phase_id": "PHASE33",
+    "status": "DONE",
+    "description": "In-memory contradiction resolution",
+    "spec_file": "docs/specs/in-memory-contradiction-resolution/spec.md",
+    "plan_file": "docs/specs/in-memory-contradiction-resolution/plan.md"
+  },
+  {
+    "phase_id": "PHASE34",
+    "status": "DONE",
+    "description": "In-memory contradiction-aware belief ranking",
+    "spec_file": "docs/specs/in-memory-contradiction-aware-belief-ranking/spec.md",
+    "plan_file": "docs/specs/in-memory-contradiction-aware-belief-ranking/plan.md"
+  },
+  {
+    "phase_id": "PHASE35",
+    "status": "DONE",
+    "description": "FastEmbed query provider",
+    "spec_file": "docs/specs/fastembed-query-provider/spec.md",
+    "plan_file": "docs/specs/fastembed-query-provider/plan.md"
+  },
+  {
+    "phase_id": "PHASE36",
+    "status": "DONE",
+    "description": "Local runtime examples",
+    "spec_file": "docs/specs/local-runtime-examples/spec.md",
+    "plan_file": "docs/specs/local-runtime-examples/plan.md"
+  },
+  {
+    "phase_id": "PHASE37",
+    "status": "DONE",
+    "description": "In-memory semantic drift detection",
+    "spec_file": "docs/specs/in-memory-semantic-drift-detection/spec.md",
+    "plan_file": "docs/specs/in-memory-semantic-drift-detection/plan.md"
+  },
+  {
+    "phase_id": "PHASE38",
+    "status": "DONE",
+    "description": "In-memory hierarchy aggregate summaries",
+    "spec_file": "docs/specs/in-memory-hierarchy-aggregate-summaries/spec.md",
+    "plan_file": "docs/specs/in-memory-hierarchy-aggregate-summaries/plan.md"
+  },
+  {
+    "phase_id": "PHASE39",
+    "status": "DONE",
+    "description": "CI vector feature gates",
+    "spec_file": "docs/specs/ci-vector-feature-gates/spec.md",
+    "plan_file": "docs/specs/ci-vector-feature-gates/plan.md"
+  },
+  {
+    "phase_id": "PHASE40",
+    "status": "DONE",
+    "description": "Open source governance",
+    "spec_file": "docs/specs/open-source-governance/spec.md",
+    "plan_file": "docs/specs/open-source-governance/plan.md"
+  },
+  {
+    "phase_id": "PHASE41",
+    "status": "DONE",
+    "description": "Contributor validation parity",
+    "spec_file": "docs/specs/contributor-validation-parity/spec.md",
+    "plan_file": "docs/specs/contributor-validation-parity/plan.md"
+  },
+  {
+    "phase_id": "PHASE42",
+    "status": "DONE",
+    "description": "SQLite file-backed construction",
+    "spec_file": "docs/specs/sqlite-file-backed-construction/spec.md",
+    "plan_file": "docs/specs/sqlite-file-backed-construction/plan.md"
+  },
+  {
+    "phase_id": "PHASE43",
+    "status": "DONE",
+    "description": "Release verification workflow",
+    "spec_file": "docs/specs/release-verification-workflow/spec.md",
+    "plan_file": "docs/specs/release-verification-workflow/plan.md"
+  },
+  {
+    "phase_id": "PHASE44",
+    "status": "DONE",
+    "description": "Local benchmark smoke",
+    "spec_file": "docs/specs/local-benchmark-smoke/spec.md",
+    "plan_file": "docs/specs/local-benchmark-smoke/plan.md"
+  },
+  {
+    "phase_id": "PHASE45",
+    "status": "DONE",
+    "description": "Memory contract fixture runners",
+    "spec_file": "docs/specs/memory-contract-fixture-runners/spec.md",
+    "plan_file": "docs/specs/memory-contract-fixture-runners/plan.md"
+  },
+  {
+    "phase_id": "PHASE46",
+    "status": "DONE",
+    "description": "Accepted retrieval fixtures",
+    "spec_file": "docs/specs/accepted-retrieval-fixtures/spec.md",
+    "plan_file": "docs/specs/accepted-retrieval-fixtures/plan.md"
+  },
+  {
+    "phase_id": "PHASE47",
+    "status": "DONE",
+    "description": "Forget mode contract examples",
+    "spec_file": "docs/specs/forget-mode-contract-examples/spec.md",
+    "plan_file": "docs/specs/forget-mode-contract-examples/plan.md"
+  },
+  {
+    "phase_id": "PHASE48",
+    "status": "DONE",
+    "description": "Evaluation report generation",
+    "spec_file": "docs/specs/evaluation-report-generation/spec.md",
+    "plan_file": "docs/specs/evaluation-report-generation/plan.md"
+  },
+  {
+    "phase_id": "PHASE49",
+    "status": "DONE",
+    "description": "SQL adapter design alignment",
+    "spec_file": "docs/specs/sql-adapter-design-alignment/spec.md",
+    "plan_file": "docs/specs/sql-adapter-design-alignment/plan.md"
+  },
+  {
+    "phase_id": "PHASE50",
+    "status": "DONE",
+    "description": "Roadmap validation sweep",
+    "spec_file": "docs/specs/roadmap-validation-sweep/spec.md",
+    "plan_file": "docs/specs/roadmap-validation-sweep/plan.md"
+  },
+  {
+    "phase_id": "PHASE51",
+    "status": "DONE",
+    "description": "Memory and knowledge crate boundaries",
+    "spec_file": "docs/specs/memory-knowledge-boundaries/spec.md",
+    "plan_file": "docs/specs/memory-knowledge-boundaries/plan.md"
+  },
+  {
+    "phase_id": "PHASE52",
+    "status": "DONE",
+    "description": "Demo Slice 0: N-API build pipeline + real memory bridge + Node backend + frontend shell",
+    "spec_file": "docs/specs/napi-bridge-completion/spec.md",
+    "plan_file": "docs/specs/napi-bridge-completion/plan.md"
+  },
+  {
+    "phase_id": "PHASE53",
+    "status": "DONE",
+    "description": "Demo Slice 1: SQLite knowledge-graph adapter + TaxonomyRepository port + forbidden-import gate",
+    "spec_file": "docs/specs/sqlite-knowledge-graph/spec.md",
+    "plan_file": "docs/specs/sqlite-knowledge-graph/plan.md"
+  },
+  {
+    "phase_id": "PHASE54",
+    "status": "DONE",
+    "description": "Demo Slice 2: deterministic knowledge-graph extractor (code-symbol + document)",
+    "spec_file": "docs/specs/knowledge-graph-extractor/spec.md",
+    "plan_file": "docs/specs/knowledge-graph-extractor/plan.md"
+  },
+  {
+    "phase_id": "PHASE55",
+    "status": "DONE",
+    "description": "Demo Slice 3: FastEmbed passage embeddings + fused retrieval wiring",
+    "spec_file": "docs/specs/fastembed-passage-embeddings/spec.md",
+    "plan_file": "docs/specs/fastembed-passage-embeddings/plan.md"
+  },
+  {
+    "phase_id": "PHASE56",
+    "status": "DONE",
+    "description": "Demo Slice 4: client-demo-worthy UI polish and full demo wiring",
+    "spec_file": "docs/specs/engram-demo-app/spec.md",
+    "plan_file": "docs/specs/engram-demo-app/plan.md"
+  },
+  {
+    "phase_id": "PHASE57",
+    "status": "DONE",
+    "description": "RFC 0004 Enterprise 3D UI (minimalist-enterprise, navigable links) replacing Cytoscape",
+    "spec_file": "docs/specs/enterprise-3d-graph/spec.md",
+    "plan_file": "docs/specs/enterprise-3d-graph/plan.md"
+  },
+  {
+    "phase_id": "PHASE58",
+    "status": "DONE",
+    "description": "RFC 0004 Scale ingestion + repo indexing (scan job, .gitignore, batched embed, incremental)",
+    "spec_file": "docs/specs/scale-repo-ingestion/spec.md",
+    "plan_file": "docs/specs/scale-repo-ingestion/plan.md"
+  },
+  {
+    "phase_id": "PHASE59",
+    "status": "DONE",
+    "description": "RFC 0004 LLM relationship extraction (pi SDK -> ollama cloud -> gemma4:31b-cloud, deterministic baseline)",
+    "spec_file": "docs/specs/llm-relationship-extraction/spec.md",
+    "plan_file": "docs/specs/llm-relationship-extraction/plan.md"
+  },
+  {
+    "phase_id": "PHASE60",
+    "status": "DONE",
+    "description": "RFC 0004 Ontology + taxonomy for an IT org (OntologyRepository SQLite + binding + UI); ADR-0008",
+    "spec_file": "docs/specs/it-org-ontology/spec.md",
+    "plan_file": "docs/specs/it-org-ontology/plan.md"
+  },
+  {
+    "phase_id": "PHASE61",
+    "status": "DONE",
+    "description": "RFC 0004 Provenance + confidence viz (encode belief confidence + source provenance + links)",
+    "spec_file": "docs/specs/provenance-confidence-viz/spec.md",
+    "plan_file": "docs/specs/provenance-confidence-viz/plan.md"
+  },
+  {
+    "phase_id": "PHASE62",
+    "status": "DONE",
+    "description": "RFC 0004 Belief + contradiction + bi-temporal (new belief SQLite adapter + consolidation + binding)",
+    "spec_file": "docs/specs/belief-contradiction-bitemporal/spec.md",
+    "plan_file": "docs/specs/belief-contradiction-bitemporal/plan.md"
+  },
+  {
+    "phase_id": "PHASE63",
+    "status": "DONE",
+    "description": "RFC 0004 Query + answer over knowledge and memory (LLM synthesis + grounded citations)",
+    "spec_file": "docs/specs/qa-over-knowledge/spec.md",
+    "plan_file": "docs/specs/qa-over-knowledge/plan.md"
+  },
+  {
+    "phase_id": "PHASE64",
+    "status": "DONE",
+    "description": "Research architecture parity: close docs/research gaps against implementation and add executable parity guards",
+    "spec_file": "docs/specs/research-architecture-parity/spec.md",
+    "plan_file": "docs/specs/research-architecture-parity/plan.md"
+  }
+]

@@ -1,0 +1,28 @@
+{
+  "query": "What implementation stack does engram v1 use?",
+  "scope": {
+    "tenant": "tenant-demo",
+    "workspace": "engram",
+    "environment": "local"
+  },
+  "requester": {
+    "actor": {
+      "id": "actor-agent-1",
+      "kind": "agent",
+      "displayName": "Contract Agent"
+    },
+    "roles": ["maintainer"],
+    "permissions": ["memory.retrieve"]
+  },
+  "modes": ["keyword", "semantic"],
+  "filters": {
+    "memoryKinds": ["fact"],
+    "includeArchived": false
+  },
+  "limit": 5,
+  "budget": {
+    "maxItems": 3,
+    "maxTokens": 1200
+  },
+  "includeExplanations": true
+}

@@ -118,9 +118,11 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
     Betweenness (B4) and Louvain→hierarchy clusters (B5) are follow-on
     micro-specs in the same crate.
 
-- **B4 — Betweenness centrality (bridges)** · base · depends: B3
+- **B4 — Betweenness centrality (bridges)** · base · depends: B3 · **SHIPPED 2026-07-08**
   - Objective: Add betweenness centrality.
-  - Acceptance: bridge nodes of a fixture graph score highest.
+  - Status: `betweenness(edges)` (Brandes' algorithm) added to
+    `engram-graph-analytics`; bridge-carries-traffic + parallel-paths-split
+    (0.5) + empty + deterministic tests green (4 tests).
 
 - **B5 — Community detection (Louvain) → hierarchy clusters** · base · depends: B3
   - Objective: Implement Louvain, emitting `HierarchyNode(kind=cluster)` via the

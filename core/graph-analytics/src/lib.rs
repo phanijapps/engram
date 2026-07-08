@@ -8,6 +8,8 @@
 //! Currently: PageRank centrality. Betweenness (B4) and Louvain community
 //! detection (B5) land as follow-on micro-specs in this crate.
 
+mod betweenness;
 mod pagerank;
 
+pub use betweenness::betweenness;
 pub use pagerank::pagerank;

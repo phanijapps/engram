@@ -22,9 +22,9 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   `RerankScorer`, stamps `FusionTrace`. No contract change. Codegraph-parity B2.
   **Shipped (adapter unit).**
 - [`graph-analytics`](graph-analytics/spec.md): a std-only graph-analytics crate
-  (`engram-graph-analytics`) with PageRank centrality over a generic edge list;
-  betweenness (B4) / Louvain (B5) follow. No contract change. Codegraph-parity B3.
-  **Shipped (PageRank).**
+  (`engram-graph-analytics`) with PageRank + betweenness (Brandes) centrality
+  over a generic edge list; Louvain (B5) follows. No contract change.
+  Codegraph-parity B3/B4. **Shipped (PageRank + betweenness).**
 - [`rust-crate-integration`](rust-crate-integration/spec.md): stable Rust crate integration contract for embedding Engram as a library — provider facade with capability reporting, typed repository handles, embedding provider abstraction (FastEmbed + Ollama), embedding-space validation, migration/import API with dry-run/apply gating, retrieval trace contract, and conformance harness. Draft.
 - [`sqlite-open-options`](sqlite-open-options/spec.md): common `SqliteOpenOptions` configuration for all SQLite adapters (WAL mode, busy timeout, foreign keys, migrations, directory creation) with `open_with_options` constructors. Shipped.
 - [`demo-reimagine`](demo-reimagine/spec.md): prune the demo to 5 views

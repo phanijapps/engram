@@ -3,7 +3,7 @@
 //! Manages ontology, class, property, and axiom operations through the
 //! OntologyRepository port.
 
-use engram_domain::{Id, Ontology, OntologyAxiom, OntologyClass, OntologyProperty, Scope};
+use engram_domain::{Ontology, OntologyAxiom, OntologyClass, OntologyProperty};
 use engram_knowledge::OntologyRepository;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;

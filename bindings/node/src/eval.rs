@@ -32,3 +32,9 @@ impl NativeEvalEngine {
         encode(&coverage)
     }
 }
+
+impl Default for NativeEvalEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}

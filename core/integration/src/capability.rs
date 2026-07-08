@@ -142,6 +142,12 @@ pub struct CapabilityReportBuilder {
     report: CapabilityReport,
 }
 
+impl Default for CapabilityReportBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CapabilityReportBuilder {
     /// Creates a new builder with all capabilities set to Unsupported.
     pub fn new() -> Self {

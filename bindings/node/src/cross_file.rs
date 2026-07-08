@@ -6,8 +6,8 @@
 //! are silently ignored (the scan summary is already captured).
 
 use engram_domain::{
-    Actor, ActorKind, AllowedUse, DeleteMode, EntityRef, EvidenceRef, EvidenceTargetType, Id,
-    KnowledgeEntity, KnowledgeRelationship, Policy, Retention, Scope, Sensitivity, Visibility,
+    Actor, ActorKind, AllowedUse, DeleteMode, EntityRef, Id, KnowledgeRelationship, Policy,
+    Retention, Scope, Sensitivity, Visibility,
 };
 use engram_knowledge::KnowledgeRepository;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;

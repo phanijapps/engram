@@ -5,7 +5,7 @@
 
 use engram_domain::{Id, Scope};
 use napi::bindgen_prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Decodes a JSON string into a typed value.
 pub fn decode<T>(json: &str) -> Result<T>

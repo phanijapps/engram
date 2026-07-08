@@ -108,19 +108,20 @@ impl ConformanceHarness {
     /// Returns `CoreError::Adapter` if fixture execution fails.
     pub fn run_all(&self) -> CoreResult<ConformanceResult> {
         let start = std::time::Instant::now();
-        let mut fixtures = Vec::new();
 
         // Run fixtures for each capability family
-        fixtures.push(self.run_memory_fixture()?);
-        fixtures.push(self.run_knowledge_fixture()?);
-        fixtures.push(self.run_graph_fixture()?);
-        fixtures.push(self.run_ontology_fixture()?);
-        fixtures.push(self.run_taxonomy_fixture()?);
-        fixtures.push(self.run_beliefs_fixture()?);
-        fixtures.push(self.run_hierarchy_fixture()?);
-        fixtures.push(self.run_retrieval_fixture()?);
-        fixtures.push(self.run_vectors_fixture()?);
-        fixtures.push(self.run_migration_fixture()?);
+        let fixtures = vec![
+            self.run_memory_fixture()?,
+            self.run_knowledge_fixture()?,
+            self.run_graph_fixture()?,
+            self.run_ontology_fixture()?,
+            self.run_taxonomy_fixture()?,
+            self.run_beliefs_fixture()?,
+            self.run_hierarchy_fixture()?,
+            self.run_retrieval_fixture()?,
+            self.run_vectors_fixture()?,
+            self.run_migration_fixture()?,
+        ];
 
         let total_duration_ms = start.elapsed().as_millis() as u64;
 

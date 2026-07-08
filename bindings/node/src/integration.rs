@@ -18,6 +18,7 @@ use crate::to_napi_error;
 /// Returned to Node as a JSON string so the TypeScript layer can validate and
 /// consume the capability report without the binding re-implementing
 /// capability logic.
+#[allow(dead_code)] // N-API entry point: consumed from JavaScript, so it has no Rust call site.
 #[napi(object)]
 pub struct IntegrationBootstrapResult {
     /// JSON-encoded capability report (one entry per family with state + reason).
@@ -41,6 +42,7 @@ pub struct IntegrationBootstrapResult {
 /// entry point exists to expose capability discovery and the integration
 /// contract to TypeScript. Long-lived provider state remains accessible through
 /// the existing per-family engines.
+#[allow(dead_code)] // N-API entry point: consumed from JavaScript, so it has no Rust call site.
 #[napi(js_name = "bootstrapIntegrationProvider")]
 pub fn bootstrap_integration_provider(config_json: String) -> Result<IntegrationBootstrapResult> {
     let config: EngramConfig = serde_json::from_str(&config_json).map_err(|e| {

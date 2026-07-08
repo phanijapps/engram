@@ -3,12 +3,12 @@
 //! Manages concept schemes, concepts, and taxonomy validation through the
 //! TaxonomyRepository port.
 
-use engram_domain::{Concept, ConceptRelation, ConceptScheme, Id, Scope, TaxonomyProposal};
+use engram_domain::{Concept, ConceptRelation, ConceptScheme, TaxonomyProposal};
 use engram_knowledge::{TaxonomyRepository, validate_taxonomy_proposal};
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::{decode, encode, id_field, scope_field, to_napi_error};

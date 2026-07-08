@@ -10,7 +10,6 @@ mod code_symbol;
 mod contract;
 mod contract_entities;
 mod extractor;
-mod extractors;
 mod filesystem;
 mod git;
 mod git_detect;

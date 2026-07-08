@@ -40,10 +40,12 @@ pub enum MigrationMode {
 /// without collisions.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[derive(Default)]
 pub enum SqliteStorageLayout {
     /// One database file per store (the default; backward compatible).
     /// Creates `memory.db`, `knowledge.db`, `belief.db`, `hierarchy.db`, and
     /// `vectors.db` under `storage_path`.
+    #[default]
     MultiFileDirectory,
 
     /// All SQLite-backed stores open the same file under `storage_path`.
@@ -55,12 +57,6 @@ pub enum SqliteStorageLayout {
         /// `.sqlite3` extension — no separators, no `..`, no drive letters.
         file_name: String,
     },
-}
-
-impl Default for SqliteStorageLayout {
-    fn default() -> Self {
-        Self::MultiFileDirectory
-    }
 }
 
 /// Embedding provider configuration.

@@ -6,7 +6,7 @@
 //! memory behavior.
 
 use engram_domain::{ForgetRequest, RetrievalRequest, WriteMemoryRequest};
-use engram_memory::{CoreError, MemoryService};
+use engram_memory::MemoryService;
 use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;

@@ -186,6 +186,8 @@ fn entity(id: Id, graph_id: Id) -> KnowledgeEntity {
         provenance: provenance(),
         created_at: Utc::now(),
         updated_at: None,
+        valid_from: None,
+        valid_until: None,
         metadata: None,
     }
 }

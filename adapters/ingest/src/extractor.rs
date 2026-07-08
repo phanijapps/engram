@@ -169,6 +169,8 @@ impl GraphExtractor {
                 provenance: source.provenance.clone(),
                 created_at: now,
                 updated_at: None,
+                valid_from: None,
+                valid_until: None,
                 metadata: None,
             });
         }
@@ -296,6 +298,8 @@ impl GraphExtractor {
                 provenance: source.provenance.clone(),
                 created_at: now,
                 updated_at: None,
+                valid_from: None,
+                valid_until: None,
                 metadata: Some(repo_meta),
             });
 

@@ -212,6 +212,10 @@ pub struct KnowledgeEntity {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_from: Option<Timestamp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_until: Option<Timestamp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Metadata>,
 }
 

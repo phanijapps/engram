@@ -136,6 +136,8 @@ pub fn build_api_entity(
         provenance: provenance.clone(),
         created_at: now,
         updated_at: None,
+        valid_from: None,
+        valid_until: None,
         metadata: Some(meta),
     }
 }

@@ -131,11 +131,15 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
     disconnected-cliques→2, single-edge→merge, empty tests green. Multi-level
     aggregation and the `HierarchyNode` wiring are follow-ups.
 
-- **B6 — Bi-temporal entities + `as_of` retrieval** · base · depends: A2 (ADR-gated)
-  - Objective: Add optional `validFrom`/`validUntil` to `KnowledgeEntity` and an
-    `as_of` retrieval filter. Must not overclaim as full bitemporality.
-  - Acceptance: `as_of(T)` returns only entity versions valid at T; re-ingest
-    stamps prior version `validUntil`.
+- **B6 — Bi-temporal entities** · base · **Part 1 SHIPPED 2026-07-08 (ADR-0019); `as_of` retrieval deferred to its own v1-contract micro-spec**
+  - Objective: Add optional `validFrom`/`validUntil` to `KnowledgeEntity` (+ an
+    `as_of` retrieval filter, deferred).
+  - Status: ADR-0019 + optional `validFrom`/`validUntil` on `KnowledgeEntity`
+    (draft-extension type — not in the frozen v1 schema, so no v1 schema regen);
+    round-trip conformance test green; 7 constructors updated; `cargo check
+    --workspace` + `.codex/hooks/check-contracts.sh` pass. The `as_of` retrieval
+    filter touches the frozen-v1 `QueryFilter` → its own micro-spec; ingest
+    stamping of `valid_from`/`valid_until` is a follow-up.
 
 - **B7 — Pluggable embedding-provider registry + code model** · base · depends: none · **gated by Q3**
   - Objective: Promote the embedding provider to a registry; add a

@@ -82,3 +82,45 @@ fn memory_record_uses_contract_json_names() {
     assert!(value.get("created_at").is_none());
     assert!(value["content"].get("structured").is_none());
 }
+
+#[test]
+fn knowledge_entity_serializes_bi_temporal_validity() {
+    // ADR-0019: KnowledgeEntity carries optional validFrom/validUntil.
+    let now = Utc::now();
+    let entity = KnowledgeEntity {
+        id: Id::from("entity-1"),
+        graph_id: None,
+        kind: EntityKind::Function,
+        name: "parse".to_owned(),
+        aliases: Vec::new(),
+        scope: scope(),
+        source_refs: Vec::new(),
+        concept_refs: Vec::new(),
+        provenance: provenance(now),
+        created_at: now,
+        updated_at: None,
+        valid_from: Some(now),
+        valid_until: Some(now),
+        metadata: None,
+    };
+
+    let value = serde_json::to_value(&entity).expect("serialize entity");
+    assert_eq!(value["validFrom"], json!(now));
+    assert_eq!(value["validUntil"], json!(now));
+    assert!(
+        value.get("valid_from").is_none(),
+        "camelCase contract names only"
+    );
+
+    // Round-trips losslessly.
+    let back: KnowledgeEntity = serde_json::from_value(value).expect("deserialize entity");
+    assert_eq!(back, entity);
+
+    // None omits the keys (skip_serializing_if = Option::is_none).
+    let mut omitted = entity;
+    omitted.valid_from = None;
+    omitted.valid_until = None;
+    let omitted_value = serde_json::to_value(&omitted).expect("serialize");
+    assert!(omitted_value.get("validFrom").is_none());
+    assert!(omitted_value.get("validUntil").is_none());
+}

@@ -85,12 +85,17 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
     smaller** (name-based cross-file resolution already exists in `extractor.rs`);
     confirmed temporal *retrieval* is shipped (only the 6 *scoring modes* = C6).
 
-- **A2 — Additive domain vocabulary** · base · depends: none (ADR-gated)
+- **A2 — Additive domain vocabulary** · base · **SHIPPED 2026-07-08 (ADR-0020)**
   - Objective: Add `EntityKind` values (`struct`, `interface`, `trait`, `enum`,
     `type_alias`, `endpoint`) and edge predicates (`overrides`, `annotated_with`)
     as compatible, freeze-safe enum additions.
-  - Acceptance: schema accepts new values; conformance tests pass; old clients
-    degrade on unknown values (not crash).
+  - Status: ADR-0020 + 6 `EntityKind` variants added (Struct, Interface, Trait,
+    TypeAlias, Enum, Endpoint; snake_case). Draft-extension enum (not in frozen
+    v1 schema) → no v1 schema regen; `KnowledgeRelationship.predicate` is already
+    a free-form String so edge predicates need no enum change. Ripple-free (the
+    only `EntityKind` match uses a wildcard); snake_case round-trip test green;
+    `cargo check --workspace` + `check-contracts.sh` pass. Follow-up: wire the
+    AST extractor to emit the new kinds.
 
 ### Phase B — Base fills (generic, reusable beyond coding)
 

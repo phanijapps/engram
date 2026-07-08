@@ -124,3 +124,21 @@ fn knowledge_entity_serializes_bi_temporal_validity() {
     assert!(omitted_value.get("validFrom").is_none());
     assert!(omitted_value.get("validUntil").is_none());
 }
+
+#[test]
+fn entity_kind_new_symbol_kinds_serialize_snake_case() {
+    // ADR-0020: code-structural symbol kinds round-trip as snake_case.
+    for (kind, expected) in [
+        (EntityKind::Struct, "struct"),
+        (EntityKind::Interface, "interface"),
+        (EntityKind::Trait, "trait"),
+        (EntityKind::TypeAlias, "type_alias"),
+        (EntityKind::Enum, "enum"),
+        (EntityKind::Endpoint, "endpoint"),
+    ] {
+        let value = serde_json::to_value(&kind).expect("serialize kind");
+        assert_eq!(value, json!(expected));
+        let back: EntityKind = serde_json::from_value(value).expect("deserialize kind");
+        assert_eq!(back, kind);
+    }
+}

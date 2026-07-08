@@ -21,3 +21,4 @@
 | [0017](0017-repository-model-source-and-node-in-one-scope.md) | Repository model: KnowledgeSource + Repository node in one shared scope | Accepted |
 | [0018](0018-knowledge-graph-retraction-and-convergence.md) | Knowledge-graph retraction and convergence on re-ingest | Accepted |
 | [0019](0019-bi-temporal-knowledge-entities.md) | Bi-temporal knowledge entities | Accepted |
+| [0020](0020-extend-entity-kind-vocabulary.md) | Extend EntityKind vocabulary for code-structural symbols | Accepted |

@@ -832,6 +832,12 @@ Enum:
 - `function`
 - `method`
 - `variable`
+- `struct`
+- `interface`
+- `trait`
+- `type_alias`
+- `enum`
+- `endpoint`
 - `api`
 - `concept`
 - `task`

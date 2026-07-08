@@ -5,6 +5,26 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 
 ## Active
 
+- [`lexical-keyword-retrieval`](lexical-keyword-retrieval/spec.md): the
+  BM25/Tantivy lexical `RetrievalIndex` adapter crate (`engram-store-lexical`:
+  store + identifier tokenizer + resolver + `RetrievalResult` shaping),
+  implementing the already-contracted `RetrievalMode::keyword`. No contract
+  change. Codegraph-parity item B1. **Shipped (adapter unit).**
+- [`lexical-wiring`](lexical-wiring/spec.md): wire the B1 lexical adapter into
+  the live retrieval pipeline — `lexical_candidates_json` binding + a
+  `SqlKnowledgeStore`-backed resolver, composed with graph + vector via the
+  existing RRF fusion, plus an end-to-end eval fixture and full gates. Split from
+  B1 after the composition layer was found to be bindings-layer RRF fusion, not
+  the unused `RetrievalRouter`. Draft.
+- [`cross-encoder-rerank`](cross-encoder-rerank/spec.md): a cross-encoder
+  reranker adapter (`engram-rerank-cross-encoder`) implementing the contracted
+  `RerankStrategy::CrossEncoder` — reorders fused candidates by an injected
+  `RerankScorer`, stamps `FusionTrace`. No contract change. Codegraph-parity B2.
+  **Shipped (adapter unit).**
+- [`graph-analytics`](graph-analytics/spec.md): a std-only graph-analytics crate
+  (`engram-graph-analytics`) with PageRank centrality over a generic edge list;
+  betweenness (B4) / Louvain (B5) follow. No contract change. Codegraph-parity B3.
+  **Shipped (PageRank).**
 - [`rust-crate-integration`](rust-crate-integration/spec.md): stable Rust crate integration contract for embedding Engram as a library — provider facade with capability reporting, typed repository handles, embedding provider abstraction (FastEmbed + Ollama), embedding-space validation, migration/import API with dry-run/apply gating, retrieval trace contract, and conformance harness. Draft.
 - [`sqlite-open-options`](sqlite-open-options/spec.md): common `SqliteOpenOptions` configuration for all SQLite adapters (WAL mode, busy timeout, foreign keys, migrations, directory creation) with `open_with_options` constructors. Shipped.
 - [`demo-reimagine`](demo-reimagine/spec.md): prune the demo to 5 views

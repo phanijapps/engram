@@ -1,0 +1,13 @@
+[package]
+name = "engram-rerank-cross-encoder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+engram-domain = { path = "../../../core/domain" }
+engram-runtime = { path = "../../../core/runtime" }
+
+[dev-dependencies]
+chrono.workspace = true

@@ -1,6 +1,6 @@
 # Spec: graph-analytics
 
-- **Status:** Shipped (PageRank + betweenness; Louvain pending as B5)
+- **Status:** Shipped (PageRank + betweenness + communities)
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0012, `docs/codegraph-parity-roadmap.md` (items B3/B4/B5), `docs/domain-data-model.md`
@@ -15,13 +15,16 @@ centrality / community primitives over a generic directed edge list, decoupled
 from domain types. Callers map `KnowledgeRelationship` (or any edge source) to
 `(source, target)` id pairs at the call site. No dependencies.
 
-**Shipped:** PageRank centrality (B3), betweenness centrality (Brandes, B4).
-**Pending:** Louvain community detection → hierarchy clusters (B5).
+**Shipped:** PageRank centrality (B3), betweenness centrality — Brandes (B4),
+community detection — single-level modularity-greedy Louvain local-moving (B5).
+**Follow-ups (out of scope here):** Louvain multi-level aggregation; wiring the
+outputs to retrieval (popularity prior, bridge detection) and to
+`HierarchyNode(kind=cluster)`.
 
 ## Objective
 
-Graph-analytics returns node centrality scores and (later) communities for a
-directed graph, enabling popularity-prior retrieval, bridge-symbol detection,
+Graph-analytics returns node centrality scores and communities for a directed
+graph, enabling popularity-prior retrieval, bridge-symbol detection,
 community/cluster detection, and code-graph queries (blast-radius, dead-code)
 downstream. General-purpose: any edge list benefits, not code alone.
 
@@ -42,7 +45,7 @@ downstream. General-purpose: any edge list benefits, not code alone.
 ## Testing Strategy
 
 - **TDD** — each algorithm on known small graphs (deterministic ordering /
-  values); per-crate gates (fmt/clippy `-D warnings`/test).
+  values / partitions); per-crate gates (fmt/clippy `-D warnings`/test).
 
 ## Acceptance Criteria
 
@@ -50,8 +53,10 @@ downstream. General-purpose: any edge list benefits, not code alone.
   cycle → near-uniform; two-source → sink ranks sink highest; empty → empty.
 - [x] `betweenness(edges)` returns Brandes betweenness; a bridge node carries all
   through-traffic; parallel shortest paths split credit (0.5 each); empty → empty.
-- [ ] Louvain community detection → `HierarchyNode(kind=cluster)` (B5).
-- [x] No dependencies; per-crate gates green.
+- [x] `communities(edges, max_passes)` returns a node→label partition via
+  single-level modularity-greedy Louvain local-moving; a triangle collapses to
+  one community; disconnected cliques stay separate; empty → empty.
+- [x] No dependencies; per-crate gates green (13 tests).
 - [x] No public contract change.
 
 ## Assumptions

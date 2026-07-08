@@ -124,11 +124,12 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
     `engram-graph-analytics`; bridge-carries-traffic + parallel-paths-split
     (0.5) + empty + deterministic tests green (4 tests).
 
-- **B5 — Community detection (Louvain) → hierarchy clusters** · base · depends: B3
-  - Objective: Implement Louvain, emitting `HierarchyNode(kind=cluster)` via the
-    existing hierarchy build path.
-  - Acceptance: partitions match a golden graph; clusters are auditable
-    `HierarchyNode`s.
+- **B5 — Community detection (Louvain) → hierarchy clusters** · base · depends: B3 · **single-level SHIPPED 2026-07-08; multi-level + HierarchyNode wiring deferred**
+  - Objective: Implement Louvain; wire communities to `HierarchyNode(kind=cluster)`.
+  - Status: `communities(edges, max_passes)` (single-level modularity-greedy
+    local-moving) added to `engram-graph-analytics`; triangle→1,
+    disconnected-cliques→2, single-edge→merge, empty tests green. Multi-level
+    aggregation and the `HierarchyNode` wiring are follow-ups.
 
 - **B6 — Bi-temporal entities + `as_of` retrieval** · base · depends: A2 (ADR-gated)
   - Objective: Add optional `validFrom`/`validUntil` to `KnowledgeEntity` and an

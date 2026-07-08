@@ -9,7 +9,9 @@
 //! detection (B5) land as follow-on micro-specs in this crate.
 
 mod betweenness;
+mod communities;
 mod pagerank;
 
 pub use betweenness::betweenness;
+pub use communities::communities;
 pub use pagerank::pagerank;

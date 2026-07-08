@@ -41,6 +41,9 @@ export function registerEngramTools(server: McpServer, deps: ToolDeps): void {
       inputSchema: {
         query: z.string(),
         limit: z.number().optional(),
+        source: z.string().optional().describe(
+          "Repo name to scope the search (e.g. 'ocean-hospitality-ui'). Omit to search all indexed repos.",
+        ),
       },
     },
     async (args) => textResult(await search(deps, args)),
@@ -51,7 +54,12 @@ export function registerEngramTools(server: McpServer, deps: ToolDeps): void {
     {
       description:
         "Retrieve grounded evidence for a question from the knowledge graph — entities, relationships, code chunks, memories, and beliefs. Returns raw evidence so you can synthesize the answer directly.",
-      inputSchema: { question: z.string() },
+      inputSchema: {
+        question: z.string(),
+        source: z.string().optional().describe(
+          "Repo name to scope the search (e.g. 'ocean-hospitality-ui'). Omit to search all indexed repos.",
+        ),
+      },
     },
     async (args) => textResult(await agenticSearch(deps, args)),
   );

@@ -27,7 +27,9 @@ export interface NativeKnowledgeEngineBinding {
   listConceptsJson(requestJson: string): string;
   listGraphsJson(requestJson: string): string;
   listEntitiesJson(requestJson: string): string;
+  listEntitiesBySourceJson(requestJson: string): string;
   listRelationshipsJson(requestJson: string): string;
+  listRelationshipsBySourceJson(requestJson: string): string;
   listChunksJson(requestJson: string): string;
   listSourcesJson(requestJson: string): string;
   putOntologyJson(ontologyJson: string): string;

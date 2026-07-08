@@ -184,9 +184,31 @@ export function buildEvidence(
   };
 }
 
-/** Fetch knowledge-graph entities + relationships + chunks visible to `scope`. */
-export async function fetchGraph(scope: unknown): Promise<{ entities: QaEntity[]; relationships: QaRelationship[]; chunks: QaChunk[] }> {
+/** Normalize a user-supplied source name to a stable_source_key prefix. */
+function normalizeSourceKey(source: string): string {
+  return source.startsWith("scan:") ? source : `scan:${source}`;
+}
+
+/**
+ * Fetch knowledge-graph entities + relationships + chunks visible to `scope`.
+ * When `source` is provided (e.g. "ocean-hospitality-ui"), only entities and
+ * relationships from that source graph are fetched — reducing the search space
+ * from the full multi-repo DB to a single repo.
+ */
+export async function fetchGraph(
+  scope: unknown,
+  source?: string,
+): Promise<{ entities: QaEntity[]; relationships: QaRelationship[]; chunks: QaChunk[] }> {
   const transport = getKnowledgeTransport();
+  if (source) {
+    const key = normalizeSourceKey(source);
+    const [entities, relationships, chunks] = await Promise.all([
+      transport.listEntitiesBySource(key, scope),
+      transport.listRelationshipsBySource(key, scope),
+      transport.listChunks(scope),
+    ]);
+    return { entities: entities as QaEntity[], relationships: relationships as QaRelationship[], chunks: chunks as QaChunk[] };
+  }
   const [entities, relationships, chunks] = await Promise.all([
     transport.listEntities(scope),
     transport.listRelationships(scope),

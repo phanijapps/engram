@@ -88,7 +88,9 @@ export interface NativeKnowledgeTransport {
   listConcepts(schemeId: string, scope: unknown): Promise<unknown>;
   listGraphs(scope: unknown): Promise<unknown>;
   listEntities(scope: unknown): Promise<unknown>;
+  listEntitiesBySource(stableSourceKey: string, scope: unknown): Promise<unknown>;
   listRelationships(scope: unknown): Promise<unknown>;
+  listRelationshipsBySource(stableSourceKey: string, scope: unknown): Promise<unknown>;
   listChunks(scope: unknown): Promise<unknown>;
   listSources(scope: unknown): Promise<unknown>;
   putOntology(ontology: unknown): Promise<unknown>;
@@ -193,8 +195,16 @@ class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
     return decode(this.engine.listEntitiesJson(encode({ scope })));
   }
 
+  async listEntitiesBySource(stableSourceKey: string, scope: unknown): Promise<unknown> {
+    return decode(this.engine.listEntitiesBySourceJson(encode({ stableSourceKey, scope })));
+  }
+
   async listRelationships(scope: unknown): Promise<unknown> {
     return decode(this.engine.listRelationshipsJson(encode({ scope })));
+  }
+
+  async listRelationshipsBySource(stableSourceKey: string, scope: unknown): Promise<unknown> {
+    return decode(this.engine.listRelationshipsBySourceJson(encode({ stableSourceKey, scope })));
   }
 
   async listChunks(scope: unknown): Promise<unknown> {

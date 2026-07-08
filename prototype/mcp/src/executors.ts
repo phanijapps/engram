@@ -17,6 +17,8 @@ export type ToolDeps = {
   };
   knowledge: {
     listEntities(scope: ToolScope): Promise<unknown>;
+    listEntitiesBySource(stableSourceKey: string, scope: ToolScope): Promise<unknown>;
+    listRelationshipsBySource(stableSourceKey: string, scope: ToolScope): Promise<unknown>;
   };
   scope: ToolScope;
   policy: unknown;
@@ -50,13 +52,21 @@ export async function getJob(deps: ToolDeps, args: { jobId: string }): Promise<u
   return deps.ingest.getScanJob(args.jobId);
 }
 
+function normalizeSourceKey(source: string): string {
+  return source.startsWith("scan:") ? source : `scan:${source}`;
+}
+
 export async function search(
   deps: ToolDeps,
-  args: { query: string; limit?: number },
+  args: { query: string; limit?: number; source?: string },
 ): Promise<unknown> {
-  const entities = (await deps.knowledge.listEntities(deps.scope)) as Array<
-    Record<string, unknown>
-  >;
+  let entities: Array<Record<string, unknown>>;
+  if (args.source) {
+    const key = normalizeSourceKey(args.source);
+    entities = (await deps.knowledge.listEntitiesBySource(key, deps.scope)) as Array<Record<string, unknown>>;
+  } else {
+    entities = (await deps.knowledge.listEntities(deps.scope)) as Array<Record<string, unknown>>;
+  }
   // Split into terms and OR-match against name + file path + source repo.
   const terms = String(args.query ?? "").toLowerCase().split(/\s+/).filter((t) => t.length > 1);
   const matched = entities
@@ -84,7 +94,7 @@ export async function search(
  */
 export async function agenticSearch(
   deps: ToolDeps,
-  args: { question: string },
+  args: { question: string; source?: string },
 ): Promise<unknown> {
   const question = String(args.question ?? "");
 
@@ -98,7 +108,7 @@ export async function agenticSearch(
       budget: { maxItems: 8, maxTokens: 2000 },
     }),
     getBeliefTransport().listBeliefs(deps.scope),
-    fetchGraph(deps.scope),
+    fetchGraph(deps.scope, args.source),
   ]);
 
   const memories = ((memoryResponse as { items?: MemoryItem[] }).items ?? []);

@@ -10,6 +10,8 @@ export function buildToolDeps(scope: ToolScope = SCAN_SCOPE): ToolDeps {
     },
     knowledge: {
       listEntities: (s) => getKnowledgeTransport().listEntities(s),
+      listEntitiesBySource: (key, s) => getKnowledgeTransport().listEntitiesBySource(key, s),
+      listRelationshipsBySource: (key, s) => getKnowledgeTransport().listRelationshipsBySource(key, s),
     },
     scope,
     policy: SCAN_POLICY,

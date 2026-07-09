@@ -165,6 +165,16 @@ fn tool_list() -> Vec<Value> {
             "Rank symbols by a blend of recency + impact (the 'what matters most right now' view).",
             obj(&[]),
         ),
+        tool(
+            "most_complex",
+            "Rank source-text snippets by cyclomatic complexity. Pass an array of {name, source} pairs.",
+            obj(&[("sources", "string")]),
+        ),
+        tool(
+            "match_api_topology",
+            "Match HTTP endpoints to call sites — cross-service API topology. Pass endpoints + calls arrays.",
+            obj(&[("endpoints", "string"), ("calls", "string")]),
+        ),
     ]
 }
 
@@ -337,6 +347,39 @@ fn handle_tool(name: &str, args: &Value, store: &SqlKnowledgeStore, scope: &Scop
                     entry["score"] = json!(score);
                     entry
                 })
+                .collect();
+            json_pretty(&readable)
+        }
+
+        // --- Cross-source + ranking tools ---
+        "most_complex" => {
+            let sources_val = &args["sources"];
+            let sources: Vec<(String, String)> = if sources_val.is_array() {
+                sources_val
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .filter_map(|item| {
+                        let name = item["name"].as_str()?;
+                        let source = item["source"].as_str()?;
+                        Some((name.to_owned(), source.to_owned()))
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let limit = args["limit"].as_u64().unwrap_or(20) as usize;
+            json_pretty(&cgq::most_complex(&sources, limit))
+        }
+        "match_api_topology" => {
+            let endpoints: Vec<cgq::HttpEndpoint> =
+                serde_json::from_value(args["endpoints"].clone()).unwrap_or_default();
+            let calls: Vec<String> =
+                serde_json::from_value(args["calls"].clone()).unwrap_or_default();
+            let matches = cgq::match_api_topology(&endpoints, &calls);
+            let readable: Vec<Value> = matches
+                .iter()
+                .map(|(call, target)| json!({ "call": call, "endpoint": target }))
                 .collect();
             json_pretty(&readable)
         }

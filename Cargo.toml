@@ -24,6 +24,7 @@ members = [
     "bindings/node",
     "examples/rust-integration",
     "codegraph/queries",
+    "codegraph/temporal",
 ]
 resolver = "3"
 

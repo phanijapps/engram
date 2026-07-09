@@ -19,6 +19,9 @@ This project follows a contract-first changelog while pre-1.0.
   (`deadCodeJson`, `blastRadiusJson`, `dependencyPathJson`, `centralSymbolsJson`,
   `bridgeSymbolsJson`, `callCommunitiesJson`) — the Rust→binding layer of MCP
   wiring; the TS/MCP-tool layer is pending.
+- Added `engram-codegraph-temporal` — the temporal scoring engine: `recent`
+  (recency decay), `impact` (blast-radius-weighted), and `compound` modes over
+  versioned symbols (ADR-0019 bi-temporal).
 - Added optional `validFrom`/`validUntil` to `KnowledgeEntity` for bi-temporal
   versioning (ADR-0019; draft-extension type, no v1 schema change).
 - Extended `EntityKind` with `struct`, `interface`, `trait`, `type_alias`,

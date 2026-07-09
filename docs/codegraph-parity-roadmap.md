@@ -186,11 +186,11 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
     ship in `engram-codegraph-queries` (tests green). Edge quality improves with
     C1; wiring into MCP / UI is the integration layer (D4/D5).
 
-- **C6 — Temporal scoring engine (6 modes + significance budget)** · data · depends: B6
-  - Objective: The six scoring modes (recent/impact/novel/directional/compound/
-    overview) + structural-significance budgeting over symbol versions.
-  - Acceptance: each mode ranks a git-history fixture as specified; budget covers
-    ≥80% of significance with the minimum set.
+- **C6 — Temporal scoring engine** · data · depends: B6 · **3 of 6 modes SHIPPED 2026-07-08; `novel`/`directional`/`overview` + significance budgeting deferred**
+  - Objective: The six scoring modes + structural-significance budgeting over symbol versions.
+  - Status: `engram-codegraph-temporal` ships `recent` (recency decay), `impact`
+    (blast-radius-weighted), and `compound` (normalized blend); 5 tests green.
+    `novel`/`directional`/`overview` need a change-diff/baseline model.
 
 - **C7 — HTTP endpoint detection (framework scanners)** · data · depends: C2 · **gated by Q4**
   - Objective: Framework-aware endpoint extraction for priority frameworks.

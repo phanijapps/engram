@@ -758,6 +758,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-codegraph-queries"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "engram-domain",
+ "engram-graph-analytics",
+]
+
+[[package]]
+name = "engram-codegraph-temporal"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+]
+
+[[package]]
 name = "engram-conformance"
 version = "0.1.0"
 dependencies = [
@@ -934,6 +950,7 @@ name = "engram-node"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "engram-codegraph-queries",
  "engram-conformance",
  "engram-core",
  "engram-domain",

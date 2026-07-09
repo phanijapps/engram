@@ -1,6 +1,6 @@
 # Spec: codegraph-queries
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0012, `docs/codegraph-parity-roadmap.md` (C4/C5 + dependency-path), AGENTS.md (on-top layer)
@@ -50,12 +50,15 @@ three queries, delegating the graph math to `engram-graph-analytics`.
 
 ## Acceptance Criteria
 
-- [ ] `dead_code` returns the zero-caller symbols (sorted, deterministic).
-- [ ] `blast_radius(target, depth)` returns the transitive callers within `depth`.
-- [ ] `dependency_path(from, to)` returns the shortest call path or `None`.
-- [ ] Non-`calls` predicates and refs without a key are skipped.
-- [ ] No contract change; depends only on `engram-domain` +
-  `engram-graph-analytics`; per-crate gates green.
+- [x] `dead_code` returns the zero-caller symbols (sorted, deterministic).
+- [x] `blast_radius(target, depth)` returns the transitive callers within `depth`.
+- [x] `dependency_path(from, to)` returns the shortest call path or `None`.
+- [x] `central_symbols(limit)` (PageRank), `bridge_symbols(limit)` (betweenness),
+  and `call_communities(max_passes)` (Louvain) over `calls` edges — the
+  architecture-overview queries.
+- [x] Non-`calls` predicates and refs without a key are skipped.
+- [x] No contract change; depends only on `engram-domain` +
+  `engram-graph-analytics`; per-crate gates green (8 tests).
 
 ## Assumptions
 

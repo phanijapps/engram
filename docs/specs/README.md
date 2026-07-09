@@ -28,9 +28,10 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   B3/B4/B5 (+ reachability for C4/C5). **Shipped.**
 - [`codegraph-queries`](codegraph-queries/spec.md): the first on-top codegraph
   crate (`engram-codegraph-queries` at `codegraph/queries/`) — dead-code,
-  blast-radius, and dependency-path over `KnowledgeRelationship` `calls` edges,
-  delegating to `engram-graph-analytics`. No contract change. Codegraph-parity
-  C4/C5 + dependency-path. **Shipped.**
+  blast-radius, dependency-path, central symbols (PageRank), bridge symbols
+  (betweenness), and communities (Louvain) over `KnowledgeRelationship` `calls`
+  edges, delegating to `engram-graph-analytics`. No contract change.
+  Codegraph-parity C4/C5 + dependency-path + architecture-overview. **Shipped.**
 - [`rust-crate-integration`](rust-crate-integration/spec.md): stable Rust crate integration contract for embedding Engram as a library — provider facade with capability reporting, typed repository handles, embedding provider abstraction (FastEmbed + Ollama), embedding-space validation, migration/import API with dry-run/apply gating, retrieval trace contract, and conformance harness. Draft.
 - [`sqlite-open-options`](sqlite-open-options/spec.md): common `SqliteOpenOptions` configuration for all SQLite adapters (WAL mode, busy timeout, foreign keys, migrations, directory creation) with `open_with_options` constructors. Shipped.
 - [`demo-reimagine`](demo-reimagine/spec.md): prune the demo to 5 views

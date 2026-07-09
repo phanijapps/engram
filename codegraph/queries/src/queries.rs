@@ -1,7 +1,7 @@
 //! Map knowledge-graph call edges to a generic edge list and answer
 //! code-specific queries over them.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use engram_domain::{EntityRef, KnowledgeRelationship};
 
@@ -71,6 +71,45 @@ pub fn dependency_path(
     engram_graph_analytics::shortest_path(&edges, &from.to_owned(), &to.to_owned())
 }
 
+/// Returns the most central symbols (PageRank over `calls` edges), best-first.
+/// Mirrors memtrace's `find_central_symbols` — the functions/classes most other
+/// code depends on.
+pub fn central_symbols(
+    relationships: &[KnowledgeRelationship],
+    limit: usize,
+) -> Vec<(String, f64)> {
+    let edges = call_edges(relationships);
+    let mut ranked: Vec<(String, f64)> = engram_graph_analytics::pagerank(&edges, 0.85, 100, 1e-6)
+        .into_iter()
+        .collect();
+    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    ranked.truncate(limit);
+    ranked
+}
+
+/// Returns the highest-betweenness symbols over `calls` edges, best-first — the
+/// chokepoints. Touching these has outsized blast radius. Mirrors memtrace's
+/// `find_bridge_symbols`.
+pub fn bridge_symbols(relationships: &[KnowledgeRelationship], limit: usize) -> Vec<(String, f64)> {
+    let edges = call_edges(relationships);
+    let mut ranked: Vec<(String, f64)> = engram_graph_analytics::betweenness(&edges)
+        .into_iter()
+        .collect();
+    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    ranked.truncate(limit);
+    ranked
+}
+
+/// Returns the community label per symbol (Louvain over `calls` edges). Mirrors
+/// memtrace's `list_communities` — clusters of tightly-coupled symbols.
+pub fn call_communities(
+    relationships: &[KnowledgeRelationship],
+    max_passes: usize,
+) -> HashMap<String, usize> {
+    let edges = call_edges(relationships);
+    engram_graph_analytics::communities(&edges, max_passes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,6 +177,30 @@ mod tests {
     fn dependency_path_none_when_unreachable() {
         let rels = vec![rel("a", "b"), rel("b", "c")];
         assert_eq!(dependency_path(&rels, "c", "a"), None);
+    }
+
+    #[test]
+    fn central_symbols_ranks_hub_highest() {
+        // a, b, c all call `hub` -> hub is the most central.
+        let rels = vec![rel("a", "hub"), rel("b", "hub"), rel("c", "hub")];
+        let central = central_symbols(&rels, 1);
+        assert_eq!(central[0].0, "hub");
+    }
+
+    #[test]
+    fn bridge_symbols_ranks_chokepoint_highest() {
+        // a -> b -> c: b is the bridge.
+        let rels = vec![rel("a", "b"), rel("b", "c")];
+        let bridges = bridge_symbols(&rels, 1);
+        assert_eq!(bridges[0].0, "b");
+    }
+
+    #[test]
+    fn call_communities_collapses_tightly_coupled_symbols() {
+        // A triangle is one community.
+        let rels = vec![rel("a", "b"), rel("b", "c"), rel("a", "c")];
+        let labels: HashSet<usize> = call_communities(&rels, 10).values().copied().collect();
+        assert_eq!(labels.len(), 1);
     }
 
     // --- fixtures ---

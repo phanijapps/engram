@@ -354,6 +354,41 @@ fn paths_match(call_path: &str, endpoint_path: &str) -> bool {
     call_base == endpoint_base || call_base.ends_with(endpoint_base)
 }
 
+/// Resolves name-only call targets against a global name→entity-id index (C1).
+/// Fills `object.id` on `calls` relationships whose object is a name-only ref,
+/// where the name uniquely maps to an id. Returns the count resolved.
+pub fn resolve_call_targets(
+    relationships: &mut [KnowledgeRelationship],
+    name_to_id: &std::collections::HashMap<String, String>,
+) -> usize {
+    let mut resolved = 0;
+    for rel in relationships.iter_mut() {
+        if rel.predicate != "calls" || rel.object.id.is_some() {
+            continue;
+        }
+        if let Some(name) = &rel.object.name {
+            if let Some(id) = name_to_id.get(name) {
+                rel.object.id = Some(engram_domain::Id::from(id.clone()));
+                resolved += 1;
+            }
+        }
+    }
+    resolved
+}
+
+/// Ranks functions by cyclomatic complexity, most-complex-first. Given
+/// `(name, source_text)` pairs, computes complexity per function + truncates to
+/// `limit`. Mirrors memtrace's `find_most_complex_functions`.
+pub fn most_complex(sources: &[(String, String)], limit: usize) -> Vec<(String, usize)> {
+    let mut ranked: Vec<(String, usize)> = sources
+        .iter()
+        .map(|(name, source)| (name.clone(), cyclomatic_complexity(source)))
+        .collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1));
+    ranked.truncate(limit);
+    ranked
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -589,6 +624,37 @@ mod tests {
             "https://api.example.com/orders".to_owned(),
             "POST /orders".to_owned()
         )));
+    }
+
+    #[test]
+    fn resolve_call_targets_fills_name_only_refs() {
+        let mut rels = vec![rel("caller", "external_fn")];
+        rels[0].object.id = None;
+        rels[0].object.name = Some("external_fn".to_owned());
+
+        let mut name_map = std::collections::HashMap::new();
+        name_map.insert("external_fn".to_owned(), "resolved-id".to_owned());
+
+        let count = resolve_call_targets(&mut rels, &name_map);
+        assert_eq!(count, 1);
+        assert_eq!(rels[0].object.id.as_ref().unwrap().as_str(), "resolved-id");
+    }
+
+    #[test]
+    fn most_complex_ranks_highest_first() {
+        let sources = vec![
+            (
+                "simple".to_owned(),
+                "fn add(a: i32, b: i32) -> i32 { a + b }".to_owned(),
+            ),
+            (
+                "complex".to_owned(),
+                "fn check(x: i32) -> i32 { if x > 0 { for i in 0..x { } } x }".to_owned(),
+            ),
+        ];
+        let ranked = most_complex(&sources, 2);
+        assert_eq!(ranked[0].0, "complex");
+        assert!(ranked[0].1 > ranked[1].1);
     }
 
     // --- fixtures ---

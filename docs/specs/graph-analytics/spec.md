@@ -1,9 +1,9 @@
 # Spec: graph-analytics
 
-- **Status:** Shipped (PageRank + betweenness + communities)
+- **Status:** Shipped (PageRank + betweenness + communities + reachability)
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
-- **Constrained by:** RFC-0012, `docs/codegraph-parity-roadmap.md` (items B3/B4/B5), `docs/domain-data-model.md`
+- **Constrained by:** RFC-0012, `docs/codegraph-parity-roadmap.md` (items B3/B4/B5 + reachability primitives for C4/C5), `docs/domain-data-model.md`
 - **Brief:** none
 - **Contract:** none — pure algorithms; no public contract change
 - **Shape:** service
@@ -11,22 +11,26 @@
 > **Spec contract:** this document defines what "done" means.
 
 **Scope.** A focused pure-algorithm crate (`engram-graph-analytics`) with graph
-centrality / community primitives over a generic directed edge list, decoupled
-from domain types. Callers map `KnowledgeRelationship` (or any edge source) to
-`(source, target)` id pairs at the call site. No dependencies.
+centrality / community / traversal primitives over a generic directed edge list,
+decoupled from domain types. Callers map `KnowledgeRelationship` (or any edge
+source) to `(source, target)` id pairs at the call site. No dependencies.
 
 **Shipped:** PageRank centrality (B3), betweenness centrality — Brandes (B4),
-community detection — single-level modularity-greedy Louvain local-moving (B5).
+community detection — single-level modularity-greedy Louvain local-moving (B5),
+and reachability primitives — `in_degree`, `ancestors`, `shortest_path` (enable
+dead-code C4, blast-radius C5, dependency-path).
 **Follow-ups (out of scope here):** Louvain multi-level aggregation; wiring the
 outputs to retrieval (popularity prior, bridge detection) and to
-`HierarchyNode(kind=cluster)`.
+`HierarchyNode(kind=cluster)`; the code-specific dead-code/blast-radius queries
+that consume these primitives.
 
 ## Objective
 
-Graph-analytics returns node centrality scores and communities for a directed
-graph, enabling popularity-prior retrieval, bridge-symbol detection,
-community/cluster detection, and code-graph queries (blast-radius, dead-code)
-downstream. General-purpose: any edge list benefits, not code alone.
+Graph-analytics returns node centrality scores, communities, and traversal
+results for a directed graph, enabling popularity-prior retrieval, bridge-symbol
+detection, community/cluster detection, dead-code / blast-radius / dependency
+queries, and code-graph analysis downstream. General-purpose: any edge list
+benefits, not code alone.
 
 ## Boundaries
 
@@ -44,8 +48,9 @@ downstream. General-purpose: any edge list benefits, not code alone.
 
 ## Testing Strategy
 
-- **TDD** — each algorithm on known small graphs (deterministic ordering /
-  values / partitions); per-crate gates (fmt/clippy `-D warnings`/test).
+- **TDD** — each algorithm/primitive on known small graphs (deterministic
+  ordering / values / partitions / paths); per-crate gates
+  (fmt/clippy `-D warnings`/test).
 
 ## Acceptance Criteria
 
@@ -54,9 +59,13 @@ downstream. General-purpose: any edge list benefits, not code alone.
 - [x] `betweenness(edges)` returns Brandes betweenness; a bridge node carries all
   through-traffic; parallel shortest paths split credit (0.5 each); empty → empty.
 - [x] `communities(edges, max_passes)` returns a node→label partition via
-  single-level modularity-greedy Louvain local-moving; a triangle collapses to
-  one community; disconnected cliques stay separate; empty → empty.
-- [x] No dependencies; per-crate gates green (13 tests).
+  single-level modularity-greedy Louvain; triangle → one community; disconnected
+  cliques stay separate; empty → empty.
+- [x] `in_degree` / `ancestors(edges, target, max_depth)` / `shortest_path(edges,
+  from, to)` traversal primitives: in-degree counts incoming; ancestors returns
+  transitive callers within a depth (blast radius); shortest_path returns the BFS
+  path or `None` (dependency path).
+- [x] No dependencies; per-crate gates green (19 tests).
 - [x] No public contract change.
 
 ## Assumptions

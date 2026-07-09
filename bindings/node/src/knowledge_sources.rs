@@ -2,7 +2,7 @@
 //!
 //! Manages knowledge source (repository) operations through the KnowledgeRepository port.
 
-use engram_domain::{KnowledgeSource, Scope};
+use engram_domain::KnowledgeSource;
 use engram_knowledge::KnowledgeRepository;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;

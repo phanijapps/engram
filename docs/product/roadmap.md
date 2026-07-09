@@ -19,6 +19,12 @@ What we're actively working on. Each item should link to a spec in
   SQLite-only. [spec: `backend-agnostic-retrieval`; RFC-0005; ADR-0009]
 - **Demo polish.** Friendlier graph (meaningful labels, source files, neighbors),
   MCP server, benchmark harness. [spec: `benchmark-lazy-embeddings`]
+- **Codegraph parity (on top of engram).** BM25 lexical retrieval, cross-encoder
+  rerank, graph analytics (PageRank / betweenness / communities / reachability),
+  and bi-temporal knowledge entities — building the codegraph layer on top of
+  engram rather than into core. Adapters shipped behind ports; live-pipeline
+  wiring in progress. [RFC-0012; `codegraph-parity-roadmap`; specs:
+  `lexical-keyword-retrieval`, `cross-encoder-rerank`, `graph-analytics`]
 
 ## Next (following 1-2 quarters)
 

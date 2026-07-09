@@ -2,7 +2,7 @@
 //!
 //! Internal state tracking for background repository scan jobs.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Snapshot of a background scan job, returned to Node as JSON.
 #[derive(Debug, Clone, Serialize)]

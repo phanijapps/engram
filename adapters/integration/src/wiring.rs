@@ -117,7 +117,7 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let mut hierarchy_state = failed();
     // retrieval_state is set unconditionally below (no RetrievalIndex adapter is
     // wired in this layer); no initial value needed.
-    let retrieval_state;
+
     let mut vectors_state = failed();
 
     let mut memory: Option<Arc<dyn MemoryService>> = None;
@@ -225,7 +225,7 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // Supported without a handle, so callers never expect a handle that is
     // absent.
     let _ = fixtures::retrieval::run_retrieval_fixture();
-    retrieval_state = CapabilityState::Unsupported {
+    let retrieval_state = CapabilityState::Unsupported {
         reason: CapabilityReason::UnsupportedStoreFamily,
     };
 
@@ -380,15 +380,14 @@ mod tests {
     // ---- single-file SQLite layout ----
 
     fn fresh_dir(label: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!(
+        std::env::temp_dir().join(format!(
             "engram-layout-{label}-{}-{}",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos(),
-        ));
-        dir
+        ))
     }
 
     fn count_db_files(dir: &std::path::Path) -> usize {

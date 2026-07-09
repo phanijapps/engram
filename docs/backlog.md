@@ -102,6 +102,54 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   documents so the reconcile can find prior documents by `(stable_source_key, path)`.
   RFC-0009 flagged the embedding cascade (OQ2). Needs a spec before work.
 
+## lexical-wiring
+
+- **End-to-end keyword retrieval (deferred: lexical-wiring):** wire the shipped
+  lexical `RetrievalIndex` (`engram-store-lexical`, B1) into the live pipeline so
+  `RetrievalMode::Keyword` returns BM25-ranked chunks composed with graph + vector
+  via the bindings-layer RRF fusion — a `lexical_candidates_json` binding +
+  `SqlKnowledgeStore`-backed resolver. Deferred from
+  [`lexical-keyword-retrieval`](specs/lexical-keyword-retrieval/spec.md) (eval
+  fixture, router/fusion composition, full workspace gates). Blocked on: the
+  composition layer is bindings-layer RRF fusion (`RetrievalRouter` is unused).
+  Tracked in [`lexical-wiring`](specs/lexical-wiring/).
+
+## cross-encoder-rerank (wiring + model)
+
+- **compose_context rerank hook (deferred: rerank-wiring):** apply the shipped
+  `engram-rerank-cross-encoder` (B2) inside `compose_context` between fusion and
+  budget via a `RetrievalReranker` port. Deferred from
+  [`cross-encoder-rerank`](specs/cross-encoder-rerank/spec.md).
+- **Feature-gated real cross-encoder model:** ground the pinned `fastembed`
+  reranker API (or an ONNX fallback) behind a feature flag; the adapter ships
+  with an injected stub scorer today.
+
+## graph-analytics (follow-ups)
+
+- **Louvain multi-level aggregation + cluster wiring:** the single-level
+  local-moving phase ships; multi-level aggregation and wiring communities to
+  `HierarchyNode(kind=cluster)` are follow-ups. From
+  [`graph-analytics`](specs/graph-analytics/spec.md).
+- **Analytics → retrieval wiring:** popularity prior (PageRank) and bridge
+  detection (betweenness) as retrieval signals.
+
+## codegraph-parity remaining (RFC-0012)
+
+The remaining codegraph-parity micro-specs — see
+[`docs/codegraph-parity-roadmap.md`](codegraph-parity-roadmap.md):
+
+- **B6b** — `as_of` retrieval filter (v1 contract change on `QueryFilter`).
+- **B6 ingest-stamping** — stamp `validFrom`/`validUntil` on re-index (note:
+  conflicts with ADR-0018 hard-delete; needs a retraction-mode decision).
+- **B7** — code embeddings (decision Q3: which model).
+- **B8** — cross-repo workspace fusion (RFC-0008).
+- **A2 follow-up** — wire the AST extractor to emit the new `EntityKind`s.
+- **Data layer (C-specs):** C1 cross-file edges, C2 taxonomy, C3 complexity,
+  C4/C5 dead-code/blast-radius/dependency-path (queries shipped via
+  `engram-codegraph-queries`; MCP/UI wiring pending), C6 temporal scoring,
+  C7/C8 HTTP topology, C9 process/flow.
+- **Integration layer:** MCP server, dashboard UI, agent skills, fleet.
+
 <!-- Add one section per spec with open work, e.g.:
 
 ## <spec-name>

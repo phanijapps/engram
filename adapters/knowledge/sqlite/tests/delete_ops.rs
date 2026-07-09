@@ -86,6 +86,8 @@ fn make_entity(id: &str, graph_id: Option<&str>, tenant: &str) -> KnowledgeEntit
         provenance: provenance(),
         created_at: Utc::now(),
         updated_at: None,
+        valid_from: None,
+        valid_until: None,
         metadata: None,
     }
 }

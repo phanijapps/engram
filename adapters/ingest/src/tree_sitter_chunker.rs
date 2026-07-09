@@ -112,7 +112,7 @@ impl TreeSitterChunker {
         &self,
         text: &str,
         ext: &str,
-        _entity_names: &std::collections::HashSet<String>,
+        entity_names: &std::collections::HashSet<String>,
     ) -> CoreResult<Vec<(String, String)>> {
         let Some(entry) = self.entries.get(ext) else {
             return Ok(Vec::new());
@@ -141,9 +141,14 @@ impl TreeSitterChunker {
             &mut call_sites,
         );
 
-        // Match each call to its enclosing function.
+        // Match each call to its enclosing function. Only emit edges where the
+        // callee is a known entity — filters out language keywords and stdlib
+        // calls that would pollute the graph with noise.
         let mut edges = Vec::new();
         for (call_line, callee) in &call_sites {
+            if !entity_names.contains(callee) {
+                continue;
+            }
             for (start, end, caller) in &fn_spans {
                 if call_line >= start && call_line <= end {
                     if caller != callee {

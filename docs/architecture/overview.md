@@ -17,15 +17,21 @@
 │   ├── knowledge/        # knowledge, graph, ontology, source, ingestion ports
 │   ├── retrieval/        # retrieval composition + fusion ports (RRF, weighted)
 │   ├── orchestration/    # orchestration facade + compatibility re-exports
-│   └── eval/             # deterministic fixtures + regression harness
+│   ├── eval/             # deterministic fixtures + regression harness
+│   └── graph-analytics/  # pure graph algorithms (PageRank, betweenness, communities, reachability)
 ├── adapters/             # replaceable infrastructure crates (behind traits)
 │   ├── ingest/           # filesystem/git ingestion + tree-sitter AST chunking
 │   ├── memory/sqlite/    # memory records/events + write/retrieve/forget
 │   ├── knowledge/sqlite/ # graph/chunk/taxonomy/ontology persistence
 │   ├── orchestration/belief-sqlite/ # belief persistence (path migration pending)
 │   ├── hierarchy/sqlite/ # hierarchy persistence + navigation repository
-│   └── retrieval/sqlite-vec/   # sqlite-vec index + feature-gated FastEmbed
+│   ├── retrieval/sqlite-vec/      # sqlite-vec vector index + feature-gated FastEmbed
+│   ├── retrieval/tantivy-lexical/ # BM25 lexical RetrievalIndex (keyword mode)
+│   └── retrieval/cross-encoder-rerank/ # cross-encoder reranker (RerankStrategy::cross_encoder)
 ├── bindings/node/        # N-API JSON transport (engram-node) — a transport, not a second impl
+├── codegraph/            # on-top codegraph layer (RFC-0012): code-specific crates on engram
+│   ├── queries/          # dead-code / blast-radius / dependency-path / centrality / communities
+│   └── temporal/         # temporal scoring engine (recent / impact / compound)
 ├── packages/             # TypeScript workspace
 │   ├── contracts/        # generated TS types + schemas
 │   ├── client/           # ergonomic application SDK
@@ -71,7 +77,25 @@
   navigation persistence.
 - `engram-store-vector` (sqlite-vec) — vector index + the feature-gated
   `FastEmbedBgeSmallQueryProvider`. **Look first:** `adapters/retrieval/sqlite-vec/src/`.
+- `engram-store-lexical` (tantivy) — BM25 lexical `RetrievalIndex` implementing
+  the contracted `RetrievalMode::keyword` (identifier-aware tokenizer). **Look
+  first:** `adapters/retrieval/tantivy-lexical/src/`.
+- `engram-rerank-cross-encoder` — cross-encoder reranker implementing the
+  contracted `RerankStrategy::cross_encoder` (injected scorer). **Look first:**
+  `adapters/retrieval/cross-encoder-rerank/src/`.
+- `engram-graph-analytics` — pure graph algorithms: PageRank, betweenness,
+  communities (Louvain local-moving), reachability (`in_degree`, `ancestors`,
+  `shortest_path`). std-only. **Look first:** `core/graph-analytics/src/`.
 - `engram-node` (`bindings/node`) — N-API bridge; JSON in/out over Rust behavior.
+- `engram-codegraph-queries` (`codegraph/queries`) — the on-top codegraph layer
+  (RFC-0012): dead-code, blast-radius, dependency-path, central symbols, bridge
+  symbols, communities, and symbol-context over `KnowledgeRelationship` `calls`
+  edges, delegating to `engram-graph-analytics`. **Look first:**
+  `codegraph/queries/src/`.
+- `engram-codegraph-temporal` (`codegraph/temporal`) — the temporal scoring
+  engine: `recent` (recency decay), `impact` (blast-radius-weighted), and
+  `compound` modes over versioned symbols (ADR-0019). **Look first:**
+  `codegraph/temporal/src/`.
 - `@engram/node`, `@engram/contracts`, `@engram/client` (`packages/*`) — TS SDK.
 - `demo/backend` — Hono API (ingest, graph, RRF-hybrid Q&A, benchmark, MCP).
 - `demo/frontend` — React + shadcn/ui (dashboard, WebGL graph explorer, chat).

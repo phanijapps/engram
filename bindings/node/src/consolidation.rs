@@ -46,3 +46,9 @@ impl NativeConsolidationEngine {
         encode(&operations)
     }
 }
+
+impl Default for NativeConsolidationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}

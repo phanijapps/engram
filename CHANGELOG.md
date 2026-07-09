@@ -4,6 +4,28 @@ This project follows a contract-first changelog while pre-1.0.
 
 ## Unreleased
 
+- Codegraph parity (RFC-0012, on top of engram): added `engram-store-lexical`
+  (Tantivy BM25 lexical `RetrievalIndex`, `RetrievalMode::keyword`,
+  identifier-aware tokenizer), `engram-rerank-cross-encoder`
+  (`RerankStrategy::cross_encoder`, injected scorer), and `engram-graph-analytics`
+  (std-only PageRank, betweenness, Louvain community detection, reachability:
+  `in_degree`/`ancestors`/`shortest_path`). Plus the codegraph-parity micro-spec
+  roadmap, the A1 capability audit, and the lexical-wiring follow-up spec.
+- Added `engram-codegraph-queries` — the first on-top `codegraph/` layer crate
+  (RFC-0012): dead-code, blast-radius, dependency-path, central symbols
+  (PageRank), bridge symbols (betweenness), and communities (Louvain) over
+  `KnowledgeRelationship` `calls` edges, delegating to `engram-graph-analytics`.
+- Exposed the codegraph queries via N-API on `NativeKnowledgeEngine`
+  (`deadCodeJson`, `blastRadiusJson`, `dependencyPathJson`, `centralSymbolsJson`,
+  `bridgeSymbolsJson`, `callCommunitiesJson`) — the Rust→binding layer of MCP
+  wiring; the TS/MCP-tool layer is pending.
+- Added `engram-codegraph-temporal` — the temporal scoring engine: `recent`
+  (recency decay), `impact` (blast-radius-weighted), and `compound` modes over
+  versioned symbols (ADR-0019 bi-temporal).
+- Added optional `validFrom`/`validUntil` to `KnowledgeEntity` for bi-temporal
+  versioning (ADR-0019; draft-extension type, no v1 schema change).
+- Extended `EntityKind` with `struct`, `interface`, `trait`, `type_alias`,
+  `enum`, `endpoint` for code-structural symbols (ADR-0020).
 - Accepted the v1 core memory contract.
 - Added Rust 2024 workspace scaffolding for domain and core ports.
 - Added contract validation, examples, invalid examples, and spec templates.

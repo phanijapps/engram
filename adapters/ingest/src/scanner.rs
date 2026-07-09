@@ -6,8 +6,9 @@
 //! tested; the security controls are ported from `demo/backend/src/decide.ts`
 //! and must not be relaxed.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use engram_domain::*;
 use engram_knowledge::{CoreError, CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
@@ -26,6 +27,7 @@ use crate::{
 pub use crate::classifier::FileKind;
 
 const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
+const WORKSPACE_MARKER: &str = ".engram-workspace";
 
 /// Summary returned by a scan.
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -295,6 +297,38 @@ where
     // FIX 1(b): Parallel ingest — no reconcile / delete calls inside this
     // closure.  Content was already read and prior graphs were already deleted
     // in the serial pre-pass above.
+
+    // Pre-pass: collect ALL entity names globally so AST call extraction can
+    // match cross-file callees. Without this, extract_calls only knows about
+    // symbols declared in the current file, dropping most cross-file edges.
+    let global_entity_names: Arc<HashSet<String>> = Arc::new(
+        to_ingest
+            .par_iter()
+            .filter_map(|item| {
+                let ext = item.rel.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
+                let ts = ts_chunker.as_ref()?;
+                if !ts.supports(ext) {
+                    return None;
+                }
+                let text = String::from_utf8_lossy(&item.content);
+                let candidates = ts.chunk_with_ext(&text, ext).ok()?;
+                Some(
+                    candidates
+                        .iter()
+                        .filter_map(|c| {
+                            c.location
+                                .as_ref()
+                                .and_then(|l| l.anchor.as_deref())
+                                .and_then(|a| a.split_once(' ').map(|x| x.1).map(|s| s.to_owned()))
+                        })
+                        .collect::<Vec<String>>(),
+                )
+            })
+            .flatten()
+            .collect(),
+    );
+
+    let name_index: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
     let outcomes: Vec<(String, Outcome)> = to_ingest
         .par_iter()
         .map(|item| {
@@ -358,21 +392,12 @@ where
                 Ok(i) => i,
                 Err(_) => return (rel.clone(), Outcome::Error),
             };
-            // Extract entity names from chunk anchors for AST call matching.
-            let entity_names: HashSet<String> = ingested
-                .chunks
-                .iter()
-                .filter_map(|c| {
-                    c.location
-                        .as_ref()
-                        .and_then(|l| l.anchor.as_deref())
-                        .and_then(|a| a.split_once(' ').map(|x| x.1).map(|s| s.to_owned()))
-                })
-                .collect();
-            // AST-level call extraction when tree-sitter supports the extension.
+            // AST-level call extraction using the GLOBAL entity name set (not
+            // just this file's symbols). This preserves cross-file call edges.
             let ast_calls = if let Some(ref ts) = ts_chunker {
-                if ts.supports(ext) && !entity_names.is_empty() {
-                    ts.extract_calls(&text_for_ast, ext, &entity_names).ok()
+                if ts.supports(ext) && !global_entity_names.is_empty() {
+                    ts.extract_calls(&text_for_ast, ext, &global_entity_names)
+                        .ok()
                 } else {
                     None
                 }
@@ -399,7 +424,22 @@ where
                 })
             };
             let extracted = match extracted_result {
-                Ok(g) => {
+                Ok(mut g) => {
+                    // C1: cross-file resolution — register entities + resolve refs.
+                    if let Ok(mut idx) = name_index.lock() {
+                        for entity in &g.entities {
+                            idx.insert(entity.name.clone(), entity.id.to_string());
+                        }
+                        for rel in &mut g.relationships {
+                            if rel.predicate == "calls" && rel.object.id.is_none() {
+                                if let Some(name) = &rel.object.name {
+                                    if let Some(id) = idx.get(name) {
+                                        rel.object.id = Some(Id::from(id.clone()));
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // Persist the graph + entities + relationships.
                     let _ = block_on(async {
                         repo.put_graph(g.graph.clone()).await?;
@@ -420,15 +460,19 @@ where
                     });
                     g
                 }
-                Err(_) => match block_on(extractor.extract_into(
-                    repo,
-                    &ingested.source,
-                    &ingested.document,
-                    &ingested.chunks,
-                )) {
-                    Ok(e) => e,
-                    Err(_) => return (rel.clone(), Outcome::Error),
-                },
+                Err(_) => {
+                    let mut idx = name_index.lock().unwrap();
+                    match block_on(extractor.extract_into(
+                        repo,
+                        &ingested.source,
+                        &ingested.document,
+                        &ingested.chunks,
+                        Some(&mut *idx),
+                    )) {
+                        Ok(e) => e,
+                        Err(_) => return (rel.clone(), Outcome::Error),
+                    }
+                }
             };
             // Contract extraction (T4/T5/T6): for YAML/JSON files, attempt
             // OpenAPI detection and emit EntityKind::Api entities + exposes edges.
@@ -724,6 +768,60 @@ where
     Ok((summary, new_manifest))
 }
 
+/// Detects workspace children: if `root` contains a `.engram-workspace` marker,
+/// returns child directories that are git repos. Returns `None` if no marker or
+/// no child repos. (B8 — workspace fusion, RFC-0008)
+pub fn detect_workspace(root: &Path) -> Option<Vec<PathBuf>> {
+    if !root.join(WORKSPACE_MARKER).exists() {
+        return None;
+    }
+    let children: Vec<PathBuf> = std::fs::read_dir(root)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_ok_and(|ft| ft.is_dir()))
+        .map(|e| e.path())
+        .filter(|p| p.join(".git").exists())
+        .collect();
+    if children.is_empty() {
+        None
+    } else {
+        Some(children)
+    }
+}
+
+/// Scans a workspace: detects child repos via `.engram-workspace` marker and
+/// scans each into the shared repository with the shared workspace scope. (B8)
+pub fn scan_workspace<R>(
+    root: &Path,
+    opts: &ScanOptions,
+    repo: &R,
+    progress: &(impl Fn(ScanProgress) + Send + Sync),
+) -> CoreResult<ScanSummary>
+where
+    R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,
+{
+    let children = detect_workspace(root).ok_or_else(|| CoreError::InvalidRequest {
+        reason: format!("no {WORKSPACE_MARKER} marker at {}", root.display()),
+    })?;
+    let mut summary = ScanSummary::default();
+    for child in &children {
+        let repo_name = child.file_name().and_then(|n| n.to_str()).unwrap_or("repo");
+        let child_opts = ScanOptions {
+            source_name: format!("{}:{repo_name}", opts.source_name),
+            ..opts.clone()
+        };
+        let (child_summary, _) = scan_repository(child, &child_opts, repo, progress)?;
+        summary.scanned += child_summary.scanned;
+        summary.ingested += child_summary.ingested;
+        summary.unchanged += child_summary.unchanged;
+        summary.skipped += child_summary.skipped;
+        summary.entities += child_summary.entities;
+        summary.relationships += child_summary.relationships;
+        summary.errors += child_summary.errors;
+    }
+    Ok(summary)
+}
+
 /// Attempts OpenAPI contract extraction for a single file during the parallel
 /// ingest phase (T4 entity emission, T5 source-ref union, T6 skip-and-warn).
 ///
@@ -813,5 +911,27 @@ mod tests {
         assert!(is_within_root(Path::new("/tmp/repo/src/a.rs"), root));
         assert!(!is_within_root(Path::new("/tmp/other"), root));
         assert!(!is_within_root(Path::new("/tmp/repo-evil"), root));
+    }
+
+    #[test]
+    fn detect_workspace_finds_child_git_repos() {
+        let tmp = std::env::temp_dir().join(format!("engram-ws-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join(".engram-workspace"), "").unwrap();
+        std::fs::create_dir_all(tmp.join("frontend").join(".git")).unwrap();
+        std::fs::create_dir_all(tmp.join("backend").join(".git")).unwrap();
+        std::fs::create_dir_all(tmp.join("not-a-repo")).unwrap();
+
+        let children = detect_workspace(&tmp).expect("workspace detected");
+        assert_eq!(children.len(), 2);
+        assert!(children.iter().any(|c| c.ends_with("frontend")));
+        assert!(children.iter().any(|c| c.ends_with("backend")));
+
+        // No marker → None.
+        let no_marker = tmp.join("not-a-repo");
+        assert!(detect_workspace(&no_marker).is_none());
+
+        std::fs::remove_dir_all(&tmp).unwrap();
     }
 }

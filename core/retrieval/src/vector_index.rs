@@ -114,7 +114,7 @@ mod tests {
 
         fn insert(
             &self,
-            target_id: &Id,
+            _target_id: &Id,
             embedding_space: &EmbeddingSpace,
             vector: Vec<f32>,
         ) -> CoreResult<()> {

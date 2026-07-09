@@ -35,6 +35,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 8-question and 50-question code-intelligence eval suites + a warm-up benchmark
   (`docs/perf/`).
 - Reference architecture + charter + roadmap instantiated for engram.
+- BM25 lexical retrieval (`engram-store-lexical`, Tantivy) implementing the
+  contracted `RetrievalMode::keyword` — codegraph-parity B1.
+- Cross-encoder reranker (`engram-rerank-cross-encoder`) implementing
+  `RerankStrategy::cross_encoder` (injected scorer) — B2.
+- Graph analytics crate (`engram-graph-analytics`): PageRank, betweenness, Louvain
+  community detection, and reachability (`in_degree` / `ancestors` /
+  `shortest_path`) — B3/B4/B5.
+- Bi-temporal knowledge entities: optional `validFrom` / `validUntil` on
+  `KnowledgeEntity` (ADR-0019).
+- Extended `EntityKind` vocabulary: `struct`, `interface`, `trait`, `type_alias`,
+  `enum`, `endpoint` (ADR-0020).
+- On-top codegraph layer begun: `engram-codegraph-queries` (the first `codegraph/`
+  crate) — dead-code, blast-radius, and dependency-path over `calls` edges.
 
 ### Changed
 

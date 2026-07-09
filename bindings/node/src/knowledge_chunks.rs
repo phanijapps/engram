@@ -2,7 +2,7 @@
 //!
 //! Manages knowledge chunk operations through the KnowledgeRepository port.
 
-use engram_domain::{Id, KnowledgeChunk, Scope};
+use engram_domain::KnowledgeChunk;
 use engram_knowledge::KnowledgeRepository;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;

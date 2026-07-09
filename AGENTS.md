@@ -29,15 +29,22 @@ core/                      Storage-neutral Rust crates.
   retrieval/               Retrieval composition and fusion ports.
   orchestration/           Orchestration facade and compatibility re-exports.
   eval/                    Deterministic fixtures and regression harness.
+  graph-analytics/         Pure graph algorithms (PageRank, betweenness, communities, reachability).
 
 adapters/                  Replaceable infrastructure crates.
   ingest/                  Filesystem/Git ingestion adapter until split.
   memory/sqlite/           SQLite memory persistence adapter.
   knowledge/sqlite/        SQLite knowledge, graph, taxonomy, and ontology adapter.
   retrieval/sqlite-vec/    sqlite-vec retrieval index adapter.
+  retrieval/tantivy-lexical/       BM25 lexical retrieval index adapter (keyword mode).
+  retrieval/cross-encoder-rerank/  Cross-encoder reranker adapter.
 
 bindings/                  Native language bridges.
   node/                    N-API bridge for TypeScript.
+
+codegraph/                 On-top codegraph layer (RFC-0012): code-specific
+  queries/                 crates built on engram (dead-code / blast-radius /
+                           dependency-path over call edges).
 
 packages/                  TypeScript workspace.
   contracts/               Generated TypeScript types and schemas.
@@ -74,6 +81,20 @@ the stack ADR is accepted.
   taxonomy, and ontology adapter. It must not own memory writes, memory
   lifecycle events, memory forget semantics, vector indexes, or sibling store
   internals.
+- `engram-store-lexical` is the BM25 lexical retrieval adapter (Tantivy). It
+  implements the contracted `RetrievalMode::keyword`; Tantivy must stay in this
+  adapter and must not enter `engram-domain` or `engram-retrieval` core.
+- `engram-rerank-cross-encoder` is the cross-encoder reranker adapter. It
+  implements the contracted `RerankStrategy::cross_encoder`; model integrations
+  stay behind the injected `RerankScorer` or a feature gate, never in core.
+- `engram-graph-analytics` owns pure, dependency-free graph algorithms only
+  (PageRank, betweenness, communities, reachability). It must not depend on
+  `engram-domain`, storage, or any infrastructure; callers map domain edges to a
+  generic edge list at the call site.
+- The `codegraph/` area is the on-top codegraph layer (RFC-0012), not engram.
+  Its crates depend only on `engram-domain`, `engram-graph-analytics`, or other
+  engram ports; they must not own storage/infra, duplicate domain truth, or live
+  under `core/`/`adapters/`/`bindings/`.
 - Store, vector, embedding, model, and gateway integrations belong in adapter
   crates or TypeScript packages.
 - TypeScript must not redefine domain truth. It may wrap, validate, compose, and

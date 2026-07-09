@@ -2,7 +2,7 @@
 //!
 //! Manages knowledge entity operations through the KnowledgeRepository port.
 
-use engram_domain::{Id, KnowledgeEntity, Scope};
+use engram_domain::KnowledgeEntity;
 use engram_knowledge::KnowledgeRepository;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
@@ -46,7 +46,7 @@ pub fn list_entities_by_source_json(
         .as_str()
         .ok_or_else(|| Error::from_reason("missing stableSourceKey"))?
         .to_owned();
-    let result = block_on(store.list_entities_by_source(&scope, &source_key))
-        .map_err(to_napi_error)?;
+    let result =
+        block_on(store.list_entities_by_source(&scope, &source_key)).map_err(to_napi_error)?;
     encode(&result)
 }

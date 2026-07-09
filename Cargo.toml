@@ -11,15 +11,21 @@ members = [
     "core/consolidation",
     "core/hierarchy",
     "core/integration",
+    "core/graph-analytics",
     "adapters/ingest",
     "adapters/integration",
     "adapters/memory/sqlite",
     "adapters/knowledge/sqlite",
     "adapters/retrieval/sqlite-vec",
+    "adapters/retrieval/tantivy-lexical",
+    "adapters/retrieval/cross-encoder-rerank",
     "adapters/orchestration/belief-sqlite",
     "adapters/hierarchy/sqlite",
     "bindings/node",
     "examples/rust-integration",
+    "codegraph/queries",
+    "codegraph/temporal",
+    "codegraph/mcp-server",
 ]
 resolver = "3"
 
@@ -44,4 +50,5 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11.0"
 sqlite-vec = "=0.1.9"
+tantivy = "0.22"
 thiserror = "2"

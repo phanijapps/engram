@@ -63,7 +63,7 @@ fn raw_runs(text: &str) -> Vec<EntityRef> {
         if trimmed.is_empty() {
             // Empty after trim — breaks the run.
             flush_run(&mut current_run, &mut results);
-        } else if trimmed.chars().next().map_or(false, |c| c.is_uppercase()) {
+        } else if trimmed.chars().next().is_some_and(|c| c.is_uppercase()) {
             current_run.push(trimmed);
         } else {
             flush_run(&mut current_run, &mut results);

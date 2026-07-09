@@ -85,6 +85,7 @@ fn ingest_and_extract(
         &ingested.source,
         &ingested.document,
         &ingested.chunks,
+        None,
     ))
     .expect("extract")
 }
@@ -383,6 +384,7 @@ fn non_git_source_produces_no_repository_node() {
         &ingested.source,
         &ingested.document,
         &ingested.chunks,
+        None,
     ))
     .expect("extract");
 

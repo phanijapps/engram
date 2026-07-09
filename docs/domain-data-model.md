@@ -814,6 +814,8 @@ Fields:
 | `provenance` | yes | Provenance | Extraction or declaration provenance |
 | `createdAt` | yes | Timestamp | Creation time |
 | `updatedAt` | no | Timestamp | Last update |
+| `validFrom` | no | Timestamp | When this entity version became authoritative (bi-temporal; ADR-0019) |
+| `validUntil` | no | Timestamp | When this entity version stopped being authoritative (bi-temporal; ADR-0019) |
 | `metadata` | no | object | Adapter-specific metadata |
 
 ### EntityKind
@@ -830,6 +832,12 @@ Enum:
 - `function`
 - `method`
 - `variable`
+- `struct`
+- `interface`
+- `trait`
+- `type_alias`
+- `enum`
+- `endpoint`
 - `api`
 - `concept`
 - `task`

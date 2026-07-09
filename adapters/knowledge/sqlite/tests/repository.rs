@@ -118,6 +118,8 @@ fn round_trips_scoped_graph_entities_and_neighbors() {
         provenance: provenance(),
         created_at: Utc::now(),
         updated_at: None,
+        valid_from: None,
+        valid_until: None,
         metadata: None,
     }))
     .expect("put entity");
@@ -565,6 +567,8 @@ fn list_graphs_entities_relationships_are_scope_filtered() {
             provenance: provenance(),
             created_at: Utc::now(),
             updated_at: None,
+            valid_from: None,
+            valid_until: None,
             metadata: None,
         }))
         .expect("put entity");

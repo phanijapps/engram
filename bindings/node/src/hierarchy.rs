@@ -34,3 +34,9 @@ impl NativeHierarchyEngine {
         encode(&serde_json::json!({ "valid": true }))
     }
 }
+
+impl Default for NativeHierarchyEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}

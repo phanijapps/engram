@@ -182,6 +182,12 @@ pub enum EntityKind {
     Function,
     Method,
     Variable,
+    Struct,
+    Interface,
+    Trait,
+    TypeAlias,
+    Enum,
+    Endpoint,
     Api,
     Concept,
     ValueStream,
@@ -211,6 +217,10 @@ pub struct KnowledgeEntity {
     pub created_at: Timestamp,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<Timestamp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_from: Option<Timestamp>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_until: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Metadata>,
 }

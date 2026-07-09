@@ -44,6 +44,12 @@ Current validated surface includes:
 - source-grounded document/code ingestion
 - native TypeScript binding package surface
 - framework-neutral observed transport adapters
+- **codegraph-parity (in progress, RFC-0012):** BM25 lexical retrieval
+  (`engram-store-lexical`), cross-encoder rerank (`engram-rerank-cross-encoder`),
+  and graph analytics (`engram-graph-analytics`: PageRank, betweenness,
+  communities, reachability) adapter crates; bi-temporal knowledge entities
+  (ADR-0019) and an extended `EntityKind` vocabulary (ADR-0020). See
+  [`docs/codegraph-parity-roadmap.md`](docs/codegraph-parity-roadmap.md).
 
 Before publishing crates, npm packages, release tags, or benchmark claims, use
 `docs/release-checklist.md`.

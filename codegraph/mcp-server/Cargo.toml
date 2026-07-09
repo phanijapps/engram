@@ -1,0 +1,24 @@
+[package]
+name = "engram-codegraph-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "engram-codegraph-mcp"
+path = "src/main.rs"
+
+[dependencies]
+engram-codegraph-queries = { path = "../../codegraph/queries" }
+engram-codegraph-temporal = { path = "../../codegraph/temporal" }
+engram-domain = { path = "../../core/domain" }
+engram-graph-analytics = { path = "../../core/graph-analytics" }
+engram-ingest = { path = "../../adapters/ingest" }
+engram-knowledge = { path = "../../core/knowledge" }
+engram-runtime = { path = "../../core/runtime" }
+engram-store-knowledge-sqlite = { path = "../../adapters/knowledge/sqlite" }
+chrono.workspace = true
+futures.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true

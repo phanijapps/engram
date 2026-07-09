@@ -32,7 +32,7 @@ pub fn graph_candidates_json(
 /// Retrieval-composition seam (RFC-0005): reciprocal-rank fusion of
 /// candidate lists (graph + vector) into one ranked list. Configurable
 /// strength (`k`, per-source `weights`) with defaults when omitted.
-pub fn fuse_rrf_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> Result<String> {
+pub fn fuse_rrf_json(_store: &Arc<SqlKnowledgeStore>, request_json: String) -> Result<String> {
     let value = decode::<serde_json::Value>(&request_json)?;
     let request: RetrievalRequest = serde_json::from_value(value["request"].clone())
         .map_err(|e| Error::from_reason(e.to_string()))?;

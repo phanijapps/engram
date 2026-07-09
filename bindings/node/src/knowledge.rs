@@ -11,6 +11,11 @@ use napi_derive::napi;
 use std::sync::Arc;
 
 // Import plain functions from operation modules
+use crate::codegraph::{
+    blast_radius_json, bridge_symbols_json, call_communities_json, central_symbols_json,
+    cyclomatic_complexity_json, dead_code_json, dependency_path_json, find_api_calls_json,
+    find_endpoints_json, find_entry_points_json, match_api_topology_json, process_flow_json,
+};
 use crate::knowledge_chunks::{get_chunk_json, list_chunks_json, put_chunk_json};
 use crate::knowledge_concepts::{
     get_concept_scheme_json, list_concepts_json, put_concept_json, put_concept_relation_json,
@@ -68,6 +73,80 @@ impl NativeKnowledgeEngine {
     #[napi(js_name = "graphCandidatesJson")]
     pub fn graph_candidates_json(&self, request_json: String) -> Result<String> {
         graph_candidates_json(&self.store, request_json)
+    }
+
+    // --- Codegraph queries (RFC-0012, on top of engram) ---
+
+    /// `{scope}` -> dead-code symbol keys (zero callers on `calls` edges).
+    #[napi(js_name = "deadCodeJson")]
+    pub fn dead_code_json(&self, request_json: String) -> Result<String> {
+        dead_code_json(&self.store, request_json)
+    }
+
+    /// `{scope, target, depth?}` -> transitive caller keys (blast radius).
+    #[napi(js_name = "blastRadiusJson")]
+    pub fn blast_radius_json(&self, request_json: String) -> Result<String> {
+        blast_radius_json(&self.store, request_json)
+    }
+
+    /// `{scope, from, to}` -> shortest call path or `null`.
+    #[napi(js_name = "dependencyPathJson")]
+    pub fn dependency_path_json(&self, request_json: String) -> Result<String> {
+        dependency_path_json(&self.store, request_json)
+    }
+
+    /// `{scope, limit?}` -> `[[symbol, score], ...]` by PageRank centrality.
+    #[napi(js_name = "centralSymbolsJson")]
+    pub fn central_symbols_json(&self, request_json: String) -> Result<String> {
+        central_symbols_json(&self.store, request_json)
+    }
+
+    /// `{scope, limit?}` -> `[[symbol, score], ...]` by betweenness (bridges).
+    #[napi(js_name = "bridgeSymbolsJson")]
+    pub fn bridge_symbols_json(&self, request_json: String) -> Result<String> {
+        bridge_symbols_json(&self.store, request_json)
+    }
+
+    /// `{scope, maxPasses?}` -> `{symbol: label}` Louvain communities.
+    #[napi(js_name = "callCommunitiesJson")]
+    pub fn call_communities_json(&self, request_json: String) -> Result<String> {
+        call_communities_json(&self.store, request_json)
+    }
+
+    /// `{source}` -> cyclomatic complexity (integer).
+    #[napi(js_name = "cyclomaticComplexityJson")]
+    pub fn cyclomatic_complexity_json(&self, request_json: String) -> Result<String> {
+        cyclomatic_complexity_json(request_json)
+    }
+
+    /// `{source}` -> `[{method, path}, ...]` HTTP endpoints.
+    #[napi(js_name = "findEndpointsJson")]
+    pub fn find_endpoints_json(&self, request_json: String) -> Result<String> {
+        find_endpoints_json(request_json)
+    }
+
+    /// `{source}` -> `["/path", ...]` HTTP call-site targets.
+    #[napi(js_name = "findApiCallsJson")]
+    pub fn find_api_calls_json(&self, request_json: String) -> Result<String> {
+        find_api_calls_json(request_json)
+    }
+
+    /// `{source}` -> `["main", ...]` entry-point function names.
+    #[napi(js_name = "findEntryPointsJson")]
+    pub fn find_entry_points_json(&self, request_json: String) -> Result<String> {
+        find_entry_points_json(request_json)
+    }
+
+    /// `{scope, entryPoint, maxDepth?}` -> `[symbol, ...]` execution flow.
+    #[napi(js_name = "processFlowJson")]
+    pub fn process_flow_json(&self, request_json: String) -> Result<String> {
+        process_flow_json(&self.store, request_json)
+    }
+
+    /// `{endpoints, calls}` -> cross-service API topology edges.
+    #[napi(js_name = "matchApiTopologyJson")]
+    pub fn match_api_topology_json(&self, request_json: String) -> Result<String> {
+        match_api_topology_json(request_json)
     }
 
     /// Retrieval-composition seam (RFC-0005): reciprocal-rank fusion of

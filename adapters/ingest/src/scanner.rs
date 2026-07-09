@@ -425,6 +425,7 @@ where
                     &ingested.source,
                     &ingested.document,
                     &ingested.chunks,
+                    None, // C1: cross-file name_index — scanner wiring deferred
                 )) {
                     Ok(e) => e,
                     Err(_) => return (rel.clone(), Outcome::Error),

@@ -344,11 +344,30 @@ impl GraphExtractor {
         source: &KnowledgeSource,
         document: &SourceDocument,
         chunks: &[KnowledgeChunk],
+        name_index: Option<&mut HashMap<String, String>>,
     ) -> CoreResult<ExtractedGraph>
     where
         R: KnowledgeRepository + KnowledgeGraphRepository + ?Sized,
     {
-        let extracted = Self.extract(source, document, chunks)?;
+        let mut extracted = Self.extract(source, document, chunks)?;
+
+        // Cross-file edge resolution (C1): fill name-only calls object refs
+        // against the caller-maintained global name→id index.
+        if let Some(index) = name_index {
+            for entity in &extracted.entities {
+                index.insert(entity.name.clone(), entity.id.to_string());
+            }
+            for rel in &mut extracted.relationships {
+                if rel.predicate == "calls" && rel.object.id.is_none() {
+                    if let Some(name) = &rel.object.name {
+                        if let Some(id) = index.get(name) {
+                            rel.object.id = Some(Id::from(id.clone()));
+                        }
+                    }
+                }
+            }
+        }
+
         repository.put_graph(extracted.graph.clone()).await?;
         for entity in &extracted.entities {
             repository.put_entity(entity.clone()).await?;

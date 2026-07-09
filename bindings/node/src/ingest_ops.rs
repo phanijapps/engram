@@ -224,6 +224,7 @@ impl IngestOps {
             &ingested.source,
             &ingested.document,
             &ingested.chunks,
+            None,
         ))
         .map_err(to_napi_error)?;
         encode(&IngestExtractResponse {

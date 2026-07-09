@@ -57,6 +57,7 @@ fn extracts_code_symbols_and_calls_edges() {
         &ingested.source,
         &ingested.document,
         &ingested.chunks,
+        None,
     ))
     .expect("extract");
 

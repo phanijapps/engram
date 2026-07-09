@@ -389,6 +389,28 @@ pub fn most_complex(sources: &[(String, String)], limit: usize) -> Vec<(String, 
     ranked
 }
 
+/// Headline statistics for a call graph: node + edge counts. Mirrors memtrace's
+/// `get_repository_stats`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RepositoryStats {
+    pub node_count: usize,
+    pub edge_count: usize,
+}
+
+/// Returns node + edge counts over `calls` relationships.
+pub fn repository_stats(relationships: &[KnowledgeRelationship]) -> RepositoryStats {
+    let edges = call_edges(relationships);
+    let mut nodes: HashSet<String> = HashSet::new();
+    for (caller, callee) in &edges {
+        nodes.insert(caller.clone());
+        nodes.insert(callee.clone());
+    }
+    RepositoryStats {
+        node_count: nodes.len(),
+        edge_count: edges.len(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -655,6 +677,14 @@ mod tests {
         let ranked = most_complex(&sources, 2);
         assert_eq!(ranked[0].0, "complex");
         assert!(ranked[0].1 > ranked[1].1);
+    }
+
+    #[test]
+    fn repository_stats_counts_nodes_and_edges() {
+        let rels = vec![rel("a", "b"), rel("b", "c"), rel("a", "c")];
+        let stats = repository_stats(&rels);
+        assert_eq!(stats.node_count, 3);
+        assert_eq!(stats.edge_count, 3);
     }
 
     // --- fixtures ---

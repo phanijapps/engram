@@ -6,8 +6,9 @@
 //! tested; the security controls are ported from `demo/backend/src/decide.ts`
 //! and must not be relaxed.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use engram_domain::*;
 use engram_knowledge::{CoreError, CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
@@ -295,6 +296,7 @@ where
     // FIX 1(b): Parallel ingest — no reconcile / delete calls inside this
     // closure.  Content was already read and prior graphs were already deleted
     // in the serial pre-pass above.
+    let name_index: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
     let outcomes: Vec<(String, Outcome)> = to_ingest
         .par_iter()
         .map(|item| {
@@ -399,7 +401,22 @@ where
                 })
             };
             let extracted = match extracted_result {
-                Ok(g) => {
+                Ok(mut g) => {
+                    // C1: cross-file resolution — register entities + resolve refs.
+                    if let Ok(mut idx) = name_index.lock() {
+                        for entity in &g.entities {
+                            idx.insert(entity.name.clone(), entity.id.to_string());
+                        }
+                        for rel in &mut g.relationships {
+                            if rel.predicate == "calls" && rel.object.id.is_none() {
+                                if let Some(name) = &rel.object.name {
+                                    if let Some(id) = idx.get(name) {
+                                        rel.object.id = Some(Id::from(id.clone()));
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // Persist the graph + entities + relationships.
                     let _ = block_on(async {
                         repo.put_graph(g.graph.clone()).await?;
@@ -420,16 +437,19 @@ where
                     });
                     g
                 }
-                Err(_) => match block_on(extractor.extract_into(
-                    repo,
-                    &ingested.source,
-                    &ingested.document,
-                    &ingested.chunks,
-                    None, // C1: cross-file name_index — scanner wiring deferred
-                )) {
-                    Ok(e) => e,
-                    Err(_) => return (rel.clone(), Outcome::Error),
-                },
+                Err(_) => {
+                    let mut idx = name_index.lock().unwrap();
+                    match block_on(extractor.extract_into(
+                        repo,
+                        &ingested.source,
+                        &ingested.document,
+                        &ingested.chunks,
+                        Some(&mut *idx),
+                    )) {
+                        Ok(e) => e,
+                        Err(_) => return (rel.clone(), Outcome::Error),
+                    }
+                }
             };
             // Contract extraction (T4/T5/T6): for YAML/JSON files, attempt
             // OpenAPI detection and emit EntityKind::Api entities + exposes edges.

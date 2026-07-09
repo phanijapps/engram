@@ -166,6 +166,11 @@ fn tool_list() -> Vec<Value> {
             obj(&[]),
         ),
         tool(
+            "capability_report",
+            "Report which tools are available and whether the graph has data indexed.",
+            obj(&[]),
+        ),
+        tool(
             "most_complex",
             "Rank source-text snippets by cyclomatic complexity. Pass an array of {name, source} pairs.",
             obj(&[("sources", "string")]),
@@ -350,8 +355,28 @@ fn handle_tool(name: &str, args: &Value, store: &SqlKnowledgeStore, scope: &Scop
                 .collect();
             json_pretty(&readable)
         }
-
-        // --- Cross-source + ranking tools ---
+        "capability_report" => {
+            let rels = relationships(store, scope);
+            let stats = cgq::repository_stats(&rels);
+            json_pretty(&json!({
+                "server": "engram-codegraph",
+                "version": "0.1.0",
+                "tools_available": 20,
+                "graph_indexed": stats.edge_count > 0,
+                "node_count": stats.node_count,
+                "edge_count": stats.edge_count,
+                "tool_groups": {
+                    "indexing": ["scan_repo"],
+                    "impact": ["dead_code", "blast_radius", "dependency_path"],
+                    "architecture": ["central_symbols", "bridge_symbols", "call_communities", "symbol_context"],
+                    "quality": ["cyclomatic_complexity", "most_complex"],
+                    "api_topology": ["find_endpoints", "find_api_calls", "match_api_topology"],
+                    "processes": ["find_entry_points", "process_flow"],
+                    "temporal": ["temporal_recent", "temporal_impact", "temporal_compound"],
+                    "stats": ["repository_stats", "capability_report"]
+                }
+            }))
+        }
         "most_complex" => {
             let sources_val = &args["sources"];
             let sources: Vec<(String, String)> = if sources_val.is_array() {

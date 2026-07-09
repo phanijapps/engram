@@ -764,6 +764,7 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-graph-analytics",
+ "serde",
 ]
 
 [[package]]

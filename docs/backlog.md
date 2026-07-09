@@ -135,20 +135,17 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ## codegraph-parity remaining (RFC-0012)
 
-The remaining codegraph-parity micro-specs — see
-[`docs/codegraph-parity-roadmap.md`](codegraph-parity-roadmap.md):
+Most items shipped (A1-A2, B1-B8, C1-C9, D3-D4, D6-D8). What remains:
 
 - **B6b** — `as_of` retrieval filter (v1 contract change on `QueryFilter`).
-- **B6 ingest-stamping** — stamp `validFrom`/`validUntil` on re-index (note:
-  conflicts with ADR-0018 hard-delete; needs a retraction-mode decision).
-- **B7** — code embeddings (decision Q3: which model).
-- **B8** — cross-repo workspace fusion (RFC-0008).
-- **A2 follow-up** — wire the AST extractor to emit the new `EntityKind`s.
-- **Data layer (C-specs):** C1 cross-file edges, C2 taxonomy, C3 complexity,
-  C4/C5 dead-code/blast-radius/dependency-path (queries shipped via
-  `engram-codegraph-queries`; MCP/UI wiring pending), C6 temporal scoring,
-  C7/C8 HTTP topology, C9 process/flow.
-- **Integration layer:** MCP server, dashboard UI, agent skills, fleet.
+- **B6 ingest-stamping** — stamp `validFrom`/`validUntil` on re-index
+  (conflicts with ADR-0018 hard-delete; needs a retraction-mode decision).
+- **D1** — N-API bindings for lexical/rerank/analytics base capabilities
+  (currently standalone; MCP server calls Rust directly).
+- **D5** — Dashboard UI (graph/timeline/insights) — on the demo branch.
+- **D7** — Fleet coordination — needs a protocol design (weakest-grounded).
+- **lexical-wiring** — wire B1 (BM25) into the live RRF pipeline.
+- **rerank-wiring** — wire B2 (cross-encoder) into `compose_context`.
 
 <!-- Add one section per spec with open work, e.g.:
 

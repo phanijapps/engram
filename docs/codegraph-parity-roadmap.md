@@ -146,13 +146,13 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
     filter touches the frozen-v1 `QueryFilter` → its own micro-spec; ingest
     stamping of `valid_from`/`valid_until` is a follow-up.
 
-- **B7 — Pluggable embedding-provider registry + code model** · base · depends: none · **gated by Q3**
+- **B7 — Pluggable embedding-provider registry + code model** · base · **SHIPPED 2026-07-08 (configurable provider; model choice deferred)
   - Objective: Promote the embedding provider to a registry; add a
     code-specialised option (jina-code / bge-code) alongside BGE-small.
   - Acceptance: register the code provider, embed chunks, retrieve; provider is
     config, not core.
 
-- **B8 — Cross-source workspace fusion** · base · extends RFC 0008 · depends: none
+- **B8 — Cross-source workspace fusion** · base · **SHIPPED 2026-07-08 (detect_workspace + scan_workspace)
   - Objective: Multi-source fusion — several sources under one workspace resolve
     cross-source edges (generic, not code-specific).
   - Acceptance: two sources under one workspace link across boundaries; scope
@@ -160,7 +160,7 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
 
 ### Phase C — Code-specific data ops (on top of base)
 
-- **C1 — Cross-file symbol edge resolution** · data · depends: A1
+- **C1 — Cross-file symbol edge resolution** · data · depends: A1 · **SHIPPED 2026-07-08 (two-pass name collection + resolution)
   - Objective: Extend the graph extractor so caller→callee `calls` edges resolve
     across files within a repo (today intra-file).
   - Acceptance: a CALLS edge connects symbols declared in two different files.
@@ -169,7 +169,7 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
   - Objective: Map Tree-sitter kinds to the enriched `EntityKind` for Rust/TS/Python.
   - Acceptance: symbols carry correct kinds on a fixture repo per language.
 
-- **C3 — Cyclomatic complexity** · data · depends: A2
+- **C3 — Cyclomatic complexity** · data · depends: A2 · **SHIPPED 2026-07-08
   - Objective: Per-symbol cyclomatic complexity from the AST.
   - Acceptance: known functions return expected complexity values.
 
@@ -196,11 +196,11 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
   - Objective: Framework-aware endpoint extraction for priority frameworks.
   - Acceptance: endpoints extracted with method + path + handler.
 
-- **C8 — HTTP call-site detection + cross-service topology** · data · depends: C7, C1, B8
+- **C8 — HTTP call-site detection + cross-service topology** · data · **SHIPPED 2026-07-08
   - Objective: Detect call sites and resolve cross-repo HTTP edges.
   - Acceptance: a frontend call links to a backend route across two indexed repos.
 
-- **C9 — Process / flow auto-detection** · data · depends: C1
+- **C9 — Process / flow auto-detection** · data · **SHIPPED 2026-07-08
   - Objective: Named execution flows from entry points.
   - Acceptance: a known flow returns the expected ordered path.
 

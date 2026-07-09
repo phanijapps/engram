@@ -27,6 +27,7 @@ use crate::{
 pub use crate::classifier::FileKind;
 
 const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
+const WORKSPACE_MARKER: &str = ".engram-workspace";
 
 /// Summary returned by a scan.
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -745,6 +746,60 @@ where
     Ok((summary, new_manifest))
 }
 
+/// Detects workspace children: if `root` contains a `.engram-workspace` marker,
+/// returns child directories that are git repos. Returns `None` if no marker or
+/// no child repos. (B8 — workspace fusion, RFC-0008)
+pub fn detect_workspace(root: &Path) -> Option<Vec<PathBuf>> {
+    if !root.join(WORKSPACE_MARKER).exists() {
+        return None;
+    }
+    let children: Vec<PathBuf> = std::fs::read_dir(root)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_ok_and(|ft| ft.is_dir()))
+        .map(|e| e.path())
+        .filter(|p| p.join(".git").exists())
+        .collect();
+    if children.is_empty() {
+        None
+    } else {
+        Some(children)
+    }
+}
+
+/// Scans a workspace: detects child repos via `.engram-workspace` marker and
+/// scans each into the shared repository with the shared workspace scope. (B8)
+pub fn scan_workspace<R>(
+    root: &Path,
+    opts: &ScanOptions,
+    repo: &R,
+    progress: &(impl Fn(ScanProgress) + Send + Sync),
+) -> CoreResult<ScanSummary>
+where
+    R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,
+{
+    let children = detect_workspace(root).ok_or_else(|| CoreError::InvalidRequest {
+        reason: format!("no {WORKSPACE_MARKER} marker at {}", root.display()),
+    })?;
+    let mut summary = ScanSummary::default();
+    for child in &children {
+        let repo_name = child.file_name().and_then(|n| n.to_str()).unwrap_or("repo");
+        let child_opts = ScanOptions {
+            source_name: format!("{}:{repo_name}", opts.source_name),
+            ..opts.clone()
+        };
+        let (child_summary, _) = scan_repository(child, &child_opts, repo, progress)?;
+        summary.scanned += child_summary.scanned;
+        summary.ingested += child_summary.ingested;
+        summary.unchanged += child_summary.unchanged;
+        summary.skipped += child_summary.skipped;
+        summary.entities += child_summary.entities;
+        summary.relationships += child_summary.relationships;
+        summary.errors += child_summary.errors;
+    }
+    Ok(summary)
+}
+
 /// Attempts OpenAPI contract extraction for a single file during the parallel
 /// ingest phase (T4 entity emission, T5 source-ref union, T6 skip-and-warn).
 ///
@@ -834,5 +889,27 @@ mod tests {
         assert!(is_within_root(Path::new("/tmp/repo/src/a.rs"), root));
         assert!(!is_within_root(Path::new("/tmp/other"), root));
         assert!(!is_within_root(Path::new("/tmp/repo-evil"), root));
+    }
+
+    #[test]
+    fn detect_workspace_finds_child_git_repos() {
+        let tmp = std::env::temp_dir().join(format!("engram-ws-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join(".engram-workspace"), "").unwrap();
+        std::fs::create_dir_all(tmp.join("frontend").join(".git")).unwrap();
+        std::fs::create_dir_all(tmp.join("backend").join(".git")).unwrap();
+        std::fs::create_dir_all(tmp.join("not-a-repo")).unwrap();
+
+        let children = detect_workspace(&tmp).expect("workspace detected");
+        assert_eq!(children.len(), 2);
+        assert!(children.iter().any(|c| c.ends_with("frontend")));
+        assert!(children.iter().any(|c| c.ends_with("backend")));
+
+        // No marker → None.
+        let no_marker = tmp.join("not-a-repo");
+        assert!(detect_workspace(&no_marker).is_none());
+
+        std::fs::remove_dir_all(&tmp).unwrap();
     }
 }

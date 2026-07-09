@@ -35,6 +35,8 @@ pub use git_detect::detect_git;
 pub use hash::content_hash;
 pub use ingestor::{IngestedKnowledge, KnowledgeIngestor};
 pub use request::{DocumentIngestRequest, DocumentMetadata};
-pub use scanner::{ScanOptions, ScanProgress, ScanSummary, scan_repository};
+pub use scanner::{
+    ScanOptions, ScanProgress, ScanSummary, detect_workspace, scan_repository, scan_workspace,
+};
 pub use source_key::{SOURCE_PATH_KEY, STABLE_SOURCE_KEY, stable_source_key};
 pub use tree_sitter_chunker::TreeSitterChunker;

@@ -297,6 +297,37 @@ where
     // FIX 1(b): Parallel ingest — no reconcile / delete calls inside this
     // closure.  Content was already read and prior graphs were already deleted
     // in the serial pre-pass above.
+
+    // Pre-pass: collect ALL entity names globally so AST call extraction can
+    // match cross-file callees. Without this, extract_calls only knows about
+    // symbols declared in the current file, dropping most cross-file edges.
+    let global_entity_names: Arc<HashSet<String>> = Arc::new(
+        to_ingest
+            .par_iter()
+            .filter_map(|item| {
+                let ext = item.rel.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
+                let ts = ts_chunker.as_ref()?;
+                if !ts.supports(ext) {
+                    return None;
+                }
+                let text = String::from_utf8_lossy(&item.content);
+                let candidates = ts.chunk_with_ext(&text, ext).ok()?;
+                Some(
+                    candidates
+                        .iter()
+                        .filter_map(|c| {
+                            c.location
+                                .as_ref()
+                                .and_then(|l| l.anchor.as_deref())
+                                .and_then(|a| a.split_once(' ').map(|x| x.1).map(|s| s.to_owned()))
+                        })
+                        .collect::<Vec<String>>(),
+                )
+            })
+            .flatten()
+            .collect(),
+    );
+
     let name_index: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
     let outcomes: Vec<(String, Outcome)> = to_ingest
         .par_iter()
@@ -361,21 +392,12 @@ where
                 Ok(i) => i,
                 Err(_) => return (rel.clone(), Outcome::Error),
             };
-            // Extract entity names from chunk anchors for AST call matching.
-            let entity_names: HashSet<String> = ingested
-                .chunks
-                .iter()
-                .filter_map(|c| {
-                    c.location
-                        .as_ref()
-                        .and_then(|l| l.anchor.as_deref())
-                        .and_then(|a| a.split_once(' ').map(|x| x.1).map(|s| s.to_owned()))
-                })
-                .collect();
-            // AST-level call extraction when tree-sitter supports the extension.
+            // AST-level call extraction using the GLOBAL entity name set (not
+            // just this file's symbols). This preserves cross-file call edges.
             let ast_calls = if let Some(ref ts) = ts_chunker {
-                if ts.supports(ext) && !entity_names.is_empty() {
-                    ts.extract_calls(&text_for_ast, ext, &entity_names).ok()
+                if ts.supports(ext) && !global_entity_names.is_empty() {
+                    ts.extract_calls(&text_for_ast, ext, &global_entity_names)
+                        .ok()
                 } else {
                     None
                 }

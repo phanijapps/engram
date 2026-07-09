@@ -15,6 +15,10 @@ This project follows a contract-first changelog while pre-1.0.
   (RFC-0012): dead-code, blast-radius, dependency-path, central symbols
   (PageRank), bridge symbols (betweenness), and communities (Louvain) over
   `KnowledgeRelationship` `calls` edges, delegating to `engram-graph-analytics`.
+- Exposed the codegraph queries via N-API on `NativeKnowledgeEngine`
+  (`deadCodeJson`, `blastRadiusJson`, `dependencyPathJson`, `centralSymbolsJson`,
+  `bridgeSymbolsJson`, `callCommunitiesJson`) — the Rust→binding layer of MCP
+  wiring; the TS/MCP-tool layer is pending.
 - Added optional `validFrom`/`validUntil` to `KnowledgeEntity` for bi-temporal
   versioning (ADR-0019; draft-extension type, no v1 schema change).
 - Extended `EntityKind` with `struct`, `interface`, `trait`, `type_alias`,

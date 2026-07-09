@@ -271,6 +271,56 @@ pub fn find_api_calls(source: &str) -> Vec<String> {
     calls
 }
 
+/// Detects entry-point function names from source text (text heuristic).
+/// Recognises `fn main(`, `int main(`, `void main(`, `def main(`,
+/// `if __name__ == "__main__"`, and `exports.handler`. Mirrors memtrace's
+/// `list_processes` (entry-point auto-detection).
+pub fn find_entry_points(source: &str) -> Vec<String> {
+    let mut entries = Vec::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//") {
+            continue;
+        }
+        if trimmed.contains("fn main(")
+            || trimmed.contains("int main(")
+            || trimmed.contains("void main(")
+            || trimmed.contains("def main(")
+        {
+            entries.push("main".to_owned());
+        }
+        if trimmed.contains("__name__") && trimmed.contains("__main__") {
+            entries.push("__main__".to_owned());
+        }
+        if trimmed.contains("exports.handler") {
+            entries.push("handler".to_owned());
+        }
+    }
+    entries.sort();
+    entries.dedup();
+    entries
+}
+
+/// Traces the execution flow from `entry_point` through the call graph: the
+/// entry point followed by all symbols reachable via `calls` edges within
+/// `max_depth` hops (sorted for determinism). Mirrors memtrace's
+/// `get_process_flow`.
+pub fn process_flow(
+    relationships: &[KnowledgeRelationship],
+    entry_point: &str,
+    max_depth: usize,
+) -> Vec<String> {
+    let edges = call_edges(relationships);
+    let mut callees: Vec<String> =
+        engram_graph_analytics::descendants(&edges, &entry_point.to_owned(), max_depth)
+            .into_iter()
+            .collect();
+    callees.sort();
+    let mut flow = vec![entry_point.to_owned()];
+    flow.append(&mut callees);
+    flow
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -450,6 +500,34 @@ mod tests {
             prefetch("/nope")
         "#;
         assert!(find_api_calls(src).is_empty());
+    }
+
+    #[test]
+    fn find_entry_points_detects_main_and_handlers() {
+        let src = r#"
+            fn main() { println!("hello"); }
+            if __name__ == "__main__":
+                main()
+        "#;
+        let entries = find_entry_points(src);
+        assert!(entries.contains(&"main".to_owned()));
+        assert!(entries.contains(&"__main__".to_owned()));
+    }
+
+    #[test]
+    fn process_flow_traces_call_chain() {
+        // a -> b -> c -> d: flow from a is [a, b, c, d].
+        let rels = vec![rel("a", "b"), rel("b", "c"), rel("c", "d")];
+        let flow = process_flow(&rels, "a", 5);
+        assert_eq!(
+            flow,
+            vec![
+                "a".to_owned(),
+                "b".to_owned(),
+                "c".to_owned(),
+                "d".to_owned(),
+            ]
+        );
     }
 
     // --- fixtures ---

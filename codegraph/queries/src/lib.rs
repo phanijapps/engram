@@ -11,5 +11,5 @@ mod queries;
 pub use queries::{
     HttpEndpoint, SymbolContext, blast_radius, bridge_symbols, call_communities, call_edges,
     central_symbols, cyclomatic_complexity, dead_code, dependency_path, entity_key, find_api_calls,
-    find_endpoints, symbol_context,
+    find_endpoints, find_entry_points, process_flow, symbol_context,
 };

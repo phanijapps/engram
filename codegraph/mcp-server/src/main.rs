@@ -153,6 +153,9 @@ fn tool_list() -> Vec<Value> {
 }
 
 fn handle_tool(name: &str, args: &Value, store: &SqlKnowledgeStore, scope: &Scope) -> String {
+    // Build the entity-name lookup once for all store-based queries.
+    let names = entity_names(store, scope);
+
     match name {
         "scan_repo" => {
             let path = args["path"].as_str().unwrap_or(".");
@@ -169,50 +172,104 @@ fn handle_tool(name: &str, args: &Value, store: &SqlKnowledgeStore, scope: &Scop
         // --- Store-based queries (need prior scan_repo) ---
         "dead_code" => {
             let rels = relationships(store, scope);
-            json_pretty(&cgq::dead_code(&rels))
+            let dead = cgq::dead_code(&rels);
+            let readable: Vec<Value> = dead.iter().map(|id| resolve_symbol(id, &names)).collect();
+            json_pretty(&readable)
         }
         "blast_radius" => {
             let target = args["target"].as_str().unwrap_or("");
             let depth = args["depth"].as_u64().unwrap_or(5) as usize;
             let rels = relationships(store, scope);
-            let mut callers: Vec<String> = cgq::blast_radius(&rels, target, depth)
+            let mut callers: Vec<Value> = cgq::blast_radius(&rels, target, depth)
                 .into_iter()
+                .map(|id| resolve_symbol(&id, &names))
                 .collect();
-            callers.sort();
+            callers.sort_by_key(|v| v["name"].as_str().unwrap_or("").to_owned());
             json_pretty(&callers)
         }
         "dependency_path" => {
             let from = args["from"].as_str().unwrap_or("");
             let to = args["to"].as_str().unwrap_or("");
             let rels = relationships(store, scope);
-            json_pretty(&cgq::dependency_path(&rels, from, to))
+            match cgq::dependency_path(&rels, from, to) {
+                Some(path) => {
+                    let readable: Vec<Value> =
+                        path.iter().map(|id| resolve_symbol(id, &names)).collect();
+                    json_pretty(&readable)
+                }
+                None => "null".to_owned(),
+            }
         }
         "central_symbols" => {
             let limit = args["limit"].as_u64().unwrap_or(20) as usize;
             let rels = relationships(store, scope);
-            json_pretty(&cgq::central_symbols(&rels, limit))
+            let ranked = cgq::central_symbols(&rels, limit);
+            let readable: Vec<Value> = ranked
+                .iter()
+                .map(|(id, score)| {
+                    let mut entry = resolve_symbol(id, &names);
+                    entry["score"] = json!(score);
+                    entry
+                })
+                .collect();
+            json_pretty(&readable)
         }
         "bridge_symbols" => {
             let limit = args["limit"].as_u64().unwrap_or(20) as usize;
             let rels = relationships(store, scope);
-            json_pretty(&cgq::bridge_symbols(&rels, limit))
+            let ranked = cgq::bridge_symbols(&rels, limit);
+            let readable: Vec<Value> = ranked
+                .iter()
+                .map(|(id, score)| {
+                    let mut entry = resolve_symbol(id, &names);
+                    entry["score"] = json!(score);
+                    entry
+                })
+                .collect();
+            json_pretty(&readable)
         }
         "call_communities" => {
             let max_passes = args["maxPasses"].as_u64().unwrap_or(10) as usize;
             let rels = relationships(store, scope);
-            json_pretty(&cgq::call_communities(&rels, max_passes))
+            let labels = cgq::call_communities(&rels, max_passes);
+            let readable: Vec<Value> = labels
+                .iter()
+                .map(|(id, label)| {
+                    let entry = resolve_symbol(id, &names);
+                    json!({ "name": entry["name"], "kind": entry["kind"], "community": label })
+                })
+                .collect();
+            json_pretty(&readable)
         }
         "symbol_context" => {
             let symbol = args["symbol"].as_str().unwrap_or("");
             let depth = args["depth"].as_u64().unwrap_or(5) as usize;
             let rels = relationships(store, scope);
-            json_pretty(&cgq::symbol_context(&rels, symbol, depth))
+            let ctx = cgq::symbol_context(&rels, symbol, depth);
+            let callers: Vec<Value> = ctx
+                .callers
+                .iter()
+                .map(|id| resolve_symbol(id, &names))
+                .collect();
+            let callees: Vec<Value> = ctx
+                .callees
+                .iter()
+                .map(|id| resolve_symbol(id, &names))
+                .collect();
+            json_pretty(&json!({
+                "symbol": resolve_symbol(symbol, &names),
+                "callers": callers,
+                "callees": callees,
+                "community": ctx.community
+            }))
         }
         "process_flow" => {
             let entry = args["entryPoint"].as_str().unwrap_or("");
             let max_depth = args["maxDepth"].as_u64().unwrap_or(10) as usize;
             let rels = relationships(store, scope);
-            json_pretty(&cgq::process_flow(&rels, entry, max_depth))
+            let flow = cgq::process_flow(&rels, entry, max_depth);
+            let readable: Vec<Value> = flow.iter().map(|id| resolve_symbol(id, &names)).collect();
+            json_pretty(&readable)
         }
         "repository_stats" => {
             let rels = relationships(store, scope);
@@ -249,6 +306,32 @@ fn relationships(
     scope: &Scope,
 ) -> Vec<engram_domain::KnowledgeRelationship> {
     block_on(store.list_relationships(scope)).unwrap_or_default()
+}
+
+/// Loads all entities and builds an ID → (name, kind) lookup for human-readable
+/// output. Entity IDs that are already names (unresolved cross-file refs) map
+/// to themselves.
+fn entity_names(store: &SqlKnowledgeStore, scope: &Scope) -> HashMap<String, (String, String)> {
+    block_on(store.list_entities(scope))
+        .unwrap_or_default()
+        .iter()
+        .map(|e| {
+            (
+                e.id.to_string(),
+                (e.name.clone(), format!("{:?}", e.kind).to_lowercase()),
+            )
+        })
+        .collect()
+}
+
+/// Resolves an entity ID to a human-readable JSON object: `{name, kind, id}`.
+/// If the ID isn't in the lookup (it's an unresolved name-only ref), the ID
+/// itself is used as the name.
+fn resolve_symbol(id: &str, names: &HashMap<String, (String, String)>) -> Value {
+    match names.get(id) {
+        Some((name, kind)) => json!({ "name": name, "kind": kind, "id": id }),
+        None => json!({ "name": id, "kind": "unknown", "id": id }),
+    }
 }
 
 fn scan_options(scope: &Scope) -> ScanOptions {

@@ -411,6 +411,18 @@ pub fn repository_stats(relationships: &[KnowledgeRelationship]) -> RepositorySt
     }
 }
 
+/// Renders a cross-service topology as a Mermaid `graph LR` diagram. Takes the
+/// output of [`match_api_topology`] (call-path → endpoint pairs) and produces a
+/// Mermaid edge list. Mirrors memtrace's `get_service_diagram`.
+pub fn service_diagram(topology: &[(String, String)]) -> String {
+    let mut mermaid = String::from("graph LR\n");
+    for (call_path, endpoint) in topology {
+        let from = call_path.split('?').next().unwrap_or(call_path);
+        mermaid.push_str(&format!("  \"{from}\" --> \"{endpoint}\"\n"));
+    }
+    mermaid
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -685,6 +697,18 @@ mod tests {
         let stats = repository_stats(&rels);
         assert_eq!(stats.node_count, 3);
         assert_eq!(stats.edge_count, 3);
+    }
+
+    #[test]
+    fn service_diagram_renders_mermaid() {
+        let topology = vec![
+            ("/api/users".to_owned(), "GET /users".to_owned()),
+            ("/orders".to_owned(), "POST /orders".to_owned()),
+        ];
+        let diagram = service_diagram(&topology);
+        assert!(diagram.starts_with("graph LR"));
+        assert!(diagram.contains("\"/api/users\" --> \"GET /users\""));
+        assert!(diagram.contains("\"/orders\" --> \"POST /orders\""));
     }
 
     // --- fixtures ---

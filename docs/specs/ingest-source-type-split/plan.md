@@ -167,7 +167,7 @@ This is a behavior-preserving internal refactor. No domain model changes, no pub
 **Approach:**
 - Create stub module with trait implementation
 - Return `Ok(vec![])` from extract method
-- Add TODO comment for Excel/DB row implementation
+- Add a follow-up comment marker for Excel/DB row implementation
 
 **Done when:** stub compiles and trait is implemented
 

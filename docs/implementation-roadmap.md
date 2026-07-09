@@ -954,3 +954,40 @@ still expose adapter-readiness probes for scope mapping, valid-time behavior,
 capability reporting, and migration diagnostics.
 
 - `PHASE64` — Research architecture parity. **(done)**
+
+## Codegraph parity — build memtrace-equivalent capability on top of engram
+
+Status: in progress (base + contract layer). Governed by
+[`docs/rfcs/0012-code-structural-graph-layer.md`](rfcs/0012-code-structural-graph-layer.md),
+tracked in [`docs/codegraph-parity-roadmap.md`](codegraph-parity-roadmap.md)
+(micro-spec roadmap) + [`docs/research/codegraph-parity-audit.md`](research/codegraph-parity-audit.md)
+(A1 capability audit).
+
+Engram's accepted domain model + shipped ingest/retrieval already cover most of
+the structural substrate (AST symbols, the code-symbol graph extractor, hybrid
+fusion, sqlite-vec, hierarchy, temporal+cue retrieval, bi-temporal belief). This
+effort fills the remaining gaps as small, contract-free adapter crates plus
+compatible contract additions — building the codegraph layer **on top of** engram
+(RFC-0012) rather than baking it into core.
+
+Shipped (branch `codegraph-base-adapters`):
+
+- **B1** `engram-store-lexical` — BM25/Tantivy lexical `RetrievalIndex`
+  (`RetrievalMode::keyword`, identifier-aware tokenizer). Live-pipeline wiring
+  → [`lexical-wiring`](specs/lexical-wiring/spec.md) spec.
+- **B2** `engram-rerank-cross-encoder` — cross-encoder reranker
+  (`RerankStrategy::cross_encoder`, injected scorer); feature-gated model +
+  `compose_context` wiring deferred.
+- **B3/B4/B5** `engram-graph-analytics` — PageRank + betweenness (Brandes) +
+  communities (single-level Louvain local-moving).
+- **reachability** — `in_degree` / `ancestors` / `shortest_path` in
+  `engram-graph-analytics` (enable dead-code C4, blast-radius C5, dependency-path).
+- **B6** ([ADR-0019](adr/0019-bi-temporal-knowledge-entities.md)) — optional
+  `validFrom`/`validUntil` on `KnowledgeEntity` (draft-extension); the `as_of`
+  retrieval filter is deferred to its own v1-contract micro-spec.
+- **A2** ([ADR-0020](adr/0020-extend-entity-kind-vocabulary.md)) — `EntityKind`
+  vocabulary: `struct`/`interface`/`trait`/`type_alias`/`enum`/`endpoint`.
+
+Next (see the parity roadmap): data-layer C-specs (cross-file edges, complexity,
+dead-code/blast-radius queries), `lexical-wiring`, B7 (code embeddings), B8
+(cross-repo workspace fusion, RFC-0008).

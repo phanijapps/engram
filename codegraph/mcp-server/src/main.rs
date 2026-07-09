@@ -10,6 +10,7 @@ use std::io::{self, BufRead, Write};
 use std::path::Path;
 
 use engram_codegraph_queries as cgq;
+use engram_codegraph_temporal as cgt;
 use engram_domain::*;
 use engram_ingest::{ScanOptions, scan_repository};
 
@@ -149,6 +150,21 @@ fn tool_list() -> Vec<Value> {
             "Node + edge counts for the indexed call graph.",
             obj(&[]),
         ),
+        tool(
+            "temporal_recent",
+            "Rank symbols by recency (most recently introduced first). Needs valid_from timestamps on entities.",
+            obj(&[]),
+        ),
+        tool(
+            "temporal_impact",
+            "Rank symbols by blast-radius-weighted impact (in_degree^0.7 × (1+out_degree)^0.3).",
+            obj(&[]),
+        ),
+        tool(
+            "temporal_compound",
+            "Rank symbols by a blend of recency + impact (the 'what matters most right now' view).",
+            obj(&[]),
+        ),
     ]
 }
 
@@ -277,6 +293,52 @@ fn handle_tool(name: &str, args: &Value, store: &SqlKnowledgeStore, scope: &Scop
             json_pretty(&stats)
         }
 
+        // --- Temporal tools (need prior scan_repo) ---
+        "temporal_recent" => {
+            let versions = build_versions(store, scope);
+            let now = chrono::Utc::now();
+            let ranked = cgt::recent(&versions, now, 86400.0); // 1-day half-life
+            let readable: Vec<Value> = ranked
+                .iter()
+                .take(20)
+                .map(|(id, score)| {
+                    let mut entry = resolve_symbol(id, &names);
+                    entry["score"] = json!(score);
+                    entry
+                })
+                .collect();
+            json_pretty(&readable)
+        }
+        "temporal_impact" => {
+            let versions = build_versions(store, scope);
+            let ranked = cgt::impact(&versions);
+            let readable: Vec<Value> = ranked
+                .iter()
+                .take(20)
+                .map(|(id, score)| {
+                    let mut entry = resolve_symbol(id, &names);
+                    entry["score"] = json!(score);
+                    entry
+                })
+                .collect();
+            json_pretty(&readable)
+        }
+        "temporal_compound" => {
+            let versions = build_versions(store, scope);
+            let now = chrono::Utc::now();
+            let ranked = cgt::compound(&versions, now, 86400.0);
+            let readable: Vec<Value> = ranked
+                .iter()
+                .take(20)
+                .map(|(id, score)| {
+                    let mut entry = resolve_symbol(id, &names);
+                    entry["score"] = json!(score);
+                    entry
+                })
+                .collect();
+            json_pretty(&readable)
+        }
+
         // --- Source-text tools (agent passes source code) ---
         "cyclomatic_complexity" => {
             let source = args["source"].as_str().unwrap_or("");
@@ -306,6 +368,34 @@ fn relationships(
     scope: &Scope,
 ) -> Vec<engram_domain::KnowledgeRelationship> {
     block_on(store.list_relationships(scope)).unwrap_or_default()
+}
+
+/// Builds VersionedSymbol list from entities + their graph degree for temporal scoring.
+fn build_versions(store: &SqlKnowledgeStore, scope: &Scope) -> Vec<cgt::VersionedSymbol> {
+    let entities = block_on(store.list_entities(scope)).unwrap_or_default();
+    let rels = relationships(store, scope);
+    let edges = cgq::call_edges(&rels);
+    let in_deg = engram_graph_analytics::in_degree(&edges);
+    let out_deg: HashMap<String, usize> = {
+        let mut m = HashMap::new();
+        for (src, _) in &edges {
+            *m.entry(src.clone()).or_default() += 1;
+        }
+        m
+    };
+    entities
+        .iter()
+        .map(|e| {
+            let id = e.id.to_string();
+            cgt::VersionedSymbol {
+                key: id,
+                valid_from: e.valid_from,
+                valid_until: e.valid_until,
+                in_degree: *in_deg.get(e.name.as_str()).unwrap_or(&0),
+                out_degree: *out_deg.get(e.name.as_str()).unwrap_or(&0),
+            }
+        })
+        .collect()
 }
 
 /// Cached entity info for human-readable MCP output.

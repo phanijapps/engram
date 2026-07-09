@@ -9,6 +9,7 @@
 mod queries;
 
 pub use queries::{
-    SymbolContext, blast_radius, bridge_symbols, call_communities, call_edges, central_symbols,
-    cyclomatic_complexity, dead_code, dependency_path, entity_key, symbol_context,
+    HttpEndpoint, SymbolContext, blast_radius, bridge_symbols, call_communities, call_edges,
+    central_symbols, cyclomatic_complexity, dead_code, dependency_path, entity_key, find_endpoints,
+    symbol_context,
 };

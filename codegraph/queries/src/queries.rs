@@ -171,6 +171,58 @@ pub fn cyclomatic_complexity(source: &str) -> usize {
     decisions
 }
 
+/// A detected HTTP endpoint: method + path.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HttpEndpoint {
+    pub method: String,
+    pub path: String,
+}
+
+/// Extracts HTTP endpoints from source text by matching framework route patterns
+/// (`.get("/path")`, `@app.post("/path")`, `#[get("/path")]`, etc.). A
+/// language-agnostic text heuristic — detects Express, FastAPI, Flask, Actix,
+/// Gin and similar. Spring `@GetMapping` is a follow-up. Mirrors memtrace's
+/// `find_api_endpoints`.
+pub fn find_endpoints(source: &str) -> Vec<HttpEndpoint> {
+    let methods = ["get", "post", "put", "delete", "patch"];
+    let mut endpoints = Vec::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//") || (trimmed.starts_with('#') && !trimmed.starts_with("#[")) {
+            continue;
+        }
+        let lower = trimmed.to_lowercase();
+        for method in methods {
+            for quote in ['"', '\''] {
+                let pattern = format!("{method}({quote}");
+                if let Some(pos) = lower.find(&pattern) {
+                    // Must be preceded by a non-alphanumeric char (route pattern,
+                    // not a function call like budget( or target().
+                    if pos > 0 && trimmed.as_bytes()[pos - 1].is_ascii_alphanumeric() {
+                        continue;
+                    }
+                    let after = &trimmed[pos + method.len() + 1..]; // after "method("
+                    if let Some(path) = extract_quoted(after, quote) {
+                        endpoints.push(HttpEndpoint {
+                            method: method.to_uppercase(),
+                            path,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    endpoints
+}
+
+/// Extracts the content between the first pair of `quote` chars in `s`.
+fn extract_quoted(s: &str, quote: char) -> Option<String> {
+    let start = s.find(quote)?;
+    let rest = &s[start + 1..];
+    let end = rest.find(quote)?;
+    Some(rest[..end].to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,6 +343,41 @@ mod tests {
         let logical = "fn both(a: bool, b: bool) -> bool { a && b || !a }";
         // 1 base + && + || = 3
         assert_eq!(cyclomatic_complexity(logical), 3);
+    }
+
+    #[test]
+    fn find_endpoints_extracts_routes_from_source() {
+        let src = r#"
+            const app = express();
+            app.get("/users", getUsers);
+            app.post("/orders", createOrder);
+            #[get("/health")]
+            async fn health() -> &'static str { "ok" }
+        "#;
+        let endpoints = find_endpoints(src);
+        assert_eq!(endpoints.len(), 3);
+        assert!(endpoints.contains(&HttpEndpoint {
+            method: "GET".to_owned(),
+            path: "/users".to_owned()
+        }));
+        assert!(endpoints.contains(&HttpEndpoint {
+            method: "POST".to_owned(),
+            path: "/orders".to_owned()
+        }));
+        assert!(endpoints.contains(&HttpEndpoint {
+            method: "GET".to_owned(),
+            path: "/health".to_owned()
+        }));
+    }
+
+    #[test]
+    fn find_endpoints_rejects_false_positives() {
+        let src = r#"
+            forget("reasons")
+            budget("hello")
+            target("world")
+        "#;
+        assert!(find_endpoints(src).is_empty());
     }
 
     // --- fixtures ---

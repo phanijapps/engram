@@ -25,6 +25,7 @@ members = [
     "examples/rust-integration",
     "codegraph/queries",
     "codegraph/temporal",
+    "codegraph/mcp-server",
 ]
 resolver = "3"
 

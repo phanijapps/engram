@@ -758,6 +758,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-codegraph-mcp"
+version = "0.1.0"
+dependencies = [
+ "engram-codegraph-queries",
+ "engram-domain",
+ "engram-ingest",
+ "engram-knowledge",
+ "engram-runtime",
+ "engram-store-knowledge-sqlite",
+ "futures",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "engram-codegraph-queries"
 version = "0.1.0"
 dependencies = [

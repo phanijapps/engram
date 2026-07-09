@@ -112,7 +112,7 @@ pub fn call_communities(
 
 /// A 360° view of one symbol: its transitive callers, transitive callees, and
 /// Louvain community label. Mirrors memtrace's `get_symbol_context`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct SymbolContext {
     pub callers: Vec<String>,
     pub callees: Vec<String>,
@@ -391,7 +391,7 @@ pub fn most_complex(sources: &[(String, String)], limit: usize) -> Vec<(String, 
 
 /// Headline statistics for a call graph: node + edge counts. Mirrors memtrace's
 /// `get_repository_stats`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct RepositoryStats {
     pub node_count: usize,
     pub edge_count: usize,

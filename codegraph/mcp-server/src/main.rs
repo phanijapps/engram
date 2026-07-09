@@ -154,7 +154,7 @@ fn tool_list() -> Vec<Value> {
 
 fn handle_tool(name: &str, args: &Value, store: &SqlKnowledgeStore, scope: &Scope) -> String {
     // Build the entity-name lookup once for all store-based queries.
-    let names = entity_names(store, scope);
+    let names = entity_lookup(store, scope);
 
     match name {
         "scan_repo" => {
@@ -308,28 +308,55 @@ fn relationships(
     block_on(store.list_relationships(scope)).unwrap_or_default()
 }
 
-/// Loads all entities and builds an ID → (name, kind) lookup for human-readable
-/// output. Entity IDs that are already names (unresolved cross-file refs) map
-/// to themselves.
-fn entity_names(store: &SqlKnowledgeStore, scope: &Scope) -> HashMap<String, (String, String)> {
+/// Cached entity info for human-readable MCP output.
+struct EntityInfo {
+    name: String,
+    kind: String,
+    file: String,
+    start_line: u32,
+    end_line: u32,
+}
+
+/// Loads all entities and builds an ID → EntityInfo lookup with name, kind,
+/// and file:line from source_refs.
+fn entity_lookup(store: &SqlKnowledgeStore, scope: &Scope) -> HashMap<String, EntityInfo> {
     block_on(store.list_entities(scope))
         .unwrap_or_default()
         .iter()
         .map(|e| {
-            (
-                e.id.to_string(),
-                (e.name.clone(), format!("{:?}", e.kind).to_lowercase()),
-            )
+            let loc = e.source_refs.iter().find_map(|r| r.location.as_ref());
+            let info = EntityInfo {
+                name: e.name.clone(),
+                kind: format!("{:?}", e.kind).to_lowercase(),
+                file: loc.and_then(|l| l.path.clone()).unwrap_or_default(),
+                start_line: loc.and_then(|l| l.start_line).unwrap_or(0),
+                end_line: loc.and_then(|l| l.end_line).unwrap_or(0),
+            };
+            (e.id.to_string(), info)
         })
         .collect()
 }
 
-/// Resolves an entity ID to a human-readable JSON object: `{name, kind, id}`.
-/// If the ID isn't in the lookup (it's an unresolved name-only ref), the ID
-/// itself is used as the name.
-fn resolve_symbol(id: &str, names: &HashMap<String, (String, String)>) -> Value {
-    match names.get(id) {
-        Some((name, kind)) => json!({ "name": name, "kind": kind, "id": id }),
+/// Resolves an entity ID to a human-readable JSON object with file:line.
+fn resolve_symbol(id: &str, lookup: &HashMap<String, EntityInfo>) -> Value {
+    match lookup.get(id) {
+        Some(info) => {
+            let mut entry = json!({
+                "name": info.name,
+                "kind": info.kind,
+                "id": id,
+            });
+            if !info.file.is_empty() {
+                entry["file"] = json!(info.file);
+                if info.start_line > 0 {
+                    entry["line"] = json!(info.start_line);
+                    if info.end_line > info.start_line {
+                        entry["endLine"] = json!(info.end_line);
+                    }
+                }
+            }
+            entry
+        }
         None => json!({ "name": id, "kind": "unknown", "id": id }),
     }
 }

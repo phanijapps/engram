@@ -223,6 +223,54 @@ fn extract_quoted(s: &str, quote: char) -> Option<String> {
     Some(rest[..end].to_owned())
 }
 
+/// Extracts HTTP call-site targets from source text — paths/URLs passed to
+/// `fetch(...)`, `axios.METHOD(...)`, `requests.METHOD(...)`, `http.METHOD(...)`.
+/// Pure text heuristic; the caller context (which entity owns the call site) is
+/// determined at the wiring layer. Mirrors memtrace's `find_api_calls`.
+pub fn find_api_calls(source: &str) -> Vec<String> {
+    let call_patterns = [
+        "fetch(",
+        "axios.get(",
+        "axios.post(",
+        "axios.put(",
+        "axios.delete(",
+        "axios.patch(",
+        "requests.get(",
+        "requests.post(",
+        "requests.put(",
+        "requests.delete(",
+        "requests.patch(",
+        "http.Get(",
+        "http.Post(",
+        "http.Put(",
+        "http.Delete(",
+    ];
+    let mut calls = Vec::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("//") || (trimmed.starts_with('#') && !trimmed.starts_with("#[")) {
+            continue;
+        }
+        for pattern in &call_patterns {
+            if let Some(pos) = trimmed.find(pattern) {
+                if pos > 0 && trimmed.as_bytes()[pos - 1].is_ascii_alphanumeric() {
+                    continue;
+                }
+                let after = &trimmed[pos + pattern.len()..];
+                for quote in ['"', '\''] {
+                    if let Some(path) = extract_quoted(after, quote) {
+                        if !path.is_empty() {
+                            calls.push(path);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    calls
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -378,6 +426,30 @@ mod tests {
             target("world")
         "#;
         assert!(find_endpoints(src).is_empty());
+    }
+
+    #[test]
+    fn find_api_calls_extracts_http_targets() {
+        let src = r#"
+            const res = await fetch("/api/users");
+            axios.post("/orders", payload);
+            r = requests.get("https://api.example.com/health")
+        "#;
+        let calls = find_api_calls(src);
+        assert_eq!(calls.len(), 3);
+        assert!(calls.contains(&"/api/users".to_owned()));
+        assert!(calls.contains(&"/orders".to_owned()));
+        assert!(calls.contains(&"https://api.example.com/health".to_owned()));
+    }
+
+    #[test]
+    fn find_api_calls_rejects_false_positives() {
+        let src = r#"
+            fetchData("/not-a-call")
+            refetch("/also-not")
+            prefetch("/nope")
+        "#;
+        assert!(find_api_calls(src).is_empty());
     }
 
     // --- fixtures ---

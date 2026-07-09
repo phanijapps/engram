@@ -113,6 +113,56 @@ pub fn compound(
     ranked
 }
 
+/// `novel` mode: ranks by inverse change frequency — a symbol that changed but
+/// rarely changes historically scores highest (most surprising / novel). Given
+/// `(key, change_count)` pairs.
+pub fn novel(change_counts: &[(String, usize)]) -> Vec<(String, f64)> {
+    let mut ranked: Vec<(String, f64)> = change_counts
+        .iter()
+        .map(|(key, count)| (key.clone(), 1.0 / (1.0 + *count as f64)))
+        .collect();
+    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    ranked
+}
+
+/// Result of `directional` analysis: counts of added / removed / modified symbols.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DirectionalResult {
+    pub added: usize,
+    pub removed: usize,
+    pub modified: usize,
+}
+
+/// `directional` mode: classifies a change set as added / removed / modified.
+/// Asymmetric — a large add is different from a large remove.
+pub fn directional(added: &[String], removed: &[String], modified: &[String]) -> DirectionalResult {
+    DirectionalResult {
+        added: added.len(),
+        removed: removed.len(),
+        modified: modified.len(),
+    }
+}
+
+/// Summary statistics for `overview` mode: community count + largest community.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OverviewStats {
+    pub community_count: usize,
+    pub largest_community_size: usize,
+}
+
+/// `overview` mode: summarizes community structure from a symbol→label map.
+pub fn overview(communities: &std::collections::HashMap<String, usize>) -> OverviewStats {
+    let mut label_counts: std::collections::HashMap<usize, usize> =
+        std::collections::HashMap::new();
+    for &label in communities.values() {
+        *label_counts.entry(label).or_default() += 1;
+    }
+    OverviewStats {
+        community_count: label_counts.len(),
+        largest_community_size: label_counts.values().copied().max().unwrap_or(0),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -202,5 +252,52 @@ mod tests {
         let ranked = recent(&versions, now(), 3600.0);
         let expired_score = ranked.iter().find(|(k, _)| k == "expired").unwrap().1;
         assert_eq!(expired_score, 0.0);
+    }
+
+    #[test]
+    fn novel_ranks_rarely_changed_first() {
+        let counts = vec![
+            ("stable".to_owned(), 100), // rarely novel
+            ("volatile".to_owned(), 0), // never changed before -> most novel
+            ("regular".to_owned(), 5),
+        ];
+        let ranked = novel(&counts);
+        assert_eq!(ranked[0].0, "volatile");
+        assert!(ranked[0].1 > 0.99);
+        assert!(ranked[1].0 == "regular");
+        assert!(ranked[2].0 == "stable");
+    }
+
+    #[test]
+    fn directional_counts_additions_and_removals() {
+        let added = vec![
+            "new_fn".to_owned(),
+            "new_struct".to_owned(),
+            "new_test".to_owned(),
+        ];
+        let removed = vec!["old_fn".to_owned()];
+        let modified = vec!["changed_fn".to_owned(), "renamed_var".to_owned()];
+        let result = directional(&added, &removed, &modified);
+        assert_eq!(
+            result,
+            DirectionalResult {
+                added: 3,
+                removed: 1,
+                modified: 2
+            }
+        );
+    }
+
+    #[test]
+    fn overview_summarizes_communities() {
+        let mut communities = std::collections::HashMap::new();
+        communities.insert("a".to_owned(), 0);
+        communities.insert("b".to_owned(), 0);
+        communities.insert("c".to_owned(), 1);
+        communities.insert("d".to_owned(), 1);
+        communities.insert("e".to_owned(), 1);
+        let stats = overview(&communities);
+        assert_eq!(stats.community_count, 2);
+        assert_eq!(stats.largest_community_size, 3);
     }
 }

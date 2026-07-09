@@ -9,4 +9,7 @@
 
 mod scoring;
 
-pub use scoring::{VersionedSymbol, compound, impact, recent};
+pub use scoring::{
+    DirectionalResult, OverviewStats, VersionedSymbol, compound, directional, impact, novel,
+    overview, recent,
+};

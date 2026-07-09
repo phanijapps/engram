@@ -13,10 +13,12 @@ use engram_codegraph_queries as cgq;
 use engram_codegraph_temporal as cgt;
 use engram_domain::*;
 use engram_ingest::{ScanOptions, scan_repository};
-
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_lexical::LexicalIndex;
+
 use futures::executor::block_on;
 use serde_json::{Value, json};
+use std::sync::Mutex;
 
 fn main() {
     let store = match std::env::args().nth(1) {
@@ -24,6 +26,8 @@ fn main() {
         None => SqlKnowledgeStore::open_in_memory(),
     }
     .expect("open knowledge store");
+
+    let lexical = Mutex::new(LexicalIndex::new().expect("open lexical index"));
 
     let scope = Scope {
         tenant: "default".to_owned(),
@@ -62,7 +66,7 @@ fn main() {
             "tools/call" => {
                 let name = params["name"].as_str().unwrap_or("");
                 let args = &params["arguments"];
-                let text = handle_tool(name, args, &store, &scope);
+                let text = handle_tool(name, args, &store, &lexical, &scope);
                 Some(json!({ "content": [{ "type": "text", "text": text }] }))
             }
             _ => Some(json!({
@@ -84,6 +88,11 @@ fn tool_list() -> Vec<Value> {
             "scan_repo",
             "Index a repository into the codegraph. Returns file/entity/relationship counts.",
             obj(&[("path", "string")]),
+        ),
+        tool(
+            "search_code",
+            "BM25 keyword search over indexed symbols (find functions/classes by name or keyword).",
+            obj(&[("query", "string"), ("limit", "integer")]),
         ),
         tool(
             "dead_code",
@@ -183,7 +192,13 @@ fn tool_list() -> Vec<Value> {
     ]
 }
 
-fn handle_tool(name: &str, args: &Value, store: &SqlKnowledgeStore, scope: &Scope) -> String {
+fn handle_tool(
+    name: &str,
+    args: &Value,
+    store: &SqlKnowledgeStore,
+    lexical: &Mutex<LexicalIndex>,
+    scope: &Scope,
+) -> String {
     // Build the entity-name lookup once for all store-based queries.
     let names = entity_lookup(store, scope);
 
@@ -192,12 +207,39 @@ fn handle_tool(name: &str, args: &Value, store: &SqlKnowledgeStore, scope: &Scop
             let path = args["path"].as_str().unwrap_or(".");
             let opts = scan_options(scope);
             match scan_repository(Path::new(path), &opts, store, |_| ()) {
-                Ok((summary, _)) => format!(
-                    "Indexed {}: {} files, {} entities, {} relationships",
-                    path, summary.ingested, summary.entities, summary.relationships
-                ),
+                Ok((summary, _)) => {
+                    // Populate the lexical index with entity names for BM25 search.
+                    let entities = block_on(store.list_entities(scope)).unwrap_or_default();
+                    if let Ok(idx) = lexical.lock() {
+                        for entity in &entities {
+                            let searchable = format!("{} {:?}", entity.name, entity.kind);
+                            let _ = idx.upsert(&entity.id.to_string(), &searchable);
+                        }
+                    }
+                    format!(
+                        "Indexed {}: {} files, {} entities, {} relationships",
+                        path, summary.ingested, summary.entities, summary.relationships
+                    )
+                }
                 Err(e) => format!("Error indexing {path}: {e}"),
             }
+        }
+        "search_code" => {
+            let query = args["query"].as_str().unwrap_or("");
+            let limit = args["limit"].as_u64().unwrap_or(20) as usize;
+            let results = match lexical.lock() {
+                Ok(idx) => idx.search(query, limit).unwrap_or_default(),
+                Err(_) => Vec::new(),
+            };
+            let readable: Vec<Value> = results
+                .iter()
+                .map(|(id, score)| {
+                    let mut entry = resolve_symbol(id, &names);
+                    entry["score"] = json!(score);
+                    entry
+                })
+                .collect();
+            json_pretty(&readable)
         }
 
         // --- Store-based queries (need prior scan_repo) ---

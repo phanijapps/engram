@@ -222,6 +222,7 @@ fn handle_tool(name: &str, args: &Value, store: &SqlKnowledgeStore, scope: &Scop
             let ranked = cgq::central_symbols(&rels, limit);
             let readable: Vec<Value> = ranked
                 .iter()
+                .filter(|(id, _)| names.contains_key(id))
                 .map(|(id, score)| {
                     let mut entry = resolve_symbol(id, &names);
                     entry["score"] = json!(score);
@@ -236,6 +237,7 @@ fn handle_tool(name: &str, args: &Value, store: &SqlKnowledgeStore, scope: &Scop
             let ranked = cgq::bridge_symbols(&rels, limit);
             let readable: Vec<Value> = ranked
                 .iter()
+                .filter(|(id, _)| names.contains_key(id))
                 .map(|(id, score)| {
                     let mut entry = resolve_symbol(id, &names);
                     entry["score"] = json!(score);

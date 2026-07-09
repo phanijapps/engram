@@ -321,6 +321,39 @@ pub fn process_flow(
     flow
 }
 
+/// Matches HTTP call-site paths to endpoint definitions, producing cross-service
+/// topology edges. Given endpoints (from [`find_endpoints`]) and call paths
+/// (from [`find_api_calls`]), returns `(call_path, "METHOD /path")` pairs where
+/// the call path matches an endpoint. Mirrors memtrace's `get_api_topology`.
+pub fn match_api_topology(endpoints: &[HttpEndpoint], calls: &[String]) -> Vec<(String, String)> {
+    let mut matches = Vec::new();
+    for call_path in calls {
+        for endpoint in endpoints {
+            if paths_match(call_path, &endpoint.path) {
+                matches.push((
+                    call_path.clone(),
+                    format!("{} {}", endpoint.method, endpoint.path),
+                ));
+            }
+        }
+    }
+    matches.sort();
+    matches
+}
+
+/// Checks if a call path matches an endpoint path (exact or suffix match,
+/// ignoring query strings and trailing slashes). Endpoint paths start with `/`,
+/// so suffix matching respects path-segment boundaries naturally.
+fn paths_match(call_path: &str, endpoint_path: &str) -> bool {
+    let call_base = call_path
+        .split('?')
+        .next()
+        .unwrap_or(call_path)
+        .trim_end_matches('/');
+    let endpoint_base = endpoint_path.trim_end_matches('/');
+    call_base == endpoint_base || call_base.ends_with(endpoint_base)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,6 +561,34 @@ mod tests {
                 "d".to_owned(),
             ]
         );
+    }
+
+    #[test]
+    fn match_api_topology_links_calls_to_endpoints() {
+        let endpoints = vec![
+            HttpEndpoint {
+                method: "GET".to_owned(),
+                path: "/users".to_owned(),
+            },
+            HttpEndpoint {
+                method: "POST".to_owned(),
+                path: "/orders".to_owned(),
+            },
+        ];
+        let calls = vec![
+            "/users".to_owned(),
+            "/users?page=1".to_owned(),
+            "https://api.example.com/orders".to_owned(),
+            "/health".to_owned(),
+        ];
+        let matches = match_api_topology(&endpoints, &calls);
+        assert_eq!(matches.len(), 3);
+        assert!(matches.contains(&("/users".to_owned(), "GET /users".to_owned())));
+        assert!(matches.contains(&("/users?page=1".to_owned(), "GET /users".to_owned())));
+        assert!(matches.contains(&(
+            "https://api.example.com/orders".to_owned(),
+            "POST /orders".to_owned()
+        )));
     }
 
     // --- fixtures ---

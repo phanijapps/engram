@@ -147,6 +147,30 @@ pub fn symbol_context(
     }
 }
 
+/// Estimates cyclomatic complexity from source text: 1 + count of decision-point
+/// patterns (`if`/`for`/`while`/`match`/`switch`/`case`/`catch` + `&&`/`||`).
+/// A language-agnostic text heuristic — not AST-precise, but useful for ranking
+/// refactoring candidates. Mirrors memtrace's `calculate_cyclomatic_complexity`.
+pub fn cyclomatic_complexity(source: &str) -> usize {
+    let mut decisions = 1usize;
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+        // Skip comment lines (rough heuristic — language-agnostic).
+        if trimmed.starts_with("//") || trimmed.starts_with('#') || trimmed.starts_with('*') {
+            continue;
+        }
+        for pattern in [
+            "if ", "if(", "for ", "for(", "while ", "while(", "match ", "match(", "switch ",
+            "switch(", "case ", "catch ", "catch(",
+        ] {
+            decisions += trimmed.matches(pattern).count();
+        }
+        decisions += trimmed.matches("&&").count();
+        decisions += trimmed.matches("||").count();
+    }
+    decisions
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,6 +272,25 @@ mod tests {
         assert_eq!(ctx.callers, vec!["a".to_owned()]);
         assert_eq!(ctx.callees, vec!["c".to_owned()]);
         assert!(ctx.community.is_some(), "b belongs to a community");
+    }
+
+    #[test]
+    fn cyclomatic_complexity_counts_decision_points() {
+        let simple = "fn add(a: i32, b: i32) -> i32 { a + b }";
+        assert_eq!(cyclomatic_complexity(simple), 1);
+
+        let branching = "fn check(x: i32) -> i32 {
+            if x > 0 { return x; }
+            for i in 0..x { println!(\"x\"); }
+            while x > 0 { x -= 1; }
+            x
+        }";
+        // 1 base + if + for + while = 4
+        assert_eq!(cyclomatic_complexity(branching), 4);
+
+        let logical = "fn both(a: bool, b: bool) -> bool { a && b || !a }";
+        // 1 base + && + || = 3
+        assert_eq!(cyclomatic_complexity(logical), 3);
     }
 
     // --- fixtures ---

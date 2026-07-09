@@ -379,9 +379,12 @@ fn parse_symbol(anchor: &str) -> Option<(EntityKind, String)> {
     }
     let kind = match keyword {
         "fn" | "function" | "def" | "func" => EntityKind::Function,
-        "struct" | "enum" | "trait" | "impl" | "class" | "interface" | "record" | "type" => {
-            EntityKind::Class
-        }
+        "struct" | "record" => EntityKind::Struct,
+        "enum" => EntityKind::Enum,
+        "trait" => EntityKind::Trait,
+        "interface" => EntityKind::Interface,
+        "type" => EntityKind::TypeAlias,
+        "class" | "impl" => EntityKind::Class,
         _ => return None,
     };
     Some((kind, name.to_owned()))

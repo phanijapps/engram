@@ -61,11 +61,10 @@ benefits, not code alone.
 - [x] `communities(edges, max_passes)` returns a node→label partition via
   single-level modularity-greedy Louvain; triangle → one community; disconnected
   cliques stay separate; empty → empty.
-- [x] `in_degree` / `ancestors(edges, target, max_depth)` / `shortest_path(edges,
-  from, to)` traversal primitives: in-degree counts incoming; ancestors returns
-  transitive callers within a depth (blast radius); shortest_path returns the BFS
-  path or `None` (dependency path).
-- [x] No dependencies; per-crate gates green (19 tests).
+- [x] `in_degree` / `ancestors` / `descendants` / `shortest_path` traversal
+  primitives: in-degree counts incoming; ancestors/descendants return transitive
+  callers/callees within a depth; shortest_path returns the BFS path or `None`.
+- [x] No dependencies; per-crate gates green (21 tests).
 - [x] No public contract change.
 
 ## Assumptions

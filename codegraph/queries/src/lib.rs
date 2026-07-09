@@ -9,6 +9,6 @@
 mod queries;
 
 pub use queries::{
-    blast_radius, bridge_symbols, call_communities, call_edges, central_symbols, dead_code,
-    dependency_path, entity_key,
+    SymbolContext, blast_radius, bridge_symbols, call_communities, call_edges, central_symbols,
+    dead_code, dependency_path, entity_key, symbol_context,
 };

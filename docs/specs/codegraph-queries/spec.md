@@ -53,12 +53,12 @@ three queries, delegating the graph math to `engram-graph-analytics`.
 - [x] `dead_code` returns the zero-caller symbols (sorted, deterministic).
 - [x] `blast_radius(target, depth)` returns the transitive callers within `depth`.
 - [x] `dependency_path(from, to)` returns the shortest call path or `None`.
-- [x] `central_symbols(limit)` (PageRank), `bridge_symbols(limit)` (betweenness),
-  and `call_communities(max_passes)` (Louvain) over `calls` edges — the
-  architecture-overview queries.
+- [x] `central_symbols` (PageRank), `bridge_symbols` (betweenness),
+  `call_communities` (Louvain), and `symbol_context` (360° callers + callees +
+  community) over `calls` edges — the architecture-overview queries.
 - [x] Non-`calls` predicates and refs without a key are skipped.
 - [x] No contract change; depends only on `engram-domain` +
-  `engram-graph-analytics`; per-crate gates green (8 tests).
+  `engram-graph-analytics`; per-crate gates green (9 tests).
 
 ## Assumptions
 

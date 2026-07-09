@@ -62,6 +62,42 @@ where
     found
 }
 
+/// Returns the set of nodes reachable from `source` within `max_depth` hops
+/// (forward BFS over `edges`). The transitive callees of `source`. Excludes
+/// `source` itself.
+pub fn descendants<N>(edges: &[(N, N)], source: &N, max_depth: usize) -> HashSet<N>
+where
+    N: Eq + Hash + Clone,
+{
+    let mut adjacency: HashMap<N, Vec<N>> = HashMap::new();
+    for (from, to) in edges {
+        adjacency.entry(from.clone()).or_default().push(to.clone());
+    }
+
+    let mut found: HashSet<N> = HashSet::new();
+    let mut queue: VecDeque<(N, usize)> = VecDeque::new();
+    if let Some(direct) = adjacency.get(source) {
+        for child in direct {
+            queue.push_back((child.clone(), 1));
+        }
+    }
+
+    while let Some((node, depth)) = queue.pop_front() {
+        if !found.insert(node.clone()) {
+            continue;
+        }
+        if depth >= max_depth {
+            continue;
+        }
+        if let Some(children) = adjacency.get(&node) {
+            for child in children {
+                queue.push_back((child.clone(), depth + 1));
+            }
+        }
+    }
+    found
+}
+
 /// Returns the shortest path `from -> to` along `edges` (BFS, inclusive
 /// endpoints), or `None` if `to` is unreachable. The **dependency path**.
 pub fn shortest_path<N>(edges: &[(N, N)], from: &N, to: &N) -> Option<Vec<N>>
@@ -140,6 +176,28 @@ mod tests {
         let callers = ancestors(&e, &"d".to_string(), 1);
         assert_eq!(callers.len(), 1);
         assert!(callers.contains("c"));
+    }
+
+    #[test]
+    fn descendants_returns_transitive_callees() {
+        // a -> b -> c -> d: callees of a within 5 hops are b, c, d.
+        let e = edges(&[("a", "b"), ("b", "c"), ("c", "d")]);
+        let callees = descendants(&e, &"a".to_string(), 5);
+        let mut expected: HashSet<String> = HashSet::new();
+        for id in ["b", "c", "d"] {
+            expected.insert(id.to_string());
+        }
+        assert_eq!(callees, expected);
+        assert!(!callees.contains("a"), "source is not its own descendant");
+    }
+
+    #[test]
+    fn descendants_respects_max_depth() {
+        let e = edges(&[("a", "b"), ("b", "c"), ("c", "d")]);
+        // depth 1: only the direct callee of a (b).
+        let callees = descendants(&e, &"a".to_string(), 1);
+        assert_eq!(callees.len(), 1);
+        assert!(callees.contains("b"));
     }
 
     #[test]

@@ -110,6 +110,43 @@ pub fn call_communities(
     engram_graph_analytics::communities(&edges, max_passes)
 }
 
+/// A 360° view of one symbol: its transitive callers, transitive callees, and
+/// Louvain community label. Mirrors memtrace's `get_symbol_context`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SymbolContext {
+    pub callers: Vec<String>,
+    pub callees: Vec<String>,
+    pub community: Option<usize>,
+}
+
+/// Returns the 360° context of `symbol`: transitive callers (blast radius),
+/// transitive callees, and its community label.
+pub fn symbol_context(
+    relationships: &[KnowledgeRelationship],
+    symbol: &str,
+    depth: usize,
+) -> SymbolContext {
+    let edges = call_edges(relationships);
+    let mut callers: Vec<String> =
+        engram_graph_analytics::ancestors(&edges, &symbol.to_owned(), depth)
+            .into_iter()
+            .collect();
+    callers.sort();
+    let mut callees: Vec<String> =
+        engram_graph_analytics::descendants(&edges, &symbol.to_owned(), depth)
+            .into_iter()
+            .collect();
+    callees.sort();
+    let community = engram_graph_analytics::communities(&edges, 20)
+        .get(symbol)
+        .copied();
+    SymbolContext {
+        callers,
+        callees,
+        community,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -201,6 +238,16 @@ mod tests {
         let rels = vec![rel("a", "b"), rel("b", "c"), rel("a", "c")];
         let labels: HashSet<usize> = call_communities(&rels, 10).values().copied().collect();
         assert_eq!(labels.len(), 1);
+    }
+
+    #[test]
+    fn symbol_context_returns_callers_callees_and_community() {
+        // b is called by a; b calls c.
+        let rels = vec![rel("a", "b"), rel("b", "c")];
+        let ctx = symbol_context(&rels, "b", 5);
+        assert_eq!(ctx.callers, vec!["a".to_owned()]);
+        assert_eq!(ctx.callees, vec!["c".to_owned()]);
+        assert!(ctx.community.is_some(), "b belongs to a community");
     }
 
     // --- fixtures ---

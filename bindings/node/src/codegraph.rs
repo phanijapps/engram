@@ -99,3 +99,50 @@ pub fn call_communities_json(
     let max_passes = value["maxPasses"].as_u64().unwrap_or(10) as usize;
     encode(&cgq::call_communities(&relationships, max_passes))
 }
+
+/// `{source}` -> cyclomatic complexity (integer).
+pub fn cyclomatic_complexity_json(request_json: String) -> Result<String> {
+    let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
+    let source = value["source"].as_str().unwrap_or("");
+    Ok(cgq::cyclomatic_complexity(source).to_string())
+}
+
+/// `{source}` -> `[{method, path}, ...]` HTTP endpoints.
+pub fn find_endpoints_json(request_json: String) -> Result<String> {
+    let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
+    let source = value["source"].as_str().unwrap_or("");
+    encode(&cgq::find_endpoints(source))
+}
+
+/// `{source}` -> `["/path", ...]` HTTP call-site targets.
+pub fn find_api_calls_json(request_json: String) -> Result<String> {
+    let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
+    let source = value["source"].as_str().unwrap_or("");
+    encode(&cgq::find_api_calls(source))
+}
+
+/// `{source}` -> `["main", ...]` entry-point function names.
+pub fn find_entry_points_json(request_json: String) -> Result<String> {
+    let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
+    let source = value["source"].as_str().unwrap_or("");
+    encode(&cgq::find_entry_points(source))
+}
+
+/// `{scope, entryPoint, maxDepth?}` -> `[symbol, ...]` execution flow.
+pub fn process_flow_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> Result<String> {
+    let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
+    let scope = scope_of(&value)?;
+    let relationships = relationships_for(store, &scope)?;
+    let entry = value["entryPoint"].as_str().unwrap_or("");
+    let max_depth = value["maxDepth"].as_u64().unwrap_or(10) as usize;
+    encode(&cgq::process_flow(&relationships, entry, max_depth))
+}
+
+/// `{endpoints: [{method, path}], calls: ["/path"]}` -> cross-service topology.
+pub fn match_api_topology_json(request_json: String) -> Result<String> {
+    let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
+    let endpoints: Vec<cgq::HttpEndpoint> =
+        serde_json::from_value(value["endpoints"].clone()).map_err(json_error)?;
+    let calls: Vec<String> = serde_json::from_value(value["calls"].clone()).map_err(json_error)?;
+    encode(&cgq::match_api_topology(&endpoints, &calls))
+}

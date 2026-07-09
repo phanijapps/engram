@@ -172,7 +172,7 @@ pub fn cyclomatic_complexity(source: &str) -> usize {
 }
 
 /// A detected HTTP endpoint: method + path.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct HttpEndpoint {
     pub method: String,
     pub path: String,

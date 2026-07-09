@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 engram-domain = { path = "../../core/domain" }
 engram-graph-analytics = { path = "../../core/graph-analytics" }
+serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 chrono.workspace = true

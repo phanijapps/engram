@@ -1,0 +1,11 @@
+//! Codegraph queries over knowledge-graph call edges.
+//!
+//! The first on-top codegraph crate (RFC-0012): code-specific queries —
+//! [`dead_code`], [`blast_radius`], [`dependency_path`] — over
+//! `KnowledgeRelationship` `calls` edges, delegating the graph math to
+//! `engram-graph-analytics`. Depends only on `engram-domain` +
+//! `engram-graph-analytics`; no storage or infrastructure.
+
+mod queries;
+
+pub use queries::{blast_radius, call_edges, dead_code, dependency_path, entity_key};

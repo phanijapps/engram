@@ -173,14 +173,18 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
   - Objective: Per-symbol cyclomatic complexity from the AST.
   - Acceptance: known functions return expected complexity values.
 
-- **C4 — Dead-code detection** · data · depends: C1, B3
+- **C4 — Dead-code detection** · data · depends: B3 · **query SHIPPED 2026-07-08 via `engram-codegraph-queries`; MCP/UI wiring pending**
   - Objective: Symbols with zero in-degree on `calls`.
-  - Acceptance: dead-code list matches a golden fixture.
+  - Status: `dead_code(relationships)` ships in `engram-codegraph-queries`
+    (zero-caller detection; tests green). Edge quality improves with C1; wiring
+    into the MCP tool / UI is the integration layer (D4/D5).
 
-- **C5 — Blast-radius + dependency-path** · data · depends: B3, B4, C1
+- **C5 — Blast-radius + dependency-path** · data · depends: B3, B4 · **query SHIPPED 2026-07-08 via `engram-codegraph-queries`; MCP/UI wiring pending**
   - Objective: Transitive-caller traversal (blast radius) and from→to path queries
     over the call graph.
-  - Acceptance: `depth=N` callers and a from→to path match the fixture graph.
+  - Status: `blast_radius(relationships, target, depth)` + `dependency_path(...)`
+    ship in `engram-codegraph-queries` (tests green). Edge quality improves with
+    C1; wiring into MCP / UI is the integration layer (D4/D5).
 
 - **C6 — Temporal scoring engine (6 modes + significance budget)** · data · depends: B6
   - Objective: The six scoring modes (recent/impact/novel/directional/compound/

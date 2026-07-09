@@ -29,6 +29,8 @@
 │   ├── retrieval/tantivy-lexical/ # BM25 lexical RetrievalIndex (keyword mode)
 │   └── retrieval/cross-encoder-rerank/ # cross-encoder reranker (RerankStrategy::cross_encoder)
 ├── bindings/node/        # N-API JSON transport (engram-node) — a transport, not a second impl
+├── codegraph/            # on-top codegraph layer (RFC-0012): code-specific crates on engram
+│   └── queries/          # dead-code / blast-radius / dependency-path over call edges
 ├── packages/             # TypeScript workspace
 │   ├── contracts/        # generated TS types + schemas
 │   ├── client/           # ergonomic application SDK
@@ -84,6 +86,10 @@
   communities (Louvain local-moving), reachability (`in_degree`, `ancestors`,
   `shortest_path`). std-only. **Look first:** `core/graph-analytics/src/`.
 - `engram-node` (`bindings/node`) — N-API bridge; JSON in/out over Rust behavior.
+- `engram-codegraph-queries` (`codegraph/queries`) — the on-top codegraph layer
+  (RFC-0012): dead-code, blast-radius, and dependency-path over
+  `KnowledgeRelationship` `calls` edges, delegating to `engram-graph-analytics`.
+  **Look first:** `codegraph/queries/src/`.
 - `@engram/node`, `@engram/contracts`, `@engram/client` (`packages/*`) — TS SDK.
 - `demo/backend` — Hono API (ingest, graph, RRF-hybrid Q&A, benchmark, MCP).
 - `demo/frontend` — React + shadcn/ui (dashboard, WebGL graph explorer, chat).

@@ -23,6 +23,7 @@ members = [
     "adapters/hierarchy/sqlite",
     "bindings/node",
     "examples/rust-integration",
+    "codegraph/queries",
 ]
 resolver = "3"
 

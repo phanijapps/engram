@@ -42,6 +42,10 @@ adapters/                  Replaceable infrastructure crates.
 bindings/                  Native language bridges.
   node/                    N-API bridge for TypeScript.
 
+codegraph/                 On-top codegraph layer (RFC-0012): code-specific
+  queries/                 crates built on engram (dead-code / blast-radius /
+                           dependency-path over call edges).
+
 packages/                  TypeScript workspace.
   contracts/               Generated TypeScript types and schemas.
   client/                  Ergonomic application SDK.
@@ -87,6 +91,10 @@ the stack ADR is accepted.
   (PageRank, betweenness, communities, reachability). It must not depend on
   `engram-domain`, storage, or any infrastructure; callers map domain edges to a
   generic edge list at the call site.
+- The `codegraph/` area is the on-top codegraph layer (RFC-0012), not engram.
+  Its crates depend only on `engram-domain`, `engram-graph-analytics`, or other
+  engram ports; they must not own storage/infra, duplicate domain truth, or live
+  under `core/`/`adapters/`/`bindings/`.
 - Store, vector, embedding, model, and gateway integrations belong in adapter
   crates or TypeScript packages.
 - TypeScript must not redefine domain truth. It may wrap, validate, compose, and

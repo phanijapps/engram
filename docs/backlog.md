@@ -145,8 +145,9 @@ The remaining codegraph-parity micro-specs — see
 - **B8** — cross-repo workspace fusion (RFC-0008).
 - **A2 follow-up** — wire the AST extractor to emit the new `EntityKind`s.
 - **Data layer (C-specs):** C1 cross-file edges, C2 taxonomy, C3 complexity,
-  C4/C5 dead-code/blast-radius queries, C6 temporal scoring, C7/C8 HTTP
-  topology, C9 process/flow.
+  C4/C5 dead-code/blast-radius/dependency-path (queries shipped via
+  `engram-codegraph-queries`; MCP/UI wiring pending), C6 temporal scoring,
+  C7/C8 HTTP topology, C9 process/flow.
 - **Integration layer:** MCP server, dashboard UI, agent skills, fleet.
 
 <!-- Add one section per spec with open work, e.g.:

@@ -11,6 +11,9 @@ This project follows a contract-first changelog while pre-1.0.
   (std-only PageRank, betweenness, Louvain community detection, reachability:
   `in_degree`/`ancestors`/`shortest_path`). Plus the codegraph-parity micro-spec
   roadmap, the A1 capability audit, and the lexical-wiring follow-up spec.
+- Added `engram-codegraph-queries` — the first on-top `codegraph/` layer crate
+  (RFC-0012): dead-code, blast-radius, and dependency-path over
+  `KnowledgeRelationship` `calls` edges, delegating to `engram-graph-analytics`.
 - Added optional `validFrom`/`validUntil` to `KnowledgeEntity` for bi-temporal
   versioning (ADR-0019; draft-extension type, no v1 schema change).
 - Extended `EntityKind` with `struct`, `interface`, `trait`, `type_alias`,

@@ -46,6 +46,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `KnowledgeEntity` (ADR-0019).
 - Extended `EntityKind` vocabulary: `struct`, `interface`, `trait`, `type_alias`,
   `enum`, `endpoint` (ADR-0020).
+- On-top codegraph layer begun: `engram-codegraph-queries` (the first `codegraph/`
+  crate) — dead-code, blast-radius, and dependency-path over `calls` edges.
 
 ### Changed
 

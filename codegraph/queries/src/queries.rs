@@ -1,0 +1,198 @@
+//! Map knowledge-graph call edges to a generic edge list and answer
+//! code-specific queries over them.
+
+use std::collections::HashSet;
+
+use engram_domain::{EntityRef, KnowledgeRelationship};
+
+/// Stable string key for an entity reference: its resolved id, else its name.
+/// Returns `None` for a ref with neither (it cannot participate in a query).
+pub fn entity_key(reference: &EntityRef) -> Option<String> {
+    if let Some(id) = &reference.id {
+        return Some(id.as_str().to_owned());
+    }
+    reference.name.clone()
+}
+
+/// Extracts `(caller, callee)` string pairs from `calls` relationships.
+/// Other predicates and refs without a key are skipped.
+pub fn call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(String, String)> {
+    relationships
+        .iter()
+        .filter(|r| r.predicate == "calls")
+        .filter_map(|r| {
+            let caller = entity_key(&r.subject)?;
+            let callee = entity_key(&r.object)?;
+            Some((caller, callee))
+        })
+        .collect()
+}
+
+/// Returns the dead-code set: symbols in the call graph with zero callers
+/// (zero in-degree on `calls` edges), sorted for determinism.
+///
+/// Note: entry points (main, HTTP handlers) also have zero callers and surface
+/// here — callers filter known entry points. Mirrors memtrace's `find_dead_code`.
+pub fn dead_code(relationships: &[KnowledgeRelationship]) -> Vec<String> {
+    let edges = call_edges(relationships);
+    let in_degree = engram_graph_analytics::in_degree(&edges);
+    let mut defined: HashSet<String> = HashSet::new();
+    for (caller, callee) in &edges {
+        defined.insert(caller.clone());
+        defined.insert(callee.clone());
+    }
+    let mut dead: Vec<String> = defined
+        .into_iter()
+        .filter(|node| !in_degree.contains_key(node))
+        .collect();
+    dead.sort();
+    dead
+}
+
+/// Returns the blast radius of `target`: its transitive callers within `depth`
+/// hops (reverse reachability over `calls` edges). Empty if `target` is unknown.
+pub fn blast_radius(
+    relationships: &[KnowledgeRelationship],
+    target: &str,
+    depth: usize,
+) -> HashSet<String> {
+    let edges = call_edges(relationships);
+    engram_graph_analytics::ancestors(&edges, &target.to_owned(), depth)
+}
+
+/// Returns the shortest dependency path `from -> to` along `calls` edges
+/// (inclusive endpoints), or `None` if unreachable.
+pub fn dependency_path(
+    relationships: &[KnowledgeRelationship],
+    from: &str,
+    to: &str,
+) -> Option<Vec<String>> {
+    let edges = call_edges(relationships);
+    engram_graph_analytics::shortest_path(&edges, &from.to_owned(), &to.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+    use engram_domain::{Actor, ActorKind, Id, Provenance, Scope};
+
+    #[test]
+    fn call_edges_keeps_calls_drops_others_and_unresolved() {
+        let rels = vec![
+            rel("a", "b"),
+            rel("c", "d"),
+            // non-`calls` predicate -> dropped
+            KnowledgeRelationship {
+                predicate: "imports".to_owned(),
+                ..rel("a", "c")
+            },
+            // unresolved object (no id, no name) -> dropped
+            KnowledgeRelationship {
+                object: EntityRef {
+                    id: None,
+                    kind: None,
+                    name: None,
+                    aliases: Vec::new(),
+                },
+                ..rel("a", "b")
+            },
+        ];
+        let edges = call_edges(&rels);
+        assert_eq!(
+            edges,
+            vec![
+                ("a".to_owned(), "b".to_owned()),
+                ("c".to_owned(), "d".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn dead_code_returns_zero_caller_symbols() {
+        // a -> b -> c -> d. Only `a` is never called.
+        let rels = vec![rel("a", "b"), rel("b", "c"), rel("c", "d")];
+        assert_eq!(dead_code(&rels), vec!["a".to_owned()]);
+    }
+
+    #[test]
+    fn blast_radius_returns_transitive_callers() {
+        // a -> b -> c -> d: callers of d within 5 hops are c, b, a.
+        let rels = vec![rel("a", "b"), rel("b", "c"), rel("c", "d")];
+        let radius = blast_radius(&rels, "d", 5);
+        let expected: HashSet<String> = ["a", "b", "c"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(radius, expected);
+    }
+
+    #[test]
+    fn dependency_path_returns_shortest_call_path() {
+        // a -> b -> c, plus a -> c: shortest a->c is the direct edge.
+        let rels = vec![rel("a", "b"), rel("b", "c"), rel("a", "c")];
+        assert_eq!(
+            dependency_path(&rels, "a", "c"),
+            Some(vec!["a".to_owned(), "c".to_owned()])
+        );
+    }
+
+    #[test]
+    fn dependency_path_none_when_unreachable() {
+        let rels = vec![rel("a", "b"), rel("b", "c")];
+        assert_eq!(dependency_path(&rels, "c", "a"), None);
+    }
+
+    // --- fixtures ---
+
+    fn rel(caller: &str, callee: &str) -> KnowledgeRelationship {
+        KnowledgeRelationship {
+            id: Id::from(format!("rel-{caller}-{callee}")),
+            graph_id: None,
+            subject: ref_of(caller),
+            predicate: "calls".to_owned(),
+            object: ref_of(callee),
+            scope: Scope {
+                tenant: "t".to_owned(),
+                subject: None,
+                workspace: None,
+                session: None,
+                environment: None,
+            },
+            evidence: Vec::new(),
+            confidence: None,
+            provenance: provenance(),
+            created_at: fixed_now(),
+            updated_at: None,
+        }
+    }
+
+    fn ref_of(key: &str) -> EntityRef {
+        EntityRef {
+            id: Some(Id::from(key)),
+            kind: None,
+            name: None,
+            aliases: Vec::new(),
+        }
+    }
+
+    fn provenance() -> Provenance {
+        Provenance {
+            source: "codegraph_queries_test".to_owned(),
+            actor: Actor {
+                id: Id::from("actor-test"),
+                kind: ActorKind::Agent,
+                display_name: None,
+                metadata: None,
+            },
+            observed_at: fixed_now(),
+            evidence: Vec::new(),
+            derivations: Vec::new(),
+            confidence: Some(1.0),
+            method: Some("test".to_owned()),
+        }
+    }
+
+    fn fixed_now() -> chrono::DateTime<chrono::Utc> {
+        Utc.with_ymd_and_hms(2026, 7, 8, 12, 0, 0)
+            .single()
+            .expect("fixed timestamp")
+    }
+}

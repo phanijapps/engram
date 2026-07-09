@@ -987,6 +987,9 @@ Shipped (branch `codegraph-base-adapters`):
   retrieval filter is deferred to its own v1-contract micro-spec.
 - **A2** ([ADR-0020](adr/0020-extend-entity-kind-vocabulary.md)) — `EntityKind`
   vocabulary: `struct`/`interface`/`trait`/`type_alias`/`enum`/`endpoint`.
+- **C-queries** `engram-codegraph-queries` (the first on-top `codegraph/` crate,
+  RFC-0012) — dead-code, blast-radius, and dependency-path over `calls` edges,
+  built on `engram-graph-analytics`.
 
 Next (see the parity roadmap): data-layer C-specs (cross-file edges, complexity,
 dead-code/blast-radius queries), `lexical-wiring`, B7 (code embeddings), B8

@@ -55,3 +55,17 @@ pub trait ContextComposer: Send + Sync {
         failures: Vec<RetrievalSourceFailure>,
     ) -> CoreResult<ContextPayload>;
 }
+
+/// Reranks fused retrieval candidates by query-aware relevance (cross-encoder).
+/// Applied between fusion and budget in `compose_context`. Implementations stay
+/// behind the injected scorer; model lifecycle is never in core.
+pub trait RetrievalReranker: Send + Sync {
+    /// Reranks candidates by the query, best-first. Stamps `FusionTrace` with
+    /// `rerank_strategy = CrossEncoder` + the new score. Returns the reranked
+    /// list (may be shorter if candidates are filtered).
+    fn rerank(
+        &self,
+        request: &RetrievalRequest,
+        candidates: Vec<RetrievalResult>,
+    ) -> CoreResult<Vec<RetrievalResult>>;
+}

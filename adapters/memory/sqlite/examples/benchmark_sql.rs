@@ -77,6 +77,7 @@ fn retrieval_request() -> RetrievalRequest {
             until: None,
             min_confidence: None,
             include_archived: Some(false),
+            as_of: None,
         }),
         cues: Vec::new(),
         limit: Some(10),

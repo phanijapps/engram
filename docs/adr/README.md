@@ -22,3 +22,4 @@
 | [0018](0018-knowledge-graph-retraction-and-convergence.md) | Knowledge-graph retraction and convergence on re-ingest | Accepted |
 | [0019](0019-bi-temporal-knowledge-entities.md) | Bi-temporal knowledge entities | Accepted |
 | [0020](0020-extend-entity-kind-vocabulary.md) | Extend EntityKind vocabulary for code-structural symbols | Accepted |
+| [0021](0021-as-of-bitemporal-retrieval-filter.md) | `as_of` bi-temporal retrieval filter | Accepted |

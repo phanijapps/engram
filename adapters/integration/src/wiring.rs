@@ -145,6 +145,9 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // downcast. Populated only when the corresponding family's handle attaches.
     let mut memory_store: Option<Arc<SqlMemoryService>> = None;
     let mut knowledge_store: Option<Arc<SqlKnowledgeStore>> = None;
+    // SqlBeliefStore is kept concrete (alongside the trait handle) so the
+    // observability adapter can call its `list_beliefs` for record counts.
+    let mut belief_store: Option<Arc<SqlBeliefStore>> = None;
 
     // Memory: run the fixture (capability conformance), then attach a durable
     // file-backed handle.
@@ -217,7 +220,9 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     if fixtures::belief::run_belief_fixture().is_ok() {
         let path = &paths.belief;
         if let Ok(store) = SqlBeliefStore::open_file(path) {
-            beliefs = Some(Arc::new(store));
+            let store: Arc<SqlBeliefStore> = Arc::new(store);
+            belief_store = Some(store.clone());
+            beliefs = Some(store);
             beliefs_state = CapabilityState::Supported;
         }
     }
@@ -315,6 +320,42 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         failed()
     };
 
+    // export_import (S5): construct SqlExportImport from the wired file-backed
+    // memory + knowledge stores. The handle is attached and the capability
+    // flipped to Supported only when the conformance fixture passes AND the
+    // migration handle is wired (export + import are both needed for
+    // backend-to-backend scope movement). Like atomic_batch, this composes the
+    // concrete stores, so it is gated on memory_store + knowledge_store too.
+    let mut export_import_state = failed();
+    let mut export_import: Option<Arc<dyn engram_integration::ExportImport>> = None;
+    if fixtures::export_import::run_export_import_fixture().is_ok()
+        && migration.is_some()
+        && let (Some(memory_handle), Some(knowledge_handle)) = (&memory_store, &knowledge_store)
+    {
+        export_import = Some(Arc::new(crate::SqlExportImport::new(
+            knowledge_handle.clone(),
+            memory_handle.clone(),
+        )));
+        export_import_state = CapabilityState::Supported;
+    }
+
+    // observability (S6): the Observability port + SqlObservability impl +
+    // conformance fixture are shipped. The handle aggregates the provider's
+    // existing diagnostics (CapabilityReport, embedding config, versions) and
+    // derives record counts by listing the wired concrete knowledge + belief
+    // stores. The capability flips to Supported only when the fixture passes;
+    // otherwise it stays Unsupported { ConformanceFailed } with no handle.
+    //
+    // v1 limitation: record counts are scoped to a fixed diagnostic scope (a
+    // broad tenant scope). Cross-tenant aggregation requires instrumentation
+    // that is deferred; a fresh bootstrap reports zero counts (empty stores).
+    let observability_ok = fixtures::observability::run_observability_fixture().is_ok();
+    let observability_state = if observability_ok {
+        CapabilityState::Supported
+    } else {
+        failed()
+    };
+
     let report = CapabilityReport::builder()
         .memory(memory_state)
         .knowledge(knowledge_state)
@@ -329,7 +370,27 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .episodes_evidence(episodes_evidence_state)
         .atomic_batch(atomic_batch_state)
         .unified_recall(unified_recall_state)
+        .export_import(export_import_state)
+        .observability(observability_state)
         .build();
+
+    // Construct the SqlObservability handle from the wired concrete stores +
+    // the final capability report (delegated, not recomputed). Only attached
+    // when the fixture passed; clones the report (Clone) so the provider keeps
+    // the canonical copy.
+    let observability: Option<Arc<dyn engram_integration::Observability>> = if observability_ok {
+        Some(Arc::new(crate::SqlObservability::new(
+            knowledge_store.clone(),
+            belief_store.clone(),
+            diagnostic_scope(),
+            report.clone(),
+            config.embedding_provider.clone(),
+            SCHEMA_VERSION,
+            ADAPTER_VERSION,
+        )))
+    } else {
+        None
+    };
 
     let mut builder = EngramProviderBuilder::new(report)
         .schema_version(SCHEMA_VERSION)
@@ -370,7 +431,29 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     if let Some(h) = batch {
         builder = builder.batch(h);
     }
+    if let Some(h) = export_import {
+        builder = builder.export_import(h);
+    }
+    if let Some(h) = observability {
+        builder = builder.observability(h);
+    }
     Ok(builder.build())
+}
+
+/// The fixed diagnostic scope used by the wired observability handle.
+///
+/// v1: a broad scope (tenant set, all optional fields `None`) so record counts
+/// reflect every record in the diagnostic tenant. Cross-tenant aggregation is
+/// deferred; a host targeting diagnostics counts writes into this tenant, or a
+/// future config field can parameterize it.
+fn diagnostic_scope() -> engram_domain::Scope {
+    engram_domain::Scope {
+        tenant: "engram-diagnostics".to_string(),
+        subject: None,
+        workspace: None,
+        session: None,
+        environment: None,
+    }
 }
 
 #[cfg(test)]
@@ -477,6 +560,31 @@ mod tests {
             provider.recall().is_none(),
             "recall handle must be absent when unified_recall is not Supported"
         );
+        // export_import (S5): the export fixture passes during bootstrap AND the
+        // migration handle is wired, so the handle is attached and the
+        // capability flips to Supported.
+        assert!(
+            report.export_import.is_supported(),
+            "export_import should be Supported: {:?}",
+            report.export_import
+        );
+        assert!(
+            provider.export_import().is_some(),
+            "export_import handle must be attached when export_import is Supported"
+        );
+        // observability (S6): the conformance fixture passes during bootstrap,
+        // so the capability flips to Supported and the diagnostics handle is
+        // attached. A fresh bootstrap reports zero counts (empty stores); the
+        // snapshot shape + capability delegation is what is verified here.
+        assert!(
+            report.observability.is_supported(),
+            "observability should be Supported: {:?}",
+            report.observability
+        );
+        assert!(
+            provider.observability().is_some(),
+            "observability handle must be attached when observability is Supported"
+        );
     }
 
     #[test]
@@ -510,6 +618,14 @@ mod tests {
         // unified_recall: Unsupported here (lanes not fully wired), no handle.
         assert!(!report.unified_recall.is_supported());
         assert!(provider.recall().is_none());
+        // export_import invariant: Supported iff a handle is attached.
+        if report.export_import.is_supported() {
+            assert!(provider.export_import().is_some());
+        }
+        // observability invariant: Supported iff a handle is attached.
+        if report.observability.is_supported() {
+            assert!(provider.observability().is_some());
+        }
         let _ = report; // silence unused on partial-failure builds
     }
 
@@ -585,6 +701,81 @@ mod tests {
             engram_integration::TransactionGuarantee::BestEffort,
             "batch handle must report BestEffort, never Atomic"
         );
+    }
+
+    #[test]
+    fn bootstrap_provider_exposes_observability_handle_when_supported() {
+        use futures::executor::block_on;
+
+        let provider = bootstrap_provider(&cfg()).expect("bootstrap");
+        let report = provider.capabilities();
+        // The observability fixture passes during bootstrap, so the capability
+        // is Supported and the diagnostics handle is wired.
+        assert!(
+            report.observability.is_supported(),
+            "observability should be Supported after bootstrap: {:?}",
+            report.observability
+        );
+        let handle = provider
+            .observability()
+            .expect("observability handle must be present when observability is Supported");
+        // The snapshot delegates the provider's capability report + versions and
+        // derives (zero, empty-store) counts against the diagnostic scope.
+        let snap = block_on(handle.diagnostics()).expect("diagnostics must not error");
+        assert_eq!(
+            snap.capabilities, *report,
+            "capabilities delegated unchanged"
+        );
+        assert_eq!(snap.schema_version, SCHEMA_VERSION);
+        assert_eq!(snap.adapter_version, ADAPTER_VERSION);
+        assert!(
+            snap.slow_query_diagnostics.is_none(),
+            "slow-query None in v1"
+        );
+        // Fresh bootstrap → empty stores → all counts zero against the diagnostic
+        // tenant (honest v1: counts are scope-visible, not cross-tenant).
+        let zero = engram_integration::RecordCounts::empty();
+        assert_eq!(
+            snap.record_counts, zero,
+            "fresh bootstrap reports zero counts"
+        );
+    }
+
+    #[test]
+    fn config_only_bootstrap_has_no_observability_handle() {
+        // The config-only EngramProvider::bootstrap (no adapter wired) reports
+        // observability Unsupported { FeatureDisabled } with no handle — the
+        // contrast that proves the wiring layer only flips the capability with a
+        // handle.
+        use engram_domain::types::ScopeMappingStrategy;
+        use engram_integration::{
+            CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, EngramProvider, MigrationMode,
+        };
+        let dir = std::env::temp_dir().join(format!("engram-obs-empty-{}", std::process::id()));
+        let config = EngramConfig::new(
+            dir.clone(),
+            std::env::temp_dir(),
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "test".to_string(),
+                model: "test_model".to_string(),
+                dimensions: 384,
+                prompt_profile: "query".to_string(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        );
+        let provider = EngramProvider::bootstrap(&config).expect("empty bootstrap");
+        assert!(
+            provider.observability().is_none(),
+            "unwired provider has no observability handle"
+        );
+        assert!(
+            !provider.capabilities().observability.is_supported(),
+            "unwired provider reports observability unsupported"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // ---- single-file SQLite layout ----

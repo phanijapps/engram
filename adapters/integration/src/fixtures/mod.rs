@@ -10,6 +10,7 @@ pub mod hierarchy;
 pub mod knowledge;
 pub mod memory;
 pub mod migration;
+pub mod observability;
 pub mod provenance;
 pub mod recall;
 pub mod retrieval;

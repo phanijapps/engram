@@ -46,6 +46,7 @@ pub mod migration;
 pub mod ollama_provider;
 pub mod provenance;
 pub mod provider;
+pub mod recall;
 
 pub use batch::{
     aggregate_status, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep,
@@ -66,3 +67,4 @@ pub use migration::{
 };
 pub use provenance::{ProvenanceEntry, ProvenanceQuery, TimeWindow};
 pub use provider::{EngramProvider, EngramProviderBuilder};
+pub use recall::UnifiedRecall;

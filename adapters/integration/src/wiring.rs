@@ -222,6 +222,33 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         }
     }
 
+    // unified_recall (S4): the UnifiedRecall port + SqlUnifiedRecall impl +
+    // conformance fixture are shipped (the fixture verifies fusion +
+    // degraded-mode against configurable stub lanes). However, the production
+    // wiring cannot wire all five v1 lanes yet, so the capability stays
+    // Unsupported { FeatureDisabled } and NO handle is attached.
+    //
+    // Lane wiring status:
+    //   - facts (memory): WIRABLE — SqlMemoryStore is constructed above.
+    //   - graph: WIRABLE — SqlKnowledgeStore implements GraphCandidateSource
+    //     (engram-store-knowledge-sqlite::GraphRetrievalIndex::new).
+    //   - vector: BLOCKED — VectorRetrievalIndex needs a VectorQueryProvider
+    //     (query embedding model); bootstrap_provider constructs no embedding
+    //     provider (default build has no fastembed feature), and the
+    //     SqliteVectorIndex is moved into Arc<dyn VectorIndex> (by-value
+    //     ownership is lost).
+    //   - lexical: BLOCKED — engram-store-lexical is not a dependency of this
+    //     crate; no LexicalIndex or LexicalTargetResolver is constructed.
+    //   - beliefs: WIRABLE — SqlBeliefStore is constructed below.
+    //
+    // Honest partial-wiring beats a false Supported: until vector + lexical
+    // lanes are wirable, recall() stays None. The fixture still runs as a
+    // contract-level conformance check.
+    let _ = fixtures::recall::run_recall_fixture();
+    let unified_recall_state = CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    };
+
     // Hierarchy.
     if fixtures::hierarchy::run_hierarchy_fixture().is_ok() {
         let path = &paths.hierarchy;
@@ -301,6 +328,7 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .migration(migration_state)
         .episodes_evidence(episodes_evidence_state)
         .atomic_batch(atomic_batch_state)
+        .unified_recall(unified_recall_state)
         .build();
 
     let mut builder = EngramProviderBuilder::new(report)
@@ -436,6 +464,19 @@ mod tests {
             engram_integration::TransactionGuarantee::BestEffort,
             "batch handle must report BestEffort"
         );
+        // unified_recall (S4): stays Unsupported { FeatureDisabled } because the
+        // production wiring cannot wire all five v1 lanes (vector + lexical
+        // adapter lanes are blocked — see the wiring comment above). The handle
+        // is not attached.
+        assert!(
+            !report.unified_recall.is_supported(),
+            "unified_recall must NOT be Supported until all lanes are wired: {:?}",
+            report.unified_recall
+        );
+        assert!(
+            provider.recall().is_none(),
+            "recall handle must be absent when unified_recall is not Supported"
+        );
     }
 
     #[test]
@@ -466,6 +507,9 @@ mod tests {
         if report.atomic_batch.is_supported() {
             assert!(provider.batch().is_some());
         }
+        // unified_recall: Unsupported here (lanes not fully wired), no handle.
+        assert!(!report.unified_recall.is_supported());
+        assert!(provider.recall().is_none());
         let _ = report; // silence unused on partial-failure builds
     }
 

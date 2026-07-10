@@ -25,6 +25,7 @@ use std::sync::Arc;
 use crate::{
     batch::BatchIngest, capability::CapabilityReport, config::EngramConfig,
     embedding::EmbeddingProvider, migration::MigrationService, provenance::ProvenanceQuery,
+    recall::UnifiedRecall,
 };
 
 /// Canonical Rust SDK entry point for host applications (`engram-host-sdk`
@@ -61,6 +62,7 @@ pub struct EngramProvider {
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
     batch: Option<Arc<dyn BatchIngest>>,
+    recall: Option<Arc<dyn UnifiedRecall>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -185,6 +187,12 @@ impl EngramProvider {
         self.batch.as_ref()
     }
 
+    /// Returns the unified recall handle if the `unified_recall` capability is
+    /// supported.
+    pub fn recall(&self) -> Option<&Arc<dyn UnifiedRecall>> {
+        self.recall.as_ref()
+    }
+
     /// Returns the storage schema version visible through provider diagnostics.
     pub fn schema_version(&self) -> &str {
         &self.schema_version
@@ -241,6 +249,7 @@ impl EngramProvider {
             embedding_provider: None,
             provenance: None,
             batch: None,
+            recall: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -269,6 +278,7 @@ pub struct EngramProviderBuilder {
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
     batch: Option<Arc<dyn BatchIngest>>,
+    recall: Option<Arc<dyn UnifiedRecall>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -291,6 +301,7 @@ impl EngramProviderBuilder {
             embedding_provider: None,
             provenance: None,
             batch: None,
+            recall: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -374,6 +385,12 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the unified recall handle.
+    pub fn recall(mut self, handle: Arc<dyn UnifiedRecall>) -> Self {
+        self.recall = Some(handle);
+        self
+    }
+
     /// Sets the storage schema version reported by provider diagnostics.
     pub fn schema_version(mut self, version: impl Into<String>) -> Self {
         self.schema_version = version.into();
@@ -403,6 +420,7 @@ impl EngramProviderBuilder {
             embedding_provider: self.embedding_provider,
             provenance: self.provenance,
             batch: self.batch,
+            recall: self.recall,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }
@@ -461,6 +479,10 @@ mod tests {
         assert!(
             provider.batch().is_none(),
             "unwired provider has no batch handle"
+        );
+        assert!(
+            provider.recall().is_none(),
+            "unwired provider has no recall handle"
         );
         assert!(!provider.capabilities().all_supported());
         assert_eq!(provider.schema_version(), "unwired");
@@ -575,6 +597,39 @@ mod tests {
         assert_eq!(
             handle.transaction_guarantee(),
             TransactionGuarantee::BestEffort
+        );
+    }
+
+    #[test]
+    fn builder_attaches_recall_handle() {
+        use crate::recall::UnifiedRecall;
+        use async_trait::async_trait;
+        use engram_domain::{ContextPayload, RetrievalRequest};
+
+        struct StubRecall;
+        #[async_trait]
+        impl UnifiedRecall for StubRecall {
+            async fn recall(
+                &self,
+                _request: RetrievalRequest,
+            ) -> engram_runtime::CoreResult<ContextPayload> {
+                Ok(ContextPayload {
+                    items: Vec::new(),
+                    budget: None,
+                    omitted: Vec::new(),
+                    source_failures: Vec::new(),
+                    created_at: chrono::Utc::now(),
+                })
+            }
+        }
+
+        let report = CapabilityReport::builder().build();
+        let provider = EngramProviderBuilder::new(report)
+            .recall(std::sync::Arc::new(StubRecall))
+            .build();
+        assert!(
+            provider.recall().is_some(),
+            "recall handle must be attached"
         );
     }
 }

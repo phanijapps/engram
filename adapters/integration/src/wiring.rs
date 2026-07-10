@@ -119,6 +119,11 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // wired in this layer); no initial value needed.
 
     let mut vectors_state = failed();
+    // episodes_evidence is a shipped capability (S2): like the other implemented
+    // families, a fixture failure reports ConformanceFailed, not FeatureDisabled
+    // (which means "implementation slice has not shipped"). Flipped to Supported
+    // below only when the provenance fixture passes and the handle attaches.
+    let mut episodes_evidence_state = failed();
 
     let mut memory: Option<Arc<dyn MemoryService>> = None;
     let mut knowledge: Option<Arc<dyn KnowledgeRepository>> = None;
@@ -129,6 +134,7 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let mut hierarchy: Option<Arc<dyn HierarchyRepository>> = None;
     let retrieval: Option<Arc<dyn engram_retrieval::RetrievalIndex>> = None;
     let mut vectors: Option<Arc<dyn engram_retrieval::VectorIndex>> = None;
+    let mut provenance: Option<Arc<dyn engram_integration::ProvenanceQuery>> = None;
 
     // Memory: run the fixture (capability conformance), then attach a durable
     // file-backed handle.
@@ -145,7 +151,10 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let graph_ok = fixtures::knowledge::run_graph_fixture().is_ok();
     let ontology_ok = fixtures::knowledge::run_ontology_fixture().is_ok();
     let taxonomy_ok = fixtures::knowledge::run_taxonomy_fixture().is_ok();
-    if knowledge_ok || graph_ok || ontology_ok || taxonomy_ok {
+    // The provenance fixture verifies the SqlProvenanceQuery read path against
+    // an in-memory store; it gates the episodes_evidence capability flip.
+    let provenance_ok = fixtures::provenance::run_provenance_fixture().is_ok();
+    if knowledge_ok || graph_ok || ontology_ok || taxonomy_ok || provenance_ok {
         let path = &paths.knowledge;
         if let Ok(store) = SqlKnowledgeStore::open_file(path) {
             let store: Arc<SqlKnowledgeStore> = Arc::new(store);
@@ -164,6 +173,13 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
             if taxonomy_ok {
                 taxonomy = Some(store.clone());
                 taxonomy_state = CapabilityState::Supported;
+            }
+            // episodes_evidence: attach the SqlProvenanceQuery handle and flip
+            // the capability to Supported only when the fixture passes. The
+            // handle reuses the same knowledge store as the knowledge family.
+            if provenance_ok {
+                provenance = Some(Arc::new(crate::SqlProvenanceQuery::new(store.clone())));
+                episodes_evidence_state = CapabilityState::Supported;
             }
         }
     }
@@ -254,6 +270,7 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .retrieval(retrieval_state)
         .vectors(vectors_state)
         .migration(migration_state)
+        .episodes_evidence(episodes_evidence_state)
         .build();
 
     let mut builder = EngramProviderBuilder::new(report)
@@ -288,6 +305,9 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     }
     if let Some(h) = migration {
         builder = builder.migration(h);
+    }
+    if let Some(h) = provenance {
+        builder = builder.provenance(h);
     }
     Ok(builder.build())
 }
@@ -352,6 +372,18 @@ mod tests {
         // Retrieval handle is absent because no composer is wired here.
         assert!(provider.retrieval().is_none());
         assert_eq!(provider.schema_version(), SCHEMA_VERSION);
+        // episodes_evidence: the SqlProvenanceQuery fixture passes during
+        // bootstrap, so the handle is attached and the capability flips to
+        // Supported.
+        assert!(
+            report.episodes_evidence.is_supported(),
+            "episodes_evidence should be Supported: {:?}",
+            report.episodes_evidence
+        );
+        assert!(
+            provider.provenance().is_some(),
+            "provenance handle must be attached when episodes_evidence is Supported"
+        );
     }
 
     #[test]
@@ -374,7 +406,64 @@ mod tests {
         // Retrieval is the documented exception: Unsupported here, no handle.
         assert!(!report.retrieval.is_supported());
         assert!(provider.retrieval().is_none());
+        // episodes_evidence invariant: Supported iff a handle is attached.
+        if report.episodes_evidence.is_supported() {
+            assert!(provider.provenance().is_some());
+        }
         let _ = report; // silence unused on partial-failure builds
+    }
+
+    #[test]
+    fn bootstrap_provider_exposes_provenance_handle_when_supported() {
+        let provider = bootstrap_provider(&cfg()).expect("bootstrap");
+        let report = provider.capabilities();
+        // The provenance fixture passes during bootstrap, so the capability is
+        // Supported and the handle is wired.
+        assert!(
+            report.episodes_evidence.is_supported(),
+            "episodes_evidence should be Supported after bootstrap: {:?}",
+            report.episodes_evidence
+        );
+        assert!(
+            provider.provenance().is_some(),
+            "provenance handle must be present when episodes_evidence is Supported"
+        );
+    }
+
+    #[test]
+    fn config_only_bootstrap_has_no_provenance_handle() {
+        // The config-only EngramProvider::bootstrap (no adapter wired) reports
+        // episodes_evidence Unsupported { FeatureDisabled } with no handle — the
+        // contrast that proves T3 only flips the capability with a handle.
+        use engram_domain::types::ScopeMappingStrategy;
+        use engram_integration::{
+            CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, EngramProvider, MigrationMode,
+        };
+        let dir = std::env::temp_dir().join(format!("engram-prov-empty-{}", std::process::id()));
+        let config = EngramConfig::new(
+            dir.clone(),
+            std::env::temp_dir(),
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "test".to_string(),
+                model: "test_model".to_string(),
+                dimensions: 384,
+                prompt_profile: "query".to_string(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        );
+        let provider = EngramProvider::bootstrap(&config).expect("empty bootstrap");
+        assert!(
+            provider.provenance().is_none(),
+            "unwired provider has no provenance handle"
+        );
+        assert!(
+            !provider.capabilities().episodes_evidence.is_supported(),
+            "unwired provider reports episodes_evidence unsupported"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     // ---- single-file SQLite layout ----

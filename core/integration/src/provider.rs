@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use crate::{
     capability::CapabilityReport, config::EngramConfig, embedding::EmbeddingProvider,
-    migration::MigrationService,
+    migration::MigrationService, provenance::ProvenanceQuery,
 };
 
 /// Canonical Rust SDK entry point for host applications (`engram-host-sdk`
@@ -59,6 +59,7 @@ pub struct EngramProvider {
     vectors: Option<Arc<dyn VectorIndex>>,
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
+    provenance: Option<Arc<dyn ProvenanceQuery>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -171,6 +172,12 @@ impl EngramProvider {
         self.embedding_provider.as_ref()
     }
 
+    /// Returns the provenance / evidence query handle if the
+    /// `episodes_evidence` capability is supported.
+    pub fn provenance(&self) -> Option<&Arc<dyn ProvenanceQuery>> {
+        self.provenance.as_ref()
+    }
+
     /// Returns the storage schema version visible through provider diagnostics.
     pub fn schema_version(&self) -> &str {
         &self.schema_version
@@ -225,6 +232,7 @@ impl EngramProvider {
             vectors: None,
             migration: None,
             embedding_provider: None,
+            provenance: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -251,6 +259,7 @@ pub struct EngramProviderBuilder {
     vectors: Option<Arc<dyn VectorIndex>>,
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
+    provenance: Option<Arc<dyn ProvenanceQuery>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -271,6 +280,7 @@ impl EngramProviderBuilder {
             vectors: None,
             migration: None,
             embedding_provider: None,
+            provenance: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -342,6 +352,12 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the provenance / evidence query handle.
+    pub fn provenance(mut self, handle: Arc<dyn ProvenanceQuery>) -> Self {
+        self.provenance = Some(handle);
+        self
+    }
+
     /// Sets the storage schema version reported by provider diagnostics.
     pub fn schema_version(mut self, version: impl Into<String>) -> Self {
         self.schema_version = version.into();
@@ -369,6 +385,7 @@ impl EngramProviderBuilder {
             vectors: self.vectors,
             migration: self.migration,
             embedding_provider: self.embedding_provider,
+            provenance: self.provenance,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }

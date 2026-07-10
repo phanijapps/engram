@@ -314,21 +314,45 @@ fn handle_tool(
             };
             let readable: Vec<Value> = results
                 .iter()
-                .map(|(id, score)| {
+                .enumerate()
+                .map(|(i, (id, score))| {
                     let mut entry = resolve_symbol(id, &names);
+                    entry["rank"] = json!(i + 1);
                     entry["score"] = json!(score);
                     entry
                 })
                 .collect();
-            json_pretty(&readable)
+            envelope(&readable)
         }
 
         // --- Store-based queries (need prior scan_repo) ---
         "dead_code" => {
             let rels = relationships(store, scope);
             let dead = cgq::dead_code(&rels);
-            let readable: Vec<Value> = dead.iter().map(|id| resolve_symbol(id, &names)).collect();
-            json_pretty(&readable)
+            let mut entry_points = 0usize;
+            let mut tests = 0usize;
+            let mut candidates = 0usize;
+            let results: Vec<Value> = dead
+                .iter()
+                .map(|id| {
+                    let mut entry = resolve_symbol(id, &names);
+                    let category = dead_code_class(entry["name"].as_str().unwrap_or(""));
+                    match category {
+                        "entry_point" => entry_points += 1,
+                        "test" => tests += 1,
+                        _ => candidates += 1,
+                    }
+                    entry["category"] = json!(category);
+                    entry
+                })
+                .collect();
+            json_pretty(&json!({
+                "total": results.len(),
+                "candidates": candidates,
+                "entry_points": entry_points,
+                "tests": tests,
+                "results": results,
+            }))
         }
         "blast_radius" => {
             let target = args["target"].as_str().unwrap_or("");
@@ -339,19 +363,36 @@ fn handle_tool(
                 .map(|id| resolve_symbol(&id, &names))
                 .collect();
             callers.sort_by_key(|v| v["name"].as_str().unwrap_or("").to_owned());
-            json_pretty(&callers)
+            json_pretty(&json!({
+                "target": resolve_symbol(target, &names)["name"],
+                "depth": depth,
+                "caller_count": callers.len(),
+                "callers": callers,
+            }))
         }
         "dependency_path" => {
             let from = args["from"].as_str().unwrap_or("");
             let to = args["to"].as_str().unwrap_or("");
             let rels = relationships(store, scope);
+            let from_name = resolve_symbol(from, &names)["name"].clone();
+            let to_name = resolve_symbol(to, &names)["name"].clone();
             match cgq::dependency_path(&rels, from, to) {
                 Some(path) => {
                     let readable: Vec<Value> =
                         path.iter().map(|id| resolve_symbol(id, &names)).collect();
-                    json_pretty(&readable)
+                    json_pretty(&json!({
+                        "from": from_name,
+                        "to": to_name,
+                        "found": true,
+                        "hops": path.len().saturating_sub(1),
+                        "path": readable,
+                    }))
                 }
-                None => "null".to_owned(),
+                None => json_pretty(&json!({
+                    "from": from_name,
+                    "to": to_name,
+                    "found": false,
+                })),
             }
         }
         "central_symbols" => {
@@ -361,13 +402,15 @@ fn handle_tool(
             let readable: Vec<Value> = ranked
                 .iter()
                 .filter(|(id, _)| names.contains_key(id))
-                .map(|(id, score)| {
+                .enumerate()
+                .map(|(i, (id, score))| {
                     let mut entry = resolve_symbol(id, &names);
+                    entry["rank"] = json!(i + 1);
                     entry["score"] = json!(score);
                     entry
                 })
                 .collect();
-            json_pretty(&readable)
+            envelope(&readable)
         }
         "bridge_symbols" => {
             let limit = args["limit"].as_u64().unwrap_or(20) as usize;
@@ -376,26 +419,44 @@ fn handle_tool(
             let readable: Vec<Value> = ranked
                 .iter()
                 .filter(|(id, _)| names.contains_key(id))
-                .map(|(id, score)| {
+                .enumerate()
+                .map(|(i, (id, score))| {
                     let mut entry = resolve_symbol(id, &names);
+                    entry["rank"] = json!(i + 1);
                     entry["score"] = json!(score);
                     entry
                 })
                 .collect();
-            json_pretty(&readable)
+            envelope(&readable)
         }
         "call_communities" => {
             let max_passes = args["maxPasses"].as_u64().unwrap_or(10) as usize;
             let rels = relationships(store, scope);
             let labels = cgq::call_communities(&rels, max_passes);
-            let readable: Vec<Value> = labels
-                .iter()
-                .map(|(id, label)| {
-                    let entry = resolve_symbol(id, &names);
-                    json!({ "name": entry["name"], "kind": entry["kind"], "community": label })
+            // Group symbols by community label so an agent sees the architectural
+            // clusters (and their size) rather than a flat symbol→label table.
+            let mut groups: HashMap<usize, Vec<Value>> = HashMap::new();
+            for (id, label) in &labels {
+                let entry = resolve_symbol(id, &names);
+                groups
+                    .entry(*label)
+                    .or_default()
+                    .push(json!({ "name": entry["name"], "kind": entry["kind"] }));
+            }
+            let mut communities: Vec<Value> = groups
+                .into_iter()
+                .map(|(label, mut members)| {
+                    members.sort_by_key(|v| v["name"].as_str().unwrap_or("").to_owned());
+                    json!({ "label": label, "size": members.len(), "members": members })
                 })
                 .collect();
-            json_pretty(&readable)
+            communities.sort_by(|a, b| {
+                b["size"].as_u64().unwrap_or(0).cmp(&a["size"].as_u64().unwrap_or(0))
+            });
+            json_pretty(&json!({
+                "community_count": communities.len(),
+                "communities": communities,
+            }))
         }
         "symbol_context" => {
             let symbol = args["symbol"].as_str().unwrap_or("");
@@ -696,6 +757,31 @@ fn scan_options(scope: &Scope) -> ScanOptions {
 
 fn json_pretty<T: serde::Serialize>(value: &T) -> String {
     serde_json::to_string_pretty(value).unwrap_or_else(|_| "null".to_owned())
+}
+
+/// Wraps a result list in a uniform `{count, results}` envelope so callers can
+/// branch on magnitude/emptiness the same way for every list-returning tool.
+fn envelope(results: &[Value]) -> String {
+    json_pretty(&json!({ "count": results.len(), "results": results }))
+}
+
+/// Classifies a zero-caller symbol to help filter dead-code false positives.
+/// A symbol named like an entry point or test is *probably not genuinely dead* —
+/// it is reached via dynamic dispatch, framework wiring, or the test runner,
+/// none of which appear as static `calls` edges. This collapses the dead-code
+/// skill's manual "cross-reference find_entry_points" step into one call.
+fn dead_code_class(name: &str) -> &'static str {
+    match name {
+        "main" | "run" | "start" | "handler" | "__main__" => "entry_point",
+        _ if name.starts_with("test_")
+            || name.starts_with("tests")
+            || name.starts_with("it_")
+            || name.starts_with("should_") =>
+        {
+            "test"
+        }
+        _ => "candidate",
+    }
 }
 
 fn tool(name: &str, description: &str, schema: Value) -> Value {

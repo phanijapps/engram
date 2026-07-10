@@ -25,7 +25,11 @@ The repo must be indexed first. If `repository_stats` returns 0 nodes, call
    ```
    dead_code({})
    ```
-   Returns: entity IDs for symbols with zero incoming `calls` edges.
+   Returns `{ total, candidates, entry_points, tests, results }`. Each result
+   carries a `category` hint: `candidate` (genuinely maybe-dead), `entry_point`
+   (named main/run/start/handler/__main__ — reached via framework wiring, not a
+   `calls` edge), or `test` (named like a test — reached by the test runner).
+   Focus on `category: "candidate"` first; the other two are usually false positives.
 
 2. **Cross-reference with central symbols.** Call `central_symbols` (limit 50).
    If a "dead" symbol also appears in the central-symbols list, it's likely a
@@ -40,9 +44,10 @@ The repo must be indexed first. If `repository_stats` returns 0 nodes, call
    High-complexity dead code is the best refactoring target — it's expensive
    to maintain AND nobody calls it.
 
-4. **Check for entry points.** Pass the file's source to `find_entry_points`.
-   A dead-code symbol that IS an entry point (main, handler, __main__) is
-   NOT dead — it's the starting point of execution.
+4. **Verify entry points the heuristic missed.** The `category` hint catches
+   common entry-point/test naming, but descriptively-named handlers slip
+   through. For symbols you plan to remove, pass the file's source to
+   `find_entry_points` to confirm it isn't a real entry point.
 
 ## How to synthesize
 

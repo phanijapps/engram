@@ -20,6 +20,9 @@ use futures::executor::block_on;
 use serde_json::{Value, json};
 use std::sync::Mutex;
 
+/// Per-path manifest for incremental re-indexing (rel_path → content_hash).
+type ManifestStore = Mutex<HashMap<String, HashMap<String, String>>>;
+
 fn main() {
     let store = match std::env::args().nth(1) {
         Some(path) => SqlKnowledgeStore::open_file(&path),
@@ -28,6 +31,7 @@ fn main() {
     .expect("open knowledge store");
 
     let lexical = Mutex::new(LexicalIndex::new().expect("open lexical index"));
+    let manifest: ManifestStore = Mutex::new(HashMap::new());
 
     let scope = Scope {
         tenant: "default".to_owned(),
@@ -66,7 +70,7 @@ fn main() {
             "tools/call" => {
                 let name = params["name"].as_str().unwrap_or("");
                 let args = &params["arguments"];
-                let text = handle_tool(name, args, &store, &lexical, &scope);
+                let text = handle_tool(name, args, &store, &lexical, &manifest, &scope);
                 Some(json!({ "content": [{ "type": "text", "text": text }] }))
             }
             _ => Some(json!({
@@ -197,6 +201,7 @@ fn handle_tool(
     args: &Value,
     store: &SqlKnowledgeStore,
     lexical: &Mutex<LexicalIndex>,
+    manifest: &ManifestStore,
     scope: &Scope,
 ) -> String {
     // Build the entity-name lookup once for all store-based queries.
@@ -204,10 +209,24 @@ fn handle_tool(
 
     match name {
         "scan_repo" => {
-            let path = args["path"].as_str().unwrap_or(".");
-            let opts = scan_options(scope);
-            match scan_repository(Path::new(path), &opts, store, |_| ()) {
-                Ok((summary, _)) => {
+            let path = args["path"].as_str().unwrap_or(".").to_owned();
+            // Load the prior manifest for this path (incremental skip-unchanged).
+            let prior_manifest = {
+                let guard = manifest.lock().unwrap_or_else(|e| e.into_inner());
+                guard.get(&path).cloned().unwrap_or_default()
+            };
+            let opts = ScanOptions {
+                manifest: prior_manifest,
+                ..scan_options(scope)
+            };
+            match scan_repository(Path::new(&path), &opts, store, |_| ()) {
+                Ok((summary, new_manifest)) => {
+                    // Persist the new manifest for incremental re-scans.
+                    {
+                        let mut guard = manifest.lock().unwrap_or_else(|e| e.into_inner());
+                        guard.insert(path.clone(), new_manifest);
+                    }
+                    // Populate the lexical index with entity names for BM25 search.
                     // Populate the lexical index with entity names for BM25 search.
                     let entities = block_on(store.list_entities(scope)).unwrap_or_default();
                     if let Ok(idx) = lexical.lock() {

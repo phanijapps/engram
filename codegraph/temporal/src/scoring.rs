@@ -126,7 +126,7 @@ pub fn novel(change_counts: &[(String, usize)]) -> Vec<(String, f64)> {
 }
 
 /// Result of `directional` analysis: counts of added / removed / modified symbols.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct DirectionalResult {
     pub added: usize,
     pub removed: usize,

@@ -19,6 +19,7 @@ use crate::RetrievalFusion;
 pub struct RetrievalCompositionInput<'a> {
     pub request: &'a RetrievalRequest,
     pub fusion: &'a dyn RetrievalFusion,
+    pub reranker: Option<&'a dyn crate::RetrievalReranker>,
     pub candidates: Vec<RetrievalResult>,
     pub omitted: Vec<OmittedResult>,
     pub source_failures: Vec<RetrievalSourceFailure>,
@@ -37,9 +38,15 @@ pub fn compose_context(input: RetrievalCompositionInput<'_>) -> CoreResult<Conte
     fusion_request.limit = None;
     let fused_results = input.fusion.fuse(&fusion_request, input.candidates)?;
 
+    // Optional cross-encoder rerank between fusion and budget.
+    let ranked_results = match input.reranker {
+        Some(reranker) => reranker.rerank(input.request, fused_results)?,
+        None => fused_results,
+    };
+
     let mut items = Vec::new();
     let mut omitted = input.omitted;
-    for (index, result) in fused_results.into_iter().enumerate() {
+    for (index, result) in ranked_results.into_iter().enumerate() {
         if index >= max_items {
             omitted.push(omitted_fused_result(&result, OmittedReason::BudgetExceeded));
             continue;

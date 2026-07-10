@@ -43,6 +43,11 @@ pub struct QueryFilter {
     pub min_confidence: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub include_archived: Option<bool>,
+    /// Bi-temporal "as of" filter — returns only entity versions valid at this
+    /// instant (valid_from <= as_of < valid_until). Distinct from `since`/`until`
+    /// which filter on observed time. ADR-0021.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub as_of: Option<Timestamp>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

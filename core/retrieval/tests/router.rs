@@ -255,6 +255,7 @@ fn routed_candidates_compose_with_budget_omissions_and_failures() {
     let context = compose_context(RetrievalCompositionInput {
         request: &retrieval_request,
         fusion: &ReciprocalRankFusion::default(),
+        reranker: None,
         candidates: routed.candidates,
         omitted: Vec::new(),
         source_failures: routed.source_failures,

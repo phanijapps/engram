@@ -9,6 +9,7 @@ fn composer_returns_empty_context_for_empty_candidates() {
     let context = compose_context(RetrievalCompositionInput {
         request: &request,
         fusion: &WeightedRetrievalFusion::default(),
+        reranker: None,
         candidates: Vec::new(),
         omitted: Vec::new(),
         source_failures: Vec::new(),
@@ -28,6 +29,7 @@ fn composer_fuses_duplicates_before_final_budget_omissions() {
     let context = compose_context(RetrievalCompositionInput {
         request: &request,
         fusion: &WeightedRetrievalFusion::default(),
+        reranker: None,
         candidates: vec![
             result("keyword-a", "memory-a", 0.7, "memory.keyword"),
             result("vector-a", "memory-a", 0.5, "vector.semantic"),
@@ -71,6 +73,7 @@ fn composer_uses_budget_limit_when_it_is_smaller_than_request_limit() {
     let context = compose_context(RetrievalCompositionInput {
         request: &request,
         fusion: &WeightedRetrievalFusion::default(),
+        reranker: None,
         candidates: vec![
             result("high", "memory-high", 0.9, "memory.keyword"),
             result("low", "memory-low", 0.1, "memory.keyword"),
@@ -107,6 +110,7 @@ fn composer_preserves_degraded_source_failures() {
     let context = compose_context(RetrievalCompositionInput {
         request: &request,
         fusion: &WeightedRetrievalFusion::default(),
+        reranker: None,
         candidates: vec![result("memory", "memory-a", 0.8, "memory.keyword")],
         omitted: Vec::new(),
         source_failures: vec![source_failure.clone()],

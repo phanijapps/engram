@@ -349,6 +349,7 @@ fn sql_service_round_trips_memory_roles_without_role_wire_field() {
                 until: None,
                 min_confidence: Some(0.9),
                 include_archived: Some(false),
+                as_of: None,
             }),
             cues: Vec::new(),
             limit: Some(1),

@@ -173,6 +173,7 @@ fn rust_retrieval_request_matches_v1_schema() {
             until: None,
             min_confidence: Some(0.5),
             include_archived: Some(false),
+            as_of: None,
         }),
         cues: Vec::new(),
         limit: Some(5),

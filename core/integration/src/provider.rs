@@ -25,7 +25,7 @@ use std::sync::Arc;
 use crate::{
     batch::BatchIngest, capability::CapabilityReport, config::EngramConfig,
     embedding::EmbeddingProvider, export_import::ExportImport, migration::MigrationService,
-    provenance::ProvenanceQuery, recall::UnifiedRecall,
+    observability::Observability, provenance::ProvenanceQuery, recall::UnifiedRecall,
 };
 
 /// Canonical Rust SDK entry point for host applications (`engram-host-sdk`
@@ -64,6 +64,7 @@ pub struct EngramProvider {
     batch: Option<Arc<dyn BatchIngest>>,
     recall: Option<Arc<dyn UnifiedRecall>>,
     export_import: Option<Arc<dyn ExportImport>>,
+    observability: Option<Arc<dyn Observability>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -200,6 +201,12 @@ impl EngramProvider {
         self.export_import.as_ref()
     }
 
+    /// Returns the observability / diagnostics handle if the `observability`
+    /// capability is supported.
+    pub fn observability(&self) -> Option<&Arc<dyn Observability>> {
+        self.observability.as_ref()
+    }
+
     /// Returns the storage schema version visible through provider diagnostics.
     pub fn schema_version(&self) -> &str {
         &self.schema_version
@@ -258,6 +265,7 @@ impl EngramProvider {
             batch: None,
             recall: None,
             export_import: None,
+            observability: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -288,6 +296,7 @@ pub struct EngramProviderBuilder {
     batch: Option<Arc<dyn BatchIngest>>,
     recall: Option<Arc<dyn UnifiedRecall>>,
     export_import: Option<Arc<dyn ExportImport>>,
+    observability: Option<Arc<dyn Observability>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -312,6 +321,7 @@ impl EngramProviderBuilder {
             batch: None,
             recall: None,
             export_import: None,
+            observability: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -407,6 +417,12 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the observability / diagnostics handle.
+    pub fn observability(mut self, handle: Arc<dyn Observability>) -> Self {
+        self.observability = Some(handle);
+        self
+    }
+
     /// Sets the storage schema version reported by provider diagnostics.
     pub fn schema_version(mut self, version: impl Into<String>) -> Self {
         self.schema_version = version.into();
@@ -438,6 +454,7 @@ impl EngramProviderBuilder {
             batch: self.batch,
             recall: self.recall,
             export_import: self.export_import,
+            observability: self.observability,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }
@@ -684,6 +701,43 @@ mod tests {
         assert!(
             provider.export_import().is_some(),
             "export_import handle must be attached"
+        );
+    }
+
+    #[test]
+    fn builder_attaches_observability_handle() {
+        use crate::config::EmbeddingProviderConfig;
+        use crate::observability::{DiagnosticsSnapshot, Observability, RecordCounts};
+        use async_trait::async_trait;
+
+        struct StubObservability;
+        #[async_trait]
+        impl Observability for StubObservability {
+            async fn diagnostics(&self) -> engram_runtime::CoreResult<DiagnosticsSnapshot> {
+                Ok(DiagnosticsSnapshot {
+                    capabilities: CapabilityReport::new(CapabilityState::Supported),
+                    record_counts: RecordCounts::empty(),
+                    embedding_config: EmbeddingProviderConfig {
+                        provider_type: "test".to_string(),
+                        model: "test_model".to_string(),
+                        dimensions: 384,
+                        prompt_profile: "query".to_string(),
+                        normalization: None,
+                    },
+                    schema_version: "2026.01".to_string(),
+                    adapter_version: "0.1.0".to_string(),
+                    slow_query_diagnostics: None,
+                })
+            }
+        }
+
+        let report = CapabilityReport::builder().build();
+        let provider = EngramProviderBuilder::new(report)
+            .observability(std::sync::Arc::new(StubObservability))
+            .build();
+        assert!(
+            provider.observability().is_some(),
+            "observability handle must be attached"
         );
     }
 }

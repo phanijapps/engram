@@ -39,6 +39,7 @@ else
     "$ROOT/core/integration/src/batch.rs"
     "$ROOT/core/integration/src/recall.rs"
     "$ROOT/core/integration/src/export_import.rs"
+    "$ROOT/core/integration/src/observability.rs"
   )
 fi
 

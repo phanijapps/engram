@@ -15,14 +15,19 @@
 //!
 //! # v1 coverage
 //!
-//! v1 exports knowledge (sources, documents, chunks, entities, relationships)
-//! and memory — the families whose concrete stores expose scope-wide listing
-//! methods. Concept schemes/concepts, hierarchy, belief, and vectors are
-//! deferred: the concrete stores expose no scope-wide list method for them in
-//! v1 (see `docs/backlog.md`, `export-import-hierarchy-belief`). `SourceDocument`
-//! and `KnowledgeChunk` carry no `scope` field of their own, so their scope is
-//! resolved from their owning `KnowledgeSource` (the same visibility rule the
-//! store applies when listing).
+//! v1 exports knowledge (sources, documents, chunks, entities, relationships),
+//! taxonomy (concept schemes + their concepts), memory, belief, and hierarchy
+//! nodes — the families whose concrete stores expose scope-wide listing
+//! methods. Beliefs are read via [`SqlBeliefStore::list_beliefs`]; hierarchy
+//! nodes via [`SqlHierarchyStore::list_nodes`]; concept schemes via
+//! [`SqlKnowledgeStore::list_concept_schemes`] (with concepts listed per
+//! scheme). Vectors remain deferred — the concrete store exposes no scope-wide
+//! list method for them. The belief + hierarchy stores are attached optionally
+//! ([`SqlExportImport::with_belief`] / [`SqlExportImport::with_hierarchy`]); an
+//! unwired family exports empty rather than erroring. `SourceDocument`,
+//! `KnowledgeChunk`, and `Concept` carry no `scope` field of their own, so their
+//! scope is resolved from their owning `KnowledgeSource` / `ConceptScheme` (the
+//! same visibility rule the store applies when listing).
 //!
 //! No schema change: the impl reuses the existing per-store reads. It is
 //! engine-specific (it names `Sql*` and holds the adapters directly), which is
@@ -38,15 +43,19 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use engram_domain::{
-    KnowledgeChunk, KnowledgeEntity, KnowledgeRelationship, KnowledgeSource, MemoryRecord, Scope,
-    SourceDocument,
+    Belief, Concept, ConceptScheme, HierarchyNode, KnowledgeChunk, KnowledgeEntity,
+    KnowledgeRelationship, KnowledgeSource, MemoryRecord, Scope, SourceDocument,
 };
 use engram_integration::{
-    ExportImport, ImportData, KnowledgeChunkImportRecord, KnowledgeDocumentImportRecord,
-    KnowledgeEntityImportRecord, KnowledgeRelationshipImportRecord, KnowledgeSourceImportRecord,
-    MemoryImportRecord,
+    BeliefImportRecord, ConceptImportRecord, ConceptSchemeImportRecord, ExportImport,
+    HierarchyNodeImportRecord, ImportData, KnowledgeChunkImportRecord,
+    KnowledgeDocumentImportRecord, KnowledgeEntityImportRecord, KnowledgeRelationshipImportRecord,
+    KnowledgeSourceImportRecord, MemoryImportRecord,
 };
+use engram_knowledge::TaxonomyRepository as _;
 use engram_runtime::CoreResult;
+use engram_store_belief_sqlite::SqlBeliefStore;
+use engram_store_hierarchy_sqlite::SqlHierarchyStore;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use engram_store_sql::SqlMemoryService;
 
@@ -54,17 +63,47 @@ use engram_store_sql::SqlMemoryService;
 /// concrete stores into one [`ImportData`] payload.
 ///
 /// Construct with [`SqlExportImport::new`] from the shared knowledge + memory
-/// store handles. The export carries no mutable state; each `export` reads the
-/// stores independently.
+/// store handles, then attach the belief + hierarchy stores with
+/// [`SqlExportImport::with_belief`] / [`SqlExportImport::with_hierarchy`] so
+/// those families are exported too. When a store handle is absent the
+/// corresponding `ImportData` family is empty (the export never errors on a
+/// missing optional family). The export carries no mutable state; each
+/// `export` reads the stores independently.
 pub struct SqlExportImport {
     knowledge: Arc<SqlKnowledgeStore>,
     memory: Arc<SqlMemoryService>,
+    belief: Option<Arc<SqlBeliefStore>>,
+    hierarchy: Option<Arc<SqlHierarchyStore>>,
 }
 
 impl SqlExportImport {
     /// Wraps the shared knowledge + memory store handles to expose scope export.
+    /// The belief + hierarchy families are not exported until their stores are
+    /// attached with [`SqlExportImport::with_belief`] /
+    /// [`SqlExportImport::with_hierarchy`].
     pub fn new(knowledge: Arc<SqlKnowledgeStore>, memory: Arc<SqlMemoryService>) -> Self {
-        Self { knowledge, memory }
+        Self {
+            knowledge,
+            memory,
+            belief: None,
+            hierarchy: None,
+        }
+    }
+
+    /// Attaches the belief store so the export reads a scope's beliefs via
+    /// [`SqlBeliefStore::list_beliefs`]. Without this call the `beliefs`
+    /// family in the exported [`ImportData`] is empty.
+    pub fn with_belief(mut self, belief: Arc<SqlBeliefStore>) -> Self {
+        self.belief = Some(belief);
+        self
+    }
+
+    /// Attaches the hierarchy store so the export reads a scope's hierarchy
+    /// nodes via [`SqlHierarchyStore::list_nodes`]. Without this call the
+    /// `hierarchy_nodes` family in the exported [`ImportData`] is empty.
+    pub fn with_hierarchy(mut self, hierarchy: Arc<SqlHierarchyStore>) -> Self {
+        self.hierarchy = Some(hierarchy);
+        self
     }
 }
 
@@ -90,6 +129,39 @@ impl ExportImport for SqlExportImport {
         // ---- Memory family --------------------------------------------------
         let memories = self.memory.list_memories_in_scope(scope)?;
 
+        // ---- Taxonomy family: concept schemes + their concepts --------------
+        // Concept schemes carry their own scope; concepts inherit scope from
+        // their owning scheme (the store filters concepts by the scheme's
+        // scope in `list_concepts`). Each scheme's concepts are listed per
+        // scheme so the exported records carry the scheme's scope string.
+        let concept_schemes = self.knowledge.list_concept_schemes(scope).await?;
+        let mut concepts: Vec<ConceptImportRecord> = Vec::new();
+        for scheme in &concept_schemes {
+            let scheme_concepts = self.knowledge.list_concepts(&scheme.id, scope).await?;
+            concepts.extend(
+                scheme_concepts
+                    .iter()
+                    .map(|c| concept_record(c, &scheme.scope)),
+            );
+        }
+
+        // ---- Belief family: read via the belief store when wired ------------
+        // The belief handle is optional (an unwired provider exports no
+        // beliefs); a wired store reads scope-visible beliefs.
+        let beliefs = if let Some(belief) = &self.belief {
+            belief.list_beliefs(scope).await?
+        } else {
+            Vec::new()
+        };
+
+        // ---- Hierarchy family: read via the hierarchy store when wired ------
+        // Same optional-handle rule as beliefs.
+        let hierarchy_nodes = if let Some(hierarchy) = &self.hierarchy {
+            hierarchy.list_nodes(scope).await?
+        } else {
+            Vec::new()
+        };
+
         Ok(ImportData {
             memories: memories.iter().map(memory_record).collect(),
             knowledge_sources: sources.iter().map(source_record).collect(),
@@ -103,12 +175,11 @@ impl ExportImport for SqlExportImport {
                 .collect(),
             knowledge_entities: entities.iter().map(entity_record).collect(),
             knowledge_relationships: relationships.iter().map(relationship_record).collect(),
-            // Concept schemes/concepts, hierarchy, belief, and vectors are
-            // deferred — no scope-wide concrete list method in v1.
-            concept_schemes: Vec::new(),
-            concepts: Vec::new(),
-            beliefs: Vec::new(),
-            hierarchy_nodes: Vec::new(),
+            concept_schemes: concept_schemes.iter().map(concept_scheme_record).collect(),
+            concepts,
+            beliefs: beliefs.iter().map(belief_record).collect(),
+            hierarchy_nodes: hierarchy_nodes.iter().map(hierarchy_node_record).collect(),
+            // Vectors are still deferred — no scope-wide concrete list method.
             vectors: Vec::new(),
         })
     }
@@ -233,6 +304,63 @@ fn memory_record(record: &MemoryRecord) -> MemoryImportRecord {
         content: record.content.text.clone(),
         timestamp: record.created_at.timestamp(),
         policy: serde_json::to_string(&record.policy).unwrap_or_else(|_| "{}".to_string()),
+    }
+}
+
+fn belief_record(belief: &Belief) -> BeliefImportRecord {
+    // The record's `start_time` is the belief's validity start when set, falling
+    // back to the record's creation time (a belief without a `valid_from` still
+    // carries a creation provenance timestamp).
+    let start_time = belief
+        .valid_from
+        .map(|ts| ts.timestamp())
+        .unwrap_or_else(|| belief.created_at.timestamp());
+    BeliefImportRecord {
+        id: belief.id.to_string(),
+        scope: scope_json(&belief.scope),
+        content: belief.content.clone(),
+        start_time,
+        end_time: belief.valid_until.map(|ts| ts.timestamp()),
+        metadata: metadata_json(&belief.metadata),
+    }
+}
+
+fn hierarchy_node_record(node: &HierarchyNode) -> HierarchyNodeImportRecord {
+    // The record's `kind` is the serde string form of `HierarchyNodeKind`
+    // (e.g. `base`/`aggregate`); an empty serialize normalizes to `None`
+    // (defensive — the enum always serializes to a non-empty string).
+    let kind = enum_string(&node.kind);
+    HierarchyNodeImportRecord {
+        id: node.id.to_string(),
+        scope: scope_json(&node.scope),
+        label: node.name.clone(),
+        kind: if kind.is_empty() { None } else { Some(kind) },
+        metadata: metadata_json(&node.metadata),
+    }
+}
+
+fn concept_scheme_record(scheme: &ConceptScheme) -> ConceptSchemeImportRecord {
+    // ConceptScheme carries no inline `description` or free-form `metadata`
+    // field in this model, so those import-record fields normalize to absent.
+    // The record's `title` maps from the scheme's `name`.
+    ConceptSchemeImportRecord {
+        id: scheme.id.to_string(),
+        scope: scope_json(&scheme.scope),
+        title: scheme.name.clone(),
+        description: None,
+        metadata: "{}".to_string(),
+    }
+}
+
+fn concept_record(concept: &Concept, scheme_scope: &Scope) -> ConceptImportRecord {
+    // Concepts inherit scope from their owning scheme (Concept carries no scope
+    // of its own); the preferred label is the import record's `label`.
+    ConceptImportRecord {
+        id: concept.id.to_string(),
+        scope: scope_json(scheme_scope),
+        scheme_id: concept.scheme_id.to_string(),
+        label: concept.pref_label.value.clone(),
+        metadata: "{}".to_string(),
     }
 }
 

@@ -18,11 +18,15 @@
 use std::sync::Arc;
 
 use crate::{SqlExportImport, SqlMigrationService};
+use engram_belief::BeliefRepository as _;
 use engram_domain::*;
+use engram_hierarchy::HierarchyRepository as _;
 use engram_integration::{ExportImport, MigrationManifest, MigrationService as _, RowCounts};
-use engram_knowledge::KnowledgeRepository as _;
+use engram_knowledge::{KnowledgeRepository as _, TaxonomyRepository as _};
 use engram_memory::MemoryRepository as _;
 use engram_runtime::{CoreError, CoreResult};
+use engram_store_belief_sqlite::SqlBeliefStore;
+use engram_store_hierarchy_sqlite::SqlHierarchyStore;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
@@ -39,15 +43,19 @@ use futures::executor::block_on;
 pub fn run_export_import_fixture() -> CoreResult<()> {
     let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().map_err(err("open knowledge"))?);
     let memory = Arc::new(SqlMemoryService::open_in_memory().map_err(err("open memory"))?);
+    let belief = Arc::new(SqlBeliefStore::open_in_memory().map_err(err("open belief"))?);
+    let hierarchy = Arc::new(SqlHierarchyStore::open_in_memory().map_err(err("open hierarchy"))?);
     let scope = export_scope();
-    seed_scope(&knowledge, &memory, &scope)?;
+    seed_scope(&knowledge, &memory, &belief, &hierarchy, &scope)?;
 
-    let exporter = SqlExportImport::new(knowledge, memory);
+    let exporter = SqlExportImport::new(knowledge, memory)
+        .with_belief(belief)
+        .with_hierarchy(hierarchy);
     let data = block_on(exporter.export(&scope)).map_err(err("export"))?;
 
-    // The exported payload covers the knowledge + memory families that have
-    // concrete list methods; deferred families (concepts, beliefs, hierarchy,
-    // vectors) are empty.
+    // The exported payload covers knowledge + taxonomy + memory + belief +
+    // hierarchy — the families whose concrete stores expose scope-wide listing
+    // methods. Vectors remain deferred (no scope-wide list method).
     let expected = RowCounts {
         memory: 2,
         knowledge_sources: 1,
@@ -55,11 +63,11 @@ pub fn run_export_import_fixture() -> CoreResult<()> {
         knowledge_chunks: 1,
         knowledge_entities: 2,
         knowledge_relationships: 1,
-        concept_schemes: 0,
-        concepts: 0,
-        beliefs: 0,
+        concept_schemes: 1,
+        concepts: 1,
+        beliefs: 1,
         contradictions: 0,
-        hierarchy_nodes: 0,
+        hierarchy_nodes: 1,
         vectors: 0,
     };
     let actual = RowCounts {
@@ -160,6 +168,8 @@ fn provenance() -> Provenance {
 fn seed_scope(
     knowledge: &Arc<SqlKnowledgeStore>,
     memory: &Arc<SqlMemoryService>,
+    belief: &Arc<SqlBeliefStore>,
+    hierarchy: &Arc<SqlHierarchyStore>,
     scope: &Scope,
 ) -> CoreResult<()> {
     block_on(knowledge.put_source(KnowledgeSource {
@@ -286,6 +296,89 @@ fn seed_scope(
         }))
         .map_err(err("put_memory"))?;
     }
+
+    // Taxonomy: one concept scheme + one concept under it.
+    block_on(knowledge.put_concept_scheme(ConceptScheme {
+        id: Id::from("fx-scheme"),
+        uri: "https://example.com/schemes/fx".to_string(),
+        name: "fixture scheme".to_string(),
+        scope: scope.clone(),
+        version: "1.0".to_string(),
+        provenance: provenance(),
+        policy: policy(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+    }))
+    .map_err(err("put_concept_scheme"))?;
+
+    block_on(knowledge.put_concept(Concept {
+        id: Id::from("fx-concept"),
+        uri: "https://example.com/concepts/fx".to_string(),
+        scheme_id: Id::from("fx-scheme"),
+        pref_label: ConceptLabel {
+            value: "fixture concept".to_string(),
+            language: Some("en".to_string()),
+        },
+        alt_labels: Vec::new(),
+        definition: Some("a concept seeded by the export fixture".to_string()),
+        notation: None,
+        status: ConceptStatus::Active,
+        provenance: provenance(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+    }))
+    .map_err(err("put_concept"))?;
+
+    // Belief: one derived stance record.
+    block_on(belief.put_belief(Belief {
+        id: Id::from("fx-belief"),
+        scope: scope.clone(),
+        subject: BeliefSubject {
+            key: "svc-fx".to_string(),
+            entity_ref: None,
+            concept_ref: None,
+            aliases: Vec::new(),
+        },
+        content: "fixture belief".to_string(),
+        status: BeliefStatus::Active,
+        confidence: 0.9,
+        sources: Vec::new(),
+        valid_from: Some(chrono::Utc::now()),
+        valid_until: None,
+        superseded_by: None,
+        stale: None,
+        synthesizer: None,
+        reasoning: None,
+        embedding_refs: Vec::new(),
+        policy: policy(),
+        provenance: provenance(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .map_err(err("put_belief"))?;
+
+    // Hierarchy: one base node.
+    block_on(hierarchy.put_node(HierarchyNode {
+        id: HierarchyNodeId::from("fx-node"),
+        scope: scope.clone(),
+        kind: HierarchyNodeKind::Base,
+        layer: 0,
+        name: "fixture node".to_string(),
+        summary: None,
+        parent_id: None,
+        members: Vec::new(),
+        source_target_type: None,
+        source_target_id: None,
+        embedding_refs: Vec::new(),
+        status: HierarchyNodeStatus::Active,
+        policy: policy(),
+        provenance: provenance(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .map_err(err("put_node"))?;
 
     Ok(())
 }

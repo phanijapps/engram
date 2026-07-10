@@ -182,6 +182,19 @@ impl SqlHierarchyStore {
             message: "connection lock poisoned".to_owned(),
         })
     }
+
+    /// Lists hierarchy nodes visible to `scope` (store-specific; not on the
+    /// port). Used by the export/import path to read a scope's hierarchy state
+    /// into an `ImportData` payload. Mirrors the scope rule applied by
+    /// `path_for`: a node is included when its scope is allowed by the request
+    /// scope.
+    pub async fn list_nodes(&self, scope: &Scope) -> CoreResult<Vec<HierarchyNode>> {
+        let connection = self.lock()?;
+        Ok(load_nodes(&connection)?
+            .into_iter()
+            .filter(|node| scope_allows(&node.scope, scope))
+            .collect())
+    }
 }
 
 #[async_trait]

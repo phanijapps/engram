@@ -42,7 +42,7 @@ Legend: ✅ shipped · 🟡 partial · ❌ gap (work item below).
 | **Lexical BM25/Tantivy** leg | ❌ | only RRF present; **B1** |
 | **Graph analytics** (PageRank / betweenness / Louvain) | ❌ | grep-confirmed absent; **B3–B5** |
 | Hierarchy (nav, aggregate, cluster-build) | 🟡 | `durable-hierarchy`, `hierarchy-navigation` — build/nav ship; **graph-metric algorithms = B3–B5** |
-| **Temporal scoring modes** (recent/impact/novel/directional/compound/overview) | ❌ | `temporal-cue-retrieval` is temporal+cue retrieval, not the 6 modes; **C6** |
+| **Temporal scoring modes** (recent/impact/novel/directional/compound/overview) | 🟡 | all 6 implemented in `engram-codegraph-temporal`; 5 MCP-exposed (recent/impact/compound/overview/directional); `novel` blocked on version history (ADR-0018); **C6** |
 | Bi-temporal belief + contradiction | ✅ | `belief-contradiction-bitemporal` (entity-level `as_of` still **B6**) |
 | **HTTP API topology** (framework endpoint/call-site scanners) | ❌ | grep-confirmed absent; **C7–C8** |
 | **Complexity / dead-code / blast-radius / dependency-path** | ❌ | grep-confirmed absent; **C3–C5** |
@@ -186,11 +186,17 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
     ship in `engram-codegraph-queries` (tests green). Edge quality improves with
     C1; wiring into MCP / UI is the integration layer (D4/D5).
 
-- **C6 — Temporal scoring engine** · data · depends: B6 · **3 of 6 modes SHIPPED 2026-07-08; `novel`/`directional`/`overview` + significance budgeting deferred**
+- **C6 — Temporal scoring engine** · data · depends: B6 · **all 6 modes implemented; 5/6 MCP-exposed 2026-07-09; `novel` blocked on ADR-0018**
   - Objective: The six scoring modes + structural-significance budgeting over symbol versions.
-  - Status: `engram-codegraph-temporal` ships `recent` (recency decay), `impact`
-    (blast-radius-weighted), and `compound` (normalized blend); 5 tests green.
-    `novel`/`directional`/`overview` need a change-diff/baseline model.
+  - Status: `engram-codegraph-temporal` implements all six — `recent` (recency
+    decay), `impact` (blast-radius-weighted), `compound` (normalized blend),
+    `novel` (inverse change-frequency), `directional` (added/removed/modified),
+    `overview` (community-shape stats); 8 tests green. The MCP server exposes
+    `temporal_recent`/`temporal_impact`/`temporal_compound`/`temporal_overview`/
+    `temporal_directional` (5 of 6). `temporal_novel` is **deferred**: it needs
+    per-symbol version history, which the current hard-delete retraction
+    (ADR-0018) discards — unblock via the retraction-mode decision (B6 full).
+    Significance budgeting remains a follow-up.
 
 - **C7 — HTTP endpoint detection (framework scanners)** · data · depends: C2 · **gated by Q4**
   - Objective: Framework-aware endpoint extraction for priority frameworks.

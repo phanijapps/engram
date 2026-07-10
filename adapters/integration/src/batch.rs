@@ -1,0 +1,293 @@
+//! SQLite implementation of the [`BatchIngest`] port (engram-host-sdk brief, S3).
+//!
+//! [`SqlBatchIngest`] composes an [`Arc<SqlMemoryService>`] and an
+//! [`Arc<SqlKnowledgeStore>`] and writes a semantic batch across the two
+//! separate SQLite files **best-effort**. Because the stores live in separate
+//! databases with no cross-store transaction, each step writes in its own
+//! per-store transaction, in the fixed order ([`ALL_STEPS`]); a step failure is
+//! recorded and the batch proceeds — there is no rollback of already-succeeded
+//! steps (that would be a false claim of atomicity).
+//!
+//! v1 writes four steps via the existing per-store repository writes:
+//! - **Episode** — `put_source` / `put_document` / `put_chunk` (knowledge).
+//! - **Facts** — `write_memory` per `MemoryRecord`, deriving a **per-record
+//!   idempotency key `{batch_key}#{index}`** so N distinct memory records all
+//!   land (memory's idempotency lookup is `(tenant, subject, workspace, key)`
+//!   with no per-record disambiguation — reusing the batch key would drop
+//!   records 2..N). Re-ingest reproduces the same derived keys → the store
+//!   deduplicates and the step reports [`StepStatus::Deduplicated`].
+//! - **Entities** / **Relationships** — `put_entity` / `put_relationship`
+//!   (knowledge upserts by record id; re-ingest overwrites and reports
+//!   [`StepStatus::Succeeded`], NOT `Deduplicated`).
+//!
+//! The **Evidence** and **Embeddings** steps report [`StepStatus::Skipped`] in
+//! v1: evidence is embedded in the records' `Provenance.evidence`, and
+//! `EmbeddingRef` vector storage is a `VectorIndex` follow-up. Both are
+//! reported `Skipped` — honest, not silent.
+//!
+//! No schema change: the impl reuses the existing per-store writes. It is
+//! engine-specific (it names `Sql*` and holds the adapters directly), which is
+//! why it lives here rather than in the engine-neutral port crate.
+//!
+//! ADR-0022: only this adapter crate may name `Sql*`; the port it implements
+//! stays engine-neutral.
+
+use std::sync::Arc;
+
+use async_trait::async_trait;
+use engram_domain::{
+    Actor, KnowledgeEntity, KnowledgeRelationship, Requester, Scope, WriteMemoryRequest,
+};
+use engram_integration::{
+    ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStep, StepOutcome, StepStatus,
+    TransactionGuarantee, aggregate_status,
+};
+use engram_knowledge::KnowledgeRepository as _;
+use engram_memory::MemoryService as _;
+use engram_runtime::{CoreError, CoreResult};
+use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sql::SqlMemoryService;
+
+/// SQLite-backed [`BatchIngest`]: best-effort batch ingest across the separate
+/// memory and knowledge SQLite stores.
+///
+/// Construct with [`SqlBatchIngest::new`] from shared store handles. The batch
+/// carries no mutable state; each `ingest` runs the steps independently.
+pub struct SqlBatchIngest {
+    memory: Arc<SqlMemoryService>,
+    knowledge: Arc<SqlKnowledgeStore>,
+}
+
+impl SqlBatchIngest {
+    /// Wraps shared memory + knowledge store handles to expose batch ingest.
+    pub fn new(memory: Arc<SqlMemoryService>, knowledge: Arc<SqlKnowledgeStore>) -> Self {
+        Self { memory, knowledge }
+    }
+
+    /// Episode step: writes the optional source, documents, and chunks via the
+    /// knowledge repository. An empty episode reports [`StepStatus::Skipped`].
+    /// The batch [`Scope`] is authoritative — each record is re-scoped to it.
+    async fn step_episode(&self, request: &BatchIngestRequest) -> StepOutcome {
+        let step = BatchStep::Episode;
+        let has_episode =
+            request.source.is_some() || !request.documents.is_empty() || !request.chunks.is_empty();
+        if !has_episode {
+            return StepOutcome::ok(step, StepStatus::Skipped);
+        }
+        let mut failure: Option<CoreError> = None;
+        if let Some(source) = &request.source {
+            let mut record = source.clone();
+            record.scope = request.scope.clone();
+            if let Err(e) = self.knowledge.put_source(record).await {
+                failure = Some(e);
+            }
+        }
+        for document in &request.documents {
+            // SourceDocument carries no scope field; written through unchanged.
+            // Callers must ensure its `source_id` references a batch-scoped source.
+            if let Err(e) = self.knowledge.put_document(document.clone()).await
+                && failure.is_none()
+            {
+                failure = Some(e);
+            }
+        }
+        for chunk in &request.chunks {
+            // KnowledgeChunk carries no scope field either; written through
+            // unchanged (callers ensure its `source_id` is batch-scoped).
+            if let Err(e) = self.knowledge.put_chunk(chunk.clone()).await
+                && failure.is_none()
+            {
+                failure = Some(e);
+            }
+        }
+        match failure {
+            Some(e) => StepOutcome::failed(step, e),
+            None => StepOutcome::ok(step, StepStatus::Succeeded),
+        }
+    }
+
+    /// Facts step: writes each `MemoryRecord` via the memory service, deriving a
+    /// per-record idempotency key `{batch_key}#{index}`. This derivation is
+    /// load-bearing: memory's idempotency lookup is `(tenant, subject,
+    /// workspace, key)` with no per-record disambiguation, so reusing the batch
+    /// key would dedupe records 2..N against record 1 (data loss). With derived
+    /// keys, N distinct records all land on first ingest; re-ingest reproduces
+    /// the same keys → the store deduplicates → [`StepStatus::Deduplicated`].
+    ///
+    /// Step status: empty → `Skipped`; all records deduplicated → `Deduplicated`;
+    /// any record freshly written (none failed) → `Succeeded`; any record
+    /// failed → `Failed` (the remaining records are still attempted so every
+    /// record that can land does).
+    async fn step_facts(&self, request: &BatchIngestRequest) -> StepOutcome {
+        let step = BatchStep::Facts;
+        if request.facts.is_empty() {
+            return StepOutcome::ok(step, StepStatus::Skipped);
+        }
+        let mut failure: Option<CoreError> = None;
+        let mut any_written = false;
+        let mut all_deduplicated = true;
+        for (index, record) in request.facts.iter().enumerate() {
+            // Per-record key: deterministic, so re-ingest reproduces it and
+            // dedupes correctly. Distinct per index, so N records all land.
+            let per_record_key = format!("{}#{}", request.idempotency_key, index);
+            let write_request = WriteMemoryRequest {
+                kind: record.kind.clone(),
+                content: record.content.clone(),
+                scope: request.scope.clone(),
+                requester: requester_from(record.provenance.actor.clone()),
+                provenance: record.provenance.clone(),
+                policy: record.policy.clone(),
+                links: record.links.clone(),
+                idempotency_key: Some(per_record_key),
+            };
+            match self.memory.write_memory(write_request).await {
+                Ok(response) => {
+                    if response.deduplicated == Some(true) {
+                        // deduplicated — stays counted as deduped
+                    } else {
+                        any_written = true;
+                        all_deduplicated = false;
+                    }
+                }
+                Err(e) => {
+                    all_deduplicated = false;
+                    if failure.is_none() {
+                        failure = Some(e);
+                    }
+                }
+            }
+        }
+        match failure {
+            Some(e) => StepOutcome::failed(step, e),
+            None if all_deduplicated && !any_written => {
+                StepOutcome::ok(step, StepStatus::Deduplicated)
+            }
+            None => StepOutcome::ok(step, StepStatus::Succeeded),
+        }
+    }
+
+    /// Entities step: upserts each entity via the knowledge repository (by
+    /// record id). Re-ingest overwrites → [`StepStatus::Succeeded`] (the store
+    /// has no key-based dedup, so `Deduplicated` is never reported here).
+    async fn step_entities(&self, records: &[KnowledgeEntity], scope: &Scope) -> StepOutcome {
+        write_entities(BatchStep::Entities, records, scope, &self.knowledge).await
+    }
+
+    /// Relationships step: upserts each relationship via the knowledge
+    /// repository (by record id). Re-ingest overwrites → `Succeeded`.
+    async fn step_relationships(
+        &self,
+        records: &[KnowledgeRelationship],
+        scope: &Scope,
+    ) -> StepOutcome {
+        write_relationships(BatchStep::Relationships, records, scope, &self.knowledge).await
+    }
+}
+
+#[async_trait]
+impl BatchIngest for SqlBatchIngest {
+    fn transaction_guarantee(&self) -> TransactionGuarantee {
+        TransactionGuarantee::BestEffort
+    }
+
+    async fn ingest(&self, request: BatchIngestRequest) -> CoreResult<BatchOutcome> {
+        // Fixed step order (Episode → Facts → Entities → Relationships →
+        // Evidence → Embeddings). A failed step is recorded and the batch
+        // proceeds — best-effort, no rollback of succeeded steps.
+        let mut steps = Vec::with_capacity(ALL_STEPS.len());
+        steps.push(self.step_episode(&request).await);
+        steps.push(self.step_facts(&request).await);
+        steps.push(self.step_entities(&request.entities, &request.scope).await);
+        steps.push(
+            self.step_relationships(&request.relationships, &request.scope)
+                .await,
+        );
+        // Evidence + Embeddings are not wired in v1 — honest `Skipped`, never
+        // silent. Evidence is embedded in record provenance; embeddings need a
+        // VectorIndex wiring (deferred: atomic-batch-evidence-embeddings).
+        steps.push(StepOutcome::ok(BatchStep::Evidence, StepStatus::Skipped));
+        steps.push(StepOutcome::ok(BatchStep::Embeddings, StepStatus::Skipped));
+
+        let status = aggregate_status(&steps);
+        Ok(BatchOutcome {
+            guarantee: TransactionGuarantee::BestEffort,
+            status,
+            steps,
+        })
+    }
+}
+
+/// Writes the entities step: upserts each entity via the knowledge repository
+/// (by record id). Re-ingest overwrites → [`StepStatus::Succeeded`] (the store
+/// has no key-based dedup). The batch `scope` is authoritative — each record is
+/// re-scoped to it. An empty payload reports [`StepStatus::Skipped`].
+async fn write_entities(
+    step: BatchStep,
+    records: &[KnowledgeEntity],
+    scope: &Scope,
+    knowledge: &Arc<SqlKnowledgeStore>,
+) -> StepOutcome {
+    if records.is_empty() {
+        return StepOutcome::ok(step, StepStatus::Skipped);
+    }
+    let mut failure: Option<CoreError> = None;
+    for record in records {
+        let mut entity = record.clone();
+        entity.scope = scope.clone();
+        if let Err(e) = knowledge.put_entity(entity).await
+            && failure.is_none()
+        {
+            failure = Some(e);
+        }
+    }
+    match failure {
+        Some(e) => StepOutcome::failed(step, e),
+        None => StepOutcome::ok(step, StepStatus::Succeeded),
+    }
+}
+
+/// Writes the relationships step: upserts each relationship via the knowledge
+/// repository (by record id). Same shape and semantics as [`write_entities`].
+async fn write_relationships(
+    step: BatchStep,
+    records: &[KnowledgeRelationship],
+    scope: &Scope,
+    knowledge: &Arc<SqlKnowledgeStore>,
+) -> StepOutcome {
+    if records.is_empty() {
+        return StepOutcome::ok(step, StepStatus::Skipped);
+    }
+    let mut failure: Option<CoreError> = None;
+    for record in records {
+        let mut relationship = record.clone();
+        relationship.scope = scope.clone();
+        if let Err(e) = knowledge.put_relationship(relationship).await
+            && failure.is_none()
+        {
+            failure = Some(e);
+        }
+    }
+    match failure {
+        Some(e) => StepOutcome::failed(step, e),
+        None => StepOutcome::ok(step, StepStatus::Succeeded),
+    }
+}
+
+/// Builds a [`Requester`] from a record's provenance [`Actor`]. The memory
+/// authorizer is allow-all in v1, but `memory.write` is declared honestly.
+fn requester_from(actor: Actor) -> Requester {
+    Requester {
+        actor,
+        roles: Vec::new(),
+        permissions: vec!["memory.write".to_string()],
+        on_behalf_of: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! The SqlBatchIngest integration tests live in
+    //! `adapters/integration/tests/batch_ingest.rs` so they can share the
+    //! fixture helpers. This module is reserved for any future inline unit
+    //! tests that do not require a store.
+}

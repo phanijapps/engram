@@ -4,6 +4,7 @@
 //! before features are marked as supported. The EngramProvider calls these
 //! fixtures during bootstrap to ensure capability reporting is accurate.
 
+pub mod batch;
 pub mod fastembed_provider;
 pub mod fixtures;
 pub mod harness;
@@ -11,6 +12,7 @@ pub mod migration_service;
 pub mod provenance;
 pub mod wiring;
 
+pub use batch::SqlBatchIngest;
 pub use harness::{ConformanceHarness, ConformanceResult, FixtureResult, FixtureStatus};
 pub use migration_service::SqlMigrationService;
 pub use provenance::SqlProvenanceQuery;

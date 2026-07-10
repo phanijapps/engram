@@ -761,12 +761,16 @@ dependencies = [
 name = "engram-codegraph-mcp"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "engram-codegraph-queries",
+ "engram-codegraph-temporal",
  "engram-domain",
+ "engram-graph-analytics",
  "engram-ingest",
  "engram-knowledge",
  "engram-runtime",
  "engram-store-knowledge-sqlite",
+ "engram-store-lexical",
  "futures",
  "serde",
  "serde_json",
@@ -917,6 +921,8 @@ dependencies = [
 name = "engram-integration"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "engram-belief",
  "engram-domain",
  "engram-hierarchy",
@@ -978,6 +984,7 @@ dependencies = [
  "engram-runtime",
  "engram-store-belief-sqlite",
  "engram-store-knowledge-sqlite",
+ "engram-store-lexical",
  "engram-store-sql",
  "engram-store-vector",
  "futures",

@@ -13,6 +13,7 @@ pub mod migration_service;
 pub mod observability;
 pub mod provenance;
 pub mod recall;
+mod recall_lanes;
 pub mod wiring;
 
 pub use batch::SqlBatchIngest;

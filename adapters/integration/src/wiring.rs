@@ -140,6 +140,7 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let mut vectors: Option<Arc<dyn engram_retrieval::VectorIndex>> = None;
     let mut provenance: Option<Arc<dyn engram_integration::ProvenanceQuery>> = None;
     let mut batch: Option<Arc<dyn engram_integration::BatchIngest>> = None;
+    let mut recall: Option<Arc<dyn engram_integration::UnifiedRecall>> = None;
     // Concrete Sql* handles, kept alongside the trait handles so the batch
     // (which composes the concrete stores) can be wired without a trait→concrete
     // downcast. Populated only when the corresponding family's handle attaches.
@@ -227,32 +228,81 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         }
     }
 
-    // unified_recall (S4): the UnifiedRecall port + SqlUnifiedRecall impl +
-    // conformance fixture are shipped (the fixture verifies fusion +
-    // degraded-mode against configurable stub lanes). However, the production
-    // wiring cannot wire all five v1 lanes yet, so the capability stays
-    // Unsupported { FeatureDisabled } and NO handle is attached.
+    // unified_recall (S4): construct the SqlUnifiedRecall handle from the wired
+    // memory handle + the available retrieval lanes + the beliefs handle, then
+    // flip the capability to Supported when the conformance fixture passes.
     //
-    // Lane wiring status:
-    //   - facts (memory): WIRABLE — SqlMemoryStore is constructed above.
-    //   - graph: WIRABLE — SqlKnowledgeStore implements GraphCandidateSource
-    //     (engram-store-knowledge-sqlite::GraphRetrievalIndex::new).
-    //   - vector: BLOCKED — VectorRetrievalIndex needs a VectorQueryProvider
-    //     (query embedding model); bootstrap_provider constructs no embedding
-    //     provider (default build has no fastembed feature), and the
-    //     SqliteVectorIndex is moved into Arc<dyn VectorIndex> (by-value
-    //     ownership is lost).
-    //   - lexical: BLOCKED — engram-store-lexical is not a dependency of this
-    //     crate; no LexicalIndex or LexicalTargetResolver is constructed.
-    //   - beliefs: WIRABLE — SqlBeliefStore is constructed below.
-    //
-    // Honest partial-wiring beats a false Supported: until vector + lexical
-    // lanes are wirable, recall() stays None. The fixture still runs as a
-    // contract-level conformance check.
-    let _ = fixtures::recall::run_recall_fixture();
-    let unified_recall_state = CapabilityState::Unsupported {
-        reason: CapabilityReason::FeatureDisabled,
-    };
+    // The v1 lanes compose as:
+    //   - facts (memory) — passed to the SqlUnifiedRecall constructor below.
+    //   - graph — GraphRetrievalIndex over SqlKnowledgeStore (which implements
+    //     GraphCandidateSource).
+    //   - lexical — LexicalRetrievalIndex over an in-RAM LexicalIndex + a
+    //     knowledge-store-backed target resolver. The index starts empty (no
+    //     chunk→index ingest feed is wired here) so the lane returns no
+    //     candidates until a feed is added; the resolver is still wired so the
+    //     lane is correct once fed.
+    //   - vector — feature-gated behind `fastembed` (off by default): constructs
+    //     a vector index + the FastEmbed query provider + a knowledge-store
+    //     resolver. When disabled the lane is simply absent (degraded for
+    //     vector, not a failure).
+    //   - beliefs — passed to the SqlUnifiedRecall constructor below.
+    let mut retrieval_lanes: Vec<Arc<dyn engram_retrieval::RetrievalIndex>> = Vec::new();
+    if let Some(knowledge_handle) = &knowledge_store {
+        // Graph lane: SqlKnowledgeStore implements GraphCandidateSource.
+        retrieval_lanes.push(Arc::new(
+            engram_store_knowledge_sqlite::GraphRetrievalIndex::new(knowledge_handle.clone()),
+        ));
+        // Lexical lane: an in-RAM Tantivy index (no ingest feed wired here) +
+        // a knowledge-store-backed target resolver.
+        if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::new() {
+            let resolver =
+                crate::recall_lanes::KnowledgeLexicalResolver::new(knowledge_handle.clone());
+            retrieval_lanes.push(Arc::new(engram_store_lexical::LexicalRetrievalIndex::new(
+                lexical_index,
+                Arc::new(resolver),
+            )));
+        }
+    }
+    // Vector lane (fastembed-gated): construct the vector index + FastEmbed
+    // query provider + knowledge-store resolver. Skipped entirely when the
+    // feature is off (default build) or when construction fails — recall then
+    // runs degraded for vector (fewer candidates), never errors.
+    #[cfg(feature = "fastembed")]
+    if let (Some(knowledge_handle), Some(path_str)) = (&knowledge_store, paths.vectors.to_str()) {
+        let dims = config.embedding_provider.dimensions;
+        let space = engram_domain::EmbeddingSpace::new(
+            &config.embedding_provider.provider_type,
+            &config.embedding_provider.model,
+            dims,
+            &config.embedding_provider.prompt_profile,
+            config.embedding_provider.normalization.clone(),
+        );
+        if let Ok(vector_index) =
+            engram_store_vector::SqliteVectorIndex::open_with_embedding_space(path_str, space)
+        {
+            if let Ok(query_provider) = engram_store_vector::FastEmbedBgeSmallQueryProvider::new() {
+                let resolver =
+                    crate::recall_lanes::KnowledgeVectorResolver::new(knowledge_handle.clone());
+                retrieval_lanes.push(Arc::new(engram_store_vector::VectorRetrievalIndex::new(
+                    vector_index,
+                    Arc::new(query_provider),
+                    Arc::new(resolver),
+                )));
+            }
+        }
+    }
+    let mut unified_recall_state = failed();
+    if let (Some(memory_handle), Some(belief_handle)) = (&memory_store, &belief_store)
+        && fixtures::recall::run_recall_fixture().is_ok()
+    {
+        let unified = crate::SqlUnifiedRecall::new(
+            memory_handle.clone(),
+            retrieval_lanes,
+            belief_handle.clone(),
+        );
+        recall = Some(Arc::new(unified));
+        unified_recall_state = CapabilityState::Supported;
+    }
 
     // Hierarchy.
     if fixtures::hierarchy::run_hierarchy_fixture().is_ok() {
@@ -437,6 +487,9 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     if let Some(h) = observability {
         builder = builder.observability(h);
     }
+    if let Some(h) = recall {
+        builder = builder.recall(h);
+    }
     Ok(builder.build())
 }
 
@@ -478,6 +531,38 @@ mod tests {
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
         )
+    }
+
+    /// A minimal retrieval request used to exercise the wired recall handle.
+    fn request_for_recall() -> engram_domain::RetrievalRequest {
+        use engram_domain::{Actor, ActorKind, Id, Requester, RetrievalMode, Scope};
+        engram_domain::RetrievalRequest {
+            query: "recall-probe".to_string(),
+            scope: Scope {
+                tenant: "tenant-wiring".to_string(),
+                subject: Some("subject-wiring".to_string()),
+                workspace: Some("workspace-wiring".to_string()),
+                session: None,
+                environment: Some("test".to_string()),
+            },
+            requester: Requester {
+                actor: Actor {
+                    id: Id::from("wiring-agent"),
+                    kind: ActorKind::Agent,
+                    display_name: Some("Wiring Test".to_string()),
+                    metadata: None,
+                },
+                roles: Vec::new(),
+                permissions: vec!["memory.retrieve".to_string()],
+                on_behalf_of: None,
+            },
+            modes: vec![RetrievalMode::Keyword],
+            filters: None,
+            cues: Vec::new(),
+            limit: Some(10),
+            budget: None,
+            include_explanations: None,
+        }
     }
 
     #[test]
@@ -547,18 +632,19 @@ mod tests {
             engram_integration::TransactionGuarantee::BestEffort,
             "batch handle must report BestEffort"
         );
-        // unified_recall (S4): stays Unsupported { FeatureDisabled } because the
-        // production wiring cannot wire all five v1 lanes (vector + lexical
-        // adapter lanes are blocked — see the wiring comment above). The handle
-        // is not attached.
+        // unified_recall (S4): the recall fixture passes during bootstrap AND
+        // the memory + beliefs stores are wired, so the SqlUnifiedRecall handle
+        // (graph + lexical + beliefs lanes) is attached and the capability
+        // flips to Supported. The vector lane is fastembed-gated (off by
+        // default); recall runs degraded for vector when the feature is off.
         assert!(
-            !report.unified_recall.is_supported(),
-            "unified_recall must NOT be Supported until all lanes are wired: {:?}",
+            report.unified_recall.is_supported(),
+            "unified_recall should be Supported after bootstrap: {:?}",
             report.unified_recall
         );
         assert!(
-            provider.recall().is_none(),
-            "recall handle must be absent when unified_recall is not Supported"
+            provider.recall().is_some(),
+            "recall handle must be attached when unified_recall is Supported"
         );
         // export_import (S5): the export fixture passes during bootstrap AND the
         // migration handle is wired, so the handle is attached and the
@@ -615,9 +701,10 @@ mod tests {
         if report.atomic_batch.is_supported() {
             assert!(provider.batch().is_some());
         }
-        // unified_recall: Unsupported here (lanes not fully wired), no handle.
-        assert!(!report.unified_recall.is_supported());
-        assert!(provider.recall().is_none());
+        // unified_recall invariant: Supported iff a handle is attached.
+        if report.unified_recall.is_supported() {
+            assert!(provider.recall().is_some());
+        }
         // export_import invariant: Supported iff a handle is attached.
         if report.export_import.is_supported() {
             assert!(provider.export_import().is_some());
@@ -700,6 +787,39 @@ mod tests {
             handle.transaction_guarantee(),
             engram_integration::TransactionGuarantee::BestEffort,
             "batch handle must report BestEffort, never Atomic"
+        );
+    }
+
+    #[test]
+    fn bootstrap_provider_exposes_recall_handle_when_supported() {
+        use futures::executor::block_on;
+
+        let provider = bootstrap_provider(&cfg()).expect("bootstrap");
+        let report = provider.capabilities();
+        // The recall fixture passes during bootstrap AND the memory + beliefs
+        // stores are wired, so unified_recall is Supported and the recall handle
+        // (graph + lexical + beliefs lanes) is attached.
+        assert!(
+            report.unified_recall.is_supported(),
+            "unified_recall should be Supported after bootstrap: {:?}",
+            report.unified_recall
+        );
+        let handle = provider
+            .recall()
+            .expect("recall handle must be present when unified_recall is Supported");
+        // Recall against a fresh (empty) store degrades to Ok with no candidates
+        // — the lanes run independently; an empty graph/lexical lane yields no
+        // candidates rather than erroring.
+        let payload = block_on(handle.recall(request_for_recall())).expect("recall must not error");
+        // Fresh stores → no facts/graph/lexical/belief candidates.
+        assert!(
+            payload.items.is_empty(),
+            "fresh bootstrap recall should yield no items, got {:?}",
+            payload
+                .items
+                .iter()
+                .map(|i| i.target_id.clone())
+                .collect::<Vec<_>>()
         );
     }
 

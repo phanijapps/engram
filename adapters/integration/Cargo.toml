@@ -19,6 +19,7 @@ engram-store-knowledge-sqlite = { path = "../knowledge/sqlite" }
 engram-store-hierarchy-sqlite = { path = "../hierarchy/sqlite" }
 engram-store-belief-sqlite = { path = "../orchestration/belief-sqlite" }
 engram-store-vector = { path = "../retrieval/sqlite-vec" }
+engram-store-lexical = { path = "../retrieval/tantivy-lexical" }
 async-trait.workspace = true
 chrono.workspace = true
 futures.workspace = true

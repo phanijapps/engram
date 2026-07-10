@@ -315,6 +315,25 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         failed()
     };
 
+    // export_import (S5): construct SqlExportImport from the wired file-backed
+    // memory + knowledge stores. The handle is attached and the capability
+    // flipped to Supported only when the conformance fixture passes AND the
+    // migration handle is wired (export + import are both needed for
+    // backend-to-backend scope movement). Like atomic_batch, this composes the
+    // concrete stores, so it is gated on memory_store + knowledge_store too.
+    let mut export_import_state = failed();
+    let mut export_import: Option<Arc<dyn engram_integration::ExportImport>> = None;
+    if fixtures::export_import::run_export_import_fixture().is_ok()
+        && migration.is_some()
+        && let (Some(memory_handle), Some(knowledge_handle)) = (&memory_store, &knowledge_store)
+    {
+        export_import = Some(Arc::new(crate::SqlExportImport::new(
+            knowledge_handle.clone(),
+            memory_handle.clone(),
+        )));
+        export_import_state = CapabilityState::Supported;
+    }
+
     let report = CapabilityReport::builder()
         .memory(memory_state)
         .knowledge(knowledge_state)
@@ -329,6 +348,7 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .episodes_evidence(episodes_evidence_state)
         .atomic_batch(atomic_batch_state)
         .unified_recall(unified_recall_state)
+        .export_import(export_import_state)
         .build();
 
     let mut builder = EngramProviderBuilder::new(report)
@@ -369,6 +389,9 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     }
     if let Some(h) = batch {
         builder = builder.batch(h);
+    }
+    if let Some(h) = export_import {
+        builder = builder.export_import(h);
     }
     Ok(builder.build())
 }
@@ -477,6 +500,18 @@ mod tests {
             provider.recall().is_none(),
             "recall handle must be absent when unified_recall is not Supported"
         );
+        // export_import (S5): the export fixture passes during bootstrap AND the
+        // migration handle is wired, so the handle is attached and the
+        // capability flips to Supported.
+        assert!(
+            report.export_import.is_supported(),
+            "export_import should be Supported: {:?}",
+            report.export_import
+        );
+        assert!(
+            provider.export_import().is_some(),
+            "export_import handle must be attached when export_import is Supported"
+        );
     }
 
     #[test]
@@ -510,6 +545,10 @@ mod tests {
         // unified_recall: Unsupported here (lanes not fully wired), no handle.
         assert!(!report.unified_recall.is_supported());
         assert!(provider.recall().is_none());
+        // export_import invariant: Supported iff a handle is attached.
+        if report.export_import.is_supported() {
+            assert!(provider.export_import().is_some());
+        }
         let _ = report; // silence unused on partial-failure builds
     }
 

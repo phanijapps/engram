@@ -83,6 +83,19 @@ impl SqlMemoryService {
             ids,
         })
     }
+
+    /// Lists memory records visible to `scope` (store-specific; not on a port).
+    ///
+    /// Export and maintenance paths need a scope-wide enumeration of stored
+    /// memories. The store's internal `list_memories` returns every record;
+    /// this wrapper applies the same visibility rule retrieval uses (tenant must
+    /// match, optional scope dimensions narrow) so callers never see records
+    /// outside their scope.
+    pub fn list_memories_in_scope(&self, scope: &Scope) -> CoreResult<Vec<MemoryRecord>> {
+        let mut records = self.store.list_memories()?;
+        records.retain(|record| crate::scope::scope_allows(&record.scope, scope));
+        Ok(records)
+    }
 }
 
 #[async_trait]

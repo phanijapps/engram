@@ -34,7 +34,7 @@ pub struct ValidationReport {
 }
 
 /// Row counts by data family.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RowCounts {
     /// Number of memory records.
     pub memory: usize,

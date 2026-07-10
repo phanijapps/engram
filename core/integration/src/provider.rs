@@ -24,8 +24,8 @@ use std::sync::Arc;
 
 use crate::{
     batch::BatchIngest, capability::CapabilityReport, config::EngramConfig,
-    embedding::EmbeddingProvider, migration::MigrationService, provenance::ProvenanceQuery,
-    recall::UnifiedRecall,
+    embedding::EmbeddingProvider, export_import::ExportImport, migration::MigrationService,
+    provenance::ProvenanceQuery, recall::UnifiedRecall,
 };
 
 /// Canonical Rust SDK entry point for host applications (`engram-host-sdk`
@@ -63,6 +63,7 @@ pub struct EngramProvider {
     provenance: Option<Arc<dyn ProvenanceQuery>>,
     batch: Option<Arc<dyn BatchIngest>>,
     recall: Option<Arc<dyn UnifiedRecall>>,
+    export_import: Option<Arc<dyn ExportImport>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -193,6 +194,12 @@ impl EngramProvider {
         self.recall.as_ref()
     }
 
+    /// Returns the export-import handle if the `export_import` capability is
+    /// supported.
+    pub fn export_import(&self) -> Option<&Arc<dyn ExportImport>> {
+        self.export_import.as_ref()
+    }
+
     /// Returns the storage schema version visible through provider diagnostics.
     pub fn schema_version(&self) -> &str {
         &self.schema_version
@@ -250,6 +257,7 @@ impl EngramProvider {
             provenance: None,
             batch: None,
             recall: None,
+            export_import: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -279,6 +287,7 @@ pub struct EngramProviderBuilder {
     provenance: Option<Arc<dyn ProvenanceQuery>>,
     batch: Option<Arc<dyn BatchIngest>>,
     recall: Option<Arc<dyn UnifiedRecall>>,
+    export_import: Option<Arc<dyn ExportImport>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -302,6 +311,7 @@ impl EngramProviderBuilder {
             provenance: None,
             batch: None,
             recall: None,
+            export_import: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -391,6 +401,12 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the export-import handle.
+    pub fn export_import(mut self, handle: Arc<dyn ExportImport>) -> Self {
+        self.export_import = Some(handle);
+        self
+    }
+
     /// Sets the storage schema version reported by provider diagnostics.
     pub fn schema_version(mut self, version: impl Into<String>) -> Self {
         self.schema_version = version.into();
@@ -421,6 +437,7 @@ impl EngramProviderBuilder {
             provenance: self.provenance,
             batch: self.batch,
             recall: self.recall,
+            export_import: self.export_import,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }
@@ -630,6 +647,43 @@ mod tests {
         assert!(
             provider.recall().is_some(),
             "recall handle must be attached"
+        );
+    }
+
+    #[test]
+    fn builder_attaches_export_import_handle() {
+        use crate::export_import::ExportImport;
+        use crate::migration::ImportData;
+        use async_trait::async_trait;
+        use engram_domain::Scope;
+
+        struct StubExportImport;
+        #[async_trait]
+        impl ExportImport for StubExportImport {
+            async fn export(&self, _scope: &Scope) -> engram_runtime::CoreResult<ImportData> {
+                Ok(ImportData {
+                    memories: Vec::new(),
+                    knowledge_sources: Vec::new(),
+                    knowledge_documents: Vec::new(),
+                    knowledge_chunks: Vec::new(),
+                    knowledge_entities: Vec::new(),
+                    knowledge_relationships: Vec::new(),
+                    concept_schemes: Vec::new(),
+                    concepts: Vec::new(),
+                    beliefs: Vec::new(),
+                    hierarchy_nodes: Vec::new(),
+                    vectors: Vec::new(),
+                })
+            }
+        }
+
+        let report = CapabilityReport::builder().build();
+        let provider = EngramProviderBuilder::new(report)
+            .export_import(std::sync::Arc::new(StubExportImport))
+            .build();
+        assert!(
+            provider.export_import().is_some(),
+            "export_import handle must be attached"
         );
     }
 }

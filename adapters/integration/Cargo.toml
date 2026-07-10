@@ -22,6 +22,7 @@ engram-store-vector = { path = "../retrieval/sqlite-vec" }
 async-trait.workspace = true
 chrono.workspace = true
 futures.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 
 [features]

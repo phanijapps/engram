@@ -282,6 +282,35 @@ impl SqlKnowledgeStore {
         Ok(sources)
     }
 
+    /// Lists knowledge documents whose owning source is visible to `scope`.
+    ///
+    /// `SourceDocument` carries no `scope` field of its own (documents inherit
+    /// visibility from their owning source), so each document's parent source is
+    /// resolved and the document is included only when that source is
+    /// scope-visible — the same rule `list_chunks` applies.
+    pub async fn list_documents(&self, scope: &Scope) -> CoreResult<Vec<SourceDocument>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare("SELECT record_json FROM knowledge_documents ORDER BY source_id, id")
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut documents = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let document = serde_json::from_str::<SourceDocument>(&json).map_err(json_error)?;
+            let source = source_by_id(&connection, &document.source_id)?;
+            if source
+                .as_ref()
+                .is_some_and(|s| scope_allows(&s.scope, scope))
+            {
+                documents.push(document);
+            }
+        }
+        Ok(documents)
+    }
+
     /// Lists `KnowledgeEntity` records belonging to a specific repository (via
     /// `graph_id IN (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?)`),
     /// visible to `scope`. The per-source `EntityKind::Repository` node has
@@ -398,6 +427,24 @@ pub(crate) fn validation_provenance(
         confidence: Some(1.0),
         method: Some("ontology_validation".to_owned()),
     }
+}
+
+/// Loads the `KnowledgeSource` for a given `source_id` (used by document and
+/// chunk visibility resolution).
+fn source_by_id(
+    connection: &Connection,
+    source_id: &SourceId,
+) -> CoreResult<Option<KnowledgeSource>> {
+    connection
+        .query_row(
+            "SELECT record_json FROM knowledge_sources WHERE id = ?1",
+            params![source_id.to_string()],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(sql_error)?
+        .map(|json| serde_json::from_str::<KnowledgeSource>(&json).map_err(json_error))
+        .transpose()
 }
 
 /// Loads the `KnowledgeSource` that owns a chunk (chunk -> document -> source).

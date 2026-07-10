@@ -41,6 +41,7 @@ pub mod batch;
 pub mod capability;
 pub mod config;
 pub mod embedding;
+pub mod export_import;
 pub mod migration;
 #[cfg(feature = "ollama")]
 pub mod ollama_provider;
@@ -57,6 +58,7 @@ pub use config::{
     CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode, SqliteStorageLayout,
 };
 pub use embedding::EmbeddingProvider;
+pub use export_import::ExportImport;
 pub use migration::{
     compute_manifest_fingerprint, record_key_hash, BeliefImportRecord, ConceptImportRecord,
     ConceptSchemeImportRecord, EmbeddingSpaceValidation, HierarchyNodeImportRecord, ImportData,

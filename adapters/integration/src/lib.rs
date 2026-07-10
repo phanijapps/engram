@@ -5,6 +5,7 @@
 //! fixtures during bootstrap to ensure capability reporting is accurate.
 
 pub mod batch;
+pub mod export_import;
 pub mod fastembed_provider;
 pub mod fixtures;
 pub mod harness;
@@ -14,6 +15,7 @@ pub mod recall;
 pub mod wiring;
 
 pub use batch::SqlBatchIngest;
+pub use export_import::SqlExportImport;
 pub use harness::{ConformanceHarness, ConformanceResult, FixtureResult, FixtureStatus};
 pub use migration_service::SqlMigrationService;
 pub use provenance::SqlProvenanceQuery;

@@ -5,6 +5,7 @@
 
 pub mod batch;
 pub mod belief;
+pub mod export_import;
 pub mod hierarchy;
 pub mod knowledge;
 pub mod memory;

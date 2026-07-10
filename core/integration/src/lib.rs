@@ -37,6 +37,7 @@
 //! );
 //! ```
 
+pub mod batch;
 pub mod capability;
 pub mod config;
 pub mod embedding;
@@ -46,6 +47,10 @@ pub mod ollama_provider;
 pub mod provenance;
 pub mod provider;
 
+pub use batch::{
+    aggregate_status, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep,
+    StepOutcome, StepStatus, TransactionGuarantee, ALL_STEPS,
+};
 pub use capability::{CapabilityReport, CapabilityReportBuilder};
 pub use config::{
     CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode, SqliteStorageLayout,

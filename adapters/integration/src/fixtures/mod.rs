@@ -3,6 +3,7 @@
 //! This module contains lightweight, deterministic fixtures that verify
 //! each capability family works correctly before marking it as supported.
 
+pub mod batch;
 pub mod belief;
 pub mod hierarchy;
 pub mod knowledge;

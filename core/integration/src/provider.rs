@@ -23,8 +23,8 @@ use engram_runtime::{CoreError, CoreResult};
 use std::sync::Arc;
 
 use crate::{
-    capability::CapabilityReport, config::EngramConfig, embedding::EmbeddingProvider,
-    migration::MigrationService, provenance::ProvenanceQuery,
+    batch::BatchIngest, capability::CapabilityReport, config::EngramConfig,
+    embedding::EmbeddingProvider, migration::MigrationService, provenance::ProvenanceQuery,
 };
 
 /// Canonical Rust SDK entry point for host applications (`engram-host-sdk`
@@ -60,6 +60,7 @@ pub struct EngramProvider {
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
+    batch: Option<Arc<dyn BatchIngest>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -178,6 +179,12 @@ impl EngramProvider {
         self.provenance.as_ref()
     }
 
+    /// Returns the best-effort batch ingest handle if the `atomic_batch`
+    /// capability is supported.
+    pub fn batch(&self) -> Option<&Arc<dyn BatchIngest>> {
+        self.batch.as_ref()
+    }
+
     /// Returns the storage schema version visible through provider diagnostics.
     pub fn schema_version(&self) -> &str {
         &self.schema_version
@@ -233,6 +240,7 @@ impl EngramProvider {
             migration: None,
             embedding_provider: None,
             provenance: None,
+            batch: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -260,6 +268,7 @@ pub struct EngramProviderBuilder {
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
+    batch: Option<Arc<dyn BatchIngest>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -281,6 +290,7 @@ impl EngramProviderBuilder {
             migration: None,
             embedding_provider: None,
             provenance: None,
+            batch: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -358,6 +368,12 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the best-effort batch ingest handle.
+    pub fn batch(mut self, handle: Arc<dyn BatchIngest>) -> Self {
+        self.batch = Some(handle);
+        self
+    }
+
     /// Sets the storage schema version reported by provider diagnostics.
     pub fn schema_version(mut self, version: impl Into<String>) -> Self {
         self.schema_version = version.into();
@@ -386,6 +402,7 @@ impl EngramProviderBuilder {
             migration: self.migration,
             embedding_provider: self.embedding_provider,
             provenance: self.provenance,
+            batch: self.batch,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }
@@ -441,6 +458,10 @@ mod tests {
         // No handles wired by the config-only bootstrap.
         assert!(provider.memory().is_none());
         assert!(provider.knowledge().is_none());
+        assert!(
+            provider.batch().is_none(),
+            "unwired provider has no batch handle"
+        );
         assert!(!provider.capabilities().all_supported());
         assert_eq!(provider.schema_version(), "unwired");
         // AC2: all 8 not-yet-built areas are explicitly Unsupported { FeatureDisabled },
@@ -494,5 +515,66 @@ mod tests {
         // No memory handle was attached even though capability says Supported —
         // the builder does not cross-check; the wiring layer is responsible for
         // only marking Supported when it also attaches the handle.
+    }
+
+    #[test]
+    fn config_only_bootstrap_has_no_batch_handle() {
+        // The config-only EngramProvider::bootstrap (no adapter wired) reports
+        // atomic_batch Unsupported { FeatureDisabled } with no handle — the
+        // contrast that proves the wiring layer only flips the capability with
+        // a handle.
+        let provider = EngramProvider::bootstrap(&test_config()).unwrap();
+        assert!(
+            provider.batch().is_none(),
+            "unwired provider has no batch handle"
+        );
+        assert_eq!(
+            provider.capabilities().atomic_batch,
+            CapabilityState::Unsupported {
+                reason: CapabilityReason::FeatureDisabled,
+            },
+            "atomic_batch is FeatureDisabled until the batch fixture passes"
+        );
+    }
+
+    #[test]
+    fn builder_attaches_batch_handle() {
+        use crate::batch::{
+            aggregate_status, BatchIngest, BatchIngestRequest, BatchOutcome, StepOutcome,
+            StepStatus, TransactionGuarantee, ALL_STEPS,
+        };
+        use async_trait::async_trait;
+
+        struct StubBatch;
+        #[async_trait]
+        impl BatchIngest for StubBatch {
+            fn transaction_guarantee(&self) -> TransactionGuarantee {
+                TransactionGuarantee::BestEffort
+            }
+            async fn ingest(
+                &self,
+                _request: BatchIngestRequest,
+            ) -> engram_runtime::CoreResult<BatchOutcome> {
+                let steps: Vec<StepOutcome> = ALL_STEPS
+                    .iter()
+                    .map(|&s| StepOutcome::ok(s, StepStatus::Succeeded))
+                    .collect();
+                Ok(BatchOutcome {
+                    guarantee: TransactionGuarantee::BestEffort,
+                    status: aggregate_status(&steps),
+                    steps,
+                })
+            }
+        }
+
+        let report = CapabilityReport::builder().build();
+        let provider = EngramProviderBuilder::new(report)
+            .batch(std::sync::Arc::new(StubBatch))
+            .build();
+        let handle = provider.batch().expect("batch handle attached");
+        assert_eq!(
+            handle.transaction_guarantee(),
+            TransactionGuarantee::BestEffort
+        );
     }
 }

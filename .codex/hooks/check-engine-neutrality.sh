@@ -36,6 +36,7 @@ else
     "$ROOT/core/integration/src/provider.rs"
     "$ROOT/core/integration/src/capability.rs"
     "$ROOT/core/integration/src/provenance.rs"
+    "$ROOT/core/integration/src/batch.rs"
   )
 fi
 

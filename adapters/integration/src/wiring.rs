@@ -124,6 +124,10 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // (which means "implementation slice has not shipped"). Flipped to Supported
     // below only when the provenance fixture passes and the handle attaches.
     let mut episodes_evidence_state = failed();
+    // atomic_batch is a shipped capability (S3): same pattern — start at
+    // ConformanceFailed, flip to Supported only when the batch fixture passes
+    // and the SqlBatchIngest handle attaches.
+    let mut atomic_batch_state = failed();
 
     let mut memory: Option<Arc<dyn MemoryService>> = None;
     let mut knowledge: Option<Arc<dyn KnowledgeRepository>> = None;
@@ -135,13 +139,21 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let retrieval: Option<Arc<dyn engram_retrieval::RetrievalIndex>> = None;
     let mut vectors: Option<Arc<dyn engram_retrieval::VectorIndex>> = None;
     let mut provenance: Option<Arc<dyn engram_integration::ProvenanceQuery>> = None;
+    let mut batch: Option<Arc<dyn engram_integration::BatchIngest>> = None;
+    // Concrete Sql* handles, kept alongside the trait handles so the batch
+    // (which composes the concrete stores) can be wired without a trait→concrete
+    // downcast. Populated only when the corresponding family's handle attaches.
+    let mut memory_store: Option<Arc<SqlMemoryService>> = None;
+    let mut knowledge_store: Option<Arc<SqlKnowledgeStore>> = None;
 
     // Memory: run the fixture (capability conformance), then attach a durable
     // file-backed handle.
     if fixtures::memory::run_memory_fixture().is_ok() {
         let path = &paths.memory;
         if let Ok(svc) = SqlMemoryService::open_file(path) {
-            memory = Some(Arc::new(svc));
+            let svc: Arc<SqlMemoryService> = Arc::new(svc);
+            memory_store = Some(svc.clone());
+            memory = Some(svc);
             memory_state = CapabilityState::Supported;
         }
     }
@@ -158,6 +170,7 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         let path = &paths.knowledge;
         if let Ok(store) = SqlKnowledgeStore::open_file(path) {
             let store: Arc<SqlKnowledgeStore> = Arc::new(store);
+            knowledge_store = Some(store.clone());
             if knowledge_ok {
                 knowledge = Some(store.clone());
                 knowledge_state = CapabilityState::Supported;
@@ -182,6 +195,22 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
                 episodes_evidence_state = CapabilityState::Supported;
             }
         }
+    }
+
+    // atomic_batch (S3): a best-effort batch composes the memory + knowledge
+    // stores. The fixture verifies the ingest port end-to-end; the handle is
+    // attached and the capability flipped to Supported only when the fixture
+    // passes AND both the memory and knowledge file-backed stores are wired
+    // (the batch delegates to them). The handle is built from the durable
+    // file-backed stores, not the fixture's in-memory stores.
+    if fixtures::batch::run_batch_fixture().is_ok()
+        && let (Some(memory_handle), Some(knowledge_handle)) = (&memory_store, &knowledge_store)
+    {
+        batch = Some(Arc::new(crate::SqlBatchIngest::new(
+            memory_handle.clone(),
+            knowledge_handle.clone(),
+        )));
+        atomic_batch_state = CapabilityState::Supported;
     }
 
     // Beliefs.
@@ -271,6 +300,7 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .vectors(vectors_state)
         .migration(migration_state)
         .episodes_evidence(episodes_evidence_state)
+        .atomic_batch(atomic_batch_state)
         .build();
 
     let mut builder = EngramProviderBuilder::new(report)
@@ -308,6 +338,9 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     }
     if let Some(h) = provenance {
         builder = builder.provenance(h);
+    }
+    if let Some(h) = batch {
+        builder = builder.batch(h);
     }
     Ok(builder.build())
 }
@@ -384,6 +417,25 @@ mod tests {
             provider.provenance().is_some(),
             "provenance handle must be attached when episodes_evidence is Supported"
         );
+        // atomic_batch (S3): the batch fixture passes during bootstrap, so the
+        // handle is attached and the capability flips to Supported.
+        assert!(
+            report.atomic_batch.is_supported(),
+            "atomic_batch should be Supported: {:?}",
+            report.atomic_batch
+        );
+        assert!(
+            provider.batch().is_some(),
+            "batch handle must be attached when atomic_batch is Supported"
+        );
+        assert_eq!(
+            provider
+                .batch()
+                .expect("batch handle")
+                .transaction_guarantee(),
+            engram_integration::TransactionGuarantee::BestEffort,
+            "batch handle must report BestEffort"
+        );
     }
 
     #[test]
@@ -409,6 +461,10 @@ mod tests {
         // episodes_evidence invariant: Supported iff a handle is attached.
         if report.episodes_evidence.is_supported() {
             assert!(provider.provenance().is_some());
+        }
+        // atomic_batch invariant: Supported iff a handle is attached.
+        if report.atomic_batch.is_supported() {
+            assert!(provider.batch().is_some());
         }
         let _ = report; // silence unused on partial-failure builds
     }
@@ -464,6 +520,27 @@ mod tests {
             "unwired provider reports episodes_evidence unsupported"
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bootstrap_provider_exposes_batch_handle_when_supported() {
+        let provider = bootstrap_provider(&cfg()).expect("bootstrap");
+        let report = provider.capabilities();
+        // The batch fixture passes during bootstrap, so atomic_batch is
+        // Supported and the handle is wired with a BestEffort guarantee.
+        assert!(
+            report.atomic_batch.is_supported(),
+            "atomic_batch should be Supported after bootstrap: {:?}",
+            report.atomic_batch
+        );
+        let handle = provider
+            .batch()
+            .expect("batch handle must be present when atomic_batch is Supported");
+        assert_eq!(
+            handle.transaction_guarantee(),
+            engram_integration::TransactionGuarantee::BestEffort,
+            "batch handle must report BestEffort, never Atomic"
+        );
     }
 
     // ---- single-file SQLite layout ----

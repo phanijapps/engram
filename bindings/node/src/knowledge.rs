@@ -6,9 +6,11 @@
 //! the `engram-knowledge` ports; TypeScript owns ergonomics.
 
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_lexical::LexicalIndex;
+use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 // Import plain functions from operation modules
 use crate::codegraph::{
@@ -46,6 +48,7 @@ use crate::knowledge_sources::{list_sources_json, put_source_json};
 #[napi]
 pub struct NativeKnowledgeEngine {
     store: Arc<SqlKnowledgeStore>,
+    lexical: Mutex<Option<LexicalIndex>>,
 }
 
 #[napi]
@@ -62,6 +65,7 @@ impl NativeKnowledgeEngine {
         .map_err(|e| Error::from_reason(e.to_string()))?;
         Ok(Self {
             store: Arc::new(store),
+            lexical: Mutex::new(None),
         })
     }
 
@@ -147,6 +151,55 @@ impl NativeKnowledgeEngine {
     #[napi(js_name = "matchApiTopologyJson")]
     pub fn match_api_topology_json(&self, request_json: String) -> Result<String> {
         match_api_topology_json(request_json)
+    }
+
+    /// Builds a BM25 lexical index from all entities in the store. Call after
+    /// ingesting/indexing, then use `searchCodeJson` to query by keyword.
+    #[napi(js_name = "indexForSearchJson")]
+    pub fn index_for_search_json(&self, request_json: String) -> Result<String> {
+        let scope: engram_domain::Scope =
+            serde_json::from_str(&request_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let entities = block_on(self.store.list_entities(&scope))
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let index = LexicalIndex::new().map_err(|e| Error::from_reason(e.to_string()))?;
+        for entity in &entities {
+            let searchable = format!("{} {:?}", entity.name, entity.kind);
+            index
+                .upsert(&entity.id.to_string(), &searchable)
+                .map_err(|e| Error::from_reason(e.to_string()))?;
+        }
+        let mut guard = self
+            .lexical
+            .lock()
+            .map_err(|_| Error::from_reason("lexical lock poisoned".to_string()))?;
+        *guard = Some(index);
+        Ok(format!(r#"{{"indexed":{}}}"#, entities.len()))
+    }
+
+    /// BM25 keyword search over the lexical index built by `indexForSearchJson`.
+    #[napi(js_name = "searchCodeJson")]
+    pub fn search_code_json(&self, request_json: String) -> Result<String> {
+        let value: serde_json::Value =
+            serde_json::from_str(&request_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let query = value["query"].as_str().unwrap_or("");
+        let limit = value["limit"].as_u64().unwrap_or(20) as usize;
+        let guard = self
+            .lexical
+            .lock()
+            .map_err(|_| Error::from_reason("lexical lock poisoned".to_string()))?;
+        let index = guard.as_ref().ok_or_else(|| {
+            Error::from_reason(
+                "lexical index not built — call indexForSearchJson first".to_string(),
+            )
+        })?;
+        let hits = index
+            .search(query, limit)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let results: Vec<serde_json::Value> = hits
+            .iter()
+            .map(|(id, score)| serde_json::json!({ "id": id, "score": score }))
+            .collect();
+        serde_json::to_string(&results).map_err(|e| Error::from_reason(e.to_string()))
     }
 
     /// Retrieval-composition seam (RFC-0005): reciprocal-rank fusion of

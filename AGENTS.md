@@ -39,6 +39,14 @@ adapters/                  Replaceable infrastructure crates.
   retrieval/tantivy-lexical/       BM25 lexical retrieval index adapter (keyword mode).
   retrieval/cross-encoder-rerank/  Cross-encoder reranker adapter.
 
+backends/                  Backend recipe crates (ADR-0022). A *backend* is one
+  sqlite/                  recipe that composes adapter cells + owns connection
+                           lifecycle, config validation, and per-engine
+                           conformance. SQLite is the only implemented backend
+                           today; `backends/` is created when a second engine
+                           arrives (YAGNI). The current SQLite wiring lives in
+                           `adapters/integration` until then.
+
 bindings/                  Native language bridges.
   node/                    N-API bridge for TypeScript.
 
@@ -87,6 +95,23 @@ the stack ADR is accepted.
 - `engram-rerank-cross-encoder` is the cross-encoder reranker adapter. It
   implements the contracted `RerankStrategy::cross_encoder`; model integrations
   stay behind the injected `RerankScorer` or a feature gate, never in core.
+- **Engine neutrality (ADR-0022).** `engram-domain`, the other `core/*` port
+  crates, `engram-integration` (the SDK facade: `EngramProvider`,
+  `EngramConfig`, `CapabilityReport`), and the N-API `bindings/node` crate must
+  never name an engine type (`Sql*`, `pgvector`, …) or hold SQL. The only place
+  an engine name may appear in those layers is as a config string. This is what
+  makes backend swap-by-config true; a neutrality lint enforces it.
+- **Engines live on a capability × engine grid (ADR-0022).** Each storage engine
+  is one adapter cell at `adapters/<capability>/<engine>` behind a core port
+  (memory, knowledge, belief, hierarchy, retrieval/vector, retrieval/lexical).
+  Engines are interchangeable within a capability slot; a new engine is an
+  additive cell, never a rewrite of neutral layers.
+- **A backend is a recipe crate (ADR-0022).** `backends/<name>` owns connection
+  lifecycle, config validation, adapter composition, and per-engine conformance
+  only — never ports, domain types, or capability logic. It composes adapter
+  cells into an `EngramProvider` and is the only place a "backend" identity
+  exists. SQLite wiring currently lives in `adapters/integration`; it moves to
+  `backends/sqlite` when a second engine is adopted.
 - `engram-graph-analytics` owns pure, dependency-free graph algorithms only
   (PageRank, betweenness, communities, reachability). It must not depend on
   `engram-domain`, storage, or any infrastructure; callers map domain edges to a

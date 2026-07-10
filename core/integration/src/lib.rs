@@ -43,6 +43,7 @@ pub mod embedding;
 pub mod migration;
 #[cfg(feature = "ollama")]
 pub mod ollama_provider;
+pub mod provenance;
 pub mod provider;
 
 pub use capability::{CapabilityReport, CapabilityReportBuilder};
@@ -58,4 +59,5 @@ pub use migration::{
     MigrationManifest, MigrationService, RowCounts, ScopeTranslationFailure,
     ScopeTranslationReport, UnsupportedMapping, ValidationReport, VectorImportRecord,
 };
+pub use provenance::{ProvenanceEntry, ProvenanceQuery, TimeWindow};
 pub use provider::{EngramProvider, EngramProviderBuilder};

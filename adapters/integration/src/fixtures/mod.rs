@@ -8,6 +8,7 @@ pub mod hierarchy;
 pub mod knowledge;
 pub mod memory;
 pub mod migration;
+pub mod provenance;
 pub mod retrieval;
 pub mod support;
 pub mod vector;

@@ -8,10 +8,12 @@ pub mod fastembed_provider;
 pub mod fixtures;
 pub mod harness;
 pub mod migration_service;
+pub mod provenance;
 pub mod wiring;
 
 pub use harness::{ConformanceHarness, ConformanceResult, FixtureResult, FixtureStatus};
 pub use migration_service::SqlMigrationService;
+pub use provenance::SqlProvenanceQuery;
 pub use wiring::bootstrap_provider;
 
 /// Creates a new conformance harness with all available fixtures.

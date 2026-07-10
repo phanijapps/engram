@@ -19,6 +19,10 @@ pub enum EvidenceTargetType {
     Entity,
     Concept,
     Url,
+    /// A knowledge-graph relationship (an evidence link may target one).
+    Relationship,
+    /// A belief (an evidence link may target one).
+    Belief,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

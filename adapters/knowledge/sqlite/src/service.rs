@@ -213,6 +213,29 @@ impl SqlKnowledgeStore {
         Ok(graphs)
     }
 
+    /// Lists concept schemes visible to `scope` (store-specific; not on a port).
+    /// Used by the export/import path to read a scope's taxonomy state into an
+    /// `ImportData` payload. Each scheme carries its own scope, so it is filtered
+    /// directly — the same visibility rule `list_sources`/`list_entities` apply.
+    pub async fn list_concept_schemes(&self, scope: &Scope) -> CoreResult<Vec<ConceptScheme>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare("SELECT record_json FROM concept_schemes ORDER BY id")
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut schemes = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let scheme = serde_json::from_str::<ConceptScheme>(&json).map_err(json_error)?;
+            if scope_allows(&scheme.scope, scope) {
+                schemes.push(scheme);
+            }
+        }
+        Ok(schemes)
+    }
+
     /// Lists knowledge entities visible to `scope`. Each entity carries its
     /// `graph_id` so the explorer can cluster by source/repo.
     pub async fn list_entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>> {

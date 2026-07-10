@@ -149,6 +149,9 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // SqlBeliefStore is kept concrete (alongside the trait handle) so the
     // observability adapter can call its `list_beliefs` for record counts.
     let mut belief_store: Option<Arc<SqlBeliefStore>> = None;
+    // SqlHierarchyStore is kept concrete (alongside the trait handle) so the
+    // export handle can call its `list_nodes` for the hierarchy family.
+    let mut hierarchy_store: Option<Arc<SqlHierarchyStore>> = None;
 
     // Memory: run the fixture (capability conformance), then attach a durable
     // file-backed handle.
@@ -308,7 +311,9 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     if fixtures::hierarchy::run_hierarchy_fixture().is_ok() {
         let path = &paths.hierarchy;
         if let Ok(store) = SqlHierarchyStore::open_file(path) {
-            hierarchy = Some(Arc::new(store));
+            let store: Arc<SqlHierarchyStore> = Arc::new(store);
+            hierarchy_store = Some(store.clone());
+            hierarchy = Some(store);
             hierarchy_state = CapabilityState::Supported;
         }
     }
@@ -376,16 +381,23 @@ pub fn bootstrap_provider(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // migration handle is wired (export + import are both needed for
     // backend-to-backend scope movement). Like atomic_batch, this composes the
     // concrete stores, so it is gated on memory_store + knowledge_store too.
+    // The belief + hierarchy stores are attached optionally so the export
+    // covers those families when wired; an unwired family exports empty.
     let mut export_import_state = failed();
     let mut export_import: Option<Arc<dyn engram_integration::ExportImport>> = None;
     if fixtures::export_import::run_export_import_fixture().is_ok()
         && migration.is_some()
         && let (Some(memory_handle), Some(knowledge_handle)) = (&memory_store, &knowledge_store)
     {
-        export_import = Some(Arc::new(crate::SqlExportImport::new(
-            knowledge_handle.clone(),
-            memory_handle.clone(),
-        )));
+        let mut exporter =
+            crate::SqlExportImport::new(knowledge_handle.clone(), memory_handle.clone());
+        if let Some(belief_handle) = belief_store.clone() {
+            exporter = exporter.with_belief(belief_handle);
+        }
+        if let Some(hierarchy_handle) = hierarchy_store.clone() {
+            exporter = exporter.with_hierarchy(hierarchy_handle);
+        }
+        export_import = Some(Arc::new(exporter));
         export_import_state = CapabilityState::Supported;
     }
 

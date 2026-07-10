@@ -10,9 +10,16 @@ use serde::{Deserialize, Serialize};
 /// Capability report for all feature families.
 ///
 /// Applications use this report to discover which features are safe to enable
-/// before starting workers, routes, tools, or retrieval paths. The report is
+/// before starting workers, routes, tools, or recall paths. The report is
 /// machine-readable and stable; each capability state includes a reason code
 /// explaining why a feature is not supported.
+///
+/// The 18 keys cover every capability area named in the host-SDK brief. The
+/// 8 "not-yet-built" areas (hybrid search, episodes/evidence, contradiction,
+/// atomic batch, unified recall, export/import, maintenance, observability)
+/// default to [`CapabilityState::Unsupported`] with
+/// [`CapabilityReason::FeatureDisabled`] until their implementation slices
+/// ship — they are present and explicit, never silently absent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CapabilityReport {
     /// Memory read/write/retrieve operations.
@@ -42,8 +49,32 @@ pub struct CapabilityReport {
     /// Vector index operations with embedding-space validation.
     pub vectors: CapabilityState,
 
-    /// Migration/import API with dry-run and apply modes.
+    /// Schema-version migration (dry-run and apply modes).
     pub migration: CapabilityState,
+
+    /// Hybrid lexical + vector search composition.
+    pub hybrid_search: CapabilityState,
+
+    /// Durable provenance: source episodes, events, documents, and evidence links.
+    pub episodes_evidence: CapabilityState,
+
+    /// Contradiction / tension tracking across beliefs.
+    pub contradiction: CapabilityState,
+
+    /// Atomic cross-store semantic ingest (batch transaction).
+    pub atomic_batch: CapabilityState,
+
+    /// Unified recall across facts, graph, beliefs, episodes, and taxonomy.
+    pub unified_recall: CapabilityState,
+
+    /// Semantic-state export / import + backend-to-backend movement.
+    pub export_import: CapabilityState,
+
+    /// Backend-neutral maintenance (compact, reindex, dedup, vacuum).
+    pub maintenance: CapabilityState,
+
+    /// Operational introspection (status, counts, index/embedding diagnostics).
+    pub observability: CapabilityState,
 }
 
 impl CapabilityReport {
@@ -59,7 +90,15 @@ impl CapabilityReport {
             hierarchy: state.clone(),
             retrieval: state.clone(),
             vectors: state.clone(),
-            migration: state,
+            migration: state.clone(),
+            hybrid_search: state.clone(),
+            episodes_evidence: state.clone(),
+            contradiction: state.clone(),
+            atomic_batch: state.clone(),
+            unified_recall: state.clone(),
+            export_import: state.clone(),
+            maintenance: state.clone(),
+            observability: state,
         }
     }
 
@@ -78,6 +117,14 @@ impl CapabilityReport {
             && self.retrieval.is_supported()
             && self.vectors.is_supported()
             && self.migration.is_supported()
+            && self.hybrid_search.is_supported()
+            && self.episodes_evidence.is_supported()
+            && self.contradiction.is_supported()
+            && self.atomic_batch.is_supported()
+            && self.unified_recall.is_supported()
+            && self.export_import.is_supported()
+            && self.maintenance.is_supported()
+            && self.observability.is_supported()
     }
 
     /// Returns true if memory operations are supported.
@@ -130,6 +177,46 @@ impl CapabilityReport {
         self.migration.is_supported()
     }
 
+    /// Returns true if hybrid lexical+vector search is supported.
+    pub fn hybrid_search_supported(&self) -> bool {
+        self.hybrid_search.is_supported()
+    }
+
+    /// Returns true if episode/evidence provenance is supported.
+    pub fn episodes_evidence_supported(&self) -> bool {
+        self.episodes_evidence.is_supported()
+    }
+
+    /// Returns true if contradiction tracking is supported.
+    pub fn contradiction_supported(&self) -> bool {
+        self.contradiction.is_supported()
+    }
+
+    /// Returns true if atomic batch ingest is supported.
+    pub fn atomic_batch_supported(&self) -> bool {
+        self.atomic_batch.is_supported()
+    }
+
+    /// Returns true if unified recall is supported.
+    pub fn unified_recall_supported(&self) -> bool {
+        self.unified_recall.is_supported()
+    }
+
+    /// Returns true if export/import is supported.
+    pub fn export_import_supported(&self) -> bool {
+        self.export_import.is_supported()
+    }
+
+    /// Returns true if maintenance operations are supported.
+    pub fn maintenance_supported(&self) -> bool {
+        self.maintenance.is_supported()
+    }
+
+    /// Returns true if observability is supported.
+    pub fn observability_supported(&self) -> bool {
+        self.observability.is_supported()
+    }
+
     /// Creates a builder for incrementally constructing capability reports.
     pub fn builder() -> CapabilityReportBuilder {
         CapabilityReportBuilder::new()
@@ -137,6 +224,13 @@ impl CapabilityReport {
 }
 
 /// Builder for incrementally constructing capability reports.
+///
+/// The 10 implemented families default to [`CapabilityReason::ProviderUnavailable`]
+/// (no backend wired); the 8 not-yet-built areas default to
+/// [`CapabilityReason::FeatureDisabled`] (the capability exists in the report
+/// but its implementation slice has not shipped). Both are
+/// [`CapabilityState::Unsupported`]; callers attach a handle and mark a family
+/// [`CapabilityState::Supported`] only when its conformance fixture passes.
 #[derive(Debug, Clone)]
 pub struct CapabilityReportBuilder {
     report: CapabilityReport,
@@ -149,12 +243,36 @@ impl Default for CapabilityReportBuilder {
 }
 
 impl CapabilityReportBuilder {
-    /// Creates a new builder with all capabilities set to Unsupported.
+    /// Creates a new builder: implemented families `Unsupported` (provider
+    /// unavailable), not-yet-built areas `Unsupported` (feature disabled).
     pub fn new() -> Self {
+        let provider_unavailable = CapabilityState::Unsupported {
+            reason: CapabilityReason::ProviderUnavailable,
+        };
+        let feature_disabled = CapabilityState::Unsupported {
+            reason: CapabilityReason::FeatureDisabled,
+        };
         Self {
-            report: CapabilityReport::new(CapabilityState::Unsupported {
-                reason: CapabilityReason::ProviderUnavailable,
-            }),
+            report: CapabilityReport {
+                memory: provider_unavailable.clone(),
+                knowledge: provider_unavailable.clone(),
+                graph: provider_unavailable.clone(),
+                ontology: provider_unavailable.clone(),
+                taxonomy: provider_unavailable.clone(),
+                beliefs: provider_unavailable.clone(),
+                hierarchy: provider_unavailable.clone(),
+                retrieval: provider_unavailable.clone(),
+                vectors: provider_unavailable.clone(),
+                migration: provider_unavailable,
+                hybrid_search: feature_disabled.clone(),
+                episodes_evidence: feature_disabled.clone(),
+                contradiction: feature_disabled.clone(),
+                atomic_batch: feature_disabled.clone(),
+                unified_recall: feature_disabled.clone(),
+                export_import: feature_disabled.clone(),
+                maintenance: feature_disabled.clone(),
+                observability: feature_disabled,
+            },
         }
     }
 
@@ -215,6 +333,54 @@ impl CapabilityReportBuilder {
     /// Sets the migration capability state.
     pub fn migration(mut self, state: CapabilityState) -> Self {
         self.report.migration = state;
+        self
+    }
+
+    /// Sets the hybrid-search capability state.
+    pub fn hybrid_search(mut self, state: CapabilityState) -> Self {
+        self.report.hybrid_search = state;
+        self
+    }
+
+    /// Sets the episodes/evidence capability state.
+    pub fn episodes_evidence(mut self, state: CapabilityState) -> Self {
+        self.report.episodes_evidence = state;
+        self
+    }
+
+    /// Sets the contradiction capability state.
+    pub fn contradiction(mut self, state: CapabilityState) -> Self {
+        self.report.contradiction = state;
+        self
+    }
+
+    /// Sets the atomic-batch capability state.
+    pub fn atomic_batch(mut self, state: CapabilityState) -> Self {
+        self.report.atomic_batch = state;
+        self
+    }
+
+    /// Sets the unified-recall capability state.
+    pub fn unified_recall(mut self, state: CapabilityState) -> Self {
+        self.report.unified_recall = state;
+        self
+    }
+
+    /// Sets the export/import capability state.
+    pub fn export_import(mut self, state: CapabilityState) -> Self {
+        self.report.export_import = state;
+        self
+    }
+
+    /// Sets the maintenance capability state.
+    pub fn maintenance(mut self, state: CapabilityState) -> Self {
+        self.report.maintenance = state;
+        self
+    }
+
+    /// Sets the observability capability state.
+    pub fn observability(mut self, state: CapabilityState) -> Self {
+        self.report.observability = state;
         self
     }
 
@@ -282,19 +448,84 @@ mod tests {
     }
 
     #[test]
-    fn test_capability_report_includes_all_families() {
+    fn test_capability_report_includes_all_eighteen_keys() {
         let report = CapabilityReport::new(CapabilityState::Supported);
-        // Verify all 10 families are present
+        // Verify all 18 capability keys are present in the serialized report.
         let json = serde_json::to_string(&report).unwrap();
-        assert!(json.contains("memory"));
-        assert!(json.contains("knowledge"));
-        assert!(json.contains("graph"));
-        assert!(json.contains("ontology"));
-        assert!(json.contains("taxonomy"));
-        assert!(json.contains("beliefs"));
-        assert!(json.contains("hierarchy"));
-        assert!(json.contains("retrieval"));
-        assert!(json.contains("vectors"));
-        assert!(json.contains("migration"));
+        for key in [
+            "memory",
+            "knowledge",
+            "graph",
+            "ontology",
+            "taxonomy",
+            "beliefs",
+            "hierarchy",
+            "retrieval",
+            "vectors",
+            "migration",
+            "hybrid_search",
+            "episodes_evidence",
+            "contradiction",
+            "atomic_batch",
+            "unified_recall",
+            "export_import",
+            "maintenance",
+            "observability",
+        ] {
+            assert!(
+                json.contains(key),
+                "report must include key `{key}`: {json}"
+            );
+        }
+    }
+
+    /// AC1 / AC2: the not-yet-built areas are present and explicitly
+    /// `Unsupported { FeatureDisabled }` on a default builder — never silently
+    /// absent, and distinguished from the implemented families' `ProviderUnavailable`.
+    #[test]
+    fn builder_defaults_not_yet_built_areas_to_feature_disabled() {
+        let report = CapabilityReport::builder().build();
+        let feature_disabled = CapabilityState::Unsupported {
+            reason: CapabilityReason::FeatureDisabled,
+        };
+        let provider_unavailable = CapabilityState::Unsupported {
+            reason: CapabilityReason::ProviderUnavailable,
+        };
+        // Implemented families default to ProviderUnavailable (no backend wired).
+        assert_eq!(report.memory, provider_unavailable);
+        // Not-yet-built areas default to FeatureDisabled (slice not shipped).
+        assert_eq!(report.hybrid_search, feature_disabled);
+        assert_eq!(report.episodes_evidence, feature_disabled);
+        assert_eq!(report.contradiction, feature_disabled);
+        assert_eq!(report.atomic_batch, feature_disabled);
+        assert_eq!(report.unified_recall, feature_disabled);
+        assert_eq!(report.export_import, feature_disabled);
+        assert_eq!(report.maintenance, feature_disabled);
+        assert_eq!(report.observability, feature_disabled);
+    }
+
+    /// AC1 regression: `all_supported()` must reflect all 18 families. A report
+    /// whose only Supported families are the original 10 must return false,
+    /// because the 8 not-yet-built areas remain Unsupported — guarding against
+    /// `all_supported()` silently staying at 10 fields.
+    #[test]
+    fn all_supported_is_false_when_new_families_unsupported() {
+        let supported = CapabilityState::Supported;
+        let report = CapabilityReport::builder()
+            .memory(supported.clone())
+            .knowledge(supported.clone())
+            .graph(supported.clone())
+            .ontology(supported.clone())
+            .taxonomy(supported.clone())
+            .beliefs(supported.clone())
+            .hierarchy(supported.clone())
+            .retrieval(supported.clone())
+            .vectors(supported.clone())
+            .migration(supported)
+            .build();
+        assert!(
+            !report.all_supported(),
+            "all_supported() must account for the 8 not-yet-built areas"
+        );
     }
 }

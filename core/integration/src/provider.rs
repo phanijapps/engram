@@ -27,12 +27,25 @@ use crate::{
     migration::MigrationService,
 };
 
-/// Provider facade that bundles repository handles with capability reporting.
+/// Canonical Rust SDK entry point for host applications (`engram-host-sdk`
+/// brief). Open one provider from an [`EngramConfig`] and reach every supported
+/// engram service — memory, knowledge, graph, ontology, taxonomy, beliefs,
+/// hierarchy, retrieval, vectors, migration — through backend-neutral
+/// `Arc<dyn ...>` handles, with no engine-specific types in scope.
 ///
-/// External applications use this provider to access all supported Engram
-/// services through a single bootstrap point. Each handle is `Some` only when
-/// the corresponding conformance fixture passed during bootstrap; otherwise the
-/// family is reported `Unsupported` and the handle is `None`.
+/// Read the [`CapabilityReport`] (18 keys) via [`capabilities`](Self::capabilities)
+/// before using a family: each handle is `Some` only when that family's
+/// conformance fixture passed during bootstrap; otherwise the family is reported
+/// [`CapabilityState::Unsupported`] with a stable reason code and the handle is
+/// `None`. The 8 not-yet-built areas are reported
+/// `Unsupported { FeatureDisabled }` — present and explicit, never silently
+/// absent.
+///
+/// Hosts select a backend declaratively via config. SQLite is the active
+/// backend today; the engine-neutral contract (ADR-0022) keeps a future backend
+/// a config/crate change, never an application rewrite.
+///
+/// See `docs/guides/how-to/use-engram-provider.md` for a host-usage walkthrough.
 pub struct EngramProvider {
     capabilities: CapabilityReport,
     memory: Option<Arc<dyn MemoryService>>,
@@ -173,6 +186,13 @@ impl EngramProvider {
         let unavailable = CapabilityState::Unsupported {
             reason: CapabilityReason::ProviderUnavailable,
         };
+        // Not-yet-built capability areas are reported explicitly as
+        // FeatureDisabled (their implementation slices have not shipped), never
+        // silently absent. Distinct from the implemented families'
+        // ProviderUnavailable (a backend simply is not wired here).
+        let not_built = CapabilityState::Unsupported {
+            reason: CapabilityReason::FeatureDisabled,
+        };
         Self {
             capabilities: CapabilityReport::builder()
                 .memory(unavailable.clone())
@@ -185,6 +205,14 @@ impl EngramProvider {
                 .retrieval(unavailable.clone())
                 .vectors(unavailable.clone())
                 .migration(unavailable)
+                .hybrid_search(not_built.clone())
+                .episodes_evidence(not_built.clone())
+                .contradiction(not_built.clone())
+                .atomic_batch(not_built.clone())
+                .unified_recall(not_built.clone())
+                .export_import(not_built.clone())
+                .maintenance(not_built.clone())
+                .observability(not_built)
                 .build(),
             memory: None,
             knowledge: None,
@@ -398,6 +426,27 @@ mod tests {
         assert!(provider.knowledge().is_none());
         assert!(!provider.capabilities().all_supported());
         assert_eq!(provider.schema_version(), "unwired");
+        // AC2: all 8 not-yet-built areas are explicitly Unsupported { FeatureDisabled },
+        // present in the report (never silently absent).
+        let caps = provider.capabilities();
+        let feature_disabled = CapabilityState::Unsupported {
+            reason: CapabilityReason::FeatureDisabled,
+        };
+        for (name, state) in [
+            ("hybrid_search", &caps.hybrid_search),
+            ("episodes_evidence", &caps.episodes_evidence),
+            ("contradiction", &caps.contradiction),
+            ("atomic_batch", &caps.atomic_batch),
+            ("unified_recall", &caps.unified_recall),
+            ("export_import", &caps.export_import),
+            ("maintenance", &caps.maintenance),
+            ("observability", &caps.observability),
+        ] {
+            assert_eq!(
+                state, &feature_disabled,
+                "area `{name}` should be Unsupported {{ FeatureDisabled }}"
+            );
+        }
     }
 
     #[test]

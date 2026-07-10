@@ -25,6 +25,13 @@ optional = true
 [dev-dependencies]
 tempfile = "3"
 chrono.workspace = true
+# `futures` is a TEST-ONLY dependency here: the S7 stub-backend conformance
+# proof (tests/stub_backend.rs) drives async MemoryService trait methods
+# synchronously via `futures::executor::block_on`. It never enters the library
+# surface or any production adapter. Notably, this crate does NOT depend on
+# `engram-store-sql` — that absence is the compile-time half of the ADR-0022
+# backend-parametric proof (see tests/stub_backend.rs).
+futures.workspace = true
 
 [features]
 default = []

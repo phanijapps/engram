@@ -451,7 +451,10 @@ fn handle_tool(
                 })
                 .collect();
             communities.sort_by(|a, b| {
-                b["size"].as_u64().unwrap_or(0).cmp(&a["size"].as_u64().unwrap_or(0))
+                b["size"]
+                    .as_u64()
+                    .unwrap_or(0)
+                    .cmp(&a["size"].as_u64().unwrap_or(0))
             });
             json_pretty(&json!({
                 "community_count": communities.len(),

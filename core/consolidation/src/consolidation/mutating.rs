@@ -335,6 +335,11 @@ fn apply_gate_error(error: CoreError) -> ConsolidationError {
         CoreError::CapabilityUnsupported { .. } => ("capability_unsupported", false),
         CoreError::EmbeddingSpaceMismatch { .. } => ("embedding_space_mismatch", true),
         CoreError::MigrationManifestStale { .. } => ("migration_manifest_stale", true),
+        CoreError::MigrationFailed { .. } => ("migration_failed", false),
+        CoreError::TransactionUnsupported { .. } => ("transaction_unsupported", false),
+        CoreError::ValidationFailed { .. } => ("validation_failed", false),
+        CoreError::BackendTransient { .. } => ("backend_transient", true),
+        CoreError::BackendPermanent { .. } => ("backend_permanent", false),
     };
     ConsolidationError {
         task: None,

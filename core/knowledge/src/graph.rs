@@ -49,8 +49,8 @@ pub trait KnowledgeGraphRepository: Send + Sync {
     ///
     /// Default implementation returns a not-supported error so that a future
     /// adapter that overrides the delete methods but forgets to override this
-    /// query fails loudly rather than silently reconciling nothing.
-    /// `SqlKnowledgeStore` overrides this — no behavior change on the real path.
+    /// query fails loudly rather than silently reconciling nothing. The active
+    /// knowledge adapter overrides this on its real path (no behavior change).
     async fn list_graphs_by_source(
         &self,
         _scope: &Scope,

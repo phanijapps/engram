@@ -54,6 +54,16 @@ pub enum CoreError {
     EmbeddingSpaceMismatch { expected: String, actual: String },
     #[error("migration manifest stale: expected {expected}, actual {actual}")]
     MigrationManifestStale { expected: String, actual: String },
+    #[error("migration failed: {reason}")]
+    MigrationFailed { reason: String },
+    #[error("transaction unsupported: {capability}")]
+    TransactionUnsupported { capability: String },
+    #[error("validation failed: {reason}")]
+    ValidationFailed { reason: String },
+    #[error("transient backend failure: {backend}: {message}")]
+    BackendTransient { backend: String, message: String },
+    #[error("permanent backend failure: {backend}: {message}")]
+    BackendPermanent { backend: String, message: String },
 }
 
 impl CoreError {
@@ -117,6 +127,23 @@ impl CoreError {
                     actual: actual.clone(),
                 }
             }
+            CoreError::MigrationFailed { reason } => CoreError::MigrationFailed {
+                reason: redact_message(reason),
+            },
+            CoreError::TransactionUnsupported { capability } => CoreError::TransactionUnsupported {
+                capability: capability.clone(),
+            },
+            CoreError::ValidationFailed { reason } => CoreError::ValidationFailed {
+                reason: redact_message(reason),
+            },
+            CoreError::BackendTransient { backend, message } => CoreError::BackendTransient {
+                backend: backend.clone(),
+                message: redact_message(message),
+            },
+            CoreError::BackendPermanent { backend, message } => CoreError::BackendPermanent {
+                backend: backend.clone(),
+                message: redact_message(message),
+            },
         }
     }
 
@@ -305,6 +332,91 @@ mod tests {
             }
             .to_string(),
             "policy denied: no"
+        );
+    }
+
+    /// AC3: each of the brief's 10 error categories maps to a distinct
+    /// `CoreError` variant — discrimination is by variant, never by string match.
+    #[test]
+    fn brief_error_categories_have_distinct_variants() {
+        use std::{collections::HashSet, mem::discriminant};
+        let categories = [
+            discriminant(&CoreError::CapabilityUnsupported {
+                capability: "x".into(),
+                reason: "y".into(),
+            }),
+            discriminant(&CoreError::ProviderUnavailable {
+                provider: "x".into(),
+            }),
+            discriminant(&CoreError::MigrationPending { reason: "x".into() }),
+            discriminant(&CoreError::MigrationFailed { reason: "x".into() }),
+            discriminant(&CoreError::EmbeddingSpaceMismatch {
+                expected: "x".into(),
+                actual: "y".into(),
+            }),
+            discriminant(&CoreError::ValidationFailed { reason: "x".into() }),
+            discriminant(&CoreError::Conflict { reason: "x".into() }),
+            discriminant(&CoreError::TransactionUnsupported {
+                capability: "x".into(),
+            }),
+            discriminant(&CoreError::BackendTransient {
+                backend: "x".into(),
+                message: "y".into(),
+            }),
+            discriminant(&CoreError::BackendPermanent {
+                backend: "x".into(),
+                message: "y".into(),
+            }),
+        ];
+        let distinct: HashSet<_> = categories.into_iter().collect();
+        assert_eq!(
+            distinct.len(),
+            10,
+            "all 10 brief categories are distinct variants"
+        );
+    }
+
+    /// AC3: the new variants carry structured fields and redact SQL / paths /
+    /// vectors / private markers from their free-form `message`/`reason` fields.
+    #[test]
+    fn to_redacted_strips_internals_from_new_variants() {
+        let err = CoreError::BackendTransient {
+            backend: "engram-store-sql".to_string(),
+            message: "SELECT * FROM memories at /var/lib/engram/mem.db vec=[0.1,0.2,0.3,0.4]"
+                .to_string(),
+        };
+        let redacted = err.to_redacted().to_string();
+        assert!(!redacted.contains("SELECT"), "SQL redacted: {redacted}");
+        assert!(
+            !redacted.contains("/var/lib/engram/mem.db"),
+            "path redacted: {redacted}"
+        );
+        assert!(
+            !redacted.contains("0.1,0.2,0.3,0.4"),
+            "vector redacted: {redacted}"
+        );
+        assert!(
+            redacted.contains("engram-store-sql"),
+            "backend name preserved"
+        );
+
+        let err2 = CoreError::ValidationFailed {
+            reason: "bad <private acl> at /var/lib/x".to_string(),
+        };
+        let r2 = err2.to_redacted().to_string();
+        assert!(!r2.contains("acl"), "private marker redacted: {r2}");
+        assert!(!r2.contains("/var/lib/x"), "path redacted: {r2}");
+
+        // MigrationFailed reason is redacted too.
+        let err3 = CoreError::MigrationFailed {
+            reason: "failed at /var/lib/engram/a.db".to_string(),
+        };
+        assert!(
+            !err3
+                .to_redacted()
+                .to_string()
+                .contains("/var/lib/engram/a.db"),
+            "path redacted on MigrationFailed"
         );
     }
 }

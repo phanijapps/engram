@@ -26,9 +26,10 @@ the SQLite backend.
 
 S2 is **read-only**. Recording of episodes and evidence continues to flow through
 the existing knowledge/memory/belief repository writes, which already carry
-`Provenance`/`EvidenceRef` at write time; a dedicated *attach-evidence-to-an-
-existing-record* write operation is documented as a future enhancement and is
-**out of scope** (logged in `docs/backlog.md`).
+`Provenance`/`EvidenceRef` at write time. The dedicated *attach-evidence-to-an-
+existing-record* write operation was deferred from S2 and is now landed as the
+additive `ProvenanceQuery::attach_evidence` write op — decided by ADR-0023 (port-
+level rewrite) and tracked under the `episode-evidence-write-side` follow-up.
 
 ## Boundaries
 
@@ -46,7 +47,7 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 
 ### Ask first
 
-- Add a dedicated write op to attach evidence to an *existing* record (deferred — documented, not built in S2).
+- Add a dedicated write op to attach evidence to an *existing* record — **landed** as `ProvenanceQuery::attach_evidence` per ADR-0023 (port-level rewrite over the knowledge store's existing `get_*`/`put_*`; v1 backs entity, relationship, source).
 - Wire the v1-unsupported targets (memory, belief, document, chunk) into the query — each needs a scope-safe listing path.
 - Promote `ProvenanceQuery` out of `core/integration` into its own behavior crate.
 - Add indexed columns or a materialized evidence table (schema change) to accelerate queries beyond Rust-side filtering.
@@ -73,7 +74,7 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 - [x] `EngramProvider` exposes a `provenance()` handle; the `episodes_evidence` capability flips to `Supported` (from S1's `Unsupported { FeatureDisabled }`) only when the conformance fixture passes (a fixture failure reports `ConformanceFailed`, like the other implemented families).
 - [x] A conformance fixture writes entity/relationship/source records carrying `Provenance`/`EvidenceRef` and recovers them through the handle; the capability is `Supported` only on pass.
 - [x] `.codex/hooks/check-engine-neutrality.sh` covers `core/integration/src/provenance.rs` (added to `GATED_PATHS`); the port layer is engine-symbol-free.
-- [ ] The deferred write-side — a dedicated *attach-evidence-to-existing-record* operation — is documented here and in `docs/backlog.md`, not built. (deferred: `episode-evidence-write-side`)
+- [x] The write-side — a dedicated *attach-evidence-to-existing-record* operation (`ProvenanceQuery::attach_evidence`) — appends an `EvidenceRef` to an already-stored record's `Provenance.evidence` (and, for a relationship, its own `evidence` vec too) via a port-level rewrite over the knowledge store's existing `get_*`/`put_*`; v1 backs entity, relationship, source, others `CapabilityUnsupported`, a missing record `NotFound`. Resolved by ADR-0023 (was deferred: `episode-evidence-write-side`).
 - [x] SQLite behavior for existing operations is unchanged; existing workspace tests green. Each task's Done-when re-asserts this regression bar.
 
 ## Assumptions

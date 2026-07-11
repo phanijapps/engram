@@ -58,6 +58,19 @@ fn evidence(target_id: &str) -> EvidenceRef {
     }
 }
 
+/// Evidence attached via the write-side op — made distinct (own `uri` + `quote`)
+/// from the seeded `evidence(...)` helper so a test can assert "the attached one
+/// landed" without ambiguity against the records' pre-existing evidence.
+fn attached_evidence(target_id: &str) -> EvidenceRef {
+    EvidenceRef {
+        target_type: EvidenceTargetType::Entity,
+        target_id: Some(target_id.to_string()),
+        uri: Some("https://example/attached".to_string()),
+        quote: Some("attached after the fact".to_string()),
+        location: None,
+    }
+}
+
 fn provenance_with(
     evidence: Vec<EvidenceRef>,
     observed_at: chrono::DateTime<chrono::Utc>,
@@ -361,4 +374,112 @@ fn missing_record_returns_none_not_an_error() {
         missing_ev.is_empty(),
         "missing record yields empty evidence"
     );
+}
+
+// ---------- attach_evidence (write-side, ADR-0023) -----------------------
+
+#[test]
+fn attach_evidence_appends_to_entity_provenance() {
+    let (_store, query, _observed_at) = seeded();
+    let attached = attached_evidence("entity-1");
+
+    let updated = block_on(query.attach_evidence(
+        EvidenceTargetType::Entity,
+        "entity-1",
+        attached.clone(),
+        &scope_a(),
+    ))
+    .expect("attach_evidence entity");
+    assert!(
+        updated.evidence.contains(&attached),
+        "attach_evidence returns the provenance carrying the attached evidence"
+    );
+
+    // Re-read through the query: the evidence persisted into provenance.evidence.
+    let reread = block_on(query.provenance_for(EvidenceTargetType::Entity, "entity-1", &scope_a()))
+        .expect("provenance_for entity")
+        .expect("entity provenance present");
+    assert!(
+        reread.evidence.contains(&attached),
+        "attached evidence persisted in entity provenance.evidence"
+    );
+}
+
+#[test]
+fn attach_evidence_appends_to_relationship_both_slots() {
+    // ADR-0023: a relationship carries both its own `evidence` vec and a
+    // `Provenance.evidence` list; attach appends to BOTH.
+    let (store, query, _observed_at) = seeded();
+    let attached = attached_evidence("rel-1");
+
+    let updated = block_on(query.attach_evidence(
+        EvidenceTargetType::Relationship,
+        "rel-1",
+        attached.clone(),
+        &scope_a(),
+    ))
+    .expect("attach_evidence relationship");
+    assert!(
+        updated.evidence.contains(&attached),
+        "attach_evidence returns provenance carrying the attached evidence"
+    );
+
+    // Re-read the relationship directly: both slots must carry the evidence.
+    let rel = block_on(store.get_relationship(&RelationshipId::from("rel-1"), &scope_a()))
+        .expect("get_relationship")
+        .expect("relationship present");
+    assert!(
+        rel.evidence.contains(&attached),
+        "relationship.evidence carries the attached evidence"
+    );
+    assert!(
+        rel.provenance.evidence.contains(&attached),
+        "relationship.provenance.evidence carries the attached evidence"
+    );
+}
+
+#[test]
+fn attach_evidence_unsupported_target_returns_capability_unsupported() {
+    let (_store, query, _observed_at) = seeded();
+
+    let result = block_on(query.attach_evidence(
+        EvidenceTargetType::Memory,
+        "any",
+        attached_evidence("any"),
+        &scope_a(),
+    ));
+    match result {
+        Err(CoreError::CapabilityUnsupported { capability, reason }) => {
+            assert_eq!(
+                capability, "episodes_evidence",
+                "write-side unsupported uses the same capability key"
+            );
+            assert!(
+                reason.contains("attach_evidence"),
+                "reason names attach_evidence so the short-circuit is distinguishable: {reason}"
+            );
+        }
+        other => panic!("expected CapabilityUnsupported, got {other:?}"),
+    }
+}
+
+#[test]
+fn attach_evidence_missing_record_returns_not_found() {
+    let (_store, query, _observed_at) = seeded();
+
+    let result = block_on(query.attach_evidence(
+        EvidenceTargetType::Entity,
+        "does-not-exist",
+        attached_evidence("does-not-exist"),
+        &scope_a(),
+    ));
+    match result {
+        Err(CoreError::NotFound { target_id, .. }) => {
+            assert_eq!(
+                target_id, "does-not-exist",
+                "NotFound names the missing record id"
+            );
+        }
+        other => panic!("expected NotFound, got {other:?}"),
+    }
 }

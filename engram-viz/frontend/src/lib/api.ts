@@ -2,11 +2,16 @@
 //! proxied to :3001 by Vite in dev.
 
 import type {
+  BlastRadiusResponse,
   GraphResponse,
   InsightsResponse,
   NodeDetail,
+  OntologyResponse,
+  PathResponse,
+  SearchReadyResponse,
   SearchResponse,
   StatsResponse,
+  TaxonomyResponse,
   TimelineResponse,
 } from "./types";
 
@@ -31,7 +36,18 @@ export const api = {
     getJson<SearchResponse>(
       `${BASE}/search?q=${encodeURIComponent(q)}&limit=${limit}`,
     ),
+  searchReady: () => getJson<SearchReadyResponse>(`${BASE}/search/ready`),
   timeline: () => getJson<TimelineResponse>(`${BASE}/timeline`),
+  taxonomy: () => getJson<TaxonomyResponse>(`${BASE}/taxonomy`),
+  ontology: () => getJson<OntologyResponse>(`${BASE}/ontology`),
+  blastRadius: (id: string, depth = 5) =>
+    getJson<BlastRadiusResponse>(
+      `${BASE}/node/${encodeURIComponent(id)}/blast-radius?depth=${depth}`,
+    ),
+  path: (from: string, to: string) =>
+    getJson<PathResponse>(
+      `${BASE}/path?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    ),
   scan: (path: string) =>
     fetch(`${BASE}/scan`, {
       method: "POST",

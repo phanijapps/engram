@@ -1,10 +1,16 @@
 //! engram-viz — single-page code-graph workspace.
 //!
 //! The graph is the hero (full-viewport, always visible). Overlay panels slide
-//! in: a left sidebar (repo + insights), a top search bar, a right node-detail
-//! panel, and a bottom timeline drawer.
+//! in: a left sidebar (repo + insights/taxonomy/ontology), a top search bar,
+//! a right node-detail panel, and a bottom timeline drawer.
 
-import { Activity, AlertCircle, Loader2, Workflow as GraphIcon } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  Loader2,
+  PanelLeftOpen,
+  Workflow as GraphIcon,
+} from "lucide-react";
 import { GraphCanvas } from "./components/graph/GraphCanvas";
 import { LeftSidebar } from "./components/sidebar/LeftSidebar";
 import { NodePanel } from "./components/panel/NodePanel";
@@ -19,6 +25,8 @@ export default function App() {
   const error = useGraphStore((s) => s.error);
   const nodeCount = useGraphStore((s) => s.nodes.length);
   const toggleTimeline = useGraphStore((s) => s.toggleTimeline);
+  const sidebarCollapsed = useGraphStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useGraphStore((s) => s.toggleSidebar);
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-base-950">
@@ -27,6 +35,16 @@ export default function App() {
 
       {/* Top bar */}
       <header className="absolute left-0 right-0 top-0 z-30 flex h-12 items-center gap-3 border-b border-base-700 bg-base-900/90 px-4 backdrop-blur">
+        {/* Expand sidebar button (visible when collapsed) */}
+        {sidebarCollapsed && (
+          <button
+            onClick={toggleSidebar}
+            className="flex items-center gap-1 rounded-md border border-base-700 bg-base-850 px-2 py-1.5 text-[11px] text-ink-muted hover:border-accent hover:text-accent"
+            title="Show sidebar"
+          >
+            <PanelLeftOpen size={14} />
+          </button>
+        )}
         <div className="flex items-center gap-2">
           <GraphIcon size={16} className="text-accent" />
           <span className="font-mono text-sm font-semibold text-ink">
@@ -41,9 +59,7 @@ export default function App() {
             </>
           ) : (
             !error && (
-              <span>
-                {nodeCount.toLocaleString()} nodes
-              </span>
+              <span>{nodeCount.toLocaleString()} nodes</span>
             )
           )}
         </div>
@@ -68,10 +84,12 @@ export default function App() {
         </div>
       )}
 
-      {/* Left sidebar (below top bar) */}
-      <div className="absolute bottom-9 left-0 top-12 z-10">
-        <LeftSidebar />
-      </div>
+      {/* Left sidebar (below top bar) — hidden when collapsed */}
+      {!sidebarCollapsed && (
+        <div className="absolute bottom-9 left-0 top-12 z-10">
+          <LeftSidebar />
+        </div>
+      )}
 
       {/* Right node-detail panel */}
       <NodePanel />

@@ -1,7 +1,16 @@
-//! INFO tab — kind, file, line range, community, and callers/callees.
+//! INFO tab — kind, file, line range, community, callers/callees,
+//! and blast-radius (transitive callers) trigger.
 
-import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { useCallback, useState } from "react";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Crosshair,
+  Loader2,
+} from "lucide-react";
+import { api } from "../../lib/api";
 import { communityColor } from "../../lib/colors";
+import { useGraphStore } from "../../store/graphStore";
 import type { Neighbor, NodeDetail } from "../../lib/types";
 
 function NeighborList({
@@ -54,6 +63,29 @@ export function InfoTab({
   onSelect: (id: string) => void;
 }) {
   const e = detail.entity;
+  const setHighlight = useGraphStore((s) => s.setHighlight);
+  const clearHighlight = useGraphStore((s) => s.clearHighlight);
+  const [blastLoading, setBlastLoading] = useState(false);
+  const [blastCount, setBlastCount] = useState<number | null>(null);
+
+  const showBlastRadius = useCallback(() => {
+    setBlastLoading(true);
+    api
+      .blastRadius(e.id, 5)
+      .then((data) => {
+        const ids = new Set(data.callers.map((c) => c.id));
+        // Include the target itself so it lights up.
+        ids.add(e.id);
+        setHighlight(ids, "#d29922");
+        setBlastCount(data.callers.length);
+      })
+      .catch(() => {
+        clearHighlight();
+        setBlastCount(0);
+      })
+      .finally(() => setBlastLoading(false));
+  }, [e.id, setHighlight, clearHighlight]);
+
   return (
     <div className="space-y-4 overflow-y-auto p-4">
       {/* Facts grid */}
@@ -97,6 +129,32 @@ export function InfoTab({
             </span>
           )}
         </div>
+      </div>
+
+      {/* Blast radius */}
+      <div>
+        <button
+          onClick={showBlastRadius}
+          disabled={blastLoading}
+          className="flex w-full items-center gap-2 rounded-md border border-accent-amber/30 bg-accent-amber/5 px-3 py-2 text-left text-xs text-ink-muted hover:border-accent-amber hover:text-accent-amber disabled:opacity-50"
+        >
+          {blastLoading ? (
+            <Loader2 size={13} className="animate-spin" />
+          ) : (
+            <Crosshair size={13} />
+          )}
+          <span className="font-semibold uppercase tracking-wider">
+            Blast Radius
+          </span>
+          {blastCount !== null && (
+            <span className="ml-auto font-mono text-[10px] text-ink-faint">
+              {blastCount} caller{blastCount === 1 ? "" : "s"}
+            </span>
+          )}
+        </button>
+        <p className="mt-1 text-[10px] text-ink-faint">
+          Highlights all transitive callers of this symbol (up to 5 hops).
+        </p>
       </div>
 
       {/* Callers / callees */}

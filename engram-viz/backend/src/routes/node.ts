@@ -88,3 +88,59 @@ nodeRoute.get("/:id", (c) => {
     callees,
   });
 });
+
+// GET /api/node/:id/blast-radius — transitive callers of a symbol.
+nodeRoute.get("/:id/blast-radius", (c) => {
+  const rawId = c.req.param("id");
+  const resolvedId = engine.resolveEntityId(rawId);
+  const entity = engine.getEntity(resolvedId);
+
+  // The blast-radius analytics key: prefer the entity id, fall back to name.
+  const target = resolvedId;
+  const depth = Number(c.req.query("depth") ?? "5");
+
+  const callerKeys = engine.blastRadius(target, depth);
+
+  // Also try by name — analytics keys sometimes use bare names.
+  if (callerKeys.length === 0 && entity?.name) {
+    const byName = engine.blastRadius(entity.name, depth);
+    if (byName.length > 0) {
+      return c.json({
+        target: resolvedId,
+        depth,
+        callers: enrichKeys(byName),
+      });
+    }
+  }
+
+  return c.json({
+    target: resolvedId,
+    depth,
+    callers: enrichKeys(callerKeys),
+  });
+});
+
+/** Resolves analytics keys to entity metadata for the frontend. */
+function enrichKeys(keys: string[]): {
+  id: string;
+  name: string;
+  kind: string;
+  file?: string;
+}[] {
+  const seen = new Set<string>();
+  const result: { id: string; name: string; kind: string; file?: string }[] = [];
+  for (const key of keys) {
+    const resolved = engine.resolveEntityId(key);
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    const entity = engine.entityByKey(resolved);
+    const loc = entity?.sourceRefs?.find((r) => r.location)?.location;
+    result.push({
+      id: entity?.id ?? resolved,
+      name: entity?.name ?? key,
+      kind: entity?.kind ?? "unknown",
+      file: loc?.path,
+    });
+  }
+  return result;
+}

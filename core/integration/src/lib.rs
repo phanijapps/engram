@@ -40,6 +40,7 @@
 pub mod batch;
 pub mod capability;
 pub mod config;
+pub mod dto;
 pub mod embedding;
 pub mod export_import;
 pub mod migration;
@@ -75,3 +76,4 @@ pub use observability::{DiagnosticsSnapshot, Observability, RecordCounts};
 pub use provenance::{ProvenanceEntry, ProvenanceQuery, TimeWindow};
 pub use provider::{EngramProvider, EngramProviderBuilder};
 pub use recall::UnifiedRecall;
+pub use dto::{MemorySearch, GraphQuery, RecallRequest, scope, workspace_scope};

@@ -1,17 +1,21 @@
-//! Backend-neutral provenance / evidence query port (engram-host-sdk brief, S2).
+//! Backend-neutral provenance / evidence port (engram-host-sdk brief, S2 + ADR-0023).
 //!
 //! [`ProvenanceQuery`] reads the [`Provenance`] and [`EvidenceRef`] already
 //! embedded in stored records, explaining *why* an entity, relationship, or
-//! source exists. It is a read-only, facade-level port: `core/integration`
-//! defines the contract; the SQLite implementation lives in the adapters layer
+//! source exists; it also carries the additive [`ProvenanceQuery::attach_evidence`]
+//! write op (ADR-0023) that appends an [`EvidenceRef`] to an already-stored
+//! record's provenance. It is a facade-level port: `core/integration` defines
+//! the contract; the SQLite implementation lives in the adapters layer
 //! (`engram-conformance`). v1 serves the knowledge-graph core — entity,
-//! relationship, source — by filtering the records' existing `Provenance` /
-//! `evidence` fields. Other [`EvidenceTargetType`] kinds return
+//! relationship, source — by filtering / rewriting the records' existing
+//! `Provenance` / `evidence` fields. Other [`EvidenceTargetType`] kinds return
 //! [`engram_runtime::CoreError::CapabilityUnsupported`] until their scope-safe
 //! listing is wired.
 //!
 //! ADR-0022: this port is engine-neutral — it names no engine type and holds no
-//! SQL (enforced by `.codex/hooks/check-engine-neutrality.sh`).
+//! SQL (enforced by `.codex/hooks/check-engine-neutrality.sh`). ADR-0023: the
+//! attach write is a natural, additive extension of this same port — the trait
+//! keeps its name and stays engine-neutral.
 
 use async_trait::async_trait;
 use engram_domain::{EvidenceRef, EvidenceTargetType, Provenance, Scope, Timestamp};
@@ -70,14 +74,18 @@ pub struct ProvenanceEntry {
     pub provenance: Provenance,
 }
 
-/// Read-only provenance / evidence query port.
+/// Provenance / evidence port: scoped reads plus an additive evidence-attach
+/// write.
 ///
 /// Every op takes a [`Scope`] (tenant/workspace/session/environment isolation);
 /// the time-window ops filter on `Provenance.observed_at`. The port accepts any
 /// [`EvidenceTargetType`] as a typed input; which kinds a given backend returns
 /// data for (versus [`engram_runtime::CoreError::CapabilityUnsupported`]) is an
 /// implementation property — the SQLite impl backs entity, relationship, and
-/// source in v1.
+/// source in v1. The read ops are pure queries; [`Self::attach_evidence`]
+/// (ADR-0023) is the one write op — a port-level rewrite that appends an
+/// [`EvidenceRef`] to an already-stored record's provenance and returns the
+/// updated [`Provenance`].
 #[async_trait]
 pub trait ProvenanceQuery: Send + Sync {
     /// Provenance carried by the record `target`/`id` in `scope`, or `None` if
@@ -115,6 +123,27 @@ pub trait ProvenanceQuery: Send + Sync {
         window: TimeWindow,
         limit: usize,
     ) -> CoreResult<Vec<ProvenanceEntry>>;
+
+    /// Appends `evidence` to the `Provenance.evidence` of the record
+    /// `target`/`target_id` in `scope`, then returns the updated [`Provenance`].
+    ///
+    /// This is the single write op on this port (ADR-0023): a port-level
+    /// rewrite — read the record, append to its provenance, write it back. It is
+    /// *additive* (the trait keeps its name) and stays engine-neutral: the impl
+    /// composes the backend's existing `get_*`/`put_*` repository methods. v1
+    /// backs the same knowledge-graph core as the reads — entity, relationship,
+    /// source; a `KnowledgeRelationship` additionally carries its own
+    /// `evidence: Vec<EvidenceRef>` slot, which the impl appends to as well.
+    /// Other target kinds (memory, belief, document, chunk, concept, event, url)
+    /// return [`engram_runtime::CoreError::CapabilityUnsupported`]; a record that
+    /// does not exist in `scope` returns [`engram_runtime::CoreError::NotFound`].
+    async fn attach_evidence(
+        &self,
+        target: EvidenceTargetType,
+        target_id: &str,
+        evidence: EvidenceRef,
+        scope: &Scope,
+    ) -> CoreResult<Provenance>;
 }
 
 #[cfg(test)]

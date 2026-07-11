@@ -1,7 +1,7 @@
 # Plan: engram-viz — code-graph visualization workspace
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Draft
+- **Status:** Phase 1 Done (T1-T5); T7-T10 Draft
 
 ## Approach
 
@@ -78,3 +78,34 @@ Build engram-viz bottom-up: backend first (so the data flows), then the graph (t
 
 ## Changelog
 - 2026-07-11: initial plan (engram-viz — single-page graph-centric workspace; 6 tasks bottom-up).
+- 2026-07-11: T1-T5 shipped (PR #27). T6 folded into T7 (polish + limitations). Added T7 (polish), T8 (taxonomy), T9 (ontology), T10 (advanced graph features) per user request.
+
+### T7: Polish + Limitations
+**Depends on:** T1-T5 (shipped) · **Mode:** visual / manual QA + goal-based
+- Write `engram-viz/README.md` with setup, dev workflow, architecture overview.
+- Add graph controls to `GraphCanvas.tsx`: zoom-to-fit button, node-count limiter (top-N central nodes + "show all" toggle), community filter checkboxes.
+- Add node hover tooltips (name + kind + file).
+- Make left sidebar collapsible (toggle button to maximize graph).
+- Search warmup: start `indexForSearchJson` in a background task on server boot (non-blocking) so the index is warm by the time the user searches. Update the SearchBar notice to poll readiness.
+- **Done when:** graph has controls + tooltips + collapsible sidebar; README exists; search warmup starts on boot.
+
+### T8: Taxonomy view
+**Depends on:** T7 · **Mode:** goal-based
+- Backend: `src/routes/taxonomy.ts` — `GET /api/taxonomy` calls `listConceptsJson` + `getConceptSchemeJson` → returns `{ schemes: [...], concepts: [...] }` with broader/narrower/related relations. Handle empty gracefully.
+- Frontend: `src/components/taxonomy/TaxonomyPanel.tsx` — a sidebar tab (toggle between "Insights" and "Taxonomy" in the left sidebar). Shows concept schemes as a collapsible tree (broader → narrower). Clicking a concept → highlights matching entities in the graph (filter by concept_refs or name match).
+- Empty state: "No taxonomy concepts indexed — scan a repo with concept extraction enabled."
+- **Done when:** taxonomy panel renders concepts as a tree; clicking highlights graph nodes; empty state is honest.
+
+### T9: Ontology view + entity-kind legend
+**Depends on:** T8 · **Mode:** goal-based
+- Backend: `src/routes/ontology.ts` — `GET /api/ontology` calls `getOntologyJson` → returns `{ classes, properties, findings }`.
+- Frontend: `src/components/ontology/OntologyPanel.tsx` — sidebar tab (Insights / Taxonomy / Ontology). Shows class definitions, property definitions, validation findings.
+- Frontend: `src/components/graph/KindLegend.tsx` — floating legend showing EntityKind colors (Function/Struct/Trait/etc.). Clicking a kind filters the graph to only that kind.
+- **Done when:** ontology panel renders; kind legend filters the graph.
+
+### T10: Advanced graph features
+**Depends on:** T9 · **Mode:** goal-based + manual QA
+- Backend: extend `src/routes/node.ts` with `GET /api/node/:id/blast-radius` (calls `blastRadiusJson`) and add `src/routes/path.ts` — `GET /api/path?from=X&to=Y` (calls `dependencyPathJson`).
+- Frontend: on node select, fetch blast radius → highlight transitive callers in a distinct color (amber/orange overlay). Add a "Path Finder" mode: click two nodes → render the shortest call path as a highlighted subgraph.
+- Frontend: node grouping — a toggle in the graph controls to group nodes by EntityKind or by file-path prefix, with collapsible groups.
+- **Done when:** blast radius highlights callers; path finder renders; grouping works.

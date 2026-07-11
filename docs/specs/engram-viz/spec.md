@@ -1,6 +1,6 @@
 # Spec: engram-viz — code-graph visualization workspace
 
-- **Status:** Draft
+- **Status:** Shipped (T1-T5); T7-T9 Draft
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** none (new standalone module under `engram-viz/`)
@@ -51,14 +51,38 @@ Clean code. No prototype or demo carry-over — fresh modules.
 - **Smoke — manual QA.** Start backend + frontend, load the page, see the graph.
 
 ## Acceptance Criteria
-- [ ] `engram-viz/backend/` is a Hono server on `:3001` that exposes REST routes: `POST /api/scan`, `GET /api/graph`, `GET /api/insights`, `GET /api/node/:id`, `GET /api/timeline/:id`, `GET /api/search`, `GET /api/stats`. Each proxies to `@engram/node` N-API. Builds with `tsc`.
-- [ ] `engram-viz/frontend/` is a React + Vite SPA that renders a full-viewport `react-force-graph-2d` graph with community-colored nodes, centrality-sized nodes, and calls-edges.
-- [ ] Left sidebar: repo selector dropdown, node/edge counts, and an insights list (dead code, central symbols, bridge symbols — each clickable to highlight nodes in the graph).
-- [ ] Node click opens a right slide-in panel with three tabs: CODE (source text), INFO (kind, file, centrality score, community), HISTORY (temporal events — when introduced/modified).
-- [ ] Top search bar: BM25 keyword search via `/api/search` → results list, clicking a result focuses the node.
-- [ ] Bottom timeline drawer: repo-wide temporal view (symbols introduced over time) via `/api/timeline`.
-- [ ] The app starts with `cd engram-viz/backend && pnpm dev` (backend) + `cd engram-viz/frontend && pnpm dev` (frontend, Vite proxies to :3001). Loading the page shows the graph after scanning a repo.
-- [ ] No prototype/demo code carried over — clean modules.
+
+### Phase 1 (T1-T5) — Shipped
+- [x] `engram-viz/backend/` is a Hono server on `:3001` that exposes REST routes: `POST /api/scan`, `GET /api/graph`, `GET /api/insights`, `GET /api/node/:id`, `GET /api/timeline/:id`, `GET /api/search`, `GET /api/stats`. Each proxies to `@engram/node` N-API. Builds with `tsc`.
+- [x] `engram-viz/frontend/` is a React + Vite SPA that renders a full-viewport `react-force-graph-2d` graph with community-colored nodes, centrality-sized nodes, and calls-edges.
+- [x] Left sidebar: repo selector dropdown, node/edge counts, and an insights list (dead code, central symbols, bridge symbols — each clickable to highlight nodes in the graph).
+- [x] Node click opens a right slide-in panel with three tabs: CODE (source text), INFO (kind, file, centrality score, community), HISTORY (temporal events — when introduced/modified).
+- [x] Top search bar: BM25 keyword search via `/api/search` → results list, clicking a result focuses the node.
+- [x] Bottom timeline drawer: repo-wide temporal view (symbols introduced over time) via `/api/timeline`.
+- [x] The app starts with `cd engram-viz/backend && pnpm dev` (backend) + `cd engram-viz/frontend && pnpm dev` (frontend, Vite proxies to :3001). Loading the page shows the graph after scanning a repo.
+- [x] No prototype/demo code carried over — clean modules.
+
+### Phase 2 (T7) — Polish + Limitations
+- [ ] **README** (`engram-viz/README.md`) with setup, dev, and architecture overview.
+- [ ] **Graph controls**: zoom-to-fit button, node-count limiter (top-N by degree + "show all"), community filter (toggle communities visible/hidden).
+- [ ] **Node hover tooltips**: show name + kind + file on hover.
+- [ ] **Collapsible left sidebar**: toggle to maximize graph space.
+- [ ] **Search warmup fix**: persist the Tantivy lexical index to disk (or pre-build on backend startup in a background task) so the first search isn't ~120s. At minimum, pre-warm the index on server boot.
+
+### Phase 3 (T8) — Taxonomy view
+- [ ] `GET /api/taxonomy` route: lists concept schemes + concepts (via `listConceptsJson` + `getConceptSchemeJson` N-API methods). Returns `{ schemes: [...], concepts: [...] }` with broader/narrower/related relations.
+- [ ] **Taxonomy panel** in the frontend: a collapsible panel (or sidebar tab) showing concept schemes as a tree (broader → narrower). Clicking a concept highlights entities tagged with that concept in the graph.
+- [ ] If no taxonomy data is indexed, the panel shows an honest empty state ("No taxonomy concepts indexed — scan a repo with concept extraction enabled").
+
+### Phase 4 (T9) — Ontology view
+- [ ] `GET /api/ontology` route: lists ontology classes + properties + validation findings (via `getOntologyJson` N-API). Returns `{ classes: [...], properties: [...], findings: [...] }`.
+- [ ] **Ontology panel** in the frontend: class definitions (entity types in this codebase), property definitions, and validation findings (entities that don't conform to the ontology — e.g., a Function with no file).
+- [ ] **Entity-kind legend**: the graph shows an EntityKind legend (Function, Struct, Trait, etc.) — clicking a kind filters the graph to only that kind.
+
+### Phase 5 (T10) — Advanced graph features
+- [ ] **Blast radius**: when a node is selected, highlight its transitive callers (blast_radius via N-API) in a distinct color.
+- [ ] **Dependency path**: a search-to-search path finder — select two nodes, see the shortest call path between them (dependency_path via N-API).
+- [ ] **Node grouping**: group nodes by EntityKind (Function/Struct/Trait/...) or by file path, with collapsible groups.
 
 ## Assumptions
 - Technical: `@engram/node` exports `NativeKnowledgeEngine` with 47 N-API methods (scan, dead_code, central_symbols, bridge_symbols, call_communities, search_code, temporal_*, list_entities, list_relationships, etc.) (source: `bindings/node/src/knowledge.rs`).

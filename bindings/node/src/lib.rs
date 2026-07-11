@@ -13,6 +13,7 @@ mod ingest;
 mod integration;
 mod knowledge;
 mod memory;
+mod provider;
 
 mod knowledge_chunks;
 mod knowledge_concepts;
@@ -37,6 +38,7 @@ pub use hierarchy::NativeHierarchyEngine;
 pub use ingest::NativeIngestEngine;
 pub use knowledge::NativeKnowledgeEngine;
 pub use memory::NativeMemoryEngine;
+pub use provider::NativeProvider;
 
 // Re-export utility functions for internal use
 pub use utils::{decode, encode, id_field, scope_field, to_napi_error};

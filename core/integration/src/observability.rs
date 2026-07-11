@@ -22,6 +22,7 @@
 
 use async_trait::async_trait;
 use engram_runtime::CoreResult;
+use serde::{Deserialize, Serialize};
 
 use crate::capability::CapabilityReport;
 use crate::config::EmbeddingProviderConfig;
@@ -32,7 +33,7 @@ use crate::config::EmbeddingProviderConfig;
 /// API for that type (degraded, not an error). v1 derives counts for knowledge
 /// entities / sources / chunks / relationships and beliefs; `documents` and
 /// `memories` are `0` until the corresponding stores expose a list API.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordCounts {
     /// Memory records (v1: no list API → `0`).
     pub memories: usize,
@@ -78,7 +79,7 @@ impl Default for RecordCounts {
 /// [`EmbeddingProviderConfig`] and versions are passed through from the provider
 /// configuration. [`RecordCounts`] are derived by listing the wired concrete
 /// stores (no new SQL). `slow_query_diagnostics` is `None` in v1.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiagnosticsSnapshot {
     /// The provider's capability report (18 keys), delegated as-is.
     pub capabilities: CapabilityReport,

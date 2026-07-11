@@ -1,6 +1,6 @@
 # Spec: Export / import API (S5)
 
-- **Status:** Implementing
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0022 (engine neutrality), [`rust-crate-integration`](../rust-crate-integration/spec.md) (the Implementing facade S5 extends), [`provider-sdk-capability-report`](../provider-sdk-capability-report/spec.md) (S1 — owns the `export_import` capability key S5 flips)

@@ -24,3 +24,5 @@
 | [0020](0020-extend-entity-kind-vocabulary.md) | Extend EntityKind vocabulary for code-structural symbols | Accepted |
 | [0021](0021-as-of-bitemporal-retrieval-filter.md) | `as_of` bi-temporal retrieval filter | Accepted |
 | [0022](0022-engine-grid-vs-backend-recipe.md) | Engine grid vs backend recipe — SQLite-only now, multi-engine ready | Proposed |
+| [0023](0023-evidence-write-side-port-level-rewrite.md) | Evidence write-side — port-level rewrite on `ProvenanceQuery` | Proposed |
+| [0024](0024-batch-embeddings-deferred-reindex.md) | Batch embeddings — deferred reindex model | Proposed |

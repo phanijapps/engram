@@ -6,17 +6,18 @@
 //! relationship / source records, and (ADR-0023) appends an [`EvidenceRef`] to
 //! an already-stored record's provenance via the store's existing `get_*` /
 //! `put_*` repository methods. It is engine-specific (it names `Sql*` and holds
-//! the knowledge adapter directly), which is why it lives here in the adapters
-//! layer rather than in the engine-neutral port crate (`core/integration`). v1
-//! backs the knowledge-graph core — entity, relationship, source; every other
-//! [`EvidenceTargetType`] returns [`CoreError::CapabilityUnsupported`] until its
-//! scope-safe listing is wired.
+//! the knowledge adapter directly), which is why it lives under
+//! `core/integration/src/sqlite/` behind the `sqlite` feature rather than in the
+//! engine-neutral port surface. v1 backs the knowledge-graph core — entity,
+//! relationship, source; every other [`EvidenceTargetType`] returns
+//! [`CoreError::CapabilityUnsupported`] until its scope-safe listing is wired.
 //!
 //! No schema change: the impl reuses the existing scope-column listings and
 //! deserializes each `record_json`, filtering in Rust; the write op is a
 //! read-modify-write over the same `record_json` (put_* round-trips the record).
 //!
-//! ADR-0022: only this adapter crate may name `Sql*`; the port it implements
+//! ADR-0022: this engine-specific module is intentionally exempt from the
+//! engine-neutrality gate (it names `Sql*` by design); the port it implements
 //! stays engine-neutral. ADR-0023: the attach write reuses the knowledge
 //! store's existing get_*/put_* — no new port, no new storage.
 
@@ -27,10 +28,11 @@ use engram_domain::{
     EntityId, EvidenceRef, EvidenceTargetType, KnowledgeEntity, KnowledgeRelationship, Provenance,
     RelationshipId, Scope, SourceId,
 };
-use engram_integration::{ProvenanceEntry, ProvenanceQuery, TimeWindow};
 use engram_knowledge::KnowledgeRepository;
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+
+use crate::{ProvenanceEntry, ProvenanceQuery, TimeWindow};
 
 /// SQLite-backed [`ProvenanceQuery`]: reads embedded provenance / evidence from
 /// the knowledge-graph records an [`SqlKnowledgeStore`] already holds.

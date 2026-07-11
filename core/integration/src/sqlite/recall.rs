@@ -24,11 +24,11 @@
 //!
 //! No schema change: the impl reuses the existing per-store reads and the
 //! existing fusion/composition. It is engine-specific (it names `Sql*` and holds
-//! the adapters directly), which is why it lives here rather than in the
-//! engine-neutral port crate.
+//! the adapters directly), which is why it lives under
+//! `core/integration/src/sqlite/` behind the `sqlite` feature.
 //!
-//! ADR-0022: only this adapter crate may name `Sql*`; the port it implements
-//! stays engine-neutral.
+//! ADR-0022: this engine-specific module is intentionally exempt from the
+//! engine-neutrality gate; the port it implements stays engine-neutral.
 
 use std::sync::Arc;
 
@@ -38,11 +38,12 @@ use engram_domain::{
     Belief, ContextPayload, FusionTrace, RetrievalRequest, RetrievalResult, RetrievalScore,
     RetrievalSourceFailure, RetrievalTargetType, SourceFailureSeverity,
 };
-use engram_integration::UnifiedRecall;
 use engram_memory::MemoryService;
 use engram_retrieval::compose_context;
 use engram_retrieval::{ReciprocalRankFusion, RetrievalCompositionInput, RetrievalIndex};
 use engram_runtime::{CoreError, CoreResult};
+
+use crate::UnifiedRecall;
 
 /// The source tag stamped on belief-lane candidates and failures.
 const BELIEF_LANE: &str = "belief";

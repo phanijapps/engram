@@ -2,13 +2,19 @@
 //!
 //! Implements [`MigrationService`] with deterministic dry-run validation,
 //! SHA-256 manifest fingerprinting, and stale-manifest rejection on apply.
+//!
+//! ADR-0022: this module names no engine types (it is pure validation over the
+//! engine-neutral [`ImportData`]), but it ships under `src/sqlite/` alongside
+//! the rest of the SQLite backend wiring so the whole backend moves as one unit
+//! behind the `sqlite` feature.
 
-use engram_integration::{
+use engram_runtime::{CoreError, CoreResult};
+
+use crate::{
     EmbeddingSpaceValidation, ImportData, MigrationManifest, MigrationService, RowCounts,
     ScopeTranslationFailure, ScopeTranslationReport, UnsupportedMapping, ValidationReport,
     compute_manifest_fingerprint, record_key_hash,
 };
-use engram_runtime::{CoreError, CoreResult};
 
 /// SQLite-backed migration service.
 ///
@@ -207,7 +213,7 @@ fn collect_key_hashes(data: &ImportData) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use engram_integration::{BeliefImportRecord, MemoryImportRecord, VectorImportRecord};
+    use crate::{BeliefImportRecord, MemoryImportRecord, VectorImportRecord};
 
     fn empty_data() -> ImportData {
         ImportData {

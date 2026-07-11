@@ -17,10 +17,10 @@
 
 use std::sync::Arc;
 
-use crate::{SqlExportImport, SqlMigrationService};
 use engram_belief::BeliefRepository as _;
 use engram_domain::*;
 use engram_hierarchy::HierarchyRepository as _;
+use engram_integration::sqlite::{SqlExportImport, SqlMigrationService};
 use engram_integration::{ExportImport, MigrationManifest, MigrationService as _, RowCounts};
 use engram_knowledge::{KnowledgeRepository as _, TaxonomyRepository as _};
 use engram_memory::MemoryRepository as _;

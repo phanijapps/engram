@@ -32,10 +32,10 @@
 //!
 //! No schema change: the impl reuses the existing per-store writes. It is
 //! engine-specific (it names `Sql*` and holds the adapters directly), which is
-//! why it lives here rather than in the engine-neutral port crate.
+//! why it lives under `core/integration/src/sqlite/` behind the `sqlite` feature.
 //!
-//! ADR-0022: only this adapter crate may name `Sql*`; the port it implements
-//! stays engine-neutral.
+//! ADR-0022: this engine-specific module is intentionally exempt from the
+//! engine-neutrality gate; the port it implements stays engine-neutral.
 
 use std::sync::Arc;
 
@@ -43,15 +43,16 @@ use async_trait::async_trait;
 use engram_domain::{
     Actor, KnowledgeEntity, KnowledgeRelationship, Requester, Scope, WriteMemoryRequest,
 };
-use engram_integration::{
-    ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStep, StepOutcome, StepStatus,
-    TransactionGuarantee, aggregate_status,
-};
 use engram_knowledge::KnowledgeRepository as _;
 use engram_memory::MemoryService as _;
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use engram_store_sql::SqlMemoryService;
+
+use crate::{
+    ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStep, StepOutcome, StepStatus,
+    TransactionGuarantee, aggregate_status,
+};
 
 /// SQLite-backed [`BatchIngest`]: best-effort batch ingest across the separate
 /// memory and knowledge SQLite stores.

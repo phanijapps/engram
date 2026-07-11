@@ -49,24 +49,27 @@ pub mod ollama_provider;
 pub mod provenance;
 pub mod provider;
 pub mod recall;
+#[cfg(feature = "sqlite")]
+pub mod sqlite;
 
 pub use batch::{
-    aggregate_status, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep,
-    StepOutcome, StepStatus, TransactionGuarantee, ALL_STEPS,
+    ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, StepOutcome,
+    StepStatus, TransactionGuarantee, aggregate_status,
 };
 pub use capability::{CapabilityReport, CapabilityReportBuilder};
 pub use config::{
-    CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode, SqliteStorageLayout,
+    BackendProfile, CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode,
+    SqliteStorageLayout,
 };
 pub use embedding::EmbeddingProvider;
 pub use export_import::ExportImport;
 pub use migration::{
-    compute_manifest_fingerprint, record_key_hash, BeliefImportRecord, ConceptImportRecord,
-    ConceptSchemeImportRecord, EmbeddingSpaceValidation, HierarchyNodeImportRecord, ImportData,
-    KnowledgeChunkImportRecord, KnowledgeDocumentImportRecord, KnowledgeEntityImportRecord,
-    KnowledgeRelationshipImportRecord, KnowledgeSourceImportRecord, MemoryImportRecord,
-    MigrationManifest, MigrationService, RowCounts, ScopeTranslationFailure,
-    ScopeTranslationReport, UnsupportedMapping, ValidationReport, VectorImportRecord,
+    BeliefImportRecord, ConceptImportRecord, ConceptSchemeImportRecord, EmbeddingSpaceValidation,
+    HierarchyNodeImportRecord, ImportData, KnowledgeChunkImportRecord,
+    KnowledgeDocumentImportRecord, KnowledgeEntityImportRecord, KnowledgeRelationshipImportRecord,
+    KnowledgeSourceImportRecord, MemoryImportRecord, MigrationManifest, MigrationService,
+    RowCounts, ScopeTranslationFailure, ScopeTranslationReport, UnsupportedMapping,
+    ValidationReport, VectorImportRecord, compute_manifest_fingerprint, record_key_hash,
 };
 pub use observability::{DiagnosticsSnapshot, Observability, RecordCounts};
 pub use provenance::{ProvenanceEntry, ProvenanceQuery, TimeWindow};

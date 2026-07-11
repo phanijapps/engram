@@ -6,7 +6,7 @@
 
 use engram_domain::types::ScopeMappingStrategy;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Capability policy determines how unsupported capabilities are handled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -57,6 +57,75 @@ pub enum SqliteStorageLayout {
         /// `.sqlite3` extension — no separators, no `..`, no drive letters.
         file_name: String,
     },
+}
+
+/// Declarative backend selection for [`EngramConfig::from_profile_file`].
+///
+/// A profile file's `[backend]` section deserializes into this enum. The active
+/// backend is `sqlite` (file-backed, behind the `sqlite` cargo feature); the
+/// `postgres` and `surreal` variants are parsed and validated so profile files
+/// stay forward-compatible, but opening a provider against them fails with
+/// [`engram_runtime::CoreError::CapabilityUnsupported`] until the matching
+/// backend feature ships.
+///
+/// Hosts select a backend by editing config, not by rewriting application code
+/// (ADR-0022): swapping `sqlite` for `postgres` is a profile + feature-flag
+/// change.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum BackendProfile {
+    /// File-backed SQLite backend (the active default). `data_root` is the
+    /// directory the SQLite database files live under.
+    Sqlite {
+        /// Directory holding the SQLite database files (`memory.db`,
+        /// `knowledge.db`, …) or the single shared file.
+        data_root: String,
+    },
+    /// Postgres backend (no active feature yet). Carries the connection string
+    /// the future backend will consume.
+    Postgres {
+        /// Postgres connection string (e.g. `postgres://user@host/db`).
+        connection_string: String,
+    },
+    /// SurrealDB backend (no active feature yet). Carries the endpoint the
+    /// future backend will connect to.
+    Surreal {
+        /// SurrealDB endpoint (e.g. `ws://localhost:8000`).
+        endpoint: String,
+    },
+}
+
+/// Shape of a TOML profile file consumed by [`EngramConfig::from_profile_file`].
+///
+/// Every field except `backend` is optional and falls back to a conservative
+/// default, so a minimal profile file need only declare its `[backend]`.
+#[derive(Debug, Deserialize)]
+struct ProfileFile {
+    backend: BackendProfile,
+    #[serde(default)]
+    trusted_root: Option<PathBuf>,
+    #[serde(default)]
+    scope_policy: Option<ScopeMappingStrategy>,
+    #[serde(default)]
+    embedding_provider: Option<EmbeddingProviderConfig>,
+    #[serde(default)]
+    migration_mode: Option<MigrationMode>,
+    #[serde(default)]
+    capability_policy: Option<CapabilityPolicy>,
+    #[serde(default)]
+    sqlite_storage_layout: Option<SqliteStorageLayout>,
+}
+
+/// The default embedding-provider config used when a profile file omits the
+/// `[embedding_provider]` section.
+fn default_embedding() -> EmbeddingProviderConfig {
+    EmbeddingProviderConfig {
+        provider_type: "fastembed".to_string(),
+        model: "BAAI/bge-small-en-v1.5".to_string(),
+        dimensions: 384,
+        prompt_profile: "query".to_string(),
+        normalization: None,
+    }
 }
 
 /// Embedding provider configuration.
@@ -144,6 +213,89 @@ impl EngramConfig {
     pub fn with_sqlite_storage_layout(mut self, layout: SqliteStorageLayout) -> Self {
         self.sqlite_storage_layout = layout;
         self
+    }
+
+    /// Builds an [`EngramConfig`] from a TOML profile file.
+    ///
+    /// The file carries a `[backend]` section (a [`BackendProfile``]) that
+    /// selects the storage backend declaratively, plus optional overrides for
+    /// every other configuration field. Fields omitted from the file fall back
+    /// to conservative defaults.
+    ///
+    /// For the active `sqlite` backend, `[backend]` looks like:
+    ///
+    /// ```toml
+    /// [backend]
+    /// kind = "sqlite"
+    /// data_root = "/var/lib/engram"
+    ///
+    /// [embedding_provider]
+    /// provider_type = "fastembed"
+    /// model = "BAAI/bge-small-en-v1.5"
+    /// dimensions = 384
+    /// prompt_profile = "query"
+    /// ```
+    ///
+    /// `data_root` becomes `storage_path`; `trusted_root` defaults to its parent
+    /// directory. The `postgres` and `surreal` profile kinds are parsed and
+    /// validated but have no active backend yet — opening a provider against them
+    /// fails with [`engram_runtime::CoreError::CapabilityUnsupported`] until the
+    /// matching backend feature ships.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `String` describing the failure if the file cannot be read or
+    /// the TOML does not deserialize into the profile shape.
+    pub fn from_profile_file(path: impl AsRef<Path>) -> Result<Self, String> {
+        let path = path.as_ref();
+        let contents = std::fs::read_to_string(path)
+            .map_err(|e| format!("read profile file {}: {e}", path.display()))?;
+        let profile: ProfileFile = toml::from_str(&contents)
+            .map_err(|e| format!("parse profile file {}: {e}", path.display()))?;
+
+        let storage_path = match &profile.backend {
+            BackendProfile::Sqlite { data_root } => PathBuf::from(data_root),
+            BackendProfile::Postgres { connection_string } => {
+                // No SQLite storage path for a Postgres profile; the active
+                // backend feature is required to interpret the connection
+                // string. Surface an explicit, typed message rather than a
+                // confusing path-confinement failure.
+                return Err(format!(
+                    "backend `postgres` (connection_string={connection_string}) has no \
+                     active backend feature — open() will report CapabilityUnsupported"
+                ));
+            }
+            BackendProfile::Surreal { endpoint } => {
+                return Err(format!(
+                    "backend `surreal` (endpoint={endpoint}) has no active backend feature \
+                     — open() will report CapabilityUnsupported"
+                ));
+            }
+        };
+
+        // trusted_root defaults to the parent of data_root so path confinement
+        // holds; the parent must exist (validate() checks this).
+        let trusted_root = profile.trusted_root.unwrap_or_else(|| {
+            storage_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| storage_path.clone())
+        });
+
+        let embedding_provider = profile.embedding_provider.unwrap_or_else(default_embedding);
+        Ok(Self {
+            storage_path,
+            trusted_root,
+            scope_policy: profile.scope_policy.unwrap_or(ScopeMappingStrategy::Strict),
+            embedding_provider,
+            migration_mode: profile.migration_mode.unwrap_or(MigrationMode::DryRun),
+            capability_policy: profile
+                .capability_policy
+                .unwrap_or(CapabilityPolicy::FailClosed),
+            sqlite_storage_layout: profile
+                .sqlite_storage_layout
+                .unwrap_or(SqliteStorageLayout::MultiFileDirectory),
+        })
     }
 
     /// Validates the configuration for correctness and security.

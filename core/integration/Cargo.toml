@@ -1,7 +1,8 @@
 [package]
 name = "engram-integration"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 engram-domain = { path = "../domain" }
@@ -15,12 +16,23 @@ async-trait.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2.workspace = true
+toml.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
 
-[dependencies.reqwest]
-version = "0.12"
-default-features = false
-features = ["blocking", "json", "rustls-tls"]
-optional = true
+# SQLite backend (optional, behind the `sqlite` feature flag). These adapter
+# crates depend only on the port trait crates (engram-memory, engram-knowledge,
+# …), never on engram-integration, so the optional edge introduces no cycle.
+# ADR-0022: the engine-specific code lives under src/sqlite/ and is intentionally
+# exempt from the engine-neutrality gate.
+engram-store-sql = { path = "../../adapters/memory/sqlite", optional = true }
+engram-store-knowledge-sqlite = { path = "../../adapters/knowledge/sqlite", optional = true }
+engram-store-belief-sqlite = { path = "../../adapters/orchestration/belief-sqlite", optional = true }
+engram-store-hierarchy-sqlite = { path = "../../adapters/hierarchy/sqlite", optional = true }
+engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical", optional = true }
+engram-store-vector = { path = "../../adapters/retrieval/sqlite-vec", optional = true }
+engram-ingest = { path = "../../adapters/ingest", optional = true }
+chrono = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = "3"
@@ -35,4 +47,21 @@ futures.workspace = true
 
 [features]
 default = []
+# Optional FastEmbed-backed SQLite vector query provider. Implies `sqlite` (to
+# bring in the vector store) and forwards to that crate's fastembed-provider
+# feature.
+fastembed = ["sqlite", "engram-store-vector/fastembed-provider"]
 ollama = ["dep:reqwest"]
+# The SQLite backend: constructs every file-backed store + the Sql* port impls
+# under src/sqlite/, and makes EngramProvider::open return a wired provider.
+sqlite = [
+    "dep:engram-store-sql",
+    "dep:engram-store-knowledge-sqlite",
+    "dep:engram-store-belief-sqlite",
+    "dep:engram-store-hierarchy-sqlite",
+    "dep:engram-store-lexical",
+    "dep:engram-store-vector",
+    "dep:engram-ingest",
+    "dep:chrono",
+    "dep:futures",
+]

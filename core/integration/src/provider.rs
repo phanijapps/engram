@@ -117,6 +117,79 @@ impl EngramProvider {
         Ok(Self::empty())
     }
 
+    /// Opens a provider from configuration, selecting the backend from the
+    /// enabled cargo feature. This is the **sole runtime entry point** for host
+    /// applications: open one provider from an [`EngramConfig`] and reach every
+    /// supported engram service through the returned facade.
+    ///
+    /// With the `sqlite` feature enabled (the active backend) this constructs
+    /// every file-backed store, gates each capability family on an inlined
+    /// conformance check, and returns a fully-wired provider. With no backend
+    /// feature enabled it returns [`CoreError::CapabilityUnsupported`] — compile
+    /// with `--features sqlite` (or a future backend feature) to obtain a wired
+    /// provider.
+    ///
+    /// This method is **not `async`** even though the trait handles it returns
+    /// are async: the SQLite adapters are synchronous rusqlite bodies wrapped in
+    /// async-by-convention trait methods, so `open` drives them to completion
+    /// inline without a host runtime. If a future backend needs a runtime, the
+    /// async variant will live on a backend-specific entry point so this
+    /// synchronous contract stays stable for hosts that open the provider from
+    /// `main()` before any async context exists.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CoreError::InvalidRequest`] if configuration validation fails,
+    /// or [`CoreError::CapabilityUnsupported`] when no backend feature is
+    /// enabled.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use engram_integration::{EngramConfig, CapabilityPolicy, MigrationMode, EmbeddingProviderConfig, EngramProvider};
+    /// use engram_domain::types::ScopeMappingStrategy;
+    ///
+    /// fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let config = EngramConfig::new(
+    ///         "/var/lib/engram",
+    ///         "/var/lib",
+    ///         ScopeMappingStrategy::Strict,
+    ///         EmbeddingProviderConfig {
+    ///             provider_type: "test".to_string(),
+    ///             model: "test_model".to_string(),
+    ///             dimensions: 384,
+    ///             prompt_profile: "query".to_string(),
+    ///             normalization: None,
+    ///         },
+    ///         MigrationMode::DryRun,
+    ///         CapabilityPolicy::FailClosed,
+    ///     );
+    ///
+    ///     let provider = EngramProvider::open(&config)?;
+    ///     let report = provider.capabilities();
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn open(config: &EngramConfig) -> CoreResult<Self> {
+        config.validate().map_err(|e| CoreError::InvalidRequest {
+            reason: format!("configuration validation failed: {e}"),
+        })?;
+
+        #[cfg(feature = "sqlite")]
+        {
+            crate::sqlite::bootstrap_sqlite(config)
+        }
+
+        #[cfg(not(any(feature = "sqlite")))]
+        {
+            let _ = config;
+            Err(CoreError::CapabilityUnsupported {
+                capability: "backend".to_string(),
+                reason: "no backend feature enabled — compile with --features sqlite".to_string(),
+            })
+        }
+    }
+
     /// Returns the capability report for this provider.
     pub fn capabilities(&self) -> &CapabilityReport {
         &self.capabilities
@@ -207,7 +280,157 @@ impl EngramProvider {
         self.observability.as_ref()
     }
 
-    /// Returns the storage schema version visible through provider diagnostics.
+    // ---- require_*: error-on-absent variants for hosts that prefer a typed
+    // error over `Option` unwrapping. Each returns `CapabilityUnsupported` when
+    // the handle is not wired, naming the capability so callers can branch on a
+    // stable reason code rather than parsing the report.
+
+    /// Returns the memory repository handle or an error if it is not wired.
+    pub fn require_memory(&self) -> CoreResult<&Arc<dyn MemoryService>> {
+        self.memory()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "memory".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the knowledge repository handle or an error if it is not wired.
+    pub fn require_knowledge(&self) -> CoreResult<&Arc<dyn KnowledgeRepository>> {
+        self.knowledge()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "knowledge".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the knowledge-graph repository handle or an error if it is not wired.
+    pub fn require_graph(&self) -> CoreResult<&Arc<dyn KnowledgeGraphRepository>> {
+        self.graph()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "graph".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the ontology repository handle or an error if it is not wired.
+    pub fn require_ontology(&self) -> CoreResult<&Arc<dyn OntologyRepository>> {
+        self.ontology()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "ontology".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the taxonomy repository handle or an error if it is not wired.
+    pub fn require_taxonomy(&self) -> CoreResult<&Arc<dyn TaxonomyRepository>> {
+        self.taxonomy()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "taxonomy".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the belief repository handle or an error if it is not wired.
+    pub fn require_beliefs(&self) -> CoreResult<&Arc<dyn BeliefRepository>> {
+        self.beliefs()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "beliefs".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the hierarchy repository handle or an error if it is not wired.
+    pub fn require_hierarchy(&self) -> CoreResult<&Arc<dyn HierarchyRepository>> {
+        self.hierarchy()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "hierarchy".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the retrieval index handle or an error if it is not wired.
+    pub fn require_retrieval(&self) -> CoreResult<&Arc<dyn RetrievalIndex>> {
+        self.retrieval()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "retrieval".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the vector index handle or an error if it is not wired.
+    pub fn require_vectors(&self) -> CoreResult<&Arc<dyn VectorIndex>> {
+        self.vectors()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "vectors".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the migration service handle or an error if it is not wired.
+    pub fn require_migration(&self) -> CoreResult<&Arc<dyn MigrationService>> {
+        self.migration()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "migration".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the embedding provider or an error if it is not configured.
+    pub fn require_embedding_provider(&self) -> CoreResult<&Arc<dyn EmbeddingProvider>> {
+        self.embedding_provider()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "embedding_provider".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the provenance / evidence query handle or an error if it is not
+    /// wired.
+    pub fn require_provenance(&self) -> CoreResult<&Arc<dyn ProvenanceQuery>> {
+        self.provenance()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "episodes_evidence".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the best-effort batch ingest handle or an error if it is not
+    /// wired.
+    pub fn require_batch(&self) -> CoreResult<&Arc<dyn BatchIngest>> {
+        self.batch()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "atomic_batch".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the unified recall handle or an error if it is not wired.
+    pub fn require_recall(&self) -> CoreResult<&Arc<dyn UnifiedRecall>> {
+        self.recall()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "unified_recall".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the export-import handle or an error if it is not wired.
+    pub fn require_export_import(&self) -> CoreResult<&Arc<dyn ExportImport>> {
+        self.export_import()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "export_import".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the observability / diagnostics handle or an error if it is not
+    /// wired.
+    pub fn require_observability(&self) -> CoreResult<&Arc<dyn Observability>> {
+        self.observability()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "observability".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
     pub fn schema_version(&self) -> &str {
         &self.schema_version
     }
@@ -596,8 +819,8 @@ mod tests {
     #[test]
     fn builder_attaches_batch_handle() {
         use crate::batch::{
-            aggregate_status, BatchIngest, BatchIngestRequest, BatchOutcome, StepOutcome,
-            StepStatus, TransactionGuarantee, ALL_STEPS,
+            ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, StepOutcome, StepStatus,
+            TransactionGuarantee, aggregate_status,
         };
         use async_trait::async_trait;
 

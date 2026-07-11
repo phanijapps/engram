@@ -19,21 +19,22 @@
 //!
 //! No schema change: the impl reuses the existing per-store list reads. It is
 //! engine-specific (it names `Sql*` and holds the concrete stores), which is why
-//! it lives here rather than in the engine-neutral port crate.
+//! it lives under `core/integration/src/sqlite/` behind the `sqlite` feature.
 //!
-//! ADR-0022: only this adapter crate may name `Sql*`; the port it implements
-//! stays engine-neutral.
+//! ADR-0022: this engine-specific module is intentionally exempt from the
+//! engine-neutrality gate; the port it implements stays engine-neutral.
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use engram_domain::Scope;
-use engram_integration::{
-    CapabilityReport, DiagnosticsSnapshot, EmbeddingProviderConfig, Observability, RecordCounts,
-};
 use engram_runtime::CoreResult;
 use engram_store_belief_sqlite::SqlBeliefStore;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+
+use crate::{
+    CapabilityReport, DiagnosticsSnapshot, EmbeddingProviderConfig, Observability, RecordCounts,
+};
 
 /// SQLite-backed [`Observability`]: aggregates the provider's existing
 /// diagnostics + counts records by listing the wired concrete stores.
@@ -174,7 +175,8 @@ impl Observability for SqlObservability {
 mod tests {
     //! The SqlObservability integration tests live in
     //! `adapters/integration/tests/observability.rs` (and the self-sufficient
-    //! conformance fixture in `fixtures/observability.rs`) so they can share the
-    //! fixture helpers and the block_on driving style. This module is reserved
-    //! for any future inline unit tests that do not require a store.
+    //! conformance fixture in the adapters crate's `fixtures/observability.rs`)
+    //! so they can share the fixture helpers and the block_on driving style.
+    //! This module is reserved for any future inline unit tests that do not
+    //! require a store.
 }

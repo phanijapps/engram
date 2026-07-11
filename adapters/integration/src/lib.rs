@@ -1,29 +1,30 @@
 //! Conformance harness for capability verification.
 //!
 //! This crate provides deterministic fixtures that verify each capability family
-//! before features are marked as supported. The EngramProvider calls these
-//! fixtures during bootstrap to ensure capability reporting is accurate.
+//! before features are marked as supported, plus a thin wiring delegate. The
+//! SQLite port implementations (`Sql*`) and the bootstrap wiring have moved
+//! into `core/integration` behind the `sqlite` feature; the re-exports below
+//! keep `engram_conformance::Sql*` (used by the integration-test suite) and
+//! `engram_conformance::bootstrap_provider` (used by `examples/rust-integration`
+//! and `bindings/node`) source-compatible. New host code should call
+//! [`engram_integration::EngramProvider::open`] directly.
 
-pub mod batch;
-pub mod export_import;
 pub mod fastembed_provider;
 pub mod fixtures;
 pub mod harness;
-pub mod migration_service;
-pub mod observability;
-pub mod provenance;
-pub mod recall;
-mod recall_lanes;
 pub mod wiring;
 
-pub use batch::SqlBatchIngest;
-pub use export_import::SqlExportImport;
 pub use harness::{ConformanceHarness, ConformanceResult, FixtureResult, FixtureStatus};
-pub use migration_service::SqlMigrationService;
-pub use observability::SqlObservability;
-pub use provenance::SqlProvenanceQuery;
-pub use recall::SqlUnifiedRecall;
 pub use wiring::bootstrap_provider;
+
+// Re-export the SQLite port impls from the core crate's `sqlite` module so the
+// `engram_conformance::Sql*` paths used by the integration-test suite keep
+// resolving. These are available only because this crate enables the `sqlite`
+// feature on `engram-integration` (see Cargo.toml).
+pub use engram_integration::sqlite::{
+    SqlBatchIngest, SqlExportImport, SqlMigrationService, SqlObservability, SqlProvenanceQuery,
+    SqlUnifiedRecall,
+};
 
 /// Creates a new conformance harness with all available fixtures.
 ///

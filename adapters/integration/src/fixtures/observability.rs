@@ -26,7 +26,7 @@ use engram_store_belief_sqlite::SqlBeliefStore;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
-use crate::SqlObservability;
+use engram_integration::sqlite::SqlObservability;
 
 const TENANT: &str = "tenant-obs-fixture";
 const SCHEMA_VERSION: &str = "2026.01";

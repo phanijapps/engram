@@ -8,7 +8,11 @@ rust-version.workspace = true
 [dependencies]
 engram-domain = { path = "../../core/domain" }
 engram-runtime = { path = "../../core/runtime" }
-engram-integration = { path = "../../core/integration" }
+# Enable the `sqlite` backend so the port impls (`Sql*`) and `EngramProvider::open`
+# are available to this crate's fixtures + wiring delegate. The engine-specific
+# code lives in `core/integration/src/sqlite/`; this crate keeps the conformance
+# harness + fixtures (test infrastructure).
+engram-integration = { path = "../../core/integration", features = ["sqlite"] }
 engram-memory = { path = "../../core/memory" }
 engram-knowledge = { path = "../../core/knowledge" }
 engram-hierarchy = { path = "../../core/hierarchy" }
@@ -28,5 +32,7 @@ serde_json.workspace = true
 
 [features]
 default = []
-# Enables the FastEmbed EmbeddingProvider wrapper (pulls model-bearing code).
-fastembed = ["engram-store-vector/fastembed-provider"]
+# Enables the FastEmbed EmbeddingProvider wrapper + the FastEmbed-backed vector
+# recall lane (pulls model-bearing code). Forwards to the core crate's feature
+# of the same name, which brings in the vector store + its fastembed-provider.
+fastembed = ["engram-integration/fastembed"]

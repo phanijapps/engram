@@ -31,12 +31,12 @@
 //!
 //! No schema change: the impl reuses the existing per-store reads. It is
 //! engine-specific (it names `Sql*` and holds the adapters directly), which is
-//! why it lives here rather than in the engine-neutral port crate.
+//! why it lives under `core/integration/src/sqlite/` behind the `sqlite` feature.
 //!
-//! ADR-0022: only this adapter crate may name `Sql*`; the port it implements
-//! stays engine-neutral.
+//! ADR-0022: this engine-specific module is intentionally exempt from the
+//! engine-neutrality gate; the port it implements stays engine-neutral.
 //!
-//! [`MigrationService`]: engram_integration::MigrationService
+//! [`MigrationService`]: crate::MigrationService
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -46,18 +46,19 @@ use engram_domain::{
     Belief, Concept, ConceptScheme, HierarchyNode, KnowledgeChunk, KnowledgeEntity,
     KnowledgeRelationship, KnowledgeSource, MemoryRecord, Scope, SourceDocument,
 };
-use engram_integration::{
-    BeliefImportRecord, ConceptImportRecord, ConceptSchemeImportRecord, ExportImport,
-    HierarchyNodeImportRecord, ImportData, KnowledgeChunkImportRecord,
-    KnowledgeDocumentImportRecord, KnowledgeEntityImportRecord, KnowledgeRelationshipImportRecord,
-    KnowledgeSourceImportRecord, MemoryImportRecord,
-};
 use engram_knowledge::TaxonomyRepository as _;
 use engram_runtime::CoreResult;
 use engram_store_belief_sqlite::SqlBeliefStore;
 use engram_store_hierarchy_sqlite::SqlHierarchyStore;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use engram_store_sql::SqlMemoryService;
+
+use crate::{
+    BeliefImportRecord, ConceptImportRecord, ConceptSchemeImportRecord, ExportImport,
+    HierarchyNodeImportRecord, ImportData, KnowledgeChunkImportRecord,
+    KnowledgeDocumentImportRecord, KnowledgeEntityImportRecord, KnowledgeRelationshipImportRecord,
+    KnowledgeSourceImportRecord, MemoryImportRecord,
+};
 
 /// SQLite-backed [`ExportImport`]: reads a scope's semantic state from the wired
 /// concrete stores into one [`ImportData`] payload.

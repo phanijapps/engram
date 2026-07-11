@@ -18,7 +18,7 @@ use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 use super::support::{actor, policy, scope};
-use crate::SqlProvenanceQuery;
+use engram_integration::sqlite::SqlProvenanceQuery;
 
 /// Runs the provenance / evidence fixture.
 ///

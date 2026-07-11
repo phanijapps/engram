@@ -23,7 +23,7 @@ use engram_retrieval::RetrievalIndex;
 use engram_runtime::{CoreError, CoreResult};
 use futures::executor::block_on;
 
-use crate::SqlUnifiedRecall;
+use engram_integration::sqlite::SqlUnifiedRecall;
 
 /// Runs the unified-recall fixture.
 ///

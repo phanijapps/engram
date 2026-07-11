@@ -10,7 +10,8 @@
 //! mirroring the in-test stub resolvers in the adapter crates.
 //!
 //! ADR-0022: engine-specific (names `Sql*`, holds the knowledge adapter). The
-//! resolvers live in the adapters layer, not the engine-neutral port crate.
+//! resolvers live under `core/integration/src/sqlite/` behind the `sqlite`
+//! feature, exempt from the engine-neutrality gate.
 //!
 //! # Sync resolvers + async store
 //!
@@ -128,7 +129,7 @@ fn chunk_to_vector(chunk: KnowledgeChunk) -> VectorResolvedTarget {
 #[cfg(test)]
 mod tests {
     //! The knowledge-backed resolvers are exercised end-to-end through the
-    //! production `bootstrap_provider` wiring (see `wiring` tests) and the
+    //! production `bootstrap_sqlite` wiring (see `bootstrap` tests) and the
     //! `SqlUnifiedRecall` integration tests. This module is reserved for any
     //! future resolver-only unit tests that do not require a store.
 }

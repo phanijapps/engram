@@ -23,7 +23,7 @@ use engram_store_sql::SqlMemoryService;
 use futures::executor::block_on;
 
 use super::support::{policy, provenance, scope};
-use crate::SqlBatchIngest;
+use engram_integration::sqlite::SqlBatchIngest;
 
 /// Runs the atomic-batch fixture.
 ///

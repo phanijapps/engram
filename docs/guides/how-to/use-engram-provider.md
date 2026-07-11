@@ -11,20 +11,26 @@ handle, connection, migration, vector index, or graph table.
 
 ## You should already have
 
-- The `engram-integration` crate (the SDK facade) and the `engram-conformance`
-  crate (the backend wiring) in your workspace.
-- A Rust 2021+ toolchain.
+- The `engram-integration` crate in your workspace. That is your **only**
+  engram dependency — no `engram-conformance`, no adapter crates.
+- A Rust toolchain (edition 2024).
+
+```toml
+[dependencies]
+engram-integration = { version = "…", features = ["sqlite"] }
+```
 
 ## Open the provider
 
-`EngramProvider` is the single entry point. Construct an `EngramConfig` and
-bootstrap through the backend wiring layer — never call a backend adapter
-directly.
+`EngramProvider::open(config)` is the sole entry point. It owns backend
+selection, connection lifecycle, bootstrap, migration checks, and capability
+evaluation — all behind the `sqlite` feature flag.
+
+### Option A: programmatic config
 
 ```rust,no_run
 use engram_integration::{EngramConfig, CapabilityPolicy, MigrationMode,
-    EmbeddingProviderConfig, EngramProvider};
-use engram_domain::types::ScopeMappingStrategy;
+    EmbeddingProviderConfig, EngramProvider, ScopeMappingStrategy};
 
 let config = EngramConfig::new(
     "/var/lib/engram",          // storage root
@@ -41,53 +47,105 @@ let config = EngramConfig::new(
     CapabilityPolicy::FailClosed,
 );
 
-// The backend wiring layer (engram-conformance::wiring::bootstrap_provider)
-// constructs the SQLite adapters, runs each family's conformance fixture, and
-// attaches a handle only when the fixture passes.
-let provider = engram_conformance::wiring::bootstrap_provider(&config)?;
+let provider = EngramProvider::open(&config)?;
 ```
 
-`EngramProvider::bootstrap(&config)` validates config only — it returns a
-provider with every family `Unsupported` and no handles. Use the wiring-layer
-bootstrap to get a provider with real, fixture-verified handles.
+### Option B: config file (backend profile)
 
-## Read the capability report before you use a feature
+```toml
+# semantic-engine.toml
+[backend]
+kind = "sqlite"
+data_root = "/var/lib/engram"
+```
 
-The report has **18 keys**, one per capability area. Each is `Supported`, or a
-typed non-`Supported` state carrying a stable reason code. Check before you call;
+```rust,no_run
+use engram_integration::{EngramConfig, EngramProvider};
 
-never assume:
+let config = EngramConfig::from_profile_file("semantic-engine.toml")?;
+let provider = EngramProvider::open(&config)?;
+```
+
+To switch backends, change the TOML — no code changes:
+
+```toml
+# production profile — change this file, not your code
+[backend]
+kind = "postgres"
+connection_string = "postgres://…"
+```
+
+(Postgres/Surreal return `CapabilityUnsupported` until those backends ship; the
+profile enum reserves the variants.)
+
+## Require a handle (typed errors)
+
+Every family has a `require_*` method that returns a typed
+`CoreError::CapabilityUnsupported` when the handle is absent — no silent
+fallback, no `Option` unwrapping:
+
+```rust,no_run
+// Returns &Arc<dyn MemoryService> or a typed error
+let memory = provider.require_memory()?;
+
+// The error is machine-actionable:
+match provider.require_recall() {
+    Ok(recall) => recall.recall(request).await?,
+    Err(engram_runtime::CoreError::CapabilityUnsupported { capability, reason }) => {
+        eprintln!("{} unsupported: {}", capability, reason);
+    }
+    Err(e) => return Err(e.into()),
+}
+```
+
+### All require_* handles
+
+| Method | Trait | What it does |
+|---|---|---|
+| `require_memory()` | `MemoryService` | Write, retrieve, forget memory records |
+| `require_knowledge()` | `KnowledgeRepository` | Sources, documents, chunks |
+| `require_graph()` | `KnowledgeGraphRepository` | Entities, relationships, neighbors |
+| `require_ontology()` | `OntologyRepository` | Class/property/axiom definitions |
+| `require_taxonomy()` | `TaxonomyRepository` | Concept schemes, concepts |
+| `require_beliefs()` | `BeliefRepository` | Beliefs, contradictions |
+| `require_hierarchy()` | `HierarchyRepository` | Hierarchy nodes, paths |
+| `require_provenance()` | `ProvenanceQuery` | Read/attach evidence + provenance |
+| `require_batch()` | `BatchIngest` | Best-effort semantic batch ingest |
+| `require_recall()` | `UnifiedRecall` | Fused multi-lane recall |
+| `require_export_import()` | `ExportImport` | Export scope state |
+| `require_observability()` | `Observability` | Diagnostics snapshot |
+| `require_migration()` | `MigrationService` | Dry-run + apply imports |
+
+## Read the capability report
+
+The report has **18 keys**, each `Supported` or a typed `Unsupported { reason }`.
+Use it at startup to gate features:
 
 ```rust,no_run
 use engram_integration::CapabilityState;
 
 let caps = provider.capabilities();
-assert!(caps.memory.is_supported(), "memory not supported: {:?}", caps.memory);
-
-// The 8 not-yet-built areas are present and explicit:
-match caps.episodes_evidence {
-    CapabilityState::Unsupported { .. } => { /* episodes/evidence slice not shipped yet */ }
-    _ => { /* safe to use */ }
+if !caps.memory.is_supported() {
+    return Err("memory backend not wired");
 }
 ```
 
-Unsupported operations fail with typed `CoreError` variants across the brief's
-10 categories (unsupported capability, backend unavailable, migration
-required/failed, embedding mismatch, validation failed, conflict, transaction
-unsupported, transient/permanent backend failure) — discriminate by variant,
-never by string match.
+## Error handling
 
-## Call a supported family
-
-Each family is a backend-neutral `Arc<dyn ...>` handle, `Some` only when
-supported:
+Every operation returns `CoreResult<T>` (= `Result<T, CoreError>`). Discriminate
+by variant, never by string matching:
 
 ```rust,no_run
-if let Some(memory) = provider.memory() {
-    // memory: Arc<dyn MemoryService> — write, retrieve, forget.
-}
-if let Some(graph) = provider.graph() {
-    // graph: Arc<dyn KnowledgeGraphRepository> — entities, relationships, neighbors.
+use engram_runtime::CoreError;
+
+match result {
+    Ok(value) => { /* use value */ }
+    Err(CoreError::CapabilityUnsupported { capability, reason }) => { /* typed */ }
+    Err(CoreError::NotFound { target_type, target_id }) => { /* typed */ }
+    Err(CoreError::ValidationFailed { reason }) => { /* typed */ }
+    Err(CoreError::TransactionUnsupported { capability }) => { /* typed */ }
+    Err(CoreError::BackendTransient { backend, message }) => { /* retry */ }
+    Err(e) => { eprintln!("other: {}", e); }
 }
 ```
 
@@ -98,16 +156,22 @@ if let Some(graph) = provider.graph() {
 - **You own** product behavior: orchestration, UI/API contracts, prompt policy,
   recall policy, context budgeting, domain governance.
 
+Your sidecar schema may store workflow state and opaque Engram IDs, but **not**
+semantic records, embeddings, graph edges, or backend query logic.
+
 ## Backends
 
-SQLite is the active backend today. The engine-neutral contract (ADR-0022) means
-swapping to a future backend is an Engram-internal config/crate change — your
-application code does not change. Selecting a backend is declarative in config;
-the same high-level APIs work across supported backends.
+SQLite is the only implemented backend today. The engine-neutral contract
+(ADR-0022) means swapping to a future backend (Postgres, Surreal) is a
+config-file change, not a code change. The neutrality gate
+(`check-engine-neutrality.sh`) enforces that the port layer names zero engine
+types. A stub backend (S7) proves the traits are satisfiable without SQLite.
 
 ## Further reading
 
-- `engram-host-sdk` brief — `docs/product/briefs/engram-host-sdk.md`
+- [Integrating Engram as a library](integrate-engram-as-library.md) — full reference
 - ADR-0022 — engine grid vs backend recipe
-- `rust-crate-integration` spec — the provider facade contract
+- ADR-0023 — evidence append (port-level rewrite)
+- ADR-0024 — batch embeddings (deferred reindex)
+- `engram-host-sdk` brief — `docs/product/briefs/engram-host-sdk.md`
 - API: `cargo doc -p engram-integration --open`

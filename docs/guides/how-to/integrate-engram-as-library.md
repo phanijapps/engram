@@ -24,22 +24,29 @@ enforced by the ADR-0022 engine-neutrality gate and proven by the S7 stub backen
 
 ```toml
 [dependencies]
-engram-integration = { path = "..." }   # the SDK facade (provider + ports + DTOs)
-engram-conformance = { path = "..." }   # the backend wiring (bootstrap_provider)
-engram-domain = { path = "..." }        # domain types (Scope, MemoryRecord, etc.)
-engram-runtime = { path = "..." }       # CoreError, CoreResult
+engram-integration = { version = "…", features = ["sqlite"] }
 ```
+
+That is your **only** engram dependency. No `engram-conformance`, no adapter
+crates, no `engram-domain` or `engram-runtime` — `engram-integration`
+re-exports the types you need.
 
 ### 2. Open a provider
 
 ```rust,no_run
-use engram_integration::{EngramConfig, CapabilityPolicy, MigrationMode,
-    EmbeddingProviderConfig, EngramProvider};
-use engram_domain::types::ScopeMappingStrategy;
+use engram_integration::{EngramConfig, EngramProvider};
+
+// Option A: config file (backend profile)
+let config = EngramConfig::from_profile_file("semantic-engine.toml")?;
+let provider = EngramProvider::open(&config)?;
+
+// Option B: programmatic config
+use engram_integration::{CapabilityPolicy, MigrationMode,
+    EmbeddingProviderConfig, ScopeMappingStrategy};
 
 let config = EngramConfig::new(
-    "/var/lib/engram",          // storage root
-    "/var/lib",                 // trusted root (paths must stay inside)
+    "/var/lib/engram",
+    "/var/lib",
     ScopeMappingStrategy::Strict,
     EmbeddingProviderConfig {
         provider_type: "fastembed".to_string(),
@@ -51,30 +58,18 @@ let config = EngramConfig::new(
     MigrationMode::DryRun,
     CapabilityPolicy::FailClosed,
 );
-
-// bootstrap_provider constructs the SQLite adapters, runs each family's
-// conformance fixture, and attaches a handle only when the fixture passes.
-let provider = engram_conformance::wiring::bootstrap_provider(&config)?;
+let provider = EngramProvider::open(&config)?;
 ```
 
-### 3. Read the capability report before using a feature
-
-The report has **18 keys**, each `Supported` or a typed `Unsupported { reason }`.
+### 3. Require a handle (typed error on missing)
 
 ```rust,no_run
-use engram_integration::CapabilityState;
+// require_* returns CoreResult — no Option, no unwrap
+let memory = provider.require_memory()?;
 
+// Check capabilities at startup
 let caps = provider.capabilities();
-assert!(caps.memory.is_supported(), "memory not wired: {:?}", caps.memory);
-
-// Not-yet-built areas are present and explicit (never silently absent):
-match caps.unified_recall {
-    CapabilityState::Supported => { /* safe to use */ }
-    CapabilityState::Unsupported { reason } => {
-        eprintln!("unified_recall unsupported: {reason:?}");
-    }
-    _ => {}
-}
+assert!(caps.memory.is_supported(), "memory: {:?}", caps.memory);
 ```
 
 ## Capability areas
@@ -85,7 +80,7 @@ Write, retrieve, and forget memory records with scope isolation, confidence,
 validity windows, and source metadata.
 
 ```rust,no_run
-if let Some(memory) = provider.memory() {
+let memory = provider.require_memory()?; {
     let record = memory.write_memory(request).await?;
     let retrieved = memory.retrieve(query).await?;
     memory.forget(forget_request).await?;
@@ -97,7 +92,7 @@ if let Some(memory) = provider.memory() {
 Upsert entities and relationships, query neighbors, traverse paths, deduplicate.
 
 ```rust,no_run
-if let Some(graph) = provider.graph() {
+let graph = provider.require_graph()?; {
     graph.put_entity(entity).await?;
     graph.put_relationship(relationship).await?;
     let neighbors = graph.neighbors(&entity_id, &scope).await?;
@@ -112,7 +107,7 @@ evidence to an existing record (ADR-0023 port-level rewrite).
 ```rust,no_run
 use engram_domain::EvidenceTargetType;
 
-if let Some(prov = provider.provenance() {
+let prov = provider.require_provenance()? {
     // Read: what evidence supports this entity?
     let evidence = prov.evidence_for(EvidenceTargetType::Entity, &entity_id, &scope).await?;
 
@@ -135,10 +130,10 @@ Register ontology definitions; validate entity/relationship types. Store SKOS-li
 concept schemes with broader/narrower/related; expand terms for recall.
 
 ```rust,no_run
-if let Some(ontology) = provider.ontology() {
+let ontology = provider.require_ontology()?; {
     ontology.put_class(class_def).await?;
 }
-if let Some(taxonomy) = provider.taxonomy() {
+let taxonomy = provider.require_taxonomy()?; {
     taxonomy.put_concept_scheme(scheme).await?;
 }
 ```
@@ -149,7 +144,7 @@ Store beliefs linked to supporting facts; track confidence, validity windows,
 and contradictions.
 
 ```rust,no_run
-if let Some(beliefs) = provider.beliefs() {
+let beliefs = provider.require_beliefs()?; {
     let belief = beliefs.put_belief(belief_record).await?;
     let query = BeliefQuery::live_subject(scope, subject_key, now);
     let found = beliefs.get_belief(query).await?;
@@ -165,7 +160,7 @@ partial-failure reporting). Per-record idempotency keys prevent data loss.
 ```rust,no_run
 use engram_integration::{BatchIngestRequest, BatchStep, TransactionGuarantee};
 
-if let Some(batch) = provider.batch() {
+let batch = provider.require_batch()?; {
     assert_eq!(batch.transaction_guarantee(), TransactionGuarantee::BestEffort);
 
     let request = BatchIngestRequest {
@@ -192,7 +187,7 @@ One query that fans across facts (memory), graph, vector, lexical, and beliefs,
 fused via Reciprocal Rank Fusion into a `ContextPayload`.
 
 ```rust,no_run
-if let Some(recall) = provider.recall() {
+let recall = provider.require_recall()?; {
     let payload = recall.recall(retrieval_request).await?;
     for item in &payload.items {
         println!("{} (score from fusion trace)", item.target_id);
@@ -211,7 +206,7 @@ Export a scope's semantic state into `ImportData`; import via `MigrationService`
 (dry-run validation + apply). Round-trip for backend-to-backend movement.
 
 ```rust,no_run
-if let Some(export_import) = provider.export_import() {
+let export_import = provider.require_export_import()?; {
     // Export scope A:
     let data = export_import.export(&scope_a).await?;
 
@@ -233,7 +228,7 @@ Query the provider's operational state: capability report, record counts by
 semantic type, embedding configuration, schema/adapter versions.
 
 ```rust,no_run
-if let Some(obs) = provider.observability() {
+let obs = provider.require_observability()?; {
     let snapshot = obs.diagnostics().await?;
     println!("Entities: {}", snapshot.record_counts.entities);
     println!("Beliefs: {}", snapshot.record_counts.beliefs);

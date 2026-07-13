@@ -1,7 +1,12 @@
 //! Global UI + graph state (zustand).
 
 import { create } from "zustand";
-import type { GraphLink, GraphNode, StatsResponse } from "../lib/types";
+import type {
+  GraphLink,
+  GraphNode,
+  RepoSource,
+  StatsResponse,
+} from "../lib/types";
 
 export type SidebarTab = "insights" | "taxonomy" | "ontology";
 
@@ -12,6 +17,15 @@ interface GraphState {
   links: GraphLink[];
   loading: boolean;
   error: string | null;
+
+  // Repos (stable_source_key list) + active repo filter.
+  sources: RepoSource[];
+  sourceFilter: string | null; // null = all repos; else a stable_source_key
+
+  // Server cap info: when true, the server pruned the graph to top-maxNodes
+  // by degree (originalNodeCount is the pre-cap count).
+  capped: boolean;
+  originalNodeCount: number | null;
 
   // Interaction.
   focusNodeId: string | null; // node to highlight + recenter (from insights/search)
@@ -44,6 +58,9 @@ interface GraphState {
   setStats: (stats: StatsResponse | null) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setSources: (sources: RepoSource[]) => void;
+  setSourceFilter: (source: string | null) => void;
+  setCapInfo: (capped: boolean, originalNodeCount: number | null) => void;
 
   // Actions — interaction.
   focusNode: (id: string) => void;
@@ -80,6 +97,10 @@ export const useGraphStore = create<GraphState>((set) => ({
   loading: false,
   error: null,
   stats: null,
+  sources: [],
+  sourceFilter: null,
+  capped: false,
+  originalNodeCount: null,
   focusNodeId: null,
   selectedNodeId: null,
   hoveredNodeId: null,
@@ -105,6 +126,21 @@ export const useGraphStore = create<GraphState>((set) => ({
   setStats: (stats) => set({ stats }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
+  setSources: (sources) => set({ sources }),
+  setSourceFilter: (source) =>
+    // Clear any node-level focus/highlight when switching repos — the old ids
+    // likely no longer exist in the filtered graph.
+    set({
+      sourceFilter: source,
+      focusNodeId: null,
+      selectedNodeId: null,
+      hoveredNodeId: null,
+      highlightNodeIds: new Set<string>(),
+      highlightColor: null,
+      pathFromId: null,
+      pathToId: null,
+    }),
+  setCapInfo: (capped, originalNodeCount) => set({ capped, originalNodeCount }),
 
   focusNode: (id) => set({ focusNodeId: id, selectedNodeId: id }),
   selectNode: (id) => set({ selectedNodeId: id }),

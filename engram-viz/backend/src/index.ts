@@ -5,6 +5,7 @@
 
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
+import { compress } from "hono/compress";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
@@ -30,6 +31,8 @@ app.use(
     allowMethods: ["GET", "POST", "OPTIONS"],
   }),
 );
+// gzip the (large) JSON graph payloads over the wire.
+app.use("*", compress());
 
 app.get("/api/health", (c) =>
   c.json({ status: "ok", scope: engine.scope }),
@@ -42,6 +45,60 @@ app.get("/api/search/ready", (c) =>
     building: engine.lexicalSearchBuilding,
   }),
 );
+
+// Seed code-derived taxonomy + ontology from existing entity data.
+app.post("/api/seed-taxonomy-ontology", (c) => {
+  try {
+    const result = engine.seedTaxonomyOntology();
+    return c.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[seed] error:", msg);
+    return c.json({ seeded: false, message: msg }, 500);
+  }
+});
+
+// Seed configurable enterprise taxonomy + ontology (Business/IT/Support/Customer).
+app.post("/api/seed-enterprise-taxonomy", async (c) => {
+  try {
+    const body = await c.req.text().catch(() => "");
+    const result = engine.seedEnterpriseTaxonomyOntology(body || undefined);
+    return c.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[seed-enterprise] error:", msg);
+    return c.json({ seeded: false, message: msg }, 500);
+  }
+});
+
+// On-demand auto-tagging: classify entities into taxonomy concepts by file path.
+// Pass custom rules as JSON body { "path/pattern": "conceptId" }. Omit for defaults.
+app.post("/api/auto-tag", async (c) => {
+  try {
+    const body = await c.req.text().catch(() => "");
+    const customRules = body ? JSON.parse(body) : undefined;
+    const result = engine.autoTag(customRules);
+    return c.json(result);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[auto-tag] error:", msg);
+    return c.json({ tagged: 0, untagged: 0, byConcept: {}, error: msg }, 500);
+  }
+});
+
+// Get entities filtered by a taxonomy concept.
+app.get("/api/by-concept/:conceptId", (c) => {
+  const conceptId = c.req.param("conceptId");
+  const entities = engine.entitiesByConcept(conceptId);
+  return c.json({ conceptId, count: entities.length, entities: entities.map((e) => ({ id: e.id, name: e.name, kind: e.kind, file: e.file })) });
+});
+
+// List indexed repositories (distinct stable_source_key) with entity/relationship
+// counts for each. The stable_source_key is the value the `?source=` graph filter
+// and entitiesBySource() expect — NOT the KnowledgeSource id.
+app.get("/api/sources", (c) => {
+  return c.json({ sources: engine.repos() });
+});
 
 app.route("/api/stats", statsRoute);
 app.route("/api/graph", graphRoute);
@@ -59,8 +116,9 @@ const port = Number(process.env.PORT ?? "3001");
 serve({ fetch: app.fetch, port }, (info) => {
   console.log(`engram-viz backend listening on http://localhost:${info.port}`);
   console.log(`  scope: ${JSON.stringify(engine.scope)}`);
-  // Pre-warm the BM25 lexical index in the background so the first user
-  // search is not blocked by a multi-minute index build.
-  console.log("[engine] pre-warming lexical search index in the background…");
-  engine.prewarmLexical();
+  // NOTE: the BM25 lexical index is built lazily on the first /api/search
+  // (ensureLexical), NOT pre-warmed at startup. indexForSearchJson is a
+  // synchronous N-API call that blocks the event loop; pre-warming it at
+  // startup froze the whole server (incl. graph loads) for the multi-second
+  // build over ~18k entities. Offloading it to a worker thread is deferred.
 });

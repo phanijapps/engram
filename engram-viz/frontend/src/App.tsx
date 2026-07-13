@@ -24,6 +24,8 @@ export default function App() {
   const loading = useGraphStore((s) => s.loading);
   const error = useGraphStore((s) => s.error);
   const nodeCount = useGraphStore((s) => s.nodes.length);
+  const capped = useGraphStore((s) => s.capped);
+  const originalNodeCount = useGraphStore((s) => s.originalNodeCount);
   const toggleTimeline = useGraphStore((s) => s.toggleTimeline);
   const sidebarCollapsed = useGraphStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useGraphStore((s) => s.toggleSidebar);
@@ -59,7 +61,17 @@ export default function App() {
             </>
           ) : (
             !error && (
-              <span>{nodeCount.toLocaleString()} nodes</span>
+              <span>
+                {nodeCount.toLocaleString()} nodes
+                {capped && originalNodeCount != null && (
+                  <span
+                    className="ml-1 text-accent-amber"
+                    title="The server pruned low-degree leaves to keep the graph snappy."
+                  >
+                    of {originalNodeCount.toLocaleString()} (capped)
+                  </span>
+                )}
+              </span>
             )
           )}
         </div>

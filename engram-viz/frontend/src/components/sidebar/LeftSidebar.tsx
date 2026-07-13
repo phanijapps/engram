@@ -28,6 +28,11 @@ const TABS: { id: SidebarTab; label: string; icon: React.ReactNode }[] = [
 
 export function LeftSidebar() {
   const stats = useGraphStore((s) => s.stats);
+  const nodes = useGraphStore((s) => s.nodes);
+  const links = useGraphStore((s) => s.links);
+  const sources = useGraphStore((s) => s.sources);
+  const sourceFilter = useGraphStore((s) => s.sourceFilter);
+  const setSourceFilter = useGraphStore((s) => s.setSourceFilter);
   const focusNode = useGraphStore((s) => s.focusNode);
   const sidebarTab = useGraphStore((s) => s.sidebarTab);
   const setSidebarTab = useGraphStore((s) => s.setSidebarTab);
@@ -51,23 +56,38 @@ export function LeftSidebar() {
     };
   }, []);
 
-  const repoName = stats?.sources?.[0]?.name
-    ? stats.sources[0].name.replace(/^mcp-scan\s*/, "")
-    : "codegraph";
+  // Counts reflect the active filter: when a repo is selected, show the
+  // filtered graph's node/edge counts; otherwise the global stats totals.
+  const nodeCount = sourceFilter ? nodes.length : stats?.nodeCount ?? nodes.length;
+  const edgeCount = sourceFilter ? links.length : stats?.edgeCount ?? links.length;
 
   return (
     <aside className="flex h-full w-72 shrink-0 flex-col border-r border-base-700 bg-base-900/95 backdrop-blur">
       {/* Repo selector + collapse button */}
       <div className="flex items-center gap-2 border-b border-base-700 px-3 py-3">
         <div className="min-w-0 flex-1">
-          <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+          <label
+            htmlFor="repo-select"
+            className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-ink-faint"
+          >
             Repository
           </label>
           <div className="flex items-center gap-2 rounded-md border border-base-700 bg-base-850 px-2 py-1.5">
             <Boxes size={14} className="shrink-0 text-accent" />
-            <span className="truncate text-xs text-ink" title={repoName}>
-              {repoName}
-            </span>
+            <select
+              id="repo-select"
+              value={sourceFilter ?? ""}
+              onChange={(e) => setSourceFilter(e.target.value || null)}
+              className="min-w-0 flex-1 cursor-pointer truncate bg-transparent text-xs text-ink outline-none [&>option]:bg-base-850 [&>option]:text-ink"
+              title={sourceFilter ?? "All repositories"}
+            >
+              <option value="">All repositories</option>
+              {sources.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} ({s.entityCount.toLocaleString()})
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         <button
@@ -87,7 +107,7 @@ export function LeftSidebar() {
             <span className="text-[10px] uppercase tracking-wider">Nodes</span>
           </div>
           <div className="mt-0.5 font-mono text-lg text-ink">
-            {stats?.nodeCount?.toLocaleString() ?? "—"}
+            {nodeCount.toLocaleString()}
           </div>
         </div>
         <div className="bg-base-900 px-4 py-3">
@@ -96,7 +116,7 @@ export function LeftSidebar() {
             <span className="text-[10px] uppercase tracking-wider">Edges</span>
           </div>
           <div className="mt-0.5 font-mono text-lg text-ink">
-            {stats?.edgeCount?.toLocaleString() ?? "—"}
+            {edgeCount.toLocaleString()}
           </div>
         </div>
       </div>

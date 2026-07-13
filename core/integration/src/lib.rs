@@ -62,6 +62,7 @@ pub use config::{
     BackendProfile, CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode,
     SqliteStorageLayout,
 };
+pub use dto::{GraphQuery, MemorySearch, RecallRequest, scope, workspace_scope};
 pub use embedding::EmbeddingProvider;
 pub use export_import::ExportImport;
 pub use migration::{
@@ -76,4 +77,3 @@ pub use observability::{DiagnosticsSnapshot, Observability, RecordCounts};
 pub use provenance::{ProvenanceEntry, ProvenanceQuery, TimeWindow};
 pub use provider::{EngramProvider, EngramProviderBuilder};
 pub use recall::UnifiedRecall;
-pub use dto::{MemorySearch, GraphQuery, RecallRequest, scope, workspace_scope};

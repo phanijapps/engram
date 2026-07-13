@@ -5,11 +5,8 @@
 //! underlying domain type via `From`/`Into`. Hosts that prefer the domain types
 //! can use those instead — the DTOs are a convenience layer, not a replacement.
 
-use engram_domain::{
-    EntityKind, RetrievalMode, RetrievalRequest, Scope,
-    types::ActorId,
-};
 use engram_domain::identity::{Actor, ActorKind, Requester};
+use engram_domain::{EntityKind, RetrievalMode, RetrievalRequest, Scope, types::ActorId};
 
 // ---------------------------------------------------------------------------
 // Scope helpers

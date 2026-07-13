@@ -14,7 +14,7 @@ engram-codegraph-queries = { path = "../../codegraph/queries" }
 engram-core = { path = "../../core/orchestration" }
 engram-domain = { path = "../../core/domain" }
 engram-conformance = { path = "../../adapters/integration" }
-engram-integration = { path = "../../core/integration" }
+engram-integration = { path = "../../core/integration", features = ["sqlite"] }
 engram-ingest = { path = "../../adapters/ingest" }
 engram-knowledge = { path = "../../core/knowledge" }
 engram-memory = { path = "../../core/memory" }

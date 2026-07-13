@@ -13,13 +13,24 @@ export interface StatsResponse {
   sources: SourceInfo[];
 }
 
+/** One indexed repository. `id` is the stable_source_key — the value the
+ *  `?source=` graph filter and entitiesBySource() expect. */
+export interface RepoSource {
+  id: string;
+  name: string;
+  entityCount: number;
+  relationshipCount: number;
+}
+
+export interface SourceListResponse {
+  sources: RepoSource[];
+}
+
 export interface GraphNode {
   id: string;
   name: string;
   kind: string;
   file?: string;
-  line?: number;
-  endLine?: number;
   community?: number;
   degree: number;
 }
@@ -33,6 +44,11 @@ export interface GraphResponse {
   nodeCount: number;
   edgeCount: number;
   communityCount: number;
+  sourceFilter?: string | null;
+  /** True when the server pruned the graph to the top-`maxNodes` by degree. */
+  capped?: boolean;
+  /** The pre-cap node count, for a "Showing N of M" notice. */
+  originalNodeCount?: number;
   nodes: GraphNode[];
   links: GraphLink[];
 }

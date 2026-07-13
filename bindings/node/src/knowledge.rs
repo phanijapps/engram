@@ -162,12 +162,21 @@ impl NativeKnowledgeEngine {
         let entities = block_on(self.store.list_entities(&scope))
             .map_err(|e| Error::from_reason(e.to_string()))?;
         let index = LexicalIndex::new().map_err(|e| Error::from_reason(e.to_string()))?;
-        for entity in &entities {
-            let searchable = format!("{} {:?}", entity.name, entity.kind);
-            index
-                .upsert(&entity.id.to_string(), &searchable)
-                .map_err(|e| Error::from_reason(e.to_string()))?;
-        }
+        // Batch into ONE commit — per-document upsert commits once per doc
+        // (segment finalize + reader reload), which made a full-corpus build
+        // O(n²) and froze the host process for >90s over ~18k entities.
+        let entries: Vec<(String, String)> = entities
+            .iter()
+            .map(|entity| {
+                (
+                    entity.id.to_string(),
+                    format!("{} {:?}", entity.name, entity.kind),
+                )
+            })
+            .collect();
+        index
+            .upsert_batch(&entries)
+            .map_err(|e| Error::from_reason(e.to_string()))?;
         let mut guard = self
             .lexical
             .lock()

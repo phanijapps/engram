@@ -28,6 +28,7 @@ use engram_domain::{
     KnowledgeSource, MemoryRecord, Scope, SourceDocument,
 };
 use engram_runtime::{CoreError, CoreResult};
+use serde::{Deserialize, Serialize};
 
 /// The transactional guarantee a [`BatchIngest`] backend provides.
 ///
@@ -35,7 +36,7 @@ use engram_runtime::{CoreError, CoreResult};
 /// cannot share a transaction, so a step failure does not roll back earlier
 /// steps. `Atomic` is reserved for a future single-connection backend that can
 /// offer true cross-store ACID; no v1 backend returns it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TransactionGuarantee {
     /// Each step writes in its own per-store transaction; a later step's
     /// failure does not roll back earlier steps. Succeeded steps stay landed.
@@ -47,7 +48,7 @@ pub enum TransactionGuarantee {
 
 /// One logical write phase of a batch, in the fixed order a backend executes
 /// them ([`ALL_STEPS`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum BatchStep {
     /// Optional `source` + `documents` + `chunks` (the episode).
     Episode,
@@ -77,7 +78,7 @@ pub const ALL_STEPS: [BatchStep; 6] = [
 ];
 
 /// The per-step outcome status.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StepStatus {
     /// The step wrote its payload (or a non-empty payload landed).
     Succeeded,
@@ -128,7 +129,7 @@ impl StepOutcome {
 }
 
 /// The overall batch status.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BatchStatus {
     /// Every step is `Succeeded`, `Deduplicated`, or `Skipped` — none failed.
     Complete,
@@ -172,7 +173,7 @@ pub fn aggregate_status(steps: &[StepOutcome]) -> BatchStatus {
 
 /// One semantic batch: a single `idempotency_key` + `scope`, plus each payload
 /// slice (every slice is optional / empty-allowed).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BatchIngestRequest {
     /// The batch idempotency key. Backends derive per-record keys from it where
     /// a store has no per-record disambiguation (e.g. the Facts step derives

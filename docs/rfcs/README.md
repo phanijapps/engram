@@ -18,4 +18,4 @@ specs under `docs/specs/`. See `docs/CONVENTIONS.md` for the RFC lifecycle.
 | [0010](0010-decompose-god-modules.md) | Decompose god modules by responsibility | Draft | 2026-07-05 |
 | [0011](0011-rust-crate-integration.md) | Rust crate integration | Draft | — |
 | [0012](0012-code-structural-graph-layer.md) | Code-structural graph layer on top of engram | Draft | 2026-07-08 |
-| [0013](0013-context-graph-packets.md) | Context-graph packets for AI agents | Draft | 2026-07-13 |
+| [0013](0013-context-graph-packets.md) | Context-graph packets for AI agents | Accepted | 2026-07-13 |

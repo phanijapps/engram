@@ -2,11 +2,11 @@
 <!-- Engram as a framework: packet/rules/trace primitives + composition machinery
 are product; the domain taxonomy/ontology content is consumer-loaded. -->
 
-- **Status:** Draft <!-- Draft until circulated -->
+- **Status:** Accepted <!-- accepted by the approver 2026-07-13 (solo project; no circulation period) -->
 - **Author:** phanijapps
 - **Approver:** phanijapps <!-- solo project; a third-party approver line would strengthen sign-off (review nit #10) -->
 - **Date opened:** 2026-07-13
-- **Date closed:**
+- **Date closed:** 2026-07-13
 - **Decision weight:** standard
 - **Related:** ADR-0009 (retrieval-composition seam), ADR-0022 (engine neutrality), RFC-0008 (cross-repo linkage), RFC-0012 (codegraph on-top layer), `docs/research/engram-framing-synthesis.md`, `docs/research/more/it-sdlc-ontology-build-reduction-options.md`, `docs/domain-data-model.md`
 

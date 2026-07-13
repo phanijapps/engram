@@ -73,6 +73,33 @@ impl LexicalIndex {
         Ok(())
     }
 
+    /// Inserts or replaces many documents in a single transaction (one commit).
+    ///
+    /// Equivalent to calling [`upsert`](Self::upsert) per entry, but commits
+    /// only once at the end. Bulk indexing MUST use this, not per-document
+    /// `upsert`: each `commit()` finalizes a Tantivy segment and (under
+    /// `OnCommitWithDelay`) reloads the reader, so per-document commits make a
+    /// full-corpus build O(n²) — e.g. ~18k entities took >90s one-commit-per-doc
+    /// and froze the host process. Use `upsert` only for incremental
+    /// single-document updates.
+    pub fn upsert_batch(&self, entries: &[(String, String)]) -> tantivy::Result<()> {
+        let mut writer = self.writer.lock().expect("lexical writer lock poisoned");
+        for (target_id, text) in entries {
+            let normalized = normalize_identifier_text(text);
+            // Delete-first keeps upsert idempotency for repeated target ids.
+            writer.delete_term(Term::from_field_text(
+                self.target_id_field,
+                target_id.as_str(),
+            ));
+            writer.add_document(doc!(
+                self.target_id_field => target_id.as_str(),
+                self.text_field => normalized.as_str(),
+            ))?;
+        }
+        writer.commit()?;
+        Ok(())
+    }
+
     /// Removes the document for `target_id`, if present.
     pub fn delete(&self, target_id: &str) -> tantivy::Result<()> {
         let mut writer = self.writer.lock().expect("lexical writer lock poisoned");
@@ -167,5 +194,42 @@ mod tests {
         index.upsert("t1", "completely different content").unwrap();
         let hits = index.search("parse", 10).unwrap();
         assert!(hits.is_empty(), "upsert must replace, not duplicate");
+    }
+
+    #[test]
+    fn upsert_batch_indexes_many_in_one_commit() {
+        let index = LexicalIndex::new().unwrap();
+        let entries = vec![
+            ("a".to_string(), "parse error".to_string()),
+            ("b".to_string(), "parse warning".to_string()),
+            ("c".to_string(), "unrelated content".to_string()),
+        ];
+        index.upsert_batch(&entries).unwrap();
+
+        let hits = index.search("parse", 10).unwrap();
+        let ids: Vec<&str> = hits.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(hits.len(), 2, "both parse docs should match");
+        assert!(ids.contains(&"a") && ids.contains(&"b"));
+        assert!(!ids.contains(&"c"), "non-matching doc should be absent");
+    }
+
+    #[test]
+    fn upsert_batch_replaces_existing_targets() {
+        let index = LexicalIndex::new().unwrap();
+        index
+            .upsert_batch(&[("t".to_string(), "alpha beta".to_string())])
+            .unwrap();
+        // Second batch for the same id must replace, not duplicate.
+        index
+            .upsert_batch(&[("t".to_string(), "gamma delta".to_string())])
+            .unwrap();
+
+        let alpha_hits = index.search("alpha", 10).unwrap();
+        assert!(
+            alpha_hits.is_empty(),
+            "batch upsert must replace, not duplicate"
+        );
+        let gamma_hits = index.search("gamma", 10).unwrap();
+        assert!(gamma_hits.iter().any(|(id, _)| id == "t"));
     }
 }

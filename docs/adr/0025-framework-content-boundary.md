@@ -1,6 +1,6 @@
 # ADR-0025: Framework/content boundary: ship mechanism, not domain ontology content
 
-- **Status:** Proposed
+- **Status:** Accepted <!-- accepted 2026-07-13; the decision was made at RFC-0013 acceptance and confirmed on review (no consumer behavior change) -->
 - **Date:** 2026-07-13
 - **Decision-makers:** phanijapps
 - **Supersedes:** none

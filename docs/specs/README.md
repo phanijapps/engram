@@ -140,6 +140,12 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   Engram reaches research-architecture parity as a pristine local Rust library
   and TypeScript integration surface, excluding the actual AgentZero provider
   cutover.
+- [`context-packet-contract-additions`](context-packet-contract-additions/spec.md):
+  Phase 1 of RFC-0013 — the four framework contract types (`ContextSubgraph`,
+  `ApplicabilityRule`, `DecisionTrace`, `KnowledgeEntity.ontologyClassRefs`) +
+  `RetrievalTargetType` variants (`Rule`/`Policy`/`Axiom`/`DecisionTrace`), as
+  inert contract surface only (no composition/population/writer wiring; that
+  lands in Phases 2–4). Constrained by ADR-0025, ADR-0009, ADR-0022. Draft.
 
 ## Existing Slices
 

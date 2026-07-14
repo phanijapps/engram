@@ -83,6 +83,7 @@ fn make_entity(id: &str, graph_id: Option<&str>, tenant: &str) -> KnowledgeEntit
         scope: scope(tenant),
         source_refs: Vec::new(),
         concept_refs: Vec::new(),
+        ontology_class_refs: Vec::new(),
         provenance: provenance(),
         created_at: Utc::now(),
         updated_at: None,

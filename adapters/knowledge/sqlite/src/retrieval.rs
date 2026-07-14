@@ -166,6 +166,10 @@ fn graph_result(rank: usize, score: f32, view: GraphCandidateView) -> RetrievalR
     let kind_slug = match view.target_type {
         RetrievalTargetType::Entity => "entity",
         RetrievalTargetType::Chunk => "chunk",
+        RetrievalTargetType::Rule => "rule",
+        RetrievalTargetType::Policy => "policy",
+        RetrievalTargetType::Axiom => "axiom",
+        RetrievalTargetType::DecisionTrace => "decision_trace",
         _ => "item",
     };
     RetrievalResult {

@@ -24,7 +24,11 @@ export type RetrievalTargetType =
   | "belief"
   | "contradiction"
   | "hierarchy_node"
-  | "hierarchy_relation";
+  | "hierarchy_relation"
+  | "rule"
+  | "policy"
+  | "axiom"
+  | "decision_trace";
 export type RetrievalMode = "temporal" | "cue" | "hierarchical" | "semantic" | "graph" | "keyword";
 export type KnowledgeChunkKind =
   | "document_section"

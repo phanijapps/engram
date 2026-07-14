@@ -1321,7 +1321,11 @@ export const engramV1Schema = {
         "belief",
         "contradiction",
         "hierarchy_node",
-        "hierarchy_relation"
+        "hierarchy_relation",
+        "rule",
+        "policy",
+        "axiom",
+        "decision_trace"
       ],
       "type": "string"
     },

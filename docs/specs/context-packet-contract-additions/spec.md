@@ -1,6 +1,6 @@
 # Spec: context-packet-contract-additions
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0013, ADR-0025 (framework/content boundary), ADR-0009 (retrieval-composition seam), ADR-0022 (engine neutrality), ADR-0003 (implementation-stack gate)
@@ -47,16 +47,16 @@ The context-graph packet layer (RFC-0013) rests on four framework contract types
 
 ## Acceptance Criteria
 
-- [ ] `ContextSubgraph` struct exists in `core/domain/src/retrieval.rs`, carrying `nodes` (`RetrievalResult[]` — the included set) + `edges` (`KnowledgeRelationship[]`) + `omitted` (`OmittedResult[]` — the excluded set) + `budget` (`Option<ContextBudget>`), mirroring `ContextPayload`'s `items`/`omitted` split; serde round-trip test green.
-- [ ] `ApplicabilityRule` struct exists in a new `core/domain/src/rule.rs` module, with `{ id, condition, target (EntityRef|ConceptRef), binding, scope, policy, provenance, validFrom, validUntil, createdAt }`; serde round-trip green; re-exported from `core/domain/src/lib.rs`.
-- [ ] `DecisionTrace` struct exists in a new `core/domain/src/trace.rs` module, with `{ id, scope, agent (Actor), items_consulted, traversal_path, policy_applied, precedent, output, provenance, createdAt }`; serde round-trip green; re-exported. **No `promote` method ships in Phase 1** — the never-auto-promote invariant is documented in `domain-data-model.md`; the `promote(actor)` method is deferred to Phase 4.
-- [ ] `KnowledgeEntity.ontology_class_refs: Vec<OntologyClassId>` (optional, `skip_serializing_if = "Vec::is_empty"`) added; existing `KnowledgeEntity` tests still pass; round-trip green.
-- [ ] `RetrievalTargetType` gains `Rule`, `Policy`, `Axiom`, `DecisionTrace` variants; `contracts/v1/schemas/engram-v1.schema.json` enum updated; `contracts:check-generated` passes.
-- [ ] The one exhaustive match on `RetrievalTargetType` (`core/eval/src/lib.rs:194`) gains arms for the new variants (compile-required); the two wildcard sites on `RetrievalTargetType` — `adapters/knowledge/sqlite/src/retrieval.rs:166` (slugs unknown → `"item"`) and `adapters/integration/src/fixtures/recall.rs:560` (parses unknown → `Memory`) — gain explicit arms for correctness. (`core/belief/src/contradiction.rs:50` matches `ContradictionTargetType` and `adapters/retrieval/sqlite-vec/src/index.rs:417` matches `EmbeddingTargetType`; both are unaffected.)
-- [ ] `docs/domain-data-model.md` documents the four additions + the `RetrievalTargetType` extension + the `DecisionTrace` never-auto-promote invariant (ApplicabilityRule under the Policy and Provenance area).
-- [ ] `contracts/v1/compatibility.md` carries the enum-add tolerance note (consumers must tolerate unknown `RetrievalTargetType` values).
-- [ ] Gates green: `cargo fmt --all`, `cargo check --workspace`, `cargo clippy --workspace --all-targets`, `contracts:check-generated`, `check-contracts.sh`, `check-engine-neutrality.sh`, `check-docs.sh`.
-- [ ] No wiring introduced: `ContextSubgraph` is not emitted by `compose_context`; no `ApplicabilityRule`/`DecisionTrace` writer and no `DecisionTrace.promote` method; grep confirms zero new call sites wiring the types into behavior.
+- [x] `ContextSubgraph` struct exists in `core/domain/src/retrieval.rs`, carrying `nodes` (`RetrievalResult[]` — the included set) + `edges` (`KnowledgeRelationship[]`) + `omitted` (`OmittedResult[]` — the excluded set) + `budget` (`Option<ContextBudget>`), mirroring `ContextPayload`'s `items`/`omitted` split; serde round-trip test green.
+- [x] `ApplicabilityRule` struct exists in a new `core/domain/src/rule.rs` module, with `{ id, condition, target (EntityRef|ConceptRef), binding, scope, policy, provenance, validFrom, validUntil, createdAt }`; serde round-trip green; re-exported from `core/domain/src/lib.rs`.
+- [x] `DecisionTrace` struct exists in a new `core/domain/src/trace.rs` module, with `{ id, scope, agent (Actor), items_consulted, traversal_path, policy_applied, precedent, output, provenance, createdAt }`; serde round-trip green; re-exported. **No `promote` method ships in Phase 1** — the never-auto-promote invariant is documented in `domain-data-model.md`; the `promote(actor)` method is deferred to Phase 4.
+- [x] `KnowledgeEntity.ontology_class_refs: Vec<OntologyClassId>` (optional, `skip_serializing_if = "Vec::is_empty"`) added; existing `KnowledgeEntity` tests still pass; round-trip green.
+- [x] `RetrievalTargetType` gains `Rule`, `Policy`, `Axiom`, `DecisionTrace` variants; `contracts/v1/schemas/engram-v1.schema.json` enum updated; `contracts:check-generated` passes.
+- [x] The one exhaustive match on `RetrievalTargetType` (`core/eval/src/lib.rs:194`) gains arms for the new variants (compile-required); the two wildcard sites on `RetrievalTargetType` — `adapters/knowledge/sqlite/src/retrieval.rs:166` (slugs unknown → `"item"`) and `adapters/integration/src/fixtures/recall.rs:560` (parses unknown → `Memory`) — gain explicit arms for correctness. (`core/belief/src/contradiction.rs:50` matches `ContradictionTargetType` and `adapters/retrieval/sqlite-vec/src/index.rs:417` matches `EmbeddingTargetType`; both are unaffected.)
+- [x] `docs/domain-data-model.md` documents the four additions + the `RetrievalTargetType` extension + the `DecisionTrace` never-auto-promote invariant (ApplicabilityRule under the Policy and Provenance area).
+- [x] `contracts/v1/compatibility.md` carries the enum-add tolerance note (consumers must tolerate unknown `RetrievalTargetType` values).
+- [x] Gates green: `cargo fmt --all`, `cargo check --workspace`, `cargo clippy --workspace --all-targets`, `contracts:check-generated`, `check-contracts.sh`, `check-engine-neutrality.sh`, `check-docs.sh`.
+- [x] No wiring introduced: `ContextSubgraph` is not emitted by `compose_context`; no `ApplicabilityRule`/`DecisionTrace` writer and no `DecisionTrace.promote` method; grep confirms zero new call sites wiring the types into behavior.
 
 ## Assumptions
 

@@ -203,5 +203,9 @@ fn target_type_name(target_type: &RetrievalTargetType) -> &'static str {
         RetrievalTargetType::Contradiction => "contradiction",
         RetrievalTargetType::HierarchyNode => "hierarchy_node",
         RetrievalTargetType::HierarchyRelation => "hierarchy_relation",
+        RetrievalTargetType::Rule => "rule",
+        RetrievalTargetType::Policy => "policy",
+        RetrievalTargetType::Axiom => "axiom",
+        RetrievalTargetType::DecisionTrace => "decision_trace",
     }
 }

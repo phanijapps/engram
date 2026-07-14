@@ -145,7 +145,7 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   `ApplicabilityRule`, `DecisionTrace`, `KnowledgeEntity.ontologyClassRefs`) +
   `RetrievalTargetType` variants (`Rule`/`Policy`/`Axiom`/`DecisionTrace`), as
   inert contract surface only (no composition/population/writer wiring; that
-  lands in Phases 2–4). Constrained by ADR-0025, ADR-0009, ADR-0022. Draft.
+  lands in Phases 2–4). Constrained by ADR-0025, ADR-0009, ADR-0022. Shipped.
 
 ## Existing Slices
 

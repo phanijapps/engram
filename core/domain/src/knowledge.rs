@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ChunkId, ConceptRef, DocumentId, EntityId, EntityRef, EvidenceRef, KnowledgeGraphId, Metadata,
-    OntologyRef, Policy, Provenance, RelationshipId, Scope, SourceId, Timestamp,
+    OntologyClassId, OntologyRef, Policy, Provenance, RelationshipId, Scope, SourceId, Timestamp,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -213,6 +213,8 @@ pub struct KnowledgeEntity {
     pub source_refs: Vec<EvidenceRef>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub concept_refs: Vec<ConceptRef>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub ontology_class_refs: Vec<OntologyClassId>,
     pub provenance: Provenance,
     pub created_at: Timestamp,
     #[serde(skip_serializing_if = "Option::is_none")]

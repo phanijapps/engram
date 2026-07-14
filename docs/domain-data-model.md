@@ -811,6 +811,7 @@ Fields:
 | `scope` | yes | Scope | Entity scope |
 | `sourceRefs` | no | EvidenceRef[] | Supporting sources |
 | `conceptRefs` | no | ConceptRef[] | Taxonomy mappings |
+| `ontologyClassRefs` | no | OntologyClassId[] | Ontology class typing (RFC-0013 D3) |
 | `provenance` | yes | Provenance | Extraction or declaration provenance |
 | `createdAt` | yes | Timestamp | Creation time |
 | `updatedAt` | no | Timestamp | Last update |
@@ -1586,6 +1587,37 @@ Fields:
 | `inputRefs` | no | EvidenceRef[] | Inputs used |
 | `createdAt` | yes | Timestamp | Derivation time |
 
+### RuleTarget
+
+The target an applicability rule binds — a graph entity or a taxonomy concept.
+Externally-tagged enum (RFC-0013 D2).
+
+- `entity` — binds a `KnowledgeEntity` (via `EntityRef`).
+- `concept` — binds a taxonomy `Concept` (via `ConceptRef`).
+
+### ApplicabilityRule
+
+A condition-gated binding: "fact X binds target Y when condition Z." Rules are
+governed records (scope, policy, provenance) that govern graph shape the way
+axioms govern static constraints. Draft-extension (RFC-0013 D2). Records are
+consumer-declared (like ontology/taxonomy content), not extractor-derived;
+validated like ontology axioms.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | ApplicabilityRuleId | Stable rule identifier |
+| `condition` | yes | string | Condition expression |
+| `target` | yes | RuleTarget | Bound entity or concept |
+| `binding` | no | string | Binding name or effect |
+| `scope` | yes | Scope | Rule scope |
+| `policy` | yes | Policy | Access and retention policy |
+| `provenance` | yes | Provenance | Declaration provenance |
+| `validFrom` | no | Timestamp | Start of validity |
+| `validUntil` | no | Timestamp | End of validity |
+| `createdAt` | yes | Timestamp | Creation time |
+
 ## Retrieval Model
 
 ### RetrievalRequest
@@ -1710,6 +1742,10 @@ Enum:
 - `contradiction`
 - `hierarchy_node`
 - `hierarchy_relation`
+- `rule`
+- `policy`
+- `axiom`
+- `decision_trace`
 
 ### RetrievalScore
 
@@ -1786,6 +1822,23 @@ Fields:
 | `budget` | no | ContextBudget | Applied budget |
 | `omitted` | no | OmittedResult[] | Records omitted due to budget or policy |
 | `sourceFailures` | no | RetrievalSourceFailure[] | Retrieval sources that degraded or failed |
+| `createdAt` | yes | Timestamp | Composition time |
+
+### ContextSubgraph
+
+Connected-subgraph context packet (RFC-0013 D1). `nodes` is the included set
+(mirroring `ContextPayload.items`), `edges` the typed `KnowledgeRelationship`s
+binding them, `omitted` the excluded set. Draft-extension; the composition
+wiring that emits this from `compose_context` lands in a later phase.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `nodes` | yes | RetrievalResult[] | Included results (the subgraph's node set) |
+| `edges` | yes | KnowledgeRelationship[] | Typed edges binding the nodes |
+| `omitted` | no | OmittedResult[] | Records omitted due to budget or policy |
+| `budget` | no | ContextBudget | Applied budget |
 | `createdAt` | yes | Timestamp | Composition time |
 
 ### OmittedResult
@@ -2067,6 +2120,32 @@ Fields:
 | `requester` | yes | Requester | Caller context |
 | `mode` | yes | enum | `full`, `incremental`, `changed_only` |
 | `dryRun` | no | boolean | Whether to plan without writing |
+
+### DecisionTrace
+
+A candidate-only record of one agent decision run: what the agent consulted,
+the traversal path it followed, the policy applied, the precedent cited, and
+the output produced. Draft-extension (RFC-0013 D4).
+
+Invariant: traces are evidence, never authoritative facts. Promotion to
+trusted state requires an explicit `Actor`; the `promote(actor)` method lands
+in a later phase and is the only route to feed `ConsolidationRun`. Mirrors the
+`TaxonomyProposal` merge-requires-explicit-actor rule.
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | DecisionTraceId | Stable trace identifier |
+| `scope` | yes | Scope | Trace scope |
+| `agent` | yes | Actor | Agent that made the decision |
+| `itemsConsulted` | no | EvidenceRef[] | Items the agent consulted |
+| `traversalPath` | no | string[] | Traversal path followed |
+| `policyApplied` | no | Policy | Policy applied |
+| `precedent` | no | EvidenceRef | Precedent cited |
+| `output` | yes | string | Decision output |
+| `provenance` | yes | Provenance | Trace provenance |
+| `createdAt` | yes | Timestamp | Creation time |
 
 ## Evaluation Model
 

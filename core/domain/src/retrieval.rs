@@ -7,8 +7,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ConceptId, EntityId, KnowledgeChunkKind, MemoryKind, Metadata, Policy, Provenance, Requester,
-    Scope, SourceKind, Timestamp,
+    ConceptId, EntityId, KnowledgeChunkKind, KnowledgeRelationship, MemoryKind, Metadata, Policy,
+    Provenance, Requester, Scope, SourceKind, Timestamp,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,6 +118,10 @@ pub enum RetrievalTargetType {
     Contradiction,
     HierarchyNode,
     HierarchyRelation,
+    Rule,
+    Policy,
+    Axiom,
+    DecisionTrace,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -303,5 +307,25 @@ pub struct ContextPayload {
     pub omitted: Vec<OmittedResult>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub source_failures: Vec<RetrievalSourceFailure>,
+    pub created_at: Timestamp,
+}
+
+/// Connected-subgraph context packet (RFC-0013 D1).
+///
+/// `nodes` is the included set (mirroring `ContextPayload.items`); `edges` are
+/// the typed `KnowledgeRelationship`s binding them; `omitted` is the excluded
+/// set. Draft-extension: the composition wiring that emits this from
+/// `compose_context` lands in a later phase.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextSubgraph {
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub nodes: Vec<RetrievalResult>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub edges: Vec<KnowledgeRelationship>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub omitted: Vec<OmittedResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub budget: Option<ContextBudget>,
     pub created_at: Timestamp,
 }

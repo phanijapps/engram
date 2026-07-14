@@ -236,6 +236,7 @@ fn seed_scope(
             scope: scope.clone(),
             source_refs: Vec::new(),
             concept_refs: Vec::new(),
+            ontology_class_refs: Vec::new(),
             provenance: provenance(),
             created_at: chrono::Utc::now(),
             updated_at: None,

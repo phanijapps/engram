@@ -1,7 +1,7 @@
 # Plan: context-packet-contract-additions
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting <!-- plan vocabulary: Drafting | Executing | Done (distinct from the spec's Draft|Implementing|Shipped) -->
+- **Status:** Done <!-- plan vocabulary: Drafting | Executing | Done (distinct from the spec's Draft|Implementing|Shipped) -->
 
 > **Plan contract:** this is the implementation strategy. Unlike the spec, this
 > document is allowed to change as you learn. When it changes substantially

@@ -122,6 +122,20 @@ contracts, eval, node) now that the stack ADR (ADR-0003) is accepted.
   cells into an `EngramProvider` and is the only place a "backend" identity
   exists. SQLite wiring currently lives in `adapters/integration`; it moves to
   `backends/sqlite` when a second engine is adopted.
+- **Surface parity — integration + N-API (and every transport).** Every runtime
+  capability, operation, and `RetrievalIndex` / `RetrievalMode` must be reachable
+  through BOTH `engram-integration` (the Rust SDK `EngramProvider` facade,
+  including its unified-recall lanes) AND the N-API binding (`bindings/node`, the
+  TS transport) — and through any other supported transport — and be reflected in
+  `CapabilityReport`. A capability is not "shipped" until a Rust embedder and a
+  TS/N-API agent can both invoke it. Wiring one surface and leaving the other
+  unwired creates transport asymmetry (e.g., a retriever reachable from the
+  binding but not the facade) and is not allowed. The `lexical-keyword-retrieval`
+  + `lexical-wiring` split is the precedent for *sequencing* an adapter unit
+  ahead of its wiring — never for permanently stranding a capability on one
+  surface. If a surface genuinely cannot carry a capability, record why in an
+  ADR. A parity lint (mirroring the engine-neutrality lint) is the intended
+  enforcement.
 - `engram-graph-analytics` owns pure, dependency-free graph algorithms only
   (PageRank, betweenness, communities, reachability). It must not depend on
   `engram-domain`, storage, or any infrastructure; callers map domain edges to a

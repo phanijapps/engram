@@ -980,6 +980,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-memory-mcp"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "engram-domain",
+ "engram-integration",
+ "engram-memory",
+ "engram-runtime",
+ "futures",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "engram-node"
 version = "0.1.0"
 dependencies = [

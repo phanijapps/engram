@@ -29,6 +29,7 @@ members = [
     "codegraph/queries",
     "codegraph/temporal",
     "codegraph/mcp-server",
+    "memory/mcp-server",
 ]
 resolver = "3"
 

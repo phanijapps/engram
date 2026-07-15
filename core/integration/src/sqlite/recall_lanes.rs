@@ -25,14 +25,51 @@
 
 use std::sync::Arc;
 
-use engram_domain::{ChunkId, KnowledgeChunk, RetrievalRequest, RetrievalTargetType, Scope};
+use async_trait::async_trait;
+use engram_domain::{
+    ChunkId, KnowledgeChunk, KnowledgeEntity, KnowledgeRelationship, RetrievalRequest,
+    RetrievalTargetType, Scope,
+};
 use engram_knowledge::KnowledgeRepository;
+use engram_retrieval::RetrievalIndex;
 use engram_runtime::CoreResult;
+use engram_store_associative_graph::{AssociativeGraphIndex, GraphRelationshipSource};
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use engram_store_lexical::{LexicalResolvedTarget, LexicalTargetResolver};
 #[cfg(feature = "fastembed")]
 use engram_store_vector::{VectorResolvedTarget, VectorSearchResult, VectorTargetResolver};
 use futures::executor::block_on;
+
+/// Orphan-rule wrapper adapting `SqlKnowledgeStore` to the associative-graph
+/// edge source (mirrors `bindings/node/src/knowledge_fusion.rs`). A bare
+/// `impl GraphRelationshipSource for SqlKnowledgeStore` is forbidden in this
+/// crate (neither the trait nor the store type is local); this newtype is the
+/// local type the impl hangs on.
+pub(crate) struct KnowledgeRelationshipSource(pub(crate) Arc<SqlKnowledgeStore>);
+
+#[async_trait]
+impl GraphRelationshipSource for KnowledgeRelationshipSource {
+    async fn entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>> {
+        self.0.list_entities(scope).await
+    }
+    async fn relationships(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeRelationship>> {
+        self.0.list_relationships(scope).await
+    }
+}
+
+/// Builds the associative-graph retrieval lane over a knowledge store: the
+/// `RetrievalIndex` that ranks entities by Personalized PageRank seeded at query
+/// entities. Exposed `pub` (its signature names `SqlKnowledgeStore`, an engine
+/// type — acceptable because it lives in the engine-specific `sqlite` mod, the
+/// ADR-0022 exempt zone) so the conformance tests construct the lane directly
+/// and assert lane-level behavior in isolation from `bootstrap_sqlite`; the
+/// production bootstrap consumes it via the same call. One orphan-rule newtype,
+/// no per-consumer wrapper duplication.
+pub fn associative_recall_lane(store: Arc<SqlKnowledgeStore>) -> Arc<dyn RetrievalIndex> {
+    Arc::new(AssociativeGraphIndex::new(Arc::new(
+        KnowledgeRelationshipSource(store),
+    )))
+}
 
 /// Lexical-lane target resolver backed by the knowledge store: rehydrates a
 /// BM25 hit's chunk id into its canonical `KnowledgeChunk`.

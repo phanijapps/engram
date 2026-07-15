@@ -27,7 +27,9 @@ use crate::knowledge_documents::put_document_json;
 use crate::knowledge_entities::{
     get_entity_json, list_entities_by_source_json, list_entities_json, put_entity_json,
 };
-use crate::knowledge_fusion::{fuse_rrf_ids_json, fuse_rrf_json, graph_candidates_json};
+use crate::knowledge_fusion::{
+    associative_graph_candidates_json, fuse_rrf_ids_json, fuse_rrf_json, graph_candidates_json,
+};
 use crate::knowledge_graph::{
     get_graph_json, list_graphs_json, neighbors_json, put_graph_json, validate_graph_json,
 };
@@ -77,6 +79,15 @@ impl NativeKnowledgeEngine {
     #[napi(js_name = "graphCandidatesJson")]
     pub fn graph_candidates_json(&self, request_json: String) -> Result<String> {
         graph_candidates_json(&self.store, request_json)
+    }
+
+    /// Retrieval-composition seam (RFC-0005): associative (Personalized
+    /// PageRank) graph-ranked Entity candidates for a request, as
+    /// `RetrievalResult` JSON tagged `source = "associative_graph"`, ready to
+    /// RRF-fuse with graph/vector/lexical candidates.
+    #[napi(js_name = "associativeGraphCandidatesJson")]
+    pub fn associative_graph_candidates_json(&self, request_json: String) -> Result<String> {
+        associative_graph_candidates_json(&self.store, request_json)
     }
 
     // --- Codegraph queries (RFC-0012, on top of engram) ---

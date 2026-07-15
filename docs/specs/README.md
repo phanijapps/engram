@@ -27,6 +27,19 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   Personalized PageRank seeded at query entities (HippoRAG-style), behind an
   injected `GraphRelationshipSource` trait. Adds `personalized_pagerank` to
   `engram-graph-analytics`. No contract change. **Shipped (adapter unit).**
+- [`associative-graph-wiring`](associative-graph-wiring/spec.md): wire the
+  associative-graph adapter into the live TS/N-API binding — a
+  `SqlKnowledgeStore`-backed `GraphRelationshipSource` (orphan-rule newtype in
+  `bindings/node`), `associativeGraphCandidatesJson` binding + transport method,
+  and the pre-existing `packages/node` + `packages/client` typecheck-debt fix.
+  No contract change. Rust SDK facade wiring deferred. **Shipped.**
+- [`associative-graph-facade-wiring`](associative-graph-facade-wiring/spec.md):
+  wire the associative-graph adapter into the Rust SDK facade (`EngramProvider`)
+  as a unified-recall lane — an orphan-rule `KnowledgeRelationshipSource` newtype
+  + `associative_recall_lane` over `SqlKnowledgeStore`, pushed in
+  `bootstrap.rs`. No contract change. Closes the AGENTS.md surface-parity gap for
+  associative (now reachable via both `engram-integration` and the N-API binding).
+  **Shipped.**
 - [`graph-analytics`](graph-analytics/spec.md): a std-only graph-analytics crate
   (`engram-graph-analytics`) with PageRank + betweenness (Brandes) + communities
   (single-level Louvain) + reachability primitives (`in_degree`, `ancestors`,

@@ -54,9 +54,12 @@ describe("@engram/client native transport", () => {
           listGraphsJson(): string { return "[]"; }
           listEntitiesJson(): string { return "[]"; }
           listRelationshipsJson(): string { return "[]"; }
+          listEntitiesBySourceJson(): string { return "[]"; }
+          listRelationshipsBySourceJson(): string { return "[]"; }
           listChunksJson(): string { return "[]"; }
           listSourcesJson(): string { return "[]"; }
           graphCandidatesJson(): string { return "[]"; }
+          associativeGraphCandidatesJson(): string { return "[]"; }
           fuseRrfJson(): string { return "[]"; }
           fuseRrfIdsJson(): string { return "[]"; }
         },

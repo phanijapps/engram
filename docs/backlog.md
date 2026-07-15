@@ -179,14 +179,10 @@ Most items shipped (A1-A2, B1-B8, C1-C9, D3-D4, D6-D8). What remains:
 
 ## associative-graph-retrieval
 
-- **Wiring follow-up (follow-up spec `associative-graph-wiring`):** the
-  `associative-graph-retrieval` slice ships the adapter unit only — the PPR
-  algorithm (`engram-graph-analytics`) + the `engram-store-associative-graph`
-  `RetrievalIndex` adapter + the `GraphRelationshipSource` trait + unit tests. It
-  is not yet composed into the live retrieval pipeline. Wiring = a
-  `GraphRelationshipSource` impl backed by `SqlKnowledgeStore` (wraps
-  `list_entities` / `list_relationships` with `scope_allows`) + composing the
-  index into the N-API bindings / provider (`graph_candidates`-style seam) so
-  agents receive associative candidates end-to-end. Blocked on: nothing
-  technical; unblocked by the follow-up spec. The slice's AC5 source
-  `scope_allows` filtering and the live end-to-end path are verified there.
+- **Surface-parity lint (follow-up):** associative retrieval is fully shipped
+  across both surfaces (adapter unit → N-API binding → Rust SDK facade
+  unified-recall lane). Open: a `check-surface-parity.sh` lint to mechanically
+  enforce the new AGENTS.md surface-parity rule (every capability reachable via
+  both `engram-integration` and the N-API binding), mirroring
+  `check-engine-neutrality.sh`. Blocked on: nothing; unblocked by a small
+  tooling slice.

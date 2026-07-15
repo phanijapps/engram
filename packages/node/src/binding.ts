@@ -40,6 +40,7 @@ export interface NativeKnowledgeEngineBinding {
   validateGraphJson(requestJson: string): string;
   validateTaxonomyProposalJson(requestJson: string): string;
   graphCandidatesJson(requestJson: string): string;
+  associativeGraphCandidatesJson(requestJson: string): string;
   fuseRrfJson(requestJson: string): string;
   fuseRrfIdsJson(requestJson: string): string;
 }

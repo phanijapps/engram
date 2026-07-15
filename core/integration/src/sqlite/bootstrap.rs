@@ -265,6 +265,11 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         retrieval_lanes.push(Arc::new(
             engram_store_knowledge_sqlite::GraphRetrievalIndex::new(knowledge_handle.clone()),
         ));
+        // Associative-graph lane: PPR-ranked entities over the knowledge graph
+        // (HippoRAG-style), fused alongside the other unified-recall lanes.
+        retrieval_lanes.push(recall_lanes::associative_recall_lane(
+            knowledge_handle.clone(),
+        ));
         // Lexical lane: an in-RAM Tantivy index (no ingest feed wired here) +
         // a knowledge-store-backed target resolver.
         if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::new() {

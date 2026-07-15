@@ -933,6 +933,7 @@ dependencies = [
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
+ "engram-store-associative-graph",
  "engram-store-belief-sqlite",
  "engram-store-hierarchy-sqlite",
  "engram-store-knowledge-sqlite",
@@ -982,6 +983,7 @@ dependencies = [
 name = "engram-node"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "engram-codegraph-queries",
  "engram-conformance",
@@ -993,6 +995,7 @@ dependencies = [
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
+ "engram-store-associative-graph",
  "engram-store-belief-sqlite",
  "engram-store-knowledge-sqlite",
  "engram-store-lexical",

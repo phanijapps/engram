@@ -29,6 +29,7 @@ core/                      Storage-neutral Rust crates.
   belief/                  Belief synthesis, contradiction, and bi-temporal ports.
   hierarchy/               Hierarchy build, navigation, and aggregate ports.
   consolidation/           Consolidation planning, gated mutation, decay, audit.
+  reflection/              Reflection synthesizer + consolidation executor (derived beliefs).
   retrieval/               Retrieval composition and fusion ports.
   orchestration/           Orchestration facade and compatibility re-exports.
   integration/             SDK facade: EngramProvider, EngramConfig, CapabilityReport.

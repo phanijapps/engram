@@ -9,6 +9,7 @@ members = [
     "core/eval",
     "core/belief",
     "core/consolidation",
+    "core/reflection",
     "core/hierarchy",
     "core/integration",
     "core/graph-analytics",

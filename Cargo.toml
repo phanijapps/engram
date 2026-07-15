@@ -19,6 +19,7 @@ members = [
     "adapters/retrieval/sqlite-vec",
     "adapters/retrieval/tantivy-lexical",
     "adapters/retrieval/cross-encoder-rerank",
+    "adapters/retrieval/associative-graph",
     "adapters/orchestration/belief-sqlite",
     "adapters/hierarchy/sqlite",
     "bindings/node",

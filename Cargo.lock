@@ -1038,6 +1038,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-store-associative-graph"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-domain",
+ "engram-graph-analytics",
+ "engram-retrieval",
+ "engram-runtime",
+ "futures",
+ "serde_json",
+]
+
+[[package]]
 name = "engram-store-belief-sqlite"
 version = "0.1.0"
 dependencies = [

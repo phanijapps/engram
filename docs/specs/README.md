@@ -21,6 +21,12 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   `RerankStrategy::CrossEncoder` — reorders fused candidates by an injected
   `RerankScorer`, stamps `FusionTrace`. No contract change. Codegraph-parity B2.
   **Shipped (adapter unit).**
+- [`associative-graph-retrieval`](associative-graph-retrieval/spec.md): an
+  associative `RetrievalIndex` adapter (`engram-store-associative-graph`) for the
+  already-accepted `RetrievalMode::Graph` — ranks knowledge-graph entities by
+  Personalized PageRank seeded at query entities (HippoRAG-style), behind an
+  injected `GraphRelationshipSource` trait. Adds `personalized_pagerank` to
+  `engram-graph-analytics`. No contract change. **Shipped (adapter unit).**
 - [`graph-analytics`](graph-analytics/spec.md): a std-only graph-analytics crate
   (`engram-graph-analytics`) with PageRank + betweenness (Brandes) + communities
   (single-level Louvain) + reachability primitives (`in_degree`, `ancestors`,

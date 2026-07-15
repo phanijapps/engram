@@ -9,7 +9,8 @@
 use std::io::{self, BufRead, Write};
 
 use engram_domain::{
-    Actor, ActorKind, AllowedUse, DeleteMode, Id, MemoryContent, MemoryKind, Policy, Provenance,
+    Actor, ActorKind, AllowedUse, DeleteMode, EntityKind, EntityRef, ForgetRequest, Id,
+    KnowledgeEntity, KnowledgeRelationship, MemoryContent, MemoryKind, Policy, Provenance,
     Retention, RetrievalRequest, Scope, Sensitivity, Visibility, WriteMemoryRequest,
 };
 use engram_integration::{
@@ -115,6 +116,46 @@ fn tools_list() -> Vec<Value> {
                 "required": ["query"]
             }
         }),
+        json!({
+            "name": "forget",
+            "description": "Delete, redact, or tombstone a memory by its target ID.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "target_id": { "type": "string", "description": "The memory ID to forget." },
+                    "mode": { "type": "string", "description": "delete | redact | tombstone | archive (default: tombstone)" },
+                    "tenant": { "type": "string" }
+                },
+                "required": ["target_id"]
+            }
+        }),
+        json!({
+            "name": "put_entity",
+            "description": "Add an entity to the knowledge graph.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string" },
+                    "kind": { "type": "string", "description": "Person, Organization, Project, Concept, etc." },
+                    "tenant": { "type": "string" }
+                },
+                "required": ["name"]
+            }
+        }),
+        json!({
+            "name": "put_relationship",
+            "description": "Add a relationship between two entities in the knowledge graph.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "subject": { "type": "string" },
+                    "predicate": { "type": "string", "description": "works_at, owns, related_to, etc." },
+                    "object": { "type": "string" },
+                    "tenant": { "type": "string" }
+                },
+                "required": ["subject", "predicate", "object"]
+            }
+        }),
     ]
 }
 
@@ -122,6 +163,9 @@ fn handle_tool(name: &str, args: &Value, provider: &EngramProvider) -> String {
     match name {
         "write_memory" => handle_write_memory(args, provider),
         "recall" => handle_recall(args, provider),
+        "forget" => handle_forget(args, provider),
+        "put_entity" => handle_put_entity(args, provider),
+        "put_relationship" => handle_put_relationship(args, provider),
         _ => format!("Unknown tool: {name}"),
     }
 }
@@ -240,6 +284,118 @@ fn handle_recall(args: &Value, provider: &EngramProvider) -> String {
             }
         }
         Err(e) => format!("Recall failed: {e}"),
+    }
+}
+
+fn default_provenance() -> Provenance {
+    Provenance {
+        source: "engram-memory-mcp".to_owned(),
+        actor: system_actor(),
+        observed_at: chrono::Utc::now(),
+        evidence: Vec::new(),
+        derivations: Vec::new(),
+        confidence: Some(1.0),
+        method: Some("mcp".to_owned()),
+    }
+}
+
+fn handle_forget(args: &Value, provider: &EngramProvider) -> String {
+    let target_id = args["target_id"].as_str().unwrap_or("");
+    let tenant = args["tenant"].as_str().unwrap_or("default");
+    let mode = match args["mode"].as_str().unwrap_or("tombstone") {
+        "delete" => DeleteMode::Delete,
+        "redact" => DeleteMode::Redact,
+        "archive" => DeleteMode::Archive,
+        _ => DeleteMode::Tombstone,
+    };
+    let memory = match provider.require_memory() {
+        Ok(h) => h,
+        Err(e) => return format!("Memory not available: {e}"),
+    };
+    let request = ForgetRequest {
+        target_type: engram_domain::ForgetTargetType::Memory,
+        target_id: target_id.to_owned(),
+        scope: default_scope(tenant),
+        requester: engram_domain::Requester {
+            actor: system_actor(),
+            roles: Vec::new(),
+            permissions: Vec::new(),
+            on_behalf_of: None,
+        },
+        mode,
+        reason: None,
+    };
+    match block_on(memory.forget(request)) {
+        Ok(r) => serde_json::to_string_pretty(&r).unwrap_or_else(|_| "OK".to_owned()),
+        Err(e) => format!("Forget failed: {e}"),
+    }
+}
+
+fn handle_put_entity(args: &Value, provider: &EngramProvider) -> String {
+    let name = args["name"].as_str().unwrap_or("");
+    let tenant = args["tenant"].as_str().unwrap_or("default");
+    let knowledge = match provider.require_knowledge() {
+        Ok(h) => h,
+        Err(e) => return format!("Knowledge not available: {e}"),
+    };
+    let entity = KnowledgeEntity {
+        id: Id::from(name),
+        graph_id: None,
+        kind: EntityKind::Concept,
+        name: name.to_owned(),
+        aliases: Vec::new(),
+        scope: default_scope(tenant),
+        source_refs: Vec::new(),
+        concept_refs: Vec::new(),
+        ontology_class_refs: Vec::new(),
+        provenance: default_provenance(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        valid_from: None,
+        valid_until: None,
+        metadata: None,
+    };
+    match block_on(knowledge.put_entity(entity)) {
+        Ok(e) => format!("Entity '{}' stored.", e.name),
+        Err(e) => format!("Put entity failed: {e}"),
+    }
+}
+
+fn handle_put_relationship(args: &Value, provider: &EngramProvider) -> String {
+    let subject = args["subject"].as_str().unwrap_or("");
+    let predicate = args["predicate"].as_str().unwrap_or("");
+    let object = args["object"].as_str().unwrap_or("");
+    let tenant = args["tenant"].as_str().unwrap_or("default");
+    let knowledge = match provider.require_knowledge() {
+        Ok(h) => h,
+        Err(e) => return format!("Knowledge not available: {e}"),
+    };
+    let rel = KnowledgeRelationship {
+        id: Id::from(format!("{subject}-{predicate}-{object}")),
+        graph_id: None,
+        subject: EntityRef {
+            id: Some(Id::from(subject)),
+            kind: None,
+            name: Some(subject.to_owned()),
+            aliases: Vec::new(),
+        },
+        predicate: predicate.to_owned(),
+        object: EntityRef {
+            id: Some(Id::from(object)),
+            kind: None,
+            name: Some(object.to_owned()),
+            aliases: Vec::new(),
+        },
+        scope: default_scope(tenant),
+        evidence: Vec::new(),
+        confidence: None,
+        provenance: default_provenance(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+    };
+    match block_on(knowledge.put_relationship(rel)) {
+        Ok(_) => format!("{subject} -[{predicate}]-> {object} stored."),
+        Err(e) => format!("Put relationship failed: {e}"),
     }
 }
 

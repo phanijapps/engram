@@ -7,8 +7,8 @@ ergonomics, and infrastructure lives behind adapters.
 
 ## Current Rule
 
-Do not add runtime manifests or implementation code until
-`docs/adr/0003-implementation-stack.md` exists. Before implementation work, run:
+The implementation stack is accepted (`docs/adr/0003-implementation-stack.md`,
+Status: Accepted). Before implementation work, run:
 
 ```bash
 .codex/hooks/pre-implementation-check.sh
@@ -26,8 +26,12 @@ core/                      Storage-neutral Rust crates.
   runtime/                 Shared errors, result type, clocks, ids, policy gates.
   memory/                  Memory service and repository ports.
   knowledge/               Knowledge, graph, ontology, source, ingestion ports.
+  belief/                  Belief synthesis, contradiction, and bi-temporal ports.
+  hierarchy/               Hierarchy build, navigation, and aggregate ports.
+  consolidation/           Consolidation planning, gated mutation, decay, audit.
   retrieval/               Retrieval composition and fusion ports.
   orchestration/           Orchestration facade and compatibility re-exports.
+  integration/             SDK facade: EngramProvider, EngramConfig, CapabilityReport.
   eval/                    Deterministic fixtures and regression harness.
   graph-analytics/         Pure graph algorithms (PageRank, betweenness, communities, reachability).
 
@@ -35,9 +39,13 @@ adapters/                  Replaceable infrastructure crates.
   ingest/                  Filesystem/Git ingestion adapter until split.
   memory/sqlite/           SQLite memory persistence adapter.
   knowledge/sqlite/        SQLite knowledge, graph, taxonomy, and ontology adapter.
+  hierarchy/sqlite/        SQLite hierarchy persistence adapter.
+  orchestration/belief-sqlite/  SQLite belief and contradiction persistence adapter.
   retrieval/sqlite-vec/    sqlite-vec retrieval index adapter.
   retrieval/tantivy-lexical/       BM25 lexical retrieval index adapter (keyword mode).
   retrieval/cross-encoder-rerank/  Cross-encoder reranker adapter.
+  retrieval/associative-graph/     Associative (Personalized PageRank) retrieval index adapter.
+  integration/             Backend recipe / conformance composition (SQLite wiring until backends/ split).
 
 backends/                  Backend recipe crates (ADR-0022). A *backend* is one
   sqlite/                  recipe that composes adapter cells + owns connection
@@ -53,6 +61,8 @@ bindings/                  Native language bridges.
 codegraph/                 On-top codegraph layer (RFC-0012): code-specific
   queries/                 crates built on engram (dead-code / blast-radius /
                            dependency-path over call edges).
+  temporal/                Temporal scoring (recent / impact / compound) over versioned symbols.
+  mcp-server/              MCP server exposing codegraph queries to AI agents.
 
 packages/                  TypeScript workspace.
   contracts/               Generated TypeScript types and schemas.
@@ -62,8 +72,8 @@ packages/                  TypeScript workspace.
   eval/                    Fixture authoring helpers and CLI wrappers.
 ```
 
-Existing placeholder folders under `packages/` may be renamed to this shape when
-the stack ADR is accepted.
+The `packages/` workspace already matches this shape (adapters, client,
+contracts, eval, node) now that the stack ADR (ADR-0003) is accepted.
 
 ## Boundary Rules
 

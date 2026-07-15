@@ -34,6 +34,7 @@ use engram_knowledge::KnowledgeRepository;
 use engram_retrieval::RetrievalIndex;
 use engram_runtime::CoreResult;
 use engram_store_associative_graph::{AssociativeGraphIndex, GraphRelationshipSource};
+use engram_store_community_summary::CommunitySummaryIndex;
 use engram_store_knowledge_sqlite::SqlKnowledgeStore;
 use engram_store_lexical::{LexicalResolvedTarget, LexicalTargetResolver};
 #[cfg(feature = "fastembed")]
@@ -67,6 +68,14 @@ impl GraphRelationshipSource for KnowledgeRelationshipSource {
 /// no per-consumer wrapper duplication.
 pub fn associative_recall_lane(store: Arc<SqlKnowledgeStore>) -> Arc<dyn RetrievalIndex> {
     Arc::new(AssociativeGraphIndex::new(Arc::new(
+        KnowledgeRelationshipSource(store),
+    )))
+}
+
+/// Builds the community-summary retrieval lane (GraphRAG-style) over a
+/// knowledge store. Mirrors [`associative_recall_lane`].
+pub fn community_summary_recall_lane(store: Arc<SqlKnowledgeStore>) -> Arc<dyn RetrievalIndex> {
+    Arc::new(CommunitySummaryIndex::new(Arc::new(
         KnowledgeRelationshipSource(store),
     )))
 }

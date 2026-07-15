@@ -31,6 +31,7 @@ engram-store-hierarchy-sqlite = { path = "../../adapters/hierarchy/sqlite", opti
 engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical", optional = true }
 engram-store-vector = { path = "../../adapters/retrieval/sqlite-vec", optional = true }
 engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph", optional = true }
+engram-store-community-summary = { path = "../../adapters/retrieval/community-summary", optional = true }
 engram-ingest = { path = "../../adapters/ingest", optional = true }
 chrono = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
@@ -63,6 +64,7 @@ sqlite = [
     "dep:engram-store-lexical",
     "dep:engram-store-vector",
     "dep:engram-store-associative-graph",
+    "dep:engram-store-community-summary",
     "dep:engram-ingest",
     "dep:chrono",
     "dep:futures",

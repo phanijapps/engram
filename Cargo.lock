@@ -935,6 +935,7 @@ dependencies = [
  "engram-runtime",
  "engram-store-associative-graph",
  "engram-store-belief-sqlite",
+ "engram-store-community-summary",
  "engram-store-hierarchy-sqlite",
  "engram-store-knowledge-sqlite",
  "engram-store-lexical",

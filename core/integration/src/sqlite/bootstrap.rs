@@ -270,6 +270,10 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         retrieval_lanes.push(recall_lanes::associative_recall_lane(
             knowledge_handle.clone(),
         ));
+        // Community-summary lane (GraphRAG): community detection + summary ranking.
+        retrieval_lanes.push(recall_lanes::community_summary_recall_lane(
+            knowledge_handle.clone(),
+        ));
         // Lexical lane: an in-RAM Tantivy index (no ingest feed wired here) +
         // a knowledge-store-backed target resolver.
         if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::new() {

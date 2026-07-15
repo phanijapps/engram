@@ -1010,6 +1010,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-reflection"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-belief",
+ "engram-consolidation",
+ "engram-domain",
+ "engram-runtime",
+ "futures",
+]
+
+[[package]]
 name = "engram-rerank-cross-encoder"
 version = "0.1.0"
 dependencies = [
@@ -1067,6 +1080,20 @@ dependencies = [
  "rusqlite",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "engram-store-community-summary"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-domain",
+ "engram-graph-analytics",
+ "engram-retrieval",
+ "engram-runtime",
+ "engram-store-associative-graph",
+ "futures",
 ]
 
 [[package]]

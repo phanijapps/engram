@@ -46,6 +46,7 @@ adapters/                  Replaceable infrastructure crates.
   retrieval/tantivy-lexical/       BM25 lexical retrieval index adapter (keyword mode).
   retrieval/cross-encoder-rerank/  Cross-encoder reranker adapter.
   retrieval/associative-graph/     Associative (Personalized PageRank) retrieval index adapter.
+  retrieval/community-summary/     Community-summary (GraphRAG) retrieval index adapter.
   integration/             Backend recipe / conformance composition (SQLite wiring until backends/ split).
 
 backends/                  Backend recipe crates (ADR-0022). A *backend* is one

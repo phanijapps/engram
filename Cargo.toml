@@ -21,6 +21,7 @@ members = [
     "adapters/retrieval/tantivy-lexical",
     "adapters/retrieval/cross-encoder-rerank",
     "adapters/retrieval/associative-graph",
+    "adapters/retrieval/community-summary",
     "adapters/orchestration/belief-sqlite",
     "adapters/hierarchy/sqlite",
     "bindings/node",

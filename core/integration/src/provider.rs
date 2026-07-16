@@ -36,7 +36,7 @@ use crate::{
 /// hierarchy, retrieval, vectors, migration — through backend-neutral
 /// `Arc<dyn ...>` handles, with no engine-specific types in scope.
 ///
-/// Read the [`CapabilityReport`] (18 keys) via [`capabilities`](Self::capabilities)
+/// Read the [`CapabilityReport`] (19 keys) via [`capabilities`](Self::capabilities)
 /// before using a family: each handle is `Some` only when that family's
 /// conformance fixture passed during bootstrap; otherwise the family is reported
 /// [`CapabilityState::Unsupported`] with a stable reason code and the handle is

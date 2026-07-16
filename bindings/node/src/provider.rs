@@ -78,7 +78,7 @@ impl NativeProvider {
         Ok(Self { inner: provider })
     }
 
-    /// Returns the capability report (18 keys) as a JSON string.
+    /// Returns the capability report (19 keys) as a JSON string.
     #[napi(js_name = "capabilitiesJson")]
     pub fn capabilities_json(&self) -> Result<String> {
         encode(self.inner.capabilities())

@@ -151,6 +151,8 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut atomic_batch_state = failed();
     // unified_recall is a shipped capability (S4).
     let mut unified_recall_state = failed();
+    // consolidation is a shipped capability.
+    let mut consolidation_state = failed();
     // export_import is a shipped capability (S5).
     let mut export_import_state = failed();
 
@@ -345,6 +347,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             decay_executor,
         ]));
         consolidation = Some(Arc::new(ExecutorConsolidationService::new(composite)));
+        consolidation_state = CapabilityState::Supported;
     }
 
     // Hierarchy.
@@ -456,6 +459,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         .unified_recall(unified_recall_state)
         .export_import(export_import_state)
         .observability(observability_state)
+        .consolidation(consolidation_state)
         .build();
 
     // Construct the SqlObservability handle from the wired concrete stores +

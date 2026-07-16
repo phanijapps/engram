@@ -14,8 +14,8 @@ use serde::{Deserialize, Serialize};
 /// machine-readable and stable; each capability state includes a reason code
 /// explaining why a feature is not supported.
 ///
-/// The 18 keys cover every capability area named in the host-SDK brief. The
-/// 8 "not-yet-built" areas (hybrid search, episodes/evidence, contradiction,
+/// The 19 keys cover every capability area named in the host-SDK brief plus
+/// consolidation. The 8 "not-yet-built" areas (hybrid search, episodes/evidence, contradiction,
 /// atomic batch, unified recall, export/import, maintenance, observability)
 /// default to [`CapabilityState::Unsupported`] with
 /// [`CapabilityReason::FeatureDisabled`] until their implementation slices
@@ -75,6 +75,18 @@ pub struct CapabilityReport {
 
     /// Operational introspection (status, counts, index/embedding diagnostics).
     pub observability: CapabilityState,
+
+    /// Consolidation: reflection (derived beliefs) + decay (expiry) + composite
+    /// executor dispatch. Wired when both memory + belief stores are available.
+    #[serde(default = "default_consolidation")]
+    pub consolidation: CapabilityState,
+}
+
+/// Serde default for the `consolidation` field — `Unsupported { FeatureDisabled }`.
+fn default_consolidation() -> CapabilityState {
+    CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    }
 }
 
 impl CapabilityReport {
@@ -98,7 +110,8 @@ impl CapabilityReport {
             unified_recall: state.clone(),
             export_import: state.clone(),
             maintenance: state.clone(),
-            observability: state,
+            observability: state.clone(),
+            consolidation: state,
         }
     }
 
@@ -125,6 +138,7 @@ impl CapabilityReport {
             && self.export_import.is_supported()
             && self.maintenance.is_supported()
             && self.observability.is_supported()
+            && self.consolidation.is_supported()
     }
 
     /// Returns true if memory operations are supported.
@@ -217,6 +231,11 @@ impl CapabilityReport {
         self.observability.is_supported()
     }
 
+    /// Returns true if consolidation (reflection + decay) is supported.
+    pub fn consolidation_supported(&self) -> bool {
+        self.consolidation.is_supported()
+    }
+
     /// Creates a builder for incrementally constructing capability reports.
     pub fn builder() -> CapabilityReportBuilder {
         CapabilityReportBuilder::new()
@@ -271,7 +290,8 @@ impl CapabilityReportBuilder {
                 unified_recall: feature_disabled.clone(),
                 export_import: feature_disabled.clone(),
                 maintenance: feature_disabled.clone(),
-                observability: feature_disabled,
+                observability: feature_disabled.clone(),
+                consolidation: feature_disabled,
             },
         }
     }
@@ -384,6 +404,12 @@ impl CapabilityReportBuilder {
         self
     }
 
+    /// Sets the consolidation capability state.
+    pub fn consolidation(mut self, state: CapabilityState) -> Self {
+        self.report.consolidation = state;
+        self
+    }
+
     /// Builds the final capability report.
     pub fn build(self) -> CapabilityReport {
         self.report
@@ -448,9 +474,9 @@ mod tests {
     }
 
     #[test]
-    fn test_capability_report_includes_all_eighteen_keys() {
+    fn test_capability_report_includes_all_nineteen_keys() {
         let report = CapabilityReport::new(CapabilityState::Supported);
-        // Verify all 18 capability keys are present in the serialized report.
+        // Verify all 19 capability keys are present in the serialized report.
         let json = serde_json::to_string(&report).unwrap();
         for key in [
             "memory",
@@ -471,6 +497,7 @@ mod tests {
             "export_import",
             "maintenance",
             "observability",
+            "consolidation",
         ] {
             assert!(
                 json.contains(key),

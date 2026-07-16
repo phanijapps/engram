@@ -7,6 +7,7 @@
 //! orchestration. Concrete mutation algorithms stay behind the executor trait,
 //! implemented by adapters.
 
+mod composite;
 mod consolidation;
 
 use async_trait::async_trait;
@@ -14,6 +15,7 @@ use engram_domain::*;
 use engram_eval::{EvaluationReport, EvaluationRunner};
 use engram_runtime::{Clock, CoreError, CoreResult, IdGenerator};
 
+pub use composite::{CompositeConsolidationExecutor, ebbinghaus_retention};
 pub use consolidation::{
     AllowAllConsolidationApplyGate, ConsolidationApplyGate, ConsolidationMutationExecutor,
     ConsolidationMutationOutcome, DryRunConsolidationService, GatedConsolidationService,

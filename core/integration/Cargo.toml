@@ -12,6 +12,9 @@ engram-knowledge = { path = "../knowledge" }
 engram-hierarchy = { path = "../hierarchy" }
 engram-belief = { path = "../belief" }
 engram-retrieval = { path = "../retrieval" }
+engram-consolidation = { path = "../consolidation", optional = true }
+engram-reflection = { path = "../reflection", optional = true }
+engram-eval = { path = "../eval", optional = true }
 async-trait.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -32,6 +35,7 @@ engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical", opti
 engram-store-vector = { path = "../../adapters/retrieval/sqlite-vec", optional = true }
 engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph", optional = true }
 engram-store-community-summary = { path = "../../adapters/retrieval/community-summary", optional = true }
+engram-decay = { path = "../../adapters/consolidation/decay", optional = true }
 engram-ingest = { path = "../../adapters/ingest", optional = true }
 chrono = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
@@ -65,6 +69,10 @@ sqlite = [
     "dep:engram-store-vector",
     "dep:engram-store-associative-graph",
     "dep:engram-store-community-summary",
+    "dep:engram-consolidation",
+    "dep:engram-reflection",
+    "dep:engram-eval",
+    "dep:engram-decay",
     "dep:engram-ingest",
     "dep:chrono",
     "dep:futures",

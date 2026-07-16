@@ -16,6 +16,7 @@
 mod batch;
 mod bootstrap;
 mod conformance;
+mod consolidation_adapters;
 mod export_import;
 mod migration_service;
 mod observability;

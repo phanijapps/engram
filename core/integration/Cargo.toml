@@ -12,7 +12,7 @@ engram-knowledge = { path = "../knowledge" }
 engram-hierarchy = { path = "../hierarchy" }
 engram-belief = { path = "../belief" }
 engram-retrieval = { path = "../retrieval" }
-engram-consolidation = { path = "../consolidation", optional = true }
+engram-consolidation = { path = "../consolidation" }
 engram-reflection = { path = "../reflection", optional = true }
 engram-eval = { path = "../eval", optional = true }
 async-trait.workspace = true
@@ -69,7 +69,6 @@ sqlite = [
     "dep:engram-store-vector",
     "dep:engram-store-associative-graph",
     "dep:engram-store-community-summary",
-    "dep:engram-consolidation",
     "dep:engram-reflection",
     "dep:engram-eval",
     "dep:engram-decay",

@@ -22,6 +22,8 @@ use engram_retrieval::{RetrievalIndex, VectorIndex};
 use engram_runtime::{CoreError, CoreResult};
 use std::sync::Arc;
 
+use engram_consolidation::ConsolidationService;
+
 use crate::{
     batch::BatchIngest, capability::CapabilityReport, config::EngramConfig,
     embedding::EmbeddingProvider, export_import::ExportImport, migration::MigrationService,
@@ -65,6 +67,7 @@ pub struct EngramProvider {
     recall: Option<Arc<dyn UnifiedRecall>>,
     export_import: Option<Arc<dyn ExportImport>>,
     observability: Option<Arc<dyn Observability>>,
+    consolidation: Option<Arc<dyn ConsolidationService>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -280,6 +283,11 @@ impl EngramProvider {
         self.observability.as_ref()
     }
 
+    /// Returns the consolidation service handle, if wired.
+    pub fn consolidation(&self) -> Option<&Arc<dyn ConsolidationService>> {
+        self.consolidation.as_ref()
+    }
+
     // ---- require_*: error-on-absent variants for hosts that prefer a typed
     // error over `Option` unwrapping. Each returns `CapabilityUnsupported` when
     // the handle is not wired, naming the capability so callers can branch on a
@@ -431,6 +439,15 @@ impl EngramProvider {
                 reason: "not wired".to_string(),
             })
     }
+
+    /// Returns the consolidation handle or an error if not wired.
+    pub fn require_consolidation(&self) -> CoreResult<&Arc<dyn ConsolidationService>> {
+        self.consolidation()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "consolidation".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
     pub fn schema_version(&self) -> &str {
         &self.schema_version
     }
@@ -489,6 +506,7 @@ impl EngramProvider {
             recall: None,
             export_import: None,
             observability: None,
+            consolidation: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -520,6 +538,7 @@ pub struct EngramProviderBuilder {
     recall: Option<Arc<dyn UnifiedRecall>>,
     export_import: Option<Arc<dyn ExportImport>>,
     observability: Option<Arc<dyn Observability>>,
+    consolidation: Option<Arc<dyn ConsolidationService>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -545,6 +564,7 @@ impl EngramProviderBuilder {
             recall: None,
             export_import: None,
             observability: None,
+            consolidation: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -646,6 +666,12 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Sets the consolidation service handle.
+    pub fn consolidation(mut self, handle: Arc<dyn ConsolidationService>) -> Self {
+        self.consolidation = Some(handle);
+        self
+    }
+
     /// Sets the storage schema version reported by provider diagnostics.
     pub fn schema_version(mut self, version: impl Into<String>) -> Self {
         self.schema_version = version.into();
@@ -678,6 +704,7 @@ impl EngramProviderBuilder {
             recall: self.recall,
             export_import: self.export_import,
             observability: self.observability,
+            consolidation: self.consolidation,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }

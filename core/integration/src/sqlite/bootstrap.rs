@@ -37,7 +37,14 @@ use super::recall_lanes;
 use super::{
     SqlBatchIngest, SqlExportImport, SqlMigrationService, SqlObservability, SqlProvenanceQuery,
     SqlUnifiedRecall,
+    consolidation_adapters::{
+        ActiveMemorySourceAdapter, BeliefSinkAdapter, DecayMemorySourceAdapter,
+        ExecutorConsolidationService,
+    },
 };
+use engram_consolidation::{CompositeConsolidationExecutor, ConsolidationService};
+use engram_decay::DecayExecutor;
+use engram_reflection::{ReflectionExecutor, ReflectionSynthesizer};
 
 /// Storage schema version reported by provider diagnostics.
 const SCHEMA_VERSION: &str = "2026.01";
@@ -162,6 +169,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut migration: Option<Arc<dyn crate::MigrationService>> = None;
     let mut export_import: Option<Arc<dyn crate::ExportImport>> = None;
     let mut observability: Option<Arc<dyn crate::Observability>> = None;
+    let mut consolidation: Option<Arc<dyn ConsolidationService>> = None;
     // Concrete Sql* handles, kept alongside the trait handles so the batch /
     // export / observability adapters (which compose the concrete stores) can be
     // wired without a trait-to-concrete downcast. Populated only when the
@@ -321,6 +329,22 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         );
         recall = Some(Arc::new(unified));
         unified_recall_state = CapabilityState::Supported;
+    }
+
+    // Consolidation (reflection + decay via composite executor).
+    if let (Some(mem), Some(bel)) = (&memory_store, &belief_store) {
+        let sink = Arc::new(BeliefSinkAdapter(bel.clone()));
+        let memory_source = Arc::new(ActiveMemorySourceAdapter(mem.clone()));
+        let decay_source = Arc::new(DecayMemorySourceAdapter(mem.clone()));
+        let now = chrono::Utc::now();
+        let synthesizer = Arc::new(ReflectionSynthesizer::new(memory_source, now));
+        let reflection_executor = Arc::new(ReflectionExecutor::new(synthesizer, sink));
+        let decay_executor = Arc::new(DecayExecutor::new(decay_source));
+        let composite = Arc::new(CompositeConsolidationExecutor::new(vec![
+            reflection_executor,
+            decay_executor,
+        ]));
+        consolidation = Some(Arc::new(ExecutorConsolidationService::new(composite)));
     }
 
     // Hierarchy.
@@ -494,6 +518,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
     if let Some(h) = observability {
         builder = builder.observability(h);
+    }
+    if let Some(h) = consolidation {
+        builder = builder.consolidation(h);
     }
     if let Some(h) = recall {
         builder = builder.recall(h);

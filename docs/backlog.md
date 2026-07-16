@@ -175,3 +175,14 @@ Most items shipped (A1-A2, B1-B8, C1-C9, D3-D4, D6-D8). What remains:
 
 - **C7 (deferred: focus-node-pruned-by-cap):** When a user clicks an insight/search result whose node was pruned by the server-side `maxNodes` degree cap, `GraphCanvas`'s recenter effect no-ops silently (`graphData.nodes.find(...)` misses). Pre-cap this almost always found the node; post-cap, low-degree symbols (e.g. some dead-code entries) can be absent. The honest fix is a design call: either refetch that node's neighborhood with `?maxNodes` disabled for the focus target, or surface a "node hidden by cap — click to expand" affordance. Blocked on: deciding the affordance (refetch vs. inline expand) and whether it composes with the Strategy 2 overview/detailed modes. Unblocked by: a small slice implementing focus-target neighborhood refetch. See `docs/specs/engram-viz-graph-perf/spec.md`.
 - **Lexical index blocks the event loop (RESOLVED 2026-07-12):** The >90s freeze was a root-cause bug, not scale: `LexicalIndex::upsert` committed once per document, and `index_for_search_json` called it per entity (~18k commits → ~218s host freeze). Fixed by adding `LexicalIndex::upsert_batch` (one commit for the whole corpus) and switching the binding to it — full-corpus build dropped from ~218s to ~810ms, well under any perceptible freeze, so no `worker_threads` offload is needed. The `ensureLexical` `building` flag remains for readiness reporting. Forward-looking note: if the indexed corpus grows ~100×, revisit a worker-thread offload; the build is synchronous N-API (in-RAM `LexicalIndex`, not DB-persisted, so not cross-thread shareable today). See `adapters/retrieval/tantivy-lexical/src/index.rs`, `bindings/node/src/knowledge.rs`, `docs/specs/engram-viz-graph-perf/spec.md`.
+
+
+## associative-graph-retrieval
+
+- **Surface-parity lint (follow-up):** associative retrieval is fully shipped
+  across both surfaces (adapter unit → N-API binding → Rust SDK facade
+  unified-recall lane). Open: a `check-surface-parity.sh` lint to mechanically
+  enforce the new AGENTS.md surface-parity rule (every capability reachable via
+  both `engram-integration` and the N-API binding), mirroring
+  `check-engine-neutrality.sh`. Blocked on: nothing; unblocked by a small
+  tooling slice.

@@ -20,7 +20,9 @@ pub mod operations;
 pub mod policy;
 pub mod provenance;
 pub mod retrieval;
+pub mod rule;
 pub mod taxonomy;
+pub mod trace;
 pub mod types;
 
 pub use assertion::*;
@@ -37,5 +39,7 @@ pub use operations::*;
 pub use policy::*;
 pub use provenance::*;
 pub use retrieval::*;
+pub use rule::{ApplicabilityRule, RuleTarget};
 pub use taxonomy::*;
+pub use trace::DecisionTrace;
 pub use types::{ScopeMappingStrategy, *};

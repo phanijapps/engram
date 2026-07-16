@@ -29,3 +29,10 @@ tenant, workspace, timestamps, or storage locations from IDs.
 `metadata` may carry arbitrary JSON-compatible values, but no v1 behavior may
 depend on metadata keys unless a later version promotes those keys to typed
 fields.
+
+## Enum extensions applied
+
+- **RetrievalTargetType** (RFC-0013 Phase 1, 2026-07-13): added `rule`,
+  `policy`, `axiom`, `decision_trace`. Consumers must tolerate unknown
+  `RetrievalTargetType` values per the enum-add rule above; exhaustive `match`
+  sites require a wildcard arm or updated arms.

@@ -449,7 +449,7 @@
     },
     "RetrievalTargetType": {
       "type": "string",
-      "enum": ["memory", "event", "chunk", "document", "entity", "relationship", "concept", "belief", "contradiction", "hierarchy_node", "hierarchy_relation"]
+      "enum": ["memory", "event", "chunk", "document", "entity", "relationship", "concept", "belief", "contradiction", "hierarchy_node", "hierarchy_relation", "rule", "policy", "axiom", "decision_trace"]
     },
     "RetrievalScore": {
       "type": "object",

@@ -106,6 +106,8 @@ export interface NativeKnowledgeTransport {
   }): Promise<unknown>;
   /** Retrieval-composition seam: graph-ranked candidates for a request. */
   graphCandidates(request: unknown): Promise<unknown[]>;
+  /** Retrieval-composition seam: associative (Personalized PageRank) graph-ranked candidates. */
+  associativeGraphCandidates(request: unknown): Promise<unknown[]>;
   /** Retrieval-composition seam: RRF-fuse candidate lists (configurable). */
   fuseRrf(request: {
     request: unknown;
@@ -249,6 +251,10 @@ class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
 
   async graphCandidates(request: unknown): Promise<unknown[]> {
     return decode(this.engine.graphCandidatesJson(encode(request))) as unknown[];
+  }
+
+  async associativeGraphCandidates(request: unknown): Promise<unknown[]> {
+    return decode(this.engine.associativeGraphCandidatesJson(encode(request))) as unknown[];
   }
 
   async fuseRrf(request: {

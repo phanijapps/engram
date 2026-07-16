@@ -21,6 +21,25 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   `RerankStrategy::CrossEncoder` — reorders fused candidates by an injected
   `RerankScorer`, stamps `FusionTrace`. No contract change. Codegraph-parity B2.
   **Shipped (adapter unit).**
+- [`associative-graph-retrieval`](associative-graph-retrieval/spec.md): an
+  associative `RetrievalIndex` adapter (`engram-store-associative-graph`) for the
+  already-accepted `RetrievalMode::Graph` — ranks knowledge-graph entities by
+  Personalized PageRank seeded at query entities (HippoRAG-style), behind an
+  injected `GraphRelationshipSource` trait. Adds `personalized_pagerank` to
+  `engram-graph-analytics`. No contract change. **Shipped (adapter unit).**
+- [`associative-graph-wiring`](associative-graph-wiring/spec.md): wire the
+  associative-graph adapter into the live TS/N-API binding — a
+  `SqlKnowledgeStore`-backed `GraphRelationshipSource` (orphan-rule newtype in
+  `bindings/node`), `associativeGraphCandidatesJson` binding + transport method,
+  and the pre-existing `packages/node` + `packages/client` typecheck-debt fix.
+  No contract change. Rust SDK facade wiring deferred. **Shipped.**
+- [`associative-graph-facade-wiring`](associative-graph-facade-wiring/spec.md):
+  wire the associative-graph adapter into the Rust SDK facade (`EngramProvider`)
+  as a unified-recall lane — an orphan-rule `KnowledgeRelationshipSource` newtype
+  + `associative_recall_lane` over `SqlKnowledgeStore`, pushed in
+  `bootstrap.rs`. No contract change. Closes the AGENTS.md surface-parity gap for
+  associative (now reachable via both `engram-integration` and the N-API binding).
+  **Shipped.**
 - [`graph-analytics`](graph-analytics/spec.md): a std-only graph-analytics crate
   (`engram-graph-analytics`) with PageRank + betweenness (Brandes) + communities
   (single-level Louvain) + reachability primitives (`in_degree`, `ancestors`,
@@ -140,6 +159,12 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   Engram reaches research-architecture parity as a pristine local Rust library
   and TypeScript integration surface, excluding the actual AgentZero provider
   cutover.
+- [`context-packet-contract-additions`](context-packet-contract-additions/spec.md):
+  Phase 1 of RFC-0013 — the four framework contract types (`ContextSubgraph`,
+  `ApplicabilityRule`, `DecisionTrace`, `KnowledgeEntity.ontologyClassRefs`) +
+  `RetrievalTargetType` variants (`Rule`/`Policy`/`Axiom`/`DecisionTrace`), as
+  inert contract surface only (no composition/population/writer wiring; that
+  lands in Phases 2–4). Constrained by ADR-0025, ADR-0009, ADR-0022. Shipped.
 
 ## Existing Slices
 

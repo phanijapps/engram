@@ -1,0 +1,23 @@
+[package]
+name = "engram-memory-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "engram-memory-mcp"
+path = "src/main.rs"
+
+[dependencies]
+engram-domain = { path = "../../core/domain" }
+engram-runtime = { path = "../../core/runtime" }
+engram-memory = { path = "../../core/memory" }
+engram-integration = { path = "../../core/integration", features = ["sqlite"] }
+chrono.workspace = true
+futures.workspace = true
+serde = { workspace = true }
+serde_json.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

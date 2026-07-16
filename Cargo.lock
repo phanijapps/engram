@@ -933,7 +933,9 @@ dependencies = [
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
+ "engram-store-associative-graph",
  "engram-store-belief-sqlite",
+ "engram-store-community-summary",
  "engram-store-hierarchy-sqlite",
  "engram-store-knowledge-sqlite",
  "engram-store-lexical",
@@ -979,9 +981,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-memory-mcp"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "engram-domain",
+ "engram-integration",
+ "engram-memory",
+ "engram-runtime",
+ "futures",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "engram-node"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "engram-codegraph-queries",
  "engram-conformance",
@@ -993,6 +1011,7 @@ dependencies = [
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
+ "engram-store-associative-graph",
  "engram-store-belief-sqlite",
  "engram-store-knowledge-sqlite",
  "engram-store-lexical",
@@ -1004,6 +1023,19 @@ dependencies = [
  "napi-derive",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "engram-reflection"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-belief",
+ "engram-consolidation",
+ "engram-domain",
+ "engram-runtime",
+ "futures",
 ]
 
 [[package]]
@@ -1038,6 +1070,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-store-associative-graph"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-domain",
+ "engram-graph-analytics",
+ "engram-retrieval",
+ "engram-runtime",
+ "futures",
+ "serde_json",
+]
+
+[[package]]
 name = "engram-store-belief-sqlite"
 version = "0.1.0"
 dependencies = [
@@ -1050,6 +1096,20 @@ dependencies = [
  "rusqlite",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "engram-store-community-summary"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-domain",
+ "engram-graph-analytics",
+ "engram-retrieval",
+ "engram-runtime",
+ "engram-store-associative-graph",
+ "futures",
 ]
 
 [[package]]

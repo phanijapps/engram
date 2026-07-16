@@ -9,6 +9,7 @@ members = [
     "core/eval",
     "core/belief",
     "core/consolidation",
+    "core/reflection",
     "core/hierarchy",
     "core/integration",
     "core/graph-analytics",
@@ -19,6 +20,8 @@ members = [
     "adapters/retrieval/sqlite-vec",
     "adapters/retrieval/tantivy-lexical",
     "adapters/retrieval/cross-encoder-rerank",
+    "adapters/retrieval/associative-graph",
+    "adapters/retrieval/community-summary",
     "adapters/orchestration/belief-sqlite",
     "adapters/hierarchy/sqlite",
     "bindings/node",
@@ -26,6 +29,7 @@ members = [
     "codegraph/queries",
     "codegraph/temporal",
     "codegraph/mcp-server",
+    "memory/mcp-server",
 ]
 resolver = "3"
 

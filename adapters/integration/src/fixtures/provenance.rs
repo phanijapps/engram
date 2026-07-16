@@ -227,6 +227,7 @@ fn entity_with_evidence(id: Id, graph_id: Id) -> KnowledgeEntity {
         scope: scope("tenant-a"),
         source_refs: Vec::new(),
         concept_refs: Vec::new(),
+        ontology_class_refs: Vec::new(),
         provenance: provenance(Some(evidence_ref("doc-1"))),
         created_at: chrono::Utc::now(),
         updated_at: None,

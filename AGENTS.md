@@ -7,8 +7,8 @@ ergonomics, and infrastructure lives behind adapters.
 
 ## Current Rule
 
-Do not add runtime manifests or implementation code until
-`docs/adr/0003-implementation-stack.md` exists. Before implementation work, run:
+The implementation stack is accepted (`docs/adr/0003-implementation-stack.md`,
+Status: Accepted). Before implementation work, run:
 
 ```bash
 .codex/hooks/pre-implementation-check.sh
@@ -26,8 +26,13 @@ core/                      Storage-neutral Rust crates.
   runtime/                 Shared errors, result type, clocks, ids, policy gates.
   memory/                  Memory service and repository ports.
   knowledge/               Knowledge, graph, ontology, source, ingestion ports.
+  belief/                  Belief synthesis, contradiction, and bi-temporal ports.
+  hierarchy/               Hierarchy build, navigation, and aggregate ports.
+  consolidation/           Consolidation planning, gated mutation, decay, audit.
+  reflection/              Reflection synthesizer + consolidation executor (derived beliefs).
   retrieval/               Retrieval composition and fusion ports.
   orchestration/           Orchestration facade and compatibility re-exports.
+  integration/             SDK facade: EngramProvider, EngramConfig, CapabilityReport.
   eval/                    Deterministic fixtures and regression harness.
   graph-analytics/         Pure graph algorithms (PageRank, betweenness, communities, reachability).
 
@@ -35,9 +40,14 @@ adapters/                  Replaceable infrastructure crates.
   ingest/                  Filesystem/Git ingestion adapter until split.
   memory/sqlite/           SQLite memory persistence adapter.
   knowledge/sqlite/        SQLite knowledge, graph, taxonomy, and ontology adapter.
+  hierarchy/sqlite/        SQLite hierarchy persistence adapter.
+  orchestration/belief-sqlite/  SQLite belief and contradiction persistence adapter.
   retrieval/sqlite-vec/    sqlite-vec retrieval index adapter.
   retrieval/tantivy-lexical/       BM25 lexical retrieval index adapter (keyword mode).
   retrieval/cross-encoder-rerank/  Cross-encoder reranker adapter.
+  retrieval/associative-graph/     Associative (Personalized PageRank) retrieval index adapter.
+  retrieval/community-summary/     Community-summary (GraphRAG) retrieval index adapter.
+  integration/             Backend recipe / conformance composition (SQLite wiring until backends/ split).
 
 backends/                  Backend recipe crates (ADR-0022). A *backend* is one
   sqlite/                  recipe that composes adapter cells + owns connection
@@ -53,6 +63,8 @@ bindings/                  Native language bridges.
 codegraph/                 On-top codegraph layer (RFC-0012): code-specific
   queries/                 crates built on engram (dead-code / blast-radius /
                            dependency-path over call edges).
+  temporal/                Temporal scoring (recent / impact / compound) over versioned symbols.
+  mcp-server/              MCP server exposing codegraph queries to AI agents.
 
 packages/                  TypeScript workspace.
   contracts/               Generated TypeScript types and schemas.
@@ -62,8 +74,8 @@ packages/                  TypeScript workspace.
   eval/                    Fixture authoring helpers and CLI wrappers.
 ```
 
-Existing placeholder folders under `packages/` may be renamed to this shape when
-the stack ADR is accepted.
+The `packages/` workspace already matches this shape (adapters, client,
+contracts, eval, node) now that the stack ADR (ADR-0003) is accepted.
 
 ## Boundary Rules
 
@@ -112,6 +124,20 @@ the stack ADR is accepted.
   cells into an `EngramProvider` and is the only place a "backend" identity
   exists. SQLite wiring currently lives in `adapters/integration`; it moves to
   `backends/sqlite` when a second engine is adopted.
+- **Surface parity — integration + N-API (and every transport).** Every runtime
+  capability, operation, and `RetrievalIndex` / `RetrievalMode` must be reachable
+  through BOTH `engram-integration` (the Rust SDK `EngramProvider` facade,
+  including its unified-recall lanes) AND the N-API binding (`bindings/node`, the
+  TS transport) — and through any other supported transport — and be reflected in
+  `CapabilityReport`. A capability is not "shipped" until a Rust embedder and a
+  TS/N-API agent can both invoke it. Wiring one surface and leaving the other
+  unwired creates transport asymmetry (e.g., a retriever reachable from the
+  binding but not the facade) and is not allowed. The `lexical-keyword-retrieval`
+  + `lexical-wiring` split is the precedent for *sequencing* an adapter unit
+  ahead of its wiring — never for permanently stranding a capability on one
+  surface. If a surface genuinely cannot carry a capability, record why in an
+  ADR. A parity lint (mirroring the engine-neutrality lint) is the intended
+  enforcement.
 - `engram-graph-analytics` owns pure, dependency-free graph algorithms only
   (PageRank, betweenness, communities, reachability). It must not depend on
   `engram-domain`, storage, or any infrastructure; callers map domain edges to a

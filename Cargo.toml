@@ -22,6 +22,7 @@ members = [
     "adapters/retrieval/cross-encoder-rerank",
     "adapters/retrieval/associative-graph",
     "adapters/retrieval/community-summary",
+    "adapters/consolidation/decay",
     "adapters/orchestration/belief-sqlite",
     "adapters/hierarchy/sqlite",
     "bindings/node",

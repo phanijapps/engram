@@ -850,6 +850,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-decay"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-consolidation",
+ "engram-domain",
+ "engram-runtime",
+ "futures",
+]
+
+[[package]]
 name = "engram-domain"
 version = "0.1.0"
 dependencies = [

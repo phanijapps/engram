@@ -1,6 +1,10 @@
 # ADR-0022: Engine grid vs backend recipe — SQLite-only now, multi-engine ready
 
-- **Status:** Proposed
+- **Status:** Accepted
+- **Promoted 2026-07-16:** the SurrealDB backend (`docs/specs/surrealdb-backend`)
+  is the named "second engine" trigger event; T2 of that spec executes the
+  structural extraction this ADR defers (`backends/sqlite`). Decision-maker:
+  phanijapps (endorsement: "consumers change backend and it works, no issues").
 - **Date:** 2026-07-09
 - **Decision-makers:** phanijapps
 - **Supersedes:** none

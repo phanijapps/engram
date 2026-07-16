@@ -5,6 +5,17 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 
 ## Active
 
+- [`surrealdb-backend`](surrealdb-backend/spec.md): a SurrealDB storage backend
+  selectable by config alongside SQLite — a sibling recipe (`backends/surreal`)
+  composing Surreal adapter cells behind the existing core ports with identical
+  DTOs (persistence translation, not a new contract), covering the
+  storage-backed capabilities (memory, knowledge/taxonomy/ontology, belief,
+  hierarchy, vectors, consolidation) embedded in-process (SurrealKV). Triggers
+  the ADR-0022 reorg (extract `backends/sqlite` + extend the engine-neutrality
+  lint to cover `bindings/node`/`config.rs` and deny `surreal`/`surrealdb`).
+  No cross-engine migration (fresh store on switch). Re-scoped from LanceDB
+  (vector-only) to SurrealDB (graph-native multi-model). Constrained by
+  ADR-0022 (Proposed — promotion to Accepted is an Ask first). Draft.
 - [`lexical-keyword-retrieval`](lexical-keyword-retrieval/spec.md): the
   BM25/Tantivy lexical `RetrievalIndex` adapter crate (`engram-store-lexical`:
   store + identifier tokenizer + resolver + `RetrievalResult` shaping),

@@ -20,8 +20,9 @@
 //! — the established binding pattern, matching `NativeKnowledgeEngine`.
 
 use engram_domain::{
-    ContextPayload, EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id,
-    KnowledgeEntity, Provenance, RetrievalRequest, Scope, WriteMemoryRequest, WriteMemoryResponse,
+    ConsolidationRequest, ContextPayload, EvidenceRef, EvidenceTargetType, ForgetRequest,
+    ForgetResult, Id, KnowledgeEntity, Provenance, RetrievalRequest, Scope, WriteMemoryRequest,
+    WriteMemoryResponse,
 };
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, EngramConfig,
@@ -132,6 +133,19 @@ impl NativeProvider {
     pub fn require_recall_api(&self) -> Result<NativeRecallApi> {
         let handle = self.inner.require_recall().map_err(to_napi_error)?.clone();
         Ok(NativeRecallApi { handle })
+    }
+
+    /// Returns a consolidation handle, or throws if not wired.
+    #[napi(js_name = "consolidateJson")]
+    pub fn consolidate_json(&self, request_json: String) -> Result<String> {
+        let request: ConsolidationRequest = decode(&request_json)?;
+        let handle = self
+            .inner
+            .require_consolidation()
+            .map_err(to_napi_error)?
+            .clone();
+        let run = block_on(handle.consolidate(request)).map_err(to_napi_error)?;
+        encode(&run)
     }
 
     /// Returns an export-import handle, or throws if not wired.

@@ -22,6 +22,7 @@ engram-memory = { path = "../../core/memory" }
 engram-retrieval = { path = "../../core/retrieval" }
 engram-runtime = { path = "../../core/runtime" }
 engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph" }
+engram-consolidation = { path = "../../core/consolidation" }
 engram-store-belief-sqlite = { path = "../../adapters/orchestration/belief-sqlite" }
 engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical" }
 engram-store-knowledge-sqlite = { path = "../../adapters/knowledge/sqlite" }

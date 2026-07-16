@@ -9,9 +9,9 @@
 use std::io::{self, BufRead, Write};
 
 use engram_domain::{
-    Actor, ActorKind, AllowedUse, DeleteMode, EntityKind, EntityRef, ForgetRequest, Id,
-    KnowledgeEntity, KnowledgeRelationship, MemoryContent, MemoryKind, Policy, Provenance,
-    Retention, RetrievalRequest, Scope, Sensitivity, Visibility, WriteMemoryRequest,
+    Actor, ActorKind, AllowedUse, ConsolidationRequest, DeleteMode, EntityKind, EntityRef,
+    ForgetRequest, Id, KnowledgeEntity, KnowledgeRelationship, MemoryContent, MemoryKind, Policy,
+    Provenance, Retention, RetrievalRequest, Scope, Sensitivity, Visibility, WriteMemoryRequest,
 };
 use engram_integration::{
     CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, EngramProvider, MigrationMode,
@@ -156,6 +156,18 @@ fn tools_list() -> Vec<Value> {
                 "required": ["subject", "predicate", "object"]
             }
         }),
+        json!({
+            "name": "consolidate",
+            "description": "Run consolidation (reflection + decay): synthesizes derived beliefs from active memories + expires past-deadline memories.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "tenant": { "type": "string", "description": "Tenant scope." },
+                    "dry_run": { "type": "boolean", "description": "If true, plan only (no mutation). Default: false." }
+                },
+                "required": []
+            }
+        }),
     ]
 }
 
@@ -166,6 +178,7 @@ fn handle_tool(name: &str, args: &Value, provider: &EngramProvider) -> String {
         "forget" => handle_forget(args, provider),
         "put_entity" => handle_put_entity(args, provider),
         "put_relationship" => handle_put_relationship(args, provider),
+        "consolidate" => handle_consolidate(args, provider),
         _ => format!("Unknown tool: {name}"),
     }
 }
@@ -396,6 +409,52 @@ fn handle_put_relationship(args: &Value, provider: &EngramProvider) -> String {
     match block_on(knowledge.put_relationship(rel)) {
         Ok(_) => format!("{subject} -[{predicate}]-> {object} stored."),
         Err(e) => format!("Put relationship failed: {e}"),
+    }
+}
+
+fn handle_consolidate(args: &Value, provider: &EngramProvider) -> String {
+    let tenant = args["tenant"].as_str().unwrap_or("default");
+    let dry_run = args["dry_run"].as_bool().unwrap_or(false);
+    let consolidation = match provider.require_consolidation() {
+        Ok(h) => h,
+        Err(e) => return format!("Consolidation not available: {e}"),
+    };
+    let request = ConsolidationRequest {
+        scope: default_scope(tenant),
+        requester: engram_domain::Requester {
+            actor: system_actor(),
+            roles: Vec::new(),
+            permissions: Vec::new(),
+            on_behalf_of: None,
+        },
+        since: None,
+        until: None,
+        strategy: None,
+        dry_run: Some(dry_run),
+    };
+    match block_on(consolidation.consolidate(request)) {
+        Ok(run) => {
+            let task_summary: Vec<String> = run
+                .tasks
+                .iter()
+                .map(|t| {
+                    format!(
+                        "{:?}: {:?} (read={}, written={})",
+                        t.task,
+                        t.status,
+                        t.items_read.unwrap_or(0),
+                        t.items_written.unwrap_or(0)
+                    )
+                })
+                .collect();
+            format!(
+                "Consolidation {:?}: {} task(s).\n{}",
+                run.status,
+                run.tasks.len(),
+                task_summary.join("\n")
+            )
+        }
+        Err(e) => format!("Consolidation failed: {e}"),
     }
 }
 

@@ -50,6 +50,21 @@ Current validated surface includes:
   communities, reachability) adapter crates; bi-temporal knowledge entities
   (ADR-0019) and an extended `EntityKind` vocabulary (ADR-0020). See
   [`docs/codegraph-parity-roadmap.md`](docs/codegraph-parity-roadmap.md).
+- **associative + community-summary retrieval:** Personalized PageRank
+  (`engram-store-associative-graph`) and GraphRAG community-summary
+  (`engram-store-community-summary`) `RetrievalIndex` adapters, wired into
+  the unified recall pipeline + N-API binding.
+- **reflection operator** (`engram-reflection`): abstracts scoped active
+  memories into derived beliefs — the memory dimension engram covered least
+  (Generative Agents / Reflexion-style). Wired into `EngramProvider::consolidate()`.
+- **decay executor** (`engram-decay`): restores policy-expiry decay with the
+  Ebbinghaus forgetting curve; composes with reflection via
+  `CompositeConsolidationExecutor`.
+- **Memory MCP server** (`engram-memory-mcp`): exposes `write_memory`, `recall`,
+  `forget`, `put_entity`, `put_relationship` as agent-callable MCP tools over
+  stdio JSON-RPC 2.0.
+- **surface-parity rule:** AGENTS.md mandates every capability is reachable via
+  both `engram-integration` and the N-API binding.
 
 Before publishing crates, npm packages, release tags, or benchmark claims, use
 `docs/release-checklist.md`.

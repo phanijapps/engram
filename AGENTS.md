@@ -47,6 +47,7 @@ adapters/                  Replaceable infrastructure crates.
   retrieval/cross-encoder-rerank/  Cross-encoder reranker adapter.
   retrieval/associative-graph/     Associative (Personalized PageRank) retrieval index adapter.
   retrieval/community-summary/     Community-summary (GraphRAG) retrieval index adapter.
+  consolidation/decay/      Decay consolidation executor (policy-expiry, Ebbinghaus curve).
   integration/             Backend recipe / conformance composition (SQLite wiring until backends/ split).
 
 backends/                  Backend recipe crates (ADR-0022). A *backend* is one
@@ -65,6 +66,10 @@ codegraph/                 On-top codegraph layer (RFC-0012): code-specific
                            dependency-path over call edges).
   temporal/                Temporal scoring (recent / impact / compound) over versioned symbols.
   mcp-server/              MCP server exposing codegraph queries to AI agents.
+
+memory/                   Memory MCP server: exposes engram's memory operations as
+  mcp-server/              agent-callable MCP tools (write_memory, recall, forget,
+                           put_entity, put_relationship) over stdio JSON-RPC 2.0.
 
 packages/                  TypeScript workspace.
   contracts/               Generated TypeScript types and schemas.

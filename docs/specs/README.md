@@ -5,6 +5,12 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
 
 ## Active
 
+- [`sqlite-consolidation`](sqlite-consolidation/spec.md): consolidate the five
+  SQLite-specific adapter crates (memory, knowledge, belief, hierarchy, vector)
+  + the `Sql*` glue into ONE crate `engram-store-sqlite` — the one-crate-per-
+  backend convention (ADR-0022 amended). Engine-agnostic adapters (lexical/
+  associative/community/decay/ingest) stay shared with Surreal. Facade-first,
+  phased T0–T7, each green-gated; behavior unchanged. Draft.
 - [`surrealdb-backend`](surrealdb-backend/spec.md): a SurrealDB storage backend
   selectable by config alongside SQLite — a sibling recipe (`backends/surreal`)
   composing Surreal adapter cells behind the existing core ports with identical

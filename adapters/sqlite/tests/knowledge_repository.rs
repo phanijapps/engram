@@ -4,7 +4,7 @@ use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
     validate_taxonomy_proposal,
 };
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 fn actor() -> Actor {
@@ -691,7 +691,7 @@ fn put_graph_lifts_stable_source_key_and_path_columns() {
 /// `initialize_schema` is called again, and subsequent writes + reads work.
 #[test]
 fn initialize_schema_migrates_pre_existing_db_without_columns() {
-    use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+    use engram_store_sqlite::SqlKnowledgeStore;
     use rusqlite::Connection;
 
     // Build a pre-spec schema by hand (no stable_source_key / path / graph_id

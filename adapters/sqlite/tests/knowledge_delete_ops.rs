@@ -12,7 +12,7 @@
 use chrono::Utc;
 use engram_domain::*;
 use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 fn scope(tenant: &str) -> Scope {

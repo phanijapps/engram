@@ -18,7 +18,7 @@ use engram_retrieval::RetrievalIndex;
 use engram_runtime::CoreResult;
 use futures::future::try_join;
 
-use crate::SqlKnowledgeStore;
+use crate::knowledge::SqlKnowledgeStore;
 
 /// Injected access to the graph store's entities + chunks for a scope.
 ///

@@ -16,7 +16,7 @@ use engram_domain::*;
 use engram_runtime::{CoreError, CoreResult, SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::{
+use crate::knowledge::{
     schema::{initialize_schema, json_error, sql_error},
     scope::scope_allows,
 };
@@ -62,7 +62,7 @@ impl SqlKnowledgeStore {
     ///
     /// ```no_run
     /// use engram_runtime::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
-    /// use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+    /// use engram_store_sqlite::SqlKnowledgeStore;
     ///
     /// let options = SqliteOpenOptions {
     ///     path: SqlitePath::File("/path/to/knowledge.db".into()),

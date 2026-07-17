@@ -11,7 +11,7 @@ use engram_knowledge::OntologyRepository;
 use engram_runtime::CoreResult;
 use rusqlite::OptionalExtension;
 
-use crate::{
+use crate::knowledge::{
     schema::json_error, schema::sql_error, scope::scope_allows, service::SqlKnowledgeStore,
     service::VALIDATE_RELATIONSHIP_LIMIT, service::validation_provenance,
 };
@@ -19,7 +19,7 @@ use crate::{
 #[async_trait]
 impl OntologyRepository for SqlKnowledgeStore {
     async fn put_ontology(&self, ontology: Ontology) -> CoreResult<Ontology> {
-        let json = serde_json::to_string(&ontology).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&ontology).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(
@@ -69,7 +69,7 @@ impl OntologyRepository for SqlKnowledgeStore {
     // scheme). `put_*` does not re-verify the caller owns `ontology_id`; reads
     // (`get_ontology`, `validate_graph`) enforce scope on the parent ontology.
     async fn put_class(&self, class: OntologyClass) -> CoreResult<OntologyClass> {
-        let json = serde_json::to_string(&class).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&class).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(
@@ -87,7 +87,7 @@ impl OntologyRepository for SqlKnowledgeStore {
     }
 
     async fn put_property(&self, property: OntologyProperty) -> CoreResult<OntologyProperty> {
-        let json = serde_json::to_string(&property).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&property).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(
@@ -109,7 +109,7 @@ impl OntologyRepository for SqlKnowledgeStore {
     }
 
     async fn put_axiom(&self, axiom: OntologyAxiom) -> CoreResult<OntologyAxiom> {
-        let json = serde_json::to_string(&axiom).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&axiom).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(

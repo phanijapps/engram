@@ -11,12 +11,12 @@ use engram_knowledge::KnowledgeRepository;
 use engram_runtime::CoreResult;
 use rusqlite::OptionalExtension;
 
-use crate::{schema::sql_error, service::SqlKnowledgeStore};
+use crate::knowledge::{schema::sql_error, service::SqlKnowledgeStore};
 
 #[async_trait]
 impl KnowledgeRepository for SqlKnowledgeStore {
     async fn put_source(&self, source: KnowledgeSource) -> CoreResult<KnowledgeSource> {
-        let json = serde_json::to_string(&source).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&source).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(
@@ -47,7 +47,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     }
 
     async fn put_document(&self, document: SourceDocument) -> CoreResult<SourceDocument> {
-        let json = serde_json::to_string(&document).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&document).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(
@@ -69,7 +69,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     }
 
     async fn put_chunk(&self, chunk: KnowledgeChunk) -> CoreResult<KnowledgeChunk> {
-        let json = serde_json::to_string(&chunk).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&chunk).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(
@@ -116,7 +116,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
             .map_err(sql_error)?;
         match json {
             Some(json) => {
-                let chunk = serde_json::from_str(&json).map_err(crate::schema::json_error)?;
+                let chunk = serde_json::from_str(&json).map_err(crate::knowledge::schema::json_error)?;
                 Ok(Some(chunk))
             }
             None => Ok(None),
@@ -124,7 +124,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     }
 
     async fn put_entity(&self, entity: KnowledgeEntity) -> CoreResult<KnowledgeEntity> {
-        let json = serde_json::to_string(&entity).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&entity).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         let graph_id = entity
             .graph_id
@@ -165,7 +165,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
         &self,
         relationship: KnowledgeRelationship,
     ) -> CoreResult<KnowledgeRelationship> {
-        let json = serde_json::to_string(&relationship).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&relationship).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         let graph_id = relationship
             .graph_id
@@ -233,7 +233,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
             .map_err(sql_error)?;
         match json {
             Some(json) => {
-                let entity = serde_json::from_str(&json).map_err(crate::schema::json_error)?;
+                let entity = serde_json::from_str(&json).map_err(crate::knowledge::schema::json_error)?;
                 Ok(Some(entity))
             }
             None => Ok(None),
@@ -264,7 +264,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
         match json {
             Some(json) => {
                 let relationship =
-                    serde_json::from_str(&json).map_err(crate::schema::json_error)?;
+                    serde_json::from_str(&json).map_err(crate::knowledge::schema::json_error)?;
                 Ok(Some(relationship))
             }
             None => Ok(None),

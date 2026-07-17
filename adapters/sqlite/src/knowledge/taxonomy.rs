@@ -10,14 +10,14 @@ use engram_knowledge::TaxonomyRepository;
 use engram_runtime::CoreResult;
 use rusqlite::OptionalExtension;
 
-use crate::{
+use crate::knowledge::{
     schema::json_error, schema::sql_error, scope::scope_allows, service::SqlKnowledgeStore,
 };
 
 #[async_trait]
 impl TaxonomyRepository for SqlKnowledgeStore {
     async fn put_concept_scheme(&self, scheme: ConceptScheme) -> CoreResult<ConceptScheme> {
-        let json = serde_json::to_string(&scheme).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&scheme).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(
@@ -67,7 +67,7 @@ impl TaxonomyRepository for SqlKnowledgeStore {
     }
 
     async fn put_concept(&self, concept: Concept) -> CoreResult<Concept> {
-        let json = serde_json::to_string(&concept).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&concept).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(
@@ -85,7 +85,7 @@ impl TaxonomyRepository for SqlKnowledgeStore {
     }
 
     async fn put_concept_relation(&self, relation: ConceptRelation) -> CoreResult<ConceptRelation> {
-        let json = serde_json::to_string(&relation).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&relation).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(

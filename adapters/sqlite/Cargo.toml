@@ -8,13 +8,15 @@ rust-version.workspace = true
 # Memory cell — folded in from engram-store-sql (consolidation T1):
 async-trait.workspace = true
 chrono.workspace = true
+futures.workspace = true
 rusqlite.workspace = true
 serde_json.workspace = true
 engram-domain = { path = "../../core/domain" }
 engram-memory = { path = "../../core/memory" }
 engram-runtime = { path = "../../core/runtime" }
-# Still-facaded adapter crates (their code folds in T2-T5):
-engram-store-knowledge-sqlite = { path = "../knowledge/sqlite" }
+engram-knowledge = { path = "../../core/knowledge" }
+engram-retrieval = { path = "../../core/retrieval" }
+# Still-facaded adapter crates (their code folds in T3-T5):
 engram-store-belief-sqlite = { path = "../orchestration/belief-sqlite" }
 engram-store-hierarchy-sqlite = { path = "../hierarchy/sqlite" }
 engram-store-vector = { path = "../retrieval/sqlite-vec" }

@@ -10,14 +10,14 @@ use engram_knowledge::KnowledgeGraphRepository;
 use engram_runtime::{CoreError, CoreResult};
 use rusqlite::OptionalExtension;
 
-use crate::{
+use crate::knowledge::{
     schema::json_error, schema::sql_error, scope::scope_allows, service::SqlKnowledgeStore,
 };
 
 #[async_trait]
 impl KnowledgeGraphRepository for SqlKnowledgeStore {
     async fn put_graph(&self, graph: KnowledgeGraph) -> CoreResult<KnowledgeGraph> {
-        let json = serde_json::to_string(&graph).map_err(crate::schema::json_error)?;
+        let json = serde_json::to_string(&graph).map_err(crate::knowledge::schema::json_error)?;
         // Lift stable_source_key and path from the graph's metadata into indexed
         // columns so they can be filtered without deserializing record_json.
         //

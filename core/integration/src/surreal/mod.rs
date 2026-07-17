@@ -17,5 +17,7 @@
 //! the engine-neutral `Arc<dyn ...>` handles on the returned provider.
 
 mod bootstrap;
+mod memory;
 
 pub(crate) use bootstrap::bootstrap_surreal;
+pub use memory::SurrealMemoryService;

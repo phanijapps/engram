@@ -39,6 +39,11 @@ engram-decay = { path = "../../adapters/consolidation/decay", optional = true }
 engram-ingest = { path = "../../adapters/ingest", optional = true }
 chrono = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
+# Surreal backend (optional, behind the `surreal` feature flag). Embedded
+# SurrealKV store; tokio::sync::OnceCell for the lazy connection open (the
+# Surreal SDK needs a Tokio reactor, opened under the consumer's runtime).
+surrealdb = { version = "2", default-features = false, features = ["kv-surrealkv"], optional = true }
+tokio = { version = "1", features = ["sync", "rt", "macros"], optional = true }
 
 [dev-dependencies]
 tempfile = "3"
@@ -80,4 +85,4 @@ sqlite = [
 # cells under src/surreal/ and makes EngramProvider::open return a wired
 # provider when selected. Mutually exclusive with `sqlite` at dispatch time
 # (sqlite wins if both are enabled). Capability cells attach incrementally.
-surreal = []
+surreal = ["dep:surrealdb", "dep:tokio", "dep:chrono"]

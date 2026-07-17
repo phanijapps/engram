@@ -25,10 +25,10 @@ use engram_integration::{ExportImport, MigrationManifest, MigrationService as _,
 use engram_knowledge::{KnowledgeRepository as _, TaxonomyRepository as _};
 use engram_memory::MemoryRepository as _;
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_belief_sqlite::SqlBeliefStore;
-use engram_store_hierarchy_sqlite::SqlHierarchyStore;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlBeliefStore;
+use engram_store_sqlite::SqlHierarchyStore;
+use engram_store_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 
 /// Runs the export / import conformance fixture.

@@ -1,0 +1,20 @@
+[package]
+name = "engram-store-sqlite"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# T0 is a RE-EXPORT FACADE: these five SQLite-specific adapter crates stay in
+# place for now; their code folds into this crate incrementally (plan T1-T6).
+# Engine-agnostic adapters (lexical/associative/community/decay/ingest) are
+# deliberately NOT here — they are shared with the Surreal backend.
+engram-store-sql = { path = "../memory/sqlite" }
+engram-store-knowledge-sqlite = { path = "../knowledge/sqlite" }
+engram-store-belief-sqlite = { path = "../orchestration/belief-sqlite" }
+engram-store-hierarchy-sqlite = { path = "../hierarchy/sqlite" }
+engram-store-vector = { path = "../retrieval/sqlite-vec" }
+# Forward the optional FastEmbed provider so consumers enable it via this crate.
+[features]
+default = []
+fastembed = ["engram-store-vector/fastembed-provider"]

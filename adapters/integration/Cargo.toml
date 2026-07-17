@@ -18,6 +18,7 @@ engram-knowledge = { path = "../../core/knowledge" }
 engram-hierarchy = { path = "../../core/hierarchy" }
 engram-belief = { path = "../../core/belief" }
 engram-retrieval = { path = "../../core/retrieval" }
+engram-store-sqlite = { path = "../sqlite" }
 engram-store-sql = { path = "../memory/sqlite" }
 engram-store-knowledge-sqlite = { path = "../knowledge/sqlite" }
 engram-store-hierarchy-sqlite = { path = "../hierarchy/sqlite" }

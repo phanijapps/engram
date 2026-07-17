@@ -27,11 +27,11 @@ use engram_knowledge::{
 };
 use engram_memory::MemoryService;
 use engram_retrieval::VectorIndex;
-use engram_store_belief_sqlite::SqlBeliefStore;
-use engram_store_hierarchy_sqlite::SqlHierarchyStore;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
-use engram_store_sql::SqlMemoryService;
-use engram_store_vector::SqliteVectorIndex;
+use engram_store_sqlite::SqlBeliefStore;
+use engram_store_sqlite::SqlHierarchyStore;
+use engram_store_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlMemoryService;
+use engram_store_sqlite::SqliteVectorIndex;
 use futures::executor::block_on;
 
 use crate::sqlite::{

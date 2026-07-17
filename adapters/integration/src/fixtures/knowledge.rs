@@ -10,7 +10,7 @@ use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
 };
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 use super::support::{policy, provenance, scope};

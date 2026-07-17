@@ -17,8 +17,8 @@ use engram_integration::{
 };
 use engram_memory::MemoryEventRepository;
 use engram_runtime::CoreError;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 
 // ---------- helpers -------------------------------------------------------

@@ -7,7 +7,7 @@ use chrono::Utc;
 use engram_domain::*;
 use engram_hierarchy::HierarchyRepository;
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_hierarchy_sqlite::SqlHierarchyStore;
+use engram_store_sqlite::SqlHierarchyStore;
 use futures::executor::block_on;
 
 use super::support::{policy, provenance, scope};

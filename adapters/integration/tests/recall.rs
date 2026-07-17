@@ -22,8 +22,8 @@ use engram_integration::UnifiedRecall;
 use engram_memory::{MemoryEventRepository, MemoryRepository, MemoryService};
 use engram_retrieval::RetrievalIndex;
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_belief_sqlite::SqlBeliefStore;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlBeliefStore;
+use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 
 // ---------- helpers -------------------------------------------------------

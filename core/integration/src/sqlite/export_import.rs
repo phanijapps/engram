@@ -48,10 +48,10 @@ use engram_domain::{
 };
 use engram_knowledge::TaxonomyRepository as _;
 use engram_runtime::CoreResult;
-use engram_store_belief_sqlite::SqlBeliefStore;
-use engram_store_hierarchy_sqlite::SqlHierarchyStore;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlBeliefStore;
+use engram_store_sqlite::SqlHierarchyStore;
+use engram_store_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlMemoryService;
 
 use crate::{
     BeliefImportRecord, ConceptImportRecord, ConceptSchemeImportRecord, ExportImport,

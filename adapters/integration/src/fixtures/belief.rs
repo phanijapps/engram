@@ -8,7 +8,7 @@ use chrono::{TimeZone, Utc};
 use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::*;
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_belief_sqlite::SqlBeliefStore;
+use engram_store_sqlite::SqlBeliefStore;
 use futures::executor::block_on;
 
 use super::support::{policy, provenance, scope};

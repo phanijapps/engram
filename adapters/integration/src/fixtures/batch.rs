@@ -18,8 +18,8 @@ use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchStatus, BatchStep, StepStatus, TransactionGuarantee,
 };
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 
 use super::support::{policy, provenance, scope};

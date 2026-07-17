@@ -35,10 +35,10 @@ use engram_retrieval::RetrievalIndex;
 use engram_runtime::CoreResult;
 use engram_store_associative_graph::{AssociativeGraphIndex, GraphRelationshipSource};
 use engram_store_community_summary::CommunitySummaryIndex;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use engram_store_lexical::{LexicalResolvedTarget, LexicalTargetResolver};
 #[cfg(feature = "fastembed")]
-use engram_store_vector::{VectorResolvedTarget, VectorSearchResult, VectorTargetResolver};
+use engram_store_sqlite::{VectorResolvedTarget, VectorSearchResult, VectorTargetResolver};
 use futures::executor::block_on;
 
 /// Orphan-rule wrapper adapting `SqlKnowledgeStore` to the associative-graph

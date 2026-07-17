@@ -22,8 +22,8 @@ use engram_domain::*;
 use engram_integration::{Observability, RecordCounts};
 use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_belief_sqlite::SqlBeliefStore;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlBeliefStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 use engram_integration::sqlite::SqlObservability;

@@ -14,7 +14,7 @@ use engram_domain::*;
 use engram_integration::{ProvenanceQuery, TimeWindow};
 use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 // ---------- helpers -------------------------------------------------------

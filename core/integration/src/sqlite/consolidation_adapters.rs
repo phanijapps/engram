@@ -20,8 +20,8 @@ use engram_domain::{
 use engram_memory::{MemoryEventRepository, MemoryRepository};
 use engram_reflection::{ActiveMemorySource, BeliefSink};
 use engram_runtime::CoreResult;
-use engram_store_belief_sqlite::SqlBeliefStore;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlBeliefStore;
+use engram_store_sqlite::SqlMemoryService;
 
 /// Adapts `SqlBeliefStore` to `BeliefSink` (identical `put_belief` signature).
 pub(crate) struct BeliefSinkAdapter(pub(crate) Arc<SqlBeliefStore>);

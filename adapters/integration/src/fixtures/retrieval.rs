@@ -10,7 +10,7 @@ use engram_domain::{
 };
 use engram_retrieval::VectorIndex;
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_vector::SqliteVectorIndex;
+use engram_store_sqlite::SqliteVectorIndex;
 
 /// Runs the retrieval-trace capability fixture.
 ///

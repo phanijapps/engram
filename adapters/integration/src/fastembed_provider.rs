@@ -16,7 +16,7 @@ use engram_integration::embedding::EmbeddingProvider;
 use engram_runtime::CoreResult;
 
 /// Re-export the existing FastEmbed provider for use in the wrapper.
-pub use engram_store_vector::FastEmbedBgeSmallQueryProvider;
+pub use engram_store_sqlite::FastEmbedBgeSmallQueryProvider;
 
 impl EmbeddingProvider for FastEmbedBgeSmallQueryProvider {
     fn provider_id(&self) -> &str {

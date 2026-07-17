@@ -23,10 +23,10 @@ use engram_knowledge::{
 };
 use engram_memory::MemoryService;
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_belief_sqlite::SqlBeliefStore;
-use engram_store_hierarchy_sqlite::SqlHierarchyStore;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlBeliefStore;
+use engram_store_sqlite::SqlHierarchyStore;
+use engram_store_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlMemoryService;
 
 use crate::{
     CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder, SqliteStorageLayout,
@@ -273,7 +273,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     if let Some(knowledge_handle) = &knowledge_store {
         // Graph lane: SqlKnowledgeStore implements GraphCandidateSource.
         retrieval_lanes.push(Arc::new(
-            engram_store_knowledge_sqlite::GraphRetrievalIndex::new(knowledge_handle.clone()),
+            engram_store_sqlite::GraphRetrievalIndex::new(knowledge_handle.clone()),
         ));
         // Associative-graph lane: PPR-ranked entities over the knowledge graph
         // (HippoRAG-style), fused alongside the other unified-recall lanes.
@@ -309,11 +309,11 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             config.embedding_provider.normalization.clone(),
         );
         if let Ok(vector_index) =
-            engram_store_vector::SqliteVectorIndex::open_with_embedding_space(path_str, space)
+            engram_store_sqlite::SqliteVectorIndex::open_with_embedding_space(path_str, space)
         {
-            if let Ok(query_provider) = engram_store_vector::FastEmbedBgeSmallQueryProvider::new() {
+            if let Ok(query_provider) = engram_store_sqlite::FastEmbedBgeSmallQueryProvider::new() {
                 let resolver = recall_lanes::KnowledgeVectorResolver::new(knowledge_handle.clone());
-                retrieval_lanes.push(Arc::new(engram_store_vector::VectorRetrievalIndex::new(
+                retrieval_lanes.push(Arc::new(engram_store_sqlite::VectorRetrievalIndex::new(
                     vector_index,
                     Arc::new(query_provider),
                     Arc::new(resolver),
@@ -378,7 +378,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             reason: "vector db path is not valid unicode".to_string(),
         }) {
             if let Ok(index) =
-                engram_store_vector::SqliteVectorIndex::open_with_embedding_space(path_str, space)
+                engram_store_sqlite::SqliteVectorIndex::open_with_embedding_space(path_str, space)
             {
                 if index.requires_reindex() {
                     // The index was built under a different embedding space than

@@ -1558,6 +1558,7 @@ dependencies = [
  "engram-store-knowledge-sqlite",
  "engram-store-lexical",
  "engram-store-sql",
+ "engram-store-sqlite",
  "engram-store-vector",
  "futures",
  "serde",
@@ -1702,6 +1703,7 @@ dependencies = [
  "engram-store-knowledge-sqlite",
  "engram-store-lexical",
  "engram-store-sql",
+ "engram-store-sqlite",
  "engram-store-surreal",
  "engram-store-vector",
  "futures",
@@ -1933,6 +1935,17 @@ dependencies = [
  "futures",
  "rusqlite",
  "serde_json",
+]
+
+[[package]]
+name = "engram-store-sqlite"
+version = "0.1.0"
+dependencies = [
+ "engram-store-belief-sqlite",
+ "engram-store-hierarchy-sqlite",
+ "engram-store-knowledge-sqlite",
+ "engram-store-sql",
+ "engram-store-vector",
 ]
 
 [[package]]

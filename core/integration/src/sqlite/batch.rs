@@ -46,8 +46,8 @@ use engram_domain::{
 use engram_knowledge::KnowledgeRepository as _;
 use engram_memory::MemoryService as _;
 use engram_runtime::{CoreError, CoreResult};
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlMemoryService;
 
 use crate::{
     ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStep, StepOutcome, StepStatus,

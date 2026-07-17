@@ -6,7 +6,7 @@
 
 use engram_core::{BeliefRepository, ContradictionDetector};
 use engram_domain::{Belief, Contradiction, ContradictionResolution};
-use engram_store_belief_sqlite::SqlBeliefStore;
+use engram_store_sqlite::SqlBeliefStore;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;

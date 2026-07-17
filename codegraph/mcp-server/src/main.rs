@@ -13,7 +13,7 @@ use engram_codegraph_queries as cgq;
 use engram_codegraph_temporal as cgt;
 use engram_domain::*;
 use engram_ingest::{ScanOptions, scan_repository};
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use engram_store_lexical::LexicalIndex;
 
 use futures::executor::block_on;

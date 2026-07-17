@@ -18,7 +18,7 @@ use engram_ingest::{
     SOURCE_PATH_KEY, STABLE_SOURCE_KEY,
 };
 use engram_knowledge::KnowledgeGraphRepository;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 const REPO_A: &str = "github.com/acme/alpha";

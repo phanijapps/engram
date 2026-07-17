@@ -5,7 +5,7 @@
 
 use engram_domain::{Concept, ConceptRelation, ConceptScheme, TaxonomyProposal};
 use engram_knowledge::{TaxonomyRepository, validate_taxonomy_proposal};
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use serde::Deserialize;

@@ -7,7 +7,7 @@
 
 use engram_domain::{ForgetRequest, RetrievalRequest, WriteMemoryRequest};
 use engram_memory::MemoryService;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;

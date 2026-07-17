@@ -3,7 +3,7 @@
 //! Stateful local ingest engine exposed to Node through N-API.
 //! Owns one SQLite-backed `SqlKnowledgeStore` and manages background scan jobs.
 
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 

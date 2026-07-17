@@ -3,7 +3,7 @@ use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, KnowledgeIngestor,
 };
 use engram_knowledge::KnowledgeRepository;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 #[test]

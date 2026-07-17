@@ -5,7 +5,7 @@
 //! calls observe the same scoped state. The methods are JSON transports over
 //! the `engram-knowledge` ports; TypeScript owns ergonomics.
 
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use engram_store_lexical::LexicalIndex;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;

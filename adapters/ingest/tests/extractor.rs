@@ -3,7 +3,7 @@ use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
 };
 use engram_knowledge::KnowledgeGraphRepository;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 fn scope() -> Scope {

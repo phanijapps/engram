@@ -20,7 +20,7 @@ use std::path::PathBuf;
 
 use engram_domain::*;
 use engram_ingest::{ScanOptions, scan_repository};
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 // ── helpers ───────────────────────────────────────────────────────────────────

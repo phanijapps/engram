@@ -32,6 +32,6 @@ tree-sitter-sfapex = "3.0"
 tree-sitter-typescript = "0.23"
 
 [dev-dependencies]
-engram-store-knowledge-sqlite = { path = "../knowledge/sqlite" }
+engram-store-sqlite = { path = "../sqlite" }
 futures.workspace = true
 tempfile = "3"

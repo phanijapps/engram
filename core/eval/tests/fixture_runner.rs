@@ -3,7 +3,7 @@ use std::sync::Arc;
 use engram_domain::*;
 use engram_eval::EvaluationRunner;
 use engram_eval::{MemoryFixtureRunner, summarize_reports};
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 
 const ACCEPTED_RETRIEVAL_FIXTURES: &[&str] = &[

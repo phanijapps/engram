@@ -17,7 +17,7 @@ engram-graph-analytics = { path = "../../core/graph-analytics" }
 engram-ingest = { path = "../../adapters/ingest" }
 engram-knowledge = { path = "../../core/knowledge" }
 engram-runtime = { path = "../../core/runtime" }
-engram-store-knowledge-sqlite = { path = "../../adapters/knowledge/sqlite" }
+engram-store-sqlite = { path = "../../adapters/sqlite" }
 engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical" }
 chrono.workspace = true
 futures.workspace = true

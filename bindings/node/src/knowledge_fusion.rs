@@ -12,7 +12,7 @@ use engram_retrieval::{
 };
 use engram_runtime::CoreResult;
 use engram_store_associative_graph::{AssociativeGraphIndex, GraphRelationshipSource};
-use engram_store_knowledge_sqlite::{GraphCandidateSource, GraphRetrievalIndex, SqlKnowledgeStore};
+use engram_store_sqlite::{GraphCandidateSource, GraphRetrievalIndex, SqlKnowledgeStore};
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use std::sync::Arc;
@@ -154,7 +154,7 @@ mod tests {
     };
     use engram_knowledge::KnowledgeRepository;
     use engram_store_associative_graph::GraphRelationshipSource;
-    use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+    use engram_store_sqlite::SqlKnowledgeStore;
     use futures::executor::block_on;
     use std::sync::Arc;
 

@@ -7,7 +7,7 @@ use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, GraphExtractor, KnowledgeIngestor, PlainTextChunker,
     PlainTextChunkerOptions, ScanOptions, scan_repository,
 };
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use serde::Serialize;

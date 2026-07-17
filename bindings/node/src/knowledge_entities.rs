@@ -4,7 +4,7 @@
 
 use engram_domain::KnowledgeEntity;
 use engram_knowledge::KnowledgeRepository;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use std::sync::Arc;

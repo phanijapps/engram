@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use engram_codegraph_queries as cgq;
 use engram_domain::{KnowledgeRelationship, Scope};
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use serde_json::Value;

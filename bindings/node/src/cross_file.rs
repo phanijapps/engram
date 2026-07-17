@@ -10,7 +10,7 @@ use engram_domain::{
     Retention, Scope, Sensitivity, Visibility,
 };
 use engram_knowledge::KnowledgeRepository;
-use engram_store_knowledge_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
 use std::collections::{HashMap, HashSet};

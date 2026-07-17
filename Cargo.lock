@@ -1553,13 +1553,8 @@ dependencies = [
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
- "engram-store-belief-sqlite",
- "engram-store-hierarchy-sqlite",
- "engram-store-knowledge-sqlite",
  "engram-store-lexical",
- "engram-store-sql",
  "engram-store-sqlite",
- "engram-store-vector",
  "futures",
  "serde",
  "serde_json",
@@ -1697,15 +1692,10 @@ dependencies = [
  "engram-retrieval",
  "engram-runtime",
  "engram-store-associative-graph",
- "engram-store-belief-sqlite",
  "engram-store-community-summary",
- "engram-store-hierarchy-sqlite",
- "engram-store-knowledge-sqlite",
  "engram-store-lexical",
- "engram-store-sql",
  "engram-store-sqlite",
  "engram-store-surreal",
- "engram-store-vector",
  "futures",
  "reqwest 0.12.28",
  "serde",
@@ -1779,12 +1769,8 @@ dependencies = [
  "engram-retrieval",
  "engram-runtime",
  "engram-store-associative-graph",
- "engram-store-belief-sqlite",
- "engram-store-knowledge-sqlite",
  "engram-store-lexical",
- "engram-store-sql",
  "engram-store-sqlite",
- "engram-store-vector",
  "futures",
  "napi",
  "napi-build",
@@ -1852,13 +1838,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "engram-store-belief-sqlite"
-version = "0.1.0"
-dependencies = [
- "engram-store-sqlite",
-]
-
-[[package]]
 name = "engram-store-community-summary"
 version = "0.1.0"
 dependencies = [
@@ -1873,20 +1852,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "engram-store-hierarchy-sqlite"
-version = "0.1.0"
-dependencies = [
- "engram-store-sqlite",
-]
-
-[[package]]
-name = "engram-store-knowledge-sqlite"
-version = "0.1.0"
-dependencies = [
- "engram-store-sqlite",
-]
-
-[[package]]
 name = "engram-store-lexical"
 version = "0.1.0"
 dependencies = [
@@ -1897,13 +1862,6 @@ dependencies = [
  "engram-runtime",
  "futures",
  "tantivy",
-]
-
-[[package]]
-name = "engram-store-sql"
-version = "0.1.0"
-dependencies = [
- "engram-store-sqlite",
 ]
 
 [[package]]
@@ -1942,13 +1900,6 @@ dependencies = [
  "serde_json",
  "surrealdb",
  "tokio",
-]
-
-[[package]]
-name = "engram-store-vector"
-version = "0.1.0"
-dependencies = [
- "engram-store-sqlite",
 ]
 
 [[package]]

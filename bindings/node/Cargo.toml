@@ -24,11 +24,7 @@ engram-runtime = { path = "../../core/runtime" }
 engram-store-sqlite = { path = "../../adapters/sqlite" }
 engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph" }
 engram-consolidation = { path = "../../core/consolidation" }
-engram-store-belief-sqlite = { path = "../../adapters/orchestration/belief-sqlite" }
 engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical" }
-engram-store-knowledge-sqlite = { path = "../../adapters/knowledge/sqlite" }
-engram-store-sql = { path = "../../adapters/memory/sqlite" }
-engram-store-vector = { path = "../../adapters/retrieval/sqlite-vec" }
 futures.workspace = true
 napi.workspace = true
 napi-derive.workspace = true

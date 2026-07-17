@@ -28,12 +28,7 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 # ADR-0022: the engine-specific code lives under src/sqlite/ and is intentionally
 # exempt from the engine-neutrality gate.
 engram-store-sqlite = { path = "../../adapters/sqlite", optional = true }
-engram-store-sql = { path = "../../adapters/memory/sqlite", optional = true }
-engram-store-knowledge-sqlite = { path = "../../adapters/knowledge/sqlite", optional = true }
-engram-store-belief-sqlite = { path = "../../adapters/orchestration/belief-sqlite", optional = true }
-engram-store-hierarchy-sqlite = { path = "../../adapters/hierarchy/sqlite", optional = true }
 engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical", optional = true }
-engram-store-vector = { path = "../../adapters/retrieval/sqlite-vec", optional = true }
 engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph", optional = true }
 engram-store-community-summary = { path = "../../adapters/retrieval/community-summary", optional = true }
 engram-decay = { path = "../../adapters/consolidation/decay", optional = true }
@@ -68,12 +63,7 @@ ollama = ["dep:reqwest"]
 # under src/sqlite/, and makes EngramProvider::open return a wired provider.
 sqlite = [
     "dep:engram-store-sqlite",
-    "dep:engram-store-sql",
-    "dep:engram-store-knowledge-sqlite",
-    "dep:engram-store-belief-sqlite",
-    "dep:engram-store-hierarchy-sqlite",
     "dep:engram-store-lexical",
-    "dep:engram-store-vector",
     "dep:engram-store-associative-graph",
     "dep:engram-store-community-summary",
     "dep:engram-reflection",

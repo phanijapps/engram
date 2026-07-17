@@ -16,10 +16,14 @@ use crate::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilde
 use engram_domain::CapabilityState;
 use engram_belief::BeliefRepository;
 use engram_hierarchy::HierarchyRepository;
+use engram_knowledge::{
+    KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
+};
 use engram_memory::MemoryService;
 use engram_runtime::CoreResult;
 use engram_store_surreal::{
-    SurrealBeliefStore, SurrealConnection, SurrealHierarchyStore, SurrealMemoryService,
+    SurrealBeliefStore, SurrealConnection, SurrealHierarchyStore, SurrealKnowledgeStore,
+    SurrealMemoryService,
 };
 
 /// Bootstraps a fully-wired provider from configuration against the Surreal
@@ -38,16 +42,31 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
     // One shared Surreal connection; every Surreal cell clones this Arc.
     let memory: Arc<dyn MemoryService> = Arc::new(SurrealMemoryService::new(conn.clone()));
     let hierarchy: Arc<dyn HierarchyRepository> = Arc::new(SurrealHierarchyStore::new(conn.clone()));
-    let beliefs: Arc<dyn BeliefRepository> = Arc::new(SurrealBeliefStore::new(conn));
+    let beliefs: Arc<dyn BeliefRepository> = Arc::new(SurrealBeliefStore::new(conn.clone()));
+    // SurrealKnowledgeStore implements all 4 knowledge ports; one Arc, coerced
+    // to each trait handle.
+    let knowledge_store = Arc::new(SurrealKnowledgeStore::new(conn));
+    let knowledge: Arc<dyn KnowledgeRepository> = knowledge_store.clone();
+    let graph: Arc<dyn KnowledgeGraphRepository> = knowledge_store.clone();
+    let taxonomy: Arc<dyn TaxonomyRepository> = knowledge_store.clone();
+    let ontology: Arc<dyn OntologyRepository> = knowledge_store.clone();
     let report = CapabilityReport::builder()
         .memory(CapabilityState::Supported)
         .hierarchy(CapabilityState::Supported)
         .beliefs(CapabilityState::Supported)
+        .knowledge(CapabilityState::Supported)
+        .graph(CapabilityState::Supported)
+        .taxonomy(CapabilityState::Supported)
+        .ontology(CapabilityState::Supported)
         .build();
     Ok(EngramProviderBuilder::new(report)
         .memory(memory)
         .hierarchy(hierarchy)
         .beliefs(beliefs)
+        .knowledge(knowledge)
+        .graph(graph)
+        .taxonomy(taxonomy)
+        .ontology(ontology)
         .build())
 }
 
@@ -63,7 +82,8 @@ mod tests {
         MemoryStatus, Policy, Provenance, Requester, Retention, RetrievalRequest, Scope,
         Sensitivity, Visibility, WriteMemoryRequest, HierarchyNode, HierarchyNodeKind,
         HierarchyNodeId, HierarchyNodeStatus, HierarchyRelation, Belief, BeliefSubject,
-        BeliefStatus,
+        BeliefStatus, KnowledgeSource, SourceDocument, KnowledgeChunk, SourceKind,
+        SourceDocumentKind, KnowledgeChunkKind,
     };
     use tempfile::TempDir;
 
@@ -402,5 +422,95 @@ mod tests {
             beliefs.get_belief(record_query).await.is_err(),
             "record-time history query must be rejected"
         );
+    }
+
+    fn k_source(id: &str) -> KnowledgeSource {
+        KnowledgeSource {
+            id: Id::from(id),
+            kind: SourceKind::Filesystem,
+            scope: scope("tenant-a"),
+            name: "docs".to_owned(),
+            uri: None,
+            version: None,
+            policy: policy(),
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
+    fn k_document(id: &str, source_id: &str) -> SourceDocument {
+        SourceDocument {
+            id: Id::from(id),
+            source_id: Id::from(source_id),
+            kind: SourceDocumentKind::Markdown,
+            uri: None,
+            path: Some("docs/intro.md".to_owned()),
+            title: None,
+            mime_type: None,
+            language: None,
+            version: None,
+            content_hash: "sha256:abc".to_owned(),
+            provenance: provenance(),
+            policy: policy(),
+            created_at: Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
+    fn k_chunk(id: &str, document_id: &str, source_id: &str) -> KnowledgeChunk {
+        KnowledgeChunk {
+            id: Id::from(id),
+            document_id: Id::from(document_id),
+            source_id: Id::from(source_id),
+            kind: KnowledgeChunkKind::Paragraph,
+            text: "surreal chunk".to_owned(),
+            summary: None,
+            location: None,
+            entities: Vec::new(),
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: "sha256:chunk".to_owned(),
+            provenance: provenance(),
+            policy: policy(),
+            created_at: Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
+    /// Surreal knowledge cell: source → document → chunk round-trip with scope
+    /// isolation (chunk visibility inherits from its owning source).
+    #[tokio::test]
+    async fn surreal_knowledge_chunk_round_trip_with_scope_isolation() {
+        let dir = TempDir::new().unwrap();
+        let provider = bootstrap_surreal(&test_config(&dir)).expect("surreal bootstrap");
+        let knowledge = provider.knowledge().expect("knowledge handle wired");
+
+        knowledge.put_source(k_source("s1")).await.expect("put_source");
+        knowledge
+            .put_document(k_document("d1", "s1"))
+            .await
+            .expect("put_document");
+        knowledge
+            .put_chunk(k_chunk("c1", "d1", "s1"))
+            .await
+            .expect("put_chunk");
+
+        // tenant-a owns the source → chunk visible
+        let visible = knowledge
+            .get_chunk(&Id::from("c1"), &scope("tenant-a"))
+            .await
+            .expect("get_chunk tenant-a");
+        assert!(visible.is_some(), "tenant-a must see its chunk");
+
+        // tenant-b does not own the source → chunk hidden (scope inheritance)
+        let hidden = knowledge
+            .get_chunk(&Id::from("c1"), &scope("tenant-b"))
+            .await
+            .expect("get_chunk tenant-b");
+        assert!(hidden.is_none(), "tenant-b must not see tenant-a's chunk");
     }
 }

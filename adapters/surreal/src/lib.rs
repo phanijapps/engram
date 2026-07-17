@@ -22,9 +22,11 @@ mod util;
 pub mod belief;
 pub mod connection;
 pub mod hierarchy;
+pub mod knowledge;
 pub mod memory;
 
 pub use belief::SurrealBeliefStore;
 pub use connection::SurrealConnection;
 pub use hierarchy::SurrealHierarchyStore;
+pub use knowledge::SurrealKnowledgeStore;
 pub use memory::SurrealMemoryService;

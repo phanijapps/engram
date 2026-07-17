@@ -1896,6 +1896,7 @@ dependencies = [
  "engram-belief",
  "engram-domain",
  "engram-hierarchy",
+ "engram-knowledge",
  "engram-memory",
  "engram-runtime",
  "serde",

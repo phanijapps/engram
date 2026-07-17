@@ -54,22 +54,39 @@
 ### T5: Fold vector (`engram-store-vector`) → `::vector`
 **Depends on:** T4 · **Mode:** goal-based (green)
 
-### T6: Move `Sql*` glue into the crate; thin the facade wiring
+### T6: Move ALL `Sql*` glue + `SqliteOpenOptions` into the crate
 **Depends on:** T5 · **Mode:** goal-based (green)
-- Move `consolidation_adapters.rs` + `recall_lanes.rs` from
-  `core/integration/src/sqlite/` into `engram-store-sqlite`.
-- `core/integration/src/sqlite/` keeps ONLY `bootstrap_sqlite` (thin: constructs
-  the cells, returns `EngramProvider`) — symmetric with the Surreal backend.
-- **Done when:** the facade wiring module is thin; all `Sql*` glue lives in
-  `engram-store-sqlite`; green.
+- Move every SQLite-specific module out of `core/integration/src/sqlite/` into
+  `engram-store-sqlite`: `batch`, `export_import`, `observability`, `provenance`,
+  `recall`, `recall_lanes`, `consolidation_adapters`, `migration_service`,
+  `conformance`. `core/integration/src/sqlite/` keeps ONLY thin `bootstrap_sqlite`
+  (constructs cells via the crate's constructors, returns `EngramProvider` — no
+  raw sqlite call; Cargo cycle).
+- Move `SqliteOpenOptions` (+ `SqlitePath`, `SqliteJournalMode`) from
+  `engram-runtime/options.rs` into `engram-store-sqlite`; drop the
+  `engram_runtime` re-exports. `engram-runtime` keeps only neutral primitives
+  (`error.rs`, `redaction.rs`).
+- **Done when:** all `Sql*` glue + connection config live in
+  `engram-store-sqlite`; the facade wiring is thin; green.
 
-### T7 (optional / coordinate): `bindings/node` legacy import sweep
-**Depends on:** T0 · **Mode:** goal-based (green)
-- ~17 legacy `bindings/node` modules import `Sql*` directly; repoint to
-  `engram-store-sqlite`. (This is the same surface the `surrealdb-backend` plan's
-  T8 wants routed through the facade — coordinate so the consolidation's
-  re-point and surreal's facade-routing don't collide.)
-- **Done when:** `bindings/node` imports SQLite storage from one crate.
+### T7: Re-point every remaining consumer to `engram-store-sqlite`
+**Depends on:** T6 · **Mode:** goal-based (green)
+- Repoint `bindings/node` (~16 legacy modules import `Sql*` directly), `core/eval`
+  tests, and `adapters/ingest` tests to import from `engram-store-sqlite`.
+  (Coordinate with the `surrealdb-backend` plan's T8 — both touch
+  `bindings/node`; do them together to avoid double-churn.)
+- **Done when:** no consumer imports the deleted crate paths; all SQLite imports
+  come from `engram-store-sqlite`.
+
+### T8: Verify "nothing outside" + delete the old crates
+**Depends on:** T7 · **Mode:** goal-based (grep + green)
+- Delete the five source adapter-crate directories (code now folded in).
+- Verify: `grep -rnE 'rusqlite|SqliteOpenOptions|SqliteJournalMode|SqlitePath'`
+  outside `adapters/sqlite/` returns nothing; `grep -rnE 'engram_store_(sql|knowledge_sqlite|belief_sqlite|hierarchy_sqlite|vector)::'`
+  returns nothing.
+- Full workspace test suite + neutrality hook green; SQLite behavior unchanged.
+- **Done when:** `engram-store-sqlite` is the complete self-contained SQLite
+  backend (the template to mimic), and the grep gates are clean.
 
 ## Rollout
 - **Delivery:** behind no flag — pure relocation; default + sqlite + surreal

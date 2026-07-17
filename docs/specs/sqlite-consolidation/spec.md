@@ -65,12 +65,22 @@ Consumer surface to rewire: `engram-conformance` (re-exports `Sql*`), `bindings/
 - **Goal-based (import surface):** `grep` confirms no consumer imports the deleted crate paths after each fold.
 
 ## Acceptance Criteria
-- [ ] `engram-store-sqlite` is the single crate holding all SQLite storage: memory, knowledge (graph/taxonomy/ontology), belief, hierarchy, vectors, and the `Sql*` consolidation/recall-lane glue.
+- [ ] `engram-store-sqlite` is the single crate holding all SQLite storage: memory, knowledge (graph/taxonomy/ontology), belief, hierarchy, vectors, the `Sql*` glue (batch/export/observability/provenance/recall/recall-lanes/consolidation/migration/conformance), AND `SqliteOpenOptions` connection config.
+- [ ] **No SQLite call outside `engram-store-sqlite`** — `grep -rnE 'rusqlite|SqliteOpenOptions|SqliteJournalMode|SqlitePath'` outside `adapters/sqlite/` returns nothing. The crate is the complete, self-contained SQLite backend — a clean template to mimic for `engram-store-surreal`, `engram-store-mixed`, etc.
 - [ ] The five source adapter crates are removed; no workspace member depends on them.
+- [ ] `SqliteOpenOptions` (+ `SqlitePath`, `SqliteJournalMode`) moves from `engram-runtime` into `engram-store-sqlite`; `engram-runtime` keeps only engine-neutral primitives (errors, redaction, clocks, ids).
 - [ ] `core/integration/src/sqlite/` contains only the thin `bootstrap_sqlite` wiring.
-- [ ] Every consumer (`engram-conformance`, `bindings/node`, `core/integration`, tests) imports SQLite storage from `engram-store-sqlite`.
-- [ ] The full workspace test suite + neutrality hook are green; SQLite behavior is unchanged (existing tests pass unmodified).
+- [ ] Every consumer (`engram-conformance`, `bindings/node`, `core/integration`, `core/eval`, `adapters/ingest` tests) imports SQLite from `engram-store-sqlite`.
+- [ ] The full workspace test suite + neutrality hook are green; SQLite behavior is unchanged.
 - [ ] The engine-agnostic adapters (lexical/associative/community/decay/ingest) are untouched.
+
+### Stays outside `engram-store-sqlite` — by design, NOT SQLite calls
+- **`bootstrap_sqlite`** (thin wiring in `engram-integration`): constructs the
+  cells via the crate's constructors and returns the facade-owned
+  `EngramProvider`. It makes no raw `rusqlite` call and cannot live in the crate
+  (Cargo cycle). This is provider wiring, not a database operation.
+- **The SQL-redaction regex in `engram-runtime/error.rs`**: engine-neutral error
+  sanitization (strips SQL from error messages for any engine), not a DB call.
 
 ## Assumptions
 - Technical: the five SQLite crates are independent (each implements its own port over its own rusqlite connection); the only cross-crate `Sql*` glue is `consolidation_adapters.rs` + `recall_lanes.rs`. (source: repo grep; to confirm in T0.)

@@ -25,6 +25,7 @@ members = [
     "adapters/consolidation/decay",
     "adapters/orchestration/belief-sqlite",
     "adapters/hierarchy/sqlite",
+    "adapters/surreal",
     "bindings/node",
     "examples/rust-integration",
     "codegraph/queries",

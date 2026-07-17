@@ -1702,13 +1702,13 @@ dependencies = [
  "engram-store-knowledge-sqlite",
  "engram-store-lexical",
  "engram-store-sql",
+ "engram-store-surreal",
  "engram-store-vector",
  "futures",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "sha2 0.11.0",
- "surrealdb",
  "tempfile",
  "tokio",
  "toml",
@@ -1933,6 +1933,21 @@ dependencies = [
  "futures",
  "rusqlite",
  "serde_json",
+]
+
+[[package]]
+name = "engram-store-surreal"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "engram-domain",
+ "engram-memory",
+ "engram-runtime",
+ "serde",
+ "serde_json",
+ "surrealdb",
+ "tokio",
 ]
 
 [[package]]

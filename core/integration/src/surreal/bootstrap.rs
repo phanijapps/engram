@@ -12,11 +12,11 @@
 
 use std::sync::Arc;
 
-use super::memory::SurrealMemoryService;
 use crate::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder};
 use engram_domain::CapabilityState;
 use engram_memory::MemoryService;
 use engram_runtime::CoreResult;
+use engram_store_surreal::{SurrealConnection, SurrealMemoryService};
 
 /// Bootstraps a fully-wired provider from configuration against the Surreal
 /// backend (embedded SurrealKV).
@@ -28,7 +28,10 @@ use engram_runtime::CoreResult;
 /// report `ProviderUnavailable` (fail-closed, conformance contract).
 pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let path = config.storage_path.to_string_lossy().to_string();
-    let memory: Arc<dyn MemoryService> = Arc::new(SurrealMemoryService::new(path));
+    // One shared Surreal connection; every Surreal cell (memory now, knowledge/
+    // belief/hierarchy/vectors later) clones this Arc.
+    let conn = Arc::new(SurrealConnection::new(path));
+    let memory: Arc<dyn MemoryService> = Arc::new(SurrealMemoryService::new(conn));
     let report = CapabilityReport::builder()
         .memory(CapabilityState::Supported)
         .build();

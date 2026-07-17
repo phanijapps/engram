@@ -1,0 +1,20 @@
+[package]
+name = "engram-store-surreal"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+engram-domain = { path = "../../core/domain" }
+engram-runtime = { path = "../../core/runtime" }
+engram-memory = { path = "../../core/memory" }
+async-trait.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { workspace = true }
+# Embedded SurrealKV store. default-features=false drops the http/graphql/ws
+# surface (and a broken async-graphql pin); only the embedded KV is needed.
+surrealdb = { version = "2", default-features = false, features = ["kv-surrealkv"] }
+# OnceCell for the lazy connection open (the Surreal SDK needs a Tokio reactor,
+# opened under the consumer's runtime, not via sync block_on in the facade).
+tokio = { version = "1", features = ["sync"] }

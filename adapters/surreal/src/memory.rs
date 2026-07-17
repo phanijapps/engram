@@ -24,9 +24,7 @@ use engram_memory::{MemoryEventRepository, MemoryRepository, MemoryService};
 use engram_runtime::{Clock, CoreError, CoreResult, IdGenerator, PolicyAuthorizer};
 use serde::Deserialize;
 use serde_json::json;
-use surrealdb::engine::local::{Db, SurrealKv};
-use surrealdb::Surreal;
-use tokio::sync::OnceCell;
+use crate::SurrealConnection;
 
 const MEMORY_TABLE: &str = "memory";
 const EVENT_TABLE: &str = "memory_event";
@@ -114,51 +112,26 @@ struct DataWrapper<T> {
 
 /// `MemoryService` backed by embedded SurrealKV.
 pub struct SurrealMemoryService {
-    path: String,
-    namespace: String,
-    database: String,
-    db: OnceCell<Surreal<Db>>,
+    conn: Arc<SurrealConnection>,
     authorizer: Arc<dyn PolicyAuthorizer>,
     clock: Arc<dyn Clock>,
     ids: Arc<dyn IdGenerator>,
 }
 
 impl SurrealMemoryService {
-    /// Creates a memory service that lazily opens the embedded Surreal store at
-    /// `path` on first use. No connection is established here — `bootstrap_*`
-    /// is sync and the Surreal SDK needs a Tokio reactor, so the open is deferred
-    /// to the first async method call (run under the consumer's runtime).
-    pub fn new(path: impl Into<String>) -> Self {
+    /// Creates a memory service over a shared Surreal connection. The connection
+    /// opens lazily on first use (under the consumer's Tokio runtime).
+    pub fn new(conn: Arc<SurrealConnection>) -> Self {
         Self {
-            path: path.into(),
-            namespace: "engram".to_owned(),
-            database: "engram".to_owned(),
-            db: OnceCell::new(),
+            conn,
             authorizer: Arc::new(AllowAllAuthorizer),
             clock: Arc::new(SurrealClock),
             ids: Arc::new(SurrealIdGenerator::new()),
         }
     }
 
-    async fn db(&self) -> CoreResult<&Surreal<Db>> {
-        let db = self
-            .db
-            .get_or_try_init(|| async {
-                let db = Surreal::new::<SurrealKv>(&self.path)
-                    .await
-                    .map_err(surreal_err)?;
-                db.use_ns(&self.namespace)
-                    .use_db(&self.database)
-                    .await
-                    .map_err(surreal_err)?;
-                Ok::<_, CoreError>(db)
-            })
-            .await?;
-        Ok(db)
-    }
-
     async fn list_records(&self) -> CoreResult<Vec<MemoryRecord>> {
-        let db = self.db().await?;
+        let db = self.conn.db().await?;
         let mut res = db
             .query(&format!("SELECT data FROM {MEMORY_TABLE}"))
             .await
@@ -168,7 +141,7 @@ impl SurrealMemoryService {
     }
 
     async fn list_events(&self) -> CoreResult<Vec<MemoryEvent>> {
-        let db = self.db().await?;
+        let db = self.conn.db().await?;
         let mut res = db
             .query(&format!("SELECT data FROM {EVENT_TABLE}"))
             .await
@@ -178,7 +151,7 @@ impl SurrealMemoryService {
     }
 
     async fn remove_memory(&self, id: &MemoryId) -> CoreResult<()> {
-        let db = self.db().await?;
+        let db = self.conn.db().await?;
         db.query(&format!(
             "DELETE type::thing('{MEMORY_TABLE}', $key)"
         ))
@@ -192,7 +165,7 @@ impl SurrealMemoryService {
 #[async_trait]
 impl MemoryRepository for SurrealMemoryService {
     async fn put_memory(&self, record: MemoryRecord) -> CoreResult<MemoryRecord> {
-        let db = self.db().await?;
+        let db = self.conn.db().await?;
         let key = record.id.to_string();
         db.query(&format!(
             "UPSERT type::thing('{MEMORY_TABLE}', $key) SET data = $record"
@@ -205,7 +178,7 @@ impl MemoryRepository for SurrealMemoryService {
     }
 
     async fn get_memory(&self, id: &MemoryId, scope: &Scope) -> CoreResult<Option<MemoryRecord>> {
-        let db = self.db().await?;
+        let db = self.conn.db().await?;
         let mut res = db
             .query(&format!(
                 "SELECT data FROM type::thing('{MEMORY_TABLE}', $key)"
@@ -222,7 +195,7 @@ impl MemoryRepository for SurrealMemoryService {
     }
 
     async fn append_event(&self, event: MemoryEvent) -> CoreResult<MemoryEvent> {
-        let db = self.db().await?;
+        let db = self.conn.db().await?;
         let key = event.id.to_string();
         db.query(&format!(
             "UPSERT type::thing('{EVENT_TABLE}', $key) SET data = $event"
@@ -254,7 +227,7 @@ impl MemoryRepository for SurrealMemoryService {
 #[async_trait]
 impl MemoryEventRepository for SurrealMemoryService {
     async fn get_event(&self, id: &EventId, scope: &Scope) -> CoreResult<Option<MemoryEvent>> {
-        let db = self.db().await?;
+        let db = self.conn.db().await?;
         let mut res = db
             .query(&format!(
                 "SELECT data FROM type::thing('{EVENT_TABLE}', $key)"

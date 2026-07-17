@@ -17,6 +17,16 @@
   files (`provider.rs`, `capability.rs`, …), not these submodules, so the facade
   stays engine-neutral and swap-by-config is unchanged. Only the physical crate
   boundary differs from the original "recipe crate" wording.
+- **Amendment 2026-07-16 (one crate per backend):** a backend's database
+  operations consolidate into ONE crate `engram-store-<engine>` — e.g.
+  `engram-store-surreal`, the future `engram-store-sqlite`, and composite
+  backends like `engram-store-mixed` (e.g. lancedb + neo4j). Each holds every
+  capability cell behind a shared connection. This supersedes the per-capability
+  adapter-crate grid (`adapters/<capability>/<engine>`) for consolidated engines:
+  a consolidated backend lives at `adapters/<engine>/`. The grid stays valid for
+  engines that genuinely ship as independent per-capability cells. Only the thin
+  `bootstrap_*` wiring (which returns the facade-owned `EngramProvider`) stays
+  in `engram-integration`; the cells live in the `engram-store-<engine>` crate.
 - **Date:** 2026-07-09
 - **Decision-makers:** phanijapps
 - **Supersedes:** none

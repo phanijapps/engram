@@ -13,17 +13,18 @@
 use std::sync::Arc;
 
 use crate::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder};
-use engram_domain::CapabilityState;
 use engram_belief::BeliefRepository;
+use engram_domain::{CapabilityState, EmbeddingSpace};
 use engram_hierarchy::HierarchyRepository;
 use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
 };
 use engram_memory::MemoryService;
+use engram_retrieval::VectorIndex;
 use engram_runtime::CoreResult;
 use engram_store_surreal::{
     SurrealBeliefStore, SurrealConnection, SurrealHierarchyStore, SurrealKnowledgeStore,
-    SurrealMemoryService,
+    SurrealMemoryService, SurrealVectorIndex,
 };
 
 /// Bootstraps a fully-wired provider from configuration against the Surreal
@@ -45,11 +46,19 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
     let beliefs: Arc<dyn BeliefRepository> = Arc::new(SurrealBeliefStore::new(conn.clone()));
     // SurrealKnowledgeStore implements all 4 knowledge ports; one Arc, coerced
     // to each trait handle.
-    let knowledge_store = Arc::new(SurrealKnowledgeStore::new(conn));
+    let knowledge_store = Arc::new(SurrealKnowledgeStore::new(conn.clone()));
     let knowledge: Arc<dyn KnowledgeRepository> = knowledge_store.clone();
     let graph: Arc<dyn KnowledgeGraphRepository> = knowledge_store.clone();
     let taxonomy: Arc<dyn TaxonomyRepository> = knowledge_store.clone();
     let ontology: Arc<dyn OntologyRepository> = knowledge_store.clone();
+    let embedding_space = EmbeddingSpace::new(
+        &config.embedding_provider.provider_type,
+        &config.embedding_provider.model,
+        config.embedding_provider.dimensions,
+        &config.embedding_provider.prompt_profile,
+        config.embedding_provider.normalization.clone(),
+    );
+    let vectors: Arc<dyn VectorIndex> = Arc::new(SurrealVectorIndex::new(conn, embedding_space));
     let report = CapabilityReport::builder()
         .memory(CapabilityState::Supported)
         .hierarchy(CapabilityState::Supported)
@@ -58,6 +67,7 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
         .graph(CapabilityState::Supported)
         .taxonomy(CapabilityState::Supported)
         .ontology(CapabilityState::Supported)
+        .vectors(CapabilityState::Supported)
         .build();
     Ok(EngramProviderBuilder::new(report)
         .memory(memory)
@@ -67,6 +77,7 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
         .graph(graph)
         .taxonomy(taxonomy)
         .ontology(ontology)
+        .vectors(vectors)
         .build())
 }
 
@@ -83,7 +94,7 @@ mod tests {
         Sensitivity, Visibility, WriteMemoryRequest, HierarchyNode, HierarchyNodeKind,
         HierarchyNodeId, HierarchyNodeStatus, HierarchyRelation, Belief, BeliefSubject,
         BeliefStatus, KnowledgeSource, SourceDocument, KnowledgeChunk, SourceKind,
-        SourceDocumentKind, KnowledgeChunkKind,
+        SourceDocumentKind, KnowledgeChunkKind, EmbeddingSpace,
     };
     use tempfile::TempDir;
 
@@ -512,5 +523,36 @@ mod tests {
             .await
             .expect("get_chunk tenant-b");
         assert!(hidden.is_none(), "tenant-b must not see tenant-a's chunk");
+    }
+
+    /// Surreal vector cell: insert a vector, search returns the target.
+    #[tokio::test]
+    async fn surreal_vector_round_trip() {
+        let dir = TempDir::new().unwrap();
+        let cfg = test_config(&dir);
+        // Build the embedding space the same way bootstrap_surreal does.
+        let space = EmbeddingSpace::new(
+            &cfg.embedding_provider.provider_type,
+            &cfg.embedding_provider.model,
+            cfg.embedding_provider.dimensions,
+            &cfg.embedding_provider.prompt_profile,
+            cfg.embedding_provider.normalization.clone(),
+        );
+        let provider = bootstrap_surreal(&cfg).expect("surreal bootstrap");
+        let vectors = provider.vectors().expect("vectors handle wired");
+        let target = Id::from("chunk-1");
+        let dims = cfg.embedding_provider.dimensions as usize;
+        vectors
+            .insert(&target, &space, vec![0.1; dims])
+            .await
+            .expect("insert");
+        let hits = vectors
+            .search(&space, vec![0.1; dims], 1)
+            .await
+            .expect("search");
+        assert!(
+            hits.iter().any(|(id, _)| *id == target),
+            "search returns the inserted target"
+        );
     }
 }

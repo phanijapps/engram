@@ -7,7 +7,7 @@ use engram_domain::*;
 use engram_memory::CoreResult;
 use rusqlite::{OptionalExtension, params};
 
-use crate::{
+use crate::memory::{
     schema::{json_error, sql_error},
     service::SqlMemoryStore,
 };
@@ -113,7 +113,7 @@ pub(crate) fn write_memory_transaction(
             transaction.rollback().map_err(sql_error)?;
             drop(connection);
             let Some(mut existing) = store.get_idempotent_response(key)? else {
-                return Err(crate::schema::sql_error(
+                return Err(crate::memory::schema::sql_error(
                     rusqlite::Error::QueryReturnedNoRows,
                 ));
             };

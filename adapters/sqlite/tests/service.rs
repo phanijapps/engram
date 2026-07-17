@@ -2,7 +2,7 @@ use engram_core::EvaluationRunner;
 use engram_domain::*;
 use engram_eval::{MemoryContractRunner, MemoryFixtureRunner, accepted_examples};
 use engram_memory::{MemoryEventRepository, MemoryRepository, MemoryService};
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -251,7 +251,7 @@ fn sql_service_runs_evaluation_fixture() {
     let service = Arc::new(SqlMemoryService::open_in_memory().expect("open sql service"));
     let runner = MemoryFixtureRunner::new(service);
     let fixture: EvaluationFixture = serde_json::from_str(include_str!(
-        "../../../../contracts/v1/examples/evaluation-fixture.json"
+        "../../../contracts/v1/examples/evaluation-fixture.json"
     ))
     .expect("deserialize evaluation fixture");
 

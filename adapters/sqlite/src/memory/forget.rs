@@ -7,7 +7,7 @@ use engram_domain::*;
 use engram_memory::{CoreError, CoreResult, MemoryRepository};
 use serde_json::json;
 
-use crate::{engine::SqlMemoryService, validation::validate_forget_request};
+use crate::memory::{engine::SqlMemoryService, validation::validate_forget_request};
 
 /// Applies forget lifecycle behavior to a SQL-backed memory target.
 ///

@@ -15,7 +15,7 @@ use engram_memory::{CoreError, CoreResult, MemoryEventRepository, MemoryReposito
 use engram_runtime::{SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::{
+use crate::memory::{
     schema::{initialize_schema, json_error, sql_error},
     scope::scope_allows,
 };
@@ -69,7 +69,7 @@ impl SqlMemoryStore {
     ///
     /// ```no_run
     /// use engram_runtime::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
-    /// use engram_store_sql::SqlMemoryStore;
+    /// use engram_store_sqlite::SqlMemoryStore;
     ///
     /// let options = SqliteOpenOptions {
     ///     path: SqlitePath::File("/path/to/engram.db".into()),

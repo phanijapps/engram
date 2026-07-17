@@ -13,7 +13,7 @@ use engram_memory::{
     PolicyAuthorizer,
 };
 
-use crate::{
+use crate::memory::{
     dependencies::{AllowAllPolicyAuthorizer, SequentialIdGenerator, SystemClock},
     service::SqlMemoryStore,
 };
@@ -93,7 +93,7 @@ impl SqlMemoryService {
     /// outside their scope.
     pub fn list_memories_in_scope(&self, scope: &Scope) -> CoreResult<Vec<MemoryRecord>> {
         let mut records = self.store.list_memories()?;
-        records.retain(|record| crate::scope::scope_allows(&record.scope, scope));
+        records.retain(|record| crate::memory::scope::scope_allows(&record.scope, scope));
         Ok(records)
     }
 }
@@ -101,15 +101,15 @@ impl SqlMemoryService {
 #[async_trait]
 impl MemoryService for SqlMemoryService {
     async fn write_memory(&self, request: WriteMemoryRequest) -> CoreResult<WriteMemoryResponse> {
-        crate::write::write_memory(self, request).await
+        crate::memory::write::write_memory(self, request).await
     }
 
     async fn retrieve(&self, request: RetrievalRequest) -> CoreResult<ContextPayload> {
-        crate::retrieval::retrieve(self, request).await
+        crate::memory::retrieval::retrieve(self, request).await
     }
 
     async fn forget(&self, request: ForgetRequest) -> CoreResult<ForgetResult> {
-        crate::forget::forget(self, request).await
+        crate::memory::forget::forget(self, request).await
     }
 }
 

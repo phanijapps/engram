@@ -4,7 +4,7 @@
 use chrono::Utc;
 use engram_domain::*;
 use engram_memory::MemoryService;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 
 // ---------- helpers ----------------------------------------------------------

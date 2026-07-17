@@ -1,18 +1,18 @@
 use engram_domain::{RetrievalRequest, WriteMemoryRequest};
 use engram_memory::MemoryService;
-use engram_store_sql::SqlMemoryService;
+use engram_store_sqlite::SqlMemoryService;
 use futures::executor::block_on;
 
 fn write_fixture() -> WriteMemoryRequest {
     serde_json::from_str(include_str!(
-        "../../../../contracts/v1/examples/write-memory-request.json"
+        "../../../contracts/v1/examples/write-memory-request.json"
     ))
     .expect("accepted write-memory fixture should deserialize")
 }
 
 fn retrieval_fixture() -> RetrievalRequest {
     serde_json::from_str(include_str!(
-        "../../../../contracts/v1/examples/retrieval-request.json"
+        "../../../contracts/v1/examples/retrieval-request.json"
     ))
     .expect("accepted retrieval fixture should deserialize")
 }

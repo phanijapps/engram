@@ -1,20 +1,5 @@
-//! SQL persistence adapter for Engram memory services.
-//!
-//! This crate keeps SQL-specific schema, serialization, and transaction details
-//! behind the `engram-core` ports. The first implementation uses SQLite to make
-//! durable adapter conformance runnable in CI without external services.
-
-mod dependencies;
-mod engine;
-mod forget;
-mod retrieval;
-mod schema;
-mod scope;
-mod service;
-mod transactional_write;
-mod validation;
-mod write;
-
-pub use dependencies::{AllowAllPolicyAuthorizer, SequentialIdGenerator, SystemClock};
-pub use engine::SqlMemoryService;
-pub use service::SqlMemoryStore;
+//! Shim: the memory code has folded into `engram-store-sqlite` (consolidation
+//! T1). This crate now only re-exports it so existing `engram_store_sql::*`
+//! consumers keep compiling until they are re-pointed (T7) and this crate is
+//! deleted (T8).
+pub use engram_store_sqlite::*;

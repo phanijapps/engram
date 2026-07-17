@@ -7,7 +7,7 @@ use engram_domain::*;
 use engram_memory::{self, CoreResult};
 use serde_json::json;
 
-use crate::{
+use crate::memory::{
     engine::SqlMemoryService, transactional_write::write_memory_transaction,
     validation::validate_write_request,
 };

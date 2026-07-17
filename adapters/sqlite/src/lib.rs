@@ -19,5 +19,10 @@
 pub use engram_store_belief_sqlite::*;
 pub use engram_store_hierarchy_sqlite::*;
 pub use engram_store_knowledge_sqlite::*;
-pub use engram_store_sql::*;
 pub use engram_store_vector::*;
+
+// Memory cell — folded in from engram-store-sql (consolidation T1). Its code
+// lives in `memory/`; re-exported at the crate root so `engram_store_sqlite::*`
+// and internal `crate::memory::*` both resolve.
+pub mod memory;
+pub use memory::*;

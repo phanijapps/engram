@@ -6,15 +6,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-async-trait.workspace = true
-chrono.workspace = true
-engram-domain = { path = "../../../core/domain" }
-engram-memory = { path = "../../../core/memory" }
-engram-runtime = { path = "../../../core/runtime" }
-rusqlite.workspace = true
-serde_json.workspace = true
-
-[dev-dependencies]
-engram-core = { path = "../../../core/orchestration" }
-engram-eval = { path = "../../../core/eval" }
-futures.workspace = true
+# Shim: the memory code + its tests/examples have folded into engram-store-sqlite
+# (consolidation T1). This crate only re-exports it so existing
+# `engram_store_sql::*` consumers keep compiling until re-pointed (T7) and this
+# crate is deleted (T8).
+engram-store-sqlite = { path = "../../sqlite" }

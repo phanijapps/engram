@@ -36,3 +36,8 @@ pub use knowledge::*;
 // and internal `crate::memory::*` both resolve.
 pub mod memory;
 pub use memory::*;
+
+// SQLite connection options — moved here from engram-runtime (T6), so every
+// SQLite database concern (including connection setup) lives in this crate.
+pub mod sqlite_options;
+pub use sqlite_options::*;

@@ -20,7 +20,8 @@ use engram_core::{
     retract_belief, supersede_belief,
 };
 use engram_domain::*;
-use engram_runtime::{CoreError, CoreResult, SqliteOpenOptions, SqlitePath};
+use engram_runtime::{CoreError, CoreResult};
+use crate::{SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::belief::{
@@ -65,7 +66,7 @@ impl SqlBeliefStore {
     /// # Examples
     ///
     /// ```no_run
-    /// use engram_runtime::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
+    /// use crate::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
     /// use engram_store_sqlite::SqlBeliefStore;
     ///
     /// let options = SqliteOpenOptions {

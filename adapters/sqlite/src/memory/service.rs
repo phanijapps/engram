@@ -12,7 +12,7 @@ use std::{
 use async_trait::async_trait;
 use engram_domain::*;
 use engram_memory::{CoreError, CoreResult, MemoryEventRepository, MemoryRepository};
-use engram_runtime::{SqliteOpenOptions, SqlitePath};
+use crate::{SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::memory::{
@@ -68,7 +68,7 @@ impl SqlMemoryStore {
     /// # Examples
     ///
     /// ```no_run
-    /// use engram_runtime::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
+    /// use crate::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
     /// use engram_store_sqlite::SqlMemoryStore;
     ///
     /// let options = SqliteOpenOptions {

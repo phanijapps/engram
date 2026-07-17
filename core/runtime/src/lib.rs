@@ -6,13 +6,11 @@
 //! and knowledge systems.
 
 pub mod error;
-pub mod options;
 pub mod redaction;
 
 use engram_domain::{Id, Policy, Requester, Scope, Timestamp};
 
 pub use error::{CoreError, CoreResult, DiagnosticError};
-pub use options::{SqliteJournalMode, SqliteOpenOptions, SqlitePath};
 
 /// Supplies timestamps to services without binding them to system time.
 ///

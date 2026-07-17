@@ -12,7 +12,8 @@ use std::{
 use async_trait::async_trait;
 use engram_domain::*;
 use engram_hierarchy::{HierarchyRepository, navigation};
-use engram_runtime::{CoreError, CoreResult, SqliteOpenOptions, SqlitePath};
+use engram_runtime::{CoreError, CoreResult};
+use crate::{SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::hierarchy::{
@@ -57,7 +58,7 @@ impl SqlHierarchyStore {
     /// # Examples
     ///
     /// ```no_run
-    /// use engram_runtime::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
+    /// use crate::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
     /// use engram_store_sqlite::SqlHierarchyStore;
     ///
     /// let options = SqliteOpenOptions {

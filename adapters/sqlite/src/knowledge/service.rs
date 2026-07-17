@@ -13,7 +13,8 @@ use std::{
 
 use chrono::Utc;
 use engram_domain::*;
-use engram_runtime::{CoreError, CoreResult, SqliteOpenOptions, SqlitePath};
+use engram_runtime::{CoreError, CoreResult};
+use crate::{SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::knowledge::{
@@ -61,7 +62,7 @@ impl SqlKnowledgeStore {
     /// # Examples
     ///
     /// ```no_run
-    /// use engram_runtime::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
+    /// use crate::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
     /// use engram_store_sqlite::SqlKnowledgeStore;
     ///
     /// let options = SqliteOpenOptions {

@@ -13,6 +13,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use crate::SurrealConnection;
 use async_trait::async_trait;
 use engram_domain::{
     AllowedUse, DeleteMode, EventId, ForgetResult, ForgetStatus, ForgetTargetType, FusionStrategy,
@@ -24,7 +25,6 @@ use engram_memory::{MemoryEventRepository, MemoryRepository, MemoryService};
 use engram_runtime::{Clock, CoreError, CoreResult, IdGenerator, PolicyAuthorizer};
 use serde::Deserialize;
 use serde_json::json;
-use crate::SurrealConnection;
 
 const MEMORY_TABLE: &str = "memory";
 const EVENT_TABLE: &str = "memory_event";
@@ -152,12 +152,10 @@ impl SurrealMemoryService {
 
     async fn remove_memory(&self, id: &MemoryId) -> CoreResult<()> {
         let db = self.conn.db().await?;
-        db.query(&format!(
-            "DELETE type::thing('{MEMORY_TABLE}', $key)"
-        ))
-        .bind(("key", id.to_string()))
-        .await
-        .map_err(surreal_err)?;
+        db.query(&format!("DELETE type::thing('{MEMORY_TABLE}', $key)"))
+            .bind(("key", id.to_string()))
+            .await
+            .map_err(surreal_err)?;
         Ok(())
     }
 }

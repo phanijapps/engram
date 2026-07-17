@@ -15,11 +15,11 @@ use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
 };
 use engram_runtime::CoreResult;
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
-use crate::util::{DataWrapper, scope_allows, surreal_err};
 use crate::SurrealConnection;
+use crate::util::{DataWrapper, scope_allows, surreal_err};
 
 const SOURCE_TABLE: &str = "knowledge_source";
 const DOCUMENT_TABLE: &str = "knowledge_document";
@@ -109,14 +109,12 @@ impl KnowledgeRepository for SurrealKnowledgeStore {
         Ok(chunk)
     }
 
-    async fn get_chunk(
-        &self,
-        id: &ChunkId,
-        scope: &Scope,
-    ) -> CoreResult<Option<KnowledgeChunk>> {
+    async fn get_chunk(&self, id: &ChunkId, scope: &Scope) -> CoreResult<Option<KnowledgeChunk>> {
         // Chunk visibility inherits from its owning source (chunk -> document ->
         // source), mirroring the SQLite adapter.
-        let Some(chunk) = self.get_record::<KnowledgeChunk>(CHUNK_TABLE, &id.to_string()).await?
+        let Some(chunk) = self
+            .get_record::<KnowledgeChunk>(CHUNK_TABLE, &id.to_string())
+            .await?
         else {
             return Ok(None);
         };
@@ -244,16 +242,9 @@ impl TaxonomyRepository for SurrealKnowledgeStore {
         Ok(concept)
     }
 
-    async fn put_concept_relation(
-        &self,
-        relation: ConceptRelation,
-    ) -> CoreResult<ConceptRelation> {
-        self.put_record(
-            CONCEPT_RELATION_TABLE,
-            relation.id.to_string(),
-            &relation,
-        )
-        .await?;
+    async fn put_concept_relation(&self, relation: ConceptRelation) -> CoreResult<ConceptRelation> {
+        self.put_record(CONCEPT_RELATION_TABLE, relation.id.to_string(), &relation)
+            .await?;
         Ok(relation)
     }
 
@@ -302,11 +293,7 @@ impl OntologyRepository for SurrealKnowledgeStore {
         Ok(axiom)
     }
 
-    async fn get_ontology(
-        &self,
-        id: &OntologyId,
-        scope: &Scope,
-    ) -> CoreResult<Option<Ontology>> {
+    async fn get_ontology(&self, id: &OntologyId, scope: &Scope) -> CoreResult<Option<Ontology>> {
         Ok(self
             .get_record::<Ontology>(ONTOLOGY_TABLE, &id.to_string())
             .await?

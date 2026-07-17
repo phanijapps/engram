@@ -11,15 +11,15 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 use engram_belief::{
-    BeliefQuery, BeliefQueryOrder, BeliefReferenceQuery, BeliefRepository, belief_references_source,
-    canonical_pair_key, canonicalize_pair, clear_stale_state, mark_stale, retract_belief,
-    supersede_belief,
+    BeliefQuery, BeliefQueryOrder, BeliefReferenceQuery, BeliefRepository,
+    belief_references_source, canonical_pair_key, canonicalize_pair, clear_stale_state, mark_stale,
+    retract_belief, supersede_belief,
 };
 use engram_domain::*;
 use engram_runtime::{CoreError, CoreResult};
 
-use crate::util::{DataWrapper, scope_allows, surreal_err};
 use crate::SurrealConnection;
+use crate::util::{DataWrapper, scope_allows, surreal_err};
 
 const BELIEF_TABLE: &str = "belief";
 const CONTRADICTION_TABLE: &str = "contradiction";
@@ -162,11 +162,7 @@ impl BeliefRepository for SurrealBeliefStore {
         Ok(matches.into_iter().next())
     }
 
-    async fn get_belief_by_id(
-        &self,
-        id: &BeliefId,
-        scope: &Scope,
-    ) -> CoreResult<Option<Belief>> {
+    async fn get_belief_by_id(&self, id: &BeliefId, scope: &Scope) -> CoreResult<Option<Belief>> {
         Ok(self
             .load_belief_by_id(id)
             .await?
@@ -249,16 +245,16 @@ impl BeliefRepository for SurrealBeliefStore {
             );
             contradiction.targets = vec![pair.left, pair.right];
             let pair_key = canonical_pair_key(&contradiction.targets[0], &contradiction.targets[1]);
-            if let Some(existing) = self
-                .load_all_contradictions()
-                .await?
-                .into_iter()
-                .find(|existing| {
-                    existing.scope == contradiction.scope
-                        && existing.targets.len() == 2
-                        && canonical_pair_key(&existing.targets[0], &existing.targets[1])
-                            == pair_key
-                })
+            if let Some(existing) =
+                self.load_all_contradictions()
+                    .await?
+                    .into_iter()
+                    .find(|existing| {
+                        existing.scope == contradiction.scope
+                            && existing.targets.len() == 2
+                            && canonical_pair_key(&existing.targets[0], &existing.targets[1])
+                                == pair_key
+                    })
             {
                 return Ok(existing);
             }

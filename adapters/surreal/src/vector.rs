@@ -14,8 +14,8 @@ use engram_retrieval::VectorIndex;
 use engram_runtime::{CoreError, CoreResult};
 use serde::Deserialize;
 
-use crate::util::surreal_err;
 use crate::SurrealConnection;
+use crate::util::surreal_err;
 
 const TABLE: &str = "vector_record";
 
@@ -108,7 +108,10 @@ impl VectorIndex for SurrealVectorIndex {
         for row in rows {
             let id = Id::new(&row.target_id).map_err(|_| CoreError::Adapter {
                 adapter: "surreal.vector".to_string(),
-                message: format!("stored vector target_id is not a valid Id: {}", row.target_id),
+                message: format!(
+                    "stored vector target_id is not a valid Id: {}",
+                    row.target_id
+                ),
             })?;
             results.push((id, cosine(&query_vector, &row.embedding)));
         }

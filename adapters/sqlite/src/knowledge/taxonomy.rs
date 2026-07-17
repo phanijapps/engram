@@ -85,7 +85,8 @@ impl TaxonomyRepository for SqlKnowledgeStore {
     }
 
     async fn put_concept_relation(&self, relation: ConceptRelation) -> CoreResult<ConceptRelation> {
-        let json = serde_json::to_string(&relation).map_err(crate::knowledge::schema::json_error)?;
+        let json =
+            serde_json::to_string(&relation).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(

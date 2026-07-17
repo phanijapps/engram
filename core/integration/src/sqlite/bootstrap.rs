@@ -272,9 +272,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut retrieval_lanes: Vec<Arc<dyn engram_retrieval::RetrievalIndex>> = Vec::new();
     if let Some(knowledge_handle) = &knowledge_store {
         // Graph lane: SqlKnowledgeStore implements GraphCandidateSource.
-        retrieval_lanes.push(Arc::new(
-            engram_store_sqlite::GraphRetrievalIndex::new(knowledge_handle.clone()),
-        ));
+        retrieval_lanes.push(Arc::new(engram_store_sqlite::GraphRetrievalIndex::new(
+            knowledge_handle.clone(),
+        )));
         // Associative-graph lane: PPR-ranked entities over the knowledge graph
         // (HippoRAG-style), fused alongside the other unified-recall lanes.
         retrieval_lanes.push(recall_lanes::associative_recall_lane(

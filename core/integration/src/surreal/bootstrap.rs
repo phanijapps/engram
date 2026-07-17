@@ -42,7 +42,8 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
     let conn = Arc::new(SurrealConnection::new(path));
     // One shared Surreal connection; every Surreal cell clones this Arc.
     let memory: Arc<dyn MemoryService> = Arc::new(SurrealMemoryService::new(conn.clone()));
-    let hierarchy: Arc<dyn HierarchyRepository> = Arc::new(SurrealHierarchyStore::new(conn.clone()));
+    let hierarchy: Arc<dyn HierarchyRepository> =
+        Arc::new(SurrealHierarchyStore::new(conn.clone()));
     let beliefs: Arc<dyn BeliefRepository> = Arc::new(SurrealBeliefStore::new(conn.clone()));
     // SurrealKnowledgeStore implements all 4 knowledge ports; one Arc, coerced
     // to each trait handle.
@@ -88,13 +89,13 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use engram_belief::BeliefQuery;
     use engram_domain::{
-        types::ScopeMappingStrategy, Actor, ActorKind, AllowedUse, DeleteMode, ForgetStatus,
-        ForgetTargetType, ForgetRequest, Id, MemoryContent, MemoryEventKind, MemoryKind,
-        MemoryStatus, Policy, Provenance, Requester, Retention, RetrievalRequest, Scope,
-        Sensitivity, Visibility, WriteMemoryRequest, HierarchyNode, HierarchyNodeKind,
-        HierarchyNodeId, HierarchyNodeStatus, HierarchyRelation, Belief, BeliefSubject,
-        BeliefStatus, KnowledgeSource, SourceDocument, KnowledgeChunk, SourceKind,
-        SourceDocumentKind, KnowledgeChunkKind, EmbeddingSpace,
+        Actor, ActorKind, AllowedUse, Belief, BeliefStatus, BeliefSubject, DeleteMode,
+        EmbeddingSpace, ForgetRequest, ForgetStatus, ForgetTargetType, HierarchyNode,
+        HierarchyNodeId, HierarchyNodeKind, HierarchyNodeStatus, HierarchyRelation, Id,
+        KnowledgeChunk, KnowledgeChunkKind, KnowledgeSource, MemoryContent, MemoryEventKind,
+        MemoryKind, MemoryStatus, Policy, Provenance, Requester, Retention, RetrievalRequest,
+        Scope, Sensitivity, SourceDocument, SourceDocumentKind, SourceKind, Visibility,
+        WriteMemoryRequest, types::ScopeMappingStrategy,
     };
     use tempfile::TempDir;
 
@@ -333,9 +334,18 @@ mod tests {
         let hierarchy = provider.hierarchy().expect("hierarchy handle wired");
         let s = scope("tenant-a");
 
-        hierarchy.put_node(h_node("a", 0, None)).await.expect("put_node a");
-        hierarchy.put_node(h_node("b", 1, Some("a"))).await.expect("put_node b");
-        hierarchy.put_node(h_node("c", 2, Some("b"))).await.expect("put_node c");
+        hierarchy
+            .put_node(h_node("a", 0, None))
+            .await
+            .expect("put_node a");
+        hierarchy
+            .put_node(h_node("b", 1, Some("a")))
+            .await
+            .expect("put_node b");
+        hierarchy
+            .put_node(h_node("c", 2, Some("b")))
+            .await
+            .expect("put_node c");
         hierarchy
             .put_relation(h_relation("r1", "a", "b"))
             .await
@@ -500,7 +510,10 @@ mod tests {
         let provider = bootstrap_surreal(&test_config(&dir)).expect("surreal bootstrap");
         let knowledge = provider.knowledge().expect("knowledge handle wired");
 
-        knowledge.put_source(k_source("s1")).await.expect("put_source");
+        knowledge
+            .put_source(k_source("s1"))
+            .await
+            .expect("put_source");
         knowledge
             .put_document(k_document("d1", "s1"))
             .await

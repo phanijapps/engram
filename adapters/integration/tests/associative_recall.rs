@@ -15,8 +15,8 @@ use engram_integration::UnifiedRecall;
 use engram_knowledge::KnowledgeRepository;
 use engram_retrieval::RetrievalIndex;
 use engram_store_sqlite::SqlBeliefStore;
-use engram_store_sqlite::{GraphRetrievalIndex, SqlKnowledgeStore};
 use engram_store_sqlite::SqlMemoryService;
+use engram_store_sqlite::{GraphRetrievalIndex, SqlKnowledgeStore};
 use futures::executor::block_on;
 
 fn scope() -> Scope {

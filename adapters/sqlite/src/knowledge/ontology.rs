@@ -19,7 +19,8 @@ use crate::knowledge::{
 #[async_trait]
 impl OntologyRepository for SqlKnowledgeStore {
     async fn put_ontology(&self, ontology: Ontology) -> CoreResult<Ontology> {
-        let json = serde_json::to_string(&ontology).map_err(crate::knowledge::schema::json_error)?;
+        let json =
+            serde_json::to_string(&ontology).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(
@@ -87,7 +88,8 @@ impl OntologyRepository for SqlKnowledgeStore {
     }
 
     async fn put_property(&self, property: OntologyProperty) -> CoreResult<OntologyProperty> {
-        let json = serde_json::to_string(&property).map_err(crate::knowledge::schema::json_error)?;
+        let json =
+            serde_json::to_string(&property).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         connection
             .execute(

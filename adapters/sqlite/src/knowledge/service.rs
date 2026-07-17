@@ -11,10 +11,10 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
+use crate::{SqliteOpenOptions, SqlitePath};
 use chrono::Utc;
 use engram_domain::*;
 use engram_runtime::{CoreError, CoreResult};
-use crate::{SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::knowledge::{

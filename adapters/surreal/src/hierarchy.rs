@@ -12,8 +12,8 @@ use engram_domain::{HierarchyNode, HierarchyPath, HierarchyRelation, Scope};
 use engram_hierarchy::{HierarchyRepository, navigation};
 use engram_runtime::CoreResult;
 
-use crate::util::{DataWrapper, scope_allows, surreal_err};
 use crate::SurrealConnection;
+use crate::util::{DataWrapper, scope_allows, surreal_err};
 
 const NODE_TABLE: &str = "hierarchy_node";
 const RELATION_TABLE: &str = "hierarchy_relation";
@@ -86,6 +86,8 @@ impl HierarchyRepository for SurrealHierarchyStore {
             .map(|w| w.data)
             .filter(|r| scope_allows(&r.scope, scope))
             .collect();
-        Ok(navigation::navigate(&nodes, &relations, seed_ids, max_layer))
+        Ok(navigation::navigate(
+            &nodes, &relations, seed_ids, max_layer,
+        ))
     }
 }

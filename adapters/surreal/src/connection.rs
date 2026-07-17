@@ -8,8 +8,8 @@
 //! a `tokio::sync::OnceCell`.
 
 use engram_runtime::{CoreError, CoreResult};
-use surrealdb::engine::local::{Db, SurrealKv};
 use surrealdb::Surreal;
+use surrealdb::engine::local::{Db, SurrealKv};
 use tokio::sync::OnceCell;
 
 /// Shared, lazily-opened embedded SurrealKV connection.

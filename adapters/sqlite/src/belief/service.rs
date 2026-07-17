@@ -12,6 +12,7 @@ use std::{
     sync::{Arc, Mutex, MutexGuard},
 };
 
+use crate::{SqliteOpenOptions, SqlitePath};
 use async_trait::async_trait;
 use chrono::Utc;
 use engram_core::{
@@ -21,7 +22,6 @@ use engram_core::{
 };
 use engram_domain::*;
 use engram_runtime::{CoreError, CoreResult};
-use crate::{SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::belief::{

@@ -6,14 +6,5 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-async-trait.workspace = true
-chrono.workspace = true
-engram-core = { path = "../../../core/orchestration" }
-engram-domain = { path = "../../../core/domain" }
-engram-runtime = { path = "../../../core/runtime" }
-rusqlite.workspace = true
-serde_json.workspace = true
-sha2.workspace = true
-
-[dev-dependencies]
-futures.workspace = true
+# Shim: belief code folded into engram-store-sqlite (consolidation T3).
+engram-store-sqlite = { path = "../../sqlite" }

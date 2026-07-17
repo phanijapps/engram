@@ -1854,15 +1854,7 @@ dependencies = [
 name = "engram-store-belief-sqlite"
 version = "0.1.0"
 dependencies = [
- "async-trait",
- "chrono",
- "engram-core",
- "engram-domain",
- "engram-runtime",
- "futures",
- "rusqlite",
- "serde_json",
- "sha2 0.11.0",
+ "engram-store-sqlite",
 ]
 
 [[package]]
@@ -1933,12 +1925,12 @@ dependencies = [
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
- "engram-store-belief-sqlite",
  "engram-store-hierarchy-sqlite",
  "engram-store-vector",
  "futures",
  "rusqlite",
  "serde_json",
+ "sha2 0.11.0",
  "tempfile",
 ]
 

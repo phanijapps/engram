@@ -23,7 +23,7 @@ use engram_domain::*;
 use engram_runtime::{CoreError, CoreResult, SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::{
+use crate::belief::{
     schema::{initialize_schema, json_error, sql_error},
     scope::scope_allows,
 };
@@ -66,7 +66,7 @@ impl SqlBeliefStore {
     ///
     /// ```no_run
     /// use engram_runtime::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
-    /// use engram_store_belief_sqlite::SqlBeliefStore;
+    /// use engram_store_sqlite::SqlBeliefStore;
     ///
     /// let options = SqliteOpenOptions {
     ///     path: SqlitePath::File("/path/to/belief.db".into()),

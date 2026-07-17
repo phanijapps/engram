@@ -1,15 +1,4 @@
-//! Durable SQLite-backed belief + contradiction repository.
-//!
-//! Beliefs and contradictions are derived stance records owned by the
-//! orchestration layer (`engram-core`). This adapter persists them as contract
-//! JSON with scope indexing, mirroring `engram-store-knowledge-sqlite`. It stays
-//! distinct from knowledge and memory storage: source-grounded evidence and
-//! derived stance remain separate contract concepts.
-
-mod detector;
-mod rows;
-mod schema;
-mod scope;
-mod service;
-
-pub use service::SqlBeliefStore;
+//! Shim: the belief code has folded into `engram-store-sqlite` (consolidation
+//! T3). Re-exports it so existing `engram_store_belief_sqlite::*` consumers
+//! keep compiling until re-pointed (T7) and this crate is deleted (T8).
+pub use engram_store_sqlite::*;

@@ -8,7 +8,7 @@ use engram_domain::*;
 use engram_runtime::CoreResult;
 use rusqlite::{OptionalExtension, params};
 
-use crate::{
+use crate::belief::{
     schema::{json_error, sql_error},
     service::SqlBeliefStore,
 };

@@ -13,7 +13,7 @@ use engram_domain::*;
 use engram_runtime::CoreResult;
 use sha2::{Digest, Sha256};
 
-use crate::service::SqlBeliefStore;
+use crate::belief::service::SqlBeliefStore;
 
 #[async_trait]
 impl ContradictionDetector for SqlBeliefStore {

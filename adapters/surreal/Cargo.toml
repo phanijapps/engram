@@ -8,6 +8,7 @@ rust-version.workspace = true
 engram-domain = { path = "../../core/domain" }
 engram-runtime = { path = "../../core/runtime" }
 engram-memory = { path = "../../core/memory" }
+engram-hierarchy = { path = "../../core/hierarchy" }
 async-trait.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

@@ -17,8 +17,12 @@
 //! and is exempt from the engine-neutrality gate — the gate scans the neutral
 //! facade/port crates, not engine adapter crates.
 
+mod util;
+
 pub mod connection;
+pub mod hierarchy;
 pub mod memory;
 
 pub use connection::SurrealConnection;
+pub use hierarchy::SurrealHierarchyStore;
 pub use memory::SurrealMemoryService;

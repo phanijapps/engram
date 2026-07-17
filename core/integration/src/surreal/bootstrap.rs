@@ -14,9 +14,10 @@ use std::sync::Arc;
 
 use crate::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder};
 use engram_domain::CapabilityState;
+use engram_hierarchy::HierarchyRepository;
 use engram_memory::MemoryService;
 use engram_runtime::CoreResult;
-use engram_store_surreal::{SurrealConnection, SurrealMemoryService};
+use engram_store_surreal::{SurrealConnection, SurrealHierarchyStore, SurrealMemoryService};
 
 /// Bootstraps a fully-wired provider from configuration against the Surreal
 /// backend (embedded SurrealKV).
@@ -31,11 +32,17 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
     // One shared Surreal connection; every Surreal cell (memory now, knowledge/
     // belief/hierarchy/vectors later) clones this Arc.
     let conn = Arc::new(SurrealConnection::new(path));
-    let memory: Arc<dyn MemoryService> = Arc::new(SurrealMemoryService::new(conn));
+    // One shared Surreal connection; every Surreal cell clones this Arc.
+    let memory: Arc<dyn MemoryService> = Arc::new(SurrealMemoryService::new(conn.clone()));
+    let hierarchy: Arc<dyn HierarchyRepository> = Arc::new(SurrealHierarchyStore::new(conn));
     let report = CapabilityReport::builder()
         .memory(CapabilityState::Supported)
+        .hierarchy(CapabilityState::Supported)
         .build();
-    Ok(EngramProviderBuilder::new(report).memory(memory).build())
+    Ok(EngramProviderBuilder::new(report)
+        .memory(memory)
+        .hierarchy(hierarchy)
+        .build())
 }
 
 #[cfg(test)]
@@ -47,7 +54,8 @@ mod tests {
         types::ScopeMappingStrategy, Actor, ActorKind, AllowedUse, DeleteMode, ForgetStatus,
         ForgetTargetType, ForgetRequest, Id, MemoryContent, MemoryEventKind, MemoryKind,
         MemoryStatus, Policy, Provenance, Requester, Retention, RetrievalRequest, Scope,
-        Sensitivity, Visibility, WriteMemoryRequest,
+        Sensitivity, Visibility, WriteMemoryRequest, HierarchyNode, HierarchyNodeKind,
+        HierarchyNodeId, HierarchyNodeStatus, HierarchyRelation,
     };
     use tempfile::TempDir;
 
@@ -233,5 +241,77 @@ mod tests {
             !after.items.iter().any(|r| r.target_id == memory_id),
             "tombstoned memory must not appear in Surreal retrieval"
         );
+    }
+
+    fn h_node(id: &str, layer: u32, parent: Option<&str>) -> HierarchyNode {
+        HierarchyNode {
+            id: HierarchyNodeId::from(id),
+            scope: scope("tenant-a"),
+            kind: if layer == 0 {
+                HierarchyNodeKind::Base
+            } else {
+                HierarchyNodeKind::Aggregate
+            },
+            layer,
+            name: id.to_owned(),
+            summary: None,
+            parent_id: parent.map(HierarchyNodeId::from),
+            members: Vec::new(),
+            source_target_type: None,
+            source_target_id: None,
+            embedding_refs: Vec::new(),
+            status: HierarchyNodeStatus::Active,
+            policy: policy(),
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }
+    }
+
+    fn h_relation(id: &str, src: &str, tgt: &str) -> HierarchyRelation {
+        HierarchyRelation {
+            id: id.to_owned(),
+            scope: scope("tenant-a"),
+            source_id: HierarchyNodeId::from(src),
+            target_id: HierarchyNodeId::from(tgt),
+            predicate: "parent_of".to_owned(),
+            layer: None,
+            strength: None,
+            is_inter_cluster: None,
+            evidence: Vec::new(),
+            provenance: provenance(),
+            created_at: Utc::now(),
+        }
+    }
+
+    /// Surreal hierarchy cell: build a 3-node parent chain (a→b→c) and walk the
+    /// parent path from the leaf — same fixture the SQLite adapter exercises.
+    #[tokio::test]
+    async fn surreal_hierarchy_walks_parent_chain() {
+        let dir = TempDir::new().unwrap();
+        let provider = bootstrap_surreal(&test_config(&dir)).expect("surreal bootstrap");
+        let hierarchy = provider.hierarchy().expect("hierarchy handle wired");
+        let s = scope("tenant-a");
+
+        hierarchy.put_node(h_node("a", 0, None)).await.expect("put_node a");
+        hierarchy.put_node(h_node("b", 1, Some("a"))).await.expect("put_node b");
+        hierarchy.put_node(h_node("c", 2, Some("b"))).await.expect("put_node c");
+        hierarchy
+            .put_relation(h_relation("r1", "a", "b"))
+            .await
+            .expect("put_relation r1");
+        hierarchy
+            .put_relation(h_relation("r2", "b", "c"))
+            .await
+            .expect("put_relation r2");
+
+        let path = hierarchy
+            .path_for(&["c".to_string()], &s, None)
+            .await
+            .expect("path_for");
+        assert_eq!(path.nodes.len(), 3, "3-node parent chain a->b->c");
+        assert_eq!(path.nodes[0].id, HierarchyNodeId::from("a"), "root-first");
+        assert_eq!(path.nodes[2].id, HierarchyNodeId::from("c"), "leaf last");
     }
 }

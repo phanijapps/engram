@@ -76,3 +76,8 @@ sqlite = [
     "dep:chrono",
     "dep:futures",
 ]
+# The SurrealDB backend (embedded SurrealKV). Constructs the Surreal adapter
+# cells under src/surreal/ and makes EngramProvider::open return a wired
+# provider when selected. Mutually exclusive with `sqlite` at dispatch time
+# (sqlite wins if both are enabled). Capability cells attach incrementally.
+surreal = []

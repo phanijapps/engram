@@ -183,12 +183,20 @@ impl EngramProvider {
             crate::sqlite::bootstrap_sqlite(config)
         }
 
-        #[cfg(not(any(feature = "sqlite")))]
+        // Surreal backend (embedded, in-process store). Mutually exclusive with
+        // `sqlite` at dispatch time: `sqlite` wins if both features are enabled.
+        #[cfg(all(feature = "surreal", not(feature = "sqlite")))]
+        {
+            crate::surreal::bootstrap_surreal(config)
+        }
+
+        #[cfg(not(any(feature = "sqlite", feature = "surreal")))]
         {
             let _ = config;
             Err(CoreError::CapabilityUnsupported {
                 capability: "backend".to_string(),
-                reason: "no backend feature enabled — compile with --features sqlite".to_string(),
+                reason: "no backend feature enabled — compile with --features sqlite or surreal"
+                    .to_string(),
             })
         }
     }

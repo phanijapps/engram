@@ -52,6 +52,8 @@ pub mod provider;
 pub mod recall;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
+#[cfg(feature = "surreal")]
+pub mod surreal;
 
 pub use batch::{
     ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, StepOutcome,

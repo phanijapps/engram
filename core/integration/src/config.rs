@@ -87,11 +87,13 @@ pub enum BackendProfile {
         /// Postgres connection string (e.g. `postgres://user@host/db`).
         connection_string: String,
     },
-    /// SurrealDB backend (no active feature yet). Carries the endpoint the
-    /// future backend will connect to.
+    /// Surreal backend (embedded, behind the `surreal` cargo feature). v1 is
+    /// in-process; `data_root` is the directory the store lives under, mirroring
+    /// the SQLite `data_root` shape. Select by compiling `--features surreal`
+    /// and setting `[backend] kind = "surreal"`.
     Surreal {
-        /// SurrealDB endpoint (e.g. `ws://localhost:8000`).
-        endpoint: String,
+        /// Directory holding the embedded Surreal store.
+        data_root: String,
     },
 }
 
@@ -265,12 +267,7 @@ impl EngramConfig {
                      active backend feature — open() will report CapabilityUnsupported"
                 ));
             }
-            BackendProfile::Surreal { endpoint } => {
-                return Err(format!(
-                    "backend `surreal` (endpoint={endpoint}) has no active backend feature \
-                     — open() will report CapabilityUnsupported"
-                ));
-            }
+            BackendProfile::Surreal { data_root } => PathBuf::from(data_root),
         };
 
         // trusted_root defaults to the parent of data_root so path confinement

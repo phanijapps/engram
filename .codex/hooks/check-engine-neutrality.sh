@@ -58,7 +58,11 @@ fi
 #      REINDEX/ANALYZE/ATTACH/DETACH/BEGIN/COMMIT/ROLLBACK).
 PATTERN='\bSql[A-Z][A-Za-z0-9_]*\b|\bPg[A-Z][A-Za-z0-9_]*\b|\bSurreal[A-Z][A-Za-z0-9_]*\b|\bLance[A-Z][A-Za-z0-9_]*\b|\bTantivy[A-Z][A-Za-z0-9_]*\b'
 PATTERN="$PATTERN|(use |extern crate )[^;]*\b(rusqlite|sqlx|sqlite[-_]vec|pgvector|tantivy|engram[-_]store[-_][a-z0-9_-]+|surreal|surrealdb)\b"
-PATTERN="$PATTERN|\b(rusqlite|sqlx|tantivy|sqlite_vec|pgvector|engram_store_[a-z_]+|surreal|surrealdb)::[A-Za-z0-9_:]+"
+# NOTE: bare `surreal::` / `surrealdb::` path-refs are intentionally NOT denied
+# here — the facade's legit in-module dispatch `crate::surreal::bootstrap_*`
+# would false-positive. Surreal crate leaks are still caught by the `use` /
+# `extern crate` deny above and by the `Surreal[A-Z]` type-name pattern (line 55).
+PATTERN="$PATTERN|\b(rusqlite|sqlx|tantivy|sqlite_vec|pgvector|engram_store_[a-z_]+)::[A-Za-z0-9_:]+"
 PATTERN="$PATTERN|\"[^\"]*\b(SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|PRAGMA|VACUUM|REINDEX|ANALYZE|ATTACH|DETACH|BEGIN|COMMIT|ROLLBACK)\b"
 
 status=0

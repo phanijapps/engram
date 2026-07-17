@@ -1893,6 +1893,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "engram-belief",
  "engram-domain",
  "engram-hierarchy",
  "engram-memory",

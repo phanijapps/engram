@@ -14,10 +14,13 @@ use std::sync::Arc;
 
 use crate::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder};
 use engram_domain::CapabilityState;
+use engram_belief::BeliefRepository;
 use engram_hierarchy::HierarchyRepository;
 use engram_memory::MemoryService;
 use engram_runtime::CoreResult;
-use engram_store_surreal::{SurrealConnection, SurrealHierarchyStore, SurrealMemoryService};
+use engram_store_surreal::{
+    SurrealBeliefStore, SurrealConnection, SurrealHierarchyStore, SurrealMemoryService,
+};
 
 /// Bootstraps a fully-wired provider from configuration against the Surreal
 /// backend (embedded SurrealKV).
@@ -34,14 +37,17 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
     let conn = Arc::new(SurrealConnection::new(path));
     // One shared Surreal connection; every Surreal cell clones this Arc.
     let memory: Arc<dyn MemoryService> = Arc::new(SurrealMemoryService::new(conn.clone()));
-    let hierarchy: Arc<dyn HierarchyRepository> = Arc::new(SurrealHierarchyStore::new(conn));
+    let hierarchy: Arc<dyn HierarchyRepository> = Arc::new(SurrealHierarchyStore::new(conn.clone()));
+    let beliefs: Arc<dyn BeliefRepository> = Arc::new(SurrealBeliefStore::new(conn));
     let report = CapabilityReport::builder()
         .memory(CapabilityState::Supported)
         .hierarchy(CapabilityState::Supported)
+        .beliefs(CapabilityState::Supported)
         .build();
     Ok(EngramProviderBuilder::new(report)
         .memory(memory)
         .hierarchy(hierarchy)
+        .beliefs(beliefs)
         .build())
 }
 
@@ -49,13 +55,15 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
 mod tests {
     //! Surreal-cell tests — compile + run only with `--features surreal`.
     use super::*;
-    use chrono::Utc;
+    use chrono::{TimeZone, Utc};
+    use engram_belief::BeliefQuery;
     use engram_domain::{
         types::ScopeMappingStrategy, Actor, ActorKind, AllowedUse, DeleteMode, ForgetStatus,
         ForgetTargetType, ForgetRequest, Id, MemoryContent, MemoryEventKind, MemoryKind,
         MemoryStatus, Policy, Provenance, Requester, Retention, RetrievalRequest, Scope,
         Sensitivity, Visibility, WriteMemoryRequest, HierarchyNode, HierarchyNodeKind,
-        HierarchyNodeId, HierarchyNodeStatus, HierarchyRelation,
+        HierarchyNodeId, HierarchyNodeStatus, HierarchyRelation, Belief, BeliefSubject,
+        BeliefStatus,
     };
     use tempfile::TempDir;
 
@@ -313,5 +321,86 @@ mod tests {
         assert_eq!(path.nodes.len(), 3, "3-node parent chain a->b->c");
         assert_eq!(path.nodes[0].id, HierarchyNodeId::from("a"), "root-first");
         assert_eq!(path.nodes[2].id, HierarchyNodeId::from("c"), "leaf last");
+    }
+
+    fn ts(seconds: i64) -> chrono::DateTime<chrono::Utc> {
+        Utc.timestamp_opt(seconds, 0).single().expect("timestamp")
+    }
+
+    fn s_belief(
+        id: &str,
+        key: &str,
+        content: &str,
+        confidence: f32,
+        valid_from: Option<chrono::DateTime<chrono::Utc>>,
+        valid_until: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Belief {
+        let mut b = Belief {
+            id: Id::from(id),
+            scope: scope("tenant-a"),
+            subject: BeliefSubject {
+                key: key.to_owned(),
+                entity_ref: None,
+                concept_ref: None,
+                aliases: Vec::new(),
+            },
+            content: content.to_owned(),
+            status: BeliefStatus::Active,
+            confidence,
+            sources: Vec::new(),
+            valid_from,
+            valid_until,
+            superseded_by: None,
+            stale: None,
+            synthesizer: None,
+            reasoning: None,
+            embedding_refs: Vec::new(),
+            policy: policy(),
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+            metadata: None,
+        };
+        b.created_at = valid_from.unwrap_or_else(Utc::now);
+        b
+    }
+
+    /// Surreal belief cell: valid-time lookup returns the belief live at that
+    /// time; record-time history is rejected — same fixture as the SQLite adapter.
+    #[tokio::test]
+    async fn surreal_belief_valid_time_lookup_and_record_time_rejected() {
+        let dir = TempDir::new().unwrap();
+        let provider = bootstrap_surreal(&test_config(&dir)).expect("surreal bootstrap");
+        let beliefs = provider.beliefs().expect("belief handle wired");
+        let s = scope("tenant-a");
+
+        let old = s_belief("b-old", "svc-a", "old", 0.7, Some(ts(10)), Some(ts(20)));
+        let current = s_belief("b-cur", "svc-a", "cur", 0.9, Some(ts(20)), None);
+        beliefs.put_belief(old).await.expect("put old");
+        beliefs.put_belief(current).await.expect("put current");
+
+        // valid-time during the old window → old belief
+        let at15 = beliefs
+            .get_belief(BeliefQuery::live_subject(s.clone(), "svc-a", ts(15)))
+            .await
+            .expect("get_belief t=15")
+            .expect("belief live at t=15");
+        assert_eq!(at15.id, Id::from("b-old"));
+
+        // valid-time after switchover → current belief
+        let at40 = beliefs
+            .get_belief(BeliefQuery::live_subject(s.clone(), "svc-a", ts(40)))
+            .await
+            .expect("get_belief t=40")
+            .expect("belief live at t=40");
+        assert_eq!(at40.id, Id::from("b-cur"));
+
+        // record-time history is unsupported → rejected
+        let mut record_query = BeliefQuery::live_subject(s, "svc-a", ts(40));
+        record_query.recorded_at = Some(ts(25));
+        assert!(
+            beliefs.get_belief(record_query).await.is_err(),
+            "record-time history query must be rejected"
+        );
     }
 }

@@ -9,6 +9,7 @@ use engram_domain::{
     RetrievalTargetType,
 };
 use engram_retrieval::VectorIndex;
+use futures::executor::block_on;
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_sqlite::SqliteVectorIndex;
 
@@ -60,9 +61,9 @@ pub fn run_retrieval_fixture() -> CoreResult<()> {
     let space = EmbeddingSpace::new("conformance", "bge-small", dims, "query", None::<String>);
     let index = SqliteVectorIndex::open_in_memory(dims)?.with_embedding_space(space.clone());
     let target = Id::from("chunk-1");
-    VectorIndex::insert(&index, &target, &space, vec![0.1, 0.2, 0.3, 0.4])
+    block_on(VectorIndex::insert(&index, &target, &space, vec![0.1, 0.2, 0.3, 0.4]))
         .map_err(|e| err("vector_insert")(e))?;
-    let hits = VectorIndex::search(&index, &space, vec![0.1, 0.2, 0.3, 0.4], 1)
+    let hits = block_on(VectorIndex::search(&index, &space, vec![0.1, 0.2, 0.3, 0.4], 1))
         .map_err(|e| err("vector_search")(e))?;
     if hits.is_empty() {
         return Err(err("vector_search")(CoreError::Conflict {

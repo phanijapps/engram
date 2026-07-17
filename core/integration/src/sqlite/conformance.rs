@@ -474,10 +474,10 @@ pub(crate) fn retrieval_ok() -> bool {
     let space = EmbeddingSpace::new("conformance", "bge-small", dims, "query", None::<String>);
     let index = index.with_embedding_space(space.clone());
     let target = Id::from("chunk-1");
-    if VectorIndex::insert(&index, &target, &space, vec![0.1, 0.2, 0.3, 0.4]).is_err() {
+    if block_on(VectorIndex::insert(&index, &target, &space, vec![0.1, 0.2, 0.3, 0.4])).is_err() {
         return false;
     }
-    let hits = VectorIndex::search(&index, &space, vec![0.1, 0.2, 0.3, 0.4], 1).unwrap_or_default();
+    let hits = block_on(VectorIndex::search(&index, &space, vec![0.1, 0.2, 0.3, 0.4], 1)).unwrap_or_default();
     !hits.is_empty()
 }
 
@@ -491,17 +491,17 @@ pub(crate) fn vector_ok() -> bool {
     let space = EmbeddingSpace::new("conformance", "bge-small", dims, "query", None::<String>);
     let index = index.with_embedding_space(space.clone());
     let target = Id::from("chunk-1");
-    if VectorIndex::insert(&index, &target, &space, vec![0.1, 0.2, 0.3, 0.4]).is_err() {
+    if block_on(VectorIndex::insert(&index, &target, &space, vec![0.1, 0.2, 0.3, 0.4])).is_err() {
         return false;
     }
-    let hits = VectorIndex::search(&index, &space, vec![0.1, 0.2, 0.3, 0.4], 1).unwrap_or_default();
+    let hits = block_on(VectorIndex::search(&index, &space, vec![0.1, 0.2, 0.3, 0.4], 1)).unwrap_or_default();
     if hits.len() != 1 || hits[0].0 != target {
         return false;
     }
     let wrong_space = EmbeddingSpace::new("other-provider", "nomic", dims, "query", None::<String>);
     let insert_mismatch =
-        VectorIndex::insert(&index, &target, &wrong_space, vec![0.1, 0.2, 0.3, 0.4]);
-    let dim_mismatch = VectorIndex::insert(&index, &target, &space, vec![0.1, 0.2, 0.3]);
+        block_on(VectorIndex::insert(&index, &target, &wrong_space, vec![0.1, 0.2, 0.3, 0.4]));
+    let dim_mismatch = block_on(VectorIndex::insert(&index, &target, &space, vec![0.1, 0.2, 0.3]));
     insert_mismatch.is_err() && dim_mismatch.is_err()
 }
 

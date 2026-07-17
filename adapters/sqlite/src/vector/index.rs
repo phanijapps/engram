@@ -5,6 +5,7 @@
 //! embeddings, hybrid ranking, policy decisions, or portable retrieval
 //! contracts.
 
+use async_trait::async_trait;
 use engram_domain::{EmbeddingSpace, EmbeddingTargetType, Id};
 use engram_runtime::{CoreError, CoreResult};
 use rusqlite::{Connection, OptionalExtension, params};
@@ -219,12 +220,13 @@ impl SqliteVectorIndex {
     }
 }
 
+#[async_trait]
 impl VectorIndex for SqliteVectorIndex {
     fn embedding_space(&self) -> &EmbeddingSpace {
         &self.embedding_space
     }
 
-    fn insert(
+    async fn insert(
         &self,
         target_id: &Id,
         embedding_space: &EmbeddingSpace,
@@ -258,7 +260,7 @@ impl VectorIndex for SqliteVectorIndex {
         self.insert(entry)
     }
 
-    fn search(
+    async fn search(
         &self,
         query_embedding_space: &EmbeddingSpace,
         query_vector: Vec<f32>,
@@ -297,14 +299,14 @@ impl VectorIndex for SqliteVectorIndex {
         Ok(converted)
     }
 
-    fn delete_target(&self, target_id: &Id) -> CoreResult<()> {
+    async fn delete_target(&self, target_id: &Id) -> CoreResult<()> {
         let conn = self.connection.lock().unwrap();
         conn.execute("DELETE FROM vectors WHERE id = ?1", [target_id.as_str()])
             .map_err(sql_error)?;
         Ok(())
     }
 
-    fn clear(&self) -> CoreResult<()> {
+    async fn clear(&self) -> CoreResult<()> {
         self.clear()
     }
 }

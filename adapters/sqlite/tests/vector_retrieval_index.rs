@@ -4,7 +4,7 @@ use chrono::{TimeZone, Utc};
 use engram_domain::*;
 use engram_retrieval::RetrievalIndex;
 use engram_runtime::CoreResult;
-use engram_store_vector::{
+use engram_store_sqlite::{
     SqliteVectorIndex, VectorEntry, VectorQueryProvider, VectorResolvedTarget,
     VectorRetrievalIndex, VectorSearchResult, VectorTargetResolver,
 };

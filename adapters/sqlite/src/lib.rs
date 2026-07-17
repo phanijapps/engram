@@ -23,7 +23,9 @@ pub use hierarchy::*;
 // Belief cell — folded in from engram-store-belief-sqlite (T3).
 pub mod belief;
 pub use belief::*;
-pub use engram_store_vector::*;
+// Vector cell — folded in from engram-store-vector (T5).
+pub mod vector;
+pub use vector::*;
 
 // Knowledge cell — folded in from engram-store-knowledge-sqlite (T2).
 pub mod knowledge;

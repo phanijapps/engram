@@ -62,7 +62,7 @@ default = []
 # Optional FastEmbed-backed SQLite vector query provider. Implies `sqlite` (to
 # bring in the vector store) and forwards to that crate's fastembed-provider
 # feature.
-fastembed = ["sqlite", "engram-store-vector/fastembed-provider"]
+fastembed = ["sqlite", "engram-store-sqlite/fastembed"]
 ollama = ["dep:reqwest"]
 # The SQLite backend: constructs every file-backed store + the Sql* port impls
 # under src/sqlite/, and makes EngramProvider::open return a wired provider.

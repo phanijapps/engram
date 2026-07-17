@@ -1783,6 +1783,7 @@ dependencies = [
  "engram-store-knowledge-sqlite",
  "engram-store-lexical",
  "engram-store-sql",
+ "engram-store-sqlite",
  "engram-store-vector",
  "futures",
  "napi",
@@ -1919,11 +1920,12 @@ dependencies = [
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
- "engram-store-vector",
+ "fastembed",
  "futures",
  "rusqlite",
  "serde_json",
  "sha2 0.11.0",
+ "sqlite-vec",
  "tempfile",
 ]
 
@@ -1946,16 +1948,7 @@ dependencies = [
 name = "engram-store-vector"
 version = "0.1.0"
 dependencies = [
- "async-trait",
- "chrono",
- "engram-domain",
- "engram-retrieval",
- "engram-runtime",
- "fastembed",
- "futures",
- "rusqlite",
- "sha2 0.11.0",
- "sqlite-vec",
+ "engram-store-sqlite",
 ]
 
 [[package]]

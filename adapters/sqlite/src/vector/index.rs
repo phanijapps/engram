@@ -10,7 +10,7 @@ use engram_runtime::{CoreError, CoreResult};
 use rusqlite::{Connection, OptionalExtension, params};
 use std::sync::{Arc, Mutex as StdMutex};
 
-use crate::{
+use crate::vector::{
     entry::{VectorEntry, VectorSearchResult},
     extension::register_sqlite_vec,
     vector::serialize_f32_vector,
@@ -463,7 +463,7 @@ fn content_hash_for(vector: &[f32]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::entry::VectorEntry;
+    use crate::vector::entry::VectorEntry;
     use engram_domain::EmbeddingTargetType;
 
     #[test]

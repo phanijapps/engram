@@ -14,7 +14,7 @@ use engram_domain::{
 use engram_retrieval::RetrievalIndex;
 use engram_runtime::{CoreError, CoreResult};
 
-use crate::{SqliteVectorIndex, VectorSearchResult};
+use crate::vector::{SqliteVectorIndex, VectorSearchResult};
 
 /// Provides a query vector for a retrieval request.
 ///

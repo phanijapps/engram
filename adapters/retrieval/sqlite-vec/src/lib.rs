@@ -1,21 +1,4 @@
-//! SQLite vector adapter for Engram retrieval candidates.
-//!
-//! Vector indexes are secondary adapter state. This crate stores vectors and
-//! target metadata without changing canonical memory or knowledge records.
-
-mod entry;
-mod extension;
-#[cfg(feature = "fastembed-provider")]
-mod fastembed_provider;
-mod index;
-mod retrieval;
-mod vector;
-
-pub use entry::{VectorEntry, VectorSearchResult};
-#[cfg(feature = "fastembed-provider")]
-pub use fastembed_provider::FastEmbedBgeSmallQueryProvider;
-pub use index::SqliteVectorIndex;
-pub use retrieval::{
-    VectorQueryProvider, VectorResolvedTarget, VectorRetrievalIndex, VectorTargetResolver,
-};
-pub use vector::serialize_f32_vector;
+//! Shim: the vector code has folded into `engram-store-sqlite` (consolidation
+//! T5). Re-exports it so existing `engram_store_vector::*` consumers keep
+//! compiling until re-pointed (T7) and this crate is deleted (T8).
+pub use engram_store_sqlite::*;

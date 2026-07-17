@@ -1,7 +1,7 @@
 #![cfg(feature = "fastembed-tests")]
 
 use engram_domain::*;
-use engram_store_vector::{
+use engram_store_sqlite::{
     FastEmbedBgeSmallQueryProvider, SqliteVectorIndex, VectorEntry, VectorQueryProvider,
 };
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};

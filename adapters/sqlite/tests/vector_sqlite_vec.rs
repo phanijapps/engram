@@ -1,5 +1,5 @@
 use engram_domain::EmbeddingTargetType;
-use engram_store_vector::{SqliteVectorIndex, VectorEntry};
+use engram_store_sqlite::{SqliteVectorIndex, VectorEntry};
 
 fn entry(id: &str, target_id: &str, embedding: Vec<f32>) -> VectorEntry {
     VectorEntry {

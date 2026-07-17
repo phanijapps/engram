@@ -19,8 +19,9 @@ engram-retrieval = { path = "../../core/retrieval" }
 engram-core = { path = "../../core/orchestration" }
 engram-hierarchy = { path = "../../core/hierarchy" }
 sha2.workspace = true
-# Still-facaded adapter crate (folds in T5):
-engram-store-vector = { path = "../retrieval/sqlite-vec" }
+# Vector cell — folded in from engram-store-vector (T5):
+sqlite-vec.workspace = true
+fastembed = { version = "5.17.2", optional = true }
 
 [dev-dependencies]
 engram-core = { path = "../../core/orchestration" }
@@ -30,4 +31,8 @@ tempfile = "3"
 
 [features]
 default = []
-fastembed = ["engram-store-vector/fastembed-provider"]
+# `fastembed` is the public alias used by forwarders (core/integration,
+# bindings/node); the folded vector code cfg-gates on `fastembed-provider`.
+fastembed = ["fastembed-provider"]
+fastembed-provider = ["dep:fastembed"]
+fastembed-tests = ["fastembed-provider"]

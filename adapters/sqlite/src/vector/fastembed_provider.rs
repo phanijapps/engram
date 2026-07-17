@@ -15,7 +15,7 @@ use engram_domain::RetrievalRequest;
 use engram_runtime::{CoreError, CoreResult};
 use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
 
-use crate::VectorQueryProvider;
+use crate::vector::VectorQueryProvider;
 
 const ADAPTER_NAME: &str = "engram-store-vector.fastembed";
 

@@ -21,6 +21,7 @@ engram-knowledge = { path = "../../core/knowledge" }
 engram-memory = { path = "../../core/memory" }
 engram-retrieval = { path = "../../core/retrieval" }
 engram-runtime = { path = "../../core/runtime" }
+engram-store-sqlite = { path = "../../adapters/sqlite" }
 engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph" }
 engram-consolidation = { path = "../../core/consolidation" }
 engram-store-belief-sqlite = { path = "../../adapters/orchestration/belief-sqlite" }
@@ -38,7 +39,7 @@ serde_json.workspace = true
 # Enables NativeRetrievalEngine (FastEmbed passage + query embeddings). The demo
 # build turns this on; default builds stay free of model-bearing code.
 default = []
-fastembed = ["engram-store-vector/fastembed-provider"]
+fastembed = ["engram-store-sqlite/fastembed"]
 
 [build-dependencies]
 napi-build = "2.3.2"

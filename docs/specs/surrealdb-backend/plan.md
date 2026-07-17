@@ -411,6 +411,32 @@ suite is green against Surreal.
 surface (binding conformance green), reflected in `CapabilityReport`, with an
 E2E round-trip green.
 
+### T9: Route `codegraph/mcp-server` through the facade (surface parity)
+
+**Depends on:** T7
+**Mode:** goal-based (build + smoke) + Ask first (facade-surface gap, if any)
+
+**Tests:**
+- `codegraph/mcp-server` starts against a Surreal-backed provider
+  (`engine: surreal`) and answers a codegraph query (e.g. dead-code) end-to-end,
+  the same way it does against SQLite.
+- No `Sql*` / `engram_store_*` direct construction in `codegraph/mcp-server` —
+  it depends on the facade, not the engine adapter crates (engine-neutral).
+
+**Approach:**
+- `codegraph/mcp-server` currently constructs `SqlKnowledgeStore` + `LexicalIndex`
+  **directly** (bypasses the facade — discovered while diagramming the surfaces).
+  Re-point it at `EngramProvider::open` + the knowledge/graph handles + retrieval
+  lanes, mirroring `memory/mcp-server`.
+- The codegraph queries (dead-code, blast-radius, dependency-path, communities)
+  may need operations the facade doesn't expose. If so, surface that as a
+  facade-surface gap and either (a) extend the neutral facade, or (b) record a
+  documented exception (Ask first) for the queries that can't be facade-routed.
+
+**Done when:** `codegraph/mcp-server` runs against both SQLite and Surreal via
+the facade with zero direct engine-store construction, OR a documented exception
+is recorded for whichever queries can't be facade-routed.
+
 ## Rollout
 
 - **Delivery:** behind the new `surreal` Cargo feature + a config string;
@@ -445,6 +471,14 @@ E2E round-trip green.
 
 ## Changelog
 
+- 2026-07-16: added T9 — route `codegraph/mcp-server` through the facade. Surface-
+  parity gap discovered while diagramming the integration / N-API / MCP paths:
+  `memory/mcp-server` is already facade-routed (✅); the `bindings/node`
+  integration path is facade-routed (✅) but its legacy modules (memory/belief/
+  ingest/knowledge/codegraph) + `codegraph/mcp-server` construct `Sql*` stores
+  DIRECTLY (❌ bypass). T8 closes the N-API legacy surface; T9 closes
+  codegraph/mcp. Both are required for "consumer changes backend, everything
+  works." T3 (surreal selection) is implemented + green on branch `surrealdb-backend`.
 - 2026-07-16: ARCHITECTURE REVISION (T2 cycle) — extracting `backends/sqlite`
   as a separate crate is impossible: `bootstrap_sqlite` returns an
   `EngramProvider` (owned by `core/integration`) so the backend must depend on

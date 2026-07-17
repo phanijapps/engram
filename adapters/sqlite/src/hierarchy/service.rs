@@ -15,7 +15,7 @@ use engram_hierarchy::{HierarchyRepository, navigation};
 use engram_runtime::{CoreError, CoreResult, SqliteOpenOptions, SqlitePath};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use crate::{
+use crate::hierarchy::{
     schema::{initialize_schema, json_error, sql_error},
     scope::scope_allows,
 };
@@ -58,7 +58,7 @@ impl SqlHierarchyStore {
     ///
     /// ```no_run
     /// use engram_runtime::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
-    /// use engram_store_hierarchy_sqlite::SqlHierarchyStore;
+    /// use engram_store_sqlite::SqlHierarchyStore;
     ///
     /// let options = SqliteOpenOptions {
     ///     path: SqlitePath::File("/path/to/hierarchy.db".into()),

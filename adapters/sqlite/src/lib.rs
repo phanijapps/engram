@@ -16,7 +16,9 @@
 //! community-summary, decay, ingest) are NOT part of this crate — they are
 //! shared with the Surreal backend and any future backend.
 
-pub use engram_store_hierarchy_sqlite::*;
+// Hierarchy cell — folded in from engram-store-hierarchy-sqlite (T4).
+pub mod hierarchy;
+pub use hierarchy::*;
 
 // Belief cell — folded in from engram-store-belief-sqlite (T3).
 pub mod belief;

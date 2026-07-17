@@ -6,13 +6,5 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-async-trait.workspace = true
-engram-domain = { path = "../../../core/domain" }
-engram-hierarchy = { path = "../../../core/hierarchy" }
-engram-runtime = { path = "../../../core/runtime" }
-rusqlite.workspace = true
-serde_json.workspace = true
-
-[dev-dependencies]
-chrono.workspace = true
-futures.workspace = true
+# Shim: hierarchy code folded into engram-store-sqlite (consolidation T4).
+engram-store-sqlite = { path = "../../sqlite" }

@@ -17,9 +17,9 @@ engram-runtime = { path = "../../core/runtime" }
 engram-knowledge = { path = "../../core/knowledge" }
 engram-retrieval = { path = "../../core/retrieval" }
 engram-core = { path = "../../core/orchestration" }
+engram-hierarchy = { path = "../../core/hierarchy" }
 sha2.workspace = true
-# Still-facaded adapter crates (their code folds in T4-T5):
-engram-store-hierarchy-sqlite = { path = "../hierarchy/sqlite" }
+# Still-facaded adapter crate (folds in T5):
 engram-store-vector = { path = "../retrieval/sqlite-vec" }
 
 [dev-dependencies]

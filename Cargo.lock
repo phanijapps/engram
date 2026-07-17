@@ -1875,14 +1875,7 @@ dependencies = [
 name = "engram-store-hierarchy-sqlite"
 version = "0.1.0"
 dependencies = [
- "async-trait",
- "chrono",
- "engram-domain",
- "engram-hierarchy",
- "engram-runtime",
- "futures",
- "rusqlite",
- "serde_json",
+ "engram-store-sqlite",
 ]
 
 [[package]]
@@ -1921,11 +1914,11 @@ dependencies = [
  "engram-core",
  "engram-domain",
  "engram-eval",
+ "engram-hierarchy",
  "engram-knowledge",
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
- "engram-store-hierarchy-sqlite",
  "engram-store-vector",
  "futures",
  "rusqlite",

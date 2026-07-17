@@ -5,6 +5,18 @@
   is the named "second engine" trigger event; T2 of that spec executes the
   structural extraction this ADR defers (`backends/sqlite`). Decision-maker:
   phanijapps (endorsement: "consumers change backend and it works, no issues").
+- **Amendment 2026-07-16 (recipe = submodule, not crate):** implementing the
+  extraction found that a separate `backends/<name>` *crate* creates a Cargo
+  dependency cycle. Every backend's `bootstrap_*` returns an `EngramProvider`
+  — a type owned by `core/integration` — so the backend crate must depend on
+  the facade, while the facade's `EngramProvider::open` must call the backend.
+  Cargo forbids the cycle (feature-gating doesn't help — it is live whenever
+  the feature is on). The "recipe" is therefore realized as a **feature-gated
+  engine submodule** of `core/integration` (`src/sqlite/` already; `src/surreal/`
+  added), each an exempt engine zone: ADR-0022 rule-1 scans the neutral facade
+  files (`provider.rs`, `capability.rs`, …), not these submodules, so the facade
+  stays engine-neutral and swap-by-config is unchanged. Only the physical crate
+  boundary differs from the original "recipe crate" wording.
 - **Date:** 2026-07-09
 - **Decision-makers:** phanijapps
 - **Supersedes:** none

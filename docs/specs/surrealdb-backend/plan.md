@@ -445,6 +445,18 @@ E2E round-trip green.
 
 ## Changelog
 
+- 2026-07-16: ARCHITECTURE REVISION (T2 cycle) — extracting `backends/sqlite`
+  as a separate crate is impossible: `bootstrap_sqlite` returns an
+  `EngramProvider` (owned by `core/integration`) so the backend must depend on
+  the facade, while `open()` calls it → Cargo cycle. Decision (user 2026-07-16:
+  "all DB ops in one place, easy to switch"): recipes are feature-gated engine
+  SUBMODULES of `core/integration` (`src/sqlite/` already; add `src/surreal/`),
+  each an exempt engine zone. **T2 collapses** (sqlite recipe is already a
+  submodule; no extraction needed). **T3 becomes**: add `src/surreal/` submodule
+  + `surreal` feature + `bootstrap_surreal` + `BackendProfile::Surreal { data_root }`
+  reconciliation + `open()` dispatch. ADR-0022 amended (recipe = submodule).
+  Neutrality + swap-by-config unchanged. The literal `backends/<name>` crate
+  remains a future option if a facade/`EngramProvider` split is ever done.
 - 2026-07-16: CORRECTION (re-analysis) — the T1 "as_of FAIL / no time-travel"
   finding was WRONG. It used incorrect syntax (`VERSION TIME`) without the
   `.versioned()` connect opt-in. With correct `SELECT ... VERSION <dt>` + a

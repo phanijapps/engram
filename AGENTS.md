@@ -248,3 +248,41 @@ Run `pnpm run build` after TypeScript package surface changes.
   integration-boundary reviews.
 - Install local Git hooks with `git config core.hooksPath .githooks` when this
   workspace should enforce checks on commit.
+
+## Feature-specific invariants (from shipped specs)
+
+These one-off structural / honesty traps are not covered by the general boundary
+rules above; they were lifted from the feature specs when those were consolidated
+into [`docs/product/engram.md`](docs/product/engram.md). The *general principles*
+(neutrality, no-god-modules, facades stay thin, surface parity, store adapters
+don't own composition) already govern all crates; the items below are the
+feature-specific traps.
+
+- **`atomic-batch-ingest`** — the guarantee is `BestEffort`, surfaced. Do not
+  claim or imply cross-store ACID; do not roll back already-succeeded steps on a
+  later step's failure (no cross-store rollback exists); do not reuse one batch
+  key as the per-write memory key (drops records 2..N); do not restructure
+  storage (merge / ATTACH) to fake atomicity.
+- **`unified-recall-api`** — do not fail the whole recall when one lane is
+  unavailable (degrade via `source_failures`); do not bypass the existing
+  `RetrievalIndex` lanes or `MemoryService::retrieve`; do not reimplement RRF /
+  fusion or the composer (reuse `ReciprocalRankFusion` + `compose_context`).
+- **`sqlite-consolidation`** — never fold the engine-agnostic adapters into
+  `engram-store-sqlite` (they serve every backend); never break the
+  `engram-conformance::Sql*` / `bindings/node` import surface mid-transition;
+  this is relocation only — `Sql*` runtime behavior must not change (the existing
+  tests are the regression net).
+- **`retrieval-composition-boundary`** — do not merge memory records and
+  knowledge chunks into one persistence model for retrieval convenience.
+- **`memory-knowledge-boundaries`** — a memory adapter must not persist
+  knowledge-graph / ontology state by default; a knowledge-graph adapter must not
+  depend on SQL memory internals; do not hide graph / ontology semantics in
+  untyped metadata when a typed contract is required.
+- **`export-import-api`** — do not reimplement import (stays on
+  `MigrationService`); do not invent a new export format (reuse `ImportData`);
+  do not reimplement SQL queries for export (use the existing concrete store
+  methods).
+- **`sqlite-knowledge-graph`** — do not couple knowledge persistence to memory or
+  vector persistence (cross-adapter SQL / shared connections across crate
+  boundaries); do not change v1 contract fields or generated TypeScript types;
+  `OntologyRepository` is deferred (taxonomy only).

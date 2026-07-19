@@ -113,6 +113,11 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   fixture, router/fusion composition, full workspace gates). Blocked on: the
   composition layer is bindings-layer RRF fusion (`RetrievalRouter` is unused).
   Tracked in [`lexical-wiring`](specs/lexical-wiring/).
+- **L6 — persistent lexical index + ingest feed (deferred: lexical-persistent-index):**
+  populate-on-query (current) rebuilds the index per request — fine for demo
+  corpora, not repo-scale. Production shape: a file-backed `LexicalIndex` fed by
+  the ingest chunk-write path. Decide after latency measurement on a realistic
+  corpus; recommend a separate `lexical-persistent-index` spec.
 
 ## cross-encoder-rerank (wiring + model)
 
@@ -186,3 +191,105 @@ Most items shipped (A1-A2, B1-B8, C1-C9, D3-D4, D6-D8). What remains:
   both `engram-integration` and the N-API binding), mirroring
   `check-engine-neutrality.sh`. Blocked on: nothing; unblocked by a small
   tooling slice.
+
+<!-- The sections below were swept from the historical feature specs when they
+     were consolidated into docs/product/engram.md. They preserve the open /
+     deferred / out-of-scope items that lived only in those specs. -->
+
+## workspace-architecture-alignment
+
+- **adapt-to-project skill dangling (bug):** session startup advertises an
+  `adapt-to-project` skill that does not exist locally — restore or remove the
+  advertisement.
+- **Specs lifecycle groups:** (mostly superseded by the historical-specs
+  consolidation) evaluate whether `docs/specs/` still wants `active/` /
+  `shipped/` / `retired/` grouping.
+- **Crate-path normalization:** move `adapters/orchestration/belief-sqlite` →
+  `adapters/belief/sqlite`.
+- **Root governance files:** decide whether README/AGENTS/GOVERNANCE/CONTRIBUTING
+  stay full docs (GitHub discoverability) or stub into `docs/governance/`.
+
+## background-repo-indexer
+
+- **Out of scope (logged):** job cancellation; multi-repo queuing; persistent
+  job history across restarts; LLM-enhance during the parallel scan (stays
+  per-doc on `/ingest` today); server-side clustering.
+
+## predictive-retrieval
+
+- **Wiring follow-up:** wire `RetrievalHints` into the in-memory `retrieve()`
+  path or a query router.
+- **Model-assisted (deferred):** expectation models; prediction-error / surprise
+  signals; hierarchical multi-level prediction. Baseline is dependency-free and
+  mirrors the `query_terms` tokenizer (no stopword/NLP on predicted queries).
+- **Scope-binding design note:** `RetrievalHints` / `AgentState` are deliberately
+  scope-agnostic — the query router binds hints to the `RetrievalRequest`'s
+  `Scope` at wiring time, so no contract amendment is required.
+
+## belief-contradiction-bitemporal
+
+- **Out of scope (logged):** full memory-assertion → belief consolidation driver
+  (a DryRun ConsolidationService exists for planning); enforced belief policy;
+  temporal / as-of queries; hierarchy (deferred program-wide).
+
+## ast-symbol-extraction
+
+- **Out of scope (logged):** AST-level call-edge formation (tree-sitter
+  `call_expression` queries); additional languages beyond the 10 shipped;
+  changing the `Chunker` trait signature; LLM-enhanced extraction during scan
+  (stays per-doc on `/ingest`).
+
+## ontology-it-org
+
+- **Out of scope (logged):** enforced (write-rejecting) ontology validation;
+  generated typed ontology contract; ontology imports resolution; hierarchy
+  (deferred program-wide).
+
+## qa-over-knowledge
+
+- **Out of scope (logged):** LLM-grounded knowledge-graph keyword search (no
+  entity-search port); streaming answers; multi-turn.
+
+## demo-ui-shell
+
+- **Out of scope (logged):** new backend capabilities; auth (Clerk); replacing
+  the 3D viz; mobile-native builds; i18n/RTL; multi-tenant.
+
+## provenance-confidence-viz
+
+- **Out of scope (logged):** confidence/method filtering; backend provenance
+  enrichment.
+
+## enterprise-3d-graph
+
+- **Out of scope (logged):** hierarchy aggregation/clustering (TBD).
+
+## scale-repo-ingestion
+
+- **Out of scope (logged):** binary / PDF / office ingestion.
+
+## llm-relationship-extraction
+
+- **Out of scope (logged):** LLM enhance on the whole repo by default (opt-in
+  only today).
+
+## graph-explorer
+
+- **Out of scope (logged):** value-stream / requirement / API-endpoint
+  extraction + cross-doc semantic linking (phase 2 — needs extractor + ontology
+  work); server-side clustering / pagination; community detection; saving
+  explorer layouts.
+
+## engram-viz (Phases 2–5)
+
+- **Phase 2 — polish:** README; graph controls (zoom-to-fit, top-N node limiter,
+  community filter); hover tooltips; collapsible sidebar; search warmup fix
+  (persist / pre-warm the Tantivy lexical index).
+- **Phase 3 — taxonomy view:** `GET /api/taxonomy`; taxonomy panel (concept-scheme
+  tree; click highlights tagged entities; honest empty state).
+- **Phase 4 — ontology view:** `GET /api/taxonomy`; ontology panel
+  (classes / properties / findings); EntityKind legend + filter.
+- **Phase 5 — advanced graph:** blast-radius highlight; dependency-path finder;
+  node grouping (EntityKind / file).
+- **Ask-first (deferred):** WebSocket/SSE live re-index; multi-repo overlay;
+  auth / multi-user.

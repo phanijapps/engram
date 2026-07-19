@@ -40,9 +40,9 @@ required_files=(
   "contracts/v1/examples/invalid/retrieval-request.missing-requester.json"
   "contracts/v1/examples/invalid/context-payload.redacted-content.json"
   "docs/specs/README.md"
-  "docs/specs/memory-contract-fixture-runners/spec.md"
-  "docs/specs/accepted-retrieval-fixtures/spec.md"
-  "docs/specs/forget-mode-contract-examples/spec.md"
+  "contracts/v1/acceptance/memory-fixtures.md"
+  "contracts/v1/acceptance/retrieval-fixtures.md"
+  "contracts/v1/acceptance/forget-modes.md"
 )
 
 for file in "${required_files[@]}"; do

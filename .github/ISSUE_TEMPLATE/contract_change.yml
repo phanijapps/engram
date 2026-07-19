@@ -1,0 +1,33 @@
+name: Contract change
+description: Propose a change to accepted or draft contracts.
+title: "contract: "
+labels: ["contract"]
+body:
+  - type: textarea
+    id: surface
+    attributes:
+      label: Contract surface
+      description: Which schema, spec, or domain model section changes?
+    validations:
+      required: true
+  - type: dropdown
+    id: compatibility
+    attributes:
+      label: Compatibility
+      options:
+        - Compatible v1 addition
+        - Breaking change requiring future version
+        - Draft extension only
+    validations:
+      required: true
+  - type: textarea
+    id: rationale
+    attributes:
+      label: Rationale
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples and specs
+      description: Which examples or specs should be added or updated?

@@ -1,0 +1,76 @@
+{
+  "id": "eval-retrieval-no-result-001",
+  "name": "no-result retrieval",
+  "scope": {
+    "tenant": "tenant-demo",
+    "workspace": "engram",
+    "environment": "local"
+  },
+  "setup": {
+    "memories": [
+      {
+        "kind": "fact",
+        "content": {
+          "text": "Engram no-result fixture stores a Rust memory fact.",
+          "format": "text"
+        },
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-eval-no-result",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          }
+        },
+        "provenance": {
+          "source": "evaluation_fixture_no_result",
+          "actor": {
+            "id": "actor-eval-no-result",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          },
+          "observedAt": "2026-06-30T12:08:00Z",
+          "method": "manual"
+        },
+        "policy": {
+          "visibility": "workspace",
+          "retention": "durable",
+          "allowedUses": ["retrieval", "evaluation"]
+        }
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "returns-no-matching-memory",
+      "request": {
+        "query": "banana pineapple unmatched query",
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-eval-no-result",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          }
+        }
+      },
+      "expect": {
+        "mustExclude": [
+          {
+            "targetType": "memory",
+            "targetId": "memory-001"
+          }
+        ]
+      }
+    }
+  ],
+  "createdAt": "2026-06-30T12:09:00Z"
+}

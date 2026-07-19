@@ -1,0 +1,13 @@
+engram-core
+engram-domain
+engram-eval
+engram-ingest
+engram-knowledge
+engram-memory
+engram-node
+engram-retrieval
+engram-runtime
+engram-store-knowledge-memory
+engram-store-memory
+engram-store-sql
+engram-store-vector

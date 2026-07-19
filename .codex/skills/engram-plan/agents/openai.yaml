@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engram Plan"
+  short_description: "Plan Engram implementation work."
+  default_prompt: "Use this skill when planning engram crates, packages, adapters, milestones, or implementation sequencing."

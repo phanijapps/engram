@@ -1,0 +1,18 @@
+[package]
+name = "engram-store-community-summary"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+engram-domain = { path = "../../../core/domain" }
+engram-retrieval = { path = "../../../core/retrieval" }
+engram-runtime = { path = "../../../core/runtime" }
+engram-graph-analytics = { path = "../../../core/graph-analytics" }
+engram-store-associative-graph = { path = "../associative-graph" }
+futures.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true

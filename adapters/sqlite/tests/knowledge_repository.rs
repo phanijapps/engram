@@ -1,0 +1,839 @@
+use chrono::Utc;
+use engram_domain::*;
+use engram_knowledge::{
+    KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
+    validate_taxonomy_proposal,
+};
+use engram_store_sqlite::SqlKnowledgeStore;
+use futures::executor::block_on;
+
+fn actor() -> Actor {
+    Actor {
+        id: Id::from("agent-1"),
+        kind: ActorKind::Agent,
+        display_name: Some("Knowledge Agent".to_owned()),
+        metadata: None,
+    }
+}
+
+fn scope(tenant: &str) -> Scope {
+    Scope {
+        tenant: tenant.to_owned(),
+        subject: Some("subject-a".to_owned()),
+        workspace: Some("workspace-a".to_owned()),
+        session: None,
+        environment: Some("test".to_owned()),
+    }
+}
+
+fn policy() -> Policy {
+    Policy {
+        visibility: Visibility::Workspace,
+        retention: Retention::Durable,
+        sensitivity: Some(Sensitivity::Medium),
+        allowed_uses: vec![AllowedUse::Retrieval, AllowedUse::Evaluation],
+        expires_at: None,
+        delete_mode: Some(DeleteMode::Tombstone),
+    }
+}
+
+fn provenance() -> Provenance {
+    Provenance {
+        source: "knowledge-sqlite-test".to_owned(),
+        actor: actor(),
+        observed_at: Utc::now(),
+        evidence: Vec::new(),
+        derivations: Vec::new(),
+        confidence: Some(1.0),
+        method: Some("manual".to_owned()),
+    }
+}
+
+fn graph(graph_id: &str, tenant: &str) -> KnowledgeGraph {
+    KnowledgeGraph {
+        id: Id::from(graph_id),
+        scope: scope(tenant),
+        name: "Code Graph".to_owned(),
+        uri: None,
+        version: None,
+        ontology_refs: Vec::new(),
+        policy: policy(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }
+}
+
+#[test]
+fn graph_round_trip_preserves_metadata_and_scope() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let graph = KnowledgeGraph {
+        id: Id::from("graph-metadata"),
+        scope: scope("tenant-a"),
+        name: "Code Graph".to_owned(),
+        uri: Some("urn:graph:code".to_owned()),
+        version: Some("1.0.0".to_owned()),
+        ontology_refs: vec![OntologyRef {
+            id: Some(Id::from("ontology-1")),
+            uri: Some("urn:ontology:code".to_owned()),
+            version: Some("1.0.0".to_owned()),
+        }],
+        policy: policy(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    };
+
+    let stored = block_on(store.put_graph(graph.clone())).expect("put graph");
+    let visible = block_on(store.get_graph(&graph.id, &scope("tenant-a"))).expect("get graph");
+    let hidden = block_on(store.get_graph(&graph.id, &scope("tenant-b"))).expect("get graph");
+
+    assert_eq!(stored.id, graph.id);
+    let visible = visible.expect("visible graph");
+    assert_eq!(visible.name, "Code Graph");
+    assert_eq!(visible.uri.as_deref(), Some("urn:graph:code"));
+    assert_eq!(visible.version.as_deref(), Some("1.0.0"));
+    assert_eq!(visible.ontology_refs, graph.ontology_refs);
+    assert!(hidden.is_none());
+}
+
+#[test]
+fn round_trips_scoped_graph_entities_and_neighbors() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let graph_id = Id::from("graph-1");
+    let function_a = Id::from("function-a");
+
+    block_on(store.put_graph(graph(graph_id.as_str(), "tenant-a"))).expect("put graph");
+    block_on(store.put_entity(KnowledgeEntity {
+        id: function_a.clone(),
+        graph_id: Some(graph_id.clone()),
+        kind: EntityKind::Function,
+        name: "function_a".to_owned(),
+        aliases: Vec::new(),
+        scope: scope("tenant-a"),
+        source_refs: Vec::new(),
+        concept_refs: Vec::new(),
+        ontology_class_refs: Vec::new(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        valid_from: None,
+        valid_until: None,
+        metadata: None,
+    }))
+    .expect("put entity");
+
+    for (relationship_id, object_id) in [("rel-1", "function-b"), ("rel-2", "function-c")] {
+        block_on(store.put_relationship(KnowledgeRelationship {
+            id: Id::from(relationship_id),
+            graph_id: Some(graph_id.clone()),
+            subject: EntityRef {
+                id: Some(function_a.clone()),
+                kind: Some("function".to_owned()),
+                name: Some("function_a".to_owned()),
+                aliases: Vec::new(),
+            },
+            predicate: "calls".to_owned(),
+            object: EntityRef {
+                id: Some(Id::from(object_id)),
+                kind: Some("function".to_owned()),
+                name: Some(object_id.to_owned()),
+                aliases: Vec::new(),
+            },
+            scope: scope("tenant-a"),
+            evidence: Vec::new(),
+            confidence: Some(0.9),
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+        }))
+        .expect("put relationship");
+    }
+
+    let visible_graph =
+        block_on(store.get_graph(&graph_id, &scope("tenant-a"))).expect("get graph");
+    let hidden_graph = block_on(store.get_graph(&graph_id, &scope("tenant-b"))).expect("get graph");
+    let neighbors = block_on(store.neighbors(&graph_id, &function_a, &scope("tenant-a"), Some(1)))
+        .expect("neighbors");
+    let hidden_neighbors =
+        block_on(store.neighbors(&graph_id, &function_a, &scope("tenant-b"), None))
+            .expect("hidden neighbors");
+
+    assert!(visible_graph.is_some());
+    assert!(hidden_graph.is_none());
+    assert_eq!(neighbors.len(), 1);
+    assert_eq!(neighbors[0].id, Id::from("rel-1"));
+    assert!(hidden_neighbors.is_empty());
+}
+
+#[test]
+fn chunk_inherits_source_scope() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let source_id = Id::from("source-1");
+    let document_id = Id::from("document-1");
+    let chunk_id = Id::from("chunk-1");
+
+    block_on(store.put_source(KnowledgeSource {
+        id: source_id.clone(),
+        kind: SourceKind::Filesystem,
+        scope: scope("tenant-a"),
+        name: "docs".to_owned(),
+        uri: None,
+        version: None,
+        policy: policy(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put source");
+    block_on(store.put_document(SourceDocument {
+        id: document_id.clone(),
+        source_id: source_id.clone(),
+        kind: SourceDocumentKind::Markdown,
+        uri: None,
+        path: Some("docs/intro.md".to_owned()),
+        title: None,
+        mime_type: None,
+        language: None,
+        version: None,
+        content_hash: "sha256:abc".to_owned(),
+        provenance: provenance(),
+        policy: policy(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put document");
+    block_on(store.put_chunk(KnowledgeChunk {
+        id: chunk_id.clone(),
+        document_id: document_id.clone(),
+        source_id: source_id.clone(),
+        kind: KnowledgeChunkKind::Paragraph,
+        text: "engram keeps memory and knowledge separate.".to_owned(),
+        summary: None,
+        location: None,
+        entities: Vec::new(),
+        concepts: Vec::new(),
+        embedding_refs: Vec::new(),
+        content_hash: "sha256:chunk".to_owned(),
+        provenance: provenance(),
+        policy: policy(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put chunk");
+
+    let visible = block_on(store.get_chunk(&chunk_id, &scope("tenant-a"))).expect("get chunk");
+    let hidden = block_on(store.get_chunk(&chunk_id, &scope("tenant-b"))).expect("get chunk");
+
+    assert!(visible.is_some());
+    assert!(hidden.is_none());
+}
+
+#[test]
+fn taxonomy_round_trips_scoped_scheme_and_concepts() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let scheme_id = Id::from("scheme-1");
+
+    block_on(store.put_concept_scheme(ConceptScheme {
+        id: scheme_id.clone(),
+        uri: "urn:scheme:langs".to_owned(),
+        name: "Languages".to_owned(),
+        scope: scope("tenant-a"),
+        version: "1.0.0".to_owned(),
+        provenance: provenance(),
+        policy: policy(),
+        created_at: Utc::now(),
+        updated_at: None,
+    }))
+    .expect("put scheme");
+
+    for concept_id in ["concept-rust", "concept-ts"] {
+        block_on(store.put_concept(Concept {
+            id: Id::from(concept_id),
+            uri: format!("urn:concept:{concept_id}"),
+            scheme_id: scheme_id.clone(),
+            pref_label: ConceptLabel {
+                value: concept_id.to_owned(),
+                language: Some("en".to_owned()),
+            },
+            alt_labels: Vec::new(),
+            definition: None,
+            notation: None,
+            status: ConceptStatus::Active,
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+        }))
+        .expect("put concept");
+    }
+
+    block_on(store.put_concept_relation(ConceptRelation {
+        id: "rel-rust-ts".to_owned(),
+        scheme_id: scheme_id.clone(),
+        subject_id: Id::from("concept-rust"),
+        predicate: ConceptRelationKind::Related,
+        object_id: Id::from("concept-ts"),
+        provenance: provenance(),
+        created_at: Utc::now(),
+    }))
+    .expect("put relation");
+
+    let visible_scheme =
+        block_on(store.get_concept_scheme(&scheme_id, &scope("tenant-a"))).expect("get scheme");
+    let hidden_scheme =
+        block_on(store.get_concept_scheme(&scheme_id, &scope("tenant-b"))).expect("get scheme");
+    let concepts =
+        block_on(store.list_concepts(&scheme_id, &scope("tenant-a"))).expect("list concepts");
+    let hidden_concepts =
+        block_on(store.list_concepts(&scheme_id, &scope("tenant-b"))).expect("list concepts");
+
+    assert!(visible_scheme.is_some());
+    assert!(hidden_scheme.is_none());
+    assert_eq!(concepts.len(), 2);
+    assert_eq!(concepts[0].id, Id::from("concept-rust"));
+    assert!(hidden_concepts.is_empty());
+}
+
+#[test]
+fn governed_taxonomy_proposal_validates_before_sqlite_merge() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let scheme_id = Id::from("scheme-governed");
+    let proposal = TaxonomyProposal {
+        id: "proposal-governed".to_owned(),
+        scheme_id: scheme_id.clone(),
+        status: TaxonomyProposalStatus::Merged,
+        changes: Vec::new(),
+        validation: None,
+        semantic_drift: vec![SemanticDriftFinding {
+            id: "drift-runtime-label".to_owned(),
+            target_type: SemanticDriftTargetType::Concept,
+            target_id: "concept-runtime".to_owned(),
+            severity: SemanticDriftSeverity::Warning,
+            reason: "label_shift".to_owned(),
+            message: Some("runtime label changed during proposal review".to_owned()),
+            evidence: Vec::new(),
+            detected_at: Utc::now(),
+        }],
+        proposer: actor(),
+        reviewer: Some(actor()),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        reviewed_at: Some(Utc::now()),
+        metadata: None,
+    };
+    let concepts = vec![
+        Concept {
+            id: Id::from("concept-runtime"),
+            uri: "urn:concept:runtime".to_owned(),
+            scheme_id: scheme_id.clone(),
+            pref_label: ConceptLabel {
+                value: "Runtime".to_owned(),
+                language: Some("en".to_owned()),
+            },
+            alt_labels: Vec::new(),
+            definition: Some("Execution boundary".to_owned()),
+            notation: None,
+            status: ConceptStatus::Active,
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+        },
+        Concept {
+            id: Id::from("concept-adapter"),
+            uri: "urn:concept:adapter".to_owned(),
+            scheme_id: scheme_id.clone(),
+            pref_label: ConceptLabel {
+                value: "Adapter".to_owned(),
+                language: Some("en".to_owned()),
+            },
+            alt_labels: Vec::new(),
+            definition: Some("Replaceable infrastructure boundary".to_owned()),
+            notation: None,
+            status: ConceptStatus::Active,
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+        },
+    ];
+    let relations = vec![ConceptRelation {
+        id: "runtime-related-adapter".to_owned(),
+        scheme_id: scheme_id.clone(),
+        subject_id: Id::from("concept-runtime"),
+        predicate: ConceptRelationKind::Related,
+        object_id: Id::from("concept-adapter"),
+        provenance: provenance(),
+        created_at: Utc::now(),
+    }];
+    let validation = validate_taxonomy_proposal(&proposal, &concepts, &relations);
+    assert_eq!(validation.status, TaxonomyValidationStatus::Passed);
+    assert_eq!(proposal.semantic_drift[0].reason, "label_shift");
+
+    block_on(store.put_concept_scheme(ConceptScheme {
+        id: scheme_id.clone(),
+        uri: "urn:scheme:governed".to_owned(),
+        name: "Governed taxonomy".to_owned(),
+        scope: scope("tenant-a"),
+        version: "1.0.0".to_owned(),
+        provenance: provenance(),
+        policy: policy(),
+        created_at: Utc::now(),
+        updated_at: None,
+    }))
+    .expect("put scheme");
+    for concept in concepts {
+        block_on(store.put_concept(concept)).expect("put concept");
+    }
+    for relation in relations {
+        block_on(store.put_concept_relation(relation)).expect("put relation");
+    }
+
+    let stored =
+        block_on(store.list_concepts(&scheme_id, &scope("tenant-a"))).expect("list concepts");
+    assert_eq!(stored.len(), 2);
+    assert_eq!(stored[0].pref_label.value, "Adapter");
+    assert_eq!(stored[1].pref_label.value, "Runtime");
+}
+
+fn ontology(ontology_id: &str, tenant: &str) -> Ontology {
+    Ontology {
+        id: Id::from(ontology_id),
+        uri: format!("urn:ontology:{ontology_id}"),
+        name: "IT Org Ontology".to_owned(),
+        scope: scope(tenant),
+        language: OntologyLanguage::Owl,
+        version: "1.0.0".to_owned(),
+        status: OntologyStatus::Active,
+        imports: Vec::new(),
+        policy: policy(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }
+}
+
+#[test]
+fn ontology_round_trips_scoped_with_classes_and_properties() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let ontology_id = Id::from("ontology-it");
+    block_on(store.put_ontology(ontology("ontology-it", "tenant-a"))).expect("put ontology");
+
+    block_on(store.put_class(OntologyClass {
+        id: Id::from("class-service"),
+        ontology_id: ontology_id.clone(),
+        uri: "urn:cls:service".to_owned(),
+        label: "Service".to_owned(),
+        description: Some("A deployable service".to_owned()),
+        parent_class_ids: Vec::new(),
+        concept_refs: Vec::new(),
+        status: OntologyTermStatus::Active,
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put class");
+
+    block_on(store.put_property(OntologyProperty {
+        id: Id::from("prop-depends-on"),
+        ontology_id: ontology_id.clone(),
+        uri: "urn:prop:depends_on".to_owned(),
+        label: "depends_on".to_owned(),
+        kind: OntologyPropertyKind::Object,
+        domain_class_id: Some(Id::from("class-service")),
+        range_class_id: Some(Id::from("class-service")),
+        datatype: None,
+        inverse_property_id: None,
+        status: OntologyTermStatus::Active,
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put property");
+
+    block_on(store.put_axiom(OntologyAxiom {
+        id: Id::from("axiom-1"),
+        ontology_id: ontology_id.clone(),
+        kind: OntologyAxiomKind::Transitive,
+        subject_class_id: Some(Id::from("class-service")),
+        property_id: Some(Id::from("prop-depends-on")),
+        object_class_id: Some(Id::from("class-service")),
+        expression: None,
+        provenance: provenance(),
+        created_at: Utc::now(),
+        metadata: None,
+    }))
+    .expect("put axiom");
+
+    let visible =
+        block_on(store.get_ontology(&ontology_id, &scope("tenant-a"))).expect("get ontology");
+    let hidden =
+        block_on(store.get_ontology(&ontology_id, &scope("tenant-b"))).expect("get ontology");
+
+    assert!(visible.is_some());
+    assert!(hidden.is_none());
+}
+
+#[test]
+fn validate_graph_warns_on_undeclared_predicate_only() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let ontology_id = Id::from("ontology-it");
+    let graph_id = Id::from("graph-it");
+
+    block_on(store.put_ontology(ontology("ontology-it", "tenant-a"))).expect("put ontology");
+    // Declare a single property "depends_on"; "calls" is intentionally undeclared.
+    block_on(store.put_property(OntologyProperty {
+        id: Id::from("prop-depends-on"),
+        ontology_id: ontology_id.clone(),
+        uri: "urn:prop:depends_on".to_owned(),
+        label: "depends_on".to_owned(),
+        kind: OntologyPropertyKind::Object,
+        domain_class_id: None,
+        range_class_id: None,
+        datatype: None,
+        inverse_property_id: None,
+        status: OntologyTermStatus::Active,
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: None,
+    }))
+    .expect("put property");
+    block_on(store.put_graph(graph(graph_id.as_str(), "tenant-a"))).expect("put graph");
+
+    for (relationship_id, predicate) in
+        [("rel-declared", "depends_on"), ("rel-undeclared", "calls")]
+    {
+        block_on(store.put_relationship(KnowledgeRelationship {
+            id: Id::from(relationship_id),
+            graph_id: Some(graph_id.clone()),
+            subject: EntityRef {
+                id: Some(Id::from("svc-a")),
+                kind: Some("service".to_owned()),
+                name: Some("svc-a".to_owned()),
+                aliases: Vec::new(),
+            },
+            predicate: predicate.to_owned(),
+            object: EntityRef {
+                id: Some(Id::from("svc-b")),
+                kind: Some("service".to_owned()),
+                name: Some("svc-b".to_owned()),
+                aliases: Vec::new(),
+            },
+            scope: scope("tenant-a"),
+            evidence: Vec::new(),
+            confidence: Some(0.9),
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+        }))
+        .expect("put relationship");
+    }
+
+    let findings = block_on(store.validate_graph(&graph_id, &ontology_id, &scope("tenant-a")))
+        .expect("validate");
+    // Advisory: only the undeclared predicate is flagged; never rejects.
+    assert_eq!(findings.len(), 1);
+    assert_eq!(findings[0].code, "undeclared_predicate");
+    assert_eq!(findings[0].severity, OntologyValidationSeverity::Warning);
+
+    // A scope-hidden caller sees no findings.
+    let hidden = block_on(store.validate_graph(&graph_id, &ontology_id, &scope("tenant-b")))
+        .expect("validate hidden");
+    assert!(hidden.is_empty());
+}
+
+#[test]
+fn list_graphs_entities_relationships_are_scope_filtered() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+
+    for tenant in ["tenant-a", "tenant-b"] {
+        let graph_id = Id::from(format!("graph-{tenant}"));
+        block_on(store.put_graph(graph(graph_id.as_str(), tenant))).expect("put graph");
+        block_on(store.put_entity(KnowledgeEntity {
+            id: Id::from(format!("entity-{tenant}")),
+            graph_id: Some(graph_id.clone()),
+            kind: EntityKind::Function,
+            name: format!("fn_{tenant}"),
+            aliases: Vec::new(),
+            scope: scope(tenant),
+            source_refs: Vec::new(),
+            concept_refs: Vec::new(),
+            ontology_class_refs: Vec::new(),
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+            valid_from: None,
+            valid_until: None,
+            metadata: None,
+        }))
+        .expect("put entity");
+        block_on(store.put_relationship(KnowledgeRelationship {
+            id: Id::from(format!("rel-{tenant}")),
+            graph_id: Some(graph_id.clone()),
+            subject: EntityRef {
+                id: Some(Id::from(format!("entity-{tenant}"))),
+                kind: Some("function".to_owned()),
+                name: Some(format!("fn_{tenant}")),
+                aliases: Vec::new(),
+            },
+            predicate: "calls".to_owned(),
+            object: EntityRef {
+                id: Some(Id::from(format!("entity-{tenant}"))),
+                kind: Some("function".to_owned()),
+                name: Some(format!("fn_{tenant}")),
+                aliases: Vec::new(),
+            },
+            scope: scope(tenant),
+            evidence: Vec::new(),
+            confidence: Some(0.5),
+            provenance: provenance(),
+            created_at: Utc::now(),
+            updated_at: None,
+        }))
+        .expect("put relationship");
+    }
+
+    let graphs = block_on(store.list_graphs(&scope("tenant-a"))).expect("list graphs");
+    let entities = block_on(store.list_entities(&scope("tenant-a"))).expect("list entities");
+    let relationships =
+        block_on(store.list_relationships(&scope("tenant-a"))).expect("list relationships");
+    let hidden_graphs = block_on(store.list_graphs(&scope("tenant-b"))).expect("list graphs b");
+
+    assert_eq!(graphs.len(), 1);
+    assert_eq!(graphs[0].id, Id::from("graph-tenant-a"));
+    assert_eq!(entities.len(), 1);
+    assert_eq!(entities[0].graph_id, Some(Id::from("graph-tenant-a")));
+    assert_eq!(relationships.len(), 1);
+    assert_eq!(relationships[0].id, Id::from("rel-tenant-a"));
+    // Explicit: tenant-a's list excludes tenant-b's relationship.
+    assert!(
+        !relationships
+            .iter()
+            .any(|r| r.id == Id::from("rel-tenant-b"))
+    );
+    assert_eq!(hidden_graphs.len(), 1);
+    assert_eq!(hidden_graphs[0].id, Id::from("graph-tenant-b"));
+}
+
+// ---------------------------------------------------------------------------
+// Structured-repo-identity: metadata-key lift and migration path
+// ---------------------------------------------------------------------------
+
+/// Verifies that `put_graph` lifts the literal metadata keys "stableSourceKey"
+/// and "path" (the cross-crate contract with `engram-ingest`) into the indexed
+/// columns, and that `list_graphs_by_source` returns only the matching graph.
+/// An empty result here means the key literals have drifted — fix both crates.
+#[test]
+fn put_graph_lifts_stable_source_key_and_path_columns() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+
+    let mut meta = Metadata::default();
+    meta.insert(
+        "stableSourceKey".to_owned(),
+        serde_json::Value::String("github.com/acme/repo".to_owned()),
+    );
+    meta.insert(
+        "path".to_owned(),
+        serde_json::Value::String("src/lib.rs".to_owned()),
+    );
+    let g = KnowledgeGraph {
+        id: Id::from("graph-lift-test"),
+        scope: scope("tenant-lift"),
+        name: "Lift Test".to_owned(),
+        uri: None,
+        version: None,
+        ontology_refs: Vec::new(),
+        policy: policy(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: Some(meta),
+    };
+    block_on(store.put_graph(g)).expect("put graph");
+
+    // Query via the lifted column — must return exactly the one graph.
+    let by_source =
+        block_on(store.list_graphs_by_source(&scope("tenant-lift"), "github.com/acme/repo"))
+            .expect("list_graphs_by_source");
+    assert_eq!(
+        by_source.len(),
+        1,
+        "list_graphs_by_source must return the graph via the lifted stable_source_key column"
+    );
+    let returned = &by_source[0];
+    assert_eq!(returned.id, Id::from("graph-lift-test"));
+    assert_eq!(
+        returned
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("path"))
+            .and_then(|v| v.as_str()),
+        Some("src/lib.rs"),
+        "path must survive the round-trip"
+    );
+
+    // A different key returns nothing.
+    let empty =
+        block_on(store.list_graphs_by_source(&scope("tenant-lift"), "github.com/other/repo"))
+            .expect("list empty");
+    assert!(empty.is_empty(), "unknown key must return no graphs");
+}
+
+/// Verifies the migration path: a DB that was created WITHOUT the attribution
+/// columns (simulating a pre-spec DB file) successfully gains the columns when
+/// `initialize_schema` is called again, and subsequent writes + reads work.
+#[test]
+fn initialize_schema_migrates_pre_existing_db_without_columns() {
+    use engram_store_sqlite::SqlKnowledgeStore;
+    use rusqlite::Connection;
+
+    // Build a pre-spec schema by hand (no stable_source_key / path / graph_id
+    // columns) and write one graph + one entity row the old way.
+    let conn = Connection::open_in_memory().expect("open conn");
+    conn.execute_batch(
+        r#"
+        PRAGMA journal_mode = WAL;
+        CREATE TABLE knowledge_graphs (
+            id TEXT PRIMARY KEY,
+            tenant TEXT NOT NULL,
+            subject TEXT,
+            workspace TEXT,
+            session TEXT,
+            environment TEXT,
+            record_json TEXT NOT NULL
+        );
+        CREATE TABLE knowledge_entities (
+            id TEXT PRIMARY KEY,
+            tenant TEXT NOT NULL,
+            subject TEXT,
+            workspace TEXT,
+            session TEXT,
+            environment TEXT,
+            record_json TEXT NOT NULL
+        );
+        "#,
+    )
+    .expect("create pre-spec schema");
+
+    // Insert a row in the old schema (no attribution columns) to confirm
+    // existing rows survive the migration.
+    conn.execute(
+        "INSERT INTO knowledge_graphs (id, tenant, record_json) VALUES ('g-old', 'ta', '{}')",
+        [],
+    )
+    .expect("insert old graph");
+    conn.execute(
+        "INSERT INTO knowledge_entities (id, tenant, record_json) VALUES ('e-old', 'ta', '{}')",
+        [],
+    )
+    .expect("insert old entity");
+
+    // Persist the connection to a temp file so SqlKnowledgeStore::open_file can
+    // re-open it and run initialize_schema (which runs the migration).
+    let path =
+        std::env::temp_dir().join(format!("engram-migration-test-{}.db", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    let file_conn = Connection::open(&path).expect("open file db");
+    file_conn
+        .execute_batch(
+            r#"
+            PRAGMA journal_mode = WAL;
+            CREATE TABLE knowledge_graphs (
+                id TEXT PRIMARY KEY,
+                tenant TEXT NOT NULL,
+                subject TEXT,
+                workspace TEXT,
+                session TEXT,
+                environment TEXT,
+                record_json TEXT NOT NULL
+            );
+            CREATE TABLE knowledge_entities (
+                id TEXT PRIMARY KEY,
+                tenant TEXT NOT NULL,
+                subject TEXT,
+                workspace TEXT,
+                session TEXT,
+                environment TEXT,
+                record_json TEXT NOT NULL
+            );
+            CREATE TABLE knowledge_sources (id TEXT PRIMARY KEY, tenant TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE knowledge_documents (id TEXT PRIMARY KEY, source_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE knowledge_chunks (id TEXT PRIMARY KEY, document_id TEXT NOT NULL, source_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE knowledge_relationships (id TEXT PRIMARY KEY, graph_id TEXT, subject_id TEXT, tenant TEXT NOT NULL, subject TEXT, workspace TEXT, session TEXT, environment TEXT, record_json TEXT NOT NULL);
+            CREATE TABLE concept_schemes (id TEXT PRIMARY KEY, tenant TEXT NOT NULL, subject TEXT, workspace TEXT, session TEXT, environment TEXT, record_json TEXT NOT NULL);
+            CREATE TABLE concepts (id TEXT PRIMARY KEY, scheme_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE concept_relations (id TEXT PRIMARY KEY, scheme_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE ontologies (id TEXT PRIMARY KEY, tenant TEXT NOT NULL, subject TEXT, workspace TEXT, session TEXT, environment TEXT, record_json TEXT NOT NULL);
+            CREATE TABLE ontology_classes (id TEXT PRIMARY KEY, ontology_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE ontology_properties (id TEXT PRIMARY KEY, ontology_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            CREATE TABLE ontology_axioms (id TEXT PRIMARY KEY, ontology_id TEXT NOT NULL, record_json TEXT NOT NULL);
+            "#,
+        )
+        .expect("create pre-spec file schema");
+    file_conn
+        .execute(
+            "INSERT INTO knowledge_graphs (id, tenant, record_json) VALUES ('g-old', 'ta', '{\"id\":\"g-old\",\"scope\":{\"tenant\":\"ta\"},\"name\":\"old\",\"ontologyRefs\":[],\"policy\":{\"visibility\":\"private\",\"retention\":\"durable\"},\"provenance\":{\"source\":\"t\",\"actor\":{\"id\":\"a\",\"kind\":\"agent\"},\"observedAt\":\"2024-01-01T00:00:00Z\",\"evidence\":[],\"derivations\":[]},\"createdAt\":\"2024-01-01T00:00:00Z\"}')",
+            [],
+        )
+        .expect("insert pre-migration graph");
+    drop(file_conn); // flush
+
+    // open_file runs initialize_schema which includes the ALTER TABLE migration.
+    let store = SqlKnowledgeStore::open_file(&path).expect("open migrated store");
+    let mig_scope = Scope {
+        tenant: "ta".to_owned(),
+        subject: None,
+        workspace: None,
+        session: None,
+        environment: None,
+    };
+
+    // Old row is still readable.
+    let graphs = block_on(store.list_graphs(&mig_scope)).expect("list migrated graphs");
+    assert_eq!(graphs.len(), 1, "pre-migration row must survive");
+
+    // New writes with attribution columns work after migration.
+    let mut meta = Metadata::default();
+    meta.insert(
+        "stableSourceKey".to_owned(),
+        serde_json::Value::String("github.com/acme/migrated".to_owned()),
+    );
+    let new_g = KnowledgeGraph {
+        id: Id::from("g-new"),
+        scope: mig_scope.clone(),
+        name: "New Post-Migration".to_owned(),
+        uri: None,
+        version: None,
+        ontology_refs: Vec::new(),
+        policy: Policy {
+            visibility: Visibility::Private,
+            retention: Retention::Durable,
+            sensitivity: None,
+            allowed_uses: Vec::new(),
+            expires_at: None,
+            delete_mode: None,
+        },
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        metadata: Some(meta),
+    };
+    block_on(store.put_graph(new_g)).expect("put post-migration graph");
+
+    let by_source = block_on(store.list_graphs_by_source(&mig_scope, "github.com/acme/migrated"))
+        .expect("list_graphs_by_source post-migration");
+    assert_eq!(
+        by_source.len(),
+        1,
+        "list_graphs_by_source must work on a migrated DB"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}

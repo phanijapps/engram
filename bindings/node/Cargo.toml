@@ -1,0 +1,41 @@
+[package]
+name = "engram-node"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+engram-codegraph-queries = { path = "../../codegraph/queries" }
+engram-core = { path = "../../core/orchestration" }
+engram-domain = { path = "../../core/domain" }
+engram-conformance = { path = "../../adapters/integration" }
+engram-integration = { path = "../../core/integration", features = ["sqlite"] }
+engram-ingest = { path = "../../adapters/ingest" }
+engram-knowledge = { path = "../../core/knowledge" }
+engram-memory = { path = "../../core/memory" }
+engram-retrieval = { path = "../../core/retrieval" }
+engram-runtime = { path = "../../core/runtime" }
+engram-store-sqlite = { path = "../../adapters/sqlite" }
+engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph" }
+engram-consolidation = { path = "../../core/consolidation" }
+engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical" }
+futures.workspace = true
+napi.workspace = true
+napi-derive.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[features]
+# Enables NativeRetrievalEngine (FastEmbed passage + query embeddings). The demo
+# build turns this on; default builds stay free of model-bearing code.
+default = []
+fastembed = ["engram-store-sqlite/fastembed"]
+
+[build-dependencies]
+napi-build = "2.3.2"

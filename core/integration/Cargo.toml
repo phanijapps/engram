@@ -1,0 +1,80 @@
+[package]
+name = "engram-integration"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+engram-domain = { path = "../domain" }
+engram-runtime = { path = "../runtime" }
+engram-memory = { path = "../memory" }
+engram-knowledge = { path = "../knowledge" }
+engram-hierarchy = { path = "../hierarchy" }
+engram-belief = { path = "../belief" }
+engram-retrieval = { path = "../retrieval" }
+engram-consolidation = { path = "../consolidation" }
+engram-reflection = { path = "../reflection", optional = true }
+engram-eval = { path = "../eval", optional = true }
+async-trait.workspace = true
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2.workspace = true
+toml.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"], optional = true }
+
+# SQLite backend (optional, behind the `sqlite` feature flag). These adapter
+# crates depend only on the port trait crates (engram-memory, engram-knowledge,
+# …), never on engram-integration, so the optional edge introduces no cycle.
+# ADR-0022: the engine-specific code lives under src/sqlite/ and is intentionally
+# exempt from the engine-neutrality gate.
+engram-store-sqlite = { path = "../../adapters/sqlite", optional = true }
+engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical", optional = true }
+engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph", optional = true }
+engram-store-community-summary = { path = "../../adapters/retrieval/community-summary", optional = true }
+engram-decay = { path = "../../adapters/consolidation/decay", optional = true }
+engram-ingest = { path = "../../adapters/ingest", optional = true }
+chrono = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+# Surreal backend (optional, behind the `surreal` feature flag). Embedded
+# SurrealKV store; tokio::sync::OnceCell for the lazy connection open (the
+# Surreal SDK needs a Tokio reactor, opened under the consumer's runtime).
+engram-store-surreal = { path = "../../adapters/surreal", optional = true }
+tokio = { version = "1", features = ["sync", "rt", "macros"], optional = true }
+
+[dev-dependencies]
+tempfile = "3"
+chrono.workspace = true
+# `futures` is a TEST-ONLY dependency here: the S7 stub-backend conformance
+# proof (tests/stub_backend.rs) drives async MemoryService trait methods
+# synchronously via `futures::executor::block_on`. It never enters the library
+# surface or any production adapter. Notably, this crate does NOT depend on
+# `engram-store-sql` — that absence is the compile-time half of the ADR-0022
+# backend-parametric proof (see tests/stub_backend.rs).
+futures.workspace = true
+
+[features]
+default = []
+# Optional FastEmbed-backed SQLite vector query provider. Implies `sqlite` (to
+# bring in the vector store) and forwards to that crate's fastembed-provider
+# feature.
+fastembed = ["sqlite", "engram-store-sqlite/fastembed"]
+ollama = ["dep:reqwest"]
+# The SQLite backend: constructs every file-backed store + the Sql* port impls
+# under src/sqlite/, and makes EngramProvider::open return a wired provider.
+sqlite = [
+    "dep:engram-store-sqlite",
+    "dep:engram-store-lexical",
+    "dep:engram-store-associative-graph",
+    "dep:engram-store-community-summary",
+    "dep:engram-reflection",
+    "dep:engram-eval",
+    "dep:engram-decay",
+    "dep:engram-ingest",
+    "dep:chrono",
+    "dep:futures",
+]
+# The SurrealDB backend (embedded SurrealKV). Constructs the Surreal adapter
+# cells under src/surreal/ and makes EngramProvider::open return a wired
+# provider when selected. Mutually exclusive with `sqlite` at dispatch time
+# (sqlite wins if both are enabled). Capability cells attach incrementally.
+surreal = ["dep:engram-store-surreal", "dep:tokio", "dep:chrono"]

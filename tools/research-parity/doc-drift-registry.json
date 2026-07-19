@@ -1,0 +1,111 @@
+{
+  "scan_paths": [
+    "docs/research",
+    "docs/architecture"
+  ],
+  "scan_files": [
+    "docs/arch_divergence.md"
+  ],
+  "deny": [
+    {
+      "id": "belief-sqlite-valid-time-display-only",
+      "path_globs": [
+        "docs/research/*.md",
+        "docs/research/**/*.md",
+        "docs/arch_divergence.md",
+        "docs/architecture/*.md",
+        "docs/architecture/**/*.md"
+      ],
+      "patterns": [
+        "valid_from` / `valid_until` in JSON but explicitly treats them as display-only",
+        "no transaction-time field and no as-of query behavior",
+        "valid_from` / `valid_until` are stored and surfaced for display only",
+        "stores valid intervals\\s+for display only",
+        "does not implement as-of reads",
+        "does not implement `as_of` reads",
+        "no as-of reads",
+        "no `as_of` reads"
+      ],
+      "reason": "engram-store-belief-sqlite now implements valid-time as_of reads and rejects only record-time history"
+    },
+    {
+      "id": "memory-inmem-required-current",
+      "path_globs": [
+        "docs/research/*.md",
+        "docs/research/**/*.md",
+        "docs/arch_divergence.md",
+        "docs/architecture/*.md",
+        "docs/architecture/**/*.md"
+      ],
+      "patterns": [
+        "you cannot delete inmem today",
+        "Dropping it today breaks eval and ingest",
+        "eval harness bound to `InMemoryMemoryService`",
+        "`engram-store-memory` \\*is\\* the inmem crate",
+        "SQLite adapters are not yet behavior-complete enough to replace inmem"
+      ],
+      "reason": "the memory and knowledge in-memory adapters are retired from the active workspace"
+    },
+    {
+      "id": "consolidation-trigger-undecided",
+      "path_globs": [
+        "docs/arch_divergence.md",
+        "docs/architecture/*.md",
+        "docs/architecture/**/*.md"
+      ],
+      "patterns": [
+        "Consolidation trigger policy is undecided"
+      ],
+      "reason": "ADR-0011 decided the explicit-command baseline and deferred automatic triggers"
+    }
+  ],
+  "require": [
+    {
+      "id": "graphmind-retirement-superseded-marker",
+      "path": "docs/research/graphmind-prior-art-survey.md",
+      "section_regex": "\\*\\*Superseded implementation note \\(2026-07-02\\)\\.\\*\\*.*?active\\s+workspace",
+      "reason": "graphmind research must explicitly distinguish historical in-memory findings from current retired-adapter state"
+    },
+    {
+      "id": "zbot-valid-time-current-marker",
+      "path": "docs/research/zbot-engram-belief-bitemporal-cutover.md",
+      "section_regex": "Current implementation note:.*?record-time history",
+      "reason": "AgentZero belief research must state current Engram valid-time support"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "belief-valid-time-as-of",
+      "status": "active",
+      "path": "docs/research/zbot-engram-belief-bitemporal-cutover.md",
+      "section_regex": "Current implementation note:.*?record-time history",
+      "must_contain": [
+        "`as_of` valid-time query",
+        "supports valid-time filters",
+        "record-time history"
+      ],
+      "reason": "AgentZero cutover docs must not regress Engram belief valid-time support"
+    },
+    {
+      "id": "memory-inmem-adapters",
+      "status": "inactive",
+      "path": "docs/research/graphmind-prior-art-survey.md",
+      "section_regex": "\\*\\*Superseded implementation note \\(2026-07-02\\)\\.\\*\\*.*?active\\s+workspace",
+      "must_contain": [
+        "historical",
+        "removed the broad in-memory adapters"
+      ],
+      "reason": "research docs must keep retired memory and knowledge in-memory adapters inactive"
+    },
+    {
+      "id": "automatic-consolidation-triggers",
+      "status": "deferred",
+      "path": "docs/arch_divergence.md",
+      "section_regex": "ADR-0011.*?explicit-command baseline.*?automatic triggers deferred",
+      "must_contain": [
+        "deferred"
+      ],
+      "reason": "the architecture divergence ledger must reflect the accepted consolidation trigger decision"
+    }
+  ]
+}

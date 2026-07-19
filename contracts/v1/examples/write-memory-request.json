@@ -1,0 +1,43 @@
+{
+  "kind": "fact",
+  "content": {
+    "text": "engram v1 uses Rust 2024 for the deterministic core and TypeScript for bindings.",
+    "summary": "Rust core with TypeScript bindings",
+    "language": "en",
+    "format": "text",
+    "hash": "sha256:example-write-memory"
+  },
+  "scope": {
+    "tenant": "tenant-demo",
+    "workspace": "engram",
+    "environment": "local"
+  },
+  "requester": {
+    "actor": {
+      "id": "actor-agent-1",
+      "kind": "agent",
+      "displayName": "Contract Agent"
+    },
+    "roles": ["maintainer"],
+    "permissions": ["memory.write"]
+  },
+  "provenance": {
+    "source": "manual_contract_example",
+    "actor": {
+      "id": "actor-agent-1",
+      "kind": "agent",
+      "displayName": "Contract Agent"
+    },
+    "observedAt": "2026-06-29T12:00:00Z",
+    "confidence": 1,
+    "method": "manual"
+  },
+  "policy": {
+    "visibility": "workspace",
+    "retention": "durable",
+    "sensitivity": "low",
+    "allowedUses": ["retrieval", "evaluation", "debugging"],
+    "deleteMode": "tombstone"
+  },
+  "idempotencyKey": "write-example-001"
+}

@@ -1,0 +1,1203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory vs Knowledge Architecture v2 — SVG Diagrams</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --heading: #f0f6fc;
+    --mem: #58a6ff;
+    --mem-bg: #0d2240;
+    --know: #d2a8ff;
+    --know-bg: #2a1e42;
+    --ret: #ffa657;
+    --ret-bg: #3a2a0a;
+    --orch: #f0883e;
+    --orch-bg: #3a210a;
+    --store: #7ee787;
+    --store-bg: #0a2a18;
+    --evo: #f778ba;
+    --evo-bg: #3a0d2a;
+    --muted: #8b949e;
+    --accent: #79c0ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    padding: 0;
+  }
+  header {
+    text-align: center;
+    padding: 3rem 2rem 2rem;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, #161b22 0%, #0d1117 100%);
+  }
+  header h1 {
+    color: var(--heading);
+    font-size: 2.2rem;
+    margin-bottom: 0.5rem;
+  }
+  header .subtitle {
+    color: var(--evo);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 0.75rem;
+  }
+  header p {
+    color: var(--muted);
+    max-width: 720px;
+    margin: 0 auto;
+    font-size: 1.05rem;
+  }
+  nav {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 1.5rem 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+  nav h2 {
+    color: var(--heading);
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 0.75rem;
+  }
+  nav ul {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+  }
+  nav a {
+    color: var(--ret);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+  }
+  nav a:hover { color: var(--accent); }
+  main { max-width: 1320px; margin: 0 auto; padding: 2rem; }
+  .diagram-section {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2.5rem;
+  }
+  .diagram-section h2 {
+    color: var(--heading);
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+    border-bottom: 2px solid var(--border);
+    padding-bottom: 0.5rem;
+  }
+  .diagram-section h2 .num {
+    color: var(--accent);
+    margin-right: 0.5rem;
+  }
+  .diagram-section h2 .tag {
+    display: inline-block;
+    background: var(--evo-bg);
+    color: var(--evo);
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    vertical-align: middle;
+    margin-left: 0.5rem;
+    border: 1px solid var(--evo);
+  }
+  .caption {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin: 0.75rem 0 1.5rem;
+    max-width: 900px;
+  }
+  .svg-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    border-radius: 8px;
+    background: #0a0e14;
+  }
+  .svg-wrapper svg {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+  }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.5rem;
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: #0a0e14;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .legend-swatch {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+  .v2-badge {
+    fill: #f778ba;
+    font-size: 9px;
+    font-weight: bold;
+  }
+  .v2-bg {
+    fill: #2d0d22;
+    stroke: #f778ba;
+    stroke-width: 1;
+    rx: 4;
+  }
+  footer {
+    text-align: center;
+    padding: 2rem;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    font-size: 0.85rem;
+  }
+  footer a { color: var(--ret); text-decoration: none; }
+  @media (max-width: 768px) {
+    header h1 { font-size: 1.6rem; }
+    .diagram-section { padding: 1.25rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="subtitle">Version 2.0 — Hierarchical · Dynamic · SKOS-Aligned</div>
+  <h1>Memory vs Knowledge — Modular Composable Architecture v2</h1>
+  <p>Seven interactive SVG diagrams visualizing the v2 architecture: hierarchical memory, dynamic taxonomy evolution, SKOS-aligned knowledge, cue-based retrieval, and evolution feedback loops. All v1 capabilities remain — v2 extends with hierarchical organization and dynamic adaptability.</p>
+</header>
+
+<nav>
+  <h2>Table of Contents</h2>
+  <ul>
+    <li><a href="#diagram-1">1. Component Architecture v2</a></li>
+    <li><a href="#diagram-2">2. Hierarchical Memory Subsystems</a></li>
+    <li><a href="#diagram-3">3. Knowledge Subsystems v2</a></li>
+    <li><a href="#diagram-4">4. Retrieval Data Flow v2</a></li>
+    <li><a href="#diagram-5">5. Dynamic Taxonomy Lifecycle</a></li>
+    <li><a href="#diagram-6">6. Storage Tiers v2</a></li>
+    <li><a href="#diagram-7">7. End-to-End Agent Cycle v2</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<!-- ==================== DIAGRAM 1: COMPONENT ARCHITECTURE v2 ==================== -->
+<section class="diagram-section" id="diagram-1">
+  <h2><span class="num">01</span>Component Architecture v2<span class="tag">HIERARCHICAL + DYNAMIC</span></h2>
+  <p class="caption">Five composable layers with v2 extensions. Memory subsystems now support hierarchical organization (chunk hierarchy, dual-index, skill chunking). Knowledge subsystems include SKOS-aligned taxonomy with an evolution pipeline. The Retrieval Layer adds cue-based and hierarchical query routing.</p>
+  <div class="svg-wrapper">
+    <svg viewBox="0 0 1100 780" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <defs>
+        <linearGradient id="d1-orchGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f0a868"/><stop offset="100%" stop-color="#c77432"/>
+        </linearGradient>
+        <linearGradient id="d1-retGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffa657"/><stop offset="100%" stop-color="#c77030"/>
+        </linearGradient>
+        <linearGradient id="d1-storeGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#7ee787"/><stop offset="100%" stop-color="#3fa950"/>
+        </linearGradient>
+        <linearGradient id="d1-memGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#58a6ff"/><stop offset="100%" stop-color="#2d6dc7"/>
+        </linearGradient>
+        <linearGradient id="d1-knowGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#d2a8ff"/><stop offset="100%" stop-color="#9d6ad6"/>
+        </linearGradient>
+        <filter id="d1-shadow">
+          <feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.4"/>
+        </filter>
+      </defs>
+
+      <!-- Orchestrator -->
+      <rect x="200" y="30" width="700" height="70" rx="10" fill="url(#d1-orchGrad)" filter="url(#d1-shadow)"/>
+      <text x="550" y="60" text-anchor="middle" fill="#fff" font-size="18" font-weight="bold">ORCHESTRATION LAYER</text>
+      <text x="550" y="82" text-anchor="middle" fill="#fff" font-size="12" opacity="0.85">Agent Loop / Central Executive</text>
+
+      <!-- Retrieval Layer -->
+      <rect x="100" y="135" width="900" height="90" rx="10" fill="url(#d1-retGrad)" filter="url(#d1-shadow)"/>
+      <text x="550" y="160" text-anchor="middle" fill="#fff" font-size="15" font-weight="bold">RETRIEVAL LAYER v2</text>
+      <text x="200" y="192" text-anchor="middle" fill="#fff" font-size="11">Query Router</text>
+      <text x="200" y="208" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">+ cue-based routing</text>
+      <text x="400" y="192" text-anchor="middle" fill="#fff" font-size="11">Ranker</text>
+      <text x="400" y="208" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">+ cue match + granularity</text>
+      <text x="600" y="192" text-anchor="middle" fill="#fff" font-size="11">Provenance Tracker</text>
+      <text x="600" y="208" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">+ taxonomy version</text>
+      <text x="850" y="192" text-anchor="middle" fill="#fff" font-size="11">Context Composer</text>
+
+      <!-- Memory Subsystems Column -->
+      <rect x="70" y="265" width="460" height="420" rx="10" fill="#0d2240" stroke="#58a6ff" stroke-width="2" filter="url(#d1-shadow)"/>
+      <text x="300" y="292" text-anchor="middle" fill="#58a6ff" font-size="14" font-weight="bold">MEMORY SUBSYSTEMS v2</text>
+
+      <rect x="100" y="310" width="400" height="65" rx="8" fill="url(#d1-memGrad)" opacity="0.7"/>
+      <text x="300" y="333" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Working Memory</text>
+      <text x="300" y="355" text-anchor="middle" fill="#fff" font-size="10" opacity="0.8">Active context · bounded · volatile</text>
+
+      <rect x="100" y="390" width="400" height="80" rx="8" fill="url(#d1-memGrad)" opacity="0.55"/>
+      <text x="300" y="412" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Episodic Memory</text>
+      <rect x="115" y="425" width="120" height="18" rx="4" fill="#f778ba" opacity="0.25" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="175" y="438" text-anchor="middle" class="v2-badge">v2: CHUNK HIERARCHY</text>
+      <text x="370" y="438" text-anchor="middle" fill="#fff" font-size="9" opacity="0.7">cue-based retrieval</text>
+      <text x="300" y="460" text-anchor="middle" fill="#fff" font-size="9" opacity="0.6">events → episodes → schemas → domains</text>
+
+      <rect x="100" y="485" width="400" height="80" rx="8" fill="url(#d1-memGrad)" opacity="0.55"/>
+      <text x="300" y="507" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Semantic Memory</text>
+      <rect x="115" y="520" width="100" height="18" rx="4" fill="#f778ba" opacity="0.25" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="165" y="533" text-anchor="middle" class="v2-badge">v2: DUAL-INDEX</text>
+      <text x="350" y="533" text-anchor="middle" fill="#fff" font-size="9" opacity="0.7">temporal + hierarchical</text>
+      <text x="300" y="555" text-anchor="middle" fill="#fff" font-size="9" opacity="0.6">cue-based · hierarchical traversal</text>
+
+      <rect x="100" y="580" width="400" height="80" rx="8" fill="url(#d1-memGrad)" opacity="0.55"/>
+      <text x="300" y="602" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Procedural Memory</text>
+      <rect x="115" y="615" width="120" height="18" rx="4" fill="#f778ba" opacity="0.25" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="175" y="628" text-anchor="middle" class="v2-badge">v2: SKILL CHUNKING</text>
+      <text x="350" y="628" text-anchor="middle" fill="#fff" font-size="9" opacity="0.7">atomic → composite → pattern</text>
+
+      <!-- Knowledge Subsystems Column -->
+      <rect x="570" y="265" width="460" height="420" rx="10" fill="#2a1e42" stroke="#d2a8ff" stroke-width="2" filter="url(#d1-shadow)"/>
+      <text x="800" y="292" text-anchor="middle" fill="#d2a8ff" font-size="14" font-weight="bold">KNOWLEDGE SUBSYSTEMS v2</text>
+
+      <rect x="600" y="310" width="400" height="55" rx="8" fill="url(#d1-knowGrad)" opacity="0.6"/>
+      <text x="800" y="332" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Flat Facts Store</text>
+      <text x="800" y="350" text-anchor="middle" fill="#fff" font-size="9" opacity="0.7">key-value · substring match</text>
+
+      <rect x="600" y="380" width="400" height="115" rx="8" fill="url(#d1-knowGrad)" opacity="0.5"/>
+      <text x="800" y="402" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Hierarchical Taxonomy</text>
+      <rect x="615" y="415" width="210" height="18" rx="4" fill="#f778ba" opacity="0.25" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="720" y="428" text-anchor="middle" class="v2-badge">v2: SKOS + EVOLUTION PIPELINE</text>
+      <text x="800" y="450" text-anchor="middle" fill="#fff" font-size="9" opacity="0.75">broader/narrower · collections · cross-scheme</text>
+      <text x="800" y="466" text-anchor="middle" fill="#fff" font-size="9" opacity="0.75">drift detection · provenance tracking</text>
+      <text x="800" y="482" text-anchor="middle" fill="#fff" font-size="9" opacity="0.6">Discovery → Proposal → Validation → Merge</text>
+
+      <rect x="600" y="510" width="400" height="65" rx="8" fill="url(#d1-knowGrad)" opacity="0.6"/>
+      <text x="800" y="533" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Vector Embedding Store (RAG)</text>
+      <text x="800" y="555" text-anchor="middle" fill="#fff" font-size="9" opacity="0.7">semantic similarity · top-k chunks</text>
+
+      <rect x="600" y="590" width="400" height="75" rx="8" fill="url(#d1-knowGrad)" opacity="0.5"/>
+      <text x="800" y="612" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Knowledge Graph</text>
+      <rect x="615" y="625" width="160" height="18" rx="4" fill="#f778ba" opacity="0.25" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="695" y="638" text-anchor="middle" class="v2-badge">v2: CROSS-SCHEME MAPPING</text>
+      <text x="870" y="638" text-anchor="middle" fill="#fff" font-size="9" opacity="0.7">link_to_concept()</text>
+
+      <!-- Storage Layer -->
+      <rect x="70" y="710" width="960" height="55" rx="10" fill="url(#d1-storeGrad)" filter="url(#d1-shadow)"/>
+      <text x="550" y="735" text-anchor="middle" fill="#0d1117" font-size="14" font-weight="bold">STORAGE LAYER v2 — T1 (Volatile) · T2 (Structured DB + hierarchy) · T3 (Vector) · T4 (Graph + SKOS edges) · T5 (Cold Archive + taxonomy versions)</text>
+
+      <!-- Vertical connectors -->
+      <line x1="550" y1="100" x2="550" y2="135" stroke="#30363d" stroke-width="2"/>
+      <line x1="550" y1="225" x2="300" y2="265" stroke="#30363d" stroke-width="2"/>
+      <line x1="550" y1="225" x2="800" y2="265" stroke="#30363d" stroke-width="2"/>
+      <line x1="300" y1="685" x2="300" y2="710" stroke="#30363d" stroke-width="2"/>
+      <line x1="800" y1="685" x2="800" y2="710" stroke="#30363d" stroke-width="2"/>
+    </svg>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#f0a868,#c77432)"></div>Orchestration</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#ffa657,#c77030)"></div>Retrieval</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#58a6ff,#2d6dc7)"></div>Memory</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#d2a8ff,#9d6ad6)"></div>Knowledge</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#7ee787,#3fa950)"></div>Storage</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #f778ba; opacity: 0.3"></div>v2 Enhancement</div>
+  </div>
+</section>
+
+
+<!-- ==================== DIAGRAM 2: HIERARCHICAL MEMORY SUBSYSTEMS ==================== -->
+<section class="diagram-section" id="diagram-2">
+  <h2><span class="num">02</span>Hierarchical Memory Subsystems<span class="tag">CHUNK HIERARCHY + DUAL-INDEX</span></h2>
+  <p class="caption">Memory subsystems with v2 hierarchical organization. Episodic memory nests events into a four-level chunk hierarchy (event → episode → schema → domain). Semantic memory uses dual-indexing (temporal + hierarchical). Procedural memory uses skill chunking. Construction and navigation modules handle organize-then-retrieve.</p>
+  <div class="svg-wrapper">
+    <svg viewBox="0 0 1100 900" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <defs>
+        <linearGradient id="d2-memGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#58a6ff"/><stop offset="100%" stop-color="#2d6dc7"/>
+        </linearGradient>
+        <linearGradient id="d2-schemaGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#79c0ff"/><stop offset="100%" stop-color="#3884d4"/>
+        </linearGradient>
+        <linearGradient id="d2-navGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f778ba"/><stop offset="100%" stop-color="#b04a86"/>
+        </linearGradient>
+        <filter id="d2-shadow"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.4"/></filter>
+      </defs>
+
+      <!-- Title -->
+      <text x="550" y="30" text-anchor="middle" fill="#f0f6fc" font-size="16" font-weight="bold">Episodic Memory — Chunk Hierarchy (4 Levels)</text>
+
+      <!-- Level 4: Domain Ontology -->
+      <rect x="375" y="55" width="350" height="60" rx="8" fill="url(#d2-memGrad)" opacity="0.9" filter="url(#d2-shadow)"/>
+      <text x="550" y="80" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Level 4: Domain Ontology</text>
+      <text x="550" y="100" text-anchor="middle" fill="#fff" font-size="10" opacity="0.8">e.g., "Software Engineering"</text>
+
+      <!-- Level 3: Schema -->
+      <rect x="300" y="145" width="500" height="70" rx="8" fill="url(#d2-memGrad)" opacity="0.75" filter="url(#d2-shadow)"/>
+      <text x="550" y="170" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Level 3: Schema</text>
+      <text x="550" y="190" text-anchor="middle" fill="#fff" font-size="10" opacity="0.8">e.g., "Bug Triage Workflow"</text>
+      <text x="550" y="205" text-anchor="middle" fill="#f778ba" font-size="9">associative · adaptable · chronological · cross-connected</text>
+
+      <!-- Level 2: Episode -->
+      <rect x="225" y="250" width="650" height="60" rx="8" fill="url(#d2-memGrad)" opacity="0.6" filter="url(#d2-shadow)"/>
+      <text x="550" y="275" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Level 2: Episode</text>
+      <text x="550" y="295" text-anchor="middle" fill="#fff" font-size="10" opacity="0.8">e.g., "Triage session 2024-03-15"</text>
+
+      <!-- Level 1: Raw Events -->
+      <rect x="100" y="345" width="900" height="55" rx="8" fill="url(#d2-memGrad)" opacity="0.45" filter="url(#d2-shadow)"/>
+      <text x="550" y="368" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Level 1: Raw Events</text>
+      <text x="550" y="388" text-anchor="middle" fill="#fff" font-size="10" opacity="0.8">e.g., "User reported login failure" · timestamped · slot-value pairs (cues)</text>
+
+      <!-- Hierarchy connectors -->
+      <path d="M550 115 L550 145" stroke="#58a6ff" stroke-width="2" fill="none"/>
+      <path d="M550 215 L550 250" stroke="#58a6ff" stroke-width="2" fill="none"/>
+      <path d="M550 310 L550 345" stroke="#58a6ff" stroke-width="2" fill="none"/>
+      <text x="565" y="130" fill="#58a6ff" font-size="9">broader</text>
+      <text x="565" y="232" fill="#58a6ff" font-size="9">broader</text>
+      <text x="565" y="327" fill="#58a6ff" font-size="9">broader</text>
+
+      <!-- Construction / Navigation separation -->
+      <text x="550" y="435" text-anchor="middle" fill="#f0f6fc" font-size="14" font-weight="bold">Construction ⇄ Navigation Separation (Organize then Retrieve)</text>
+
+      <!-- Construction Module -->
+      <rect x="80" y="460" width="430" height="180" rx="10" fill="#0d2240" stroke="#58a6ff" stroke-width="2" filter="url(#d2-shadow)"/>
+      <rect x="80" y="460" width="430" height="35" rx="10" fill="url(#d2-schemaGrad)"/>
+      <text x="295" y="483" text-anchor="middle" fill="#0d1117" font-size="13" font-weight="bold">Construction Module</text>
+      <text x="295" y="515" text-anchor="middle" fill="#c9d1d9" font-size="10">Iteratively refines how events are</text>
+      <text x="295" y="530" text-anchor="middle" fill="#c9d1d9" font-size="10">structured into the chunk hierarchy</text>
+      <rect x="100" y="548" width="180" height="22" rx="4" fill="#0d1117" stroke="#58a6ff" stroke-width="0.5"/>
+      <text x="190" y="563" text-anchor="middle" fill="#58a6ff" font-size="9">construct(events) → Hierarchy</text>
+      <rect x="290" y="548" width="200" height="22" rx="4" fill="#0d1117" stroke="#58a6ff" stroke-width="0.5"/>
+      <text x="390" y="563" text-anchor="middle" fill="#58a6ff" font-size="9">refine(failure) → Update</text>
+      <text x="295" y="595" text-anchor="middle" fill="#8b949e" font-size="9">Distinguishes missing information</text>
+      <text x="295" y="608" text-anchor="middle" fill="#8b949e" font-size="9">from misleading / overloaded context</text>
+      <text x="295" y="626" text-anchor="middle" fill="#f778ba" font-size="8">arXiv:2606.11680</text>
+
+      <!-- Navigation Module -->
+      <rect x="590" y="460" width="430" height="180" rx="10" fill="#3a0d2a" stroke="#f778ba" stroke-width="2" filter="url(#d2-shadow)"/>
+      <rect x="590" y="460" width="430" height="35" rx="10" fill="url(#d2-navGrad)"/>
+      <text x="805" y="483" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Navigation Module</text>
+      <text x="805" y="515" text-anchor="middle" fill="#c9d1d9" font-size="10">Retrieves task-relevant context by</text>
+      <text x="805" y="530" text-anchor="middle" fill="#c9d1d9" font-size="10">traversing the hierarchy</text>
+      <rect x="610" y="548" width="200" height="22" rx="4" fill="#0d1117" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="710" y="563" text-anchor="middle" fill="#f778ba" font-size="9">navigate(hierarchy, query) → Context</text>
+      <text x="805" y="595" text-anchor="middle" fill="#8b949e" font-size="9">Selects minimal yet sufficient context</text>
+      <text x="805" y="608" text-anchor="middle" fill="#8b949e" font-size="9">at the appropriate granularity level</text>
+      <text x="805" y="626" text-anchor="middle" fill="#f778ba" font-size="8">arXiv:2606.11680</text>
+
+      <!-- Arrow between construction → hierarchy → navigation -->
+      <path d="M295 640 Q295 665 460 665 L640 665 Q805 665 805 640" stroke="#f778ba" stroke-width="2" fill="none" stroke-dasharray="6,4"/>
+      <polygon points="805,645 800,635 810,635" fill="#f778ba"/>
+      <text x="550" y="680" text-anchor="middle" fill="#8b949e" font-size="9">hierarchy refinement loop</text>
+
+      <!-- Dual-Index System (Semantic Memory) -->
+      <text x="550" y="720" text-anchor="middle" fill="#f0f6fc" font-size="14" font-weight="bold">Semantic Memory — Dual-Index System</text>
+
+      <rect x="200" y="745" width="320" height="120" rx="8" fill="#0d2240" stroke="#58a6ff" stroke-width="1.5" filter="url(#d2-shadow)"/>
+      <text x="360" y="770" text-anchor="middle" fill="#58a6ff" font-size="12" font-weight="bold">Temporal Index</text>
+      <text x="360" y="790" text-anchor="middle" fill="#c9d1d9" font-size="10">Chronological ordering of</text>
+      <text x="360" y="805" text-anchor="middle" fill="#c9d1d9" font-size="10">fact acquisition</text>
+      <text x="360" y="830" text-anchor="middle" fill="#8b949e" font-size="9">Time queries · recency ranking</text>
+      <text x="360" y="845" text-anchor="middle" fill="#8b949e" font-size="9">Temporal decay</text>
+
+      <rect x="580" y="745" width="320" height="120" rx="8" fill="#0d2240" stroke="#58a6ff" stroke-width="1.5" filter="url(#d2-shadow)"/>
+      <text x="740" y="770" text-anchor="middle" fill="#58a6ff" font-size="12" font-weight="bold">Hierarchical Index</text>
+      <text x="740" y="790" text-anchor="middle" fill="#c9d1d9" font-size="10">Tree structure of</text>
+      <text x="740" y="805" text-anchor="middle" fill="#c9d1d9" font-size="10">concept relationships</text>
+      <text x="740" y="830" text-anchor="middle" fill="#8b949e" font-size="9">Granularity selection · traversal</text>
+      <text x="740" y="845" text-anchor="middle" fill="#8b949e" font-size="9">Schema-level retrieval</text>
+
+      <text x="550" y="885" text-anchor="middle" fill="#8b949e" font-size="9">Grounding: "conversational agents benefit from memory indexes that are both temporal and hierarchical" — arXiv:2606.04555</text>
+    </svg>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#58a6ff,#2d6dc7)"></div>Memory hierarchy levels</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#79c0ff,#3884d4)"></div>Construction module</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#f778ba,#b04a86)"></div>Navigation module</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #0d2240; border: 1px solid #58a6ff"></div>Dual-index</div>
+  </div>
+</section>
+
+
+<!-- ==================== DIAGRAM 3: KNOWLEDGE SUBSYSTEMS v2 ==================== -->
+<section class="diagram-section" id="diagram-3">
+  <h2><span class="num">03</span>Knowledge Subsystems v2<span class="tag">SKOS-ALIGNED</span></h2>
+  <p class="caption">Knowledge representation subsystems. The Hierarchical Taxonomy is now SKOS-aligned with URI concepts, broader/narrower direct links, collections for facets, and cross-scheme mapping. The Knowledge Graph supports cross-scheme references to taxonomy concepts, enabling graph-to-taxonomy traversal.</p>
+  <div class="svg-wrapper">
+    <svg viewBox="0 0 1100 880" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <defs>
+        <linearGradient id="d3-knowGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#d2a8ff"/><stop offset="100%" stop-color="#9d6ad6"/>
+        </linearGradient>
+        <linearGradient id="d3-skosGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#bc8cff"/><stop offset="100%" stop-color="#8e5fd6"/>
+        </linearGradient>
+        <filter id="d3-shadow"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.4"/></filter>
+      </defs>
+
+      <!-- SKOS Taxonomy Tree -->
+      <text x="400" y="30" text-anchor="middle" fill="#f0f6fc" font-size="16" font-weight="bold">Hierarchical Taxonomy — SKOS Concept Scheme</text>
+
+      <!-- Concept Scheme container -->
+      <rect x="50" y="50" width="700" height="280" rx="10" fill="#2a1e42" stroke="#d2a8ff" stroke-width="2" stroke-dasharray="8,4"/>
+      <text x="400" y="72" text-anchor="middle" fill="#d2a8ff" font-size="11" font-style="italic">skos:ConceptScheme — "Programming Languages"</text>
+
+      <!-- Root -->
+      <rect x="320" y="85" width="160" height="45" rx="8" fill="url(#d3-skosGrad)" filter="url(#d3-shadow)"/>
+      <text x="400" y="105" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Language</text>
+      <text x="400" y="121" text-anchor="middle" fill="#fff" font-size="8" opacity="0.7">skos:Concept (URI)</text>
+
+      <!-- Level 2 -->
+      <rect x="140" y="160" width="140" height="40" rx="6" fill="url(#d3-knowGrad)" opacity="0.8" filter="url(#d3-shadow)"/>
+      <text x="210" y="178" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">Compiled</text>
+      <text x="210" y="192" text-anchor="middle" fill="#fff" font-size="8" opacity="0.7">skos:narrower</text>
+
+      <rect x="560" y="160" width="140" height="40" rx="6" fill="url(#d3-knowGrad)" opacity="0.8" filter="url(#d3-shadow)"/>
+      <text x="630" y="178" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">Interpreted</text>
+      <text x="630" y="192" text-anchor="middle" fill="#fff" font-size="8" opacity="0.7">skos:narrower</text>
+
+      <!-- Level 3 -->
+      <rect x="80" y="230" width="100" height="35" rx="6" fill="url(#d3-knowGrad)" opacity="0.6"/>
+      <text x="130" y="252" text-anchor="middle" fill="#fff" font-size="11">C++</text>
+
+      <rect x="200" y="230" width="100" height="35" rx="6" fill="url(#d3-knowGrad)" opacity="0.6"/>
+      <text x="250" y="252" text-anchor="middle" fill="#fff" font-size="11">Rust</text>
+
+      <rect x="530" y="230" width="100" height="35" rx="6" fill="url(#d3-knowGrad)" opacity="0.6"/>
+      <text x="580" y="252" text-anchor="middle" fill="#fff" font-size="11">Python</text>
+
+      <rect x="650" y="230" width="100" height="35" rx="6" fill="url(#d3-knowGrad)" opacity="0.6"/>
+      <text x="700" y="252" text-anchor="middle" fill="#fff" font-size="11">Ruby</text>
+
+      <!-- Tree connectors -->
+      <path d="M400 130 L400 145 L210 145 L210 160" stroke="#bc8cff" stroke-width="1.5" fill="none"/>
+      <path d="M400 130 L400 145 L630 145 L630 160" stroke="#bc8cff" stroke-width="1.5" fill="none"/>
+      <path d="M210 200 L210 215 L130 215 L130 230" stroke="#d2a8ff" stroke-width="1" fill="none" opacity="0.6"/>
+      <path d="M210 200 L210 215 L250 215 L250 230" stroke="#d2a8ff" stroke-width="1" fill="none" opacity="0.6"/>
+      <path d="M630 200 L630 215 L580 215 L580 230" stroke="#d2a8ff" stroke-width="1" fill="none" opacity="0.6"/>
+      <path d="M630 200 L630 215 L700 215 L700 230" stroke="#d2a8ff" stroke-width="1" fill="none" opacity="0.6"/>
+
+      <!-- Collection (facet) -->
+      <rect x="50" y="285" width="700" height="40" rx="6" fill="#2d0d22" stroke="#f778ba" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="80" y="310" fill="#f778ba" font-size="10" font-weight="bold">skos:Collection: "Web Technologies"</text>
+      <rect x="310" y="296" width="70" height="22" rx="4" fill="#3a0d2a" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="345" y="311" text-anchor="middle" fill="#f778ba" font-size="9">JavaScript</text>
+      <rect x="390" y="296" width="60" height="22" rx="4" fill="#3a0d2a" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="420" y="311" text-anchor="middle" fill="#f778ba" font-size="9">Python</text>
+      <rect x="460" y="296" width="50" height="22" rx="4" fill="#3a0d2a" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="485" y="311" text-anchor="middle" fill="#f778ba" font-size="9">Ruby</text>
+
+      <!-- Cross-Scheme Mapping section -->
+      <text x="550" y="360" text-anchor="middle" fill="#f0f6fc" font-size="14" font-weight="bold">Cross-Scheme Mapping</text>
+
+      <!-- Scheme A -->
+      <rect x="50" y="380" width="200" height="55" rx="8" fill="#2a1e42" stroke="#d2a8ff" stroke-width="1.5" filter="url(#d3-shadow)"/>
+      <text x="150" y="400" text-anchor="middle" fill="#d2a8ff" font-size="10" font-style="italic">QA Scheme</text>
+      <text x="150" y="420" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">"Bug"</text>
+
+      <!-- Scheme B -->
+      <rect x="850" y="380" width="200" height="55" rx="8" fill="#2a1e42" stroke="#d2a8ff" stroke-width="1.5" filter="url(#d3-shadow)"/>
+      <text x="950" y="400" text-anchor="middle" fill="#d2a8ff" font-size="10" font-style="italic">Engineering Scheme</text>
+      <text x="950" y="420" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">"Defect"</text>
+
+      <!-- Mapping arrows -->
+      <path d="M250 400 Q450 380 650 395 L850 400" stroke="#f778ba" stroke-width="2" fill="none" stroke-dasharray="5,3"/>
+      <text x="450" y="385" text-anchor="middle" fill="#f778ba" font-size="9" font-weight="bold">skos:closeMatch</text>
+
+      <path d="M250 420 Q450 440 650 425 L850 420" stroke="#7ee787" stroke-width="2" fill="none" stroke-dasharray="5,3"/>
+      <text x="450" y="455" text-anchor="middle" fill="#7ee787" font-size="9" font-weight="bold">skos:exactMatch</text>
+
+      <!-- SKOS Properties table -->
+      <text x="550" y="490" text-anchor="middle" fill="#f0f6fc" font-size="14" font-weight="bold">SKOS Core Properties</text>
+
+      <rect x="50" y="510" width="1000" height="310" rx="8" fill="#0a0e14" stroke="#30363d" stroke-width="1"/>
+
+      <!-- Property rows -->
+      <g font-size="10">
+        <rect x="60" y="525" width="190" height="28" rx="4" fill="#2a1e42" stroke="#bc8cff" stroke-width="0.5"/>
+        <text x="155" y="543" text-anchor="middle" fill="#bc8cff" font-weight="bold">skos:Concept</text>
+        <text x="270" y="543" fill="#c9d1d9">Base concept type — URI-identified resource</text>
+
+        <rect x="60" y="560" width="190" height="28" rx="4" fill="#2a1e42" stroke="#bc8cff" stroke-width="0.5"/>
+        <text x="155" y="578" text-anchor="middle" fill="#bc8cff" font-weight="bold">skos:ConceptScheme</text>
+        <text x="270" y="578" fill="#c9d1d9">Groups concepts into a controlled vocabulary</text>
+
+        <rect x="60" y="595" width="190" height="28" rx="4" fill="#2a1e42" stroke="#bc8cff" stroke-width="0.5"/>
+        <text x="155" y="613" text-anchor="middle" fill="#bc8cff" font-weight="bold">skos:broader</text>
+        <text x="270" y="613" fill="#c9d1d9">Direct (immediate) parent link</text>
+
+        <rect x="60" y="630" width="190" height="28" rx="4" fill="#2a1e42" stroke="#bc8cff" stroke-width="0.5"/>
+        <text x="155" y="648" text-anchor="middle" fill="#bc8cff" font-weight="bold">skos:narrower</text>
+        <text x="270" y="648" fill="#c9d1d9">Direct (immediate) child link</text>
+
+        <rect x="60" y="665" width="190" height="28" rx="4" fill="#2a1e42" stroke="#bc8cff" stroke-width="0.5"/>
+        <text x="155" y="683" text-anchor="middle" fill="#bc8cff" font-weight="bold">skos:related</text>
+        <text x="270" y="683" fill="#c9d1d9">Non-hierarchical associative relationship</text>
+
+        <rect x="60" y="700" width="190" height="28" rx="4" fill="#2d0d22" stroke="#f778ba" stroke-width="0.5"/>
+        <text x="155" y="718" text-anchor="middle" fill="#f778ba" font-weight="bold">skos:Collection</text>
+        <text x="270" y="718" fill="#c9d1d9">Groups concepts for facets/topics (non-hierarchical)</text>
+
+        <rect x="60" y="735" width="190" height="28" rx="4" fill="#2d0d22" stroke="#f778ba" stroke-width="0.5"/>
+        <text x="155" y="753" text-anchor="middle" fill="#f778ba" font-weight="bold">skos:exactMatch</text>
+        <text x="270" y="753" fill="#c9d1d9">Same concept in different schemes</text>
+
+        <rect x="60" y="770" width="190" height="28" rx="4" fill="#2d0d22" stroke="#f778ba" stroke-width="0.5"/>
+        <text x="155" y="788" text-anchor="middle" fill="#f778ba" font-weight="bold">skos:closeMatch</text>
+        <text x="270" y="788" fill="#c9d1d9">Related but not identical (approximate mapping)</text>
+      </g>
+
+      <text x="550" y="840" text-anchor="middle" fill="#8b949e" font-size="9">Direct parent-child only — transitive closure computed at query time. Grounding: W3C SKOS Reference (w3.org/TR/skos-reference)</text>
+    </svg>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#bc8cff,#8e5fd6)"></div>SKOS Concept</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#d2a8ff,#9d6ad6)"></div>Taxonomy node</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #2d0d22; border: 1px solid #f778ba"></div>Collection / Mapping</div>
+  </div>
+</section>
+
+
+<!-- ==================== DIAGRAM 4: RETRIEVAL DATA FLOW v2 ==================== -->
+<section class="diagram-section" id="diagram-4">
+  <h2><span class="num">04</span>Retrieval Data Flow v2<span class="tag">CUE-BASED + MULTI-DIMENSIONAL</span></h2>
+  <p class="caption">The retrieval layer's v2 data flow. The Query Router fans out across four retrieval modes — temporal, cue-based, hierarchical, and semantic — to multiple subsystems in parallel. Results are ranked (including cue match score and hierarchical granularity), annotated with provenance (including taxonomy version), and composed within budget.</p>
+  <div class="svg-wrapper">
+    <svg viewBox="0 0 1100 950" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <defs>
+        <linearGradient id="d4-retGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffa657"/><stop offset="100%" stop-color="#c77030"/>
+        </linearGradient>
+        <linearGradient id="d4-modeGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#bc8cff"/><stop offset="100%" stop-color="#8e5fd6"/>
+        </linearGradient>
+        <linearGradient id="d4-memGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#58a6ff"/><stop offset="100%" stop-color="#2d6dc7"/>
+        </linearGradient>
+        <linearGradient id="d4-knowGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#d2a8ff"/><stop offset="100%" stop-color="#9d6ad6"/>
+        </linearGradient>
+        <filter id="d4-shadow"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.4"/></filter>
+        <marker id="d4-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0 0 L10 5 L0 10 z" fill="#58a6ff"/>
+        </marker>
+      </defs>
+
+      <!-- Query source -->
+      <rect x="380" y="20" width="340" height="55" rx="10" fill="url(#d4-retGrad)" filter="url(#d4-shadow)"/>
+      <text x="550" y="45" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Incoming Query / Agent State / Cue</text>
+      <text x="550" y="62" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">TimeQuery · CueQuery · HierarchicalQuery · SimilarityQuery</text>
+      <path d="M550 75 L550 100" stroke="#ffa657" stroke-width="2" marker-end="url(#d4-arrow)"/>
+
+      <!-- Query Router -->
+      <rect x="340" y="100" width="420" height="55" rx="10" fill="url(#d4-retGrad)" filter="url(#d4-shadow)"/>
+      <text x="550" y="125" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">Query Router</text>
+      <text x="550" y="143" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">routes query to appropriate subsystem(s) + retrieval mode</text>
+
+      <!-- Fan-out lines to 4 modes -->
+      <path d="M400 155 Q200 200 160 230" stroke="#bc8cff" stroke-width="2" fill="none"/>
+      <path d="M470 155 Q350 200 340 230" stroke="#f778ba" stroke-width="2" fill="none"/>
+      <path d="M630 155 Q750 200 760 230" stroke="#7ee787" stroke-width="2" fill="none"/>
+      <path d="M700 155 Q900 200 940 230" stroke="#58a6ff" stroke-width="2" fill="none"/>
+
+      <!-- 4 Retrieval Modes -->
+      <rect x="60" y="230" width="200" height="65" rx="8" fill="url(#d4-modeGrad)" opacity="0.7" filter="url(#d4-shadow)"/>
+      <text x="160" y="253" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Temporal</text>
+      <text x="160" y="272" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">"What happened during</text>
+      <text x="160" y="285" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">session X?"</text>
+
+      <rect x="290" y="230" width="200" height="65" rx="8" fill="#2d0d22" stroke="#f778ba" stroke-width="1.5" filter="url(#d4-shadow)"/>
+      <text x="390" y="253" text-anchor="middle" fill="#f778ba" font-size="12" font-weight="bold">Cue-Based [v2]</text>
+      <text x="390" y="272" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">"Find events where</text>
+      <text x="390" y="285" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">tool=X, outcome=success"</text>
+
+      <rect x="610" y="230" width="200" height="65" rx="8" fill="#0a2a18" stroke="#7ee787" stroke-width="1.5" filter="url(#d4-shadow)"/>
+      <text x="710" y="253" text-anchor="middle" fill="#7ee787" font-size="12" font-weight="bold">Hierarchical [v2]</text>
+      <text x="710" y="272" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">"Give me the schema for</text>
+      <text x="710" y="285" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">these events"</text>
+
+      <rect x="840" y="230" width="200" height="65" rx="8" fill="url(#d4-memGrad)" opacity="0.7" filter="url(#d4-shadow)"/>
+      <text x="940" y="253" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Semantic</text>
+      <text x="940" y="272" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">"Find similar past</text>
+      <text x="940" y="285" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">experiences"</text>
+
+      <!-- Subsystem targets -->
+      <text x="550" y="330" text-anchor="middle" fill="#8b949e" font-size="10" font-style="italic">Parallel fan-out to subsystems</text>
+
+      <rect x="60" y="350" width="200" height="50" rx="8" fill="url(#d4-memGrad)" opacity="0.5"/>
+      <text x="160" y="372" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">Episodic Memory</text>
+      <text x="160" y="388" text-anchor="middle" fill="#fff" font-size="8" opacity="0.7">recall() with TimeQuery</text>
+
+      <rect x="290" y="350" width="200" height="50" rx="8" fill="url(#d4-memGrad)" opacity="0.5"/>
+      <text x="390" y="372" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">Epi / Sem / Proc Memory</text>
+      <text x="390" y="388" text-anchor="middle" fill="#fff" font-size="8" opacity="0.7">recall() with CueQuery</text>
+
+      <rect x="610" y="350" width="200" height="50" rx="8" fill="#0d2240" stroke="#58a6ff" stroke-width="1"/>
+      <text x="710" y="372" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">Epi / Sem / Taxonomy</text>
+      <text x="710" y="388" text-anchor="middle" fill="#fff" font-size="8" opacity="0.7">traverse_hierarchy()</text>
+
+      <rect x="840" y="350" width="200" height="50" rx="8" fill="url(#d4-knowGrad)" opacity="0.5"/>
+      <text x="940" y="372" text-anchor="middle" fill="#fff" font-size="11" font-weight="bold">Vector Store / KG</text>
+      <text x="940" y="388" text-anchor="middle" fill="#fff" font-size="8" opacity="0.7">similarity_search() / traverse()</text>
+
+      <!-- Convergence lines -->
+      <path d="M160 400 Q160 440 380 470" stroke="#30363d" stroke-width="1.5" fill="none"/>
+      <path d="M390 400 Q390 440 450 470" stroke="#30363d" stroke-width="1.5" fill="none"/>
+      <path d="M710 400 Q710 440 650 470" stroke="#30363d" stroke-width="1.5" fill="none"/>
+      <path d="M940 400 Q940 440 720 470" stroke="#30363d" stroke-width="1.5" fill="none"/>
+
+      <!-- Ranker -->
+      <rect x="330" y="470" width="440" height="65" rx="10" fill="url(#d4-retGrad)" filter="url(#d4-shadow)"/>
+      <text x="550" y="495" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">Ranker</text>
+      <text x="550" y="513" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">relevance · recency · confidence</text>
+      <text x="550" y="527" text-anchor="middle" fill="#f778ba" font-size="9" font-weight="bold">[v2] + cue match score + hierarchical granularity</text>
+
+      <path d="M550 535 L550 565" stroke="#ffa657" stroke-width="2"/>
+
+      <!-- Provenance Tracker -->
+      <rect x="330" y="565" width="440" height="65" rx="10" fill="url(#d4-retGrad)" filter="url(#d4-shadow)"/>
+      <text x="550" y="590" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">Provenance Tracker</text>
+      <text x="550" y="608" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">source attribution · retrieval confidence</text>
+      <text x="550" y="622" text-anchor="middle" fill="#f778ba" font-size="9" font-weight="bold">[v2] + taxonomy version / concept provenance</text>
+
+      <path d="M550 630 L550 660" stroke="#ffa657" stroke-width="2"/>
+
+      <!-- Context Composer -->
+      <rect x="330" y="660" width="440" height="55" rx="10" fill="url(#d4-retGrad)" filter="url(#d4-shadow)"/>
+      <text x="550" y="685" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">Context Composer</text>
+      <text x="550" y="703" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">assembles within capacity budget</text>
+
+      <path d="M550 715 L550 745" stroke="#ffa657" stroke-width="2"/>
+
+      <!-- Context Payload -->
+      <rect x="370" y="745" width="360" height="50" rx="10" fill="url(#d4-memGrad)" filter="url(#d4-shadow)"/>
+      <text x="550" y="767" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Context Payload</text>
+      <text x="550" y="783" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">→ Working Memory</text>
+
+      <!-- Predictive Retrieval sidebar -->
+      <rect x="820" y="470" width="240" height="180" rx="8" fill="#2a1e42" stroke="#d2a8ff" stroke-width="1" stroke-dasharray="5,3"/>
+      <text x="940" y="495" text-anchor="middle" fill="#d2a8ff" font-size="12" font-weight="bold">Predictive Retrieval</text>
+      <text x="940" y="515" text-anchor="middle" fill="#8b949e" font-size="9">(Proactive Loading)</text>
+      <text x="940" y="540" text-anchor="middle" fill="#c9d1d9" font-size="9">Generates expectation-based</text>
+      <text x="940" y="555" text-anchor="middle" fill="#c9d1d9" font-size="9">retrieval hints from state</text>
+      <text x="940" y="580" text-anchor="middle" fill="#f778ba" font-size="8">Prediction errors → surprise</text>
+      <text x="940" y="595" text-anchor="middle" fill="#f778ba" font-size="8">signals → proactive loading</text>
+      <text x="940" y="625" text-anchor="middle" fill="#58a6ff" font-size="8">predict_context() →</text>
+      <text x="940" y="640" text-anchor="middle" fill="#58a6ff" font-size="8">RetrievalHints</text>
+      <path d="M820 540 Q780 540 770 503" stroke="#d2a8ff" stroke-width="1.5" fill="none" stroke-dasharray="4,3"/>
+
+      <!-- Footer note -->
+      <text x="550" y="830" text-anchor="middle" fill="#8b949e" font-size="9">Grounding: ACT-R cue-based retrieval · "Organize then Retrieve" (arXiv:2606.11680) · "Temporal Order Matters" (arXiv:2606.04555) · Friston predictive processing</text>
+    </svg>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#ffa657,#c77030)"></div>Retrieval pipeline</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#bc8cff,#8e5fd6)"></div>Temporal mode</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #2d0d22; border: 1px solid #f778ba"></div>Cue-Based [v2]</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #0a2a18; border: 1px solid #7ee787"></div>Hierarchical [v2]</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #2a1e42; border: 1px solid #d2a8ff"></div>Predictive</div>
+  </div>
+</section>
+
+
+<!-- ==================== DIAGRAM 5: DYNAMIC TAXONOMY LIFECYCLE ==================== -->
+<section class="diagram-section" id="diagram-5">
+  <h2><span class="num">05</span>Dynamic Taxonomy Lifecycle<span class="tag">4-PHASE EVOLUTION</span></h2>
+  <p class="caption">The taxonomy evolution pipeline manages the lifecycle of new concepts. Four phases — Discovery, Proposal (with concept formation), Validation, and Merge — handle unrecognized concepts end-to-end. Semantic drift detection continuously monitors existing concepts at concept and structural levels. All changes are tracked with full provenance.</p>
+  <div class="svg-wrapper">
+    <svg viewBox="0 0 1100 900" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <defs>
+        <linearGradient id="d5-phase1" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffa657"/><stop offset="100%" stop-color="#c77030"/>
+        </linearGradient>
+        <linearGradient id="d5-phase2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#bc8cff"/><stop offset="100%" stop-color="#8e5fd6"/>
+        </linearGradient>
+        <linearGradient id="d5-phase3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#58a6ff"/><stop offset="100%" stop-color="#2d6dc7"/>
+        </linearGradient>
+        <linearGradient id="d5-phase4" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#7ee787"/><stop offset="100%" stop-color="#3fa950"/>
+        </linearGradient>
+        <linearGradient id="d5-driftGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f778ba"/><stop offset="100%" stop-color="#b04a86"/>
+        </linearGradient>
+        <filter id="d5-shadow"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.4"/></filter>
+        <marker id="d5-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 L10 5 L0 10 z" fill="#f778ba"/>
+        </marker>
+      </defs>
+
+      <!-- Agent interactions input -->
+      <rect x="430" y="20" width="240" height="45" rx="8" fill="#2a1e42" stroke="#d2a8ff" stroke-width="1.5" filter="url(#d5-shadow)"/>
+      <text x="550" y="42" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Agent Interactions</text>
+      <text x="550" y="57" text-anchor="middle" fill="#d2a8ff" font-size="9" opacity="0.8">encounters new concepts</text>
+      <path d="M550 65 L550 90" stroke="#f778ba" stroke-width="2" marker-end="url(#d5-arrow)"/>
+
+      <!-- Phase 1: Discovery -->
+      <rect x="50" y="90" width="230" height="130" rx="10" fill="url(#d5-phase1)" opacity="0.85" filter="url(#d5-shadow)"/>
+      <text x="165" y="115" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">1. Discovery</text>
+      <text x="165" y="138" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Detect concepts encountered</text>
+      <text x="165" y="152" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">outside current taxonomy</text>
+      <rect x="65" y="165" width="200" height="20" rx="4" fill="#0d1117" fill-opacity="0.4"/>
+      <text x="165" y="179" text-anchor="middle" fill="#fff" font-size="8">detect_unrecognized(Concepts)</text>
+      <text x="165" y="205" text-anchor="middle" fill="#fff" font-size="8" opacity="0.6">Triggers on unrecognized</text>
+      <text x="165" y="217" text-anchor="middle" fill="#fff" font-size="8" opacity="0.6">recurring concepts</text>
+
+      <path d="M280 155 L320 155" stroke="#f778ba" stroke-width="2.5" marker-end="url(#d5-arrow)"/>
+
+      <!-- Phase 2: Proposal -->
+      <rect x="320" y="90" width="230" height="130" rx="10" fill="url(#d5-phase2)" opacity="0.85" filter="url(#d5-shadow)"/>
+      <text x="435" y="115" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">2. Proposal</text>
+      <text x="435" y="138" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Generate extension proposals</text>
+      <text x="435" y="152" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">from recurring patterns</text>
+      <rect x="335" y="165" width="200" height="20" rx="4" fill="#0d1117" fill-opacity="0.4"/>
+      <text x="435" y="179" text-anchor="middle" fill="#fff" font-size="8">propose_extensions(Concepts)</text>
+      <text x="435" y="205" text-anchor="middle" fill="#f778ba" font-size="8" font-weight="bold">Concept Formation Pipeline ↓</text>
+      <text x="435" y="217" text-anchor="middle" fill="#fff" font-size="8" opacity="0.6">Extract → Group → Hierarchize → Relate</text>
+
+      <path d="M550 155 L590 155" stroke="#f778ba" stroke-width="2.5" marker-end="url(#d5-arrow)"/>
+
+      <!-- Phase 3: Validation -->
+      <rect x="590" y="90" width="230" height="130" rx="10" fill="url(#d5-phase3)" opacity="0.85" filter="url(#d5-shadow)"/>
+      <text x="705" y="115" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">3. Validation</text>
+      <text x="705" y="138" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Domain experts review &</text>
+      <text x="705" y="152" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">approve proposals</text>
+      <rect x="605" y="165" width="200" height="20" rx="4" fill="#0d1117" fill-opacity="0.4"/>
+      <text x="705" y="179" text-anchor="middle" fill="#fff" font-size="8">validate(Proposal) → Result</text>
+      <text x="705" y="205" text-anchor="middle" fill="#fff" font-size="8" opacity="0.6">Checks for conflicts,</text>
+      <text x="705" y="217" text-anchor="middle" fill="#fff" font-size="8" opacity="0.6">redundancy, consistency</text>
+
+      <path d="M820 155 L860 155" stroke="#f778ba" stroke-width="2.5" marker-end="url(#d5-arrow)"/>
+
+      <!-- Phase 4: Merge -->
+      <rect x="860" y="90" width="230" height="130" rx="10" fill="url(#d5-phase4)" opacity="0.85" filter="url(#d5-shadow)"/>
+      <text x="975" y="115" text-anchor="middle" fill="#0d1117" font-size="14" font-weight="bold">4. Merge</text>
+      <text x="975" y="138" text-anchor="middle" fill="#0d1117" font-size="9" opacity="0.85">Integrate approved extensions</text>
+      <text x="975" y="152" text-anchor="middle" fill="#0d1117" font-size="9" opacity="0.85">with provenance tracking</text>
+      <rect x="875" y="165" width="200" height="20" rx="4" fill="#0d1117" fill-opacity="0.3"/>
+      <text x="975" y="179" text-anchor="middle" fill="#fff" font-size="8">merge(Proposal) → MergeResult</text>
+      <text x="975" y="205" text-anchor="middle" fill="#0d1117" font-size="8" opacity="0.7">Updates taxonomy +</text>
+      <text x="975" y="217" text-anchor="middle" fill="#0d1117" font-size="8" opacity="0.7">writes ProvenanceRecord</text>
+
+      <!-- Concept Formation Pipeline detail -->
+      <rect x="320" y="250" width="230" height="160" rx="10" fill="#2d0d22" stroke="#f778ba" stroke-width="1.5" filter="url(#d5-shadow)"/>
+      <text x="435" y="272" text-anchor="middle" fill="#f778ba" font-size="12" font-weight="bold">Concept Formation</text>
+
+      <rect x="340" y="285" width="90" height="22" rx="4" fill="url(#d5-phase2)" opacity="0.7"/>
+      <text x="385" y="300" text-anchor="middle" fill="#fff" font-size="9" font-weight="bold">Extract</text>
+      <path d="M430 296 L450 296" stroke="#f778ba" stroke-width="1.5" marker-end="url(#d5-arrow)"/>
+
+      <rect x="455" y="285" width="80" height="22" rx="4" fill="url(#d5-phase2)" opacity="0.7"/>
+      <text x="495" y="300" text-anchor="middle" fill="#fff" font-size="9" font-weight="bold">Group</text>
+
+      <rect x="340" y="320" width="80" height="22" rx="4" fill="url(#d5-phase2)" opacity="0.7"/>
+      <text x="380" y="335" text-anchor="middle" fill="#fff" font-size="8" font-weight="bold">Hierarchize</text>
+      <path d="M420 331 L440 331" stroke="#f778ba" stroke-width="1.5" marker-end="url(#d5-arrow)"/>
+
+      <rect x="445" y="320" width="90" height="22" rx="4" fill="url(#d5-phase2)" opacity="0.7"/>
+      <text x="490" y="335" text-anchor="middle" fill="#fff" font-size="9" font-weight="bold">Relate</text>
+
+      <text x="435" y="360" text-anchor="middle" fill="#c9d1d9" font-size="8">is-a relationships (taxonomic)</text>
+      <text x="435" y="375" text-anchor="middle" fill="#c9d1d9" font-size="8">+ non-taxonomic (semantic)</text>
+      <text x="435" y="395" text-anchor="middle" fill="#8b949e" font-size="7">arXiv:2404.14991</text>
+
+      <!-- Drift Detection -->
+      <text x="165" y="250" text-anchor="middle" fill="#f0f6fc" font-size="13" font-weight="bold">Semantic Drift Detection</text>
+      <rect x="50" y="265" width="230" height="145" rx="10" fill="#2d0d22" stroke="url(#d5-driftGrad)" stroke-width="1.5" filter="url(#d5-shadow)"/>
+
+      <rect x="65" y="280" width="200" height="55" rx="6" fill="#3a0d2a" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="165" y="298" text-anchor="middle" fill="#f778ba" font-size="10" font-weight="bold">Concept Level</text>
+      <text x="165" y="314" text-anchor="middle" fill="#c9d1d9" font-size="8">Intention, extension, labels, URIs</text>
+      <text x="165" y="326" text-anchor="middle" fill="#8b949e" font-size="7">Compare across time windows</text>
+
+      <rect x="65" y="345" width="200" height="55" rx="6" fill="#3a0d2a" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="165" y="363" text-anchor="middle" fill="#f778ba" font-size="10" font-weight="bold">Structural Level</text>
+      <text x="165" y="379" text-anchor="middle" fill="#c9d1d9" font-size="8">Taxonomic relations (parent-child)</text>
+      <text x="165" y="391" text-anchor="middle" fill="#8b949e" font-size="7">Compare tree structure across time</text>
+
+      <!-- Drift arrow pointing to Discovery (feedback) -->
+      <path d="M165 265 Q165 240 165 220" stroke="#f778ba" stroke-width="1.5" fill="none" stroke-dasharray="4,3" marker-end="url(#d5-arrow)"/>
+      <text x="180" y="245" fill="#8b949e" font-size="7">flags drift</text>
+
+      <!-- Provenance Record -->
+      <rect x="860" y="250" width="230" height="160" rx="10" fill="#0a2a18" stroke="#7ee787" stroke-width="1.5" filter="url(#d5-shadow)"/>
+      <text x="975" y="272" text-anchor="middle" fill="#7ee787" font-size="12" font-weight="bold">Provenance Record</text>
+      <text x="975" y="290" text-anchor="middle" fill="#8b949e" font-size="8">Written at Merge phase</text>
+
+      <g font-size="8" fill="#c9d1d9">
+        <text x="880" y="312">change_id: str</text>
+        <text x="880" y="326">change_type: add | restructure</text>
+        <text x="880" y="340">source: pipeline | explicit</text>
+        <text x="880" y="354">timestamp: datetime</text>
+        <text x="880" y="368">proposal_id: str</text>
+        <text x="880" y="382">agent_id: str</text>
+        <text x="880" y="396">validation_status: approved</text>
+      </g>
+
+      <!-- Feedback loops -->
+      <path d="M975 220 Q975 235 975 250" stroke="#7ee787" stroke-width="1.5" fill="none" stroke-dasharray="4,3" marker-end="url(#d5-arrow)"/>
+
+      <!-- Continuous monitoring label -->
+      <text x="550" y="445" text-anchor="middle" fill="#8b949e" font-size="10" font-style="italic">Continuous monitoring feeds back into Discovery when drift or new patterns are detected</text>
+
+      <!-- Bottom: provenance chain -->
+      <text x="550" y="480" text-anchor="middle" fill="#f0f6fc" font-size="13" font-weight="bold">Evolution Feedback to Taxonomy</text>
+
+      <rect x="300" y="500" width="500" height="55" rx="8" fill="#2a1e42" stroke="#d2a8ff" stroke-width="1.5" filter="url(#d5-shadow)"/>
+      <text x="550" y="522" text-anchor="middle" fill="#d2a8ff" font-size="12" font-weight="bold">Hierarchical Taxonomy (SKOS-aligned)</text>
+      <text x="550" y="542" text-anchor="middle" fill="#c9d1d9" font-size="9">Updated with provenance tracking · historical versions archived in T5</text>
+
+      <!-- Arrows from all phases to taxonomy -->
+      <path d="M165 220 Q165 480 300 527" stroke="#ffa657" stroke-width="1" fill="none" stroke-dasharray="3,3" opacity="0.5"/>
+      <path d="M435 220 Q435 480 400 527" stroke="#bc8cff" stroke-width="1" fill="none" stroke-dasharray="3,3" opacity="0.5"/>
+      <path d="M705 220 Q705 480 600 527" stroke="#58a6ff" stroke-width="1" fill="none" stroke-dasharray="3,3" opacity="0.5"/>
+      <path d="M975 220 Q975 480 700 527" stroke="#7ee787" stroke-width="1.5" fill="none" opacity="0.7"/>
+
+      <!-- References -->
+      <rect x="100" y="600" width="900" height="110" rx="8" fill="#0a0e14" stroke="#30363d" stroke-width="1"/>
+      <text x="550" y="622" text-anchor="middle" fill="#f0f6fc" font-size="11" font-weight="bold">Research Grounding</text>
+      <g font-size="9" fill="#8b949e">
+        <text x="120" y="644">• Discovery → Proposal → Validation → Merge: Ontology-Constrained Neural Reasoning (arXiv:2604.00555)</text>
+        <text x="120" y="660">• Concept Formation (Extract → Group → Hierarchize → Relate): Ontology Learning Survey (arXiv:2404.14991)</text>
+        <text x="120" y="676">• Semantic Drift Detection (concept + structural levels): OntoDrift (CEUR-WS Vol-2821)</text>
+        <text x="120" y="692">• Provenance Tracking & Knowledge Graph evolution: arXiv:2201.05910</text>
+      </g>
+
+      <text x="550" y="740" text-anchor="middle" fill="#8b949e" font-size="9">Pattern H in architecture-design-v2.md §8</text>
+    </svg>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#ffa657,#c77030)"></div>Discovery</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#bc8cff,#8e5fd6)"></div>Proposal</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#58a6ff,#2d6dc7)"></div>Validation</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#7ee787,#3fa950)"></div>Merge</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #2d0d22; border: 1px solid #f778ba"></div>Drift / Formation</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #0a2a18; border: 1px solid #7ee787"></div>Provenance</div>
+  </div>
+</section>
+
+
+<!-- ==================== DIAGRAM 6: STORAGE TIERS v2 ==================== -->
+<section class="diagram-section" id="diagram-6">
+  <h2><span class="num">06</span>Storage Tiers v2<span class="tag">HIERARCHICAL ORGANIZATION</span></h2>
+  <p class="caption">Five storage tiers (T1–T5) with v2 hierarchical annotations. T2 stores chunk hierarchy and dual-index. T4 stores SKOS broader/narrower as typed graph edges. T5 archives historical taxonomy versions for provenance queries. The multi-tier model follows MemGPT's OS-style paging.</p>
+  <div class="svg-wrapper">
+    <svg viewBox="0 0 1100 720" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <defs>
+        <linearGradient id="d6-t1" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#f0883e"/><stop offset="100%" stop-color="#c77432"/>
+        </linearGradient>
+        <linearGradient id="d6-t2" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#58a6ff"/><stop offset="100%" stop-color="#2d6dc7"/>
+        </linearGradient>
+        <linearGradient id="d6-t3" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#bc8cff"/><stop offset="100%" stop-color="#8e5fd6"/>
+        </linearGradient>
+        <linearGradient id="d6-t4" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#d2a8ff"/><stop offset="100%" stop-color="#9d6ad6"/>
+        </linearGradient>
+        <linearGradient id="d6-t5" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#7ee787"/><stop offset="100%" stop-color="#3fa950"/>
+        </linearGradient>
+        <filter id="d6-shadow"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.4"/></filter>
+      </defs>
+
+      <!-- Column headers -->
+      <text x="80" y="25" fill="#8b949e" font-size="10" font-weight="bold">TIER</text>
+      <text x="200" y="25" fill="#8b949e" font-size="10" font-weight="bold">VOLATILITY</text>
+      <text x="350" y="25" fill="#8b949e" font-size="10" font-weight="bold">LATENCY</text>
+      <text x="470" y="25" fill="#8b949e" font-size="10" font-weight="bold">SERVES</text>
+      <text x="820" y="25" fill="#8b949e" font-size="10" font-weight="bold">TECHNOLOGY</text>
+      <text x="980" y="25" fill="#f778ba" font-size="10" font-weight="bold">v2 HIERARCHY NOTES</text>
+
+      <!-- T1 -->
+      <rect x="20" y="40" width="1060" height="95" rx="8" fill="#0a0e14" stroke="#30363d" stroke-width="1"/>
+      <rect x="30" y="55" width="60" height="65" rx="6" fill="url(#d6-t1)" filter="url(#d6-shadow)"/>
+      <text x="60" y="85" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold">T1</text>
+      <text x="60" y="105" text-anchor="middle" fill="#fff" font-size="8">Context</text>
+
+      <text x="110" y="75" fill="#c9d1d9" font-size="11">Volatile</text>
+      <text x="110" y="92" fill="#8b949e" font-size="8">in-process</text>
+
+      <text x="260" y="75" fill="#7ee787" font-size="11" font-weight="bold">Fastest</text>
+
+      <text x="370" y="75" fill="#c9d1d9" font-size="10">Working Memory</text>
+      <text x="370" y="92" fill="#8b949e" font-size="8">context window, in-memory state</text>
+
+      <text x="820" y="75" fill="#c9d1d9" font-size="9">In-process</text>
+      <text x="820" y="90" fill="#8b949e" font-size="8">context window</text>
+
+      <text x="980" y="75" fill="#8b949e" font-size="8">Flat — no hierarchy</text>
+      <text x="980" y="90" fill="#8b949e" font-size="8">(volatile)</text>
+
+      <!-- T2 -->
+      <rect x="20" y="145" width="1060" height="105" rx="8" fill="#0a0e14" stroke="#30363d" stroke-width="1"/>
+      <rect x="30" y="160" width="60" height="75" rx="6" fill="url(#d6-t2)" filter="url(#d6-shadow)"/>
+      <text x="60" y="195" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold">T2</text>
+      <text x="60" y="215" text-anchor="middle" fill="#fff" font-size="8">Structured</text>
+
+      <text x="110" y="180" fill="#c9d1d9" font-size="11">Persistent</text>
+      <text x="110" y="197" fill="#8b949e" font-size="8">durable</text>
+
+      <text x="260" y="180" fill="#ffa657" font-size="11">Moderate</text>
+
+      <text x="370" y="175" fill="#c9d1d9" font-size="10">Episodic, Semantic,</text>
+      <text x="370" y="190" fill="#c9d1d9" font-size="10">Flat Facts, Taxonomy</text>
+      <text x="370" y="207" fill="#8b949e" font-size="8">chunk hierarchy · dual-index</text>
+
+      <text x="820" y="180" fill="#c9d1d9" font-size="9">PostgreSQL, SQLite</text>
+      <text x="820" y="195" fill="#8b949e" font-size="8">document stores</text>
+
+      <rect x="975" y="165" width="95" height="35" rx="4" fill="#2d0d22" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="1022" y="180" text-anchor="middle" fill="#f778ba" font-size="7" font-weight="bold">Stores chunk hierarchy,</text>
+      <text x="1022" y="192" text-anchor="middle" fill="#f778ba" font-size="7" font-weight="bold">dual-index, SKOS</text>
+
+      <!-- T3 -->
+      <rect x="20" y="260" width="1060" height="95" rx="8" fill="#0a0e14" stroke="#30363d" stroke-width="1"/>
+      <rect x="30" y="275" width="60" height="65" rx="6" fill="url(#d6-t3)" filter="url(#d6-shadow)"/>
+      <text x="60" y="305" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold">T3</text>
+      <text x="60" y="325" text-anchor="middle" fill="#fff" font-size="8">Vector</text>
+
+      <text x="110" y="295" fill="#c9d1d9" font-size="11">Persistent</text>
+
+      <text x="260" y="295" fill="#ffa657" font-size="11">Moderate</text>
+
+      <text x="370" y="295" fill="#c9d1d9" font-size="10">Vector Embeddings (RAG)</text>
+      <text x="370" y="312" fill="#8b949e" font-size="8">Semantic (similarity)</text>
+
+      <text x="820" y="295" fill="#c9d1d9" font-size="9">Pinecone, Weaviate</text>
+      <text x="820" y="310" fill="#8b949e" font-size="8">Chroma</text>
+
+      <text x="980" y="295" fill="#f778ba" font-size="7">Hierarchical metadata</text>
+      <text x="980" y="308" fill="#f778ba" font-size="7">for granularity-filtered</text>
+      <text x="980" y="320" fill="#f778ba" font-size="7">similarity search</text>
+
+      <!-- T4 -->
+      <rect x="20" y="365" width="1060" height="105" rx="8" fill="#0a0e14" stroke="#30363d" stroke-width="1"/>
+      <rect x="30" y="380" width="60" height="75" rx="6" fill="url(#d6-t4)" filter="url(#d6-shadow)"/>
+      <text x="60" y="415" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold">T4</text>
+      <text x="60" y="435" text-anchor="middle" fill="#fff" font-size="8">Graph</text>
+
+      <text x="110" y="400" fill="#c9d1d9" font-size="11">Persistent</text>
+
+      <text x="260" y="400" fill="#ffa657" font-size="11">Moderate</text>
+
+      <text x="370" y="395" fill="#c9d1d9" font-size="10">Knowledge Graph,</text>
+      <text x="370" y="410" fill="#c9d1d9" font-size="10">Taxonomy (SKOS edges)</text>
+      <text x="370" y="427" fill="#8b949e" font-size="8">broader/narrower as typed edges</text>
+
+      <text x="820" y="400" fill="#c9d1d9" font-size="9">Neo4j, property graphs</text>
+
+      <rect x="975" y="385" width="95" height="40" rx="4" fill="#2d0d22" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="1022" y="400" text-anchor="middle" fill="#f778ba" font-size="7" font-weight="bold">SKOS broader/narrower</text>
+      <text x="1022" y="412" text-anchor="middle" fill="#f778ba" font-size="7" font-weight="bold">as typed edges; cross-</text>
+      <text x="1022" y="422" text-anchor="middle" fill="#f778ba" font-size="7" font-weight="bold">scheme mappings as edges</text>
+
+      <!-- T5 -->
+      <rect x="20" y="480" width="1060" height="105" rx="8" fill="#0a0e14" stroke="#30363d" stroke-width="1"/>
+      <rect x="30" y="495" width="60" height="75" rx="6" fill="url(#d6-t5)" filter="url(#d6-shadow)"/>
+      <text x="60" y="530" text-anchor="middle" fill="#0d1117" font-size="16" font-weight="bold">T5</text>
+      <text x="60" y="550" text-anchor="middle" fill="#0d1117" font-size="8">Archive</text>
+
+      <text x="110" y="515" fill="#c9d1d9" font-size="11">Persistent</text>
+
+      <text x="260" y="515" fill="#f0883e" font-size="11" font-weight="bold">High</text>
+
+      <text x="370" y="510" fill="#c9d1d9" font-size="10">Episodic (raw logs),</text>
+      <text x="370" y="525" fill="#c9d1d9" font-size="10">Procedural (historical),</text>
+      <text x="370" y="540" fill="#c9d1d9" font-size="10">Taxonomy (old versions)</text>
+      <text x="370" y="557" fill="#8b949e" font-size="8">provenance history</text>
+
+      <text x="820" y="520" fill="#c9d1d9" font-size="9">Object storage,</text>
+      <text x="820" y="535" fill="#8b949e" font-size="8">log archives</text>
+
+      <rect x="975" y="505" width="95" height="40" rx="4" fill="#2d0d22" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="1022" y="520" text-anchor="middle" fill="#f778ba" font-size="7" font-weight="bold">Archives previous</text>
+      <text x="1022" y="532" text-anchor="middle" fill="#f778ba" font-size="7" font-weight="bold">taxonomy versions for</text>
+      <text x="1022" y="542" text-anchor="middle" fill="#f778ba" font-size="7" font-weight="bold">provenance history</text>
+
+      <!-- Paging arrows -->
+      <path d="M1050 88 Q1080 200 1050 310" stroke="#8b949e" stroke-width="1" fill="none" stroke-dasharray="3,3"/>
+      <text x="1075" y="200" fill="#8b949e" font-size="7" transform="rotate(90, 1075, 200)">OS-style paging</text>
+
+      <!-- Footer -->
+      <text x="550" y="620" text-anchor="middle" fill="#8b949e" font-size="10" font-style="italic">"OS-style paging between context and external storage" — MemGPT (arXiv:2310.08560)</text>
+      <text x="550" y="640" text-anchor="middle" fill="#8b949e" font-size="9">Letta 3-tier (core/archival/recall) · Zep temporal KGs (arXiv:2606.24775)</text>
+
+      <text x="550" y="680" text-anchor="middle" fill="#f778ba" font-size="9">v2 key insight: hierarchical organization is distributed across tiers — chunk hierarchy in T2, SKOS edges in T4, version history in T5</text>
+    </svg>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(90deg, #f0883e, #c77432)"></div>T1 — Working</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(90deg, #58a6ff, #2d6dc7)"></div>T2 — Structured DB</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(90deg, #bc8cff, #8e5fd6)"></div>T3 — Vector Store</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(90deg, #d2a8ff, #9d6ad6)"></div>T4 — Graph Store</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(90deg, #7ee787, #3fa950)"></div>T5 — Cold Archive</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #2d0d22; border: 1px solid #f778ba"></div>v2 Hierarchy Notes</div>
+  </div>
+</section>
+
+
+<!-- ==================== DIAGRAM 7: END-TO-END AGENT CYCLE v2 ==================== -->
+<section class="diagram-section" id="diagram-7">
+  <h2><span class="num">07</span>End-to-End Agent Cycle v2<span class="tag">EVOLUTION FEEDBACK LOOPS</span></h2>
+  <p class="caption">A single agent cycle through the v2 architecture. The cycle adds three v2 feedback loops: (1) chunk hierarchy assignment during event recording, (2) consolidation into the taxonomy, and (3) as-needed taxonomy evolution when unrecognized concepts are encountered. All loops feed back into the architecture, making it self-improving.</p>
+  <div class="svg-wrapper">
+    <svg viewBox="0 0 1100 950" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+      <defs>
+        <linearGradient id="d7-orchGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f0a868"/><stop offset="100%" stop-color="#c77432"/>
+        </linearGradient>
+        <linearGradient id="d7-retGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffa657"/><stop offset="100%" stop-color="#c77030"/>
+        </linearGradient>
+        <linearGradient id="d7-memGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#58a6ff"/><stop offset="100%" stop-color="#2d6dc7"/>
+        </linearGradient>
+        <linearGradient id="d7-knowGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#d2a8ff"/><stop offset="100%" stop-color="#9d6ad6"/>
+        </linearGradient>
+        <linearGradient id="d7-evoGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#f778ba"/><stop offset="100%" stop-color="#b04a86"/>
+        </linearGradient>
+        <filter id="d7-shadow"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity="0.4"/></filter>
+        <marker id="d7-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0 0 L10 5 L0 10 z" fill="#8b949e"/>
+        </marker>
+        <marker id="d7-arrow-evo" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+          <path d="M0 0 L10 5 L0 10 z" fill="#f778ba"/>
+        </marker>
+      </defs>
+
+      <!-- 1. Perception -->
+      <rect x="400" y="20" width="300" height="55" rx="10" fill="url(#d7-orchGrad)" filter="url(#d7-shadow)"/>
+      <text x="550" y="42" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">1. Perception</text>
+      <text x="550" y="60" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">User message / env signal → Working Memory</text>
+      <path d="M550 75 L550 100" stroke="#8b949e" stroke-width="2" marker-end="url(#d7-arrow)"/>
+
+      <!-- 2. Prediction (optional) -->
+      <rect x="400" y="100" width="300" height="50" rx="10" fill="#2a1e42" stroke="#d2a8ff" stroke-width="1" stroke-dasharray="5,3"/>
+      <text x="550" y="120" text-anchor="middle" fill="#d2a8ff" font-size="12" font-weight="bold">2. Prediction (optional)</text>
+      <text x="550" y="137" text-anchor="middle" fill="#c9d1d9" font-size="9">Predictive retrieval → expectation hints</text>
+      <path d="M550 150 L550 175" stroke="#8b949e" stroke-width="2" marker-end="url(#d7-arrow)"/>
+
+      <!-- 3. Retrieval -->
+      <rect x="250" y="175" width="600" height="60" rx="10" fill="url(#d7-retGrad)" filter="url(#d7-shadow)"/>
+      <text x="550" y="200" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">3. Retrieval (Query Router → Subsystems)</text>
+      <text x="550" y="218" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Temporal → Episodic · Cue-based → Epi/Sem/Proc · Hierarchical → Epi/Sem/Taxonomy · Semantic → Vector/KG</text>
+      <path d="M550 235 L550 260" stroke="#8b949e" stroke-width="2" marker-end="url(#d7-arrow)"/>
+
+      <!-- 4. Ranking & Provenance -->
+      <rect x="350" y="260" width="400" height="60" rx="10" fill="url(#d7-retGrad)" filter="url(#d7-shadow)"/>
+      <text x="550" y="283" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">4. Ranking & Provenance</text>
+      <text x="550" y="300" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">relevance + recency + confidence</text>
+      <text x="550" y="313" text-anchor="middle" fill="#f778ba" font-size="9" font-weight="bold">[v2] + cue match + granularity + taxonomy version</text>
+      <path d="M550 320 L550 345" stroke="#8b949e" stroke-width="2" marker-end="url(#d7-arrow)"/>
+
+      <!-- 5. Context Composition -->
+      <rect x="380" y="345" width="340" height="50" rx="10" fill="url(#d7-retGrad)" filter="url(#d7-shadow)"/>
+      <text x="550" y="367" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">5. Context Composition</text>
+      <text x="550" y="383" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Assemble payload within budget</text>
+      <path d="M550 395 L550 420" stroke="#8b949e" stroke-width="2" marker-end="url(#d7-arrow)"/>
+
+      <!-- 6. Reasoning & Action -->
+      <rect x="400" y="420" width="300" height="55" rx="10" fill="url(#d7-orchGrad)" filter="url(#d7-shadow)"/>
+      <text x="550" y="442" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">6. Reasoning & Action</text>
+      <text x="550" y="460" text-anchor="middle" fill="#fff" font-size="9" opacity="0.8">Orchestration processes context → action</text>
+      <path d="M550 475 L550 500" stroke="#8b949e" stroke-width="2" marker-end="url(#d7-arrow)"/>
+
+      <!-- 7. Recording -->
+      <rect x="370" y="500" width="360" height="60" rx="10" fill="url(#d7-memGrad)" filter="url(#d7-shadow)"/>
+      <text x="550" y="522" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">7. Recording</text>
+      <text x="550" y="538" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Action + outcome → Episodic Memory</text>
+      <text x="550" y="552" text-anchor="middle" fill="#f778ba" font-size="9" font-weight="bold">[v2] Event assigned to parent schema in chunk hierarchy</text>
+
+      <!-- Feedback Loop 1: Chunk hierarchy assignment -->
+      <path d="M370 530 Q250 530 250 400 Q250 300 380 287" stroke="#f778ba" stroke-width="2" fill="none" stroke-dasharray="6,3" marker-end="url(#d7-arrow-evo)"/>
+      <rect x="180" y="395" width="130" height="40" rx="6" fill="#2d0d22" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="245" y="410" text-anchor="middle" fill="#f778ba" font-size="8" font-weight="bold">FEEDBACK LOOP 1</text>
+      <text x="245" y="425" text-anchor="middle" fill="#c9d1d9" font-size="7">Hierarchy assignment</text>
+
+      <!-- 8. Consolidation -->
+      <rect x="320" y="590" width="460" height="60" rx="10" fill="url(#d7-memGrad)" opacity="0.7" filter="url(#d7-shadow)"/>
+      <text x="550" y="612" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">8. Consolidation (periodic)</text>
+      <text x="550" y="628" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Episodic events → consolidate() → Semantic facts</text>
+      <text x="550" y="642" text-anchor="middle" fill="#f778ba" font-size="9" font-weight="bold">[v2] → Knowledge Graph and/or Taxonomy</text>
+      <path d="M550 560 L550 590" stroke="#8b949e" stroke-width="2" marker-end="url(#d7-arrow)"/>
+
+      <!-- Feedback Loop 2: Consolidation to taxonomy -->
+      <path d="M780 620 Q900 620 900 500 Q900 420 800 287" stroke="#f778ba" stroke-width="2" fill="none" stroke-dasharray="6,3" marker-end="url(#d7-arrow-evo)"/>
+      <rect x="840" y="480" width="130" height="40" rx="6" fill="#2d0d22" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="905" y="495" text-anchor="middle" fill="#f778ba" font-size="8" font-weight="bold">FEEDBACK LOOP 2</text>
+      <text x="905" y="510" text-anchor="middle" fill="#c9d1d9" font-size="7">Consolidation feed</text>
+
+      <!-- 9. Skill Learning -->
+      <rect x="370" y="680" width="360" height="50" rx="10" fill="url(#d7-memGrad)" opacity="0.6" filter="url(#d7-shadow)"/>
+      <text x="550" y="702" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">9. Skill Learning (on task success)</text>
+      <text x="550" y="718" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Successful patterns → Procedural Memory</text>
+      <path d="M550 660 L550 680" stroke="#8b949e" stroke-width="2" marker-end="url(#d7-arrow)"/>
+
+      <!-- 10. Taxonomy Evolution -->
+      <rect x="250" y="755" width="600" height="95" rx="10" fill="url(#d7-evoGrad)" filter="url(#d7-shadow)"/>
+      <text x="550" y="778" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">10. Taxonomy Evolution (as-needed)</text>
+      <text x="550" y="796" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">Discovery → Proposal (Extract→Group→Hierarchize→Relate) → Validation → Merge</text>
+      <text x="550" y="812" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">+ Semantic drift detection (concept + structural levels)</text>
+      <text x="550" y="828" text-anchor="middle" fill="#fff" font-size="9" opacity="0.85">All changes tracked with provenance</text>
+      <path d="M550 740 L550 755" stroke="#f778ba" stroke-width="2" marker-end="url(#d7-arrow-evo)"/>
+
+      <!-- Feedback Loop 3: Taxonomy evolution to retrieval -->
+      <path d="M250 800 Q80 800 80 500 Q80 205 380 205" stroke="#f778ba" stroke-width="2.5" fill="none" stroke-dasharray="6,3" marker-end="url(#d7-arrow-evo)"/>
+      <rect x="30" y="480" width="110" height="50" rx="6" fill="#2d0d22" stroke="#f778ba" stroke-width="0.5"/>
+      <text x="85" y="498" text-anchor="middle" fill="#f778ba" font-size="8" font-weight="bold">FEEDBACK LOOP 3</text>
+      <text x="85" y="513" text-anchor="middle" fill="#c9d1d9" font-size="7">Evolved taxonomy</text>
+      <text x="85" y="524" text-anchor="middle" fill="#c9d1d9" font-size="7">enriches retrieval</text>
+
+      <!-- Footer -->
+      <text x="550" y="890" text-anchor="middle" fill="#8b949e" font-size="9">Three v2 feedback loops make the architecture self-improving: hierarchy assignment, consolidation, and taxonomy evolution</text>
+      <text x="550" y="908" text-anchor="middle" fill="#8b949e" font-size="9">Grounding: CoALA (arXiv:2309.02427) · Organize then Retrieve (arXiv:2606.11680) · Ontology Evolution (arXiv:2604.00555)</text>
+      <text x="550" y="926" text-anchor="middle" fill="#8b949e" font-size="9">See: architecture-design-v2.md §9</text>
+    </svg>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#f0a868,#c77432)"></div>Orchestration steps</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#ffa657,#c77030)"></div>Retrieval steps</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#58a6ff,#2d6dc7)"></div>Memory steps</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: linear-gradient(#f778ba,#b04a86)"></div>Evolution step</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #2a1e42; border: 1px solid #d2a8ff"></div>Predictive (optional)</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #2d0d22; border: 1px solid #f778ba"></div>Feedback loop</div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <p>Memory vs Knowledge Architecture v2 — Hierarchical · Dynamic · SKOS-Aligned</p>
+  <p style="margin-top: 0.5rem;">Companion: <a href="architecture-design-v2.md">architecture-design-v2.md</a> · v1 diagrams: <a href="architecture-diagrams.html">architecture-diagrams.html</a></p>
+  <p style="margin-top: 0.5rem;">Sources: CoALA · ACT-R · Schema Theory · W3C SKOS · Ontology Evolution · Temporal Order Matters · Organize then Retrieve · MemGPT</p>
+</footer>
+
+</body>
+</html>

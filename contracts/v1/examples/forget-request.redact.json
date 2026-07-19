@@ -1,0 +1,20 @@
+{
+  "targetType": "memory",
+  "targetId": "memory-001",
+  "scope": {
+    "tenant": "tenant-demo",
+    "workspace": "engram",
+    "environment": "local"
+  },
+  "requester": {
+    "actor": {
+      "id": "actor-agent-1",
+      "kind": "agent",
+      "displayName": "Contract Agent"
+    },
+    "roles": ["maintainer"],
+    "permissions": ["memory.forget"]
+  },
+  "mode": "redact",
+  "reason": "Contract example redaction"
+}

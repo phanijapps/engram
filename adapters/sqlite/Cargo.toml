@@ -1,0 +1,38 @@
+[package]
+name = "engram-store-sqlite"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Memory cell — folded in from engram-store-sql (consolidation T1):
+async-trait.workspace = true
+chrono.workspace = true
+futures.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
+engram-domain = { path = "../../core/domain" }
+engram-memory = { path = "../../core/memory" }
+engram-runtime = { path = "../../core/runtime" }
+engram-knowledge = { path = "../../core/knowledge" }
+engram-retrieval = { path = "../../core/retrieval" }
+engram-core = { path = "../../core/orchestration" }
+engram-hierarchy = { path = "../../core/hierarchy" }
+sha2.workspace = true
+# Vector cell — folded in from engram-store-vector (T5):
+sqlite-vec.workspace = true
+fastembed = { version = "5.17.2", optional = true }
+
+[dev-dependencies]
+engram-core = { path = "../../core/orchestration" }
+engram-eval = { path = "../../core/eval" }
+futures.workspace = true
+tempfile = "3"
+
+[features]
+default = []
+# `fastembed` is the public alias used by forwarders (core/integration,
+# bindings/node); the folded vector code cfg-gates on `fastembed-provider`.
+fastembed = ["fastembed-provider"]
+fastembed-provider = ["dep:fastembed"]
+fastembed-tests = ["fastembed-provider"]

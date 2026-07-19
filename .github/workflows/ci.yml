@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  contract:
+    name: Contract validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python dev dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Validate contracts
+        run: .codex/hooks/check-contracts.sh
+
+  rust:
+    name: Rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Check
+        run: cargo check --workspace
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+      - name: Check vector FastEmbed feature tests
+        run: cargo check -p engram-store-vector --features fastembed-tests --tests
+      - name: Clippy vector FastEmbed feature tests
+        run: cargo clippy -p engram-store-vector --features fastembed-tests --tests -- -D warnings
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Python dev dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Check docs
+        run: .codex/hooks/check-docs.sh
+
+  typescript:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate contracts
+        run: pnpm run contracts:generate
+      - name: Check generated contract drift
+        run: git diff --exit-code -- packages/contracts/src/generated
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Test
+        run: pnpm run test
+      - name: Build
+        run: pnpm run build

@@ -1,0 +1,17 @@
+[package]
+name = "engram-store-lexical"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+engram-domain = { path = "../../../core/domain" }
+engram-retrieval = { path = "../../../core/retrieval" }
+engram-runtime = { path = "../../../core/runtime" }
+tantivy.workspace = true
+
+[dev-dependencies]
+chrono.workspace = true
+futures.workspace = true

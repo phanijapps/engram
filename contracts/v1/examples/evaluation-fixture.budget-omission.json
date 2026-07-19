@@ -1,0 +1,120 @@
+{
+  "id": "eval-retrieval-budget-001",
+  "name": "budget-constrained retrieval",
+  "scope": {
+    "tenant": "tenant-demo",
+    "workspace": "engram",
+    "environment": "local"
+  },
+  "setup": {
+    "memories": [
+      {
+        "kind": "fact",
+        "content": {
+          "text": "Budget alpha beta gamma fixture should rank first.",
+          "format": "text"
+        },
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-eval-budget",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          }
+        },
+        "provenance": {
+          "source": "evaluation_fixture_budget",
+          "actor": {
+            "id": "actor-eval-budget",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          },
+          "observedAt": "2026-06-30T12:05:00Z",
+          "method": "manual"
+        },
+        "policy": {
+          "visibility": "workspace",
+          "retention": "durable",
+          "allowedUses": ["retrieval", "evaluation"]
+        }
+      },
+      {
+        "kind": "fact",
+        "content": {
+          "text": "Budget alpha fixture should be omitted by item budget.",
+          "format": "text"
+        },
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-eval-budget",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          }
+        },
+        "provenance": {
+          "source": "evaluation_fixture_budget",
+          "actor": {
+            "id": "actor-eval-budget",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          },
+          "observedAt": "2026-06-30T12:06:00Z",
+          "method": "manual"
+        },
+        "policy": {
+          "visibility": "workspace",
+          "retention": "durable",
+          "allowedUses": ["retrieval", "evaluation"]
+        }
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "limits-retrieval-to-one-result",
+      "request": {
+        "query": "budget alpha beta gamma",
+        "scope": {
+          "tenant": "tenant-demo",
+          "workspace": "engram",
+          "environment": "local"
+        },
+        "requester": {
+          "actor": {
+            "id": "actor-eval-budget",
+            "kind": "agent",
+            "displayName": "Evaluation Agent"
+          }
+        },
+        "budget": {
+          "maxItems": 1
+        }
+      },
+      "expect": {
+        "mustInclude": [
+          {
+            "targetType": "memory",
+            "targetId": "memory-001"
+          }
+        ],
+        "mustExclude": [
+          {
+            "targetType": "memory",
+            "targetId": "memory-002"
+          }
+        ],
+        "maxResults": 1
+      }
+    }
+  ],
+  "createdAt": "2026-06-30T12:07:00Z"
+}

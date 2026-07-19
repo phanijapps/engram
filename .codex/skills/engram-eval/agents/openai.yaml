@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engram Eval"
+  short_description: "Maintain memory quality evaluations."
+  default_prompt: "Use this skill when adding or reviewing evaluation fixtures, recall assertions, policy checks, or regression scenarios."

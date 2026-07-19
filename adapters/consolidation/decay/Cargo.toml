@@ -1,0 +1,17 @@
+[package]
+name = "engram-decay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+engram-domain = { path = "../../../core/domain" }
+engram-consolidation = { path = "../../../core/consolidation" }
+engram-runtime = { path = "../../../core/runtime" }
+
+[dev-dependencies]
+chrono.workspace = true
+futures.workspace = true

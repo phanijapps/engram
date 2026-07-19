@@ -1,5 +1,9 @@
 # Engram
 
+<p align="center">
+  <img src="docs/assets/engram-icon.png" width="160" alt="Engram">
+</p>
+
 > Contract-first agentic memory — structured, durable recall for AI agents that
 > need more than a context window.
 

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Engram icon">
+  <title>Engram</title>
+  <desc>Engram — contract-first agentic memory layer. A layered memory-graph mark.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.32" cy="0.26" r="0.85">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0.04"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- badge -->
+  <rect x="0" y="0" width="512" height="512" rx="116" ry="116" fill="url(#bg)"/>
+  <rect x="0" y="0" width="512" height="512" rx="116" ry="116" fill="url(#glow)"/>
+
+  <!-- memory graph: hexagonal ring + core -->
+  <g fill="none" stroke="#FFFFFF" stroke-width="8.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.95">
+    <!-- spokes from core to each satellite -->
+    <line x1="256" y1="256" x2="388" y2="256"/>
+    <line x1="256" y1="256" x2="322" y2="370"/>
+    <line x1="256" y1="256" x2="190" y2="370"/>
+    <line x1="256" y1="256" x2="124" y2="256"/>
+    <line x1="256" y1="256" x2="190" y2="142"/>
+    <line x1="256" y1="256" x2="322" y2="142"/>
+    <!-- hexagon perimeter -->
+    <polygon points="388,256 322,370 190,370 124,256 190,142 322,142"/>
+  </g>
+
+  <!-- satellite nodes -->
+  <g fill="#FFFFFF">
+    <circle cx="388" cy="256" r="20"/>
+    <circle cx="322" cy="370" r="20"/>
+    <circle cx="190" cy="370" r="20"/>
+    <circle cx="124" cy="256" r="20"/>
+    <circle cx="190" cy="142" r="20"/>
+    <circle cx="322" cy="142" r="20"/>
+  </g>
+
+  <!-- core: solid ring with inner accent (belief/memory core) -->
+  <circle cx="256" cy="256" r="38" fill="#FFFFFF"/>
+  <circle cx="256" cy="256" r="17" fill="#A78BFA"/>
+</svg>

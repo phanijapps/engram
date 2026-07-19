@@ -25,7 +25,7 @@ engram **processes and stores** across swappable engine cells; a separate
 **context packet** returned to the agent. Storage and retrieval are deliberately
 decoupled — exactly Memora's "decouple what is stored from how it is retrieved."
 
-![Engram memory pipeline: write/ingest → process → storage cells → retrieval composition → context packet](../architecture/images/pipeline-overview.png)
+<p align="center"><img src="images/engram-pipeline.svg" alt="Engram — agentic memory pipeline" width="100%"></p>
 
 ```
                 Agent / host app / MCP client

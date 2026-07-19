@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1320 540" width="1320" height="540" role="img" aria-label="Engram agentic memory pipeline">
+  <title>Engram — agentic memory pipeline</title>
+  <desc>Horizontal pipeline: Consumer → Write &amp; ingest → Storage cells (engine-swappable) → Retrieval composition → Context packet, with a cross-cutting governance band.</desc>
+
+  <rect x="0" y="0" width="1320" height="540" fill="#F8FAFC"/>
+
+  <g font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" text-rendering="geometricPrecision">
+
+    <text x="660" y="36" text-anchor="middle" fill="#0F172A" font-size="24" font-weight="700">Engram — agentic memory pipeline</text>
+    <text x="660" y="60" text-anchor="middle" fill="#64748B" font-size="13">Decouple what is stored from how it is retrieved — memory · knowledge · belief · hierarchy, fused into one context packet</text>
+
+    <!-- CARD 1 — CONSUMER -->
+    <rect x="32" y="96" width="232" height="340" rx="16" fill="#FFFFFF"/>
+    <path d="M48,96 H248 A16,16 0 0 1 264,112 V142 H32 V112 A16,16 0 0 1 48,96 Z" fill="#4F46E5"/>
+    <text x="148" y="125" text-anchor="middle" fill="#FFFFFF" font-size="15" font-weight="700">1 · Consumer</text>
+    <g fill="#334155" font-size="12">
+      <text x="52" y="172">• write_memory</text>
+      <text x="52" y="198">• ingest source</text>
+      <text x="52" y="224">• put_entity / relationship</text>
+      <text x="52" y="250">• recall</text>
+    </g>
+    <text x="148" y="410" text-anchor="middle" fill="#64748B" font-size="11.5">via Rust facade · N-API/TS · MCP</text>
+    <rect x="32" y="96" width="232" height="340" rx="16" fill="none" stroke="#E2E8F0" stroke-width="1.5"/>
+
+    <!-- CARD 2 — WRITE & INGEST -->
+    <rect x="288" y="96" width="232" height="340" rx="16" fill="#FFFFFF"/>
+    <path d="M304,96 H504 A16,16 0 0 1 520,112 V142 H288 V112 A16,16 0 0 1 304,96 Z" fill="#6D28D9"/>
+    <text x="404" y="125" text-anchor="middle" fill="#FFFFFF" font-size="15" font-weight="700">2 · Write &amp; ingest</text>
+    <g fill="#334155" font-size="12">
+      <text x="308" y="172">• extract → chunk → embed</text>
+      <text x="308" y="198">• persist memory / KG</text>
+      <text x="308" y="224">• policy + provenance / row</text>
+      <text x="308" y="250">• scope-stamped</text>
+    </g>
+    <rect x="288" y="96" width="232" height="340" rx="16" fill="none" stroke="#E2E8F0" stroke-width="1.5"/>
+
+    <!-- CARD 3 — STORAGE CELLS -->
+    <rect x="544" y="96" width="232" height="340" rx="16" fill="#FFFFFF"/>
+    <path d="M560,96 H760 A16,16 0 0 1 776,112 V142 H544 V112 A16,16 0 0 1 560,96 Z" fill="#7C3AED"/>
+    <text x="660" y="125" text-anchor="middle" fill="#FFFFFF" font-size="15" font-weight="700">3 · Storage cells</text>
+    <g fill="#334155" font-size="12">
+      <text x="564" y="172">• one crate per engine</text>
+      <text x="564" y="198">• sqlite ⇄ surreal ⇄ …</text>
+      <text x="564" y="224">• memory · knowledge · belief</text>
+      <text x="564" y="250">• hierarchy · vector</text>
+    </g>
+    <text x="660" y="410" text-anchor="middle" fill="#7C3AED" font-size="11.5" font-weight="600">↻ consolidation: reflection + decay</text>
+    <rect x="544" y="96" width="232" height="340" rx="16" fill="none" stroke="#E2E8F0" stroke-width="1.5"/>
+
+    <!-- CARD 4 — RETRIEVAL -->
+    <rect x="800" y="96" width="232" height="340" rx="16" fill="#FFFFFF"/>
+    <path d="M816,96 H1016 A16,16 0 0 1 1032,112 V142 H800 V112 A16,16 0 0 1 816,96 Z" fill="#8B5CF6"/>
+    <text x="916" y="125" text-anchor="middle" fill="#FFFFFF" font-size="15" font-weight="700">4 · Retrieval</text>
+    <g fill="#334155" font-size="12">
+      <text x="820" y="172">• graph + lexical + vector</text>
+      <text x="820" y="198">• + cue + beliefs</text>
+      <text x="820" y="224">• RRF fusion</text>
+      <text x="820" y="250">• cross-encoder rerank</text>
+    </g>
+    <rect x="800" y="96" width="232" height="340" rx="16" fill="none" stroke="#E2E8F0" stroke-width="1.5"/>
+
+    <!-- CARD 5 — CONTEXT PACKET -->
+    <rect x="1056" y="96" width="232" height="340" rx="16" fill="#FFFFFF"/>
+    <path d="M1072,96 H1272 A16,16 0 0 1 1288,112 V142 H1056 V112 A16,16 0 0 1 1072,96 Z" fill="#9333EA"/>
+    <text x="1172" y="125" text-anchor="middle" fill="#FFFFFF" font-size="15" font-weight="700">5 · Context packet</text>
+    <g fill="#334155" font-size="12">
+      <text x="1076" y="172">• ranked · fused · capped</text>
+      <text x="1076" y="198">• provenance + explanations</text>
+      <text x="1076" y="224">• policy-filtered</text>
+    </g>
+    <text x="1172" y="250" text-anchor="middle" fill="#9333EA" font-size="12" font-weight="600">→ back to consumer</text>
+    <rect x="1056" y="96" width="232" height="340" rx="16" fill="none" stroke="#E2E8F0" stroke-width="1.5"/>
+
+    <!-- inter-card arrows -->
+    <g fill="#7C3AED">
+      <line x1="264" y1="261" x2="280" y2="261" stroke="#7C3AED" stroke-width="3" stroke-linecap="round"/>
+      <polygon points="280,255 288,261 280,267"/>
+      <line x1="520" y1="261" x2="536" y2="261" stroke="#7C3AED" stroke-width="3" stroke-linecap="round"/>
+      <polygon points="536,255 544,261 536,267"/>
+      <line x1="776" y1="261" x2="792" y2="261" stroke="#7C3AED" stroke-width="3" stroke-linecap="round"/>
+      <polygon points="792,255 800,261 792,267"/>
+      <line x1="1032" y1="261" x2="1048" y2="261" stroke="#7C3AED" stroke-width="3" stroke-linecap="round"/>
+      <polygon points="1048,255 1056,261 1048,267"/>
+    </g>
+
+    <!-- governance band -->
+    <rect x="32" y="462" width="1256" height="54" rx="14" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
+    <text x="660" y="494" text-anchor="middle" fill="#3730A3" font-size="14" font-weight="600">Governance — policy · provenance · scope · sensitivity · retention — enforced on every read and write</text>
+
+  </g>
+</svg>

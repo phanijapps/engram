@@ -27,3 +27,8 @@
 | [0023](0023-evidence-append-port-level-rewrite.md) | Evidence append — port-level rewrite over separate evidence table | Accepted |
 | [0024](0024-batch-embeddings-deferred-reindex.md) | Batch embeddings — deferred reindex over inline VectorIndex composition | Accepted |
 | [0025](0025-framework-content-boundary.md) | Framework/content boundary: ship mechanism, not domain ontology content | Accepted |
+
+> **Note:** ADRs may reference feature specs that were consolidated into
+> [`docs/product/engram.md`](../product/engram.md). Those references are
+> point-in-time historical links; the capability/status they describe now lives
+> in the product overview.

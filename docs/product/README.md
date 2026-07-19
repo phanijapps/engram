@@ -23,7 +23,7 @@
 
 - **Why we made past choices** → [`../adr/`](../adr/) (immutable history).
 - **What we're proposing to change** → [`../rfc/`](../rfc/) (governance).
-- **What an individual feature does** → [`../specs/<feature>/spec.md`](../specs/).
+- **What an individual feature does** → [`engram.md`](engram.md).
 - **The mission and scope of the project** → [`../CHARTER.md`](../CHARTER.md).
 - **How users actually use the product** → [`../guides/`](../guides/) (Diátaxis-organized user docs).
 

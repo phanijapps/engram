@@ -53,7 +53,7 @@ Legend: ✅ shipped · 🟡 partial · ❌ gap.
 
 | Capability | State | Evidence | Missing → work item |
 |---|---|---|---|
-| MCP server | ❌ | grep for `rmcp\|jsonrpsee\|mcp_server\|streamable.http` → empty; `docs/specs/mcp-server/spec.md` is **Draft** (proposes TS-over-demo backend, 4 tools: `index_repo`/`search`/`agentic_search`/`get_job`) | Build server + expand to ~38 tools → **D3, D4** (Q2: host language open; Draft leans TS) |
+| MCP server | ❌ | grep for `rmcp\|jsonrpsee\|mcp_server\|streamable.http` → empty; an `mcp-server` spec was **Draft** at audit time (proposed TS-over-demo backend, 4 tools: `index_repo`/`search`/`agentic_search`/`get_job`); capability now tracked in `docs/product/engram.md` | Build server + expand to ~38 tools → **D3, D4** (Q2: host language open; Draft leans TS) |
 | Dashboard UI | 🟡 | `enterprise-3d-graph` Shipped (3D graph, demo/engram-ui) | Node CODE/INFO/HISTORY + timeline + insights + fleet panes → **D5** |
 | Agent skills / fleet / CapabilityReport | ❌ | none specced | **D6, D7, D8** |
 

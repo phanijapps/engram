@@ -273,9 +273,9 @@ journal blocks readers during writes. WAL lets readers + the writer coexist;
   co-occurrence relationship formation, + chunk entity-ref stamping.
 - [Q&A logic](../../demo/backend/src/qa.ts) — entity ranking, chunk grounding,
   context assembly.
-- [Background repo indexer spec](../../docs/specs/background-repo-indexer/spec.md)
-  — the spec that introduced the Rust parallel scanner.
-- [AST symbol extraction spec](../../docs/specs/ast-symbol-extraction/spec.md) —
-  the spec that introduced tree-sitter + chunk entity-refs.
+- [Background repo indexer](../../product/engram.md)
+  — the capability introduced by the Rust parallel scanner.
+- [AST symbol extraction](../../product/engram.md) —
+  the capability that introduced tree-sitter + chunk entity-refs.
 - [ADR-0007](../../docs/adr/0007-napi-binding-surface-extension.md) — the N-API
   binding surface decision.

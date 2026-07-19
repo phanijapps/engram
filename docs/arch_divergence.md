@@ -83,8 +83,8 @@ before adding behavior.
 5. **Re-land Cue, Temporal, and hierarchy expansion on durable paths.** The
    earlier process-local implementation was retired with the all-in-one fixture;
    the replacement should go through `engram-retrieval` and focused adapters.
-6. **✅ Retire the broad process-local memory fixture** (done via
-   `docs/specs/retire-memory-inmem`). Remaining: remove downstream dependence
+6. **✅ Retire the broad process-local memory fixture** (done via the
+   `retire-memory-inmem` slice; see `docs/product/engram.md`). Remaining: remove downstream dependence
    on `engram-core` compatibility re-exports.
 7. **Rename adapter packages** to post-move names after compatibility
    planning (`engram-store-sql` → memory-sqlite; `engram-store-vector` →

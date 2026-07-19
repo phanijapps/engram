@@ -38,18 +38,18 @@ change from Agent Zero's perspective, not a new API for callers to learn.
 
 For the belief-network and bitemporal cutover slice, the detailed applied
 research and implementation contract live in
-[`zbot-engram-belief-bitemporal-cutover.md`](zbot-engram-belief-bitemporal-cutover.md)
-and
-[`docs/specs/zbot-engram-belief-bitemporal-cutover`](../specs/zbot-engram-belief-bitemporal-cutover/spec.md).
+[`zbot-engram-belief-bitemporal-cutover.md`](zbot-engram-belief-bitemporal-cutover.md);
+the belief/bitemporal capability is covered in
+[`docs/product/engram.md`](../product/engram.md).
 The current implementation note is that Agent Zero exposes valid-time `as_of`
 behavior and Engram's shipped belief SQLite adapter now supports valid-time
 belief reads. The remaining temporal gap is record-time history: Engram rejects
 record-time belief history for the current SQLite store rather than pretending
 current rows are a full bitemporal audit log.
 
-The broader build-and-integrate contract for Agent Zero is
-[`docs/specs/agentzero-engram-adapter-integration`](../specs/agentzero-engram-adapter-integration/spec.md).
-That spec treats the belief/bitemporal work as a specialist slice and adds the
+The broader build-and-integrate contract for Agent Zero is documented in
+[`agentzero-engram-adapter-integration`](../product/engram.md).
+It treats the belief/bitemporal work as a specialist slice and adds the
 provider-selection, store coverage, recall, hierarchy, migration dry-run,
 capability-reporting, API/UI parity, and rollout gates needed for Agent Zero to
 actually run its memory jobs through Engram.

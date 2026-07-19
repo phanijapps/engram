@@ -11,8 +11,8 @@ file as stale and ask before relying on it.
 
 ## Now (current quarter)
 
-What we're actively working on. Each item should link to a spec in
-`docs/specs/` once one exists.
+What we're actively working on. Each item should reference its capability in
+`docs/product/engram.md`.
 
 - **Backend-agnostic retrieval composition.** RRF-fused graph + vector hybrid
   over the `RetrievalIndex` seam, durable sqlite-vec, configurable RRF — shipped

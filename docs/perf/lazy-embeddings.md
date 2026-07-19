@@ -138,5 +138,5 @@ the KG-only baseline varies with LLM non-determinism.)
 ## See also
 - [PERFORMANCE.md](./PERFORMANCE.md) — the KG-only baseline study
 - [8-question eval](./eval-8-question.md) · [50-question eval](./eval-50-question.md)
-- [Spec](../specs/benchmark-lazy-embeddings/spec.md) · [Lazy orchestrator](../../demo/backend/src/lazy_embeddings.ts)
+- [Benchmark](../product/engram.md) · [Lazy orchestrator](../../demo/backend/src/lazy_embeddings.ts)
 - [Retrieval engine](../../bindings/node/src/lib.rs) (`NativeRetrievalEngine`)

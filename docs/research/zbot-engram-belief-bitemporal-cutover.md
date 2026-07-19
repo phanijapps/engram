@@ -2,7 +2,7 @@
 
 - **Status:** Applied research
 - **Date:** 2026-07-02
-- **Related spec:** [`docs/specs/zbot-engram-belief-bitemporal-cutover/spec.md`](../specs/zbot-engram-belief-bitemporal-cutover/spec.md)
+- **Related spec:** `zbot-engram-belief-bitemporal-cutover` (historical; capability covered in [docs/product/engram.md](../product/engram.md))
 - **Question:** How should AgentZero's belief, contradiction, and bitemporal memory behavior map to Engram when AgentZero cuts over from its current stores to an Engram-backed Rust library?
 
 ## Short Verdict

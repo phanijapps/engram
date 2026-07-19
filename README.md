@@ -1,73 +1,218 @@
 # Engram
 
-> Contract-first agentic memory for agents, tools, and applications that need
-> durable recall without turning memory into a monolith.
+> Contract-first agentic memory — structured, durable recall for AI agents that
+> need more than a context window.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-2024-orange.svg)](Cargo.toml)
 [![TypeScript](https://img.shields.io/badge/typescript-sdk-blue.svg)](packages)
 [![Status](https://img.shields.io/badge/status-pre--1.0-yellow.svg)](#status)
 
-Engram is an open-source memory layer with a Rust core and TypeScript bindings.
-It is built around explicit contracts, deterministic behavior, and replaceable
-adapters so memory can evolve from local fixtures to durable stores, vector
-indexes, hierarchy navigation, belief networks, and agent integrations.
+Engram is an open-source **agentic memory layer**: a Rust core that owns
+deterministic memory, knowledge-graph, belief, hierarchy, and retrieval
+behavior, with TypeScript bindings — so agents get reliable, structured,
+long-lived memory instead of opaque, disposable context windows.
 
-## Why Engram
+It is **not a vector database** (vectors are one retrieval mode among six). It
+is **not a knowledge store** (knowledge is source-grounded, not free-floating).
+It is the layer where raw observations become **durable beliefs**, where
+retrieval is **composed** (not single-mode), and where **policy, provenance, and
+scope** govern every read and write — so memory is auditable, not accidental.
+
+---
+
+## Why engram exists
 
 Agent memory gets messy when storage, ranking, policy, provenance, and runtime
-integration collapse into one service. Engram keeps those concerns separate:
+integration collapse into one service. The result is either a vector DB that
+returns similar text without understanding *why* it's relevant, or an LLM
+context window that forgets everything when the session ends.
 
-- Contract-first v1 memory, retrieval, forget, and evaluation payloads.
-- Rust 2024 core traits and deterministic adapter behavior.
-- TypeScript packages generated from the accepted contracts.
-- SQLite persistence and sqlite-vec retrieval test surfaces.
-- Focused SQLite-backed memory, knowledge, hierarchy, belief, and retrieval
-  adapter slices.
-- Local-first examples, benchmark smoke paths, and release gates.
+Engram keeps these concerns **separate and explicit**:
 
-## Status
+- **Contract-first** domain types that rank above any SQL schema or storage
+  engine — so agents depend on *semantics*, not *implementation*.
+- **Rust-owns-deterministic-behavior** — the core traits, adapters, and
+  conformance tests are in Rust; TypeScript wraps generated contracts.
+- **Replaceable adapters** — storage (SQLite, SurrealDB), retrieval (vector,
+  graph, lexical, associative), and embedding providers (FastEmbed, Ollama) are
+  behind ports, never hardcoded.
+- **Policy on every path** — scope, retention, allowed-uses, and provenance are
+  checked on write, retrieve, ingest, consolidate, and forget — never hidden in
+  a generic manager.
 
-Engram is **pre-1.0**. It is suitable for contract and adapter development, not
-production deployment.
+---
 
-Current validated surface includes:
+## The conceptual model
 
-- memory write, retrieve, forget, and lifecycle events
-- accepted v1 JSON schemas and TypeScript contract generation
-- reusable Rust evaluation fixtures and report summaries
-- SQLite-backed memory service and local in-memory SQLite conformance tests
-- SQLite-backed knowledge graph, taxonomy, and ontology adapter
-- storage-neutral retrieval composition and weighted fusion
-- file-backed SQLite local smoke support
-- sqlite-vec candidate retrieval with opt-in FastEmbed BGE-small test wiring
-- source-grounded document/code ingestion
-- native TypeScript binding package surface
-- framework-neutral observed transport adapters
-- **codegraph-parity (in progress, RFC-0012):** BM25 lexical retrieval
-  (`engram-store-lexical`), cross-encoder rerank (`engram-rerank-cross-encoder`),
-  and graph analytics (`engram-graph-analytics`: PageRank, betweenness,
-  communities, reachability) adapter crates; bi-temporal knowledge entities
-  (ADR-0019) and an extended `EntityKind` vocabulary (ADR-0020). See
-  [`docs/codegraph-parity-roadmap.md`](docs/codegraph-parity-roadmap.md).
-- **associative + community-summary retrieval:** Personalized PageRank
-  (`engram-store-associative-graph`) and GraphRAG community-summary
-  (`engram-store-community-summary`) `RetrievalIndex` adapters, wired into
-  the unified recall pipeline + N-API binding.
-- **reflection operator** (`engram-reflection`): abstracts scoped active
-  memories into derived beliefs — the memory dimension engram covered least
-  (Generative Agents / Reflexion-style). Wired into `EngramProvider::consolidate()`.
-- **decay executor** (`engram-decay`): restores policy-expiry decay with the
-  Ebbinghaus forgetting curve; composes with reflection via
-  `CompositeConsolidationExecutor`.
-- **Memory MCP server** (`engram-memory-mcp`): exposes `write_memory`, `recall`,
-  `forget`, `put_entity`, `put_relationship` as agent-callable MCP tools over
-  stdio JSON-RPC 2.0.
-- **surface-parity rule:** AGENTS.md mandates every capability is reachable via
-  both `engram-integration` and the N-API binding.
+Engram bakes in eight concepts that go beyond "store text, search by
+similarity." Each is a distinct domain axis with its own port, lifecycle, and
+contract.
 
-Before publishing crates, npm packages, release tags, or benchmark claims, use
-`docs/release-checklist.md`.
+### 1. Memory as a first-class domain (not just rows)
+
+A `MemoryRecord` is a canonical durable unit with explicit `kind`
+(observation, fact, preference, episode, artifact, relationship, procedure),
+`content`, `scope`, `provenance`, `policy`, `status`, and `links` — never a
+bare row. Memory has a **lifecycle** (`active → archived → redacted → forgotten
+→ expired`) and emits append-only `MemoryEvent`s (`written`, `retrieved`,
+`consolidated`, `forgotten`, `belief_synthesized`, …). State and events are
+separated, so the layer is **auditable and replayable** rather than a mutable
+log.
+
+A `MemoryRole` (working / episodic / semantic / procedural, CoALA-aligned) is
+*derived* from kind + policy + scope + provenance — keeping the contract small
+while preserving the cognitive-science taxonomy.
+
+### 2. Knowledge graph, source-grounded (not free-floating facts)
+
+Knowledge is a separate domain axis from memory:
+`KnowledgeSource → SourceDocument → KnowledgeChunk → KnowledgeEntity /
+KnowledgeRelationship → EmbeddingRef`, bounded by a named `KnowledgeGraph`.
+
+Memory records agent **experience**; knowledge records are **source-grounded
+content** from code repos, documents, URLs. A memory may *link* to a knowledge
+chunk but cannot replace it — preventing hallucinated "facts" from masquerading
+as grounded knowledge. Every chunk references its source and document (invariant).
+
+### 3. Belief synthesis (what agents BELIEVE vs what they observed)
+
+A `Belief` is a *derived stance* over evidence — never raw memory, never source
+truth. It has a `subject`, declarative `content`, `confidence`, weighted
+`BeliefSource`s, a lifecycle (`active / stale / superseded / retracted`), and a
+`synthesizer` derivation ref. A belief is **recomputable** — when a source is
+invalidated, a single-source belief retracts; a multi-source belief is marked
+`stale` and resynthesized.
+
+Beliefs are **bi-temporal**: `valid_from / valid_until` define when the content
+was true *in the world* (valid time), distinct from `created_at / updated_at`
+(when engram recorded it — transaction time). This "true as-of T" retrieval is
+the whitespace no competitor owns.
+
+`Contradiction` records are *reviewable signals*, never automatic truth changes
+— they classify the tension (`logical`, `temporal`, `tension`, `duplicate`,
+`policy`) and capture how a human or system resolved it.
+
+### 4. Hierarchy (aggregation + navigation + context compression)
+
+`HierarchyNode` organizes retrievable objects (memories, chunks, entities,
+concepts, other nodes) into abstraction layers — `layer 0` = base retrievable,
+`layer > 0` = aggregate (summary, schema, topic, cluster, domain). This is the
+GraphRAG insight: a query may need a raw chunk, an episode summary, a workflow
+schema, or a domain pattern; hierarchy lets retrieval return the right
+granularity instead of N similar low-level fragments.
+
+Hierarchy ≠ taxonomy. Taxonomy organizes *controlled concepts*; hierarchy
+organizes *retrievable objects* for **navigation and context compression**.
+Construction (building the tree) is separated from navigation (traversing it).
+
+### 5. Retrieval composition (never one mode)
+
+`RetrievalRequest` fans out across **six modes** — `temporal`, `cue`,
+`hierarchical`, `semantic` (vector), `graph`, `keyword` (BM25) — with results
+fused, reranked, budget-compressed, and policy-filtered into a `ContextPayload`.
+
+The `RetrievalScore` is **multi-factor**: `relevance + recency + confidence +
+cue_match + hierarchical_fit + policy_fit`. Fusion uses
+[Reciprocal Rank Fusion](https://plg.uwaterloo.ca/~gvcormac/cormacksigir09-rrf.pdf)
+(RRF) to unify heterogeneous sources without distributed write consistency.
+An optional **cross-encoder reranker** reorders fused candidates for precision.
+
+A `FusionTrace` is attached to every result: source, source rank, source score,
+fusion score, rerank score, deduplicated-with — full explainability of how a
+candidate moved through the pipeline. When sources degrade or results are
+omitted (budget, policy), the agent is told *what* was dropped and *why*.
+
+### 6. Consolidation (reflection + decay, as an explicit pipeline)
+
+Consolidation is a **first-class operation pipeline**, not an incidental write
+side-effect: `ConsolidationRequest → ConsolidationPlan (dry-run) →
+ConsolidationRun (auditable execution) → ConsolidationTaskResult`s.
+
+This is where **reflection** happens (working memory → episodic event → semantic
+fact → optional taxonomy/graph/procedural update — Generative Agents /
+Reflexion-style) and where **forgetting** happens (Ebbinghaus-style decay:
+policy-expiry + memory curve). Both are explicit, both auditable. Without
+consolidation, memory degrades into an undifferentiated log.
+
+Task kinds: `fact_extraction`, `belief_synthesis`, `belief_contradiction_detection`,
+`hierarchy_build`, `taxonomy_evolution`, `graph_evolution`, `decay`, `pruning`,
+`procedure_extraction`, `evaluation`, and more.
+
+### 7. Policy, provenance, and scope (governance baked into every path)
+
+`Policy` (`visibility / retention / sensitivity / allowed_uses / expires_at /
+delete_mode`) and `Provenance` (`source / actor / observed_at / evidence /
+derivations / confidence / method`) are **required fields on every durable
+record**. `Scope` (`tenant` required; `subject / workspace / session /
+environment` optional) bounds every operation.
+
+These are not optional metadata — they are **checked at runtime** on write,
+retrieve, ingest, consolidate, and forget. Redacted records must not leak
+through retrieval, evaluation, links, or explanations. Forgetting is a domain
+concept (`delete / redact / tombstone / archive`), not a DB delete. Every
+record's lineage is traceable via `EvidenceRef` and `DerivationRef`.
+
+### 8. Contract-first design (domain types outrank SQL)
+
+The human-readable domain model (`docs/domain-data-model.md`), the
+machine-readable wire contract (`contracts/v1/`), and the behavior specs
+(`docs/specs/`) are the **source of truth**. Rust types, generated TypeScript,
+JSON Schema, database schemas, and API payloads all conform *downward* — never
+the reverse. This is what makes engram portable across SQLite today and
+SurrealDB / Postgres / Neo4j tomorrow without breaking agents that depend on it.
+
+The contract freeze policy forbids renames, removals, or meaning changes within
+a version; breaking changes require a new versioned contract. `metadata` maps
+are allowed, but core semantics must use typed fields (no smuggling policy or
+provenance through unstructured metadata).
+
+---
+
+## Storage backends — one crate per engine, swap by config
+
+Engram supports multiple storage backends, each consolidated into a single crate
+holding **all** database operations for that engine. Consumers switch backends
+by changing a config string + Cargo feature — no application code changes.
+
+| Backend | Crate | Status |
+|---|---|---|
+| **SQLite** | `engram-store-sqlite` | ✅ Complete — memory, knowledge, belief, hierarchy, vector, consolidation glue, `SqliteOpenOptions` |
+| **SurrealDB** | `engram-store-surreal` | ✅ All 5 capabilities — memory, knowledge, belief, hierarchy, vector (MTREE) |
+| **Mixed** (future) | `engram-store-mixed` | 🔜 Compose multiple engines (e.g. lancedb + neo4j) |
+
+```toml
+# Select the backend in a profile file
+[backend]
+kind = "sqlite"        # or "surreal"
+data_root = "/var/lib/engram"
+```
+
+```bash
+# Compile with the backend feature
+cargo build --features sqlite    # or --features surreal
+```
+
+Both backends share the **same ports, same DTOs, same facade** — the storage
+engine is an adapter detail. An engine-neutrality lint
+(`.codex/hooks/check-engine-neutrality.sh`) enforces that no engine type
+(`Sql*`, `Surreal*`, raw SQL) leaks into the neutral facade or port crates.
+
+### Engine-agnostic adapters (shared across backends)
+
+These adapters work with **any** backend — they read the active knowledge store
+via traits, not engine-specific calls:
+
+| Adapter | Role |
+|---|---|
+| `engram-store-lexical` (Tantivy) | BM25 keyword retrieval |
+| `engram-store-associative-graph` | Personalized PageRank (HippoRAG-style) |
+| `engram-store-community-summary` | GraphRAG community summaries |
+| `engram-rerank-cross-encoder` | Cross-encoder reranking |
+| `engram-decay` | Ebbinghaus forgetting-curve decay |
+| `engram-ingest` | Filesystem/git source ingestion |
+
+---
 
 ## Architecture
 
@@ -90,6 +235,8 @@ Before publishing crates, npm packages, release tags, or benchmark claims, use
         |                    Rust behavior boundaries                     |
         | runtime: errors/policy deps · memory: memory ports · knowledge: |
         | graph/ontology/source ports · retrieval: composition/fusion     |
+        | belief: bi-temporal ports · hierarchy: navigation ports          |
+        | consolidation: reflection + decay · integration: SDK facade      |
         +-------------------------------+--------------------------------+
                                         |
                                         v
@@ -103,215 +250,227 @@ Before publishing crates, npm packages, release tags, or benchmark claims, use
           |                             |                             |
           v                             v                             v
 +--------------------+        +--------------------+        +--------------------+
-| Memory adapters    |        | Knowledge adapters |        | Retrieval adapters |
-| SQLite memory SQL  |        | SQLite graph/store |        | sqlite-vec, fusion |
-+---------+----------+        +---------+----------+        +---------+----------+
-          |                             |                             |
-          v                             v                             v
-+--------------------+        +--------------------+        +--------------------+
-| Local state / SQL  |        | Sources/chunks     |        | Vector candidates  |
-| events/idempotency |        | graph/ontology     |        | rehydrated targets |
+| Storage backends   |        | Retrieval adapters |        | Engine-agnostic    |
+| engram-store-sqlite|        | sqlite-vec, MTREE  |        | Tantivy, PPR,      |
+| engram-store-surreal|       | RRF fusion, rerank |        | GraphRAG, decay    |
 +--------------------+        +--------------------+        +--------------------+
 ```
 
-The rule of thumb: `engram-domain` owns portable concepts, `engram-memory`
-owns memory ports, `engram-knowledge` owns knowledge graph, ontology, source,
-and ingestion ports, `engram-retrieval` owns candidate composition and fusion,
-`engram-core` keeps higher-level orchestration and compatibility re-exports,
-concrete infrastructure lives behind adapters, and TypeScript wraps generated
+The rule of thumb: `engram-domain` owns portable concepts; `engram-memory`,
+`-knowledge`, `-belief`, `-hierarchy`, `-retrieval`, `-consolidation` own their
+respective ports; `engram-integration` is the SDK facade (`EngramProvider`);
+concrete infrastructure lives behind adapter crates; TypeScript wraps generated
 contracts instead of redefining them.
 
-## Repository Layout
+---
+
+## Status
+
+Engram is **pre-1.0** — demo-driven, not production-ready. The conceptual
+model (memory, knowledge, belief, hierarchy, retrieval, consolidation) is
+direction-fixed; the frozen v1 contract covers the memory + retrieval +
+evaluation vertical. Belief, contradiction, hierarchy, and consolidation are
+draft extension contracts — direction-fixed but not frozen.
+
+Current validated surface:
+
+- **Memory**: write, retrieve, forget, lifecycle events, scope isolation,
+  policy enforcement — SQLite + SurrealDB.
+- **Knowledge graph**: source → document → chunk → entity → relationship,
+  taxonomy, ontology, graph traversal (neighbors) — SQLite + SurrealDB.
+- **Belief**: put, get (valid-time), mark-stale, supersede, retract,
+  contradictions — SQLite + SurrealDB.
+- **Hierarchy**: put-node, put-relation, path navigation — SQLite + SurrealDB.
+- **Vector retrieval**: embedding-space-validated insert/search, KNN — SQLite
+  (sqlite-vec) + SurrealDB (MTREE).
+- **Retrieval composition**: graph + lexical + vector lanes, RRF fusion,
+  cross-encoder rerank, associative (PPR), community-summary (GraphRAG).
+- **Consolidation**: reflection (derived beliefs) + decay (Ebbinghaus) +
+  composite executor — wired into `EngramProvider::consolidate()`.
+- **MCP servers**: memory MCP (`write_memory`, `recall`, `forget`,
+  `put_entity`, `put_relationship`) + codegraph MCP (dead-code, blast-radius,
+  dependency-path, communities).
+- **N-API binding**: full `EngramProvider` surface reachable from TypeScript.
+- **Backend swap**: SQLite ↔ SurrealDB by config string + Cargo feature.
+- **Engine-neutrality lint**: enforces no engine types in the facade/ports.
+- **Codegraph layer** (RFC-0012): dead-code, blast-radius, dependency-path,
+  central symbols (PageRank), bridge symbols (betweenness), communities
+  (Louvain), temporal scoring — on top of engram, not in it.
+
+---
+
+## Repository layout
 
 ```text
-contracts/        Accepted JSON schemas, examples, and contract notes.
-core/             Storage-neutral Rust crates: domain, runtime, memory,
-                  knowledge, retrieval, orchestration, and evaluation.
-adapters/         Replaceable Rust infrastructure: ingest, memory stores,
-                  knowledge stores, and retrieval indexes.
-bindings/         Native language bridges, including the Node N-API crate.
-docs/             Architecture docs, ADRs, RFCs, research, specs, and roadmap.
-examples/         Scenario fixtures and usage sketches.
-packages/         TypeScript contracts, client, node package, adapters, eval.
-.codex/           Local agent skills, review agents, and validation hooks.
+contracts/           Portable JSON schemas and generated contract outputs.
+core/                Storage-neutral Rust crates.
+  domain/            Domain types, invariants, serde, version markers.
+  runtime/           Shared errors, result type, clocks, ids, policy gates.
+  memory/            Memory service + repository ports.
+  knowledge/         Knowledge, graph, ontology, source, ingestion ports.
+  belief/            Belief synthesis, contradiction, bi-temporal ports.
+  hierarchy/         Hierarchy build, navigation, aggregate ports.
+  consolidation/     Consolidation planning, gated mutation, decay, audit.
+  reflection/        Reflection synthesizer + consolidation executor.
+  retrieval/         Retrieval composition + fusion ports + VectorIndex.
+  integration/       SDK facade: EngramProvider, EngramConfig, CapabilityReport.
+  eval/              Deterministic fixtures + regression harness.
+  graph-analytics/   Pure graph algorithms (PageRank, betweenness, communities).
+
+adapters/            Replaceable infrastructure crates.
+  sqlite/            engram-store-sqlite — ALL SQLite DB ops (one crate).
+  surreal/           engram-store-surreal — ALL SurrealDB DB ops (one crate).
+  ingest/            Filesystem/git ingestion adapter.
+  retrieval/         sqlite-vec, tantivy-lexical, associative-graph,
+                     community-summary, cross-encoder-rerank.
+  consolidation/     Decay executor (Ebbinghaus curve).
+  integration/       Backend recipe / conformance composition.
+
+bindings/            Native language bridges (N-API for TypeScript).
+
+codegraph/           On-top codegraph layer (RFC-0012).
+  queries/           Dead-code, blast-radius, dependency-path, central/bridge.
+  temporal/          Temporal scoring (recent / impact / compound).
+  mcp-server/        MCP server exposing codegraph queries to AI agents.
+
+memory/              Memory MCP server (agent-callable tools).
+
+packages/            TypeScript workspace.
+  contracts/         Generated TypeScript types + schemas.
+  client/            Ergonomic application SDK.
+  node/              Native binding package.
+  adapters/          JS-side framework + gateway integrations.
+  eval/              Fixture authoring helpers + CLI wrappers.
+
+docs/                Architecture, ADRs, RFCs, research, specs, domain model.
 ```
 
-## Quick Start
+---
 
-Install dependencies:
-
-```bash
-pnpm install
-python3 -m pip install -r requirements-dev.txt
-```
-
-Run the Rust workspace:
-
-```bash
-cargo test --workspace
-```
-
-Run TypeScript generation, typechecks, and tests:
-
-```bash
-pnpm run check
-```
-
-Run local adapter examples:
-
-```bash
-cargo run -p engram-store-sql --example sql_memory
-pnpm --filter @engram/client test
-```
-
-Run the local benchmark smoke path:
-
-```bash
-cargo run -p engram-store-sql --example benchmark_sql
-```
-
-Benchmark output is local observation only. See `docs/benchmarks.md` for claim
-boundaries.
-
-## Demo: build & run on a new machine
-
-The demo (`prototype/`) is an enterprise knowledge-platform UI over the Rust core:
-index a polyglot repo or docs folder, build a knowledge graph, ask grounded +
-agentic questions, and explore the graph. It needs the **FastEmbed** native
-build (BGE-small embeddings) plus the TypeScript workspace.
+## Quick start
 
 ### Prerequisites
 
-- **Rust 1.85+** (edition 2024) — `cargo`.
+- **Rust 1.85+** (edition 2024).
 - **Node 22+** and **pnpm 10** (`corepack enable && corepack prepare pnpm@10 --activate`).
-- Optional, for LLM extraction + Q&A: an OpenAI-compatible endpoint reachable as
-  `ollama-cloud` (e.g. ollama cloud `gemma4:31b-cloud`). Without it the demo
-  runs deterministic-only (no LLM calls).
+- Optional for LLM extraction + Q&A: an OpenAI-compatible endpoint.
 
-### Build and run
+### Build + test
 
 ```bash
-# 1. Install JS dependencies (workspace root)
+# Install JS dependencies
 pnpm install
 
-# 2. Clean generated JS/native build outputs when needed.
-pnpm run clean
+# Build the Rust workspace (default: no backend feature)
+cargo check --workspace
 
-# 3. Build the native addon WITH fastembed, then build all packages/demos.
-#    The BGE-small model downloads on the first embedding call — one-time.
-pnpm run build
+# Build + test with a backend
+cargo test --workspace --features sqlite     # SQLite backend
+cargo test -p engram-integration --features surreal surreal::  # SurrealDB backend
+
+# TypeScript generation + typecheck + tests
+pnpm run check
 ```
 
-### Configure + run
+### Use the SDK (Rust embedder)
 
-```bash
-# 4. LLM creds (optional). Copy the template and fill in real values.
-cp prototype/backend/.env.example prototype/backend/.env
-#   ENGRAM_LLM_BASE_URL=https://your-host/v1
-#   ENGRAM_LLM_API_KEY=...
-#   ENGRAM_LLM_MODEL=gemma4:31b-cloud
-# Leave the placeholder to run deterministic-only.
+```rust
+use engram_integration::{EngramConfig, EngramProvider, CapabilityPolicy,
+    EmbeddingProviderConfig, MigrationMode};
+use engram_domain::types::ScopeMappingStrategy;
 
-# 5. Start the backend (Hono on :8787 — serves the API + /mcp)
-pnpm run backend
+let config = EngramConfig::new(
+    "/var/lib/engram", "/var/lib",
+    ScopeMappingStrategy::Strict,
+    EmbeddingProviderConfig {
+        provider_type: "fastembed".to_string(),
+        model: "BAAI/bge-small-en-v1.5".to_string(),
+        dimensions: 384, prompt_profile: "query".to_string(),
+        normalization: None,
+    },
+    MigrationMode::DryRun, CapabilityPolicy::FailClosed,
+);
 
-# 6. In another shell, start the frontend (Vite on :5173, proxies API routes
-#    to :8787)
-pnpm --filter prototype-frontend dev
+// open() selects the backend by compiled feature (sqlite or surreal)
+let provider = EngramProvider::open(&config)?;
+
+// Check what's supported
+let report = provider.capabilities();
+println!("memory: {:?}", report.memory);
+println!("knowledge: {:?}", report.knowledge);
+
+// Write + retrieve through the facade
+let memory = provider.memory().expect("memory supported");
+// ... memory.write_memory(request).await
 ```
 
-Open **http://localhost:5173**. From the dashboard, point **Index** at a local
-repo (or docs folder) and let it scan; then open the graph or chat. Re-indexing
-reuses durable embeddings (`${ENGRAM_DB}.embeddings.db`).
+### Profile-file configuration
 
-> The native addon must be rebuilt after any `bindings/node` change — re-run
-> `pnpm --filter @engram/node build:native`. `tsx watch` reloads the backend on
-> TS edits, but the `.node` is picked up only when the backend restarts.
+```toml
+# engram.toml — select the backend declaratively
+[backend]
+kind = "surreal"                    # "sqlite" or "surreal"
+data_root = "/var/lib/engram"
+
+[embedding_provider]
+provider_type = "fastembed"
+model = "BAAI/bge-small-en-v1.5"
+dimensions = 384
+prompt_profile = "query"
+```
+
+```rust
+let config = EngramConfig::from_profile_file("engram.toml")?;
+let provider = EngramProvider::open(&config)?;
+```
+
+---
 
 ## Connect via MCP
 
-The demo backend serves a spec-compliant **Streamable HTTP** MCP endpoint at
-`/mcp`, built on the official `@modelcontextprotocol/sdk`. It completes the full
-`initialize` handshake, so any HTTP MCP client — **GitHub Copilot**, Claude
-Desktop, Cursor — can connect. Four tools:
+Engram ships two MCP servers exposing memory + codegraph operations as
+agent-callable tools over stdio or HTTP:
 
-| Tool | What it does |
-| --- | --- |
-| `index_repo` | Scan + ingest a repo (or docs folder) into the knowledge graph. |
-| `get_job` | Poll an indexing job's status. |
-| `search` | Keyword/entity search over the graph. |
-| `agentic_search` | Grounded + agentic Q&A over the graph (LLM, if configured). |
+| Server | Tools |
+|---|---|
+| **memory MCP** (`memory/mcp-server`) | `write_memory`, `recall`, `forget`, `put_entity`, `put_relationship`, `consolidate` |
+| **codegraph MCP** (`codegraph/mcp-server`) | dead-code, blast-radius, dependency-path, central symbols, communities |
 
-**Start the backend** (it loads the Rust core through the native binding):
-
-```bash
-pnpm --filter @engram/node build:native   # if not already built
-pnpm run backend                           # serves http://localhost:8787
-```
-
-**GitHub Copilot** (VS Code `mcp.json`, or `.vscode/mcp.json` in a workspace):
+The demo backend also serves a **Streamable HTTP** MCP endpoint at `/mcp`
+(GitHub Copilot / Claude Desktop / Cursor compatible):
 
 ```jsonc
+// .vscode/mcp.json
 {
   "servers": {
-    "engram": {
-      "type": "http",
-      "url": "http://localhost:8787/mcp"
-    }
+    "engram": { "type": "http", "url": "http://localhost:8787/mcp" }
   }
 }
 ```
 
-**Claude Desktop / Cursor** — point their HTTP/streamable-HTTP transport at the
-same URL, or bridge a stdio-only client with
-[`mcp-remote`](https://www.npmjs.com/package/mcp-remote):
-
-```jsonc
-{
-  "mcpServers": {
-    "engram": { "command": "npx", "args": ["-y", "mcp-remote", "http://localhost:8787/mcp"] }
-  }
-}
-```
-
-The endpoint is **stateless** — no session store; each request is
-self-contained. It reads whatever the backend's `ENGRAM_DB` points at, so it
-shares the graphs you index in the demo UI. Quick check with curl:
-
-```bash
-curl -s -X POST http://localhost:8787/mcp \
-  -H 'content-type: application/json' \
-  -H 'accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"curl","version":"0"}}}'
-```
+---
 
 ## Contracts
 
-The accepted v1 contract package lives in `contracts/v1/`.
-
-Useful commands:
+The accepted v1 contract package lives in `contracts/v1/`. Domain types in
+`engram-domain` are the Rust source of truth; TypeScript types are generated
+from them and should not be edited by hand.
 
 ```bash
+pnpm run contracts:generate     # generate TS types from Rust
+pnpm run contracts:check-generated  # verify they match
 python3 tools/scripts/validate_contracts.py
-pnpm run contracts:generate
-pnpm run contracts:check-generated
-.codex/hooks/check-contracts.sh
 ```
 
-Generated TypeScript types are emitted under `packages/contracts/src/generated/`
-and should not be edited by hand. Repository automation scripts live under
-`tools/scripts/`.
+---
 
-## Development Workflow
+## Development workflow
 
 Engram uses spec-driven implementation:
 
 1. Record durable architecture decisions in `docs/adr/`.
 2. Add or update specs under `docs/specs/` before behavior changes.
-3. Keep `docs/implementation/phases.json` in sync with roadmap slices.
-4. Run Rust, TypeScript, contract, docs, and vector feature gates before handoff.
-
-Core validation:
+3. Run Rust, TypeScript, contract, docs, and engine-neutrality gates.
 
 ```bash
 cargo fmt --all --check
@@ -321,29 +480,26 @@ cargo test --workspace
 pnpm run check
 .codex/hooks/check-contracts.sh
 .codex/hooks/check-docs.sh
+.codex/hooks/check-engine-neutrality.sh   # ADR-0022 rule-1 gate
 ```
 
-Vector/FastEmbed feature gate:
+---
 
-```bash
-cargo check -p engram-store-vector --features fastembed-tests --tests
-cargo clippy -p engram-store-vector --features fastembed-tests --tests -- -D warnings
-```
+## Key documentation
 
-The FastEmbed BGE-small path stays opt-in; default validation does not download
-models.
+| Document | What it covers |
+|---|---|
+| [`docs/domain-data-model.md`](docs/domain-data-model.md) | The source-of-truth domain model (2,400+ lines) |
+| [`docs/CHARTER.md`](docs/CHARTER.md) | Mission, scope, six principles |
+| [`docs/research/synthesis.md`](docs/research/synthesis.md) | Research → architecture direction |
+| [`docs/research/engram-framing-synthesis.md`](docs/research/engram-framing-synthesis.md) | The "belief layer" positioning |
+| [`docs/research/academic-research-findings.md`](docs/research/academic-research-findings.md) | CoALA, Tulving, MemGPT, ACT-R, GraphRAG citations |
+| [`docs/adr/`](docs/adr/) | 25 architecture decision records |
+| [`docs/rfcs/`](docs/rfcs/) | 13 design proposals (memory scope → context-graph packets) |
+| [`docs/specs/`](docs/specs/) | Spec-driven implementation slices |
+| [`AGENTS.md`](AGENTS.md) | Repository instructions, boundary rules, validation |
 
-## Documentation
-
-- `docs/architecture/reference.md` - normative architecture and design rules.
-- `docs/architecture/overview.md` - current module map.
-- `docs/domain-data-model.md` - domain model source of truth.
-- `docs/implementation-roadmap.md` - completed roadmap loop and next-slice
-  policy.
-- `docs/sql-adapter-design.md` - SQLite adapter boundary and deferred server DB
-  work.
-- `docs/benchmarks.md` - local benchmark smoke commands and limitations.
-- `docs/release-checklist.md` - release and publication gates.
+---
 
 ## Contributing
 
@@ -357,14 +513,11 @@ is strict:
 - Do not add god modules, hidden infrastructure coupling, or provider-backed
   behavior in core/domain crates.
 
-Read:
+Read: [`CONTRIBUTING.md`](CONTRIBUTING.md) · [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) ·
+[`SECURITY.md`](SECURITY.md) · [`GOVERNANCE.md`](GOVERNANCE.md) · [`AGENTS.md`](AGENTS.md)
 
-- `CONTRIBUTING.md`
-- `CODE_OF_CONDUCT.md`
-- `SECURITY.md`
-- `GOVERNANCE.md`
-- `AGENTS.md`
+---
 
 ## License
 
-MIT. See `LICENSE`.
+MIT. See [`LICENSE`](LICENSE).

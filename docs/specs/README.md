@@ -22,6 +22,14 @@ directory owns a `spec.md` contract and a `plan.md` implementation strategy.
   No cross-engine migration (fresh store on switch). Re-scoped from LanceDB
   (vector-only) to SurrealDB (graph-native multi-model). Constrained by
   ADR-0022 (Proposed — promotion to Accepted is an Ask first). Draft.
+- [`documentation-overhaul`](documentation-overhaul/spec.md): a documentation set
+  for two audiences — 80% techno-functional + 20% functional (BAs/data
+  scientists/POs/AI strategists): a functional README (concepts + use cases
+  first, links out), a Memora-style architecture overview (pipeline flow diagram
+  + core-layer/adapters/integration/N-API responsibilities), a storage-extension
+  guide (how to add `engram-store-<engine>`), a build guide, an MCP guide, and a
+  synthesized research index — one canonical home per topic, README as hub.
+  Documentation-only (no code, no contract change). T1–T6 phased. **Shipped.**
 - [`lexical-keyword-retrieval`](lexical-keyword-retrieval/spec.md): the
   BM25/Tantivy lexical `RetrievalIndex` adapter crate (`engram-store-lexical`:
   store + identifier tokenizer + resolver + `RetrievalResult` shaping),

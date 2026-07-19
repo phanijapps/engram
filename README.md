@@ -19,6 +19,41 @@ It is the layer where raw observations become **durable beliefs**, where
 retrieval is **composed** (not single-mode), and where **policy, provenance, and
 scope** govern every read and write — so memory is auditable, not accidental.
 
+## What engram is for
+
+For product, data, and strategy teams — the problems engram solves, in plain terms:
+
+- **Long-horizon agent memory.** An agent that remembers decisions, constraints,
+  and stakeholder preferences across sessions, days, or months — without
+  re-reading its entire history every turn (the problem Microsoft Research's
+  [Memora](https://www.microsoft.com/en-us/research/blog/memora-a-harmonic-memory-representation-balancing-abstraction-and-specificity/)
+  names). Less context burned, better answers on multi-hop questions.
+- **Source-grounded knowledge, not hallucinated facts.** Ask questions grounded
+  in your code repositories and documents; every answer traces back to a chunk
+  and its source. Memory (agent experience) stays distinct from knowledge
+  (grounded content) so the two never blur.
+- **Auditable, governed recall.** Every record carries policy, provenance, and
+  scope — who saw it, where it came from, how long it lives, who may retrieve
+  it. Redaction and deletion are first-class; nothing leaks through retrieval.
+- **Code understanding.** A codegraph layer answers structural questions — "who
+  breaks if I change this?", "find the call path from handler to database",
+  "what changed recently that matters most?" — over any indexed repository.
+
+## Concepts at a glance
+
+Engram bakes in eight concepts beyond "store text, search by similarity." The
+full version is in [The conceptual model](#the-conceptual-model); the pipeline
+that connects them is in the [architecture overview](docs/architecture/overview.md).
+
+1. **Memory as a first-class domain** — typed records with a lifecycle, not bare rows.
+2. **Source-grounded knowledge graph** — facts traceable to a source, never free-floating.
+3. **Belief synthesis** — derived, recomputable, *bi-temporal* stances over evidence.
+4. **Hierarchy** — aggregate + navigate + compress context to the right granularity.
+5. **Retrieval composition** — six modes fused (RRF) + cross-encoder rerank, never one.
+6. **Consolidation** — reflection + decay as an explicit, auditable pipeline.
+7. **Policy, provenance, scope** — governance checked on every read and write.
+8. **Contract-first** — domain types outrank SQL; portable across storage engines.
+
 ---
 
 ## Why engram exists
@@ -171,9 +206,9 @@ provenance through unstructured metadata).
 
 ## Storage backends — one crate per engine, swap by config
 
-Engram supports multiple storage backends, each consolidated into a single crate
-holding **all** database operations for that engine. Consumers switch backends
-by changing a config string + Cargo feature — no application code changes.
+Each storage engine lives in a single crate holding **all** its database
+operations. Consumers switch backends by changing a config string + Cargo feature
+— no application code changes, no migration (fresh store on switch).
 
 | Backend | Crate | Status |
 |---|---|---|
@@ -197,70 +232,31 @@ Both backends share the **same ports, same DTOs, same facade** — the storage
 engine is an adapter detail. An engine-neutrality lint
 (`.codex/hooks/check-engine-neutrality.sh`) enforces that no engine type
 (`Sql*`, `Surreal*`, raw SQL) leaks into the neutral facade or port crates.
-
-### Engine-agnostic adapters (shared across backends)
-
-These adapters work with **any** backend — they read the active knowledge store
-via traits, not engine-specific calls:
-
-| Adapter | Role |
-|---|---|
-| `engram-store-lexical` (Tantivy) | BM25 keyword retrieval |
-| `engram-store-associative-graph` | Personalized PageRank (HippoRAG-style) |
-| `engram-store-community-summary` | GraphRAG community summaries |
-| `engram-rerank-cross-encoder` | Cross-encoder reranking |
-| `engram-decay` | Ebbinghaus forgetting-curve decay |
-| `engram-ingest` | Filesystem/git source ingestion |
+Engine-agnostic adapters (lexical BM25, associative-graph PPR, community-summary,
+cross-encoder rerank, decay, ingest) work with any backend — see
+[Extend the storage layer](docs/guides/how-to/extend-storage.md) for the full
+adapter list + how to add a new engine.
 
 ---
 
 ## Architecture
 
-```text
-                         +-------------------------------+
-                         |        Applications / Agents   |
-                         |  SDKs, gateways, tools, CLIs   |
-                         +---------------+---------------+
-                                         |
-                                         v
-        +----------------------+  +------+----------------+  +----------------------+
-        | TypeScript packages  |  |      N-API bridge     |  | Runtime adapters     |
-        | contracts/client/... |  |      engram-node      |  | packages/adapters    |
-        +----------+-----------+  +----------+------------+  +----------+-----------+
-                   |                         |                          |
-                   +-------------------------+--------------------------+
-                                             |
-                                             v
-        +----------------------------------------------------------------+
-        |                    Rust behavior boundaries                     |
-        | runtime: errors/policy deps · memory: memory ports · knowledge: |
-        | graph/ontology/source ports · retrieval: composition/fusion     |
-        | belief: bi-temporal ports · hierarchy: navigation ports          |
-        | consolidation: reflection + decay · integration: SDK facade      |
-        +-------------------------------+--------------------------------+
-                                        |
-                                        v
-        +-------------------------------+--------------------------------+
-        |                       Domain contract layer                     |
-        | engram-domain + contracts/v1: memory, knowledge, policy,       |
-        | provenance, retrieval, forget, evaluation, hierarchy, belief    |
-        +-------------------------------+--------------------------------+
-                                        |
-          +-----------------------------+-----------------------------+
-          |                             |                             |
-          v                             v                             v
-+--------------------+        +--------------------+        +--------------------+
-| Storage backends   |        | Retrieval adapters |        | Engine-agnostic    |
-| engram-store-sqlite|        | sqlite-vec, MTREE  |        | Tantivy, PPR,      |
-| engram-store-surreal|       | RRF fusion, rerank |        | GraphRAG, decay    |
-+--------------------+        +--------------------+        +--------------------+
-```
+Data flows one way: an agent **writes** (or ingests a source) → engram
+**processes and stores** across swappable engine cells (policy + provenance on
+every row) → a separate **retrieval composition** layer fuses many recall modes
+into one policy-filtered **context packet** returned to the agent. Storage and
+retrieval are deliberately decoupled — the same "decouple what is stored from
+how it is retrieved" insight as Memora.
 
 The rule of thumb: `engram-domain` owns portable concepts; `engram-memory`,
 `-knowledge`, `-belief`, `-hierarchy`, `-retrieval`, `-consolidation` own their
 respective ports; `engram-integration` is the SDK facade (`EngramProvider`);
 concrete infrastructure lives behind adapter crates; TypeScript wraps generated
 contracts instead of redefining them.
+
+The full pipeline diagram (write/ingest → process → storage cells → retrieval
+composition → context packet), the layer responsibilities, and the research
+grounding are in the **[architecture overview](docs/architecture/overview.md)**.
 
 ---
 
@@ -286,16 +282,19 @@ Current validated surface:
 - **Retrieval composition**: graph + lexical + vector lanes, RRF fusion,
   cross-encoder rerank, associative (PPR), community-summary (GraphRAG).
 - **Consolidation**: reflection (derived beliefs) + decay (Ebbinghaus) +
-  composite executor — wired into `EngramProvider::consolidate()`.
-- **MCP servers**: memory MCP (`write_memory`, `recall`, `forget`,
-  `put_entity`, `put_relationship`) + codegraph MCP (dead-code, blast-radius,
-  dependency-path, communities).
+  composite executor — wired into the `EngramProvider` facade via
+  `require_consolidation()`.
+- **MCP servers**: memory MCP (`write_memory`, `recall`, `forget`, `put_entity`,
+  `put_relationship`, `consolidate`) + codegraph MCP (23 tools — `scan_repo`,
+  `dead_code`, `blast_radius`, `dependency_path`, `central_symbols`,
+  `call_communities`, temporal scoring, …; see the
+  [MCP guide](docs/guides/how-to/connect-via-mcp.md)).
 - **N-API binding**: full `EngramProvider` surface reachable from TypeScript.
 - **Backend swap**: SQLite ↔ SurrealDB by config string + Cargo feature.
 - **Engine-neutrality lint**: enforces no engine types in the facade/ports.
-- **Codegraph layer** (RFC-0012): dead-code, blast-radius, dependency-path,
-  central symbols (PageRank), bridge symbols (betweenness), communities
-  (Louvain), temporal scoring — on top of engram, not in it.
+- **Codegraph layer** (RFC-0012): `dead_code`, `blast_radius`, `dependency_path`,
+  `central_symbols` (PageRank), `bridge_symbols` (betweenness),
+  `call_communities` (Louvain), temporal scoring — on top of engram, not in it.
 
 ---
 
@@ -366,11 +365,14 @@ cargo check --workspace
 
 # Build + test with a backend
 cargo test --workspace --features sqlite     # SQLite backend
-cargo test -p engram-integration --features surreal surreal::  # SurrealDB backend
+cargo test -p engram-integration --features surreal   # SurrealDB backend
 
 # TypeScript generation + typecheck + tests
 pnpm run check
 ```
+
+> For the demo, MCP server startup, validation hooks, and every feature
+> combination, see the **[build guide](docs/guides/how-to/build-and-run.md)**.
 
 ### Use the SDK (Rust embedder)
 
@@ -429,24 +431,30 @@ let provider = EngramProvider::open(&config)?;
 ## Connect via MCP
 
 Engram ships two MCP servers exposing memory + codegraph operations as
-agent-callable tools over stdio or HTTP:
+agent-callable tools (stdio JSON-RPC 2.0), so any client — Claude Desktop,
+Cursor, Copilot — can read and write engram with no code on your side:
 
 | Server | Tools |
 |---|---|
-| **memory MCP** (`memory/mcp-server`) | `write_memory`, `recall`, `forget`, `put_entity`, `put_relationship`, `consolidate` |
-| **codegraph MCP** (`codegraph/mcp-server`) | dead-code, blast-radius, dependency-path, central symbols, communities |
-
-The demo backend also serves a **Streamable HTTP** MCP endpoint at `/mcp`
-(GitHub Copilot / Claude Desktop / Cursor compatible):
+| **memory MCP** (`engram-memory-mcp`) | `write_memory`, `recall`, `forget`, `put_entity`, `put_relationship`, `consolidate` |
+| **codegraph MCP** (`engram-codegraph-mcp`) | 23 tools — `scan_repo`, `dead_code`, `blast_radius`, `dependency_path`, `central_symbols`, `call_communities`, temporal scoring, … |
 
 ```jsonc
-// .vscode/mcp.json
+// e.g. .vscode/mcp.json or claude_desktop_config.json — stdio transport
 {
-  "servers": {
-    "engram": { "type": "http", "url": "http://localhost:8787/mcp" }
+  "mcpServers": {
+    "engram-memory": {
+      "command": "cargo",
+      "args": ["run", "-p", "engram-memory-mcp", "--", "/path/to/store"]
+    }
   }
 }
 ```
+
+Full tool lists, the codegraph index-then-query flow, per-client config
+locations, and the MCP-vs-N-API-vs-Rust-facade choice are in the
+**[MCP guide](docs/guides/how-to/connect-via-mcp.md)**.
+
 
 ---
 
@@ -486,6 +494,19 @@ pnpm run check
 ---
 
 ## Key documentation
+
+**Guides:**
+
+| Document | What it covers |
+|---|---|
+| [`docs/architecture/overview.md`](docs/architecture/overview.md) | The memory pipeline diagram + layer responsibilities |
+| [`docs/guides/how-to/build-and-run.md`](docs/guides/how-to/build-and-run.md) | Prerequisites, build/test, demo, MCP startup |
+| [`docs/guides/how-to/connect-via-mcp.md`](docs/guides/how-to/connect-via-mcp.md) | Both MCP servers, tool lists, client configs |
+| [`docs/guides/how-to/extend-storage.md`](docs/guides/how-to/extend-storage.md) | How to add a new storage backend |
+| [`docs/guides/how-to/build-a-surrealdb-store.md`](docs/guides/how-to/build-a-surrealdb-store.md) | SURQL patterns in the SurrealDB backend |
+| [`docs/research/README.md`](docs/research/README.md) | Synthesized research index (concept → source map) |
+
+**Sources of truth:**
 
 | Document | What it covers |
 |---|---|

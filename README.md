@@ -1,16 +1,20 @@
-# Engram
+<h1 align="center">
+  <img src="docs/assets/engram-icon.png" width="64" alt="Engram">
+  &nbsp;Engram
+</h1>
+
+<p align="center"><em>Contract-first agentic memory — structured, durable recall for AI agents that need more than a context window.</em></p>
 
 <p align="center">
-  <img src="docs/assets/engram-icon.png" width="160" alt="Engram">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="Cargo.toml"><img src="https://img.shields.io/badge/rust-2024-orange.svg" alt="Rust"></a>
+  <a href="packages"><img src="https://img.shields.io/badge/typescript-sdk-blue.svg" alt="TypeScript"></a>
+  <a href="#status"><img src="https://img.shields.io/badge/status-pre--1.0-yellow.svg" alt="Status"></a>
 </p>
 
-> Contract-first agentic memory — structured, durable recall for AI agents that
-> need more than a context window.
-
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-2024-orange.svg)](Cargo.toml)
-[![TypeScript](https://img.shields.io/badge/typescript-sdk-blue.svg)](packages)
-[![Status](https://img.shields.io/badge/status-pre--1.0-yellow.svg)](#status)
+<p align="center">
+  <img src="docs/assets/engram-pipeline.svg" alt="Engram architecture — build path (one-way): agent → ingest → construct → store. Retrieve path (bidirectional): agent ↔ context path ↔ retrieve ↔ store." width="900">
+</p>
 
 Engram is an open-source **agentic memory layer**: a Rust core that owns
 deterministic memory, knowledge-graph, belief, hierarchy, and retrieval

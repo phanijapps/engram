@@ -1,7 +1,7 @@
-<h1 align="center">
-  <img src="docs/assets/engram-icon.png" width="64" alt="Engram">
+<h2 align="center">
+  <img src="docs/assets/engram-icon.png" width="64" align="absmiddle" alt="Engram">
   &nbsp;Engram
-</h1>
+</h2>
 
 <p align="center"><em>Contract-first agentic memory — structured, durable recall for AI agents that need more than a context window.</em></p>
 

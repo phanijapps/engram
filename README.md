@@ -507,6 +507,7 @@ pnpm run check
 
 | Document | What it covers |
 |---|---|
+| [`docs/product/engram.md`](docs/product/engram.md) | Consolidated product overview — every capability + status, from the specs |
 | [`docs/architecture/overview.md`](docs/architecture/overview.md) | The memory pipeline diagram + layer responsibilities |
 | [`docs/guides/how-to/build-and-run.md`](docs/guides/how-to/build-and-run.md) | Prerequisites, build/test, demo, MCP startup |
 | [`docs/guides/how-to/connect-via-mcp.md`](docs/guides/how-to/connect-via-mcp.md) | Both MCP servers, tool lists, client configs |

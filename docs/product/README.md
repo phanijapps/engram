@@ -7,6 +7,8 @@
 
 ## What lives here
 
+- [`engram.md`](engram.md) — the consolidated product overview: what engram is
+  today, by capability, synthesized from all feature specs. **Start here.**
 - [`roadmap.md`](roadmap.md) — direction for the next 2-4 quarters.
   Direction, not commitments. Updated quarterly.
 - [`changelog.md`](changelog.md) — user-visible changes by release,

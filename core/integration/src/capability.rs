@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 /// machine-readable and stable; each capability state includes a reason code
 /// explaining why a feature is not supported.
 ///
-/// The 19 keys cover every capability area named in the host-SDK brief plus
+/// The 20 keys cover every capability area named in the host-SDK brief plus
 /// consolidation. The 8 "not-yet-built" areas (hybrid search, episodes/evidence, contradiction,
 /// atomic batch, unified recall, export/import, maintenance, observability)
 /// default to [`CapabilityState::Unsupported`] with
@@ -80,6 +80,17 @@ pub struct CapabilityReport {
     /// executor dispatch. Wired when both memory + belief stores are available.
     #[serde(default = "default_consolidation")]
     pub consolidation: CapabilityState,
+
+    /// Knowledge-graph identity + consolidation (RFC-0014).
+    #[serde(default = "default_identity")]
+    pub identity: CapabilityState,
+}
+
+/// Serde default for the `identity` field.
+fn default_identity() -> CapabilityState {
+    CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    }
 }
 
 /// Serde default for the `consolidation` field — `Unsupported { FeatureDisabled }`.
@@ -111,7 +122,8 @@ impl CapabilityReport {
             export_import: state.clone(),
             maintenance: state.clone(),
             observability: state.clone(),
-            consolidation: state,
+            consolidation: state.clone(),
+            identity: state,
         }
     }
 
@@ -139,6 +151,7 @@ impl CapabilityReport {
             && self.maintenance.is_supported()
             && self.observability.is_supported()
             && self.consolidation.is_supported()
+            && self.identity.is_supported()
     }
 
     /// Returns true if memory operations are supported.
@@ -291,7 +304,8 @@ impl CapabilityReportBuilder {
                 export_import: feature_disabled.clone(),
                 maintenance: feature_disabled.clone(),
                 observability: feature_disabled.clone(),
-                consolidation: feature_disabled,
+                consolidation: feature_disabled.clone(),
+                identity: feature_disabled,
             },
         }
     }
@@ -410,6 +424,12 @@ impl CapabilityReportBuilder {
         self
     }
 
+    /// Sets the knowledge-graph identity capability state.
+    pub fn identity(mut self, state: CapabilityState) -> Self {
+        self.report.identity = state;
+        self
+    }
+
     /// Builds the final capability report.
     pub fn build(self) -> CapabilityReport {
         self.report
@@ -476,7 +496,7 @@ mod tests {
     #[test]
     fn test_capability_report_includes_all_nineteen_keys() {
         let report = CapabilityReport::new(CapabilityState::Supported);
-        // Verify all 19 capability keys are present in the serialized report.
+        // Verify all 20 capability keys are present in the serialized report.
         let json = serde_json::to_string(&report).unwrap();
         for key in [
             "memory",

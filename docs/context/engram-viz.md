@@ -57,7 +57,7 @@ filter. Getting this wrong produces a repo dropdown that shows 0 entities.
 
 ### 3. Graph snappiness — Strategy 1 (data diet)
 With 2 repos (~18k entities) `/api/graph` shipped a 4.5 MB payload and the UI
-blocked on parse. Spec: `docs/specs/engram-viz-graph-perf/spec.md`.
+blocked on parse. Capability: `docs/product/engram.md`.
 
 | Lever | Change |
 |---|---|

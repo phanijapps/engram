@@ -19,3 +19,9 @@ specs under `docs/specs/`. See `docs/CONVENTIONS.md` for the RFC lifecycle.
 | [0011](0011-rust-crate-integration.md) | Rust crate integration | Draft | — |
 | [0012](0012-code-structural-graph-layer.md) | Code-structural graph layer on top of engram | Draft | 2026-07-08 |
 | [0013](0013-context-graph-packets.md) | Context-graph packets for AI agents | Accepted | 2026-07-13 |
+| [0014](0014-canonical-knowledge-graph-identity.md) | Canonical knowledge-graph identity and consolidation | Draft | 2026-07-21 |
+
+> **Note:** RFCs may reference feature specs that were consolidated into
+> [`docs/product/engram.md`](../product/engram.md). Those references are
+> point-in-time historical links; the capability/status they describe now lives
+> in the product overview.

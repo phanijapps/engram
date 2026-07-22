@@ -48,8 +48,9 @@ look like?" before any code.
    - **Process** — review cadence, who signs off on **Boundaries**
      (especially the `Never do` subsection), how the spec moves Draft
      → Approved. Canonical sources: `docs/CHARTER.md`,
-     `docs/CONVENTIONS.md`, recent `docs/specs/<feature>/spec.md` for
-     shape precedent, prior ADRs / RFCs that named the rule.
+     `docs/CONVENTIONS.md`, the bundled `assets/spec.md` template for shape
+     + `docs/product/engram.md` for what exists today, prior ADRs / RFCs that
+     named the rule.
 
    See the **Source of truth** table in `AGENTS.md` for the full repo
    map. For assumptions about an external library, standard, service,

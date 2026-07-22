@@ -39,6 +39,12 @@ impl SqlKnowledgeStore {
         Self::from_connection(connection)
     }
 
+    /// Returns a clone of the shared connection Arc for use by identity/consolidation
+    /// modules that share the same SQLite database.
+    pub fn shared_connection(&self) -> Arc<Mutex<Connection>> {
+        self.connection.clone()
+    }
+
     /// Opens a file-backed SQLite knowledge store and initializes its schema.
     pub fn open_file(path: impl AsRef<Path>) -> CoreResult<Self> {
         let connection = Connection::open(path).map_err(sql_error)?;

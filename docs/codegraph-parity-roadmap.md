@@ -105,8 +105,8 @@ one-at-a-time when the item starts — this file is the sequenced catalog.
   - Status: `engram-store-lexical` crate shipped (LexicalIndex + LexicalRetrievalIndex
     + LexicalTargetResolver + identifier normalizer; 10 tests, fmt/clippy clean).
     Live-pipeline composition (RRF), store-backed resolver, eval, and full
-    workspace gates split to `docs/specs/lexical-wiring` (the composition layer is
-    bindings-layer RRF fusion, not the unused `RetrievalRouter`).
+    workspace gates split to the `lexical-wiring` item (see `docs/backlog.md`); the composition layer is
+    bindings-layer RRF fusion, not the unused `RetrievalRouter`.
 
 - **B2 — Cross-encoder rerank stage** · base · depends: none · **adapter SHIPPED 2026-07-08; real model (T2) + compose_context wiring deferred**
   - Objective: Implement `RerankStrategy::cross_encoder` (ONNX/cross-encoder behind a trait).

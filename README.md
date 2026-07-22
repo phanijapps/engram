@@ -199,8 +199,8 @@ record's lineage is traceable via `EvidenceRef` and `DerivationRef`.
 ### 8. Contract-first design (domain types outrank SQL)
 
 The human-readable domain model (`docs/domain-data-model.md`), the
-machine-readable wire contract (`contracts/v1/`), and the behavior specs
-(`docs/specs/`) are the **source of truth**. Rust types, generated TypeScript,
+machine-readable wire contract (`contracts/v1/`), and the product overview
+(`docs/product/engram.md`) are the **source of truth**. Rust types, generated TypeScript,
 JSON Schema, database schemas, and API payloads all conform *downward* — never
 the reverse. This is what makes engram portable across SQLite today and
 SurrealDB / Postgres / Neo4j tomorrow without breaking agents that depend on it.
@@ -518,6 +518,7 @@ pnpm run check
 
 | Document | What it covers |
 |---|---|
+| [`docs/product/engram.md`](docs/product/engram.md) | Consolidated product overview — every capability + status |
 | [`docs/domain-data-model.md`](docs/domain-data-model.md) | The source-of-truth domain model (2,400+ lines) |
 | [`docs/CHARTER.md`](docs/CHARTER.md) | Mission, scope, six principles |
 | [`docs/research/synthesis.md`](docs/research/synthesis.md) | Research → architecture direction |

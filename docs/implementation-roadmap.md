@@ -17,10 +17,11 @@ ports until their contracts are proven.
 
 Apply this loop to every feature slice.
 
-1. Update or add the implementation spec under `docs/specs/<feature>/`.
+1. Update or add the capability detail under `docs/product/engram.md`
+   (open items in `docs/backlog.md`).
 2. Confirm whether the public contract changes.
 3. If the public contract changes, update `docs/domain-data-model.md`,
-   `contracts/v1/`, `docs/specs/`, examples, invalid examples, and generated
+   `contracts/v1/`, `docs/product/engram.md`, examples, invalid examples, and generated
    TypeScript.
 4. Add conformance tests that prove Rust serialization still matches the
    accepted schema.
@@ -120,7 +121,7 @@ Crates:
 
 Implementation work:
 
-- Convert accepted memory behavior specs under `docs/specs/` into executable
+- Convert accepted memory behavior specs (now in `docs/product/engram.md`) into executable
   fixtures.
 - Validate required fields and contract-level forbidden behavior.
 - Enforce policy before durable mutation.
@@ -946,7 +947,7 @@ ontology + taxonomy, belief/contradiction with bi-temporal display, and Q&A over
 knowledge + memory. The only path not exercised without creds is the live LLM
 call (ollama cloud); every other path is validated + smoke-tested.
 
-Research architecture parity — `docs/specs/research-architecture-parity`
+Research architecture parity — `docs/product/engram.md`
 (`PHASE64`): close the remaining gap between `docs/research/` and current
 implementation, then implement the missing research-backed library capabilities
 as focused slices. AgentZero provider cutover remains out of scope; Engram must
@@ -974,7 +975,7 @@ Shipped (branch `codegraph-base-adapters`):
 
 - **B1** `engram-store-lexical` — BM25/Tantivy lexical `RetrievalIndex`
   (`RetrievalMode::keyword`, identifier-aware tokenizer). Live-pipeline wiring
-  → [`lexical-wiring`](specs/lexical-wiring/spec.md) spec.
+  → [`lexical-wiring`](product/engram.md).
 - **B2** `engram-rerank-cross-encoder` — cross-encoder reranker
   (`RerankStrategy::cross_encoder`, injected scorer); feature-gated model +
   `compose_context` wiring deferred.

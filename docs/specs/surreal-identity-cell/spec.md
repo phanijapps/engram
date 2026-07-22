@@ -3,78 +3,83 @@
 - **Status:** Draft
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
-- **Constrained by:** RFC-0014 (canonical knowledge-graph identity), ADR-0022 (engine neutrality), [`knowledge-graph-identity`](../knowledge-graph-identity/spec.md) (parent spec — defines the port + pure logic)
+- **Constrained by:** RFC-0014, ADR-0022 (engine neutrality), [`knowledge-graph-identity`](../knowledge-graph-identity/spec.md) (parent spec)
 - **Brief:** none
-- **Contract:** none — implements the `EntityIdentityRepository` port defined by the parent spec; SURQL is adapter-private.
-- **Shape:** integration — adapter cell implementing a neutral port behind SURQL
+- **Contract:** none — implements the already-shipped `EntityIdentityRepository` port; SURQL is adapter-private.
+- **Shape:** integration
 
 > **Spec contract:** this document defines what "done" means for the SurrealDB
 > identity adapter. The implementing PR must match this spec, or update it.
 
+## Context (what already shipped)
+
+The parent spec (`knowledge-graph-identity`) shipped E0–E6 against SQLite:
+
+- **Domain types** in `core/domain/src/knowledge.rs` — `EntityIdentityMode`,
+  `EntityWriteRequest`, `EntityWriteOutcome`, `EntityMergePolicy`,
+  `EntityMergeConflict`, `EntityMergeRequest`, `EntityMergeResult`,
+  `CollisionGroup`.
+- **Port + pure functions** in `core/knowledge/src/identity.rs` —
+  `EntityIdentityRepository` trait, `normalize_name()`,
+  `compute_identity_key()`, `compute_relationship_key()`, `merge_entities()`.
+  These are **engine-neutral and shared** — the Surreal cell reuses them as-is.
+- **SQLite reference** in `adapters/sqlite/src/knowledge/identity.rs` —
+  `SqlIdentityStore` implements the full port.
+- **Facade wiring** — `CapabilityReport.identity` (20th field),
+  `EngramProvider.identity()` handle, `EngramProviderBuilder.identity()`.
+
+This spec covers **only the SurrealDB adapter cell** — the SURQL-specific
+implementation that sits behind the same port.
+
 ## Objective
 
 The `engram-store-surreal` crate provides a `SurrealIdentityStore` that
-implements the `EntityIdentityRepository` port (defined by
-[`knowledge-graph-identity`](../knowledge-graph-identity/spec.md) E0–E1) over
-embedded SurrealKV, using SURQL-native semantics for identity resolution,
-atomic resolve-or-create, exact relationship identity, and transactional
-consolidation. The cell shares one `SurrealConnection` with the existing
-knowledge/belief/hierarchy/vector cells and is wired into `bootstrap_surreal`.
+implements `EntityIdentityRepository` over embedded SurrealKV, using SURQL-native
+primitives. It shares one `SurrealConnection` with the existing knowledge cell
+and is wired into `bootstrap_surreal`.
 
-Success: the SurrealDB identity cell passes the same cross-adapter conformance
-fixtures as the SQLite cell (entity identity, exact relationship identity,
-concurrent convergence, dry-run discovery, consolidation integrity, unchanged
-ID-only puts); `CapabilityReport` advertises identity `Supported` when the
-Surreal backend is active.
+Success: the Surreal identity cell passes the same conformance fixture as the
+SQLite cell; `CapabilityReport` advertises identity `Supported` when the Surreal
+backend is active; existing `put_entity` / `put_relationship` behavior is
+unchanged.
 
 ## Boundaries
 
 ### Always do
-- Implement the port contract exactly as defined by `knowledge-graph-identity`
-  E0 — no Surreal-specific behavior leaks through the trait surface.
-- Use SURQL-native primitives: `DEFINE INDEX … UNIQUE` for identity keys,
-  `BEGIN TRANSACTION … COMMIT` for atomic resolve-or-create + consolidation,
-  graph-native edge semantics for relationship identity, `MERGE` for
-  consolidation endpoint redirection.
+- Reuse the pure functions from `core/knowledge/src/identity.rs` — no
+  reimplementation of normalization or merge logic in the adapter.
 - Share the existing `SurrealConnection` (lazy-open `OnceCell`) with the other
-  Surreal cells — one connection per backend, cloned via `Arc`.
-- Coalesce exact relationships created by endpoint redirection, preserving
-  evidence, provenance, and confidence — same merge semantics as the SQLite cell.
+  Surreal cells.
+- Use SURQL-native primitives:
+  - `DEFINE INDEX … UNIQUE` for entity identity keys.
+  - `DEFINE INDEX … UNIQUE` on the relationship exact key.
+  - `BEGIN TRANSACTION … COMMIT` for atomic resolve-or-create + consolidation.
+  - `UPDATE … MERGE` / `UPDATE … SET` for consolidation endpoint redirection.
+- The Surreal cell is async (uses `conn.db().await?` per the existing pattern);
+  tests are `#[tokio::test]`.
 
 ### Ask first
-- Adding a SurrealDB-specific identity feature not in the port contract (e.g.
-  SURQL graph traversal for fuzzy identity matching).
-- Changing the normalization version or merge policy in a Surreal-specific way
-  (must match the pure logic in `core/knowledge/src/identity.rs`).
+- Adding a SurrealDB-specific identity feature not in the port contract.
+- Changing the normalization version or merge policy in a Surreal-specific way.
 
 ### Never do
-- Put SURQL, `surrealdb` crate types, or SurrealDB-specific index/table
-  definitions in `engram-domain` or `engram-knowledge` (engine neutrality,
-  ADR-0022). [structural]
+- Put SURQL or `surrealdb` crate types in `engram-domain` or `engram-knowledge`
+  (engine neutrality, ADR-0022). [structural]
 - Reimplement normalization or merge logic in the adapter — reuse the pure
-  functions from `core/knowledge/src/identity.rs` (E1 of the parent spec). [structural]
-- Break the existing `SurrealKnowledgeStore` `put_entity` / `put_relationship`
-  behavior — identity operations are additive. [structural]
+  functions from `core/knowledge/src/identity.rs`. [structural]
+- Break the existing `SurrealKnowledgeStore::put_entity` /
+  `put_relationship` behavior — identity operations are additive. [structural]
 
 ## Testing Strategy
 
-- **Goal-based check** — SURQL identity indexes + uniqueness: `DEFINE INDEX …
-  UNIQUE` on the identity key; backfill does not auto-select winners; concurrent
-  writers converge via UPSERT + unique constraint. Verified by
-  `cargo test -p engram-store-surreal --features surreal` (the existing
-  `#[tokio::test]` pattern from the Surreal bootstrap tests).
-- **Integration** — transactional consolidation over SurrealKV: endpoint
-  redirection (inbound, outbound, self-loop), relationship coalescing,
-  evidence/provenance preservation, cross-scope rejection, dry-run discovery,
-  idempotent repeated apply, rollback-as-a-unit, reopen integrity. Exercised
-  by `core/integration/src/surreal/bootstrap.rs` tests (same `#[tokio::test]`
-  pattern as the existing 6 Surreal cell tests).
-- **Goal-based check** — cross-adapter fixtures from `knowledge-graph-identity`
-  E6 pass against the Surreal backend (same fixtures as SQLite). Verified by
-  running the identity + consolidation fixtures with the Surreal provider.
-- **Goal-based check** — `CapabilityReport` advertises identity `Supported`
-  when `bootstrap_surreal` wires the cell; `EngremProvider` exposes the typed
-  handle. Verified by `cargo test -p engram-integration --features surreal`.
+- **Goal-based check** — SURQL identity indexes: `DEFINE INDEX … UNIQUE` on the
+  `knowledge_entities` table for `identity_key`; `DEFINE INDEX … UNIQUE` on
+  `knowledge_relationships` for `relationship_key`. Verified by `#[tokio::test]`
+  in `core/integration/src/surreal/bootstrap.rs`.
+- **Integration** — the identity conformance fixture from `knowledge-graph-identity`
+  E6, run against the Surreal provider (same fixture as SQLite).
+- **Goal-based check** — `CapabilityReport` shows identity `Supported` when
+  `bootstrap_surreal` wires the cell.
 
 ## Acceptance Criteria
 
@@ -82,45 +87,39 @@ Surreal backend is active.
   `resolve_or_put_entity`, `resolve_or_put_relationship`,
   `discover_collisions`, and `consolidate_entities`.
 - [ ] Case variants under the same scope, graph, kind, and normalized-name
-  policy converge on one canonical entity via SURQL `DEFINE INDEX … UNIQUE` +
-  UPSERT.
-- [ ] Concurrent `resolve_or_put_entity` requests converge on one canonical ID
-  (SurrealKV ACID + unique constraint, not application-level probe-then-insert).
-- [ ] `resolve_or_put_relationship` enforces the exact canonical key (scope +
-  graph + subject + object + predicate) via a SURQL unique index on the
-  relationship edge.
+  policy converge on one canonical entity via `DEFINE INDEX … UNIQUE` + UPSERT.
+- [ ] Concurrent `resolve_or_put_entity` requests converge on one canonical ID.
+- [ ] `resolve_or_put_relationship` enforces the exact canonical key via a SURQL
+  unique index on the relationship edge.
 - [ ] Dry-run collision discovery reports duplicate IDs without mutation.
-- [ ] Entity consolidation redirects every inbound and outbound relationship
-  endpoint via SURQL `UPDATE … MERGE` and leaves no dangling references.
-- [ ] Relationships made identical by redirection are coalesced with evidence,
-  provenance, and confidence preserved.
+- [ ] Entity consolidation redirects endpoints via `UPDATE … SET` and leaves no
+  dangling references.
 - [ ] Consolidation is transactional (`BEGIN TRANSACTION … COMMIT`) and
-  idempotent when repeated.
+  idempotent.
 - [ ] Existing `SurrealKnowledgeStore::put_entity` / `put_relationship` calls
-  retain their current behavior (compatibility).
-- [ ] The Surreal identity cell passes the same cross-adapter conformance
-  fixtures as the SQLite cell.
-- [ ] `CapabilityReport` advertises identity `Supported` when the Surreal
-  backend is active; the `EngramProvider` facade exposes the typed handle.
+  retain their current behavior.
+- [ ] The Surreal identity cell passes the same conformance fixture as SQLite.
+- [ ] `CapabilityReport` advertises identity `Supported` when Surreal is active.
 
 ## Assumptions
 
 - Technical: `engram-store-surreal` has `knowledge.rs` implementing
-  `KnowledgeRepository` + `KnowledgeGraphRepository`. (source:
-  adapters/surreal/src/knowledge.rs)
-- Technical: `EntityIdentityRepository` port does not exist yet — defined by
-  `knowledge-graph-identity` spec E0, not implemented. This spec is downstream.
-  (source: grep core/knowledge/src/ → NOT FOUND)
+  `KnowledgeRepository` + `KnowledgeGraphRepository`.
+  (source: adapters/surreal/src/knowledge.rs)
+- Technical: `EntityIdentityRepository` port + pure functions are already shipped
+  in `core/knowledge/src/identity.rs` — the Surreal cell reuses them.
+  (source: commit b3254c2)
+- Technical: `SqlIdentityStore` in `adapters/sqlite/src/knowledge/identity.rs` is
+  the reference implementation — the Surreal cell mirrors its logic with SURQL.
+  (source: commit da642f9)
 - Technical: `DEFINE INDEX` is already used in the adapter (MTREE for vectors);
-  `UNIQUE` index is standard SURQL. (source: adapters/surreal/src/vector.rs:77)
-- Technical: No explicit transactions in the Surreal adapter today (lazy-open
-  `OnceCell` pattern); transactional resolve-or-create + consolidation is new
-  SURQL usage. (source: grep adapters/surreal/src/ → no BEGIN/transaction)
+  `UNIQUE` index is standard SURQL.
+  (source: adapters/surreal/src/vector.rs)
+- Technical: The Surreal adapter uses a lazy-open connection pattern
+  (`SurrealConnection` with `OnceCell`); all methods are async.
+  (source: adapters/surreal/src/connection.rs)
 - Technical: One crate per backend (ADR-0022) — the identity cell lives in
-  `engram-store-surreal` as `identity.rs`, same pattern as the other 5 cells.
+  `engram-store-surreal` as `identity.rs`.
   (source: adapters/surreal/src/lib.rs)
-- Technical: Engine neutrality + surface parity: identity is a port contract;
-  the Surreal cell implements it behind SURQL. (source: ADR-0022, AGENTS.md)
-- Process: This spec depends on `knowledge-graph-identity` E0–E1 (port
-  definition + pure normalization/merge logic). The user will switch to Surreal
-  for testing later. (source: user confirmation 2026-07-21)
+- Process: User will switch to Surreal for testing later.
+  (source: user confirmation 2026-07-21)

@@ -9,7 +9,7 @@
 //! the internal module layout.
 
 mod graph;
-mod identity;
+pub mod identity;
 mod ingest;
 mod ontology;
 mod repository;

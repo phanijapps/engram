@@ -12,6 +12,7 @@
 //! backend can evolve (or move to Postgres / a graph store) without coupling.
 
 mod graph;
+mod identity;
 mod knowledge;
 mod ontology;
 mod retrieval;
@@ -20,5 +21,6 @@ mod scope;
 mod service;
 mod taxonomy;
 
+pub use identity::SqlIdentityStore;
 pub use retrieval::{GraphCandidateSource, GraphRetrievalIndex};
 pub use service::SqlKnowledgeStore;

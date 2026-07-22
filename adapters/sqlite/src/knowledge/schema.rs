@@ -45,6 +45,7 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 session TEXT,
                 environment TEXT,
                 graph_id TEXT,
+                identity_key TEXT,
                 record_json TEXT NOT NULL
             );
 
@@ -57,6 +58,7 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 workspace TEXT,
                 session TEXT,
                 environment TEXT,
+                relationship_key TEXT,
                 record_json TEXT NOT NULL
             );
 
@@ -148,6 +150,8 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
         "ALTER TABLE knowledge_graphs ADD COLUMN stable_source_key TEXT",
         "ALTER TABLE knowledge_graphs ADD COLUMN path TEXT",
         "ALTER TABLE knowledge_entities ADD COLUMN graph_id TEXT",
+        "ALTER TABLE knowledge_entities ADD COLUMN identity_key TEXT",
+        "ALTER TABLE knowledge_relationships ADD COLUMN relationship_key TEXT",
     ] {
         match connection.execute_batch(sql) {
             Ok(_) => {}
@@ -166,6 +170,10 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
             CREATE INDEX IF NOT EXISTS idx_graphs_path ON knowledge_graphs(path);
             CREATE INDEX IF NOT EXISTS idx_entities_graph_id
                 ON knowledge_entities(graph_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_identity
+                ON knowledge_entities(identity_key) WHERE identity_key IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_exact_key
+                ON knowledge_relationships(relationship_key) WHERE relationship_key IS NOT NULL;
             "#,
         )
         .map_err(sql_error)?;

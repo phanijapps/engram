@@ -12,11 +12,13 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
 
 ## Active
 
-_(none — open a new spec via the `new-spec` skill. Shipped capability is recorded
-in `docs/product/engram.md`, not here.)_
-
-<!--
-When a new spec lands, add an entry:
-
-- [`<feature>`](<feature>/spec.md): <one-line>. <Draft | Shipped>.
--->
+- [`knowledge-graph-identity`](knowledge-graph-identity/spec.md): storage-neutral,
+  caller-policy-driven identity operations for KG entities and exact relationships,
+  plus transactional duplicate consolidation. All six RFC-0014 decisions (D1–D6);
+  focused `EntityIdentityRepository` port. Constrained by RFC-0014, ADR-0022.
+  Draft.
+- [`surreal-identity-cell`](surreal-identity-cell/spec.md): the SurrealDB adapter
+  cell implementing `EntityIdentityRepository` over embedded SurrealKV with
+  SURQL-native semantics (UNIQUE indexes, UPSERT, BEGIN TRANSACTION, MERGE).
+  Depends on `knowledge-graph-identity` E0–E1. Constrained by RFC-0014,
+  ADR-0022. Draft.

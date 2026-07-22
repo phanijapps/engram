@@ -247,6 +247,120 @@ pub struct KnowledgeRelationship {
     pub updated_at: Option<Timestamp>,
 }
 
+// ── Knowledge-graph identity and consolidation (RFC-0014) ───────────────────
+
+/// Current normalization scheme version.
+pub const NORMALIZATION_VERSION: &str = "1";
+
+/// Caller-selected identity policy for entity resolution.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "mode")]
+pub enum EntityIdentityMode {
+    /// ID-only: no identity resolution (existing behavior, default).
+    IdOnly,
+    /// Caller-supplied stable key that survives renames.
+    StableKey { key: String },
+    /// Scope + kind + normalized name (opt-in; never crosses scope/kind/graph
+    /// unless the caller explicitly broadens the boundary).
+    ScopedKindAndNormalizedName {
+        normalization_version: String,
+        include_graph: bool,
+        match_aliases: bool,
+    },
+}
+
+/// How conflicting scalar values are resolved during a merge.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictStrategy {
+    /// Report conflicts but do not auto-resolve (caller decides).
+    Report,
+    /// Canonical entity's value wins.
+    PreferCanonical,
+    /// Earliest-created entity's value wins.
+    PreferEarliest,
+}
+
+/// Controls how entity fields merge during identity resolution or consolidation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntityMergePolicy {
+    pub conflict_strategy: ConflictStrategy,
+}
+
+impl Default for EntityMergePolicy {
+    fn default() -> Self {
+        Self {
+            conflict_strategy: ConflictStrategy::Report,
+        }
+    }
+}
+
+/// A write request with a declared identity policy.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntityWriteRequest {
+    pub entity: KnowledgeEntity,
+    pub identity: EntityIdentityMode,
+    #[serde(default)]
+    pub merge_policy: EntityMergePolicy,
+}
+
+/// The outcome of an identity-aware entity write.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "outcome")]
+pub enum EntityWriteOutcome {
+    Created { entity: KnowledgeEntity },
+    Matched { entity: KnowledgeEntity },
+    Merged {
+        entity: KnowledgeEntity,
+        changed_fields: Vec<String>,
+        conflicts: Vec<EntityMergeConflict>,
+    },
+}
+
+/// A conflicting field value discovered during a merge.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntityMergeConflict {
+    pub field: String,
+    pub canonical_value: String,
+    pub duplicate_value: String,
+}
+
+/// A request to consolidate duplicate entity IDs into a canonical entity.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntityMergeRequest {
+    pub canonical_id: EntityId,
+    pub duplicate_ids: Vec<EntityId>,
+    pub scope: Scope,
+    #[serde(default)]
+    pub policy: EntityMergePolicy,
+}
+
+/// The result of a transactional entity consolidation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntityMergeResult {
+    pub canonical_entity: KnowledgeEntity,
+    pub redirected_relationships: usize,
+    pub coalesced_relationships: usize,
+    pub deleted_entities: usize,
+    pub conflicts: Vec<EntityMergeConflict>,
+    pub audit_id: String,
+}
+
+/// A group of entities that share an identity key under a declared policy.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CollisionGroup {
+    pub identity_key: String,
+    pub entity_ids: Vec<EntityId>,
+}
+
+// ── End identity types ──────────────────────────────────────────────────────
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EmbeddingTargetType {

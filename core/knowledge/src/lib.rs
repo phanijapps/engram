@@ -9,6 +9,7 @@
 //! the internal module layout.
 
 mod graph;
+mod identity;
 mod ingest;
 mod ontology;
 mod repository;
@@ -18,6 +19,7 @@ mod taxonomy_validation;
 pub use engram_runtime::{CoreError, CoreResult};
 
 pub use graph::KnowledgeGraphRepository;
+pub use identity::EntityIdentityRepository;
 pub use ingest::{Chunker, IngestionService, SourceReader};
 pub use ontology::OntologyRepository;
 pub use repository::KnowledgeRepository;

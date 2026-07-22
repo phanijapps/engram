@@ -50,15 +50,16 @@ pub trait EntityIdentityRepository: Send + Sync {
 /// Normalize a name for identity comparison: trim, collapse whitespace,
 /// lowercase.
 pub fn normalize_name(name: &str) -> String {
-    name.trim().to_lowercase().split_whitespace().collect::<Vec<_>>().join(" ")
+    name.trim()
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Compute the identity key for an entity under a declared mode, or `None`
 /// if the mode is `IdOnly` (no identity resolution).
-pub fn compute_identity_key(
-    entity: &KnowledgeEntity,
-    mode: &EntityIdentityMode,
-) -> Option<String> {
+pub fn compute_identity_key(entity: &KnowledgeEntity, mode: &EntityIdentityMode) -> Option<String> {
     match mode {
         EntityIdentityMode::IdOnly => None,
         EntityIdentityMode::StableKey { key } => Some(format!("sk:{}", key)),
@@ -71,11 +72,18 @@ pub fn compute_identity_key(
             let kind_part = format!("{:?}", entity.kind);
             let name_part = normalize_name(&entity.name);
             let graph_part = if *include_graph {
-                entity.graph_id.as_ref().map(|g| g.to_string()).unwrap_or_default()
+                entity
+                    .graph_id
+                    .as_ref()
+                    .map(|g| g.to_string())
+                    .unwrap_or_default()
             } else {
                 String::new()
             };
-            Some(format!("sn:{}|{}|{}|{}", scope_part, kind_part, name_part, graph_part))
+            Some(format!(
+                "sn:{}|{}|{}|{}",
+                scope_part, kind_part, name_part, graph_part
+            ))
         }
     }
 }
@@ -83,10 +91,27 @@ pub fn compute_identity_key(
 /// Compute the exact canonical relationship key:
 /// `scope_tenant|graph|subject_id|predicate|object_id`.
 pub fn compute_relationship_key(rel: &KnowledgeRelationship) -> String {
-    let subject = rel.subject.id.as_ref().map(|i| i.to_string()).unwrap_or_default();
-    let object = rel.object.id.as_ref().map(|i| i.to_string()).unwrap_or_default();
-    let graph = rel.graph_id.as_ref().map(|g| g.to_string()).unwrap_or_default();
-    format!("{}|{}|{}|{}|{}", rel.scope.tenant, graph, subject, rel.predicate, object)
+    let subject = rel
+        .subject
+        .id
+        .as_ref()
+        .map(|i| i.to_string())
+        .unwrap_or_default();
+    let object = rel
+        .object
+        .id
+        .as_ref()
+        .map(|i| i.to_string())
+        .unwrap_or_default();
+    let graph = rel
+        .graph_id
+        .as_ref()
+        .map(|g| g.to_string())
+        .unwrap_or_default();
+    format!(
+        "{}|{}|{}|{}|{}",
+        rel.scope.tenant, graph, subject, rel.predicate, object
+    )
 }
 
 /// Merge a duplicate entity into a canonical entity.
@@ -115,7 +140,11 @@ pub fn merge_entities(
 
     // Union source_refs (dedup by target_id).
     for sr in &duplicate.source_refs {
-        if !merged.source_refs.iter().any(|e| e.target_id == sr.target_id) {
+        if !merged
+            .source_refs
+            .iter()
+            .any(|e| e.target_id == sr.target_id)
+        {
             merged.source_refs.push(sr.clone());
             changed.push("source_refs".to_string());
         }
@@ -239,14 +268,36 @@ mod tests {
         }
     }
 
-    fn test_relationship(id: &str, subject_id: &str, predicate: &str, object_id: &str, tenant: &str) -> KnowledgeRelationship {
+    fn test_relationship(
+        id: &str,
+        subject_id: &str,
+        predicate: &str,
+        object_id: &str,
+        tenant: &str,
+    ) -> KnowledgeRelationship {
         KnowledgeRelationship {
             id: RelationshipId::from(id),
             graph_id: None,
-            subject: EntityRef { id: Some(EntityId::from(subject_id)), kind: None, name: None, aliases: Vec::new() },
+            subject: EntityRef {
+                id: Some(EntityId::from(subject_id)),
+                kind: None,
+                name: None,
+                aliases: Vec::new(),
+            },
             predicate: predicate.to_string(),
-            object: EntityRef { id: Some(EntityId::from(object_id)), kind: None, name: None, aliases: Vec::new() },
-            scope: Scope { tenant: tenant.to_string(), subject: None, workspace: None, session: None, environment: None },
+            object: EntityRef {
+                id: Some(EntityId::from(object_id)),
+                kind: None,
+                name: None,
+                aliases: Vec::new(),
+            },
+            scope: Scope {
+                tenant: tenant.to_string(),
+                subject: None,
+                workspace: None,
+                session: None,
+                environment: None,
+            },
             evidence: Vec::new(),
             confidence: None,
             provenance: Provenance {
@@ -294,7 +345,12 @@ mod tests {
     #[test]
     fn identity_key_stable_key() {
         let entity = test_entity("e1", "Foo", "tenant-a");
-        let key = compute_identity_key(&entity, &EntityIdentityMode::StableKey { key: "org-123".into() });
+        let key = compute_identity_key(
+            &entity,
+            &EntityIdentityMode::StableKey {
+                key: "org-123".into(),
+            },
+        );
         assert_eq!(key.as_deref(), Some("sk:org-123"));
     }
 
@@ -303,9 +359,14 @@ mod tests {
         let e1 = test_entity("e1", "FastIndex", "tenant-a");
         let e2 = test_entity("e2", "fastindex", "tenant-a");
         let mode = EntityIdentityMode::ScopedKindAndNormalizedName {
-            normalization_version: "1".into(), include_graph: false, match_aliases: false,
+            normalization_version: "1".into(),
+            include_graph: false,
+            match_aliases: false,
         };
-        assert_eq!(compute_identity_key(&e1, &mode), compute_identity_key(&e2, &mode));
+        assert_eq!(
+            compute_identity_key(&e1, &mode),
+            compute_identity_key(&e2, &mode)
+        );
     }
 
     #[test]
@@ -313,9 +374,14 @@ mod tests {
         let e1 = test_entity("e1", "Foo", "tenant-a");
         let e2 = test_entity("e2", "Foo", "tenant-b");
         let mode = EntityIdentityMode::ScopedKindAndNormalizedName {
-            normalization_version: "1".into(), include_graph: false, match_aliases: false,
+            normalization_version: "1".into(),
+            include_graph: false,
+            match_aliases: false,
         };
-        assert_ne!(compute_identity_key(&e1, &mode), compute_identity_key(&e2, &mode));
+        assert_ne!(
+            compute_identity_key(&e1, &mode),
+            compute_identity_key(&e2, &mode)
+        );
     }
 
     // ── compute_relationship_key ──────────────────────────────────────────
@@ -324,7 +390,12 @@ mod tests {
     fn relationship_key_includes_all_parts() {
         let rel = test_relationship("r1", "subj-1", "uses", "obj-1", "tenant-a");
         let key = compute_relationship_key(&rel);
-        assert!(key.contains("subj-1") && key.contains("uses") && key.contains("obj-1") && key.contains("tenant-a"));
+        assert!(
+            key.contains("subj-1")
+                && key.contains("uses")
+                && key.contains("obj-1")
+                && key.contains("tenant-a")
+        );
     }
 
     #[test]
@@ -342,7 +413,8 @@ mod tests {
         canonical.aliases = vec!["bar".into()];
         let mut duplicate = test_entity("e2", "foo", "t");
         duplicate.aliases = vec!["baz".into()];
-        let (merged, changed, _) = merge_entities(&canonical, &duplicate, &EntityMergePolicy::default());
+        let (merged, changed, _) =
+            merge_entities(&canonical, &duplicate, &EntityMergePolicy::default());
         assert!(merged.aliases.contains(&"bar".into()) && merged.aliases.contains(&"baz".into()));
         assert!(changed.contains(&"aliases".into()));
     }
@@ -363,7 +435,8 @@ mod tests {
         canonical.kind = EntityKind::Project;
         let mut duplicate = test_entity("e2", "foo", "t");
         duplicate.kind = EntityKind::Concept;
-        let (_, _, conflicts) = merge_entities(&canonical, &duplicate, &EntityMergePolicy::default());
+        let (_, _, conflicts) =
+            merge_entities(&canonical, &duplicate, &EntityMergePolicy::default());
         assert!(conflicts.iter().any(|c| c.field == "kind"));
     }
 }

@@ -7,10 +7,10 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use async_trait::async_trait;
 use engram_domain::*;
-use engram_knowledge::identity::{compute_identity_key, compute_relationship_key, merge_entities};
 use engram_knowledge::EntityIdentityRepository;
+use engram_knowledge::identity::{compute_identity_key, compute_relationship_key, merge_entities};
 use engram_runtime::{CoreError, CoreResult};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{OptionalExtension, params};
 
 use crate::knowledge::schema::{json_error, sql_error};
 
@@ -42,13 +42,18 @@ impl SqlIdentityStore {
             )
             .optional()
             .map_err(sql_error)?;
-        json.map(|j| serde_json::from_str(&j).map_err(json_error)).transpose()
+        json.map(|j| serde_json::from_str(&j).map_err(json_error))
+            .transpose()
     }
 
     fn upsert_entity_with_key(&self, entity: &KnowledgeEntity, key: &str) -> CoreResult<()> {
         let json = serde_json::to_string(entity).map_err(json_error)?;
         let conn = self.lock()?;
-        let graph_id = entity.graph_id.as_ref().map(|g| g.to_string()).unwrap_or_default();
+        let graph_id = entity
+            .graph_id
+            .as_ref()
+            .map(|g| g.to_string())
+            .unwrap_or_default();
         conn.execute(
             r#"INSERT INTO knowledge_entities
                (id, graph_id, tenant, subject, workspace, session, environment, identity_key, record_json)
@@ -78,14 +83,28 @@ impl SqlIdentityStore {
             )
             .optional()
             .map_err(sql_error)?;
-        json.map(|j| serde_json::from_str(&j).map_err(json_error)).transpose()
+        json.map(|j| serde_json::from_str(&j).map_err(json_error))
+            .transpose()
     }
 
-    fn upsert_relationship_with_key(&self, rel: &KnowledgeRelationship, key: &str) -> CoreResult<()> {
+    fn upsert_relationship_with_key(
+        &self,
+        rel: &KnowledgeRelationship,
+        key: &str,
+    ) -> CoreResult<()> {
         let json = serde_json::to_string(rel).map_err(json_error)?;
         let conn = self.lock()?;
-        let graph_id = rel.graph_id.as_ref().map(|g| g.to_string()).unwrap_or_default();
-        let subject_id = rel.subject.id.as_ref().map(|i| i.to_string()).unwrap_or_default();
+        let graph_id = rel
+            .graph_id
+            .as_ref()
+            .map(|g| g.to_string())
+            .unwrap_or_default();
+        let subject_id = rel
+            .subject
+            .id
+            .as_ref()
+            .map(|i| i.to_string())
+            .unwrap_or_default();
         conn.execute(
             r#"INSERT INTO knowledge_relationships
                (id, graph_id, subject_id, tenant, subject, workspace, session, environment, relationship_key, record_json)
@@ -124,20 +143,29 @@ impl EntityIdentityRepository for SqlIdentityStore {
                         params![request.entity.id.to_string()],
                     );
                 }
-                Ok(EntityWriteOutcome::Created { entity: request.entity })
+                Ok(EntityWriteOutcome::Created {
+                    entity: request.entity,
+                })
             }
             Some(key) => {
                 let existing = self.select_entity_by_key(&key)?;
                 match existing {
                     None => {
                         self.upsert_entity_with_key(&request.entity, &key)?;
-                        Ok(EntityWriteOutcome::Created { entity: request.entity })
+                        Ok(EntityWriteOutcome::Created {
+                            entity: request.entity,
+                        })
                     }
                     Some(existing_entity) => {
-                        let (merged, changed, conflicts) =
-                            merge_entities(&existing_entity, &request.entity, &request.merge_policy);
+                        let (merged, changed, conflicts) = merge_entities(
+                            &existing_entity,
+                            &request.entity,
+                            &request.merge_policy,
+                        );
                         if changed.is_empty() {
-                            Ok(EntityWriteOutcome::Matched { entity: existing_entity })
+                            Ok(EntityWriteOutcome::Matched {
+                                entity: existing_entity,
+                            })
                         } else {
                             self.upsert_entity_with_key(&merged, &key)?;
                             Ok(EntityWriteOutcome::Merged {
@@ -166,7 +194,11 @@ impl EntityIdentityRepository for SqlIdentityStore {
             Some(mut existing_rel) => {
                 // Merge evidence, provenance, confidence from the new into existing.
                 for ev in &relationship.evidence {
-                    if !existing_rel.evidence.iter().any(|e| e.target_id == ev.target_id) {
+                    if !existing_rel
+                        .evidence
+                        .iter()
+                        .any(|e| e.target_id == ev.target_id)
+                    {
                         existing_rel.evidence.push(ev.clone());
                     }
                 }
@@ -194,9 +226,7 @@ impl EntityIdentityRepository for SqlIdentityStore {
             )
             .map_err(sql_error)?;
         let rows: Vec<(String, String)> = stmt
-            .query_map(params![&scope.tenant], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
+            .query_map(params![&scope.tenant], |row| Ok((row.get(0)?, row.get(1)?)))
             .map_err(sql_error)?
             .filter_map(|r| r.ok())
             .collect();
@@ -235,7 +265,8 @@ impl EntityIdentityRepository for SqlIdentityStore {
                 .map_err(sql_error)?;
 
             let Some(dup_json) = dup_json else { continue };
-            let dup_entity: KnowledgeEntity = serde_json::from_str(&dup_json).map_err(json_error)?;
+            let dup_entity: KnowledgeEntity =
+                serde_json::from_str(&dup_json).map_err(json_error)?;
 
             // Load the canonical entity.
             let canon_json: String = tx
@@ -245,10 +276,12 @@ impl EntityIdentityRepository for SqlIdentityStore {
                     |row| row.get(0),
                 )
                 .map_err(sql_error)?;
-            let canon_entity: KnowledgeEntity = serde_json::from_str(&canon_json).map_err(json_error)?;
+            let canon_entity: KnowledgeEntity =
+                serde_json::from_str(&canon_json).map_err(json_error)?;
 
             // Merge.
-            let (merged, _, conflicts) = merge_entities(&canon_entity, &dup_entity, &request.policy);
+            let (merged, _, conflicts) =
+                merge_entities(&canon_entity, &dup_entity, &request.policy);
             all_conflicts.extend(conflicts);
             let merged_json = serde_json::to_string(&merged).map_err(json_error)?;
 
@@ -268,11 +301,12 @@ impl EntityIdentityRepository for SqlIdentityStore {
             .map_err(sql_error)?;
 
             // Redirect relationships: subject_id.
-            redirected += tx.execute(
-                "UPDATE knowledge_relationships SET subject_id = ?1 WHERE subject_id = ?2",
-                params![&canonical_id, &dup_id_str],
-            )
-            .map_err(sql_error)?;
+            redirected += tx
+                .execute(
+                    "UPDATE knowledge_relationships SET subject_id = ?1 WHERE subject_id = ?2",
+                    params![&canonical_id, &dup_id_str],
+                )
+                .map_err(sql_error)?;
 
             // Redirect relationships: object_id (stored in record_json).
             // Load relationships where object references the duplicate, fix the JSON.
@@ -290,8 +324,13 @@ impl EntityIdentityRepository for SqlIdentityStore {
                 drop(stmt);
                 for (rel_id, rel_json) in to_fix {
                     if let Ok(mut rel) = serde_json::from_str::<KnowledgeRelationship>(&rel_json) {
-                        let changed = replace_entity_ref_id(&mut rel.object, dup_id, &request.canonical_id)
-                            || replace_entity_ref_id(&mut rel.subject, dup_id, &request.canonical_id);
+                        let changed =
+                            replace_entity_ref_id(&mut rel.object, dup_id, &request.canonical_id)
+                                || replace_entity_ref_id(
+                                    &mut rel.subject,
+                                    dup_id,
+                                    &request.canonical_id,
+                                );
                         if changed {
                             let new_json = serde_json::to_string(&rel).unwrap_or(rel_json);
                             let new_key = compute_relationship_key(&rel);
@@ -305,15 +344,16 @@ impl EntityIdentityRepository for SqlIdentityStore {
             }
 
             // Coalesce: delete duplicate relationships by relationship_key.
-            coalesced += tx.execute(
-                "DELETE FROM knowledge_relationships WHERE rowid NOT IN (
+            coalesced += tx
+                .execute(
+                    "DELETE FROM knowledge_relationships WHERE rowid NOT IN (
                     SELECT MIN(rowid) FROM knowledge_relationships
                     WHERE relationship_key IS NOT NULL
                     GROUP BY relationship_key
                 ) AND relationship_key IS NOT NULL",
-                [],
-            )
-            .map_err(sql_error)?;
+                    [],
+                )
+                .map_err(sql_error)?;
 
             // Delete the duplicate entity.
             tx.execute(
@@ -331,7 +371,8 @@ impl EntityIdentityRepository for SqlIdentityStore {
                 |row| row.get(0),
             )
             .map_err(sql_error)?;
-        let final_entity: KnowledgeEntity = serde_json::from_str(&final_json).map_err(json_error)?;
+        let final_entity: KnowledgeEntity =
+            serde_json::from_str(&final_json).map_err(json_error)?;
 
         tx.commit().map_err(sql_error)?;
 

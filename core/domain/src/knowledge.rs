@@ -310,8 +310,12 @@ pub struct EntityWriteRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "outcome")]
 pub enum EntityWriteOutcome {
-    Created { entity: KnowledgeEntity },
-    Matched { entity: KnowledgeEntity },
+    Created {
+        entity: KnowledgeEntity,
+    },
+    Matched {
+        entity: KnowledgeEntity,
+    },
     Merged {
         entity: KnowledgeEntity,
         changed_fields: Vec<String>,

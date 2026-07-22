@@ -15,8 +15,8 @@ use engram_belief::BeliefRepository;
 use engram_domain::{CapabilityReason, CapabilityState};
 use engram_hierarchy::HierarchyRepository;
 use engram_knowledge::{
-    EntityIdentityRepository, KnowledgeGraphRepository, KnowledgeRepository,
-    OntologyRepository, TaxonomyRepository,
+    EntityIdentityRepository, KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository,
+    TaxonomyRepository,
 };
 use engram_memory::MemoryService;
 use engram_retrieval::{RetrievalIndex, VectorIndex};

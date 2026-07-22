@@ -25,6 +25,7 @@ use engram_memory::MemoryService;
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_sqlite::SqlBeliefStore;
 use engram_store_sqlite::SqlHierarchyStore;
+use engram_store_sqlite::SqlIdentityStore;
 use engram_store_sqlite::SqlKnowledgeStore;
 use engram_store_sqlite::SqlMemoryService;
 
@@ -153,6 +154,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut unified_recall_state = failed();
     // consolidation is a shipped capability.
     let mut consolidation_state = failed();
+    let mut identity_state = failed();
     // export_import is a shipped capability (S5).
     let mut export_import_state = failed();
 
@@ -172,6 +174,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut export_import: Option<Arc<dyn crate::ExportImport>> = None;
     let mut observability: Option<Arc<dyn crate::Observability>> = None;
     let mut consolidation: Option<Arc<dyn ConsolidationService>> = None;
+    let mut identity: Option<Arc<dyn engram_knowledge::EntityIdentityRepository>> = None;
     // Concrete Sql* handles, kept alongside the trait handles so the batch /
     // export / observability adapters (which compose the concrete stores) can be
     // wired without a trait-to-concrete downcast. Populated only when the
@@ -230,6 +233,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
                 provenance = Some(Arc::new(SqlProvenanceQuery::new(store.clone())));
                 episodes_evidence_state = CapabilityState::Supported;
             }
+            // Identity: construct SqlIdentityStore from the shared connection.
+            identity = Some(Arc::new(SqlIdentityStore::new(store.shared_connection())));
+            identity_state = CapabilityState::Supported;
         }
     }
 
@@ -460,6 +466,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         .export_import(export_import_state)
         .observability(observability_state)
         .consolidation(consolidation_state)
+        .identity(identity_state)
         .build();
 
     // Construct the SqlObservability handle from the wired concrete stores +
@@ -528,6 +535,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
     if let Some(h) = recall {
         builder = builder.recall(h);
+    }
+    if let Some(h) = identity {
+        builder = builder.identity(h);
     }
     Ok(builder.build())
 }

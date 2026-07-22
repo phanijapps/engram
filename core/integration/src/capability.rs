@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 /// machine-readable and stable; each capability state includes a reason code
 /// explaining why a feature is not supported.
 ///
-/// The 19 keys cover every capability area named in the host-SDK brief plus
+/// The 20 keys cover every capability area named in the host-SDK brief plus
 /// consolidation. The 8 "not-yet-built" areas (hybrid search, episodes/evidence, contradiction,
 /// atomic batch, unified recall, export/import, maintenance, observability)
 /// default to [`CapabilityState::Unsupported`] with
@@ -496,7 +496,7 @@ mod tests {
     #[test]
     fn test_capability_report_includes_all_nineteen_keys() {
         let report = CapabilityReport::new(CapabilityState::Supported);
-        // Verify all 19 capability keys are present in the serialized report.
+        // Verify all 20 capability keys are present in the serialized report.
         let json = serde_json::to_string(&report).unwrap();
         for key in [
             "memory",

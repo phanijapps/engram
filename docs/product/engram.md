@@ -129,7 +129,7 @@ sqlite-file-backed-construction, surrealdb-backend.*
 
 ### Rust SDK + host-SDK ✅
 `EngramProvider` — the canonical Rust entry: a facade holding typed repository
-handles, with `CapabilityReport` (19 capability areas), an engine-neutrality gate, an embedding-provider abstraction
+handles, with `CapabilityReport` (20 capability areas), an engine-neutrality gate, an embedding-provider abstraction
 (FastEmbed / Ollama), and migration/import with dry-run gating. The
 **host-SDK brief (S1–S7)** ships all seven slices (each with named per-slice
 deferrals linked from its spec): capability report, episode/evidence

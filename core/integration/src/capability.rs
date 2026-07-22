@@ -80,6 +80,17 @@ pub struct CapabilityReport {
     /// executor dispatch. Wired when both memory + belief stores are available.
     #[serde(default = "default_consolidation")]
     pub consolidation: CapabilityState,
+
+    /// Knowledge-graph identity + consolidation (RFC-0014).
+    #[serde(default = "default_identity")]
+    pub identity: CapabilityState,
+}
+
+/// Serde default for the `identity` field.
+fn default_identity() -> CapabilityState {
+    CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    }
 }
 
 /// Serde default for the `consolidation` field — `Unsupported { FeatureDisabled }`.
@@ -111,7 +122,8 @@ impl CapabilityReport {
             export_import: state.clone(),
             maintenance: state.clone(),
             observability: state.clone(),
-            consolidation: state,
+            consolidation: state.clone(),
+            identity: state,
         }
     }
 
@@ -139,6 +151,7 @@ impl CapabilityReport {
             && self.maintenance.is_supported()
             && self.observability.is_supported()
             && self.consolidation.is_supported()
+            && self.identity.is_supported()
     }
 
     /// Returns true if memory operations are supported.
@@ -291,7 +304,8 @@ impl CapabilityReportBuilder {
                 export_import: feature_disabled.clone(),
                 maintenance: feature_disabled.clone(),
                 observability: feature_disabled.clone(),
-                consolidation: feature_disabled,
+                consolidation: feature_disabled.clone(),
+                identity: feature_disabled,
             },
         }
     }
@@ -407,6 +421,12 @@ impl CapabilityReportBuilder {
     /// Sets the consolidation capability state.
     pub fn consolidation(mut self, state: CapabilityState) -> Self {
         self.report.consolidation = state;
+        self
+    }
+
+    /// Sets the knowledge-graph identity capability state.
+    pub fn identity(mut self, state: CapabilityState) -> Self {
+        self.report.identity = state;
         self
     }
 

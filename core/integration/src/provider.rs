@@ -15,7 +15,8 @@ use engram_belief::BeliefRepository;
 use engram_domain::{CapabilityReason, CapabilityState};
 use engram_hierarchy::HierarchyRepository;
 use engram_knowledge::{
-    KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
+    EntityIdentityRepository, KnowledgeGraphRepository, KnowledgeRepository,
+    OntologyRepository, TaxonomyRepository,
 };
 use engram_memory::MemoryService;
 use engram_retrieval::{RetrievalIndex, VectorIndex};
@@ -68,6 +69,7 @@ pub struct EngramProvider {
     export_import: Option<Arc<dyn ExportImport>>,
     observability: Option<Arc<dyn Observability>>,
     consolidation: Option<Arc<dyn ConsolidationService>>,
+    identity: Option<Arc<dyn EntityIdentityRepository>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -296,6 +298,11 @@ impl EngramProvider {
         self.consolidation.as_ref()
     }
 
+    /// Returns the identity repository handle, if wired.
+    pub fn identity(&self) -> Option<&Arc<dyn EntityIdentityRepository>> {
+        self.identity.as_ref()
+    }
+
     // ---- require_*: error-on-absent variants for hosts that prefer a typed
     // error over `Option` unwrapping. Each returns `CapabilityUnsupported` when
     // the handle is not wired, naming the capability so callers can branch on a
@@ -515,6 +522,7 @@ impl EngramProvider {
             export_import: None,
             observability: None,
             consolidation: None,
+            identity: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -547,6 +555,7 @@ pub struct EngramProviderBuilder {
     export_import: Option<Arc<dyn ExportImport>>,
     observability: Option<Arc<dyn Observability>>,
     consolidation: Option<Arc<dyn ConsolidationService>>,
+    identity: Option<Arc<dyn EntityIdentityRepository>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -573,6 +582,7 @@ impl EngramProviderBuilder {
             export_import: None,
             observability: None,
             consolidation: None,
+            identity: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -680,6 +690,12 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Sets the identity repository handle (knowledge-graph identity + consolidation).
+    pub fn identity(mut self, handle: Arc<dyn EntityIdentityRepository>) -> Self {
+        self.identity = Some(handle);
+        self
+    }
+
     /// Sets the storage schema version reported by provider diagnostics.
     pub fn schema_version(mut self, version: impl Into<String>) -> Self {
         self.schema_version = version.into();
@@ -713,6 +729,7 @@ impl EngramProviderBuilder {
             export_import: self.export_import,
             observability: self.observability,
             consolidation: self.consolidation,
+            identity: self.identity,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }

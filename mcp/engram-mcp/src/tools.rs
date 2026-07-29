@@ -1036,6 +1036,49 @@ mod tests {
         );
     }
 
+    /// P1 AC1–AC3 — graph tools traverse the unified graph (concept ↔ code).
+    #[test]
+    fn graph_tools_traverse_doc_code_bridge() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("docs")).unwrap();
+        std::fs::write(repo_dir.path().join("src/lib.rs"), "pub fn flange() {}\n").unwrap();
+        std::fs::write(
+            repo_dir.path().join("docs/flange.md"),
+            "# flange\ndocs body\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+
+        // AC1: neighbors shows the describes bridge.
+        let nbrs = crate::graph::graph_neighbors(&app, &json!({ "name": "flange" })).unwrap();
+        let nbody = nbrs["content"][0]["text"].as_str().unwrap();
+        assert!(
+            nbody.contains("describes"),
+            "neighbors must show describes: {nbody}"
+        );
+
+        // AC2: subgraph includes the describes bridge.
+        let sub =
+            crate::graph::graph_subgraph(&app, &json!({ "name": "flange", "depth": 2 })).unwrap();
+        let sbody = sub["content"][0]["text"].as_str().unwrap();
+        assert!(
+            sbody.contains("describes"),
+            "subgraph must include describes: {sbody}"
+        );
+
+        // AC3: resolve finds flange.
+        let res = crate::graph::resolve_entity(&app, &json!({ "name": "flange" })).unwrap();
+        let rbody = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            rbody.contains("Resolved") && rbody.contains("flange"),
+            "resolve must find flange: {rbody}"
+        );
+    }
+
     #[test]
     fn composites_work_on_seeded_graph() {
         let dir = tempfile::tempdir().unwrap();

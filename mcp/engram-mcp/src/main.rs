@@ -15,6 +15,7 @@ mod app;
 mod bootstrap;
 mod codegraph;
 mod config;
+mod graph;
 mod ontology;
 mod protocol;
 mod registry;
@@ -213,6 +214,47 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         description: "Keyword search over indexed code symbols.",
         input_schema: json!({ "type": "object", "properties": { "query": { "type": "string" }, "limit": { "type": "integer" } }, "required": ["query"] }),
         handler: codegraph::search,
+    });
+    registry.register(ToolRecord {
+        name: "graph_neighbors",
+        description: "Entities directly connected to a node (any kind) and the edges between \
+                      them. Bidirectional — e.g. a concept describes a function, or a function \
+                      calls another.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "limit": { "type": "integer", "description": "Max edges (default 100)." }
+            },
+            "required": ["name"]
+        }),
+        handler: graph::graph_neighbors,
+    });
+    registry.register(ToolRecord {
+        name: "graph_subgraph",
+        description: "Breadth-first subgraph around a node up to `depth` hops (default 2). Edges \
+                      are labelled with their natural direction; explores doc↔code links.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "depth": { "type": "integer", "description": "Hop limit (default 2)." },
+                "limit": { "type": "integer", "description": "Max edges (default 100)." }
+            },
+            "required": ["name"]
+        }),
+        handler: graph::graph_subgraph,
+    });
+    registry.register(ToolRecord {
+        name: "resolve_entity",
+        description: "Resolve a name to its entity (exact, else first substring): kind, id, graph, \
+                      source-ref count, aliases. The \"is X in the graph?\" lookup.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "name": { "type": "string" } },
+            "required": ["name"]
+        }),
+        handler: graph::resolve_entity,
     });
     registry.register(ToolRecord {
         name: "symbol_context",

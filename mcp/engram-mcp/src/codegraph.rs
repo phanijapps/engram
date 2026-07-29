@@ -163,7 +163,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
 // --- composites (T2–T8) ------------------------------------------------------
 
 /// Fetch all relationships in the project scope (returns empty vec on error).
-fn fetch_rels(app: &App) -> Vec<KnowledgeRelationship> {
+pub(crate) fn fetch_rels(app: &App) -> Vec<KnowledgeRelationship> {
     app.provider
         .require_knowledge_query()
         .ok()

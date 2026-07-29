@@ -50,8 +50,8 @@ The `engram-mcp` server gains code intelligence: an agent can `scan_repo` a code
 
 - [ ] `scan_repo` ingests a fixture repo via `scan_repository` routed through the provider (no direct `SqlKnowledgeStore`); afterward the code symbols are recallable in the project workspace.
 - [ ] A `KnowledgeQuery` exposure in `engram-integration` provides `list_entities(scope)` / `list_relationships(scope)` reachable as a provider handle; the composites use it to obtain their edge/entity input.
-- [ ] A lexical-feed exposure (over the in-RAM Tantivy `LexicalIndex` from `bootstrap_sqlite`) lets `scan_repo` feed code-symbol names so `search` returns code symbols; `search` routes through the provider (no direct `LexicalIndex` in the MCP).
-- [ ] The six consolidated tools are exposed and return structured answers: `symbol_context`, `change_impact`, `code_health`, `architecture`, `api_topology`, `whats_changed` (composing `engram-codegraph-queries` + `engram-codegraph-temporal`).
+- [ ] (deferred: phase-2-search-entity-resolver) A lexical-feed exposure lets `scan_repo` feed code-symbol names so `search` returns code symbols. **Deferred**: the unified-recall lexical resolver is chunk-based (`KnowledgeLexicalResolver` calls `get_chunk`); entity-id hits are dropped. Needs an entity-id resolver lane.
+- [ ] Five of six consolidated tools are exposed and return structured answers: `symbol_context`, `change_impact`, `code_health`, `architecture`, `whats_changed` (composing `engram-codegraph-queries` + `engram-codegraph-temporal`). `api_topology` is deferred (needs chunk-text access).
 - [ ] No `Sql*`/`Surreal*`/`LexicalIndex`/engine types in `mcp/engram-mcp/src`; the engine-neutrality gate passes for `mcp/engram-mcp/src` **and** the new `core/integration/src/knowledge_query.rs` + `lexical_feed.rs`; `mcp/engram-mcp/Cargo.toml` pins `engram-integration` to `features = ["sqlite"]` (no `surreal`).
 - [ ] `recall`/`search` fuse code symbols with docs + a written concept within the project scope (integration test against a scanned fixture + an indexed doc + a `put_entity` concept).
 - [ ] No LLM in the server; no `engram-domain` contract change.

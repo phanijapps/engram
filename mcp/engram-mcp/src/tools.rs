@@ -1000,4 +1000,43 @@ mod tests {
             "scan_repo must index the functions: {entities:?}"
         );
     }
+
+    #[test]
+    fn composites_work_on_seeded_graph() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        put_entity(&app, &json!({ "name": "alpha", "kind": "function" })).unwrap();
+        put_entity(&app, &json!({ "name": "beta", "kind": "function" })).unwrap();
+        put_relationship(
+            &app,
+            &json!({ "subject": "alpha", "predicate": "calls", "object": "beta" }),
+        )
+        .unwrap();
+        let ctx = crate::codegraph::symbol_context(&app, &json!({ "symbol": "alpha" })).unwrap();
+        assert!(!ctx["content"][0]["text"].as_str().unwrap().is_empty());
+        let health = crate::codegraph::code_health(&app, &json!({})).unwrap();
+        assert!(
+            health["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("Dead code")
+        );
+        let arch = crate::codegraph::architecture(&app, &json!({})).unwrap();
+        assert!(
+            arch["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("Central")
+        );
+    }
+
+    #[test]
+    fn capability_report_lists_supported() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let res = crate::codegraph::capability_report(&app, &json!({})).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(body.contains("memory: supported"), "{body}");
+        assert!(body.contains("knowledge_query: supported"), "{body}");
+    }
 }

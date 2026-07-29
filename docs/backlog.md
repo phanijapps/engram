@@ -309,3 +309,9 @@ Most items shipped (A1-A2, B1-B8, C1-C9, D3-D4, D6-D8). What remains:
   needs source-text access (`find_endpoints`/`find_api_calls` take `&str`). The
   provider exposes no "list chunk text" surface. Blocked on: chunk-text listing
   via `KnowledgeQuery` or a new port. Unblocked by: a slice adding that surface.
+- **search entity-resolver (deferred: phase-2-search-entity-resolver):** The `search`
+  tool feeds entity IDs to the lexical lane via `LexicalFeed`, but the unified-recall
+  resolver (`KnowledgeLexicalResolver`) resolves BM25 hits via `get_chunk` — entity
+  IDs are not chunk IDs, so every hit resolves to None and is dropped. Needs a sibling
+  entity-id resolver lane (resolve via `get_entity` + return `RetrievalTargetType::Entity`)
+  wired in bootstrap. Blocked on: the resolver design + bootstrap wiring.

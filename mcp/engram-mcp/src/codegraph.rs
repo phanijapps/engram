@@ -1,7 +1,6 @@
-//! Code-intelligence tools (RFC-0015 Phase 2): `scan_repo` + the composites +
-//! `search`. `scan_repo` uses a fan-in adapter so treesitter ingestion routes
-//! through the provider's separate knowledge + graph handles (no direct
-//! (no engine-store bypass, unlike the old `codegraph/mcp-server`).
+//! Code-intelligence tools (RFC-0015 Phase 2 + 3): `scan_repo` + the composites
+//! + `search` + `get_context`. `scan_repo` uses a fan-in adapter so treesitter
+//! ingestion routes through the provider's handles (no engine-store bypass).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -151,7 +150,10 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
             .map(|e| (e.id.to_string(), format!("{} {:?}", e.name, e.kind)))
             .collect();
         if !entries.is_empty() {
-            let _ = block_on(feed.upsert_batch(&entries));
+            if let Err(e) = block_on(feed.upsert_batch(&entries)) {
+                // Non-fatal: search may return no code symbols, but the scan itself succeeded.
+                eprintln!("engram-mcp: lexical feed warning: {e}");
+            }
         }
     }
 

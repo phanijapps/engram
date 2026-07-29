@@ -15,6 +15,7 @@ mod git;
 mod git_detect;
 mod hash;
 mod ingestor;
+mod markdown_chunker;
 mod openapi_types;
 mod reconcile;
 mod request;
@@ -34,6 +35,7 @@ pub use git::GitSourceReader;
 pub use git_detect::detect_git;
 pub use hash::content_hash;
 pub use ingestor::{IngestedKnowledge, KnowledgeIngestor};
+pub use markdown_chunker::MarkdownChunker;
 pub use request::{DocumentIngestRequest, DocumentMetadata};
 pub use scanner::{
     ScanOptions, ScanProgress, ScanSummary, detect_workspace, scan_repository, scan_workspace,

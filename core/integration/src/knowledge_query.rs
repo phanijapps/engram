@@ -7,7 +7,7 @@
 //! and any caller that needs the full entity/edge set for a project — goes
 //! through this port so it can route through the
 //! [`EngramProvider`](crate::EngramProvider) instead of reaching into a concrete
-//! store (the old `codegraph/mcp-server` reached into `SqlKnowledgeStore`
+//! store (the old `codegraph/mcp-server` reached into the concrete store
 //! directly; this port removes that need).
 
 use async_trait::async_trait;

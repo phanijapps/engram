@@ -293,3 +293,19 @@ Most items shipped (A1-A2, B1-B8, C1-C9, D3-D4, D6-D8). What remains:
   node grouping (EntityKind / file).
 - **Ask-first (deferred):** WebSocket/SSE live re-index; multi-repo overlay;
   auth / multi-user.
+
+## engram-mcp-code-intel (RFC-0015 Phase 2)
+
+- **N-API parity (deferred: phase-2-napi-parity):** The new `EngramProvider`
+  handles (`knowledge_query`, `lexical_feed`) are reachable from Rust but not
+  yet from the N-API binding (`bindings/node`). ADR-0022 surface parity
+  requires they reach TS too. Blocked on: adding the handles to the binding.
+- **directional temporal (deferred: phase-2-directional-temporal):** The
+  `whats_changed` tool's `directional` mode needs per-project scan-baseline
+  retention (storing prior manifests between scans). Blocked on: a
+  `DirectionalStore` design. Unblocked by: a small slice implementing
+  per-project manifest persistence.
+- **api_topology (deferred: phase-2-api-topology):** The `api_topology` composite
+  needs source-text access (`find_endpoints`/`find_api_calls` take `&str`). The
+  provider exposes no "list chunk text" surface. Blocked on: chunk-text listing
+  via `KnowledgeQuery` or a new port. Unblocked by: a slice adding that surface.

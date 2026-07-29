@@ -1,7 +1,7 @@
 //! Code-intelligence tools (RFC-0015 Phase 2): `scan_repo` + the composites +
 //! `search`. `scan_repo` uses a fan-in adapter so treesitter ingestion routes
 //! through the provider's separate knowledge + graph handles (no direct
-//! `SqlKnowledgeStore`, unlike the old `codegraph/mcp-server`).
+//! (no engine-store bypass, unlike the old `codegraph/mcp-server`).
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -25,7 +25,7 @@ use crate::tools::{internal, policy, req_str, system_actor};
 /// Fan-in adapter combining the provider's separate knowledge + graph handles
 /// into one type implementing both traits, so [`scan_repository`] (which needs a
 /// single `R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync`)
-/// runs against the provider-backed stores — no direct `SqlKnowledgeStore`.
+/// runs against the provider-backed stores — no direct concrete-store access.
 pub(crate) struct KnowledgeRepoGraph {
     knowledge: Arc<dyn KnowledgeRepository>,
     graph: Arc<dyn KnowledgeGraphRepository>,

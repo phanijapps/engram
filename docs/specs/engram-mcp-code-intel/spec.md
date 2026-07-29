@@ -1,6 +1,6 @@
 # Spec: engram-mcp-code-intel
 
-- **Status:** Draft
+- **Status:** Implementing
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0015, ADR-0008, ADR-0009, ADR-0022, ADR-0020, ADR-0025

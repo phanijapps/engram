@@ -23,9 +23,14 @@ use crate::LexicalIndex;
 /// Resolvers own canonical record lookup and policy-aware target visibility.
 /// Returning `Ok(None)` means the indexed target is stale or not visible for
 /// this request and should be skipped.
+#[async_trait]
 pub trait LexicalTargetResolver: Send + Sync {
     /// Resolves one BM25 hit's target id into a retrieval target.
-    fn resolve(
+    ///
+    /// Async so implementors await canonical-record lookups (e.g. the store's
+    /// `get_chunk`) instead of nesting a `block_on` inside the already-async
+    /// recall pipeline — which would panic (`LocalPool` re-entry).
+    async fn resolve(
         &self,
         target_id: &str,
         request: &RetrievalRequest,
@@ -102,7 +107,7 @@ impl RetrievalIndex for LexicalRetrievalIndex {
 
         let mut results = Vec::with_capacity(hits.len());
         for (rank, (target_id, score)) in hits.into_iter().enumerate() {
-            let Some(target) = self.target_resolver.resolve(&target_id, request)? else {
+            let Some(target) = self.target_resolver.resolve(&target_id, request).await? else {
                 continue;
             };
             results.push(lexical_result(rank, &target_id, score, target));
@@ -223,8 +228,9 @@ mod tests {
         targets: BTreeMap<String, LexicalResolvedTarget>,
     }
 
+    #[async_trait]
     impl LexicalTargetResolver for TargetMap {
-        fn resolve(
+        async fn resolve(
             &self,
             target_id: &str,
             _request: &RetrievalRequest,

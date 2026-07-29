@@ -1199,6 +1199,43 @@ mod tests {
         );
     }
 
+    /// Regression: get_context (which recalls) works in the SAME process after
+    /// scan_repo — the scan now runs on a dedicated thread, so its internal
+    /// block_on no longer poisons this thread's executor. This is the prior
+    /// nested-executor panic that killed the MCP subprocess ("Transport closed").
+    #[test]
+    fn get_context_works_after_scan_in_one_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/mw.rs"),
+            "pub fn auth_middleware() {}\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+        put_entity(
+            &app,
+            &json!({ "name": "Authentication", "kind": "concept" }),
+        )
+        .unwrap();
+        put_relationship(
+            &app,
+            &json!({ "subject": "Authentication", "predicate": "describes", "object": "auth_middleware" }),
+        )
+        .unwrap();
+        // Previously panicked here (nested block_on after scan on the same thread).
+        let res =
+            crate::codegraph::get_context(&app, &json!({ "focus": "auth_middleware" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("[Graph]") && body.contains("describes"),
+            "get_context after scan must work + show the graph link: {body}"
+        );
+    }
+
     #[test]
     fn composites_work_on_seeded_graph() {
         let dir = tempfile::tempdir().unwrap();

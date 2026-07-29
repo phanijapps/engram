@@ -1125,6 +1125,45 @@ mod tests {
         );
     }
 
+    /// P3 — agentic semantic bridge: a concept linked to a DIFFERENTLY-named scanned
+    /// function via a `describes` relationship (what the engram-distill skill does;
+    /// distinct from P0's exact-name auto-bridge).
+    #[test]
+    fn agentic_semantic_bridge_links_concept_to_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/mw.rs"),
+            "pub fn auth_middleware() {}\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        // 1. Scan code → the function entity "auth_middleware" exists.
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+        // 2. Agent distills: concept "Authentication" describes "auth_middleware"
+        //    (semantic bridge — names differ, the link the scan cannot infer).
+        put_entity(
+            &app,
+            &json!({ "name": "Authentication", "kind": "concept" }),
+        )
+        .unwrap();
+        put_relationship(
+            &app,
+            &json!({ "subject": "Authentication", "predicate": "describes", "object": "auth_middleware" }),
+        )
+        .unwrap();
+        // 3. graph_neighbors confirms the semantic bridge.
+        let nbrs =
+            crate::graph::graph_neighbors(&app, &json!({ "name": "Authentication" })).unwrap();
+        let body = nbrs["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("describes") && body.contains("auth_middleware"),
+            "semantic bridge must link Authentication -> auth_middleware: {body}"
+        );
+    }
+
     #[test]
     fn composites_work_on_seeded_graph() {
         let dir = tempfile::tempdir().unwrap();

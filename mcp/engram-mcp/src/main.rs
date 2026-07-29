@@ -207,6 +207,42 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         }),
         handler: codegraph::scan_repo,
     });
+    registry.register(ToolRecord {
+        name: "search",
+        description: "Keyword search over indexed code symbols.",
+        input_schema: json!({ "type": "object", "properties": { "query": { "type": "string" }, "limit": { "type": "integer" } }, "required": ["query"] }),
+        handler: codegraph::search,
+    });
+    registry.register(ToolRecord {
+        name: "symbol_context",
+        description: "Callers, callees, and community for one symbol.",
+        input_schema: json!({ "type": "object", "properties": { "symbol": { "type": "string" }, "depth": { "type": "integer" } }, "required": ["symbol"] }),
+        handler: codegraph::symbol_context,
+    });
+    registry.register(ToolRecord {
+        name: "change_impact",
+        description: "Blast radius + dependency paths from a change site.",
+        input_schema: json!({ "type": "object", "properties": { "target": { "type": "string" }, "depth": { "type": "integer" }, "to": { "type": "string" } }, "required": ["target"] }),
+        handler: codegraph::change_impact,
+    });
+    registry.register(ToolRecord {
+        name: "code_health",
+        description: "Dead code + repository stats.",
+        input_schema: json!({ "type": "object", "properties": {} }),
+        handler: codegraph::code_health,
+    });
+    registry.register(ToolRecord {
+        name: "architecture",
+        description: "Central symbols, bridges, communities, stats — one map.",
+        input_schema: json!({ "type": "object", "properties": { "limit": { "type": "integer" } } }),
+        handler: codegraph::architecture,
+    });
+    registry.register(ToolRecord {
+        name: "whats_changed",
+        description: "Temporal recency + impact + compound + overview.",
+        input_schema: json!({ "type": "object", "properties": {} }),
+        handler: codegraph::whats_changed,
+    });
 }
 
 fn ping(_app: &App, _args: &Value) -> Result<Value, ToolError> {

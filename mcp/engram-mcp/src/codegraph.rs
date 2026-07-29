@@ -9,7 +9,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use engram_domain::{
     ChunkId, EntityId, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeGraphId,
-    KnowledgeRelationship, KnowledgeSource, RelationshipId, Scope, SourceDocument,
+    KnowledgeRelationship, KnowledgeSource, RelationshipId, RetrievalRequest, RetrievalTargetType,
+    Scope, SourceDocument,
 };
 use engram_ingest::{ScanOptions, scan_repository};
 use engram_knowledge::{CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
@@ -155,4 +156,140 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     }
 
     Ok(protocol::text_content(format!("{summary:?}")))
+}
+
+// --- composites (T2–T8) ------------------------------------------------------
+
+/// Fetch all relationships in the project scope (returns empty vec on error).
+fn fetch_rels(app: &App) -> Vec<KnowledgeRelationship> {
+    app.provider
+        .require_knowledge_query()
+        .ok()
+        .and_then(|q| block_on(q.list_relationships(&app.scope)).ok())
+        .unwrap_or_default()
+}
+
+/// `search`: keyword search over indexed code symbols (lexical lane, fed by scan_repo).
+pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let query = req_str(args, "query")?;
+    let limit = args["limit"]
+        .as_u64()
+        .map(|n| n as u32)
+        .unwrap_or(10)
+        .clamp(1, 100);
+    let recall = app.provider.require_recall().map_err(internal)?;
+    let request = RetrievalRequest {
+        query: query.to_owned(),
+        scope: app.scope.clone(),
+        requester: crate::tools::requester(),
+        modes: Vec::new(),
+        filters: None,
+        cues: Vec::new(),
+        limit: Some(limit),
+        budget: None,
+        include_explanations: Some(true),
+    };
+    let payload = block_on(recall.recall(request)).map_err(internal)?;
+    let items: Vec<&str> = payload
+        .items
+        .iter()
+        .filter(|i| {
+            matches!(
+                i.target_type,
+                RetrievalTargetType::Entity
+                    | RetrievalTargetType::Relationship
+                    | RetrievalTargetType::Concept
+            )
+        })
+        .map(|i| i.content.as_str())
+        .collect();
+    let body = if items.is_empty() {
+        "No results.".to_owned()
+    } else {
+        items.join("\n---\n")
+    };
+    Ok(protocol::text_content(body))
+}
+
+/// `symbol_context`: callers, callees, and community for one symbol.
+pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let symbol = req_str(args, "symbol")?;
+    let depth = args["depth"].as_u64().unwrap_or(2) as usize;
+    let rels = fetch_rels(app);
+    let ctx = engram_codegraph_queries::symbol_context(&rels, symbol, depth);
+    Ok(protocol::text_content(format!("{ctx:?}")))
+}
+
+/// `change_impact`: blast radius + dependency path from a change site.
+pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let target = req_str(args, "target")?;
+    let depth = args["depth"].as_u64().unwrap_or(3) as usize;
+    let rels = fetch_rels(app);
+    let radius = engram_codegraph_queries::blast_radius(&rels, target, depth);
+    let path = args["to"]
+        .as_str()
+        .and_then(|to| engram_codegraph_queries::dependency_path(&rels, target, to));
+    Ok(protocol::text_content(format!(
+        "Blast radius ({depth} hops): {radius:?}\nDependency path: {path:?}"
+    )))
+}
+
+/// `code_health`: dead code (zero-caller symbols) + repository stats.
+pub fn code_health(app: &App, _args: &Value) -> Result<Value, ToolError> {
+    let rels = fetch_rels(app);
+    let dead = engram_codegraph_queries::dead_code(&rels);
+    let stats = engram_codegraph_queries::repository_stats(&rels);
+    Ok(protocol::text_content(format!(
+        "Dead code ({} symbols): {dead:?}\nStats: {stats:?}",
+        dead.len()
+    )))
+}
+
+/// `architecture`: central symbols, bridges, communities, stats — one map.
+pub fn architecture(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let limit = args["limit"].as_u64().unwrap_or(10) as usize;
+    let rels = fetch_rels(app);
+    let central = engram_codegraph_queries::central_symbols(&rels, limit);
+    let bridges = engram_codegraph_queries::bridge_symbols(&rels, limit);
+    let communities = engram_codegraph_queries::call_communities(&rels, 3);
+    let stats = engram_codegraph_queries::repository_stats(&rels);
+    Ok(protocol::text_content(format!(
+        "Central: {central:?}\nBridges: {bridges:?}\nCommunities: {communities:?}\nStats: {stats:?}"
+    )))
+}
+
+/// `whats_changed`: temporal recency + impact + compound + overview.
+/// (`directional` deferred — needs scan-baseline retention.)
+pub fn whats_changed(app: &App, _args: &Value) -> Result<Value, ToolError> {
+    let query = app.provider.require_knowledge_query().map_err(internal)?;
+    let entities = block_on(query.list_entities(&app.scope)).unwrap_or_default();
+    let rels = fetch_rels(app);
+    let versions: Vec<engram_codegraph_temporal::VersionedSymbol> = entities
+        .iter()
+        .map(|e| {
+            let name = e.name.as_str();
+            engram_codegraph_temporal::VersionedSymbol {
+                key: name.to_owned(),
+                valid_from: e.valid_from,
+                valid_until: e.valid_until,
+                in_degree: rels
+                    .iter()
+                    .filter(|r| r.object.name.as_deref() == Some(name))
+                    .count(),
+                out_degree: rels
+                    .iter()
+                    .filter(|r| r.subject.name.as_deref() == Some(name))
+                    .count(),
+            }
+        })
+        .collect();
+    let now = chrono::Utc::now();
+    let recent = engram_codegraph_temporal::recent(&versions, now, 14.0);
+    let impact = engram_codegraph_temporal::impact(&versions);
+    let compound = engram_codegraph_temporal::compound(&versions, now, 14.0);
+    let communities = engram_codegraph_queries::call_communities(&rels, 3);
+    let overview = engram_codegraph_temporal::overview(&communities);
+    Ok(protocol::text_content(format!(
+        "Recent: {recent:?}\nImpact: {impact:?}\nCompound: {compound:?}\nOverview: {overview:?}"
+    )))
 }

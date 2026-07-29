@@ -35,7 +35,7 @@ pub(crate) fn system_actor() -> Actor {
     }
 }
 
-fn requester() -> Requester {
+pub(crate) fn requester() -> Requester {
     Requester {
         actor: system_actor(),
         roles: Vec::new(),

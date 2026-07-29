@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 engram-domain = { path = "../../core/domain" }
+engram-ingest = { path = "../../adapters/ingest" }
 engram-integration = { path = "../../core/integration", features = ["sqlite"] }
 chrono = { workspace = true }
 futures = { workspace = true }

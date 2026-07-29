@@ -181,6 +181,21 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         }),
         handler: tools::store_knowledge,
     });
+    registry.register(ToolRecord {
+        name: "index_docs",
+        description: "Chunk a Markdown (or text) document into retrievable sections and persist \
+                      them (docs lane). Use for docs/notes the agent wants recallable.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "content": { "type": "string", "description": "The document text (Markdown)." },
+                "path": { "type": "string", "description": "Optional source path (provenance)." },
+                "kind": { "type": "string", "description": "markdown | text (default markdown)." }
+            },
+            "required": ["content"]
+        }),
+        handler: tools::index_docs,
+    });
 }
 
 fn ping(_app: &App, _args: &Value) -> Result<Value, ToolError> {

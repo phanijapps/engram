@@ -8,10 +8,12 @@
 use chrono::Utc;
 use engram_domain::{
     Actor, ActorKind, AllowedUse, ConsolidationRequest, DeleteMode, EntityKind, EntityRef,
-    ForgetRequest, ForgetTargetType, Id, KnowledgeEntity, KnowledgeRelationship, MemoryContent,
-    MemoryKind, MemoryRecord, MemoryStatus, Policy, Provenance, Requester, Retention,
-    RetrievalRequest, RetrievalTargetType, Sensitivity, Visibility, WriteMemoryRequest,
+    ForgetRequest, ForgetTargetType, Id, KnowledgeChunk, KnowledgeEntity, KnowledgeRelationship,
+    KnowledgeSource, MemoryContent, MemoryKind, MemoryRecord, MemoryStatus, Policy, Provenance,
+    Requester, Retention, RetrievalRequest, RetrievalTargetType, Sensitivity, SourceDocument,
+    SourceDocumentKind, SourceKind, Visibility, WriteMemoryRequest,
 };
+use engram_ingest::{Chunker, MarkdownChunker, content_hash};
 use engram_integration::BatchIngestRequest;
 use futures::executor::block_on;
 use serde_json::Value;
@@ -497,6 +499,112 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
     )))
 }
 
+/// `index_docs`: chunk a Markdown (or text) document into retrieval-friendly
+/// sections and persist them through `BatchIngest` so the doc is retrievable via
+/// `recall` (the `docs` lane). The Markdown structure (headers / code / prose)
+/// is preserved as chunk kinds + line-span provenance.
+pub fn index_docs(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let text = req_str(args, "content")?;
+    let path = args["path"].as_str().map(str::to_owned);
+    let kind = match args["kind"].as_str().unwrap_or("markdown") {
+        "text" => SourceDocumentKind::Text,
+        _ => SourceDocumentKind::Markdown,
+    };
+
+    let candidates = MarkdownChunker::new()
+        .map_err(internal)?
+        .chunk(text)
+        .map_err(internal)?;
+    if candidates.is_empty() {
+        return Err(invalid("document produced no chunks"));
+    }
+
+    let now = Utc::now();
+    let scope = app.scope.clone();
+    let prov = provenance("mcp-index-docs");
+    let pol = policy();
+    let doc_key = format!("doc-{}", content_hash(text));
+    let source_id = Id::from(format!("source-{doc_key}"));
+    let doc_id = Id::from(doc_key.clone());
+
+    let source = KnowledgeSource {
+        id: source_id.clone(),
+        kind: SourceKind::Upload,
+        scope: scope.clone(),
+        name: path.clone().unwrap_or_else(|| "indexed-doc".to_owned()),
+        uri: None,
+        version: None,
+        policy: pol.clone(),
+        provenance: prov.clone(),
+        created_at: now,
+        updated_at: None,
+        metadata: None,
+    };
+    let document = SourceDocument {
+        id: doc_id.clone(),
+        source_id: source_id.clone(),
+        kind,
+        uri: None,
+        path,
+        title: None,
+        mime_type: Some("text/markdown".to_owned()),
+        language: None,
+        version: None,
+        content_hash: content_hash(text),
+        provenance: prov.clone(),
+        policy: pol.clone(),
+        created_at: now,
+        updated_at: None,
+        metadata: None,
+    };
+
+    let chunks: Vec<KnowledgeChunk> = candidates
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| {
+            let chunk_hash = content_hash(&c.text);
+            KnowledgeChunk {
+                id: Id::from(format!("{doc_id}#{i}")),
+                document_id: doc_id.clone(),
+                source_id: source_id.clone(),
+                kind: c.kind,
+                text: c.text,
+                summary: None,
+                location: c.location,
+                entities: Vec::new(),
+                concepts: Vec::new(),
+                embedding_refs: Vec::new(),
+                content_hash: chunk_hash,
+                provenance: prov.clone(),
+                policy: pol.clone(),
+                created_at: now,
+                updated_at: None,
+                metadata: None,
+            }
+        })
+        .collect();
+    let chunk_count = chunks.len();
+
+    let request = BatchIngestRequest {
+        idempotency_key: format!("index-docs-{doc_key}"),
+        scope,
+        source: Some(source),
+        documents: vec![document],
+        chunks,
+        facts: Vec::new(),
+        entities: Vec::new(),
+        relationships: Vec::new(),
+        evidence: Vec::new(),
+        embeddings: Vec::new(),
+    };
+    let batch = app.provider.require_batch().map_err(internal)?;
+    let outcome = block_on(batch.ingest(request)).map_err(internal)?;
+    Ok(protocol::text_content(format!(
+        "Indexed {} chunk(s). Batch {:?} (guarantee: {:?}).",
+        chunk_count, outcome.status, outcome.guarantee
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -772,6 +880,28 @@ mod tests {
         assert!(
             steps.contains("Succeeded"),
             "non-failed steps stay landed (no rollback): {steps}"
+        );
+    }
+
+    /// T10 — index_docs chunks a doc and persists it retrievably.
+    #[test]
+    fn index_docs_chunks_and_is_retrievable() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let md = "# Design\nThe flubbaz-widget is the core unit.\n";
+        let res = index_docs(&app, &json!({ "content": md, "path": "design.md" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("Indexed") && body.contains("BestEffort"),
+            "{body}"
+        );
+
+        // The doc chunk is retrievable via recall.
+        let rec = recall(&app, &json!({ "query": "flubbaz-widget" })).unwrap();
+        let rec_body = rec["content"][0]["text"].as_str().unwrap();
+        assert!(
+            rec_body.contains("flubbaz-widget"),
+            "doc chunk should be retrievable: {rec_body}"
         );
     }
 }

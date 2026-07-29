@@ -165,6 +165,21 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         }),
         handler: tools::consolidate,
     });
+    registry.register(ToolRecord {
+        name: "store_knowledge",
+        description: "Bulk distill-write: write extracted facts + entities + relationships in one \
+                      best-effort batch (NOT ACID). Surfaces per-step status.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "facts": { "type": "array", "items": { "type": "object", "properties": { "content": { "type": "string" } }, "required": ["content"] } },
+                "entities": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string" } }, "required": ["name"] } },
+                "relationships": { "type": "array", "items": { "type": "object", "properties": { "subject": { "type": "string" }, "predicate": { "type": "string" }, "object": { "type": "string" } }, "required": ["subject", "predicate", "object"] } },
+                "idempotency_key": { "type": "string" }
+            }
+        }),
+        handler: tools::store_knowledge,
+    });
 }
 
 fn ping(_app: &App, _args: &Value) -> Result<Value, ToolError> {

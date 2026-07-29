@@ -9,9 +9,10 @@ use chrono::Utc;
 use engram_domain::{
     Actor, ActorKind, AllowedUse, ConsolidationRequest, DeleteMode, EntityKind, EntityRef,
     ForgetRequest, ForgetTargetType, Id, KnowledgeEntity, KnowledgeRelationship, MemoryContent,
-    MemoryKind, Policy, Provenance, Requester, Retention, RetrievalRequest, RetrievalTargetType,
-    Sensitivity, Visibility, WriteMemoryRequest,
+    MemoryKind, MemoryRecord, MemoryStatus, Policy, Provenance, Requester, Retention,
+    RetrievalRequest, RetrievalTargetType, Sensitivity, Visibility, WriteMemoryRequest,
 };
+use engram_integration::BatchIngestRequest;
 use futures::executor::block_on;
 use serde_json::Value;
 
@@ -324,6 +325,160 @@ pub fn consolidate(app: &App, args: &Value) -> Result<Value, ToolError> {
     )))
 }
 
+/// `store_knowledge`: bulk distill-write. Takes facts + entities + relationships
+/// (extracted by the agent skill) and writes them through one `BatchIngest`
+/// call. The guarantee is **best-effort, not ACID** — the batch's per-step
+/// status is surfaced so a partial failure is visible, never hidden.
+///
+/// Entries missing a required field are skipped (lenient): a malformed fact /
+/// entity / relationship does not abort the batch; valid entries still land.
+pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let batch = app.provider.require_batch().map_err(internal)?;
+    let idempotency_key = args["idempotency_key"]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            format!(
+                "store-knowledge-{}",
+                Utc::now().timestamp_nanos_opt().unwrap_or(0)
+            )
+        });
+
+    let scope = app.scope.clone();
+    let prov = provenance("mcp-store-knowledge");
+    let pol = policy();
+
+    // Facts (memories). Entries without non-empty `content` are skipped.
+    let facts: Vec<MemoryRecord> = args["facts"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .filter_map(|(i, f)| {
+            let content = f["content"].as_str().filter(|s| !s.is_empty())?;
+            Some(MemoryRecord {
+                id: Id::from(format!("{idempotency_key}#{i}")),
+                kind: MemoryKind::Observation,
+                content: MemoryContent {
+                    text: content.to_owned(),
+                    summary: None,
+                    entities: Vec::new(),
+                    language: None,
+                    format: None,
+                    structured: None,
+                    hash: None,
+                },
+                scope: scope.clone(),
+                provenance: prov.clone(),
+                policy: pol.clone(),
+                status: MemoryStatus::Active,
+                links: Vec::new(),
+                assertions: Vec::new(),
+                created_at: Utc::now(),
+                updated_at: None,
+                metadata: None,
+            })
+        })
+        .collect();
+
+    // Entities. Entries without a non-empty `name` or with an unknown kind are skipped.
+    let entities: Vec<KnowledgeEntity> = args["entities"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|e| {
+            let name = e["name"].as_str().filter(|s| !s.is_empty())?;
+            let kind = parse_entity_kind(e["kind"].as_str().unwrap_or("concept")).ok()?;
+            Some(KnowledgeEntity {
+                id: Id::from(name),
+                graph_id: None,
+                kind,
+                name: name.to_owned(),
+                aliases: Vec::new(),
+                scope: scope.clone(),
+                source_refs: Vec::new(),
+                concept_refs: Vec::new(),
+                ontology_class_refs: Vec::new(),
+                provenance: prov.clone(),
+                created_at: Utc::now(),
+                updated_at: None,
+                valid_from: None,
+                valid_until: None,
+                metadata: None,
+            })
+        })
+        .collect();
+
+    // Relationships. Entries missing subject/predicate/object are skipped.
+    let relationships: Vec<KnowledgeRelationship> = args["relationships"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| {
+            let subject = r["subject"].as_str().filter(|s| !s.is_empty())?;
+            let predicate = r["predicate"].as_str().filter(|s| !s.is_empty())?;
+            let object = r["object"].as_str().filter(|s| !s.is_empty())?;
+            Some(KnowledgeRelationship {
+                id: Id::from(format!("{subject}\u{1f}{predicate}\u{1f}{object}")),
+                graph_id: None,
+                subject: EntityRef {
+                    id: Some(Id::from(subject)),
+                    kind: None,
+                    name: Some(subject.to_owned()),
+                    aliases: Vec::new(),
+                },
+                predicate: predicate.to_owned(),
+                object: EntityRef {
+                    id: Some(Id::from(object)),
+                    kind: None,
+                    name: Some(object.to_owned()),
+                    aliases: Vec::new(),
+                },
+                scope: scope.clone(),
+                evidence: Vec::new(),
+                confidence: None,
+                provenance: prov.clone(),
+                created_at: Utc::now(),
+                updated_at: None,
+            })
+        })
+        .collect();
+
+    let fact_count = facts.len();
+    let entity_count = entities.len();
+    let rel_count = relationships.len();
+
+    let request = BatchIngestRequest {
+        idempotency_key,
+        scope,
+        source: None,
+        documents: Vec::new(),
+        chunks: Vec::new(),
+        facts,
+        entities,
+        relationships,
+        evidence: Vec::new(),
+        embeddings: Vec::new(),
+    };
+    let outcome = block_on(batch.ingest(request)).map_err(internal)?;
+
+    let steps: Vec<String> = outcome
+        .steps
+        .iter()
+        .map(|s| format!("{:?}: {:?}", s.step, s.status))
+        .collect();
+    Ok(protocol::text_content(format!(
+        "Batch {:?} (guarantee: {:?}). {} fact(s), {} entit(y/ies), {} relationship(s). [{}]",
+        outcome.status,
+        outcome.guarantee,
+        fact_count,
+        entity_count,
+        rel_count,
+        steps.join(", ")
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -488,6 +643,35 @@ mod tests {
         assert!(
             !leaked,
             "recall under a different workspace must be isolated"
+        );
+    }
+
+    /// AC #8 — store_knowledge maps onto BatchIngest and surfaces the
+    /// BestEffort guarantee + per-step status for valid input.
+    #[test]
+    fn store_knowledge_completes_and_surfaces_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let res = store_knowledge(
+            &app,
+            &json!({
+                "facts": [{ "content": "Acme builds widgets" }],
+                "entities": [
+                    { "name": "Acme", "kind": "organization" },
+                    { "name": "Widget", "kind": "concept" }
+                ],
+                "relationships": [{ "subject": "Acme", "predicate": "builds", "object": "Widget" }]
+            }),
+        )
+        .expect("store_knowledge should succeed");
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("BestEffort"),
+            "must surface the guarantee: {body}"
+        );
+        assert!(
+            body.contains("Complete"),
+            "expected Complete for valid input: {body}"
         );
     }
 }

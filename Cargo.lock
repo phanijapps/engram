@@ -1732,8 +1732,13 @@ dependencies = [
 name = "engram-mcp"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "engram-domain",
  "engram-integration",
+ "engram-knowledge",
+ "engram-memory",
+ "engram-runtime",
+ "futures",
  "serde",
  "serde_json",
  "tempfile",

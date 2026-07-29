@@ -19,6 +19,7 @@ mod protocol;
 mod registry;
 mod scope;
 mod server;
+mod tools;
 
 use app::App;
 use registry::{ToolError, ToolRecord, ToolRegistry};
@@ -86,6 +87,56 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         description: "Return the active taxonomy configuration: concept scheme name + concepts.",
         input_schema: json!({ "type": "object", "properties": {} }),
         handler: app::taxonomy_read,
+    });
+    registry.register(ToolRecord {
+        name: "write_memory",
+        description: "Persist an observation or episode to the memory layer.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "content": { "type": "string" } },
+            "required": ["content"]
+        }),
+        handler: tools::write_memory,
+    });
+    registry.register(ToolRecord {
+        name: "forget",
+        description: "Delete, redact, tombstone, or archive a memory by target id.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "target_id": { "type": "string" },
+                "mode": { "type": "string", "description": "delete | redact | tombstone | archive" }
+            },
+            "required": ["target_id"]
+        }),
+        handler: tools::forget,
+    });
+    registry.register(ToolRecord {
+        name: "put_entity",
+        description: "Add an entity to the knowledge graph (honors the configured ontology).",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "kind": { "type": "string", "description": "Entity kind (Service, Concept, …); defaults to Concept." }
+            },
+            "required": ["name"]
+        }),
+        handler: tools::put_entity,
+    });
+    registry.register(ToolRecord {
+        name: "put_relationship",
+        description: "Add a (subject, predicate, object) edge to the knowledge graph.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "subject": { "type": "string" },
+                "predicate": { "type": "string" },
+                "object": { "type": "string" }
+            },
+            "required": ["subject", "predicate", "object"]
+        }),
+        handler: tools::put_relationship,
     });
 }
 

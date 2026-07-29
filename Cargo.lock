@@ -1729,6 +1729,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-mcp"
+version = "0.1.0"
+dependencies = [
+ "engram-domain",
+ "engram-integration",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "engram-memory"
 version = "0.1.0"
 dependencies = [

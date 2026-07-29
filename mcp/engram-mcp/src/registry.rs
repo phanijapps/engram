@@ -1,24 +1,26 @@
 //! Tool registry — the single source of truth for the MCP tool surface.
 //!
 //! `tools/list` and (Phase 3) `capability_report` both read from this registry,
-//! so the advertised tool set cannot drift from the implemented one. Phase 1
-//! keeps handlers synchronous and provider-less; Phase 2 evolves the handler
-//! signature to carry the [`EngramProvider`] once tools need it.
+//! so the advertised tool set cannot drift from the implemented one. The
+//! registry is generic over a handler context `C`: production passes the
+//! [`EngramProvider`]; unit tests pass `()` so dispatch is verifiable without
+//! opening a provider.
 //!
 //! [`EngramProvider`]: engram_integration::EngramProvider
 
 use serde_json::{Value, json};
 
-/// A tool handler. Given the parsed `arguments` object, returns the MCP
-/// `result` value to place under the JSON-RPC `result` field.
-pub type ToolHandler = fn(args: &Value) -> Value;
+/// A tool handler. Given the handler context and the parsed `arguments`
+/// object, returns the MCP `result` value to place under the JSON-RPC `result`
+/// field.
+pub type ToolHandler<C> = fn(ctx: &C, args: &Value) -> Value;
 
 /// One registered tool: its identity, schema, and handler.
-pub struct ToolRecord {
+pub struct ToolRecord<C> {
     pub name: &'static str,
     pub description: &'static str,
     pub input_schema: Value,
-    pub handler: ToolHandler,
+    pub handler: ToolHandler<C>,
 }
 
 /// Outcome of dispatching a `tools/call` to the registry.
@@ -29,19 +31,19 @@ pub enum CallOutcome {
     NotFound,
 }
 
-/// The set of tools this server exposes.
-pub struct ToolRegistry {
-    tools: Vec<ToolRecord>,
+/// The set of tools this server exposes, keyed by handler context `C`.
+pub struct ToolRegistry<C> {
+    tools: Vec<ToolRecord<C>>,
 }
 
-impl ToolRegistry {
+impl<C> ToolRegistry<C> {
     /// An empty registry. `main` (via `register_all`) populates it.
     pub fn new() -> Self {
         Self { tools: Vec::new() }
     }
 
     /// Register a tool. Registration order is preserved in `tools/list`.
-    pub fn register(&mut self, tool: ToolRecord) {
+    pub fn register(&mut self, tool: ToolRecord<C>) {
         self.tools.push(tool);
     }
 
@@ -60,15 +62,15 @@ impl ToolRegistry {
     }
 
     /// Dispatch a `tools/call` by name.
-    pub fn call(&self, name: &str, args: &Value) -> CallOutcome {
+    pub fn call(&self, ctx: &C, name: &str, args: &Value) -> CallOutcome {
         match self.tools.iter().find(|t| t.name == name) {
-            Some(tool) => CallOutcome::Ok((tool.handler)(args)),
+            Some(tool) => CallOutcome::Ok((tool.handler)(ctx, args)),
             None => CallOutcome::NotFound,
         }
     }
 }
 
-impl Default for ToolRegistry {
+impl<C> Default for ToolRegistry<C> {
     fn default() -> Self {
         Self::new()
     }
@@ -78,11 +80,11 @@ impl Default for ToolRegistry {
 mod tests {
     use super::*;
 
-    fn echo(args: &Value) -> Value {
+    fn echo(_ctx: &(), args: &Value) -> Value {
         json!({ "content": [{ "type": "text", "text": args.to_string() }] })
     }
 
-    fn reg() -> ToolRegistry {
+    fn reg() -> ToolRegistry<()> {
         let mut r = ToolRegistry::new();
         r.register(ToolRecord {
             name: "echo",
@@ -95,11 +97,11 @@ mod tests {
 
     #[test]
     fn empty_registry_lists_nothing() {
-        assert!(ToolRegistry::new().list().is_empty());
+        assert!(ToolRegistry::<()>::new().list().is_empty());
     }
 
     #[test]
-    fn list_preserves_registration_order_and_shape() {
+    fn list_preserves_order_and_shape() {
         let list = reg().list();
         let names: Vec<&str> = list.iter().filter_map(|v| v["name"].as_str()).collect();
         assert_eq!(names, vec!["echo"]);
@@ -108,7 +110,7 @@ mod tests {
 
     #[test]
     fn call_dispatches_to_handler() {
-        match reg().call("echo", &json!({ "x": 1 })) {
+        match reg().call(&(), "echo", &json!({ "x": 1 })) {
             CallOutcome::Ok(v) => assert!(
                 v["content"][0]["text"].as_str().unwrap().contains("\"x\""),
                 "echo should echo its args"
@@ -120,7 +122,7 @@ mod tests {
     #[test]
     fn call_unknown_is_not_found() {
         assert!(matches!(
-            reg().call("missing", &json!({})),
+            reg().call(&(), "missing", &json!({})),
             CallOutcome::NotFound
         ));
     }

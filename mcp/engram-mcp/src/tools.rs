@@ -662,6 +662,22 @@ mod tests {
     }
 
     #[test]
+    fn knowledge_query_lists_written_entities() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        put_entity(&app, &json!({ "name": "ListMe", "kind": "concept" })).unwrap();
+        let q = app
+            .provider
+            .require_knowledge_query()
+            .expect("knowledge_query handle");
+        let entities = block_on(q.list_entities(&app.scope)).expect("list_entities");
+        assert!(
+            entities.iter().any(|e| e.name == "ListMe"),
+            "list_entities must include the written entity: {entities:?}"
+        );
+    }
+
+    #[test]
     fn write_memory_rejects_missing_content() {
         let dir = tempfile::tempdir().unwrap();
         let app = test_app(dir.path());

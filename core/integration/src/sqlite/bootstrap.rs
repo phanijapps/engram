@@ -160,6 +160,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
 
     let mut memory: Option<Arc<dyn MemoryService>> = None;
     let mut knowledge: Option<Arc<dyn KnowledgeRepository>> = None;
+    let mut knowledge_query: Option<Arc<dyn crate::KnowledgeQuery>> = None;
     let mut graph: Option<Arc<dyn KnowledgeGraphRepository>> = None;
     let mut ontology: Option<Arc<dyn OntologyRepository>> = None;
     let mut taxonomy: Option<Arc<dyn TaxonomyRepository>> = None;
@@ -211,6 +212,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         if let Ok(store) = SqlKnowledgeStore::open_file(path) {
             let store: Arc<SqlKnowledgeStore> = Arc::new(store);
             knowledge_store = Some(store.clone());
+            knowledge_query = Some(store.clone());
             if knowledge_ok {
                 knowledge = Some(store.clone());
                 knowledge_state = CapabilityState::Supported;
@@ -493,6 +495,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
     if let Some(h) = knowledge {
         builder = builder.knowledge(h);
+    }
+    if let Some(h) = knowledge_query {
+        builder = builder.knowledge_query(h);
     }
     if let Some(h) = graph {
         builder = builder.graph(h);

@@ -43,6 +43,7 @@ pub mod config;
 pub mod dto;
 pub mod embedding;
 pub mod export_import;
+pub mod knowledge_query;
 pub mod migration;
 pub mod observability;
 #[cfg(feature = "ollama")]
@@ -67,6 +68,7 @@ pub use config::{
 pub use dto::{GraphQuery, MemorySearch, RecallRequest, scope, workspace_scope};
 pub use embedding::EmbeddingProvider;
 pub use export_import::ExportImport;
+pub use knowledge_query::KnowledgeQuery;
 pub use migration::{
     BeliefImportRecord, ConceptImportRecord, ConceptSchemeImportRecord, EmbeddingSpaceValidation,
     HierarchyNodeImportRecord, ImportData, KnowledgeChunkImportRecord,

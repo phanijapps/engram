@@ -243,6 +243,26 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         input_schema: json!({ "type": "object", "properties": {} }),
         handler: codegraph::whats_changed,
     });
+    registry.register(ToolRecord {
+        name: "get_context",
+        description: "Compose a task-aware context packet: fused recall + code neighborhood.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "focus": { "type": "string", "description": "Symbol, file, concept, or free-text." },
+                "depth": { "type": "integer" },
+                "limit": { "type": "integer" }
+            },
+            "required": ["focus"]
+        }),
+        handler: codegraph::get_context,
+    });
+    registry.register(ToolRecord {
+        name: "capability_report",
+        description: "Report which provider capabilities are wired.",
+        input_schema: json!({ "type": "object", "properties": {} }),
+        handler: codegraph::capability_report,
+    });
 }
 
 fn ping(_app: &App, _args: &Value) -> Result<Value, ToolError> {

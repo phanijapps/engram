@@ -293,3 +293,78 @@ pub fn whats_changed(app: &App, _args: &Value) -> Result<Value, ToolError> {
         "Recent: {recent:?}\nImpact: {impact:?}\nCompound: {compound:?}\nOverview: {overview:?}"
     )))
 }
+
+// --- Phase 3 -----------------------------------------------------------------
+
+/// `get_context`: compose a task-aware context packet for a focus (symbol, file,
+/// concept, or free-text). Fuses recall (docs + memories + beliefs) with the
+/// code neighborhood (callers/callees/community) — a pragmatic first version of
+/// RFC-0013's `ContextSubgraph` packet, built on existing capabilities.
+pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let focus = req_str(args, "focus")?;
+    let depth = args["depth"].as_u64().unwrap_or(2) as usize;
+    let limit = args["limit"].as_u64().unwrap_or(10).clamp(1, 50) as u32;
+
+    // 1. Fused recall (docs + memories + beliefs matching the focus).
+    let recall_text = match app.provider.require_recall() {
+        Ok(handle) => {
+            let req = RetrievalRequest {
+                query: focus.to_owned(),
+                scope: app.scope.clone(),
+                requester: crate::tools::requester(),
+                modes: Vec::new(),
+                filters: None,
+                cues: Vec::new(),
+                limit: Some(limit),
+                budget: None,
+                include_explanations: Some(true),
+            };
+            let payload = block_on(handle.recall(req)).map_err(internal)?;
+            let items: Vec<&str> = payload
+                .items
+                .iter()
+                .take(limit as usize)
+                .map(|i| i.content.as_str())
+                .collect();
+            if items.is_empty() {
+                String::new()
+            } else {
+                items.join("\n---\n")
+            }
+        }
+        Err(_) => String::new(),
+    };
+
+    // 2. Code neighborhood (callers/callees/community for the focus symbol).
+    let rels = fetch_rels(app);
+    let code_ctx = engram_codegraph_queries::symbol_context(&rels, focus, depth);
+
+    Ok(protocol::text_content(format!(
+        "=== Context for '{focus}' ===\n\n[Recall]\n{recall_text}\n\n[Code]\n{code_ctx:?}"
+    )))
+}
+
+/// `capability_report`: report which provider capabilities are wired.
+pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
+    let caps: Vec<String> = [
+        ("memory", app.provider.memory().is_some()),
+        ("knowledge", app.provider.knowledge().is_some()),
+        ("graph", app.provider.graph().is_some()),
+        ("knowledge_query", app.provider.knowledge_query().is_some()),
+        ("lexical_feed", app.provider.lexical_feed().is_some()),
+        ("recall", app.provider.recall().is_some()),
+        ("consolidation", app.provider.consolidation().is_some()),
+        ("batch", app.provider.batch().is_some()),
+        ("ontology", app.provider.ontology().is_some()),
+        ("taxonomy", app.provider.taxonomy().is_some()),
+        ("hierarchy", app.provider.hierarchy().is_some()),
+        ("identity", app.provider.identity().is_some()),
+    ]
+    .into_iter()
+    .map(|(name, ok)| format!("  {name}: {}", if ok { "supported" } else { "unsupported" }))
+    .collect();
+    Ok(protocol::text_content(format!(
+        "Server: engram-mcp 0.1.0\nCapabilities:\n{}",
+        caps.join("\n")
+    )))
+}

@@ -956,6 +956,21 @@ mod tests {
     }
 
     #[test]
+    fn get_context_returns_recall_and_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        write_memory(&app, &json!({ "content": "context-test-marker" })).unwrap();
+        let res = crate::codegraph::get_context(&app, &json!({ "focus": "context-test-marker" }))
+            .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(body.contains("=== Context"), "header: {body}");
+        assert!(
+            body.contains("context-test-marker"),
+            "recall should surface the marker: {body}"
+        );
+    }
+
+    #[test]
     fn scan_repo_indexes_code_into_the_project() {
         let dir = tempfile::tempdir().unwrap();
         let repo_dir = tempfile::tempdir().unwrap();

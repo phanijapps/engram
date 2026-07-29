@@ -26,7 +26,7 @@ use crate::registry::ToolError;
 
 // --- shared record helpers ----------------------------------------------------
 
-fn system_actor() -> Actor {
+pub(crate) fn system_actor() -> Actor {
     Actor {
         id: Id::from("engram-mcp"),
         kind: ActorKind::Agent,
@@ -44,7 +44,7 @@ fn requester() -> Requester {
     }
 }
 
-fn policy() -> Policy {
+pub(crate) fn policy() -> Policy {
     Policy {
         visibility: Visibility::Workspace,
         retention: Retention::Durable,
@@ -67,7 +67,7 @@ fn provenance(method: &str) -> Provenance {
     }
 }
 
-fn internal(msg: impl std::fmt::Display) -> ToolError {
+pub(crate) fn internal(msg: impl std::fmt::Display) -> ToolError {
     ToolError::new(-32603, msg.to_string())
 }
 
@@ -76,7 +76,7 @@ fn invalid(msg: impl std::fmt::Display) -> ToolError {
 }
 
 /// A required, non-empty string arg; `-32602` (invalid params) if absent/empty.
-fn req_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
+pub(crate) fn req_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
     args[key]
         .as_str()
         .filter(|s| !s.is_empty())
@@ -952,6 +952,37 @@ mod tests {
         assert!(
             rec_body.contains("flubbaz-widget"),
             "doc chunk should be retrievable: {rec_body}"
+        );
+    }
+
+    #[test]
+    fn scan_repo_indexes_code_into_the_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/main.rs"),
+            "fn alpha() {}\nfn beta() {}\nfn main() { alpha(); beta(); }\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        let res = crate::codegraph::scan_repo(
+            &app,
+            &json!({ "path": repo_dir.path().to_str().unwrap() }),
+        )
+        .unwrap();
+        let _body = res["content"][0]["text"].as_str().unwrap();
+        // The scanned functions land as entities in the project scope.
+        let q = app
+            .provider
+            .require_knowledge_query()
+            .expect("knowledge_query handle");
+        let entities = block_on(q.list_entities(&app.scope)).unwrap();
+        assert!(
+            entities
+                .iter()
+                .any(|e| e.name == "alpha" || e.name == "beta"),
+            "scan_repo must index the functions: {entities:?}"
         );
     }
 }

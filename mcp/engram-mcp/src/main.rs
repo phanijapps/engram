@@ -13,6 +13,7 @@
 
 mod app;
 mod bootstrap;
+mod codegraph;
 mod config;
 mod ontology;
 mod protocol;
@@ -195,6 +196,16 @@ fn register_all(registry: &mut ToolRegistry<App>) {
             "required": ["content"]
         }),
         handler: tools::index_docs,
+    });
+    registry.register(ToolRecord {
+        name: "scan_repo",
+        description: "Treesitter-index a code repository into the project workspace (code lane).",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "path": { "type": "string", "description": "Repository root path." } },
+            "required": ["path"]
+        }),
+        handler: codegraph::scan_repo,
     });
 }
 

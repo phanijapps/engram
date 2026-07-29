@@ -9,8 +9,8 @@ use chrono::Utc;
 use engram_domain::{
     Actor, ActorKind, AllowedUse, ConsolidationRequest, DeleteMode, EntityKind, EntityRef,
     ForgetRequest, ForgetTargetType, Id, KnowledgeEntity, KnowledgeRelationship, MemoryContent,
-    MemoryKind, Policy, Provenance, Requester, Retention, RetrievalRequest, Sensitivity,
-    Visibility, WriteMemoryRequest,
+    MemoryKind, Policy, Provenance, Requester, Retention, RetrievalRequest, RetrievalTargetType,
+    Sensitivity, Visibility, WriteMemoryRequest,
 };
 use futures::executor::block_on;
 use serde_json::Value;
@@ -66,19 +66,70 @@ fn internal(msg: impl std::fmt::Display) -> ToolError {
     ToolError::new(-32603, msg.to_string())
 }
 
-/// Parse a free-form `kind` string into an [`EntityKind`], defaulting to
-/// `Concept` for anything that isn't a known variant (so `put_entity` honors the
-/// caller's kind without hard-coding `Concept`).
-fn parse_entity_kind(kind: &str) -> EntityKind {
+fn invalid(msg: impl std::fmt::Display) -> ToolError {
+    ToolError::new(-32602, msg.to_string())
+}
+
+/// A required, non-empty string arg; `-32602` (invalid params) if absent/empty.
+fn req_str<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
+    args[key]
+        .as_str()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| invalid(format!("{key} is required")))
+}
+
+/// Parse a `kind` string into an [`EntityKind`], rejecting unknown variants
+/// (so `put_entity` honors the caller's kind rather than silently defaulting).
+fn parse_entity_kind(kind: &str) -> Result<EntityKind, ToolError> {
     serde_json::from_value(serde_json::Value::String(kind.to_owned()))
-        .unwrap_or(EntityKind::Concept)
+        .map_err(|_| invalid(format!("unknown entity kind: {kind}")))
+}
+
+/// A recall lane filter: `None` fuses every source; `Some(set)` keeps only the
+/// listed [`RetrievalTargetType`]s. Maps user-facing lane names onto the
+/// underlying target types.
+struct LaneFilter(Option<Vec<RetrievalTargetType>>);
+
+impl LaneFilter {
+    fn all() -> Self {
+        Self(None)
+    }
+
+    fn allows(&self, t: &RetrievalTargetType) -> bool {
+        match &self.0 {
+            None => true,
+            Some(set) => set.iter().any(|x| x == t),
+        }
+    }
+}
+
+fn parse_lanes(raw: &Value) -> LaneFilter {
+    use RetrievalTargetType::*;
+    let Some(arr) = raw.as_array() else {
+        return LaneFilter::all();
+    };
+    let mut set = Vec::new();
+    for lane in arr.iter().filter_map(Value::as_str) {
+        match lane {
+            "memory" => set.push(Memory),
+            "knowledge" | "code" => set.extend([Entity, Relationship, Concept]),
+            "docs" => set.extend([Chunk, Document]),
+            "beliefs" => set.push(Belief),
+            _ => {} // unrecognized lane names are ignored (lenient).
+        }
+    }
+    if set.is_empty() {
+        LaneFilter::all()
+    } else {
+        LaneFilter(Some(set))
+    }
 }
 
 // --- tools --------------------------------------------------------------------
 
 /// `write_memory`: persist an observation/episode to the memory layer.
 pub fn write_memory(app: &App, args: &Value) -> Result<Value, ToolError> {
-    let content = args["content"].as_str().unwrap_or("");
+    let content = req_str(args, "content")?;
     let memory = app.provider.require_memory().map_err(internal)?;
     let request = WriteMemoryRequest {
         kind: MemoryKind::Observation,
@@ -105,12 +156,17 @@ pub fn write_memory(app: &App, args: &Value) -> Result<Value, ToolError> {
 
 /// `forget`: delete, redact, tombstone, or archive a memory by target id.
 pub fn forget(app: &App, args: &Value) -> Result<Value, ToolError> {
-    let target_id = args["target_id"].as_str().unwrap_or("");
+    let target_id = req_str(args, "target_id")?;
     let mode = match args["mode"].as_str().unwrap_or("tombstone") {
         "delete" => DeleteMode::Delete,
         "redact" => DeleteMode::Redact,
+        "tombstone" => DeleteMode::Tombstone,
         "archive" => DeleteMode::Archive,
-        _ => DeleteMode::Tombstone,
+        other => {
+            return Err(invalid(format!(
+                "unknown mode: {other}; expected delete|redact|tombstone|archive"
+            )));
+        }
     };
     let memory = app.provider.require_memory().map_err(internal)?;
     let request = ForgetRequest {
@@ -126,10 +182,11 @@ pub fn forget(app: &App, args: &Value) -> Result<Value, ToolError> {
     Ok(protocol::text_content(body))
 }
 
-/// `put_entity`: add an entity to the knowledge graph (honoring the `kind` arg).
+/// `put_entity`: add an entity to the knowledge graph (upsert by `name`;
+/// honors the `kind` arg, rejecting unknown kinds).
 pub fn put_entity(app: &App, args: &Value) -> Result<Value, ToolError> {
-    let name = args["name"].as_str().unwrap_or("");
-    let kind = parse_entity_kind(args["kind"].as_str().unwrap_or("Concept"));
+    let name = req_str(args, "name")?;
+    let kind = parse_entity_kind(args["kind"].as_str().unwrap_or("concept"))?;
     let knowledge = app.provider.require_knowledge().map_err(internal)?;
     let entity = KnowledgeEntity {
         id: Id::from(name),
@@ -156,13 +213,15 @@ pub fn put_entity(app: &App, args: &Value) -> Result<Value, ToolError> {
 }
 
 /// `put_relationship`: add a (subject, predicate, object) edge to the graph.
+/// The ID uses a unit-separator-delimited tuple so distinct (s, p, o) triples
+/// cannot collide regardless of the strings involved.
 pub fn put_relationship(app: &App, args: &Value) -> Result<Value, ToolError> {
-    let subject = args["subject"].as_str().unwrap_or("");
-    let predicate = args["predicate"].as_str().unwrap_or("");
-    let object = args["object"].as_str().unwrap_or("");
+    let subject = req_str(args, "subject")?;
+    let predicate = req_str(args, "predicate")?;
+    let object = req_str(args, "object")?;
     let knowledge = app.provider.require_knowledge().map_err(internal)?;
     let rel = KnowledgeRelationship {
-        id: Id::from(format!("{subject}-{predicate}-{object}")),
+        id: Id::from(format!("{subject}\u{1f}{predicate}\u{1f}{object}")),
         graph_id: None,
         subject: EntityRef {
             id: Some(Id::from(subject)),
@@ -191,11 +250,19 @@ pub fn put_relationship(app: &App, args: &Value) -> Result<Value, ToolError> {
 }
 
 /// `recall`: fused retrieval across memory + knowledge + beliefs for the
-/// project scope. (A `lanes` restriction is accepted by the surface; the
-/// underlying `UnifiedRecall` fuses all sources in Phase 1, and per-lane
-/// filtering is a refinement that maps `lanes` onto `RetrievalMode`.)
+/// project scope. The optional `lanes` array restricts the result to a subset
+/// of target types (memory / knowledge / docs / beliefs); absent or empty
+/// `lanes` fuses everything. `limit` defaults to 10 (clamped 1..=100).
 pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
-    let query = args["query"].as_str().unwrap_or("");
+    let query = req_str(args, "query")?;
+    let lanes = parse_lanes(&args["lanes"]);
+    let limit = Some(
+        args["limit"]
+            .as_u64()
+            .map(|n| n as u32)
+            .unwrap_or(10)
+            .clamp(1, 100),
+    );
     let recall = app.provider.require_recall().map_err(internal)?;
     let request = RetrievalRequest {
         query: query.to_owned(),
@@ -204,12 +271,17 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
         modes: Vec::new(),
         filters: None,
         cues: Vec::new(),
-        limit: Some(10),
+        limit,
         budget: None,
         include_explanations: Some(true),
     };
     let payload = block_on(recall.recall(request)).map_err(internal)?;
-    let items: Vec<&str> = payload.items.iter().map(|i| i.content.as_str()).collect();
+    let items: Vec<&str> = payload
+        .items
+        .iter()
+        .filter(|i| lanes.allows(&i.target_type))
+        .map(|i| i.content.as_str())
+        .collect();
     let body = if items.is_empty() {
         "No results.".to_owned()
     } else {
@@ -255,7 +327,6 @@ pub fn consolidate(app: &App, args: &Value) -> Result<Value, ToolError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::App;
     use crate::ontology::{OntologyConfig, TaxonomyConfig};
     use crate::scope::project_scope;
     use engram_domain::ScopeMappingStrategy;
@@ -289,33 +360,42 @@ mod tests {
     }
 
     #[test]
-    fn write_memory_succeeds() {
+    fn write_memory_rejects_missing_content() {
         let dir = tempfile::tempdir().unwrap();
         let app = test_app(dir.path());
-        let res = write_memory(&app, &json!({ "content": "Alice works at Acme" }));
-        assert!(res.is_ok(), "write_memory should succeed: {:?}", res.err());
+        let err = write_memory(&app, &json!({})).unwrap_err();
+        assert_eq!(err.code, -32602);
     }
 
     #[test]
-    fn put_entity_honors_kind_and_stores() {
+    fn put_entity_honors_kind_and_rejects_unknown() {
         let dir = tempfile::tempdir().unwrap();
         let app = test_app(dir.path());
-        let res = put_entity(&app, &json!({ "name": "AuthService", "kind": "Service" }));
-        assert!(res.is_ok(), "{:?}", res.err());
-        // Unknown kind falls back to Concept, still Ok.
-        let res2 = put_entity(&app, &json!({ "name": "Mystery", "kind": "NotARealKind" }));
-        assert!(res2.is_ok(), "{:?}", res2.err());
+        assert!(put_entity(&app, &json!({ "name": "X", "kind": "concept" })).is_ok());
+        assert!(put_entity(&app, &json!({ "name": "Y", "kind": "api" })).is_ok());
+        // "Service" is not a valid EntityKind → invalid params.
+        let err = put_entity(&app, &json!({ "name": "Z", "kind": "Service" })).unwrap_err();
+        assert_eq!(err.code, -32602);
     }
 
     #[test]
-    fn put_relationship_stores() {
+    fn put_relationship_rejects_missing_fields() {
         let dir = tempfile::tempdir().unwrap();
         let app = test_app(dir.path());
-        let res = put_relationship(
+        let err = put_relationship(
             &app,
-            &json!({ "subject": "AuthService", "predicate": "realized_by", "object": "auth.rs" }),
-        );
-        assert!(res.is_ok(), "{:?}", res.err());
+            &json!({ "subject": "a", "predicate": "b" }), // no object
+        )
+        .unwrap_err();
+        assert_eq!(err.code, -32602);
+    }
+
+    #[test]
+    fn forget_rejects_unknown_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let err = forget(&app, &json!({ "target_id": "x", "mode": "permanent" })).unwrap_err();
+        assert_eq!(err.code, -32602);
     }
 
     #[test]
@@ -331,13 +411,42 @@ mod tests {
         );
     }
 
+    /// AC #4 — `lanes` restricts the fused result: a memory is visible with no
+    /// lanes (or `lanes:["memory"]`) and excluded when only `knowledge` is requested.
+    #[test]
+    fn recall_lanes_filter_excludes_other_lanes() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        write_memory(&app, &json!({ "content": "lanes-filter-marker" })).unwrap();
+
+        let all = recall(&app, &json!({ "query": "lanes-filter-marker" })).unwrap();
+        assert!(
+            all["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("lanes-filter-marker")
+        );
+
+        let knowledge_only = recall(
+            &app,
+            &json!({ "query": "lanes-filter-marker", "lanes": ["knowledge"] }),
+        )
+        .unwrap();
+        assert!(
+            !knowledge_only["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("lanes-filter-marker"),
+            "knowledge lane must exclude memory items"
+        );
+    }
+
     /// AC #5 — fused-per-project isolation: a memory written under a different
     /// project workspace is invisible to recall under this project's scope.
     #[test]
     fn workspace_scope_isolates_recall() {
         let dir = tempfile::tempdir().unwrap();
         let app = test_app(dir.path());
-        // Write under a *different* workspace via the memory handle directly.
         let memory = app.provider.require_memory().expect("memory handle");
         let write_req = WriteMemoryRequest {
             kind: MemoryKind::Observation,
@@ -359,7 +468,6 @@ mod tests {
         };
         block_on(memory.write_memory(write_req)).expect("write");
 
-        // Recall under app.scope (project = test-project): must not leak.
         let recall_handle = app.provider.require_recall().expect("recall handle");
         let req = RetrievalRequest {
             query: "isolated-secret-token".to_owned(),

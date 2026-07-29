@@ -113,12 +113,12 @@ fn register_all(registry: &mut ToolRegistry<App>) {
     });
     registry.register(ToolRecord {
         name: "put_entity",
-        description: "Add an entity to the knowledge graph (honors the configured ontology).",
+        description: "Add an entity to the knowledge graph (upsert by name; honors the kind arg).",
         input_schema: json!({
             "type": "object",
             "properties": {
                 "name": { "type": "string" },
-                "kind": { "type": "string", "description": "Entity kind (Service, Concept, …); defaults to Concept." }
+                "kind": { "type": "string", "description": "Entity kind (concept, api, function, …); defaults to concept. Unknown kinds are rejected." }
             },
             "required": ["name"]
         }),
@@ -143,7 +143,15 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         description: "Fused retrieval across memory + knowledge + beliefs for the project.",
         input_schema: json!({
             "type": "object",
-            "properties": { "query": { "type": "string" } },
+            "properties": {
+                "query": { "type": "string" },
+                "lanes": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "Restrict to source lanes: memory | knowledge | docs | beliefs. Absent or empty fuses all."
+                },
+                "limit": { "type": "integer", "minimum": 1, "maximum": 100, "description": "Max items (default 10)." }
+            },
             "required": ["query"]
         }),
         handler: tools::recall,

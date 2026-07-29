@@ -55,7 +55,7 @@ pub(crate) fn policy() -> Policy {
     }
 }
 
-fn provenance(method: &str) -> Provenance {
+pub(crate) fn provenance(method: &str) -> Provenance {
     Provenance {
         source: "engram-mcp".to_owned(),
         actor: system_actor(),
@@ -1076,6 +1076,52 @@ mod tests {
         assert!(
             rbody.contains("Resolved") && rbody.contains("flange"),
             "resolve must find flange: {rbody}"
+        );
+    }
+
+    /// P2 AC1–AC3 — belief surface: put → get round-trip, retract closes it.
+    #[test]
+    fn belief_tools_put_get_retract() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+
+        // AC1: put then get round-trips.
+        let put = crate::belief::belief_put(
+            &app,
+            &json!({ "subject": "svc-a", "statement": "svc-a is healthy", "confidence": 0.9 }),
+        )
+        .unwrap();
+        let pbody = put["content"][0]["text"].as_str().unwrap();
+        assert!(pbody.contains("Belief stored"), "{pbody}");
+
+        let get = crate::belief::belief_get(&app, &json!({ "subject": "svc-a" })).unwrap();
+        let gbody = get["content"][0]["text"].as_str().unwrap();
+        assert!(
+            gbody.contains("svc-a is healthy"),
+            "get must return the statement: {gbody}"
+        );
+
+        // Extract the stored belief id from the put response.
+        let id = pbody.rsplit_once("id ").unwrap().1.trim_end_matches(']');
+        assert!(!id.is_empty(), "parse id from: {pbody}");
+
+        // AC2: retract then get no longer returns it as live.
+        crate::belief::belief_retract(&app, &json!({ "id": id })).unwrap();
+        let after = crate::belief::belief_get(&app, &json!({ "subject": "svc-a" })).unwrap();
+        let abody = after["content"][0]["text"].as_str().unwrap();
+        assert!(
+            abody.contains("No live belief"),
+            "after retract, get must not return it as live: {abody}"
+        );
+
+        // AC3: stale_list runs (empty here — retract closes, not stale).
+        let stale = crate::belief::belief_stale_list(&app, &json!({})).unwrap();
+        assert!(
+            stale["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("stale"),
+            "stale_list must run"
         );
     }
 

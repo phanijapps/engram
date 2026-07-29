@@ -349,6 +349,7 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
         ("batch", app.provider.batch().is_some()),
         ("ontology", app.provider.ontology().is_some()),
         ("taxonomy", app.provider.taxonomy().is_some()),
+        ("beliefs", app.provider.beliefs().is_some()),
         ("hierarchy", app.provider.hierarchy().is_some()),
         ("identity", app.provider.identity().is_some()),
     ]

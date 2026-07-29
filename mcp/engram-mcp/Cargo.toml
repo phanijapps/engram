@@ -14,6 +14,8 @@ engram-domain = { path = "../../core/domain" }
 engram-ingest = { path = "../../adapters/ingest" }
 engram-integration = { path = "../../core/integration", features = ["sqlite"] }
 engram-knowledge = { path = "../../core/knowledge" }
+engram-belief = { path = "../../core/belief" }
+engram-hierarchy = { path = "../../core/hierarchy" }
 engram-codegraph-queries = { path = "../../codegraph/queries" }
 engram-codegraph-temporal = { path = "../../codegraph/temporal" }
 async-trait = { workspace = true }

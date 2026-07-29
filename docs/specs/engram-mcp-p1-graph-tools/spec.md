@@ -1,6 +1,6 @@
 # Spec — engram-mcp P1 Graph Tools (RFC-0016, Layer 2)
 
-- **Status:** Implementing
+- **Status:** Implemented (P1 complete 2026-07-29; verified on live agentzero data)
 - **Mode:** full (new module + new public tool surface)
 - **Constrained by:** RFC-0016 D1 (surface, not build — route through `KnowledgeQuery`), ADR-0022 (surface parity)
 - **Branch:** `feat/engram-mcp-core`

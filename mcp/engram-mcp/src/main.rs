@@ -12,10 +12,12 @@
 //! [`EngramProvider`]: engram_integration::EngramProvider
 
 mod app;
+mod belief;
 mod bootstrap;
 mod codegraph;
 mod config;
 mod graph;
+mod hierarchy;
 mod ontology;
 mod protocol;
 mod registry;
@@ -255,6 +257,64 @@ fn register_all(registry: &mut ToolRegistry<App>) {
             "required": ["name"]
         }),
         handler: graph::resolve_entity,
+    });
+    registry.register(ToolRecord {
+        name: "belief_get",
+        description: "Read the live belief for a subject (valid at `as_of`, default now). The \
+                      \"what do we believe about X?\" lookup.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "subject": { "type": "string" },
+                "as_of": { "type": "string", "description": "Optional RFC3339 timestamp; defaults to now." }
+            },
+            "required": ["subject"]
+        }),
+        handler: belief::belief_get,
+    });
+    registry.register(ToolRecord {
+        name: "belief_put",
+        description: "Assert or update a belief (a new valid-time version) for a subject.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "subject": { "type": "string" },
+                "statement": { "type": "string" },
+                "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0, "description": "Default 0.8." }
+            },
+            "required": ["subject", "statement"]
+        }),
+        handler: belief::belief_put,
+    });
+    registry.register(ToolRecord {
+        name: "belief_retract",
+        description: "Retract a belief by id (closes its valid interval).",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "id": { "type": "string" } },
+            "required": ["id"]
+        }),
+        handler: belief::belief_retract,
+    });
+    registry.register(ToolRecord {
+        name: "belief_stale_list",
+        description: "List beliefs flagged stale in the project scope (need review).",
+        input_schema: json!({ "type": "object", "properties": {} }),
+        handler: belief::belief_stale_list,
+    });
+    registry.register(ToolRecord {
+        name: "hierarchy_path",
+        description: "Navigation path (LCA + nodes + relations) for seed entity ids over the \
+                      clustered hierarchy. Empty until a hierarchy is built for the scope.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "seeds": { "type": "array", "items": { "type": "string" } },
+                "max_layer": { "type": "integer" }
+            },
+            "required": ["seeds"]
+        }),
+        handler: hierarchy::hierarchy_path,
     });
     registry.register(ToolRecord {
         name: "symbol_context",

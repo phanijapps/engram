@@ -1164,6 +1164,41 @@ mod tests {
         );
     }
 
+    /// P4 — get_context surfaces the unified-graph links ([Graph] section).
+    #[test]
+    fn get_context_includes_graph_links() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        // Written directly (avoids scan_repo + recall in one process — the known
+        // nested-executor limitation: recall panics after scan's internal block_on).
+        put_entity(
+            &app,
+            &json!({ "name": "auth_middleware", "kind": "function" }),
+        )
+        .unwrap();
+        put_entity(
+            &app,
+            &json!({ "name": "Authentication", "kind": "concept" }),
+        )
+        .unwrap();
+        put_relationship(
+            &app,
+            &json!({ "subject": "Authentication", "predicate": "describes", "object": "auth_middleware" }),
+        )
+        .unwrap();
+        let res =
+            crate::codegraph::get_context(&app, &json!({ "focus": "auth_middleware" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("[Graph]"),
+            "get_context must include a [Graph] section: {body}"
+        );
+        assert!(
+            body.contains("describes"),
+            "[Graph] must show the describes link: {body}"
+        );
+    }
+
     #[test]
     fn composites_work_on_seeded_graph() {
         let dir = tempfile::tempdir().unwrap();

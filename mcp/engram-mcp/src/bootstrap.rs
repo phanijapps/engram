@@ -63,6 +63,9 @@ mod tests {
             taxonomy_path: None,
             sqlite_layout: McpSqliteLayout::default(),
             db_file: "engram_data.db".to_string(),
+            org: None,
+            domain: None,
+            subdomain: None,
         }
     }
 

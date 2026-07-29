@@ -331,8 +331,31 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let rels = fetch_rels(app);
     let code_ctx = engram_codegraph_queries::symbol_context(&rels, focus, depth);
 
+    // 3. Unified-graph links — doc/concept `describes`/`mentions` edges for the
+    //    focus, on top of the code neighborhood. This is the doc↔code connection
+    //    surfacing in one context packet.
+    let links: Vec<String> = rels
+        .iter()
+        .filter_map(|r| {
+            let (s, o) = (r.subject.name.as_deref()?, r.object.name.as_deref()?);
+            if s == focus {
+                Some(format!("{focus} -[{}]-> {o}", r.predicate))
+            } else if o == focus {
+                Some(format!("{s} -[{}]-> {focus}", r.predicate))
+            } else {
+                None
+            }
+        })
+        .take(20)
+        .collect();
+    let graph_text = if links.is_empty() {
+        "(none)".to_owned()
+    } else {
+        links.join("\n")
+    };
+
     Ok(protocol::text_content(format!(
-        "=== Context for '{focus}' ===\n\n[Recall]\n{recall_text}\n\n[Code]\n{code_ctx:?}"
+        "=== Context for '{focus}' ===\n\n[Recall]\n{recall_text}\n\n[Graph]\n{graph_text}\n\n[Code]\n{code_ctx:?}"
     )))
 }
 

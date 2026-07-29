@@ -35,6 +35,7 @@ fn main() {
         eprintln!("engram-mcp: {message}");
         eprintln!(
             "usage: engram-mcp --storage <path> [--project <name>] \
+             [--org <name> --domain <name> [--subdomain <name>]] \
              [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
              [--db-file <name>]"
         );
@@ -61,7 +62,12 @@ fn main() {
 
     let app = App {
         provider,
-        scope: scope::project_scope(&config.project, "default"),
+        scope: scope::resolve_scope(
+            config.org.as_deref(),
+            config.domain.as_deref(),
+            config.subdomain.as_deref(),
+            &config.project,
+        ),
         ontology,
         taxonomy,
     };

@@ -38,6 +38,9 @@ pub struct McpConfig {
     pub taxonomy_path: Option<PathBuf>,
     pub sqlite_layout: McpSqliteLayout,
     pub db_file: String,
+    pub org: Option<String>,
+    pub domain: Option<String>,
+    pub subdomain: Option<String>,
 }
 
 impl McpConfig {
@@ -50,12 +53,23 @@ impl McpConfig {
         let mut taxonomy_path = None;
         let mut sqlite_layout: Option<McpSqliteLayout> = None;
         let mut db_file: Option<String> = None;
+        let mut org: Option<String> = None;
+        let mut domain: Option<String> = None;
+        let mut subdomain: Option<String> = None;
         let mut i = 0;
         while i < argv.len() {
             let flag = argv[i].as_str();
             if !matches!(
                 flag,
-                "--storage" | "--project" | "--ontology" | "--taxonomy" | "--layout" | "--db-file"
+                "--storage"
+                    | "--project"
+                    | "--ontology"
+                    | "--taxonomy"
+                    | "--layout"
+                    | "--db-file"
+                    | "--org"
+                    | "--domain"
+                    | "--subdomain"
             ) {
                 return Err(format!("unknown argument: {flag}"));
             }
@@ -82,6 +96,9 @@ impl McpConfig {
                     });
                 }
                 "--db-file" => db_file = Some(value),
+                "--org" => org = Some(value),
+                "--domain" => domain = Some(value),
+                "--subdomain" => subdomain = Some(value),
                 _ => unreachable!("known flags are matched above"),
             }
             i += 2;
@@ -104,6 +121,9 @@ impl McpConfig {
             taxonomy_path,
             sqlite_layout: sqlite_layout.unwrap_or_default(),
             db_file: db_file.unwrap_or_else(|| "engram_data.db".to_string()),
+            org,
+            domain,
+            subdomain,
         })
     }
 }

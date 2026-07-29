@@ -41,11 +41,16 @@ fn handle_request<C>(registry: &ToolRegistry<C>, ctx: &C, req: &Value) -> Option
             let args = &params["arguments"];
             match registry.call(ctx, name, args) {
                 CallOutcome::Ok(result) => Some(Response::Result(result)),
+                // Handler-reported failure: surface its code/message verbatim.
+                CallOutcome::Err(err) => Some(Response::Error(err.code, err.message)),
+                // Unknown tool name under a known method → invalid params.
                 CallOutcome::NotFound => {
-                    Some(Response::Error(-32601, format!("tool not found: {name}")))
+                    Some(Response::Error(-32602, format!("tool not found: {name}")))
                 }
             }
         }
+        // Unknown method. (`-32601` per JSON-RPC 2.0; distinct from the
+        // `-32602` used for an unknown tool name under `tools/call`.)
         _ => Some(Response::Error(
             -32601,
             format!("method not found: {method}"),
@@ -53,7 +58,7 @@ fn handle_request<C>(registry: &ToolRegistry<C>, ctx: &C, req: &Value) -> Option
     }
 }
 
-/// Run the stdio JSON-RPC loop until stdin closes.
+/// Run the stdio JSON-RPC loop until stdin closes or the client goes away.
 pub fn run<C>(registry: ToolRegistry<C>, ctx: &C) {
     let stdin = io::stdin();
     let stdout = io::stdout();
@@ -74,28 +79,44 @@ pub fn run<C>(registry: ToolRegistry<C>, ctx: &C) {
             Response::Result(result) => protocol::success(&id, result),
             Response::Error(code, message) => protocol::error(&id, code, &message),
         };
-        writeln!(out, "{message}").unwrap();
-        out.flush().unwrap();
+        // A write/flush error (e.g. broken pipe when the client dies) ends the
+        // session cleanly rather than panicking.
+        if writeln!(out, "{message}")
+            .and_then(|()| out.flush())
+            .is_err()
+        {
+            break;
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::registry::{ToolRecord, ToolRegistry};
+    use crate::registry::{ToolError, ToolRecord, ToolRegistry};
     use serde_json::json;
 
-    fn ping(_ctx: &(), _args: &Value) -> Value {
-        protocol::text_content("pong")
+    fn ping(_ctx: &(), _args: &Value) -> Result<Value, ToolError> {
+        Ok(protocol::text_content("pong"))
     }
 
-    fn registry_with_ping() -> ToolRegistry<()> {
+    fn boom(_ctx: &(), _args: &Value) -> Result<Value, ToolError> {
+        Err(ToolError::new(-32603, "kaboom"))
+    }
+
+    fn registry_with_tools() -> ToolRegistry<()> {
         let mut r = ToolRegistry::new();
         r.register(ToolRecord {
             name: "ping",
             description: "ping",
             input_schema: json!({}),
             handler: ping,
+        });
+        r.register(ToolRecord {
+            name: "boom",
+            description: "boom",
+            input_schema: json!({}),
+            handler: boom,
         });
         r
     }
@@ -109,7 +130,7 @@ mod tests {
     #[test]
     fn initialize_returns_server_info() {
         let resp =
-            handle_request(&registry_with_ping(), &(), &json!({"method":"initialize"})).unwrap();
+            handle_request(&registry_with_tools(), &(), &json!({"method":"initialize"})).unwrap();
         match resp {
             Response::Result(v) => {
                 assert_eq!(v["serverInfo"]["name"], "engram-mcp");
@@ -124,7 +145,7 @@ mod tests {
     fn notification_is_skipped() {
         assert!(
             handle_request(
-                &registry_with_ping(),
+                &registry_with_tools(),
                 &(),
                 &json!({"method":"notifications/initialized"})
             )
@@ -135,7 +156,7 @@ mod tests {
     #[test]
     fn tools_list_reflects_registry() {
         let resp =
-            handle_request(&registry_with_ping(), &(), &json!({"method":"tools/list"})).unwrap();
+            handle_request(&registry_with_tools(), &(), &json!({"method":"tools/list"})).unwrap();
         match resp {
             Response::Result(v) => {
                 let names: Vec<&str> = v["tools"]
@@ -144,7 +165,7 @@ mod tests {
                     .iter()
                     .filter_map(|t| t["name"].as_str())
                     .collect();
-                assert_eq!(names, vec!["ping"]);
+                assert_eq!(names, vec!["ping", "boom"]);
             }
             _ => panic!("expected result"),
         }
@@ -153,24 +174,37 @@ mod tests {
     #[test]
     fn tools_call_dispatches() {
         let req = json!({"method":"tools/call","params":{"name":"ping","arguments":{}}});
-        match handle_request(&registry_with_ping(), &(), &req).unwrap() {
+        match handle_request(&registry_with_tools(), &(), &req).unwrap() {
             Response::Result(v) => assert_eq!(v["content"][0]["text"], "pong"),
             _ => panic!("expected result"),
         }
     }
 
     #[test]
-    fn unknown_tool_is_error() {
-        let req = json!({"method":"tools/call","params":{"name":"nope","arguments":{}}});
-        match handle_request(&registry_with_ping(), &(), &req).unwrap() {
-            Response::Error(code, _) => assert_eq!(code, -32601),
+    fn tools_call_surfaces_handler_error() {
+        let req = json!({"method":"tools/call","params":{"name":"boom","arguments":{}}});
+        match handle_request(&registry_with_tools(), &(), &req).unwrap() {
+            Response::Error(code, msg) => {
+                assert_eq!(code, -32603);
+                assert_eq!(msg, "kaboom");
+            }
             _ => panic!("expected error"),
         }
     }
 
     #[test]
-    fn unknown_method_is_error() {
-        match handle_request(&registry_with_ping(), &(), &json!({"method":"frobnicate"})).unwrap() {
+    fn unknown_tool_is_invalid_params() {
+        let req = json!({"method":"tools/call","params":{"name":"nope","arguments":{}}});
+        match handle_request(&registry_with_tools(), &(), &req).unwrap() {
+            Response::Error(code, _) => assert_eq!(code, -32602),
+            _ => panic!("expected error"),
+        }
+    }
+
+    #[test]
+    fn unknown_method_is_method_not_found() {
+        match handle_request(&registry_with_tools(), &(), &json!({"method":"frobnicate"})).unwrap()
+        {
             Response::Error(code, _) => assert_eq!(code, -32601),
             _ => panic!("expected error"),
         }

@@ -18,7 +18,7 @@ mod scope;
 mod server;
 
 use engram_integration::EngramProvider;
-use registry::{ToolRecord, ToolRegistry};
+use registry::{ToolError, ToolRecord, ToolRegistry};
 use serde_json::{Value, json};
 
 fn main() {
@@ -57,6 +57,6 @@ fn register_all(registry: &mut ToolRegistry<EngramProvider>) {
     });
 }
 
-fn ping(_provider: &EngramProvider, _args: &Value) -> Value {
-    protocol::text_content("pong")
+fn ping(_provider: &EngramProvider, _args: &Value) -> Result<Value, ToolError> {
+    Ok(protocol::text_content("pong"))
 }

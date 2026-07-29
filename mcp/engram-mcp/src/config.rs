@@ -11,6 +11,7 @@ use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, MigrationMod
 /// `ontology_path` / `taxonomy_path` are accepted here and consumed by the
 /// loader in T4; Phase 1's generic core ignores them when absent (baked-in
 /// default).
+#[derive(Debug)]
 #[allow(dead_code)] // project read by scope (T3); ontology/taxonomy by the loader (T4)
 pub struct McpConfig {
     pub storage_path: PathBuf,
@@ -33,27 +34,27 @@ impl McpConfig {
         let mut taxonomy_path = None;
         let mut i = 0;
         while i < argv.len() {
-            match argv[i].as_str() {
-                "--storage" => {
-                    storage_path = argv.get(i + 1).map(PathBuf::from);
-                    i += 2;
-                }
-                "--project" => {
-                    project = argv.get(i + 1).cloned();
-                    i += 2;
-                }
-                "--ontology" => {
-                    ontology_path = argv.get(i + 1).map(PathBuf::from);
-                    i += 2;
-                }
-                "--taxonomy" => {
-                    taxonomy_path = argv.get(i + 1).map(PathBuf::from);
-                    i += 2;
-                }
-                other => {
-                    return Err(format!("unknown argument: {other}"));
-                }
+            let flag = argv[i].as_str();
+            if !matches!(
+                flag,
+                "--storage" | "--project" | "--ontology" | "--taxonomy"
+            ) {
+                return Err(format!("unknown argument: {flag}"));
             }
+            // A known flag must be followed by a value that is not itself a flag.
+            let value = argv
+                .get(i + 1)
+                .filter(|v| !v.starts_with("--"))
+                .cloned()
+                .ok_or_else(|| format!("{flag} requires a value"))?;
+            match flag {
+                "--storage" => storage_path = Some(PathBuf::from(value)),
+                "--project" => project = Some(value),
+                "--ontology" => ontology_path = Some(PathBuf::from(value)),
+                "--taxonomy" => taxonomy_path = Some(PathBuf::from(value)),
+                _ => unreachable!("known flags are matched above"),
+            }
+            i += 2;
         }
         let storage_path = storage_path.ok_or("missing required --storage <path>")?;
         Ok(Self {
@@ -116,5 +117,19 @@ mod tests {
     fn from_args_rejects_unknown_flag() {
         let argv = ["--bogus".to_string()];
         assert!(McpConfig::from_args(&argv).is_err());
+    }
+
+    #[test]
+    fn from_args_flag_requires_a_value() {
+        let argv = ["--storage".to_string()];
+        let err = McpConfig::from_args(&argv).unwrap_err();
+        assert!(err.contains("requires a value"), "got: {err}");
+    }
+
+    #[test]
+    fn from_args_rejects_value_that_looks_like_a_flag() {
+        let argv = ["--storage".to_string(), "--project".to_string()];
+        let err = McpConfig::from_args(&argv).unwrap_err();
+        assert!(err.contains("requires a value"), "got: {err}");
     }
 }

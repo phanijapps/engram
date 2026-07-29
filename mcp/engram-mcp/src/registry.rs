@@ -4,16 +4,36 @@
 //! so the advertised tool set cannot drift from the implemented one. The
 //! registry is generic over a handler context `C`: production passes the
 //! [`EngramProvider`]; unit tests pass `()` so dispatch is verifiable without
-//! opening a provider.
+//! opening a provider. Handlers return [`Result<Value, ToolError>`] so a failed
+//! call surfaces as a JSON-RPC error rather than being smuggled into `result`.
 //!
 //! [`EngramProvider`]: engram_integration::EngramProvider
 
 use serde_json::{Value, json};
 
-/// A tool handler. Given the handler context and the parsed `arguments`
-/// object, returns the MCP `result` value to place under the JSON-RPC `result`
-/// field.
-pub type ToolHandler<C> = fn(ctx: &C, args: &Value) -> Value;
+/// A tool error: a JSON-RPC error code + message. Handlers construct it when a
+/// call fails (bad args, provider error, partial batch); the server translates
+/// it to a JSON-RPC error response at the protocol edge.
+#[derive(Debug, Clone)]
+pub struct ToolError {
+    pub code: i64,
+    pub message: String,
+}
+
+impl ToolError {
+    /// `code` follows JSON-RPC 2.0 (e.g. `-32602` invalid params, `-32603`
+    /// internal error); `message` is the human-readable detail.
+    #[allow(dead_code)] // first used by tool handlers in T5
+    pub fn new(code: i64, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+        }
+    }
+}
+
+/// A tool handler returns its MCP `result` value, or a [`ToolError`].
+pub type ToolHandler<C> = fn(ctx: &C, args: &Value) -> Result<Value, ToolError>;
 
 /// One registered tool: its identity, schema, and handler.
 pub struct ToolRecord<C> {
@@ -27,6 +47,8 @@ pub struct ToolRecord<C> {
 pub enum CallOutcome {
     /// The tool ran; the value is its MCP `result`.
     Ok(Value),
+    /// The tool ran and returned an error.
+    Err(ToolError),
     /// No tool is registered under that name.
     NotFound,
 }
@@ -64,7 +86,10 @@ impl<C> ToolRegistry<C> {
     /// Dispatch a `tools/call` by name.
     pub fn call(&self, ctx: &C, name: &str, args: &Value) -> CallOutcome {
         match self.tools.iter().find(|t| t.name == name) {
-            Some(tool) => CallOutcome::Ok((tool.handler)(ctx, args)),
+            Some(tool) => match (tool.handler)(ctx, args) {
+                Ok(value) => CallOutcome::Ok(value),
+                Err(err) => CallOutcome::Err(err),
+            },
             None => CallOutcome::NotFound,
         }
     }
@@ -80,8 +105,12 @@ impl<C> Default for ToolRegistry<C> {
 mod tests {
     use super::*;
 
-    fn echo(_ctx: &(), args: &Value) -> Value {
-        json!({ "content": [{ "type": "text", "text": args.to_string() }] })
+    fn echo(_ctx: &(), args: &Value) -> Result<Value, ToolError> {
+        Ok(json!({ "content": [{ "type": "text", "text": args.to_string() }] }))
+    }
+
+    fn fail(_ctx: &(), _args: &Value) -> Result<Value, ToolError> {
+        Err(ToolError::new(-32602, "bad args"))
     }
 
     fn reg() -> ToolRegistry<()> {
@@ -115,7 +144,25 @@ mod tests {
                 v["content"][0]["text"].as_str().unwrap().contains("\"x\""),
                 "echo should echo its args"
             ),
-            CallOutcome::NotFound => panic!("expected dispatch"),
+            _ => panic!("expected ok"),
+        }
+    }
+
+    #[test]
+    fn call_surfaces_handler_error() {
+        let mut r = reg();
+        r.register(ToolRecord {
+            name: "fail",
+            description: "fail",
+            input_schema: json!({}),
+            handler: fail,
+        });
+        match r.call(&(), "fail", &json!({})) {
+            CallOutcome::Err(err) => {
+                assert_eq!(err.code, -32602);
+                assert_eq!(err.message, "bad args");
+            }
+            _ => panic!("expected err"),
         }
     }
 

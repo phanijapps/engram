@@ -37,7 +37,7 @@ mod tests {
     }
 
     #[test]
-    fn different_projects_isolate() {
+    fn different_projects_produce_different_workspaces() {
         assert_ne!(project_scope("a", "t"), project_scope("b", "t"));
         assert_eq!(project_scope("a", "t"), project_scope("a", "t"));
     }

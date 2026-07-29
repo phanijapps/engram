@@ -11,9 +11,18 @@ use crate::config::McpConfig;
 /// Open the provider described by `config`. Errors are surfaced as a string
 /// for the caller (`main`) to report.
 pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
+    // `EngramProvider::open` validates that `storage_path` is inside
+    // `trusted_root`, so default the trusted root to the storage path's parent
+    // (mirroring `EngramConfig::from_profile_file`) instead of a hardcoded
+    // temp dir — otherwise real `--storage` paths outside /tmp fail to boot.
+    let trusted_root = config
+        .storage_path
+        .parent()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("."));
     let engram_config = EngramConfig::new(
         config.storage_path.clone(),
-        std::env::temp_dir(),
+        trusted_root,
         config.scope_strategy,
         config.embedding.clone(),
         config.migration_mode,

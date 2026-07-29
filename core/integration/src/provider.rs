@@ -24,6 +24,7 @@ use engram_runtime::{CoreError, CoreResult};
 use std::sync::Arc;
 
 use crate::knowledge_query::KnowledgeQuery;
+use crate::lexical_feed::LexicalFeed;
 
 use engram_consolidation::ConsolidationService;
 
@@ -73,6 +74,7 @@ pub struct EngramProvider {
     consolidation: Option<Arc<dyn ConsolidationService>>,
     identity: Option<Arc<dyn EntityIdentityRepository>>,
     knowledge_query: Option<Arc<dyn KnowledgeQuery>>,
+    lexical_feed: Option<Arc<dyn LexicalFeed>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -320,6 +322,20 @@ impl EngramProvider {
             })
     }
 
+    /// Returns the lexical-feed handle (BM25 upsert) if supported.
+    pub fn lexical_feed(&self) -> Option<&Arc<dyn LexicalFeed>> {
+        self.lexical_feed.as_ref()
+    }
+
+    /// Returns the lexical-feed handle or an error if it is not wired.
+    pub fn require_lexical_feed(&self) -> CoreResult<&Arc<dyn LexicalFeed>> {
+        self.lexical_feed()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "lexical_feed".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
     // ---- require_*: error-on-absent variants for hosts that prefer a typed
     // error over `Option` unwrapping. Each returns `CapabilityUnsupported` when
     // the handle is not wired, naming the capability so callers can branch on a
@@ -541,6 +557,7 @@ impl EngramProvider {
             consolidation: None,
             identity: None,
             knowledge_query: None,
+            lexical_feed: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -575,6 +592,7 @@ pub struct EngramProviderBuilder {
     consolidation: Option<Arc<dyn ConsolidationService>>,
     identity: Option<Arc<dyn EntityIdentityRepository>>,
     knowledge_query: Option<Arc<dyn KnowledgeQuery>>,
+    lexical_feed: Option<Arc<dyn LexicalFeed>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -603,6 +621,7 @@ impl EngramProviderBuilder {
             consolidation: None,
             identity: None,
             knowledge_query: None,
+            lexical_feed: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -722,6 +741,12 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the lexical-feed handle (BM25 upsert).
+    pub fn lexical_feed(mut self, handle: Arc<dyn LexicalFeed>) -> Self {
+        self.lexical_feed = Some(handle);
+        self
+    }
+
     /// Sets the storage schema version reported by provider diagnostics.
     pub fn schema_version(mut self, version: impl Into<String>) -> Self {
         self.schema_version = version.into();
@@ -757,6 +782,7 @@ impl EngramProviderBuilder {
             consolidation: self.consolidation,
             identity: self.identity,
             knowledge_query: self.knowledge_query,
+            lexical_feed: self.lexical_feed,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }

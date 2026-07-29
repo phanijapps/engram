@@ -678,6 +678,19 @@ mod tests {
     }
 
     #[test]
+    fn lexical_feed_upserts() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let feed = app
+            .provider
+            .require_lexical_feed()
+            .expect("lexical_feed handle");
+        block_on(feed.upsert("Zorblax", "Zorblax function")).expect("upsert");
+        block_on(feed.upsert_batch(&[("a".into(), "alpha".into()), ("b".into(), "beta".into())]))
+            .expect("upsert_batch");
+    }
+
+    #[test]
     fn write_memory_rejects_missing_content() {
         let dir = tempfile::tempdir().unwrap();
         let app = test_app(dir.path());

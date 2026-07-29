@@ -19,6 +19,7 @@ mod conformance;
 mod consolidation_adapters;
 mod export_import;
 mod knowledge_query;
+mod lexical_feed;
 mod migration_service;
 mod observability;
 mod provenance;

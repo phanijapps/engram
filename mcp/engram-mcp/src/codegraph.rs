@@ -8,8 +8,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use engram_domain::{
     ChunkId, EntityId, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeGraphId,
-    KnowledgeRelationship, KnowledgeSource, RelationshipId, RetrievalRequest, RetrievalTargetType,
-    Scope, SourceDocument,
+    KnowledgeRelationship, KnowledgeSource, RelationshipId, RetrievalRequest, Scope,
+    SourceDocument,
 };
 use engram_ingest::{ScanOptions, scan_repository};
 use engram_knowledge::{CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
@@ -171,44 +171,34 @@ fn fetch_rels(app: &App) -> Vec<KnowledgeRelationship> {
         .unwrap_or_default()
 }
 
-/// `search`: keyword search over indexed code symbols (lexical lane, fed by scan_repo).
+/// `search`: keyword search over indexed code symbols by entity name/kind.
+/// Uses `KnowledgeQuery` directly (list entities, filter by substring) — no
+/// dependency on the lexical resolver (which is chunk-based; entity-ID hits
+/// would be dropped). The `LexicalFeed` remains wired for future BM25 ranking
+/// once an entity-id resolver lane is added.
 pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
     let query = req_str(args, "query")?;
     let limit = args["limit"]
         .as_u64()
-        .map(|n| n as u32)
+        .map(|n| n as usize)
         .unwrap_or(10)
         .clamp(1, 100);
-    let recall = app.provider.require_recall().map_err(internal)?;
-    let request = RetrievalRequest {
-        query: query.to_owned(),
-        scope: app.scope.clone(),
-        requester: crate::tools::requester(),
-        modes: Vec::new(),
-        filters: None,
-        cues: Vec::new(),
-        limit: Some(limit),
-        budget: None,
-        include_explanations: Some(true),
-    };
-    let payload = block_on(recall.recall(request)).map_err(internal)?;
-    let items: Vec<&str> = payload
-        .items
+    let knowledge_query = app.provider.require_knowledge_query().map_err(internal)?;
+    let entities = block_on(knowledge_query.list_entities(&app.scope)).unwrap_or_default();
+    let needle = query.to_lowercase();
+    let matches: Vec<String> = entities
         .iter()
-        .filter(|i| {
-            matches!(
-                i.target_type,
-                RetrievalTargetType::Entity
-                    | RetrievalTargetType::Relationship
-                    | RetrievalTargetType::Concept
-            )
+        .filter(|e| {
+            let haystack = format!("{} {:?}", e.name, e.kind).to_lowercase();
+            haystack.contains(&needle)
         })
-        .map(|i| i.content.as_str())
+        .take(limit)
+        .map(|e| format!("{} ({:?})", e.name, e.kind))
         .collect();
-    let body = if items.is_empty() {
+    let body = if matches.is_empty() {
         "No results.".to_owned()
     } else {
-        items.join("\n---\n")
+        matches.join("\n")
     };
     Ok(protocol::text_content(body))
 }

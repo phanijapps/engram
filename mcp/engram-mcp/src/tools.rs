@@ -1039,4 +1039,25 @@ mod tests {
         assert!(body.contains("memory: supported"), "{body}");
         assert!(body.contains("knowledge_query: supported"), "{body}");
     }
+
+    #[test]
+    fn search_finds_scanned_symbols() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/main.rs"),
+            "fn alpha() {}\nfn beta() {}\nfn main() { alpha(); beta(); }\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+        let res = crate::codegraph::search(&app, &json!({ "query": "alpha" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("alpha"),
+            "search must find the scanned symbol: {body}"
+        );
+    }
 }

@@ -138,6 +138,25 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         }),
         handler: tools::put_relationship,
     });
+    registry.register(ToolRecord {
+        name: "recall",
+        description: "Fused retrieval across memory + knowledge + beliefs for the project.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "query": { "type": "string" } },
+            "required": ["query"]
+        }),
+        handler: tools::recall,
+    });
+    registry.register(ToolRecord {
+        name: "consolidate",
+        description: "Run consolidation (reflection + decay) over the project scope.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "dry_run": { "type": "boolean" } }
+        }),
+        handler: tools::consolidate,
+    });
 }
 
 fn ping(_app: &App, _args: &Value) -> Result<Value, ToolError> {

@@ -7,9 +7,10 @@
 
 use chrono::Utc;
 use engram_domain::{
-    Actor, ActorKind, AllowedUse, DeleteMode, EntityKind, EntityRef, ForgetRequest,
-    ForgetTargetType, Id, KnowledgeEntity, KnowledgeRelationship, MemoryContent, MemoryKind,
-    Policy, Provenance, Requester, Retention, Sensitivity, Visibility, WriteMemoryRequest,
+    Actor, ActorKind, AllowedUse, ConsolidationRequest, DeleteMode, EntityKind, EntityRef,
+    ForgetRequest, ForgetTargetType, Id, KnowledgeEntity, KnowledgeRelationship, MemoryContent,
+    MemoryKind, Policy, Provenance, Requester, Retention, RetrievalRequest, Sensitivity,
+    Visibility, WriteMemoryRequest,
 };
 use futures::executor::block_on;
 use serde_json::Value;
@@ -189,6 +190,68 @@ pub fn put_relationship(app: &App, args: &Value) -> Result<Value, ToolError> {
     )))
 }
 
+/// `recall`: fused retrieval across memory + knowledge + beliefs for the
+/// project scope. (A `lanes` restriction is accepted by the surface; the
+/// underlying `UnifiedRecall` fuses all sources in Phase 1, and per-lane
+/// filtering is a refinement that maps `lanes` onto `RetrievalMode`.)
+pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let query = args["query"].as_str().unwrap_or("");
+    let recall = app.provider.require_recall().map_err(internal)?;
+    let request = RetrievalRequest {
+        query: query.to_owned(),
+        scope: app.scope.clone(),
+        requester: requester(),
+        modes: Vec::new(),
+        filters: None,
+        cues: Vec::new(),
+        limit: Some(10),
+        budget: None,
+        include_explanations: Some(true),
+    };
+    let payload = block_on(recall.recall(request)).map_err(internal)?;
+    let items: Vec<&str> = payload.items.iter().map(|i| i.content.as_str()).collect();
+    let body = if items.is_empty() {
+        "No results.".to_owned()
+    } else {
+        items.join("\n---\n")
+    };
+    Ok(protocol::text_content(body))
+}
+
+/// `consolidate`: run reflection + decay over the project scope.
+pub fn consolidate(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let dry_run = args["dry_run"].as_bool().unwrap_or(false);
+    let consolidation = app.provider.require_consolidation().map_err(internal)?;
+    let request = ConsolidationRequest {
+        scope: app.scope.clone(),
+        requester: requester(),
+        since: None,
+        until: None,
+        strategy: None,
+        dry_run: Some(dry_run),
+    };
+    let run = block_on(consolidation.consolidate(request)).map_err(internal)?;
+    let summary: Vec<String> = run
+        .tasks
+        .iter()
+        .map(|t| {
+            format!(
+                "{:?}: {:?} (read={}, written={})",
+                t.task,
+                t.status,
+                t.items_read.unwrap_or(0),
+                t.items_written.unwrap_or(0)
+            )
+        })
+        .collect();
+    Ok(protocol::text_content(format!(
+        "Consolidation {:?}: {} task(s).\n{}",
+        run.status,
+        run.tasks.len(),
+        summary.join("\n")
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,5 +316,70 @@ mod tests {
             &json!({ "subject": "AuthService", "predicate": "realized_by", "object": "auth.rs" }),
         );
         assert!(res.is_ok(), "{:?}", res.err());
+    }
+
+    #[test]
+    fn write_then_recall_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        write_memory(&app, &json!({ "content": "Alice works at Acme" })).unwrap();
+        let res = recall(&app, &json!({ "query": "Alice" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("Alice") || body.contains("Acme"),
+            "recall should find the written memory: {body}"
+        );
+    }
+
+    /// AC #5 — fused-per-project isolation: a memory written under a different
+    /// project workspace is invisible to recall under this project's scope.
+    #[test]
+    fn workspace_scope_isolates_recall() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        // Write under a *different* workspace via the memory handle directly.
+        let memory = app.provider.require_memory().expect("memory handle");
+        let write_req = WriteMemoryRequest {
+            kind: MemoryKind::Observation,
+            content: MemoryContent {
+                text: "isolated-secret-token".to_owned(),
+                summary: None,
+                entities: Vec::new(),
+                language: None,
+                format: None,
+                structured: None,
+                hash: None,
+            },
+            scope: project_scope("other-project", "default"),
+            requester: requester(),
+            provenance: provenance("test"),
+            policy: policy(),
+            links: Vec::new(),
+            idempotency_key: None,
+        };
+        block_on(memory.write_memory(write_req)).expect("write");
+
+        // Recall under app.scope (project = test-project): must not leak.
+        let recall_handle = app.provider.require_recall().expect("recall handle");
+        let req = RetrievalRequest {
+            query: "isolated-secret-token".to_owned(),
+            scope: app.scope.clone(),
+            requester: requester(),
+            modes: Vec::new(),
+            filters: None,
+            cues: Vec::new(),
+            limit: Some(10),
+            budget: None,
+            include_explanations: Some(true),
+        };
+        let payload = block_on(recall_handle.recall(req)).expect("recall");
+        let leaked = payload
+            .items
+            .iter()
+            .any(|i| i.content.contains("isolated-secret-token"));
+        assert!(
+            !leaked,
+            "recall under a different workspace must be isolated"
+        );
     }
 }

@@ -81,13 +81,18 @@ impl Chunker for MarkdownChunker {
         let mut chunks = Vec::new();
         let mut i = 0usize;
 
-        // Skip a leading YAML front-matter block bounded by `---`.
+        // Skip a leading YAML front-matter block bounded by `---`. If no closing
+        // `---` is found, the leading `---` is treated as content (a thematic
+        // break), not front-matter — so an unterminated block can't swallow the
+        // whole document.
         if n > 0 && lines[0].trim() == "---" {
             let mut j = 1;
             while j < n && lines[j].trim() != "---" {
                 j += 1;
             }
-            i = (j + 1).min(n);
+            if j < n {
+                i = j + 1;
+            }
         }
 
         while i < n {
@@ -228,6 +233,19 @@ mod tests {
             .find(|c| c.kind == KnowledgeChunkKind::DocumentSection)
             .expect("a section chunk");
         assert_eq!(section.location.as_ref().unwrap().start_line, Some(4));
+    }
+
+    #[test]
+    fn unterminated_front_matter_is_treated_as_content() {
+        // A leading `---` with no closing `---` is a thematic break, not
+        // front-matter — the document must still be chunked.
+        let md = "---\nthis is not front matter\n";
+        let chunks = MarkdownChunker::new().unwrap().chunk(md).unwrap();
+        assert!(
+            !chunks.is_empty(),
+            "unterminated --- must not swallow the doc"
+        );
+        assert!(chunks.iter().any(|c| c.text.contains("not front matter")));
     }
 
     #[test]

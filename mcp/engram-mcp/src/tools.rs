@@ -11,9 +11,11 @@ use engram_domain::{
     ForgetRequest, ForgetTargetType, Id, KnowledgeChunk, KnowledgeEntity, KnowledgeRelationship,
     KnowledgeSource, MemoryContent, MemoryKind, MemoryRecord, MemoryStatus, Policy, Provenance,
     Requester, Retention, RetrievalRequest, RetrievalTargetType, Sensitivity, SourceDocument,
-    SourceDocumentKind, SourceKind, Visibility, WriteMemoryRequest,
+    SourceDocumentKind, SourceKind, SourceLocation, Visibility, WriteMemoryRequest,
 };
-use engram_ingest::{Chunker, MarkdownChunker, content_hash};
+use engram_ingest::{
+    Chunker, MarkdownChunker, PlainTextChunker, PlainTextChunkerOptions, content_hash,
+};
 use engram_integration::BatchIngestRequest;
 use futures::executor::block_on;
 use serde_json::Value;
@@ -507,14 +509,30 @@ pub fn index_docs(app: &App, args: &Value) -> Result<Value, ToolError> {
     let text = req_str(args, "content")?;
     let path = args["path"].as_str().map(str::to_owned);
     let kind = match args["kind"].as_str().unwrap_or("markdown") {
+        "markdown" => SourceDocumentKind::Markdown,
         "text" => SourceDocumentKind::Text,
-        _ => SourceDocumentKind::Markdown,
+        other => {
+            return Err(invalid(format!(
+                "unknown doc kind: {other}; expected markdown|text"
+            )));
+        }
+    };
+    let mime = if kind == SourceDocumentKind::Text {
+        "text/plain"
+    } else {
+        "text/markdown"
     };
 
-    let candidates = MarkdownChunker::new()
-        .map_err(internal)?
-        .chunk(text)
-        .map_err(internal)?;
+    let candidates = match kind {
+        SourceDocumentKind::Text => PlainTextChunker::new(PlainTextChunkerOptions::default())
+            .map_err(internal)?
+            .chunk(text)
+            .map_err(invalid)?,
+        _ => MarkdownChunker::new()
+            .map_err(internal)?
+            .chunk(text)
+            .map_err(invalid)?,
+    };
     if candidates.is_empty() {
         return Err(invalid("document produced no chunks"));
     }
@@ -545,9 +563,9 @@ pub fn index_docs(app: &App, args: &Value) -> Result<Value, ToolError> {
         source_id: source_id.clone(),
         kind,
         uri: None,
-        path,
+        path: path.clone(),
         title: None,
-        mime_type: Some("text/markdown".to_owned()),
+        mime_type: Some(mime.to_owned()),
         language: None,
         version: None,
         content_hash: content_hash(text),
@@ -570,7 +588,10 @@ pub fn index_docs(app: &App, args: &Value) -> Result<Value, ToolError> {
                 kind: c.kind,
                 text: c.text,
                 summary: None,
-                location: c.location,
+                location: c.location.map(|loc| SourceLocation {
+                    path: path.clone(),
+                    ..loc
+                }),
                 entities: Vec::new(),
                 concepts: Vec::new(),
                 embedding_refs: Vec::new(),

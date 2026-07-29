@@ -14,6 +14,7 @@ mod bootstrap;
 mod config;
 mod protocol;
 mod registry;
+mod scope;
 mod server;
 
 use engram_integration::EngramProvider;

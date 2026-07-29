@@ -168,14 +168,15 @@ fn register_all(registry: &mut ToolRegistry<App>) {
     registry.register(ToolRecord {
         name: "store_knowledge",
         description: "Bulk distill-write: write extracted facts + entities + relationships in one \
-                      best-effort batch (NOT ACID). Surfaces per-step status.",
+                      best-effort batch (NOT ACID). Surfaces per-step status. Entries missing a \
+                      required field are skipped (reported in the result).",
         input_schema: json!({
             "type": "object",
             "properties": {
                 "facts": { "type": "array", "items": { "type": "object", "properties": { "content": { "type": "string" } }, "required": ["content"] } },
                 "entities": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string" } }, "required": ["name"] } },
                 "relationships": { "type": "array", "items": { "type": "object", "properties": { "subject": { "type": "string" }, "predicate": { "type": "string" }, "object": { "type": "string" } }, "required": ["subject", "predicate", "object"] } },
-                "idempotency_key": { "type": "string" }
+                "idempotency_key": { "type": "string", "description": "Omit only if you do not need re-send dedup; otherwise supply a stable caller-chosen key." }
             }
         }),
         handler: tools::store_knowledge,

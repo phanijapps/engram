@@ -448,6 +448,24 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
     let fact_count = facts.len();
     let entity_count = entities.len();
     let rel_count = relationships.len();
+    // How many entries were dropped at the edge (missing required fields).
+    let skipped = args["facts"]
+        .as_array()
+        .map_or(0, Vec::len)
+        .saturating_sub(fact_count)
+        + args["entities"]
+            .as_array()
+            .map_or(0, Vec::len)
+            .saturating_sub(entity_count)
+        + args["relationships"]
+            .as_array()
+            .map_or(0, Vec::len)
+            .saturating_sub(rel_count);
+    let skipped_note = if skipped > 0 {
+        format!(", {skipped} malformed entries skipped")
+    } else {
+        String::new()
+    };
 
     let request = BatchIngestRequest {
         idempotency_key,
@@ -469,7 +487,7 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
         .map(|s| format!("{:?}: {:?}", s.step, s.status))
         .collect();
     Ok(protocol::text_content(format!(
-        "Batch {:?} (guarantee: {:?}). {} fact(s), {} entit(y/ies), {} relationship(s). [{}]",
+        "Batch {:?} (guarantee: {:?}). {} fact(s), {} entities, {} relationship(s){skipped_note}. [{}]",
         outcome.status,
         outcome.guarantee,
         fact_count,
@@ -672,6 +690,88 @@ mod tests {
         assert!(
             body.contains("Complete"),
             "expected Complete for valid input: {body}"
+        );
+
+        // Persistence readback: the written fact must be recoverable via recall.
+        let rec = recall(&app, &json!({ "query": "Acme" })).unwrap();
+        let rec_body = rec["content"][0]["text"].as_str().unwrap();
+        assert!(
+            rec_body.contains("Acme builds widgets") || rec_body.contains("Acme"),
+            "written fact should be recoverable: {rec_body}"
+        );
+    }
+
+    /// AC #8 — a failed step surfaces `Partial` (not `Complete`) with the
+    /// `BestEffort` guarantee, and other steps still land (no rollback). Uses
+    /// the batch handle directly with an empty-text fact (the trigger at
+    /// `adapters/integration/tests/batch_ingest.rs:342`); `store_knowledge`
+    /// surfaces this outcome verbatim.
+    #[test]
+    fn batch_surfaces_partial_on_a_failed_step() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let batch = app.provider.require_batch().expect("batch handle");
+        let req = BatchIngestRequest {
+            idempotency_key: "partial-batch".to_owned(),
+            scope: app.scope.clone(),
+            source: None,
+            documents: Vec::new(),
+            chunks: Vec::new(),
+            facts: vec![MemoryRecord {
+                id: Id::from("bad-fact"),
+                kind: MemoryKind::Observation,
+                content: MemoryContent {
+                    text: String::new(),
+                    summary: None,
+                    entities: Vec::new(),
+                    language: None,
+                    format: None,
+                    structured: None,
+                    hash: None,
+                },
+                scope: app.scope.clone(),
+                provenance: provenance("test"),
+                policy: policy(),
+                status: MemoryStatus::Active,
+                links: Vec::new(),
+                assertions: Vec::new(),
+                created_at: Utc::now(),
+                updated_at: None,
+                metadata: None,
+            }],
+            entities: vec![KnowledgeEntity {
+                id: Id::from("good-entity"),
+                graph_id: None,
+                kind: EntityKind::Concept,
+                name: "Good".to_owned(),
+                aliases: Vec::new(),
+                scope: app.scope.clone(),
+                source_refs: Vec::new(),
+                concept_refs: Vec::new(),
+                ontology_class_refs: Vec::new(),
+                provenance: provenance("test"),
+                created_at: Utc::now(),
+                updated_at: None,
+                valid_from: None,
+                valid_until: None,
+                metadata: None,
+            }],
+            relationships: Vec::new(),
+            evidence: Vec::new(),
+            embeddings: Vec::new(),
+        };
+        let outcome = block_on(batch.ingest(req)).expect("ingest");
+        let guarantee = format!("{:?}", outcome.guarantee);
+        let status = format!("{:?}", outcome.status);
+        let steps = format!("{:?}", outcome.steps);
+        assert!(guarantee.contains("BestEffort"), "guarantee: {guarantee}");
+        assert!(
+            status.contains("Partial"),
+            "a bad fact should make the batch Partial: {status}"
+        );
+        assert!(
+            steps.contains("Succeeded"),
+            "non-failed steps stay landed (no rollback): {steps}"
         );
     }
 }

@@ -71,6 +71,13 @@ memory/                   Memory MCP server: exposes engram's memory operations 
   mcp-server/              agent-callable MCP tools (write_memory, recall, forget,
                            put_entity, put_relationship) over stdio JSON-RPC 2.0.
 
+mcp/                      Unified agent MCP server (RFC-0015): one EngramProvider,
+  engram-mcp/              fused-per-project scope, multi-layer ontology/taxonomy
+                           as launch config, generic memory + KG + doc-ingestion
+                           tools, and the `engram-distill` agent skill. Supersedes
+                           `codegraph/mcp-server` + `memory/mcp-server` (those stay
+                           until the Phase 3 deprecation).
+
 packages/                  TypeScript workspace.
   contracts/               Generated TypeScript types and schemas.
   client/                  Ergonomic application SDK.
@@ -285,4 +292,5 @@ feature-specific traps.
 - **`sqlite-knowledge-graph`** — do not couple knowledge persistence to memory or
   vector persistence (cross-adapter SQL / shared connections across crate
   boundaries); do not change v1 contract fields or generated TypeScript types;
-  `OntologyRepository` is deferred (taxonomy only).
+  `OntologyRepository` is durable (ADR-0008); its `validate_graph` is advisory
+  only.

@@ -32,7 +32,8 @@ fn main() {
         eprintln!("engram-mcp: {message}");
         eprintln!(
             "usage: engram-mcp --storage <path> [--project <name>] \
-             [--ontology <path>] [--taxonomy <path>]"
+             [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
+             [--db-file <name>]"
         );
         std::process::exit(2);
     });

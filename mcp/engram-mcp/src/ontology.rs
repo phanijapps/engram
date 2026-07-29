@@ -45,21 +45,72 @@ pub struct OntologyConfig {
 }
 
 impl Default for OntologyConfig {
-    /// Baked-in generic default: a single `generic` layer + minimal predicates,
-    /// so the server runs with no `--ontology` file.
+    /// Baked-in generic default: a 3-layer technology ontology (a rich
+    /// `technical` layer + light `domain`/`business` layers) with standard
+    /// `within`/`across` predicates. Lets the server run with a meaningful
+    /// vocabulary when no `--ontology` file is supplied; the `across`
+    /// predicates (`describes`, `realized_by`, …) are what bridge layers —
+    /// e.g. a domain concept `describes` a technical artifact.
     fn default() -> Self {
         Self {
-            layers: vec![OntologyLayer {
-                name: "generic".to_owned(),
-                classes: vec![
-                    "Concept".to_owned(),
-                    "Entity".to_owned(),
-                    "Relation".to_owned(),
-                ],
-            }],
+            layers: vec![
+                OntologyLayer {
+                    name: "technical".to_owned(),
+                    classes: vec![
+                        "Module".to_owned(),
+                        "Package".to_owned(),
+                        "Namespace".to_owned(),
+                        "File".to_owned(),
+                        "Function".to_owned(),
+                        "Method".to_owned(),
+                        "Class".to_owned(),
+                        "Struct".to_owned(),
+                        "Interface".to_owned(),
+                        "Trait".to_owned(),
+                        "Type".to_owned(),
+                        "Endpoint".to_owned(),
+                        "Service".to_owned(),
+                        "Component".to_owned(),
+                        "Configuration".to_owned(),
+                        "Dependency".to_owned(),
+                    ],
+                },
+                OntologyLayer {
+                    name: "domain".to_owned(),
+                    classes: vec![
+                        "Concept".to_owned(),
+                        "Feature".to_owned(),
+                        "Requirement".to_owned(),
+                        "Behavior".to_owned(),
+                    ],
+                },
+                OntologyLayer {
+                    name: "business".to_owned(),
+                    classes: vec![
+                        "Capability".to_owned(),
+                        "Workflow".to_owned(),
+                        "Stakeholder".to_owned(),
+                    ],
+                },
+            ],
             predicates: OntologyPredicates {
-                within: vec!["related_to".to_owned()],
-                across: vec!["describes".to_owned(), "realized_by".to_owned()],
+                within: vec![
+                    "calls".to_owned(),
+                    "depends_on".to_owned(),
+                    "implements".to_owned(),
+                    "contains".to_owned(),
+                    "part_of".to_owned(),
+                    "uses".to_owned(),
+                    "defines".to_owned(),
+                    "references".to_owned(),
+                ],
+                across: vec![
+                    "describes".to_owned(),
+                    "realized_by".to_owned(),
+                    "governs".to_owned(),
+                    "extracted_from".to_owned(),
+                    "distilled_from".to_owned(),
+                ],
             },
         }
     }
@@ -88,13 +139,34 @@ pub struct TaxonomyConfig {
 }
 
 impl Default for TaxonomyConfig {
+    /// Baked-in generic default: a small SKOS-aligned concept scheme so recall
+    /// has a non-trivial hierarchy when no `--taxonomy` file is supplied.
+    /// `label` maps to `skos:prefLabel`, `broader` to `skos:broader`.
     fn default() -> Self {
         Self {
-            name: "default".to_owned(),
-            concepts: vec![TaxonomyConcept {
-                label: "Knowledge".to_owned(),
-                broader: None,
-            }],
+            name: "software".to_owned(),
+            concepts: vec![
+                TaxonomyConcept {
+                    label: "Software".to_owned(),
+                    broader: None,
+                },
+                TaxonomyConcept {
+                    label: "Code".to_owned(),
+                    broader: Some("Software".to_owned()),
+                },
+                TaxonomyConcept {
+                    label: "Documentation".to_owned(),
+                    broader: Some("Software".to_owned()),
+                },
+                TaxonomyConcept {
+                    label: "Configuration".to_owned(),
+                    broader: Some("Software".to_owned()),
+                },
+                TaxonomyConcept {
+                    label: "Test".to_owned(),
+                    broader: Some("Code".to_owned()),
+                },
+            ],
         }
     }
 }
@@ -169,11 +241,35 @@ mod tests {
     }
 
     #[test]
-    fn default_ontology_is_generic() {
+    fn default_ontology_is_generic_technology() {
         let cfg = OntologyConfig::default();
-        assert_eq!(cfg.layers.len(), 1);
-        assert_eq!(cfg.layers[0].name, "generic");
+        assert!(
+            cfg.layers.len() >= 3,
+            "default should be multi-layer (technical/domain/business)"
+        );
+        assert!(
+            cfg.layers.iter().any(|l| l.name == "technical"),
+            "default should include a technical layer"
+        );
+        assert!(!cfg.predicates.within.is_empty());
         assert!(!cfg.predicates.across.is_empty());
+        assert!(
+            cfg.predicates.across.iter().any(|p| p == "describes"),
+            "default across predicates should include describes"
+        );
+    }
+
+    #[test]
+    fn default_taxonomy_is_skos_tree() {
+        let cfg = TaxonomyConfig::default();
+        assert!(
+            cfg.concepts.len() > 1,
+            "default taxonomy should be a tree, not a single concept"
+        );
+        assert!(
+            cfg.concepts.iter().any(|c| c.broader.is_some()),
+            "default taxonomy should have at least one broader (skos:broader) link"
+        );
     }
 
     #[test]
@@ -210,6 +306,6 @@ mod tests {
     fn ontology_config_as_text_contains_layer_name() {
         let text = ontology_config_as_text(&OntologyConfig::default());
         let body = text["content"][0]["text"].as_str().unwrap();
-        assert!(body.contains("generic"), "got: {body}");
+        assert!(body.contains("technical"), "got: {body}");
     }
 }

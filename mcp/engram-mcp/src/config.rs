@@ -6,13 +6,27 @@ use std::path::PathBuf;
 use engram_domain::ScopeMappingStrategy;
 use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, MigrationMode};
 
+/// SQLite storage layout the server opens. `Single` (the default) writes one
+/// shared database file — matching the agentzero adapter invariant so the same
+/// database is consumable by the gateway. `Multi` keeps the per-store default
+/// (one file per family) for tests and advanced use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpSqliteLayout {
+    Single,
+    Multi,
+}
+
+impl Default for McpSqliteLayout {
+    fn default() -> Self {
+        Self::Single
+    }
+}
+
 /// Everything the server needs to open a provider and resolve scope.
 ///
 /// `ontology_path` / `taxonomy_path` are accepted here and consumed by the
-/// loader in T4; Phase 1's generic core ignores them when absent (baked-in
-/// default).
+/// loader; the generic core ignores them when absent (baked-in default).
 #[derive(Debug)]
-#[allow(dead_code)] // project read by scope (T3); ontology/taxonomy by the loader (T4)
 pub struct McpConfig {
     pub storage_path: PathBuf,
     pub project: String,
@@ -22,6 +36,8 @@ pub struct McpConfig {
     pub capability_policy: CapabilityPolicy,
     pub ontology_path: Option<PathBuf>,
     pub taxonomy_path: Option<PathBuf>,
+    pub sqlite_layout: McpSqliteLayout,
+    pub db_file: String,
 }
 
 impl McpConfig {
@@ -32,12 +48,14 @@ impl McpConfig {
         let mut project = None;
         let mut ontology_path = None;
         let mut taxonomy_path = None;
+        let mut sqlite_layout: Option<McpSqliteLayout> = None;
+        let mut db_file: Option<String> = None;
         let mut i = 0;
         while i < argv.len() {
             let flag = argv[i].as_str();
             if !matches!(
                 flag,
-                "--storage" | "--project" | "--ontology" | "--taxonomy"
+                "--storage" | "--project" | "--ontology" | "--taxonomy" | "--layout" | "--db-file"
             ) {
                 return Err(format!("unknown argument: {flag}"));
             }
@@ -52,6 +70,18 @@ impl McpConfig {
                 "--project" => project = Some(value),
                 "--ontology" => ontology_path = Some(PathBuf::from(value)),
                 "--taxonomy" => taxonomy_path = Some(PathBuf::from(value)),
+                "--layout" => {
+                    sqlite_layout = Some(match value.as_str() {
+                        "single" => McpSqliteLayout::Single,
+                        "multi" => McpSqliteLayout::Multi,
+                        other => {
+                            return Err(format!(
+                                "unknown --layout value: {other}; expected single|multi"
+                            ));
+                        }
+                    });
+                }
+                "--db-file" => db_file = Some(value),
                 _ => unreachable!("known flags are matched above"),
             }
             i += 2;
@@ -72,6 +102,8 @@ impl McpConfig {
             capability_policy: CapabilityPolicy::FailClosed,
             ontology_path,
             taxonomy_path,
+            sqlite_layout: sqlite_layout.unwrap_or_default(),
+            db_file: db_file.unwrap_or_else(|| "engram_data.db".to_string()),
         })
     }
 }
@@ -111,6 +143,41 @@ mod tests {
         let argv = ["--storage".to_string(), "/tmp/x".to_string()];
         let c = McpConfig::from_args(&argv).unwrap();
         assert_eq!(c.project, "default");
+    }
+
+    #[test]
+    fn from_args_defaults_to_single_file_layout() {
+        let argv = ["--storage".to_string(), "/tmp/x".to_string()];
+        let c = McpConfig::from_args(&argv).unwrap();
+        assert_eq!(c.sqlite_layout, McpSqliteLayout::Single);
+        assert_eq!(c.db_file, "engram_data.db");
+    }
+
+    #[test]
+    fn from_args_parses_layout_and_db_file() {
+        let argv = [
+            "--storage".to_string(),
+            "/tmp/x".to_string(),
+            "--layout".to_string(),
+            "multi".to_string(),
+            "--db-file".to_string(),
+            "custom.sqlite".to_string(),
+        ];
+        let c = McpConfig::from_args(&argv).unwrap();
+        assert_eq!(c.sqlite_layout, McpSqliteLayout::Multi);
+        assert_eq!(c.db_file, "custom.sqlite");
+    }
+
+    #[test]
+    fn from_args_rejects_unknown_layout() {
+        let argv = [
+            "--storage".to_string(),
+            "/tmp/x".to_string(),
+            "--layout".to_string(),
+            "sharded".to_string(),
+        ];
+        let err = McpConfig::from_args(&argv).unwrap_err();
+        assert!(err.contains("expected single|multi"), "got: {err}");
     }
 
     #[test]

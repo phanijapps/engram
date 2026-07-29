@@ -1001,6 +1001,41 @@ mod tests {
         );
     }
 
+    /// AC4 + AC6 — a markdown section whose heading matches a code symbol is
+    /// bridged to it: the concept `flange` (from docs/flange.md) `describes` the
+    /// function `flange` (from src/lib.rs), connecting docs to code.
+    #[test]
+    fn scan_repo_bridges_doc_concept_to_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("docs")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/lib.rs"),
+            "pub fn flange() {}\npub fn other() { flange(); }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo_dir.path().join("docs/flange.md"),
+            "# flange\nThe flange connects the widgets.\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+        let q = app
+            .provider
+            .require_knowledge_query()
+            .expect("knowledge_query handle");
+        let rels = block_on(q.list_relationships(&app.scope)).unwrap();
+        assert!(
+            rels.iter().any(|r| r.predicate == "describes"
+                && r.subject.name.as_deref() == Some("flange")
+                && r.object.name.as_deref() == Some("flange")),
+            "expected a concept -[describes]-> function edge for 'flange': {rels:?}"
+        );
+    }
+
     #[test]
     fn composites_work_on_seeded_graph() {
         let dir = tempfile::tempdir().unwrap();

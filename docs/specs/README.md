@@ -22,3 +22,16 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   SURQL-native semantics (UNIQUE indexes, UPSERT, BEGIN TRANSACTION, MERGE).
   Depends on `knowledge-graph-identity` E0–E1. Constrained by RFC-0014,
   ADR-0022. Draft.
+- [`engram-mcp-core`](engram-mcp-core/spec.md): Phase 1 (generic core) of RFC-0015 —
+  the unified `engram-mcp` server: thin JSON-RPC loop + tool registry, one
+  `EngramProvider`, fused-per-project scope, multi-layer ontology/taxonomy as MCP
+  launch config, generic write/recall tools, `MarkdownChunker` + `index_docs`, and
+  the `engram-distill` agent skill. Constrained by RFC-0015, ADR-0008, ADR-0009,
+  ADR-0022, ADR-0020, ADR-0025. Draft.
+- [`engram-mcp-code-intel`](engram-mcp-code-intel/spec.md): Phase 2 (code intelligence)
+  of RFC-0015 — `scan_repo` (treesitter, routed through the provider via a fan-in
+  adapter), the six consolidated composites (`symbol_context`/`change_impact`/
+  `code_health`/`architecture`/`api_topology`/`whats_changed`), and `search`; adds
+  new `engram-integration` exposure (`KnowledgeQuery` list methods + a lexical feed)
+  so code-intel routes through `EngramProvider` with no provider bypass. Constrained
+  by RFC-0015, ADR-0008, ADR-0009, ADR-0022, ADR-0020, ADR-0025. Draft.

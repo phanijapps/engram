@@ -57,6 +57,20 @@ impl LexicalRetrievalIndex {
         Self::with_default_limit(index, target_resolver, 20)
     }
 
+    /// Creates a lexical retrieval index from an already-shared index, so the
+    /// same `Arc<LexicalIndex>` can feed a `LexicalFeed` (writes) and serve
+    /// retrieval (reads) over one in-RAM Tantivy index.
+    pub fn from_arc(
+        index: Arc<LexicalIndex>,
+        target_resolver: Arc<dyn LexicalTargetResolver>,
+    ) -> Self {
+        Self {
+            index,
+            target_resolver,
+            default_limit: 20,
+        }
+    }
+
     /// Creates a lexical retrieval index with an explicit fallback limit.
     pub fn with_default_limit(
         index: LexicalIndex,

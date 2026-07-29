@@ -160,6 +160,8 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
 
     let mut memory: Option<Arc<dyn MemoryService>> = None;
     let mut knowledge: Option<Arc<dyn KnowledgeRepository>> = None;
+    let mut knowledge_query: Option<Arc<dyn crate::KnowledgeQuery>> = None;
+    let mut lexical_feed: Option<Arc<dyn crate::LexicalFeed>> = None;
     let mut graph: Option<Arc<dyn KnowledgeGraphRepository>> = None;
     let mut ontology: Option<Arc<dyn OntologyRepository>> = None;
     let mut taxonomy: Option<Arc<dyn TaxonomyRepository>> = None;
@@ -211,6 +213,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         if let Ok(store) = SqlKnowledgeStore::open_file(path) {
             let store: Arc<SqlKnowledgeStore> = Arc::new(store);
             knowledge_store = Some(store.clone());
+            knowledge_query = Some(store.clone());
             if knowledge_ok {
                 knowledge = Some(store.clone());
                 knowledge_state = CapabilityState::Supported;
@@ -290,13 +293,20 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         retrieval_lanes.push(recall_lanes::community_summary_recall_lane(
             knowledge_handle.clone(),
         ));
-        // Lexical lane: an in-RAM Tantivy index (no ingest feed wired here) +
-        // a knowledge-store-backed target resolver.
+        // Lexical lane: an in-RAM Tantivy index shared with the lexical feed —
+        // `scan_repo` feeds code-symbol names via the `LexicalFeed` handle so
+        // keyword `search`/`recall` return them.
         if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::new() {
+            let lexical_index = Arc::new(lexical_index);
             let resolver = recall_lanes::KnowledgeLexicalResolver::new(knowledge_handle.clone());
-            retrieval_lanes.push(Arc::new(engram_store_lexical::LexicalRetrievalIndex::new(
+            retrieval_lanes.push(Arc::new(
+                engram_store_lexical::LexicalRetrievalIndex::from_arc(
+                    lexical_index.clone(),
+                    Arc::new(resolver),
+                ),
+            ));
+            lexical_feed = Some(Arc::new(crate::sqlite::lexical_feed::SqlLexicalFeed::new(
                 lexical_index,
-                Arc::new(resolver),
             )));
         }
     }
@@ -493,6 +503,12 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
     if let Some(h) = knowledge {
         builder = builder.knowledge(h);
+    }
+    if let Some(h) = knowledge_query {
+        builder = builder.knowledge_query(h);
+    }
+    if let Some(h) = lexical_feed {
+        builder = builder.lexical_feed(h);
     }
     if let Some(h) = graph {
         builder = builder.graph(h);

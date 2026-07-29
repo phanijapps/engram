@@ -44,6 +44,9 @@ else
     "$ROOT/core/integration/src/recall.rs"
     "$ROOT/core/integration/src/export_import.rs"
     "$ROOT/core/integration/src/observability.rs"
+    "$ROOT/mcp/engram-mcp/src"
+    "$ROOT/core/integration/src/knowledge_query.rs"
+    "$ROOT/core/integration/src/lexical_feed.rs"
   )
 fi
 

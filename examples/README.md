@@ -30,6 +30,16 @@ pnpm --filter @engram/client typecheck
 pnpm --filter @engram/client test
 ```
 
+## Scan Config
+
+A checked sample of the `scan_repo` filter config (concept-link blocklist/
+allowlist + file denylist). Copy it to `<repo>/.engram/scan.json` or pass its
+path as the `scan_config` arg:
+
+- [`scan-config/scan.json`](scan-config/scan.json) — the sample.
+- [`scan-config/README.md`](scan-config/README.md) — field reference + discovery ladder.
+
+
 ## Future Examples
 
 - Convert a task trace into an episode memory.

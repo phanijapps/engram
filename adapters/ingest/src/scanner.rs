@@ -18,10 +18,12 @@ use rayon::prelude::*;
 use crate::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
     MarkdownChunker, PlainTextChunker, PlainTextChunkerOptions,
-    classifier::{classify_file, is_denylisted, is_secret_file, is_within_root},
+    classifier::{classify_file, is_secret_file, is_within_root},
     content_hash, contract,
     git_detect::detect_git,
-    reconcile, stable_source_key,
+    reconcile,
+    scan_filter::ScanFilter,
+    stable_source_key,
 };
 
 pub use crate::classifier::FileKind;
@@ -61,6 +63,9 @@ pub struct ScanOptions {
     pub max_bytes: u64,
     /// Prior manifest (rel path -> content hash) for incremental skip-unchanged.
     pub manifest: std::collections::HashMap<String, String>,
+    /// Tunable concept-link + file-denylist filter. Defaults to the builtin
+    /// (prior hardcoded) behavior; a host merges a user config into it.
+    pub scan_filter: ScanFilter,
 }
 
 impl ScanOptions {
@@ -207,7 +212,7 @@ where
         // Observe the path BEFORE any filter that could skip it so that
         // skipped-but-present files are never classified as removals (FIX 3).
         observed_paths.insert(rel.clone());
-        if is_denylisted(&rel) || is_secret_file(&rel) {
+        if opts.scan_filter.is_denylisted(&rel) || is_secret_file(&rel) {
             summary.skipped += 1;
             continue;
         }
@@ -442,6 +447,18 @@ where
                                 if let Some(name) = &rel.object.name {
                                     if let Some(id) = idx.get(name) {
                                         rel.object.id = Some(Id::from(id.clone()));
+                                    }
+                                }
+                            }
+                            // T5: cross-document mentions resolution — fill name-only
+                            // `mentions` object refs against the global name index so
+                            // concepts from different documents are connected.
+                            if rel.predicate == "mentions" && rel.object.id.is_none() {
+                                if let Some(name) = &rel.object.name {
+                                    if opts.scan_filter.should_link_concept(name) {
+                                        if let Some(id) = idx.get(name) {
+                                            rel.object.id = Some(Id::from(id.clone()));
+                                        }
                                     }
                                 }
                             }

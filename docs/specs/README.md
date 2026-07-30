@@ -35,3 +35,9 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   new `engram-integration` exposure (`KnowledgeQuery` list methods + a lexical feed)
   so code-intel routes through `EngramProvider` with no provider bypass. Constrained
   by RFC-0015, ADR-0008, ADR-0009, ADR-0022, ADR-0020, ADR-0025. Draft.
+- [`scan-filter-config`](scan-filter-config/spec.md): externalize the scanner's
+  two hardcoded tuning lists — the cross-document concept-link filter
+  (`should_link_concept`) and the file denylist (`is_denylisted`) — behind an
+  optional `.engram/scan.json` (or `scan_config` arg) merged with built-in
+  defaults. `engram-ingest` takes a ready `ScanFilter`; discovery lives in
+  `engram-mcp`. Constrained by ADR-0022. Shipped.

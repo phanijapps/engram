@@ -1504,25 +1504,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "engram-codegraph-mcp"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "engram-codegraph-queries",
- "engram-codegraph-temporal",
- "engram-domain",
- "engram-graph-analytics",
- "engram-ingest",
- "engram-knowledge",
- "engram-runtime",
- "engram-store-lexical",
- "engram-store-sqlite",
- "futures",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "engram-codegraph-queries"
 version = "0.1.0"
 dependencies = [
@@ -1663,13 +1644,17 @@ dependencies = [
  "tree-sitter-c",
  "tree-sitter-c-sharp",
  "tree-sitter-cpp",
+ "tree-sitter-go",
  "tree-sitter-java",
  "tree-sitter-kotlin-ng",
  "tree-sitter-perl",
  "tree-sitter-php",
  "tree-sitter-python",
+ "tree-sitter-ruby",
  "tree-sitter-rust",
+ "tree-sitter-scala",
  "tree-sitter-sfapex",
+ "tree-sitter-swift",
  "tree-sitter-typescript",
 ]
 
@@ -1688,6 +1673,7 @@ dependencies = [
  "engram-ingest",
  "engram-knowledge",
  "engram-memory",
+ "engram-procedures",
  "engram-reflection",
  "engram-retrieval",
  "engram-runtime",
@@ -1743,6 +1729,7 @@ dependencies = [
  "engram-integration",
  "engram-knowledge",
  "futures",
+ "regex",
  "serde",
  "serde_json",
  "tempfile",
@@ -1758,35 +1745,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "engram-memory-mcp"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "engram-domain",
- "engram-integration",
- "engram-memory",
- "engram-runtime",
- "futures",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "engram-node"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "engram-belief",
  "engram-codegraph-queries",
  "engram-conformance",
  "engram-consolidation",
  "engram-core",
  "engram-domain",
+ "engram-hierarchy",
  "engram-ingest",
  "engram-integration",
  "engram-knowledge",
  "engram-memory",
+ "engram-procedures",
  "engram-retrieval",
  "engram-runtime",
  "engram-store-associative-graph",
@@ -1798,6 +1773,15 @@ dependencies = [
  "napi-derive",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "engram-procedures"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "engram-domain",
+ "engram-runtime",
 ]
 
 [[package]]
@@ -1898,6 +1882,7 @@ dependencies = [
  "engram-hierarchy",
  "engram-knowledge",
  "engram-memory",
+ "engram-procedures",
  "engram-retrieval",
  "engram-runtime",
  "fastembed",
@@ -6752,6 +6737,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-go"
+version = "0.23.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b13d476345220dbe600147dd444165c5791bf85ef53e28acbedd46112ee18431"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-java"
 version = "0.23.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6809,6 +6804,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-ruby"
+version = "0.23.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be0484ea4ef6bb9c575b4fdabde7e31340a8d2dbc7d52b321ac83da703249f95"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-rust"
 version = "0.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6819,10 +6824,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-scala"
+version = "0.23.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "efde5e68b4736e9eac17bfa296c6f104a26bffab363b365eb898c40a63c15d2f"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-sfapex"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ac630633dad003566212db2adc29a2a75c3e581a7288713dde28f42a428b016"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-swift"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe36052155b9dd69ca82b3b8f1b4ccfb2d867125ac1a4db1dd7331829242668c"
 dependencies = [
  "cc",
  "tree-sitter-language",

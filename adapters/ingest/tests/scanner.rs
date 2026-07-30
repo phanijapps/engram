@@ -68,6 +68,7 @@ fn scans_fixture_skipping_secrets_oversized_and_denylist() {
         source_name: "fixture".to_owned(),
         max_bytes: 1024,
         manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
     };
     let (summary, manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
 
@@ -148,6 +149,7 @@ fn scanner_git_repo_sets_git_repository_kind_and_stable_key() {
         source_name: "scan-test".to_owned(),
         max_bytes: 0,
         manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
     };
     let (summary, _) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
 
@@ -205,6 +207,7 @@ fn scanner_non_git_uses_fallback_key_and_filesystem_kind() {
         source_name: "local-notes".to_owned(),
         max_bytes: 0,
         manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
     };
     let (summary, _) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
 
@@ -231,6 +234,60 @@ fn scanner_non_git_uses_fallback_key_and_filesystem_kind() {
         key,
         Some("local-notes"),
         "fallback stable_source_key must equal the normalized source name"
+    );
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn scan_honors_custom_deny_filter() {
+    // A custom denylist (built from a ScanFilterConfig) skips a directory the
+    // builtin would index, while the builtin denylist still applies.
+    let root = std::env::temp_dir().join(format!(
+        "engram-scan-{}-{}",
+        std::process::id(),
+        "custom-deny"
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("generated")).expect("create generated");
+    fs::write(
+        root.join("main.rs"),
+        "fn alpha() { beta(); }\nfn beta() {}\n",
+    )
+    .expect("write main.rs");
+    // `generated/` is NOT in the builtin denylist → would be indexed without a
+    // custom filter.
+    fs::write(root.join("generated/gen.rs"), "fn gen() {}\n").expect("write generated/gen.rs");
+
+    let cfg = engram_ingest::ScanFilterConfig::from_json(
+        r#"{ "deny": { "dirs": ["generated"], "extensions": ["map"] } }"#,
+    )
+    .expect("parse config");
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+
+    // With the custom filter, generated/gen.rs is skipped → only main.rs ingested.
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "fixture".to_owned(),
+        max_bytes: 0,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::merge(&cfg),
+    };
+    let (summary, _manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    assert_eq!(summary.ingested, 1, "only main.rs: {summary:?}");
+
+    // With the builtin filter (no custom deny), generated/gen.rs IS ingested.
+    let opts_builtin = ScanOptions {
+        scan_filter: engram_ingest::ScanFilter::default(),
+        ..opts.clone()
+    };
+    let (summary_b, _manifest_b) =
+        scan_repository(&root, &opts_builtin, &store, |_| {}).expect("scan builtin");
+    assert_eq!(
+        summary_b.ingested, 2,
+        "main.rs + generated/gen.rs: {summary_b:?}"
     );
 
     let _ = fs::remove_dir_all(&root);

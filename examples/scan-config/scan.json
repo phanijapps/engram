@@ -1,0 +1,32 @@
+{
+  "concepts": {
+    "min_name_length": 10,
+    "blocklist": [
+      "KafkaConsumer",
+      "EventDispatcher",
+      "RequestContext",
+      "ServiceLocator"
+    ],
+    "allowlist": [
+      "api",
+      "Auth",
+      "RTBF"
+    ]
+  },
+  "deny": {
+    "dirs": [
+      "generated",
+      "vendor",
+      ".storybook",
+      "third_party",
+      "e2e-fixtures"
+    ],
+    "extensions": [
+      "map",
+      "svg",
+      "proto",
+      "woff2",
+      "snap"
+    ]
+  }
+}

@@ -11,7 +11,7 @@ pub enum FileKind {
     Text,
 }
 
-const DENY_DIRS: &[&str] = &[
+pub(crate) const DENY_DIRS: &[&str] = &[
     ".git",
     "node_modules",
     "target",
@@ -27,7 +27,8 @@ const DENY_DIRS: &[&str] = &[
     ".idea",
     ".vscode",
 ];
-const DENY_FILE_EXT: &[&str] = &["db", "sqlite", "sqlite3", "node", "log", "pyc", "lock"];
+pub(crate) const DENY_FILE_EXT: &[&str] =
+    &["db", "sqlite", "sqlite3", "node", "log", "pyc", "lock"];
 const SECRET_EXT: &[&str] = &[".key", ".pem", ".cert", ".crt", ".p12", ".pfx"];
 const SECRET_NAMES: &[&str] = &["id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"];
 const SAFE_TEMPLATES: &[&str] = &[
@@ -83,17 +84,12 @@ fn file_base(name: &str) -> &str {
 }
 
 /// True if any path segment is a deny dir, or the file suffix is denylisted.
+///
+/// Delegates to the builtin [`crate::scan_filter::ScanFilter`] so the decision
+/// logic has a single source of truth; the `DENY_DIRS`/`DENY_FILE_EXT` consts
+/// remain here as that filter's builtin input.
 pub fn is_denylisted(rel_path: &str) -> bool {
-    let segs: Vec<&str> = rel_path.split(['/', '\\']).collect();
-    if segs.iter().any(|s| DENY_DIRS.contains(s)) {
-        return true;
-    }
-    let base = segs.last().copied().unwrap_or("");
-    let ext = match base.rsplit_once('.') {
-        Some((_, e)) => e.to_lowercase(),
-        None => String::new(),
-    };
-    DENY_FILE_EXT.iter().any(|e| *e == ext)
+    crate::scan_filter::ScanFilter::builtin().is_denylisted(rel_path)
 }
 
 /// True if the file name looks like a credential/secret carrier.

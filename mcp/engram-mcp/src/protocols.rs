@@ -213,7 +213,6 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
     }
 
     // Persist handler edges: endpoint -[handled_by]-> handler
-    let mut rel_count = 0usize;
     for (ep_id, handler) in &handler_edges {
         let (method, path) = &endpoints[ep_id];
         let ep_name = format!("{method} {path}");
@@ -242,7 +241,6 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
             updated_at: None,
         };
         block_on(knowledge.put_relationship(rel)).map_err(internal)?;
-        rel_count += 1;
     }
 
     // Persist client edges: caller -[sends_request]-> endpoint
@@ -273,7 +271,6 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
             updated_at: None,
         };
         block_on(knowledge.put_relationship(rel)).map_err(internal)?;
-        rel_count += 1;
     }
 
     Ok(protocol::text_content(format!(

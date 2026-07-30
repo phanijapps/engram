@@ -19,6 +19,7 @@ mod markdown_chunker;
 mod openapi_types;
 mod reconcile;
 mod request;
+mod scan_filter;
 mod scanner;
 mod source_key;
 mod tree_sitter_chunker;
@@ -37,6 +38,7 @@ pub use hash::content_hash;
 pub use ingestor::{IngestedKnowledge, KnowledgeIngestor};
 pub use markdown_chunker::MarkdownChunker;
 pub use request::{DocumentIngestRequest, DocumentMetadata};
+pub use scan_filter::{ConceptFilterConfig, DenyFilterConfig, ScanFilter, ScanFilterConfig};
 pub use scanner::{
     ScanOptions, ScanProgress, ScanSummary, detect_workspace, scan_repository, scan_workspace,
 };

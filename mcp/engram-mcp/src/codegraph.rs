@@ -3,6 +3,7 @@
 //! ingestion routes through the provider's handles (no engine-store bypass).
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -11,7 +12,7 @@ use engram_domain::{
     KnowledgeRelationship, KnowledgeSource, RelationshipId, RetrievalRequest, Scope,
     SourceDocument,
 };
-use engram_ingest::{ScanOptions, scan_repository};
+use engram_ingest::{ScanFilter, ScanFilterConfig, ScanOptions, scan_repository};
 use engram_knowledge::{CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
 use futures::executor::block_on;
 use serde_json::Value;
@@ -128,6 +129,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     let graph = app.provider.require_graph().map_err(internal)?.clone();
     let repo = KnowledgeRepoGraph::new(knowledge, graph);
 
+    let (scan_filter, filter_note) = resolve_scan_filter(path, args);
     let opts = ScanOptions {
         scope: app.scope.clone(),
         policy: policy(),
@@ -135,6 +137,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         source_name: "engram-mcp-scan".to_owned(),
         max_bytes: 0,
         manifest: HashMap::new(),
+        scan_filter,
     };
     let (summary, _manifest) =
         scan_repository(std::path::Path::new(path), &opts, &repo, |_| ()).map_err(internal)?;
@@ -157,7 +160,71 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         }
     }
 
-    Ok(protocol::text_content(format!("{summary:?}")))
+    Ok(protocol::text_content(format!(
+        "{summary:?}\n{filter_note}"
+    )))
+}
+
+/// Load + merge a scan filter from a JSON config file.
+fn try_load_scan_filter(path: &Path) -> Result<ScanFilter, String> {
+    let json =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    let cfg =
+        ScanFilterConfig::from_json(&json).map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(ScanFilter::merge(&cfg))
+}
+
+/// Resolve the scan filter via the discovery ladder:
+///   1. an explicit `scan_config` path arg, else
+///   2. `<repo>/.engram/scan.json` if it exists, else
+///   3. the builtin defaults.
+///
+/// Returns the filter + a short note for the result text. Never errors — a
+/// missing/malformed config soft-fails to the builtin so a bad config file
+/// never aborts a scan.
+fn resolve_scan_filter(repo_root: &str, args: &Value) -> (ScanFilter, String) {
+    // (1) explicit arg wins.
+    if let Some(explicit) = args.get("scan_config").and_then(|v| v.as_str()) {
+        return match try_load_scan_filter(Path::new(explicit)) {
+            Ok(filter) => (filter, format!("scan_config applied: {explicit}")),
+            Err(e) => (
+                ScanFilter::default(),
+                format!("scan_config ignored ({e}); builtin filter"),
+            ),
+        };
+    }
+    // (2) repo-local <root>/.engram/scan.json. Read directly (no `exists()`
+    // probe) so a transient removal between probe and read can't produce a
+    // misleading "ignored" note; NotFound simply means no config.
+    let discovered = Path::new(repo_root).join(".engram").join("scan.json");
+    match std::fs::read_to_string(&discovered) {
+        Ok(json) => match ScanFilterConfig::from_json(&json) {
+            Ok(cfg) => {
+                return (
+                    ScanFilter::merge(&cfg),
+                    ".engram/scan.json applied".to_owned(),
+                );
+            }
+            Err(e) => {
+                return (
+                    ScanFilter::default(),
+                    format!(".engram/scan.json ignored (parse {e}); builtin filter"),
+                );
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => { /* no config; fall through */ }
+        Err(e) => {
+            return (
+                ScanFilter::default(),
+                format!(".engram/scan.json ignored (read {e}); builtin filter"),
+            );
+        }
+    }
+    // (3) builtin.
+    (
+        ScanFilter::default(),
+        "no scan config; builtin filter".to_owned(),
+    )
 }
 
 // --- composites (T2–T8) ------------------------------------------------------
@@ -384,4 +451,120 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
         "Server: engram-mcp 0.1.0\nCapabilities:\n{}",
         caps.join("\n")
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn tmp_root(label: &str) -> std::path::PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("engram-scan-cfg-{}-{label}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join(".engram")).unwrap();
+        root
+    }
+
+    /// `api` is 3 chars → builtin rejects it. An allowlist entry forces it on,
+    /// which is the observable signal that a config was applied.
+    const ALLOW_API_CFG: &str = r#"{ "concepts": { "allowlist": ["api"] } }"#;
+
+    #[test]
+    fn resolve_uses_explicit_scan_config_arg() {
+        let root = tmp_root("explicit");
+        let cfg_path = root.join("my-scan.json");
+        std::fs::write(&cfg_path, ALLOW_API_CFG).unwrap();
+
+        let args = json!({ "scan_config": cfg_path.to_string_lossy() });
+        let (filter, note) = resolve_scan_filter(root.to_str().unwrap(), &args);
+
+        assert!(filter.should_link_concept("api"), "allowlist applied");
+        assert!(note.contains("scan_config applied"), "note: {note}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_discovers_repo_local_config() {
+        let root = tmp_root("discovered");
+        // No `scan_config` arg, but <root>/.engram/scan.json exists.
+        std::fs::write(root.join(".engram").join("scan.json"), ALLOW_API_CFG).unwrap();
+
+        let args = json!({});
+        let (filter, note) = resolve_scan_filter(root.to_str().unwrap(), &args);
+
+        assert!(
+            filter.should_link_concept("api"),
+            "discovered config applied"
+        );
+        assert!(note.contains(".engram/scan.json applied"), "note: {note}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_falls_back_to_builtin_when_absent() {
+        let root = tmp_root("builtin");
+        let args = json!({});
+        let (filter, note) = resolve_scan_filter(root.to_str().unwrap(), &args);
+
+        // Builtin rejects short names like "api".
+        assert!(!filter.should_link_concept("api"));
+        assert!(note.contains("builtin filter"), "note: {note}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_soft_fails_on_malformed_config() {
+        let root = tmp_root("malformed");
+        std::fs::write(root.join(".engram").join("scan.json"), "{ not json").unwrap();
+
+        let args = json!({});
+        let (filter, note) = resolve_scan_filter(root.to_str().unwrap(), &args);
+
+        // Soft-fail → builtin (rejects "api"), note explains the ignore.
+        assert!(!filter.should_link_concept("api"));
+        assert!(note.contains("ignored"), "note: {note}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn resolve_explicit_arg_overrides_discovered() {
+        // Both an explicit arg AND a discovered file exist; the arg wins and the
+        // discovered file's content must NOT leak into the filter. The
+        // discovered file is given a VALID sentinel (an allowlist entry that
+        // would force-link "api" if it leaked) so any leak fails the test —
+        // using a broken discovered file would not prove read-order priority.
+        let root = tmp_root("override");
+        std::fs::write(
+            root.join(".engram").join("scan.json"),
+            r#"{ "concepts": { "allowlist": ["api"] } }"#,
+        )
+        .unwrap();
+        let cfg_path = root.join("explicit.json");
+        // Blocklist a name the builtin accepts, to prove the explicit file loaded.
+        std::fs::write(
+            &cfg_path,
+            r#"{ "concepts": { "blocklist": ["RetrievalIndex"] } }"#,
+        )
+        .unwrap();
+
+        let args = json!({ "scan_config": cfg_path.to_string_lossy() });
+        let (filter, note) = resolve_scan_filter(root.to_str().unwrap(), &args);
+
+        assert!(
+            !filter.should_link_concept("RetrievalIndex"),
+            "explicit blocklist applied"
+        );
+        assert!(
+            !filter.should_link_concept("api"),
+            "discovered allowlist must not leak (api stays builtin-rejected)"
+        );
+        assert!(note.contains("scan_config applied"), "note: {note}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
 }

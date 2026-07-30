@@ -9,7 +9,7 @@
 
 use chrono::Utc;
 use engram_belief::BeliefQuery;
-use engram_domain::{Belief, BeliefStatus, BeliefSubject, Contradiction, Id};
+use engram_domain::{Belief, BeliefStatus, BeliefSubject, Id};
 use futures::executor::block_on;
 use serde_json::Value;
 

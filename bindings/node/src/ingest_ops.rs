@@ -121,6 +121,7 @@ impl IngestOps {
                 source_name: source_name.clone(),
                 max_bytes,
                 manifest: prior,
+                scan_filter: engram_ingest::ScanFilter::default(),
             };
             let progress = |p: engram_ingest::ScanProgress| {
                 if let Ok(mut jobs) = jobs.lock() {

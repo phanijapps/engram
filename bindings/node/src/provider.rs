@@ -28,8 +28,8 @@ use engram_domain::{
 use engram_hierarchy::HierarchyRepository;
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, EngramConfig,
-    EngramProvider, ExportImport, KnowledgeQuery, Observability, ProvenanceQuery, StepStatus,
-    TransactionGuarantee, UnifiedRecall,
+    EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed, Observability, ProvenanceQuery,
+    StepStatus, TransactionGuarantee, UnifiedRecall,
 };
 use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
 use engram_memory::MemoryService;
@@ -187,10 +187,10 @@ impl NativeProvider {
     }
 
     /// Returns a belief handle, or throws if not wired.
-    #[napi(js_name = "requireBeliefApi")]
-    pub fn require_belief_api(&self) -> Result<NativeBeliefApi> {
+    #[napi(js_name = "requireBeliefsApi")]
+    pub fn require_beliefs_api(&self) -> Result<NativeBeliefsApi> {
         let handle = self.inner.require_beliefs().map_err(to_napi_error)?.clone();
-        Ok(NativeBeliefApi { handle })
+        Ok(NativeBeliefsApi { handle })
     }
 
     /// Returns a hierarchy handle, or throws if not wired.
@@ -202,6 +202,17 @@ impl NativeProvider {
             .map_err(to_napi_error)?
             .clone();
         Ok(NativeHierarchyApi { handle })
+    }
+
+    /// Returns a lexical-feed handle (BM25 lane upserts), or throws if not wired.
+    #[napi(js_name = "requireLexicalFeedApi")]
+    pub fn require_lexical_feed_api(&self) -> Result<NativeLexicalFeedApi> {
+        let handle = self
+            .inner
+            .require_lexical_feed()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeLexicalFeedApi { handle })
     }
 }
 
@@ -573,19 +584,19 @@ impl NativeKnowledgeQueryApi {
 }
 
 // ---------------------------------------------------------------------------
-// NativeBeliefApi — belief lifecycle
+// NativeBeliefsApi — belief lifecycle
 // ---------------------------------------------------------------------------
 
 /// Belief handle proxy. Holds an `Arc<dyn BeliefRepository>` and exposes the
 /// belief lifecycle as JSON-in / JSON-out methods (mirrors the MCP `belief_*`
 /// tools).
 #[napi]
-pub struct NativeBeliefApi {
+pub struct NativeBeliefsApi {
     handle: Arc<dyn BeliefRepository>,
 }
 
 #[napi]
-impl NativeBeliefApi {
+impl NativeBeliefsApi {
     /// Returns the live belief for a subject at `asOf` (default now). Takes
     /// `{ subject, scope, asOf? }` JSON (asOf is RFC3339), returns a `Belief`
     /// JSON or `null`.
@@ -682,5 +693,52 @@ impl NativeHierarchyApi {
         let result =
             block_on(self.handle.path_for(&seeds, &scope, max_layer)).map_err(to_napi_error)?;
         encode(&result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NativeLexicalFeedApi — BM25 lane feed
+// ---------------------------------------------------------------------------
+
+/// Lexical-feed handle proxy. Holds an `Arc<dyn LexicalFeed>` and exposes the
+/// BM25-lane upsert operations as JSON-in / JSON-out methods.
+#[napi]
+pub struct NativeLexicalFeedApi {
+    handle: Arc<dyn LexicalFeed>,
+}
+
+#[napi]
+impl NativeLexicalFeedApi {
+    /// Upserts one searchable document. Takes `{ targetId, text }` JSON.
+    #[napi(js_name = "upsertJson")]
+    pub fn upsert_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let target_id = value
+            .get("targetId")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::from_reason("targetId is required"))?;
+        let text = value
+            .get("text")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::from_reason("text is required"))?;
+        block_on(self.handle.upsert(target_id, text)).map_err(to_napi_error)?;
+        encode(&serde_json::json!({"ok": true}))
+    }
+
+    /// Upserts many `(targetId, text)` entries. Takes `[{ targetId, text }, …]` JSON.
+    #[napi(js_name = "upsertBatchJson")]
+    pub fn upsert_batch_json(&self, entries_json: String) -> Result<String> {
+        let entries: Vec<serde_json::Value> = decode(&entries_json)?;
+        let pairs: Vec<(String, String)> = entries
+            .iter()
+            .filter_map(|e| {
+                let id = e.get("targetId")?.as_str()?.to_owned();
+                let text = e.get("text")?.as_str()?.to_owned();
+                Some((id, text))
+            })
+            .collect();
+        let count = pairs.len();
+        block_on(self.handle.upsert_batch(&pairs)).map_err(to_napi_error)?;
+        encode(&serde_json::json!({"ok": true, "count": count}))
     }
 }

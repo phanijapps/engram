@@ -220,7 +220,7 @@ function repoDisplayName(stableSourceKey: string): string {
 const DEFAULT_MAX_PASSES = 10;
 
 class CodegraphEngine {
-  readonly scope: Scope = { tenant: "default", workspace: "codegraph" };
+  readonly scope: Scope = { tenant: "default", workspace: "memalpha" };
   readonly dbPath: string;
   private readonly native: NativeEngine;
 

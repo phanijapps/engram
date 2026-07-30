@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Engram — Architecture Report</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --panel2: #1e222b; --ink: #e6e9ef; --dim: #9aa3b2;
+    --accent: #6ea8fe; --accent2: #57d9a5; --warn: #f0a957; --rule: #2a2f3a;
+    --code: #c8d3e6; --codebg: #11141a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  code, pre { font-family: "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 28px 120px; }
+  header { padding: 64px 0 28px; border-bottom: 1px solid var(--rule); }
+  header .eyebrow { color: var(--accent); font-size: 13px; letter-spacing: 2px; text-transform: uppercase; }
+  header h1 { font-size: 44px; margin: 10px 0 6px; letter-spacing: -0.5px; }
+  header p.lede { color: var(--dim); font-size: 18px; max-width: 720px; margin: 6px 0 0; }
+  header .meta { color: var(--dim); font-size: 13px; margin-top: 18px; }
+  h2 { font-size: 26px; margin: 56px 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--rule); }
+  h2 .n { color: var(--accent); font-weight: 600; margin-right: 10px; }
+  h3 { font-size: 17px; margin: 26px 0 8px; color: var(--accent2); }
+  p { color: #cdd3df; }
+  a { color: var(--accent); }
+
+  /* stat cards */
+  .stats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin: 22px 0; }
+  .stat { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 14px; }
+  .stat .v { font-size: 24px; font-weight: 700; color: var(--accent2); }
+  .stat .l { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; margin-top: 4px; }
+
+  /* layered diagram */
+  .layers { display: flex; flex-direction: column; gap: 10px; margin: 18px 0; }
+  .layer { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; border-left: 3px solid var(--accent); }
+  .layer .lh { display: flex; justify-content: space-between; align-items: baseline; }
+  .layer .ln { font-weight: 700; color: var(--ink); }
+  .layer .ld { color: var(--dim); font-size: 13px; }
+  .layer .chips { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip { background: var(--codebg); color: var(--code); border: 1px solid var(--rule); border-radius: 6px; padding: 3px 9px; font-size: 12px; }
+  .l-domain { border-left-color: #b48bff; }
+  .l-core { border-left-color: var(--accent); }
+  .l-adapter { border-left-color: var(--warn); }
+  .l-surface { border-left-color: var(--accent2); }
+
+  /* tables */
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; font-weight: 600; }
+  td code { color: var(--code); background: var(--codebg); padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+  tr:hover td { background: var(--panel); }
+  .pred { color: var(--warn); }
+
+  /* pipeline */
+  .pipeline { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; margin: 18px 0; }
+  .step { flex: 1; min-width: 150px; background: var(--panel); border: 1px solid var(--rule); padding: 14px; position: relative; }
+  .step + .step { border-left: none; }
+  .step .sn { font-size: 11px; color: var(--accent); letter-spacing: 1px; }
+  .step .st { font-weight: 700; margin: 4px 0; }
+  .step .sd { font-size: 12px; color: var(--dim); }
+  .step .edge { margin-top: 8px; font-size: 11px; color: var(--accent2); font-family: monospace; }
+  .arrow { display: flex; align-items: center; color: var(--dim); padding: 0 4px; font-size: 18px; }
+
+  .note { background: var(--panel2); border-left: 3px solid var(--accent); padding: 12px 16px; border-radius: 6px; margin: 14px 0; color: #c3cad6; font-size: 14px; }
+  .note strong { color: var(--ink); }
+  ul.tight { margin: 8px 0; padding-left: 20px; } ul.tight li { margin: 4px 0; color: #cdd3df; }
+  footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--rule); color: var(--dim); font-size: 12px; }
+  .legend span { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Architecture Report</div>
+  <h1>Engram</h1>
+  <p class="lede">A contract-first <strong>Agentic Memory</strong> layer with a Rust core and TypeScript bindings — memory, knowledge graph, beliefs and hierarchy behind stable ports, with <strong>code as the final layer</strong>.</p>
+  <div class="meta">Generated from engram's self-hosted knowledge graph (engram-mcp + engram-distill) · indexed 764 files → 7,335 entities / 9,324 relationships</div>
+</header>
+
+<div class="stats">
+  <div class="stat"><div class="v">7,335</div><div class="l">Entities</div></div>
+  <div class="stat"><div class="v">9,324</div><div class="l">Relationships</div></div>
+  <div class="stat"><div class="v">1,999</div><div class="l">Call-graph symbols</div></div>
+  <div class="stat"><div class="v">14</div><div class="l">MCP capabilities</div></div>
+  <div class="stat"><div class="v">121</div><div class="l">Packages tracked</div></div>
+  <div class="stat"><div class="v">16</div><div class="l">Tree-sitter langs</div></div>
+</div>
+
+<h2><span class="n">01</span>What engram is</h2>
+<p>Engram is a storage-neutral memory + knowledge substrate for AI agents. It keeps <strong>memory</strong> (episodic observations), <strong>knowledge</strong> (source-grounded entities + graphs), <strong>beliefs</strong> (synthesized assertions over evidence), <strong>hierarchy</strong> (clustered navigation), and <strong>procedures</strong> (replayable runbooks) as <em>distinct concepts in separate port crates</em>. A single <code>EngramProvider</code> facade composes adapter cells into one fused-per-project workspace; the <code>engram-mcp</code> server exposes it to agents over JSON-RPC, and the on-top <code>codegraph</code> layer treats the codebase itself as a queryable graph.</p>
+<div class="note"><strong>Modularity rule:</strong> domain contracts come first, Rust owns deterministic behavior, TypeScript owns integration ergonomics, and infrastructure lives behind adapters. No god modules; crate roots are facades.</div>
+
+<h2><span class="n">02</span>Layered architecture</h2>
+<div class="legend" style="margin-bottom:10px; color:var(--dim); font-size:12px;">
+  <span style="background:#b48bff"></span>domain &nbsp; <span style="background:#6ea8fe"></span>core ports &nbsp; <span style="background:#f0a957"></span>adapters &nbsp; <span style="background:#57d9a5"></span>surface
+</div>
+<div class="layers">
+  <div class="layer l-domain">
+    <div class="lh"><span class="ln">Domain contracts</span><span class="ld">engram-domain · the source of truth</span></div>
+    <div class="chips"><span class="chip">Memory</span><span class="chip">Knowledge</span><span class="chip">Belief</span><span class="chip">Hierarchy</span><span class="chip">Ontology</span><span class="chip">Taxonomy</span><span class="chip">Policy</span><span class="chip">Provenance</span><span class="chip">Retrieval</span><span class="chip">Procedures</span></div>
+    <div class="ld" style="margin-top:8px">Types, invariants, serde, version markers. No SQL, no engines, no async runtimes.</div>
+  </div>
+  <div class="layer l-core">
+    <div class="lh"><span class="ln">Core ports + behavior</span><span class="ld">focused crates, one reason to change each</span></div>
+    <div class="chips"><span class="chip">engram-memory</span><span class="chip">engram-knowledge</span><span class="chip">engram-belief</span><span class="chip">engram-hierarchy</span><span class="chip">engram-consolidation</span><span class="chip">engram-reflection</span><span class="chip">engram-retrieval</span><span class="chip">engram-procedures</span><span class="chip">engram-eval</span><span class="chip">engram-graph-analytics</span></div>
+    <div class="ld" style="margin-top:8px">Ports + in-memory/test impls + deterministic pipelines (RRF fusion, consolidation planner, contradiction detector).</div>
+  </div>
+  <div class="layer l-adapter">
+    <div class="lh"><span class="ln">Adapters — capability × engine grid</span><span class="ld">replaceable infrastructure cells</span></div>
+    <div class="chips"><span class="chip">store-sql (memory)</span><span class="chip">store-knowledge-sqlite</span><span class="chip">store-belief-sqlite</span><span class="chip">store-hierarchy-sqlite</span><span class="chip">sqlite-vec</span><span class="chip">tantivy-lexical</span><span class="chip">cross-encoder-rerank</span><span class="chip">associative-graph</span><span class="chip">community-summary</span><span class="chip">ingest</span></div>
+    <div class="ld" style="margin-top:8px">Each engine is one cell at <code>adapters/&lt;capability&gt;/&lt;engine&gt;</code>; a new engine is additive, never a rewrite of neutral layers.</div>
+  </div>
+  <div class="layer l-surface">
+    <div class="lh"><span class="ln">Surface — facade, bindings, transport</span><span class="ld">Rust embedder + TS/N-API agent both reach every capability</span></div>
+    <div class="chips"><span class="chip">engram-integration (EngramProvider)</span><span class="chip">bindings/node (N-API)</span><span class="chip">packages/{client,contracts,node,adapters}</span><span class="chip">engram-mcp (server)</span><span class="chip">codegraph/* (on-top)</span></div>
+  </div>
+</div>
+
+<h2><span class="n">03</span>The 14 MCP capabilities</h2>
+<p>Every capability below is reachable through BOTH the Rust <code>EngramProvider</code> facade AND the N-API binding, reflected in <code>CapabilityReport</code> — enforced by the surface-parity lint (0 debt).</p>
+<table>
+  <tr><th>Capability</th><th>Owns</th><th>Layer</th></tr>
+  <tr><td><code>memory</code></td><td>Episodic writes, retrieve, forget</td><td>Memory</td></tr>
+  <tr><td><code>knowledge</code> · <code>graph</code> · <code>knowledge_query</code></td><td>Source-grounded entities, edges, KG reads</td><td>Knowledge</td></tr>
+  <tr><td><code>lexical_feed</code> · <code>recall</code></td><td>BM25 feed + fused multi-lane retrieval</td><td>Retrieval</td></tr>
+  <tr><td><code>beliefs</code></td><td>Bi-temporal beliefs + contradiction review</td><td>Belief</td></tr>
+  <tr><td><code>hierarchy</code></td><td>Louvain cluster navigation</td><td>Hierarchy</td></tr>
+  <tr><td><code>procedures</code></td><td>Replayable runbooks + success/failure counters</td><td>Procedures</td></tr>
+  <tr><td><code>consolidation</code> · <code>batch</code></td><td>Memory→fact→belief pipeline; bulk distill-write</td><td>Consolidation</td></tr>
+  <tr><td><code>ontology</code> · <code>taxonomy</code></td><td>Multi-layer ontology + SKOS taxonomy (launch config)</td><td>Knowledge</td></tr>
+  <tr><td><code>identity</code></td><td>Cross-adapter entity identity + dedup consolidation</td><td>Knowledge</td></tr>
+</table>
+
+<h2><span class="n">04</span>Architectural principles → the code they govern</h2>
+<p>Distilled from the boundary rules and bridged to real code symbols (semantic links the exact-name scan cannot infer). These are the load-bearing invariants of the system.</p>
+<table>
+  <tr><th>Principle / concept</th><th>Predicate</th><th>Code it binds to</th></tr>
+  <tr><td>Engine Neutrality (ADR-0022)</td><td class="pred">governs</td><td><code>EngramProvider</code></td></tr>
+  <tr><td>Surface Parity (ADR-0022)</td><td class="pred">governs</td><td><code>EngramProvider</code></td></tr>
+  <tr><td>Memory-Knowledge Separation</td><td class="pred">governs</td><td><code>MemoryService</code></td></tr>
+  <tr><td>Bi-temporal Belief Layer</td><td class="pred">describes</td><td><code>BeliefRepository</code></td></tr>
+  <tr><td>Retrieval Composition (RRF)</td><td class="pred">describes</td><td><code>ReciprocalRankFusion</code></td></tr>
+  <tr><td>Consolidation Pipeline</td><td class="pred">describes</td><td><code>ConsolidationService</code></td></tr>
+  <tr><td>Tunable Scan Filter</td><td class="pred">describes</td><td><code>ScanFilter</code></td></tr>
+  <tr><td>Procedures Layer</td><td class="pred">describes</td><td><code>ProcedureRepository</code></td></tr>
+  <tr><td>Episodic Memory Record</td><td class="pred">describes</td><td><code>MemoryRecord</code></td></tr>
+  <tr><td>Source-Grounded Knowledge Entity</td><td class="pred">describes</td><td><code>KnowledgeEntity</code></td></tr>
+  <tr><td>Capability Introspection</td><td class="pred">describes</td><td><code>CapabilityReport</code></td></tr>
+  <tr><td>Consolidation Plan</td><td class="pred">describes</td><td><code>ConsolidationPlan</code></td></tr>
+  <tr><td>Retrieval Request Contract</td><td class="pred">describes</td><td><code>RetrievalRequest</code></td></tr>
+</table>
+
+<h2><span class="n">05</span>The seams — where everything flows</h2>
+<p>Highest-betweenness symbols in the call graph: the architectural seams. The whole system reads as <strong>bootstrap wires capabilities → gates validate them → writes/reads flow through the memory/knowledge/recall seams</strong>.</p>
+<div class="stats" style="grid-template-columns: repeat(4,1fr);">
+  <div class="stat"><div class="v" style="font-size:16px"><code>bootstrap_sqlite</code></div><div class="l">Wiring root</div></div>
+  <div class="stat"><div class="v" style="font-size:16px"><code>recall</code></div><div class="l">Fused retrieval</div></div>
+  <div class="stat"><div class="v" style="font-size:16px"><code>write_memory</code></div><div class="l">Memory write</div></div>
+  <div class="stat"><div class="v" style="font-size:16px"><code>retrieve_candidates</code></div><div class="l">Candidate fusion</div></div>
+  <div class="stat"><div class="v" style="font-size:16px"><code>memory_ok</code></div><div class="l">Capability gate</div></div>
+  <div class="stat"><div class="v" style="font-size:16px"><code>ingest</code></div><div class="l">Ingestion</div></div>
+  <div class="stat"><div class="v" style="font-size:16px"><code>search</code></div><div class="l">Keyword search</div></div>
+  <div class="stat"><div class="v" style="font-size:16px"><code>export</code></div><div class="l">Export/import</div></div>
+</div>
+
+<h2><span class="n">06</span>Domain model — 11 areas</h2>
+<p>The domain data model (<code>docs/domain-data-model.md</code>) is the source of truth until Rust domain types are accepted as the generated-contract source.</p>
+<div class="chips" style="background:var(--panel);padding:14px;border-radius:10px;border:1px solid var(--rule)">
+  <span class="chip">Identity &amp; Scope</span><span class="chip">Memory</span><span class="chip">Belief Network</span><span class="chip">Knowledge</span><span class="chip">Ontology</span><span class="chip">Taxonomy</span><span class="chip">Hierarchy</span><span class="chip">Policy &amp; Provenance</span><span class="chip">Retrieval</span><span class="chip">Operations</span><span class="chip">Evaluation</span><span class="chip">Compatibility</span>
+</div>
+<div class="note" style="margin-top:14px"><strong>Key distinction:</strong> <code>MemoryRecord</code> (episodic) ≠ <code>KnowledgeEntity</code> (source-grounded) ≠ <code>Belief</code> (synthesized). Conflating them is a boundary violation.</div>
+
+<h2><span class="n">07</span>How the graph is built</h2>
+<p>The knowledge graph is assembled in layers by a pipeline of post-index scans + agent distillation. Each stage adds a relationship type the previous stage couldn't infer.</p>
+<div class="pipeline">
+  <div class="step"><div class="sn">STAGE 1</div><div class="st">scan_repo</div><div class="sd">Tree-sitter index of code + markdown concepts.</div><div class="edge">→ calls, belongs_to, mentions</div></div>
+  <div class="arrow">▶</div>
+  <div class="step"><div class="sn">STAGE 2</div><div class="st">scan_protocols</div><div class="sd">HTTP client calls + server routes.</div><div class="edge">→ sends_request, handled_by</div></div>
+  <div class="arrow">▶</div>
+  <div class="step"><div class="sn">STAGE 3</div><div class="st">scan_dependencies</div><div class="sd">Cargo.toml + package.json manifests.</div><div class="edge">→ depends_on (121 pkgs / 330)</div></div>
+  <div class="arrow">▶</div>
+  <div class="step"><div class="sn">STAGE 4</div><div class="st">scan_ownership</div><div class="sd">CODEOWNERS ownership.</div><div class="edge">→ owns</div></div>
+  <div class="arrow">▶</div>
+  <div class="step"><div class="sn">STAGE 5</div><div class="st">engram-distill</div><div class="sd">Agent-extracted concepts bridged to code.</div><div class="edge">→ describes, governs, extracted_from</div></div>
+</div>
+<div class="note">The first four stages are <strong>deterministic</strong> (the server, no LLM). The fifth is the agent's reasoning — the semantic doc↔code links that make the graph navigable by meaning, not just by exact name match.</div>
+
+<h2><span class="n">08</span>Invariants that must hold</h2>
+<ul class="tight">
+  <li><strong>Engine neutrality</strong> — <code>engram-domain</code> and core port crates never name an engine type or hold SQL. Enforced by lint.</li>
+  <li><strong>Surface parity</strong> — a capability is not "shipped" until a Rust embedder AND a TS/N-API agent can both invoke it. Enforced by lint (20 capabilities, 0 debt).</li>
+  <li><strong>No god modules</strong> — a file mixing construction, validation, state, orchestration, scoring, persistence, and error translation must be split before handoff.</li>
+  <li><strong>Facades stay thin</strong> — crate roots are module declarations + narrow re-exports; behavior lives in focused modules.</li>
+  <li><strong>Store adapters don't own composition</strong> — a backend recipe composes adapter cells; the adapter never crosses capability boundaries.</li>
+  <li><strong>Distinct concepts</strong> — memory, knowledge, belief, hierarchy, policy, provenance, and evaluation stay separate unless an ADR changes the model.</li>
+</ul>
+
+<h2><span class="n">09</span>Self-hosting</h2>
+<p>Engram eats its own dog food: a project <code>.mcp.json</code> runs the locally-built <code>engram-mcp</code> against a single-file WAL store (<code>./.engram/engram_data.db</code>), which indexed the engram codebase itself. The <code>engram-index</code>, <code>engram-find</code>, and <code>engram-distill</code> skills drive the server; <code>symbol_context</code>, <code>change_impact</code>, <code>graph_neighbors</code>, and <code>recall</code> all answer against engram's own code.</p>
+
+<footer>
+  Generated by Claude using the engram-mcp server (architecture, capability_report, recall) and the engram-distill knowledge (concept→code bridges). Data reflects the self-hosted index of the engram repository.
+</footer>
+
+</div>
+</body>
+</html>

@@ -22,6 +22,7 @@ specs under `docs/specs/`. See `docs/CONVENTIONS.md` for the RFC lifecycle.
 | [0014](0014-canonical-knowledge-graph-identity.md) | Canonical knowledge-graph identity and consolidation | Draft | 2026-07-21 |
 | [0015](0015-unified-engram-mcp.md) | Unified Engram MCP — codegraph + memory + context-packets over one provider | Draft | 2026-07-28 |
 | [0016](0016-zbot-class-memory-kg-code-as-final-layer.md) | engram-mcp as a Zbot-class memory+KG layer, with code graph as the final layer | Accepted | 2026-07-29 |
+| [0017](0017-three-module-architecture-pgvector.md) | Three-module target architecture (Ingestion / Retrieval+Mutation / Maintenance) + pgvector backend | Draft | 2026-07-30 |
 
 > **Note:** RFCs may reference feature specs that were consolidated into
 > [`docs/product/engram.md`](../product/engram.md). Those references are

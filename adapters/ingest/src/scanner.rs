@@ -194,6 +194,16 @@ where
         let canonical = match std::fs::canonicalize(path) {
             Ok(c) => c,
             Err(_) => {
+                // Retain a prior-manifest path hit by a transient canonicalize/I/O
+                // error so it is NOT mistaken for a removal (otherwise its graph is
+                // deleted and only re-ingested next scan). The path is still skipped
+                // for this scan; new/transient files remain skip-and-forget.
+                if let Ok(rel) = path.strip_prefix(&root_canonical) {
+                    let rel = rel.to_string_lossy().to_string();
+                    if !rel.is_empty() && opts.manifest.contains_key(&rel) {
+                        observed_paths.insert(rel);
+                    }
+                }
                 summary.skipped += 1;
                 continue;
             }
@@ -597,13 +607,18 @@ where
     // all removed-path deletions are complete.  Run once here — never before a
     // replacement write — because a replacement write re-puts the repo node via
     // upsert so pre-write GC would only widen the transient-absence window
-    // (FIX 1 / adversarial Nit 6).  Errors are ignored; orphaned repo nodes
-    // survive until the next scan.
-    let _ = block_on(reconcile::maybe_delete_repo_node(
+    // (FIX 1 / adversarial Nit 6). A failed GC leaves a harmless orphan repo
+    // node that converges on the next scan; surface it for observability
+    // instead of swallowing it.
+    if block_on(reconcile::maybe_delete_repo_node(
         repo,
         &opts.scope,
         &source_key,
-    ));
+    ))
+    .is_err()
+    {
+        summary.errors += 1;
+    }
 
     // Build the emitted manifest from this scan's outcomes.
     let mut new_manifest = std::collections::HashMap::new();

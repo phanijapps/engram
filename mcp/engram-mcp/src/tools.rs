@@ -1331,4 +1331,38 @@ mod tests {
         let inc = block_on(repo.increment_success(&id, &scope)).unwrap();
         assert_eq!(inc.success_count, 1);
     }
+
+    /// P6 — MCP procedure tools: put → list → increment.
+    #[test]
+    fn procedure_tools_put_list_increment() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let put = crate::procedures::procedure_put(
+            &app,
+            &json!({ "name": "deploy", "steps": ["build", "ship"], "trigger": "release cut" }),
+        )
+        .unwrap();
+        assert!(
+            put["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("Procedure stored")
+        );
+
+        let list = crate::procedures::procedure_list(&app, &json!({})).unwrap();
+        let lbody = list["content"][0]["text"].as_str().unwrap();
+        assert!(lbody.contains("deploy"), "list must show deploy: {lbody}");
+
+        // Procedures are keyed by name (id = name); increment by that id.
+        let inc = crate::procedures::procedure_increment(
+            &app,
+            &json!({ "id": "deploy", "outcome": "success" }),
+        )
+        .unwrap();
+        let ibody = inc["content"][0]["text"].as_str().unwrap();
+        assert!(
+            ibody.contains("1✓"),
+            "increment must show 1 success: {ibody}"
+        );
+    }
 }

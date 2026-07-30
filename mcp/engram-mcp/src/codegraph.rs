@@ -373,6 +373,7 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
         ("ontology", app.provider.ontology().is_some()),
         ("taxonomy", app.provider.taxonomy().is_some()),
         ("beliefs", app.provider.beliefs().is_some()),
+        ("procedures", app.provider.procedures().is_some()),
         ("hierarchy", app.provider.hierarchy().is_some()),
         ("identity", app.provider.identity().is_some()),
     ]

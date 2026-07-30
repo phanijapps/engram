@@ -19,6 +19,7 @@ mod config;
 mod graph;
 mod hierarchy;
 mod ontology;
+mod procedures;
 mod protocol;
 mod registry;
 mod scope;
@@ -321,6 +322,40 @@ fn register_all(registry: &mut ToolRegistry<App>) {
             "required": ["seeds"]
         }),
         handler: hierarchy::hierarchy_path,
+    });
+    registry.register(ToolRecord {
+        name: "procedure_put",
+        description: "Assert or update a replayable procedure (runbook steps + optional trigger).",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "steps": { "type": "array", "items": { "type": "string" } },
+                "trigger": { "type": "string" }
+            },
+            "required": ["name"]
+        }),
+        handler: procedures::procedure_put,
+    });
+    registry.register(ToolRecord {
+        name: "procedure_list",
+        description: "List procedures (runbooks) in the project scope with step counts + \
+                      success/failure tallies.",
+        input_schema: json!({ "type": "object", "properties": {} }),
+        handler: procedures::procedure_list,
+    });
+    registry.register(ToolRecord {
+        name: "procedure_increment",
+        description: "Bump the success or failure counter for a procedure by id.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "id": { "type": "string" },
+                "outcome": { "type": "string", "description": "success | failure" }
+            },
+            "required": ["id", "outcome"]
+        }),
+        handler: procedures::procedure_increment,
     });
     registry.register(ToolRecord {
         name: "symbol_context",

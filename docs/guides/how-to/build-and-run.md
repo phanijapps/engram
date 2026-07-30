@@ -1,5 +1,10 @@
 # Build and run engram
 
+> **⚠ The MCP-server startup commands in this guide reference the retired
+> `engram-memory-mcp` / `engram-codegraph-mcp` crates (deleted). The current
+> server is the unified `engram-mcp` — build/run instructions are in
+> [`mcp/engram-mcp/HOW-TO.md`](../../../mcp/engram-mcp/HOW-TO.md).**
+
 > Prerequisites, build/test commands, the demo, and MCP server startup — all
 > verified against this repo. For connecting an agent over MCP, see
 > [Connect via MCP](./connect-via-mcp.md); for what you are building, see the

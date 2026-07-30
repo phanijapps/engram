@@ -1,5 +1,12 @@
 # Connect to engram via MCP
 
+> **⚠ SUPERSEDED — read [`mcp/engram-mcp/HOW-TO.md`](../../../mcp/engram-mcp/HOW-TO.md)
+> instead.** Engram now ships **one unified server, `engram-mcp`** (RFC-0015),
+> covering memory + knowledge graph + beliefs + hierarchy + code intelligence.
+> The two-server model below (`engram-memory-mcp` + `engram-codegraph-mcp`) is
+> **retired — both crates are deleted**; the instructions below are kept as
+> historical reference only.
+
 > Engram ships two MCP servers — one for **agent memory**, one for the
 > **codegraph** — so any MCP client (Claude Desktop, Cursor, Copilot, Codex) can
   read and write engram over stdio JSON-RPC 2.0. For build/run commands, see the

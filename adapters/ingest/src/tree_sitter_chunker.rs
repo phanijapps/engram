@@ -96,6 +96,11 @@ impl TreeSitterChunker {
         reg!("pm", tree_sitter_perl::LANGUAGE, perl_kinds());
         // Ruby
         reg!("rb", tree_sitter_ruby::LANGUAGE, ruby_kinds());
+        // Scala
+        reg!("scala", tree_sitter_scala::LANGUAGE, scala_kinds());
+        reg!("sc", tree_sitter_scala::LANGUAGE, scala_kinds());
+        // Swift
+        reg!("swift", tree_sitter_swift::LANGUAGE, swift_kinds());
         // Bash
         reg!("sh", tree_sitter_bash::LANGUAGE, bash_kinds());
         reg!("bash", tree_sitter_bash::LANGUAGE, bash_kinds());
@@ -386,6 +391,24 @@ fn ruby_kinds() -> HashMap<&'static str, &'static str> {
         ("method", "def"),
         ("singleton_method", "def"),
         ("class", "class"),
+    ]
+    .into()
+}
+fn scala_kinds() -> HashMap<&'static str, &'static str> {
+    [
+        ("function_definition", "def"),
+        ("class_definition", "class"),
+        ("trait_definition", "trait"),
+        ("object_definition", "class"),
+    ]
+    .into()
+}
+fn swift_kinds() -> HashMap<&'static str, &'static str> {
+    [
+        ("function_declaration", "fn"),
+        ("class_declaration", "class"),
+        ("struct_declaration", "struct"),
+        ("protocol_declaration", "trait"),
     ]
     .into()
 }

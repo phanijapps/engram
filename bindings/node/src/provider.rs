@@ -22,8 +22,8 @@
 use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
     Belief, ConsolidationRequest, ContextPayload, EvidenceRef, EvidenceTargetType, ForgetRequest,
-    ForgetResult, Id, KnowledgeEntity, Provenance, RetrievalRequest, Scope, WriteMemoryRequest,
-    WriteMemoryResponse,
+    ForgetResult, Id, KnowledgeEntity, Procedure, Provenance, RetrievalRequest, Scope,
+    WriteMemoryRequest, WriteMemoryResponse,
 };
 use engram_hierarchy::HierarchyRepository;
 use engram_integration::{
@@ -33,6 +33,7 @@ use engram_integration::{
 };
 use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
 use engram_memory::MemoryService;
+use engram_procedures::ProcedureRepository;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -213,6 +214,17 @@ impl NativeProvider {
             .map_err(to_napi_error)?
             .clone();
         Ok(NativeLexicalFeedApi { handle })
+    }
+
+    /// Returns a procedures handle (replayable runbooks), or throws if not wired.
+    #[napi(js_name = "requireProceduresApi")]
+    pub fn require_procedures_api(&self) -> Result<NativeProceduresApi> {
+        let handle = self
+            .inner
+            .require_procedures()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeProceduresApi { handle })
     }
 }
 
@@ -740,5 +752,59 @@ impl NativeLexicalFeedApi {
         let count = pairs.len();
         block_on(self.handle.upsert_batch(&pairs)).map_err(to_napi_error)?;
         encode(&serde_json::json!({"ok": true, "count": count}))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NativeProceduresApi — replayable runbooks (Layer 6)
+// ---------------------------------------------------------------------------
+
+/// Procedures handle proxy. Holds an `Arc<dyn ProcedureRepository>` and exposes
+/// the procedure lifecycle (upsert / list / increment success or failure) as
+/// JSON-in / JSON-out methods.
+#[napi]
+pub struct NativeProceduresApi {
+    handle: Arc<dyn ProcedureRepository>,
+}
+
+#[napi]
+impl NativeProceduresApi {
+    /// Upserts a procedure by id. Takes a `Procedure` JSON, returns the persisted
+    /// `Procedure` JSON.
+    #[napi(js_name = "upsertJson")]
+    pub fn upsert_json(&self, procedure_json: String) -> Result<String> {
+        let procedure: Procedure = decode(&procedure_json)?;
+        let result = block_on(self.handle.upsert_procedure(procedure)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Lists procedures in a scope. Takes a `Scope` JSON, returns `[Procedure, …]`.
+    #[napi(js_name = "listJson")]
+    pub fn list_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result = block_on(self.handle.list_procedures(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Bumps the success counter. Takes `{ id, scope }` JSON, returns the updated
+    /// `Procedure` JSON.
+    #[napi(js_name = "incrementSuccessJson")]
+    pub fn increment_success_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let id: Id = id_field(&value, "id")?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.handle.increment_success(&id, &scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Bumps the failure counter. Takes `{ id, scope }` JSON, returns the updated
+    /// `Procedure` JSON.
+    #[napi(js_name = "incrementFailureJson")]
+    pub fn increment_failure_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let id: Id = id_field(&value, "id")?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.handle.increment_failure(&id, &scope)).map_err(to_napi_error)?;
+        encode(&result)
     }
 }

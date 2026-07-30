@@ -11,6 +11,7 @@ engram-memory = { path = "../memory" }
 engram-knowledge = { path = "../knowledge" }
 engram-hierarchy = { path = "../hierarchy" }
 engram-belief = { path = "../belief" }
+engram-procedures = { path = "../procedures" }
 engram-retrieval = { path = "../retrieval" }
 engram-consolidation = { path = "../consolidation" }
 engram-reflection = { path = "../reflection", optional = true }

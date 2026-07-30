@@ -60,8 +60,14 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
 
     let mut files_scanned = 0usize;
 
-    for (_rel_path, text) in &files {
+    for (rel_path, text) in &files {
         files_scanned += 1;
+        let is_test = rel_path.contains("/test")
+            || rel_path.contains("/tests/")
+            || rel_path.contains("/conformance")
+            || rel_path.ends_with("_test.rs")
+            || rel_path.ends_with(".test.ts")
+            || rel_path.ends_with(".spec.ts");
 
         // --- Server routes ---
         for caps in axum_re.captures_iter(text) {
@@ -87,7 +93,10 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
             handler_edges.push((ep_id, handler.to_owned()));
         }
 
-        // --- Client calls ---
+        // --- Client calls (skip test files to avoid polluting the protocol graph) ---
+        if is_test {
+            continue;
+        }
         for caps in fetch_re.captures_iter(text) {
             let url = &caps[1];
             if let Some(path_part) = extract_path(url) {

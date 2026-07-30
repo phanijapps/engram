@@ -1,5 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use engram_domain::*;
 use engram_retrieval::RetrievalIndex;
@@ -24,8 +25,9 @@ struct TargetMap {
     targets: BTreeMap<String, VectorResolvedTarget>,
 }
 
+#[async_trait]
 impl VectorTargetResolver for TargetMap {
-    fn resolve(
+    async fn resolve(
         &self,
         hit: &VectorSearchResult,
         _request: &RetrievalRequest,

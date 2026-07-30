@@ -31,9 +31,15 @@ pub trait VectorQueryProvider: Send + Sync {
 /// Resolvers own canonical record lookup and policy-aware target visibility.
 /// Returning `Ok(None)` means the vector row is stale or not visible for this
 /// request and should be skipped.
+#[async_trait]
 pub trait VectorTargetResolver: Send + Sync {
     /// Resolves one sqlite-vec hit into a retrieval target.
-    fn resolve(
+    ///
+    /// Async so implementors await canonical-record lookups (e.g. the store's
+    /// `get_chunk`) instead of nesting a `block_on` inside the already-async
+    /// recall pipeline — which would panic (`LocalPool` re-entry). Mirrors
+    /// `LexicalTargetResolver`.
+    async fn resolve(
         &self,
         hit: &VectorSearchResult,
         request: &RetrievalRequest,
@@ -114,7 +120,7 @@ impl RetrievalIndex for VectorRetrievalIndex {
 
         let mut results = Vec::new();
         for (rank, hit) in hits.iter().enumerate() {
-            let Some(target) = self.target_resolver.resolve(hit, request)? else {
+            let Some(target) = self.target_resolver.resolve(hit, request).await? else {
                 continue;
             };
             results.push(vector_result(rank, hit, target));

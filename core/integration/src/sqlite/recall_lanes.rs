@@ -40,8 +40,6 @@ use engram_store_lexical::{LexicalResolvedTarget, LexicalTargetResolver};
 use engram_store_sqlite::SqlKnowledgeStore;
 #[cfg(feature = "fastembed")]
 use engram_store_sqlite::{VectorResolvedTarget, VectorSearchResult, VectorTargetResolver};
-#[cfg(feature = "fastembed")]
-use futures::executor::block_on;
 
 /// Orphan-rule wrapper adapting `SqlKnowledgeStore` to the associative-graph
 /// edge source (mirrors `bindings/node/src/knowledge_fusion.rs`). A bare
@@ -124,13 +122,14 @@ impl KnowledgeVectorResolver {
 }
 
 #[cfg(feature = "fastembed")]
+#[async_trait]
 impl VectorTargetResolver for KnowledgeVectorResolver {
-    fn resolve(
+    async fn resolve(
         &self,
         hit: &VectorSearchResult,
         request: &RetrievalRequest,
     ) -> CoreResult<Option<VectorResolvedTarget>> {
-        let chunk = resolve_chunk(&self.store, &hit.target_id, &request.scope)?;
+        let chunk = resolve_chunk(&self.store, &hit.target_id, &request.scope).await?;
         Ok(chunk.map(chunk_to_vector))
     }
 }
@@ -142,13 +141,13 @@ impl VectorTargetResolver for KnowledgeVectorResolver {
 /// skips it) rather than synthesizing a phantom candidate. (fastembed-only; the
 /// lexical resolver awaits `get_chunk` directly — see `KnowledgeLexicalResolver`.)
 #[cfg(feature = "fastembed")]
-fn resolve_chunk(
+async fn resolve_chunk(
     store: &Arc<SqlKnowledgeStore>,
     target_id: &str,
     scope: &Scope,
 ) -> CoreResult<Option<KnowledgeChunk>> {
     let id = ChunkId::from(target_id);
-    block_on(store.get_chunk(&id, scope))
+    store.get_chunk(&id, scope).await
 }
 
 /// Shapes a resolved chunk as a lexical-lane retrieval target.

@@ -49,3 +49,6 @@ artifacts/
 
 # engram-mcp self-hosting storage (project-local, hidden from the walker)
 .engram/
+
+# generated architecture report (not committed)
+engram-architecture-report.html

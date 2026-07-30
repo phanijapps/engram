@@ -19,6 +19,7 @@ mod config;
 mod graph;
 mod hierarchy;
 mod ontology;
+mod predict;
 mod procedures;
 mod protocol;
 mod protocols;
@@ -150,6 +151,22 @@ fn register_all(registry: &mut ToolRegistry<App>) {
             "required": ["subject", "predicate", "object"]
         }),
         handler: tools::put_relationship,
+    });
+    registry.register(ToolRecord {
+        name: "predict_context",
+        description: "Derive proactive retrieval hints from the agent's current state \
+                      (task + recent_queries + recent_target_ids). Returns predicted queries \
+                      + still-relevant target ids to feed into recall / get_context. \
+                      Deterministic baseline (no model).",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "task": { "type": "string", "description": "Current task label (optional)." },
+                "recent_queries": { "type": "array", "items": { "type": "string" }, "description": "Recent explicit queries (optional)." },
+                "recent_target_ids": { "type": "array", "items": { "type": "string" }, "description": "Recently retrieved target ids (optional)." }
+            }
+        }),
+        handler: predict::predict_context,
     });
     registry.register(ToolRecord {
         name: "recall",

@@ -41,3 +41,8 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   optional `.engram/scan.json` (or `scan_config` arg) merged with built-in
   defaults. `engram-ingest` takes a ready `ScanFilter`; discovery lives in
   `engram-mcp`. Constrained by ADR-0022. Shipped.
+- [`retrieval-completeness`](retrieval-completeness/spec.md): close the retrieval-mode
+  gap — re-land `Temporal` / `Cue` / `Hierarchical` modes on durable `RetrievalIndex`
+  adapters (currently enum-only; the impls died with the process-local fixture) and
+  wire predictive retrieval. Phased; Phase 1 (predict_context tool + predictor tests)
+  is the first slice. Constrained by RFC-0005, ADR-0022. Draft.

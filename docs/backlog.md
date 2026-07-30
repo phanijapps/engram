@@ -62,19 +62,14 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ## knowledge-graph-retraction (deferred nits — self-healing, demo-scale)
 
-- **Repo-node GC error swallowed:** `maybe_delete_repo_node`'s error is discarded
-  in the serial post-pass (scanner.rs); a failed GC leaves a harmless orphan
-  Repository node that converges on the next scan. Optionally count it into
-  `summary.errors` for observability.
 - **Transient graph-drop on ingest-error-after-delete:** a file whose prior graph
   is deleted in the pre-pass but then hits `Outcome::Error` in the parallel write
   has its graph absent until the next scan (self-healing; inherent to
   delete-before-write).
-- **Canonicalize-failure treated as removal:** a previously-ingested file hit by a
-  transient canonicalize/I/O error is not added to `observed_paths`, so its graph
-  is deleted as a "removal" and re-ingested next scan (self-healing availability
-  edge, caller-scope-bounded). Fix: treat canonicalize failure on a prior-manifest
-  path as retain, not remove.
+
+> Closed: "Repo-node GC error swallowed" (now counted into `summary.errors`) and
+> "Canonicalize-failure treated as removal" (prior-manifest paths are now retained
+> on a transient canonicalize error) — see the scanner fix.
 
 ## contract-first-ingestion (deferred hardening)
 

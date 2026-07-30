@@ -83,6 +83,23 @@ impl SqliteOpenOptions {
         }
     }
 
+    /// File-based options with WAL + a 5s busy timeout for **concurrent access**
+    /// (multiple readers + one writer), preserving the legacy foreign-keys-OFF
+    /// write semantics. This is what file-backed `open_file` constructors use so
+    /// hosts like the MCP, a gateway, and a visualizer can all read the same DB
+    /// without delete-mode lock contention. Use [`SqliteOpenOptions::file_wal`]
+    /// for the full production set *with* foreign-key enforcement.
+    pub fn file_wal_concurrent(path: PathBuf) -> Self {
+        Self {
+            path: SqlitePath::File(path),
+            create_parent_dirs: true,
+            journal_mode: SqliteJournalMode::Wal,
+            busy_timeout_ms: Some(5000),
+            foreign_keys: false,
+            run_migrations: false,
+        }
+    }
+
     /// Create options for an in-memory database.
     ///
     /// In-memory databases use MEMORY journal mode by default.

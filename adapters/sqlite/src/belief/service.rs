@@ -46,7 +46,9 @@ impl SqlBeliefStore {
 
     /// Opens a file-backed belief store and initializes its schema.
     pub fn open_file(path: impl AsRef<Path>) -> CoreResult<Self> {
-        Self::from_connection(Connection::open(path).map_err(sql_error)?)
+        Self::open_with_options(SqliteOpenOptions::file_wal_concurrent(
+            path.as_ref().to_path_buf(),
+        ))
     }
 
     /// Opens a SQLite belief store with explicit configuration options.
@@ -66,7 +68,7 @@ impl SqlBeliefStore {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
+    /// use engram_store_sqlite::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
     /// use engram_store_sqlite::SqlBeliefStore;
     ///
     /// let options = SqliteOpenOptions {

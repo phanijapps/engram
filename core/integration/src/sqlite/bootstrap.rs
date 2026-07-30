@@ -147,6 +147,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut ontology_state = failed();
     let mut taxonomy_state = failed();
     let mut beliefs_state = failed();
+    let mut procedures_state = failed();
     let mut hierarchy_state = failed();
     let mut vectors_state = failed();
     // episodes_evidence is a shipped capability (S2): a check failure reports
@@ -278,6 +279,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     if let Ok(store) = SqlProcedureStore::open_file(&paths.procedures) {
         let store: Arc<SqlProcedureStore> = Arc::new(store);
         procedures = Some(store);
+        procedures_state = CapabilityState::Supported;
     }
 
     // unified_recall (S4): construct the SqlUnifiedRecall handle from the wired
@@ -491,6 +493,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         .observability(observability_state)
         .consolidation(consolidation_state)
         .identity(identity_state)
+        .procedures(procedures_state)
         .build();
 
     // Construct the SqlObservability handle from the wired concrete stores +

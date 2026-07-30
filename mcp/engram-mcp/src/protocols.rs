@@ -6,7 +6,7 @@
 //! patterns, creates `Api` endpoint entities, and connects callers → endpoints
 //! → handlers so `change_impact` / `symbol_context` cross the protocol boundary.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use chrono::Utc;
@@ -116,6 +116,64 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
                     enclosing_function(text, caps.get(0).map(|m| m.start()).unwrap_or(0))
                 {
                     client_edges.push((ep_id, caller));
+                }
+            }
+        }
+    }
+
+    // --- Wrapper propagation ---
+    // Functions that contain HTTP calls with DYNAMIC urls (e.g. fetch(`${base}${path}`))
+    // are "wrappers" — their callers pass a static URL that we CAN extract.
+    let mut wrapper_names: HashSet<String> = HashSet::new();
+    for (_rel_path, text) in &files {
+        for caps in fetch_re.captures_iter(text) {
+            let url = &caps[1];
+            let pos = caps.get(0).map(|m| m.start()).unwrap_or(0);
+            if extract_path(url).is_none() {
+                if let Some(func) = enclosing_function(text, pos) {
+                    wrapper_names.insert(func);
+                }
+            }
+        }
+        for caps in client_method_re.captures_iter(text) {
+            let url = &caps[2];
+            let pos = caps.get(0).map(|m| m.start()).unwrap_or(0);
+            if extract_path(url).is_none() {
+                if let Some(func) = enclosing_function(text, pos) {
+                    wrapper_names.insert(func);
+                }
+            }
+        }
+    }
+
+    // For each caller of a wrapper that passes a static URL, create a
+    // sends_request edge to the matching endpoint.
+    if !wrapper_names.is_empty() {
+        let escaped: Vec<String> = wrapper_names.iter().map(|n| regex::escape(n)).collect();
+        let pattern = format!(
+            r#"\b({})\s*(?:<[^>]+>)?\s*\(\s*[`'"]([^`'"]+)[`'"]"#,
+            escaped.join("|")
+        );
+        if let Ok(wrapper_re) = Regex::new(&pattern) {
+            for (_rel_path, text) in &files {
+                for caps in wrapper_re.captures_iter(text) {
+                    let wrapper_name = &caps[1];
+                    let url = &caps[2];
+                    let pos = caps.get(0).map(|m| m.start()).unwrap_or(0);
+                    if let Some(path_part) = extract_path(url) {
+                        let normalized = normalize(&path_part, &route_param_re);
+                        for method in ["get", "post", "put", "delete", "patch"] {
+                            let ep_id = endpoint_id(method, &normalized);
+                            if endpoints.contains_key(&ep_id) {
+                                if let Some(caller) = enclosing_function(text, pos) {
+                                    if caller != wrapper_name {
+                                        client_edges.push((ep_id, caller));
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }

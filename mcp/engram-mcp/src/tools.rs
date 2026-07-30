@@ -1495,4 +1495,43 @@ impl Store {
             "sends_request from listBeliefs with endpoint name: {rels:?}"
         );
     }
+
+    /// Wrapper propagation: a function that calls `fetchJson("URL")` (not `fetch`
+    /// directly) should still get a `sends_request` edge to the endpoint.
+    #[test]
+    fn scan_protocols_propagates_through_http_wrappers() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("ui")).unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("server")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("ui/http.ts"),
+            "export async function fetchJson(path: string) {\n  const base = getConfig();\n  return fetch(`${base}${path}`);\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo_dir.path().join("ui/api.ts"),
+            "async function listItems() {\n  await fetchJson(\"/api/items/42\");\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo_dir.path().join("server/routes.rs"),
+            "fn setup() {\n  app.route(\"/api/items/:id\", get(items::list));\n}\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::protocols::scan_protocols(
+            &app,
+            &json!({ "path": repo_dir.path().to_str().unwrap() }),
+        )
+        .unwrap();
+        let q = app.provider.require_knowledge_query().expect("handle");
+        let rels = block_on(q.list_relationships(&app.scope)).unwrap();
+        assert!(
+            rels.iter().any(|r| r.predicate == "sends_request"
+                && r.subject.name.as_deref() == Some("listItems")
+                && r.object.name.as_deref().map(|n| n.contains("/api/items/")).unwrap_or(false)),
+            "listItems should connect to endpoint via wrapper propagation: {rels:?}"
+        );
+    }
 }

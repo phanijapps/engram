@@ -1476,13 +1476,23 @@ impl Store {
         );
         assert!(
             rels.iter().any(|r| r.predicate == "handled_by"
-                && r.object.name.as_deref() == Some("beliefs::list_beliefs")),
-            "handled_by edge to list_beliefs: {rels:?}"
+                && r.object.name.as_deref() == Some("list_beliefs")
+                && r.subject
+                    .name
+                    .as_deref()
+                    .map(|n| n.contains("/api/beliefs/"))
+                    .unwrap_or(false)),
+            "handled_by edge to list_beliefs with endpoint name: {rels:?}"
         );
         assert!(
             rels.iter().any(|r| r.predicate == "sends_request"
-                && r.subject.name.as_deref() == Some("listBeliefs")),
-            "sends_request from listBeliefs: {rels:?}"
+                && r.subject.name.as_deref() == Some("listBeliefs")
+                && r.object
+                    .name
+                    .as_deref()
+                    .map(|n| n.contains("/api/beliefs/"))
+                    .unwrap_or(false)),
+            "sends_request from listBeliefs with endpoint name: {rels:?}"
         );
     }
 }

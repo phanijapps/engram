@@ -211,10 +211,17 @@ fn register_all(registry: &mut ToolRegistry<App>) {
     });
     registry.register(ToolRecord {
         name: "scan_repo",
-        description: "Treesitter-index a code repository into the project workspace (code lane).",
+        description: "Treesitter-index a code repository into the project workspace (code lane). \
+                      Honors an optional scan config: pass `scan_config` (path to a JSON file) or \
+                      drop one at `<repo>/.engram/scan.json` to tune the concept-link filter \
+                      (blocklist/allowlist/min_name_length) and the file denylist (dirs/extensions). \
+                      Missing/malformed config soft-fails to the builtin filter.",
         input_schema: json!({
             "type": "object",
-            "properties": { "path": { "type": "string", "description": "Repository root path." } },
+            "properties": {
+                "path": { "type": "string", "description": "Repository root path." },
+                "scan_config": { "type": "string", "description": "Optional path to a scan-filter JSON config (overrides <repo>/.engram/scan.json)." }
+            },
             "required": ["path"]
         }),
         handler: codegraph::scan_repo,

@@ -11,6 +11,7 @@ members = [
     "core/consolidation",
     "core/reflection",
     "core/hierarchy",
+    "core/procedures",
     "core/integration",
     "core/graph-analytics",
     "adapters/ingest",

@@ -1440,4 +1440,49 @@ impl Store {
             "hierarchy_path should return nodes after build: {pbody}"
         );
     }
+
+    /// Protocol scan: creates endpoint entities + edges from TS fetch + Rust
+    /// Axum routes, bridging the distributed call graph.
+    #[test]
+    fn scan_protocols_bridges_ts_fetch_to_rust_route() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("ui")).unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("server")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("ui/api.ts"),
+            "async function listBeliefs() {\n  const res = await fetch(\"/api/beliefs/123\");\n}\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo_dir.path().join("server/routes.rs"),
+            "fn setup() {\n  app.route(\"/api/beliefs/:id\", get(beliefs::list_beliefs));\n}\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::protocols::scan_protocols(
+            &app,
+            &json!({ "path": repo_dir.path().to_str().unwrap() }),
+        )
+        .unwrap();
+        let q = app.provider.require_knowledge_query().expect("handle");
+        let entities = block_on(q.list_entities(&app.scope)).unwrap();
+        let rels = block_on(q.list_relationships(&app.scope)).unwrap();
+        assert!(
+            entities
+                .iter()
+                .any(|e| e.kind == EntityKind::Api && e.name.contains("/api/beliefs/")),
+            "endpoint entity should exist: {entities:?}"
+        );
+        assert!(
+            rels.iter().any(|r| r.predicate == "handled_by"
+                && r.object.name.as_deref() == Some("beliefs::list_beliefs")),
+            "handled_by edge to list_beliefs: {rels:?}"
+        );
+        assert!(
+            rels.iter().any(|r| r.predicate == "sends_request"
+                && r.subject.name.as_deref() == Some("listBeliefs")),
+            "sends_request from listBeliefs: {rels:?}"
+        );
+    }
 }

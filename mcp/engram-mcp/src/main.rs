@@ -21,6 +21,7 @@ mod hierarchy;
 mod ontology;
 mod procedures;
 mod protocol;
+mod protocols;
 mod registry;
 mod scope;
 mod server;
@@ -217,6 +218,18 @@ fn register_all(registry: &mut ToolRegistry<App>) {
             "required": ["path"]
         }),
         handler: codegraph::scan_repo,
+    });
+    registry.register(ToolRecord {
+        name: "scan_protocols",
+        description: "Post-index scan: extract HTTP protocol boundaries (client fetch calls + \
+                      server route registrations), normalize route patterns, create endpoint \
+                      entities, and link callers → endpoints → handlers. Run AFTER scan_repo.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "path": { "type": "string", "description": "Repository root path." } },
+            "required": ["path"]
+        }),
+        handler: protocols::scan_protocols,
     });
     registry.register(ToolRecord {
         name: "search",

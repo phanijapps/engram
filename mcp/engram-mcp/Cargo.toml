@@ -21,6 +21,7 @@ engram-codegraph-temporal = { path = "../../codegraph/temporal" }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }
+regex = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }
 

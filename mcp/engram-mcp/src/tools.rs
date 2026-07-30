@@ -1295,4 +1295,40 @@ mod tests {
             "search must find the scanned symbol: {body}"
         );
     }
+
+    /// Procedures (Layer 6): the bootstrap wires the handle + the adapter
+    /// round-trips (upsert → list → increment).
+    #[test]
+    fn procedures_wired_and_round_trip() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let repo = app
+            .provider
+            .require_procedures()
+            .expect("procedures handle wired");
+        let scope = app.scope.clone();
+        let id = Id::from("proc-deploy");
+        let procedure = engram_domain::Procedure {
+            id: id.clone(),
+            scope: scope.clone(),
+            name: "deploy".to_owned(),
+            steps: vec!["build".to_owned(), "ship".to_owned()],
+            trigger: None,
+            success_count: 0,
+            failure_count: 0,
+            provenance: provenance("test"),
+            policy: policy(),
+            created_at: Utc::now(),
+            updated_at: None,
+            metadata: None,
+        };
+        block_on(repo.upsert_procedure(procedure)).unwrap();
+        let list = block_on(repo.list_procedures(&scope)).unwrap();
+        assert!(
+            list.iter().any(|p| p.name == "deploy"),
+            "procedure should list: {list:?}"
+        );
+        let inc = block_on(repo.increment_success(&id, &scope)).unwrap();
+        assert_eq!(inc.success_count, 1);
+    }
 }

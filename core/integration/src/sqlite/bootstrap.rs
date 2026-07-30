@@ -22,12 +22,14 @@ use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
 };
 use engram_memory::MemoryService;
+use engram_procedures::ProcedureRepository;
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_sqlite::SqlBeliefStore;
 use engram_store_sqlite::SqlHierarchyStore;
 use engram_store_sqlite::SqlIdentityStore;
 use engram_store_sqlite::SqlKnowledgeStore;
 use engram_store_sqlite::SqlMemoryService;
+use engram_store_sqlite::SqlProcedureStore;
 
 use crate::{
     CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder, SqliteStorageLayout,
@@ -64,6 +66,7 @@ struct SqliteLayoutPaths {
     memory: PathBuf,
     knowledge: PathBuf,
     belief: PathBuf,
+    procedures: PathBuf,
     hierarchy: PathBuf,
     vectors: PathBuf,
 }
@@ -80,6 +83,7 @@ impl SqliteLayoutPaths {
                     memory: storage.join("memory.db"),
                     knowledge: storage.join("knowledge.db"),
                     belief: storage.join("belief.db"),
+                    procedures: storage.join("procedures.db"),
                     hierarchy: storage.join("hierarchy.db"),
                     vectors: storage.join("vectors.db"),
                 }
@@ -90,6 +94,7 @@ impl SqliteLayoutPaths {
                     memory: shared.clone(),
                     knowledge: shared.clone(),
                     belief: shared.clone(),
+                    procedures: shared.clone(),
                     hierarchy: shared.clone(),
                     vectors: shared,
                 }
@@ -166,6 +171,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut ontology: Option<Arc<dyn OntologyRepository>> = None;
     let mut taxonomy: Option<Arc<dyn TaxonomyRepository>> = None;
     let mut beliefs: Option<Arc<dyn BeliefRepository>> = None;
+    let mut procedures: Option<Arc<dyn ProcedureRepository>> = None;
     let mut hierarchy: Option<Arc<dyn HierarchyRepository>> = None;
     let retrieval: Option<Arc<dyn engram_retrieval::RetrievalIndex>> = None;
     let mut vectors: Option<Arc<dyn engram_retrieval::VectorIndex>> = None;
@@ -264,6 +270,14 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             beliefs = Some(store);
             beliefs_state = CapabilityState::Supported;
         }
+    }
+
+    // Procedures (RFC-0016 Layer 6). No conformance gate yet — attach when the
+    // store opens; a procedures CapabilityReport key + conformance probe are
+    // follow-up polish.
+    if let Ok(store) = SqlProcedureStore::open_file(&paths.procedures) {
+        let store: Arc<SqlProcedureStore> = Arc::new(store);
+        procedures = Some(store);
     }
 
     // unified_recall (S4): construct the SqlUnifiedRecall handle from the wired
@@ -521,6 +535,10 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
     if let Some(h) = beliefs {
         builder = builder.beliefs(h);
+    }
+
+    if let Some(h) = procedures {
+        builder = builder.procedures(h);
     }
     if let Some(h) = hierarchy {
         builder = builder.hierarchy(h);

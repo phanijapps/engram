@@ -16,6 +16,7 @@ engram-core = { path = "../../core/orchestration" }
 engram-domain = { path = "../../core/domain" }
 engram-belief = { path = "../../core/belief" }
 engram-hierarchy = { path = "../../core/hierarchy" }
+engram-procedures = { path = "../../core/procedures" }
 engram-conformance = { path = "../../adapters/integration" }
 engram-integration = { path = "../../core/integration", features = ["sqlite"] }
 engram-ingest = { path = "../../adapters/ingest" }

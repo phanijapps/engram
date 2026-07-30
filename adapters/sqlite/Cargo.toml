@@ -18,6 +18,7 @@ engram-knowledge = { path = "../../core/knowledge" }
 engram-retrieval = { path = "../../core/retrieval" }
 engram-core = { path = "../../core/orchestration" }
 engram-hierarchy = { path = "../../core/hierarchy" }
+engram-procedures = { path = "../../core/procedures" }
 sha2.workspace = true
 # Vector cell — folded in from engram-store-vector (T5):
 sqlite-vec.workspace = true

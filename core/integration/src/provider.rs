@@ -19,6 +19,7 @@ use engram_knowledge::{
     TaxonomyRepository,
 };
 use engram_memory::MemoryService;
+use engram_procedures::ProcedureRepository;
 use engram_retrieval::{RetrievalIndex, VectorIndex};
 use engram_runtime::{CoreError, CoreResult};
 use std::sync::Arc;
@@ -61,6 +62,7 @@ pub struct EngramProvider {
     ontology: Option<Arc<dyn OntologyRepository>>,
     taxonomy: Option<Arc<dyn TaxonomyRepository>>,
     beliefs: Option<Arc<dyn BeliefRepository>>,
+    procedures: Option<Arc<dyn ProcedureRepository>>,
     hierarchy: Option<Arc<dyn HierarchyRepository>>,
     retrieval: Option<Arc<dyn RetrievalIndex>>,
     vectors: Option<Arc<dyn VectorIndex>>,
@@ -243,6 +245,11 @@ impl EngramProvider {
         self.beliefs.as_ref()
     }
 
+    /// Returns the procedure repository handle if supported.
+    pub fn procedures(&self) -> Option<&Arc<dyn ProcedureRepository>> {
+        self.procedures.as_ref()
+    }
+
     /// Returns the hierarchy repository handle if supported.
     pub fn hierarchy(&self) -> Option<&Arc<dyn HierarchyRepository>> {
         self.hierarchy.as_ref()
@@ -391,6 +398,15 @@ impl EngramProvider {
         self.beliefs()
             .ok_or_else(|| CoreError::CapabilityUnsupported {
                 capability: "beliefs".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the procedure repository handle or an error if it is not wired.
+    pub fn require_procedures(&self) -> CoreResult<&Arc<dyn ProcedureRepository>> {
+        self.procedures()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "procedures".to_string(),
                 reason: "not wired".to_string(),
             })
     }
@@ -544,6 +560,7 @@ impl EngramProvider {
             ontology: None,
             taxonomy: None,
             beliefs: None,
+            procedures: None,
             hierarchy: None,
             retrieval: None,
             vectors: None,
@@ -579,6 +596,7 @@ pub struct EngramProviderBuilder {
     ontology: Option<Arc<dyn OntologyRepository>>,
     taxonomy: Option<Arc<dyn TaxonomyRepository>>,
     beliefs: Option<Arc<dyn BeliefRepository>>,
+    procedures: Option<Arc<dyn ProcedureRepository>>,
     hierarchy: Option<Arc<dyn HierarchyRepository>>,
     retrieval: Option<Arc<dyn RetrievalIndex>>,
     vectors: Option<Arc<dyn VectorIndex>>,
@@ -608,6 +626,7 @@ impl EngramProviderBuilder {
             ontology: None,
             taxonomy: None,
             beliefs: None,
+            procedures: None,
             hierarchy: None,
             retrieval: None,
             vectors: None,
@@ -660,6 +679,12 @@ impl EngramProviderBuilder {
     /// Attaches the belief repository handle.
     pub fn beliefs(mut self, handle: Arc<dyn BeliefRepository>) -> Self {
         self.beliefs = Some(handle);
+        self
+    }
+
+    /// Attaches the procedure repository handle.
+    pub fn procedures(mut self, handle: Arc<dyn ProcedureRepository>) -> Self {
+        self.procedures = Some(handle);
         self
     }
 
@@ -769,6 +794,7 @@ impl EngramProviderBuilder {
             ontology: self.ontology,
             taxonomy: self.taxonomy,
             beliefs: self.beliefs,
+            procedures: self.procedures,
             hierarchy: self.hierarchy,
             retrieval: self.retrieval,
             vectors: self.vectors,

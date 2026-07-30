@@ -84,10 +84,21 @@ pub struct CapabilityReport {
     /// Knowledge-graph identity + consolidation (RFC-0014).
     #[serde(default = "default_identity")]
     pub identity: CapabilityState,
+
+    /// Replayable procedures with success/failure accounting (RFC-0016 Layer 6).
+    #[serde(default = "default_procedures")]
+    pub procedures: CapabilityState,
 }
 
 /// Serde default for the `identity` field.
 fn default_identity() -> CapabilityState {
+    CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    }
+}
+
+/// Serde default for the `procedures` field.
+fn default_procedures() -> CapabilityState {
     CapabilityState::Unsupported {
         reason: CapabilityReason::FeatureDisabled,
     }
@@ -123,7 +134,8 @@ impl CapabilityReport {
             maintenance: state.clone(),
             observability: state.clone(),
             consolidation: state.clone(),
-            identity: state,
+            identity: state.clone(),
+            procedures: state,
         }
     }
 
@@ -152,6 +164,7 @@ impl CapabilityReport {
             && self.observability.is_supported()
             && self.consolidation.is_supported()
             && self.identity.is_supported()
+            && self.procedures.is_supported()
     }
 
     /// Returns true if memory operations are supported.
@@ -295,6 +308,7 @@ impl CapabilityReportBuilder {
                 hierarchy: provider_unavailable.clone(),
                 retrieval: provider_unavailable.clone(),
                 vectors: provider_unavailable.clone(),
+                procedures: provider_unavailable.clone(),
                 migration: provider_unavailable,
                 hybrid_search: feature_disabled.clone(),
                 episodes_evidence: feature_disabled.clone(),
@@ -349,6 +363,12 @@ impl CapabilityReportBuilder {
     /// Sets the hierarchy capability state.
     pub fn hierarchy(mut self, state: CapabilityState) -> Self {
         self.report.hierarchy = state;
+        self
+    }
+
+    /// Sets the procedures capability state.
+    pub fn procedures(mut self, state: CapabilityState) -> Self {
+        self.report.procedures = state;
         self
     }
 

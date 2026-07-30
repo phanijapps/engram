@@ -236,6 +236,7 @@ pnpm run test
 .codex/hooks/check-contracts.sh
 .codex/hooks/check-docs.sh
 .codex/hooks/check-engine-neutrality.sh   # ADR-0022 rule-1 gate (engine neutrality)
+.codex/hooks/check-surface-parity.sh      # ADR-0022 surface-parity gate (Rust facade ↔ N-API binding)
 ```
 
 Run `pnpm run build` after TypeScript package surface changes.

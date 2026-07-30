@@ -19,15 +19,17 @@
 //! Async trait methods are driven synchronously via `futures::executor::block_on`
 //! — the established binding pattern, matching `NativeKnowledgeEngine`.
 
+use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
-    ConsolidationRequest, ContextPayload, EvidenceRef, EvidenceTargetType, ForgetRequest,
+    Belief, ConsolidationRequest, ContextPayload, EvidenceRef, EvidenceTargetType, ForgetRequest,
     ForgetResult, Id, KnowledgeEntity, Provenance, RetrievalRequest, Scope, WriteMemoryRequest,
     WriteMemoryResponse,
 };
+use engram_hierarchy::HierarchyRepository;
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, EngramConfig,
-    EngramProvider, ExportImport, Observability, ProvenanceQuery, StepStatus, TransactionGuarantee,
-    UnifiedRecall,
+    EngramProvider, ExportImport, KnowledgeQuery, Observability, ProvenanceQuery, StepStatus,
+    TransactionGuarantee, UnifiedRecall,
 };
 use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
 use engram_memory::MemoryService;
@@ -169,6 +171,38 @@ impl NativeProvider {
             .clone();
         Ok(NativeObservabilityApi { handle })
     }
+
+    /// Returns a knowledge-query handle (engine-neutral entity/relationship
+    /// listing), or throws if not wired. Use this for scope-wide listing that
+    /// backs graph traversal; the trait-level reads/writes live on
+    /// [`NativeGraphApi`].
+    #[napi(js_name = "requireKnowledgeQueryApi")]
+    pub fn require_knowledge_query_api(&self) -> Result<NativeKnowledgeQueryApi> {
+        let handle = self
+            .inner
+            .require_knowledge_query()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeKnowledgeQueryApi { handle })
+    }
+
+    /// Returns a belief handle, or throws if not wired.
+    #[napi(js_name = "requireBeliefApi")]
+    pub fn require_belief_api(&self) -> Result<NativeBeliefApi> {
+        let handle = self.inner.require_beliefs().map_err(to_napi_error)?.clone();
+        Ok(NativeBeliefApi { handle })
+    }
+
+    /// Returns a hierarchy handle, or throws if not wired.
+    #[napi(js_name = "requireHierarchyApi")]
+    pub fn require_hierarchy_api(&self) -> Result<NativeHierarchyApi> {
+        let handle = self
+            .inner
+            .require_hierarchy()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeHierarchyApi { handle })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -222,11 +256,9 @@ impl NativeMemoryApi {
 /// relationship reads and writes) and `KnowledgeGraphRepository` (neighbors)
 /// handles, exposing the key graph operations as JSON-in / JSON-out methods.
 ///
-/// Note: `list_entities` / `list_relationships` are not exposed here because
-/// those are concrete-store methods on `SqlKnowledgeStore`, not on the
-/// `KnowledgeRepository` / `KnowledgeGraphRepository` port traits. Use
-/// [`crate::NativeKnowledgeEngine`] for scope-wide listing through the concrete
-/// store; this proxy offers the trait-level reads/writes plus traversal.
+/// Scope-wide listing (`list_entities` / `list_relationships`) lives on the
+/// `KnowledgeQuery` port — use [`NativeKnowledgeQueryApi`] for that. This proxy
+/// offers the trait-level reads/writes plus traversal.
 #[napi]
 pub struct NativeGraphApi {
     knowledge: Arc<dyn KnowledgeRepository>,
@@ -502,6 +534,153 @@ impl NativeObservabilityApi {
     #[napi(js_name = "diagnosticsJson")]
     pub fn diagnostics_json(&self) -> Result<String> {
         let result = block_on(self.handle.diagnostics()).map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NativeKnowledgeQueryApi — engine-neutral entity/relationship listing
+// ---------------------------------------------------------------------------
+
+/// Knowledge-query handle proxy. Holds an `Arc<dyn KnowledgeQuery>` and exposes
+/// scope-wide entity + relationship listing as JSON-in / JSON-out methods. This
+/// is the engine-neutral listing port that backs graph traversal (the MCP
+/// `graph_*` / `codegraph_*` tools).
+#[napi]
+pub struct NativeKnowledgeQueryApi {
+    handle: Arc<dyn KnowledgeQuery>,
+}
+
+#[napi]
+impl NativeKnowledgeQueryApi {
+    /// Lists entities in a scope. Takes a `Scope` JSON, returns
+    /// `[KnowledgeEntity, …]` JSON.
+    #[napi(js_name = "listEntitiesJson")]
+    pub fn list_entities_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result = block_on(self.handle.list_entities(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Lists relationships in a scope. Takes a `Scope` JSON, returns
+    /// `[KnowledgeRelationship, …]` JSON.
+    #[napi(js_name = "listRelationshipsJson")]
+    pub fn list_relationships_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result = block_on(self.handle.list_relationships(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NativeBeliefApi — belief lifecycle
+// ---------------------------------------------------------------------------
+
+/// Belief handle proxy. Holds an `Arc<dyn BeliefRepository>` and exposes the
+/// belief lifecycle as JSON-in / JSON-out methods (mirrors the MCP `belief_*`
+/// tools).
+#[napi]
+pub struct NativeBeliefApi {
+    handle: Arc<dyn BeliefRepository>,
+}
+
+#[napi]
+impl NativeBeliefApi {
+    /// Returns the live belief for a subject at `asOf` (default now). Takes
+    /// `{ subject, scope, asOf? }` JSON (asOf is RFC3339), returns a `Belief`
+    /// JSON or `null`.
+    #[napi(js_name = "getBeliefJson")]
+    pub fn get_belief_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let subject = value
+            .get("subject")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::from_reason("subject is required"))?;
+        let scope = scope_field(&value)?;
+        let as_of = match value.get("asOf").and_then(|v| v.as_str()) {
+            Some(s) => chrono::DateTime::parse_from_rfc3339(s)
+                .map_err(|e| Error::from_reason(format!("invalid asOf (RFC3339): {e}")))?
+                .with_timezone(&chrono::Utc),
+            None => chrono::Utc::now(),
+        };
+        let query = BeliefQuery::live_subject(scope, subject, as_of);
+        let result = block_on(self.handle.get_belief(query)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Upserts a belief by its compatibility key. Takes a `Belief` JSON, returns
+    /// the persisted `Belief` JSON.
+    #[napi(js_name = "upsertBeliefJson")]
+    pub fn upsert_belief_json(&self, belief_json: String) -> Result<String> {
+        let belief: Belief = decode(&belief_json)?;
+        let result = block_on(self.handle.upsert_belief(belief)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Retracts a belief by id (closes its valid interval). Takes
+    /// `{ id, scope, at? }` JSON (at is RFC3339, defaults to now), returns the
+    /// retracted `Belief` JSON.
+    #[napi(js_name = "retractBeliefJson")]
+    pub fn retract_belief_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let id: Id = id_field(&value, "id")?;
+        let scope = scope_field(&value)?;
+        let at = match value.get("at").and_then(|v| v.as_str()) {
+            Some(s) => chrono::DateTime::parse_from_rfc3339(s)
+                .map_err(|e| Error::from_reason(format!("invalid at (RFC3339): {e}")))?
+                .with_timezone(&chrono::Utc),
+            None => chrono::Utc::now(),
+        };
+        let result =
+            block_on(self.handle.retract_belief(&id, &scope, at)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Lists stale beliefs in a scope. Takes a `Scope` JSON, returns
+    /// `[Belief, …]` JSON.
+    #[napi(js_name = "listStaleBeliefsJson")]
+    pub fn list_stale_beliefs_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result = block_on(self.handle.list_stale(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NativeHierarchyApi — hierarchy navigation
+// ---------------------------------------------------------------------------
+
+/// Hierarchy handle proxy. Holds an `Arc<dyn HierarchyRepository>` and exposes
+/// hierarchy navigation as JSON-in / JSON-out methods (mirrors the MCP
+/// `hierarchy_path` tool).
+#[napi]
+pub struct NativeHierarchyApi {
+    handle: Arc<dyn HierarchyRepository>,
+}
+
+#[napi]
+impl NativeHierarchyApi {
+    /// Navigation path for seed entity ids. Takes `{ seeds: [String], scope,
+    /// maxLayer? }` JSON, returns a `HierarchyPath` JSON (nodes/relations/lca).
+    #[napi(js_name = "pathForJson")]
+    pub fn path_for_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let seeds: Vec<String> = value
+            .get("seeds")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let scope = scope_field(&value)?;
+        let max_layer = value
+            .get("maxLayer")
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32);
+        let result =
+            block_on(self.handle.path_for(&seeds, &scope, max_layer)).map_err(to_napi_error)?;
         encode(&result)
     }
 }

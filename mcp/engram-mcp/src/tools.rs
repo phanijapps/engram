@@ -1409,4 +1409,35 @@ impl Store {
             "receiver call run->process should be extracted: {rels:?}"
         );
     }
+
+    /// Hierarchy build → path: scan a repo, build clusters, verify
+    /// hierarchy_path returns nodes.
+    #[test]
+    fn hierarchy_build_then_path_returns_nodes() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/main.rs"),
+            "fn alpha() { beta(); gamma(); }\nfn beta() { gamma(); }\nfn gamma() {}\nfn delta() {}\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+
+        let build = crate::hierarchy::hierarchy_build(&app, &json!({})).unwrap();
+        let bbody = build["content"][0]["text"].as_str().unwrap();
+        assert!(
+            bbody.contains("Hierarchy built"),
+            "build should succeed: {bbody}"
+        );
+
+        let path = crate::hierarchy::hierarchy_path(&app, &json!({ "seeds": ["alpha"] })).unwrap();
+        let pbody = path["content"][0]["text"].as_str().unwrap();
+        assert!(
+            !pbody.contains("0 node(s)"),
+            "hierarchy_path should return nodes after build: {pbody}"
+        );
+    }
 }

@@ -310,6 +310,17 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         handler: belief::belief_stale_list,
     });
     registry.register(ToolRecord {
+        name: "hierarchy_build",
+        description: "Cluster the knowledge graph via Louvain communities into hierarchy nodes \
+                      (layer 0) with entity members + inter-cluster relations. After building, \
+                      hierarchy_path returns navigation results.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "max_passes": { "type": "integer", "description": "Louvain passes (default 3)." } }
+        }),
+        handler: hierarchy::hierarchy_build,
+    });
+    registry.register(ToolRecord {
         name: "hierarchy_path",
         description: "Navigation path (LCA + nodes + relations) for seed entity ids over the \
                       clustered hierarchy. Empty until a hierarchy is built for the scope.",

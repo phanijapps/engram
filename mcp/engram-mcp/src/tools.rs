@@ -1365,4 +1365,48 @@ mod tests {
             "increment must show 1 success: {ibody}"
         );
     }
+
+    /// Regression: receiver-method calls (self.store.save(), self.process())
+    /// are extracted as call edges. Before the fix, `extract_name` returned the
+    /// receiver ("self") instead of the method name.
+    #[test]
+    fn scan_repo_extracts_receiver_method_calls() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/main.rs"),
+            "struct Engine { store: Store }
+impl Engine {
+    fn run(&self) {
+        self.store.save();
+        self.process();
+    }
+    fn process(&self) {}
+}
+struct Store;
+impl Store {
+    fn save(&self) {}
+}
+",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+        let q = app.provider.require_knowledge_query().expect("handle");
+        let rels = block_on(q.list_relationships(&app.scope)).unwrap();
+        assert!(
+            rels.iter().any(|r| r.predicate == "calls"
+                && r.subject.name.as_deref() == Some("run")
+                && r.object.name.as_deref() == Some("save")),
+            "receiver call run->save should be extracted: {rels:?}"
+        );
+        assert!(
+            rels.iter().any(|r| r.predicate == "calls"
+                && r.subject.name.as_deref() == Some("run")
+                && r.object.name.as_deref() == Some("process")),
+            "receiver call run->process should be extracted: {rels:?}"
+        );
+    }
 }

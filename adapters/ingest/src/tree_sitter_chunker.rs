@@ -324,14 +324,28 @@ fn collect_calls_and_spans(
 }
 
 /// Extracts a clean name from a name node, handling nested declarators
-/// (e.g. `pointer_declarator -> identifier` in C-like languages).
+/// (e.g. `pointer_declarator -> identifier` in C-like languages) AND
+/// qualified/method-call expressions (`receiver.method`, `Type::method`).
 fn extract_name(node: &tree_sitter::Node, source: &[u8]) -> String {
     let text = node.utf8_text(source).unwrap_or("").trim().to_owned();
     // For simple identifiers, the text IS the name.
     if text.chars().all(|c| c.is_alphanumeric() || c == '_') {
         return text;
     }
-    // For complex declarators (e.g. "MyClass::method"), try the first child.
+    // For qualified/method-call expressions (receiver.method, Type::method,
+    // self.store.save), return the LAST segment — the method/function name, not
+    // the receiver. This is language-agnostic: Rust field_expression / scoped
+    // identifier, Java/TS member_expression, Python attribute, etc. all use
+    // dots or colons to separate the receiver from the method.
+    if text.contains('.') || text.contains("::") {
+        return text
+            .split(['.', ':'])
+            .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_'))
+            .last()
+            .unwrap_or(&text)
+            .to_owned();
+    }
+    // For complex declarators (e.g. "*foo"), try the first named child.
     if let Some(child) = node.named_child(0) {
         let child_text = child.utf8_text(source).unwrap_or("").trim().to_owned();
         if child_text.chars().all(|c| c.is_alphanumeric() || c == '_') {
@@ -339,7 +353,8 @@ fn extract_name(node: &tree_sitter::Node, source: &[u8]) -> String {
         }
     }
     text.split(|c: char| !c.is_alphanumeric() && c != '_')
-        .find(|s| !s.is_empty() && s.len() > 1)
+        .filter(|s| !s.is_empty() && s.len() > 1)
+        .last()
         .unwrap_or(&text)
         .to_owned()
 }

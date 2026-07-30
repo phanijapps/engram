@@ -344,6 +344,9 @@ impl BeliefRepository for FailingBeliefs {
     ) -> CoreResult<Contradiction> {
         Err(unsupported())
     }
+    async fn list_contradictions(&self, _scope: &Scope) -> CoreResult<Vec<Contradiction>> {
+        Err(unsupported())
+    }
 }
 
 // ---------- configurable memory stub (Concern 4: facts-lane merge) -------

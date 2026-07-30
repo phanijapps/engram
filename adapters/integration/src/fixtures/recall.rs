@@ -495,6 +495,9 @@ impl BeliefRepository for StubBeliefs {
     async fn list_stale(&self, _scope: &Scope) -> CoreResult<Vec<Belief>> {
         Err(unsupported())
     }
+    async fn list_contradictions(&self, _scope: &Scope) -> CoreResult<Vec<Contradiction>> {
+        Err(unsupported())
+    }
     async fn beliefs_referencing_source(
         &self,
         _query: BeliefReferenceQuery,

@@ -323,6 +323,13 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         handler: belief::belief_stale_list,
     });
     registry.register(ToolRecord {
+        name: "contradiction_list",
+        description: "List open contradiction review records (tension between beliefs) in the \
+                      project scope.",
+        input_schema: json!({ "type": "object", "properties": {} }),
+        handler: belief::contradiction_list,
+    });
+    registry.register(ToolRecord {
         name: "hierarchy_build",
         description: "Cluster the knowledge graph via Louvain communities into hierarchy nodes \
                       (layer 0) with entity members + inter-cluster relations. After building, \

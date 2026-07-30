@@ -74,7 +74,9 @@ fn find_seed_node<'a>(
         .copied()
         .filter(|node| max_layer.is_none_or(|limit| node.layer <= limit))
         .find(|node| {
-            node.id.as_str() == seed_id || node.source_target_id.as_deref() == Some(seed_id)
+            node.id.as_str() == seed_id
+                || node.source_target_id.as_deref() == Some(seed_id)
+                || node.members.iter().any(|m| m.member_id == seed_id)
         })
 }
 

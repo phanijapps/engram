@@ -22,7 +22,12 @@ pub fn entity_key(reference: &EntityRef) -> Option<String> {
 pub fn call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(String, String)> {
     relationships
         .iter()
-        .filter(|r| r.predicate == "calls")
+        .filter(|r| {
+            matches!(
+                r.predicate.as_str(),
+                "calls" | "sends_request" | "handled_by"
+            )
+        })
         .filter_map(|r| {
             let caller = entity_key(&r.subject)?;
             let callee = entity_key(&r.object)?;
@@ -712,6 +717,73 @@ mod tests {
         assert!(diagram.starts_with("graph LR"));
         assert!(diagram.contains("\"/api/users\" --> \"GET /users\""));
         assert!(diagram.contains("\"/orders\" --> \"POST /orders\""));
+    }
+
+    #[test]
+    fn symbol_context_traverses_protocol_edges() {
+        // Protocol edges (sends_request, handled_by) should be traversable
+        // alongside calls edges, so change_impact crosses the HTTP boundary.
+        let rels = vec![
+            rel_named("entity-a", "caller_fn", "entity-ep", "GET /api/foo"),
+            rel_named("entity-ep", "GET /api/foo", "entity-b", "handler_fn"),
+        ];
+        // The first rel is sends_request, the second is handled_by.
+        // But rel() hardcodes predicate="calls". Build manually.
+        let protocol_rels = vec![
+            KnowledgeRelationship {
+                id: Id::from("rel-1"),
+                graph_id: None,
+                subject: ref_named("entity-a", "caller_fn"),
+                predicate: "sends_request".to_owned(),
+                object: ref_named("entity-ep", "GET /api/foo"),
+                scope: Scope {
+                    tenant: "t".to_owned(),
+                    subject: None,
+                    workspace: None,
+                    session: None,
+                    environment: None,
+                },
+                evidence: Vec::new(),
+                confidence: None,
+                provenance: provenance(),
+                created_at: fixed_now(),
+                updated_at: None,
+            },
+            KnowledgeRelationship {
+                id: Id::from("rel-2"),
+                graph_id: None,
+                subject: ref_named("entity-ep", "GET /api/foo"),
+                predicate: "handled_by".to_owned(),
+                object: ref_named("entity-b", "handler_fn"),
+                scope: Scope {
+                    tenant: "t".to_owned(),
+                    subject: None,
+                    workspace: None,
+                    session: None,
+                    environment: None,
+                },
+                evidence: Vec::new(),
+                confidence: None,
+                provenance: provenance(),
+                created_at: fixed_now(),
+                updated_at: None,
+            },
+        ];
+        let _ = rels; // unused — protocol_rels is the test data.
+        let ctx = symbol_context(&protocol_rels, "caller_fn", 3);
+        assert!(
+            !ctx.callees.is_empty(),
+            "callees should traverse sends_request: {ctx:?}"
+        );
+        assert!(
+            ctx.callees.contains(&"GET /api/foo".to_owned()),
+            "callees should include endpoint: {ctx:?}"
+        );
+        let ctx2 = symbol_context(&protocol_rels, "handler_fn", 3);
+        assert!(
+            !ctx2.callers.is_empty(),
+            "callers should traverse handled_by: {ctx2:?}"
+        );
     }
 
     #[test]

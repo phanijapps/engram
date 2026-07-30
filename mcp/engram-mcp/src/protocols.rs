@@ -146,23 +146,25 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
     }
 
     // Persist handler edges: endpoint -[handled_by]-> handler
-    // Persist handler edges: endpoint -[handled_by]-> handler
     let mut rel_count = 0usize;
     for (ep_id, handler) in &handler_edges {
+        let (method, path) = &endpoints[ep_id];
+        let ep_name = format!("{method} {path}");
+        let handler_short = handler.rsplit("::").next().unwrap_or(handler.as_str());
         let rel = KnowledgeRelationship {
             id: Id::from(format!("{ep_id}\u{1f}handled_by\u{1f}{handler}")),
             graph_id: None,
             subject: EntityRef {
                 id: Some(Id::from(ep_id.clone())),
                 kind: Some("api".to_owned()),
-                name: None,
+                name: Some(ep_name),
                 aliases: Vec::new(),
             },
             predicate: "handled_by".to_owned(),
             object: EntityRef {
                 id: None,
                 kind: None,
-                name: Some(handler.clone()),
+                name: Some(handler_short.to_owned()),
                 aliases: Vec::new(),
             },
             scope: scope.clone(),
@@ -178,6 +180,8 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
 
     // Persist client edges: caller -[sends_request]-> endpoint
     for (ep_id, caller) in &client_edges {
+        let (method, path) = &endpoints[ep_id];
+        let ep_name = format!("{method} {path}");
         let rel = KnowledgeRelationship {
             id: Id::from(format!("{caller}\u{1f}sends_request\u{1f}{ep_id}")),
             graph_id: None,
@@ -191,7 +195,7 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
             object: EntityRef {
                 id: Some(Id::from(ep_id.clone())),
                 kind: Some("api".to_owned()),
-                name: None,
+                name: Some(ep_name),
                 aliases: Vec::new(),
             },
             scope: scope.clone(),

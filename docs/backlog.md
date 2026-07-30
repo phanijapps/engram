@@ -54,10 +54,11 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 ## deployment-adapters (intent only — no spec yet)
 
 - **pgvector(graph+vector) adapter:** one Postgres holding graph + chunks +
-  embeddings. Documented target in RFC-0005 §Target deployments; needs an ADR +
-  spec before work.
-- **pgvector(vector) + neo4j(graph) adapter:** split deployment. Same — needs an
-  ADR + spec before work.
+  embeddings. Elevated to a target-state decision in
+  [RFC-0017](rfcs/0017-three-module-architecture-pgvector.md) (the second backend;
+  Phase A). Documented target in RFC-0005 §Target deployments; needs a spec before work.
+- **pgvector(vector) + neo4j(graph) adapter:** split deployment. Alternative layout,
+  still backlog; RFC-0017 adopts the single-Postgres pgvector(graph+vector) shape first.
 
 ## knowledge-graph-retraction (deferred nits — self-healing, demo-scale)
 

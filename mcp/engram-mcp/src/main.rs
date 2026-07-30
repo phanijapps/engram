@@ -16,9 +16,11 @@ mod belief;
 mod bootstrap;
 mod codegraph;
 mod config;
+mod dependencies;
 mod graph;
 mod hierarchy;
 mod ontology;
+mod ownership;
 mod procedures;
 mod protocol;
 mod protocols;
@@ -237,6 +239,30 @@ fn register_all(registry: &mut ToolRegistry<App>) {
             "required": ["path"]
         }),
         handler: protocols::scan_protocols,
+    });
+    registry.register(ToolRecord {
+        name: "scan_dependencies",
+        description: "Post-index scan: extract package/crate dependencies from Cargo.toml + \
+                      package.json into Module entities + depends_on edges (multi-package / \
+                      multi-repo dependency view). Run AFTER scan_repo.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "path": { "type": "string", "description": "Repository root path." } },
+            "required": ["path"]
+        }),
+        handler: dependencies::scan_dependencies,
+    });
+    registry.register(ToolRecord {
+        name: "scan_ownership",
+        description: "Post-index scan: extract CODEOWNERS rules into Organization/Person \
+                      entities + owns edges to path Modules (who-owns-what view). Missing \
+                      CODEOWNERS is a no-op. Run AFTER scan_repo.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "path": { "type": "string", "description": "Repository root path." } },
+            "required": ["path"]
+        }),
+        handler: ownership::scan_ownership,
     });
     registry.register(ToolRecord {
         name: "search",

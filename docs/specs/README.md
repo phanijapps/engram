@@ -41,3 +41,9 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   optional `.engram/scan.json` (or `scan_config` arg) merged with built-in
   defaults. `engram-ingest` takes a ready `ScanFilter`; discovery lives in
   `engram-mcp`. Constrained by ADR-0022. Shipped.
+- [`ownership-dependency-import`](ownership-dependency-import/spec.md): two post-index
+  MCP tools — `scan_dependencies` (Cargo.toml + package.json → `Module` entities +
+  `depends_on` edges) and `scan_ownership` (CODEOWNERS → `Organization`/`Person`
+  entities + `owns` edges) — turning the graph into a multi-team/multi-repo program
+  view. Mirrors `scan_protocols`; routes through `require_knowledge()`. Constrained
+  by RFC-0012, ADR-0022. Draft.

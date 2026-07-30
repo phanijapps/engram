@@ -152,11 +152,14 @@ pub fn resolve_entity(app: &App, args: &Value) -> Result<Value, ToolError> {
     let name = req_str(args, "name")?;
     let entities = fetch_entities(app);
     let needle = name.to_lowercase();
-    let entity = entities.iter().find(|e| e.name == name).or_else(|| {
-        entities
-            .iter()
-            .find(|e| e.name.to_lowercase().contains(&needle))
-    });
+    let entity = entities
+        .iter()
+        .find(|e| e.name == name || e.id.to_string() == name)
+        .or_else(|| {
+            entities
+                .iter()
+                .find(|e| e.name.to_lowercase().contains(&needle))
+        });
     let body = match entity {
         Some(e) => {
             let graph = e

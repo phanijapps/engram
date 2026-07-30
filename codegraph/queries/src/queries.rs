@@ -5,13 +5,16 @@ use std::collections::{HashMap, HashSet};
 
 use engram_domain::{EntityRef, KnowledgeRelationship};
 
-/// Stable string key for an entity reference: its resolved id, else its name.
-/// Returns `None` for a ref with neither (it cannot participate in a query).
+/// Stable string key for an entity reference: its **name** (human-readable, what
+/// queries + callers use), else its resolved id. Returns `None` for a ref with
+/// neither. Name is preferred because graph queries (`symbol_context`,
+/// `blast_radius`, …) are invoked by function NAME, and scanner entity IDs are
+/// opaque hashes (`entity-…`) that would never match a name-based query.
 pub fn entity_key(reference: &EntityRef) -> Option<String> {
-    if let Some(id) = &reference.id {
-        return Some(id.as_str().to_owned());
+    if let Some(name) = &reference.name {
+        return Some(name.clone());
     }
-    reference.name.clone()
+    reference.id.as_ref().map(|id| id.as_str().to_owned())
 }
 
 /// Extracts `(caller, callee)` string pairs from `calls` relationships.
@@ -711,6 +714,22 @@ mod tests {
         assert!(diagram.contains("\"/orders\" --> \"POST /orders\""));
     }
 
+    #[test]
+    fn symbol_context_matches_by_name_not_opaque_id() {
+        // Regression: scanner entity IDs are opaque hashes (entity-…), but
+        // symbol_context is called by function NAME. entity_key must return the
+        // name so the query matches.
+        let rels = vec![rel_named(
+            "entity-hash-a",
+            "caller_fn",
+            "entity-hash-b",
+            "callee_fn",
+        )];
+        let ctx = symbol_context(&rels, "caller_fn", 2);
+        assert!(!ctx.callees.is_empty(), "callees by name: {ctx:?}");
+        assert!(ctx.callees.contains(&"callee_fn".to_owned()));
+    }
+
     // --- fixtures ---
 
     fn rel(caller: &str, callee: &str) -> KnowledgeRelationship {
@@ -741,6 +760,45 @@ mod tests {
             kind: None,
             name: None,
             aliases: Vec::new(),
+        }
+    }
+
+    /// Like `ref_of` but sets BOTH an opaque id and a human-readable name (the
+    /// scanner case: `id = entity-{hash}`, `name = function_name`).
+    fn ref_named(id: &str, name: &str) -> EntityRef {
+        EntityRef {
+            id: Some(Id::from(id)),
+            kind: None,
+            name: Some(name.to_owned()),
+            aliases: Vec::new(),
+        }
+    }
+
+    /// A `calls` relationship using named refs (opaque id + name).
+    fn rel_named(
+        caller_id: &str,
+        caller_name: &str,
+        callee_id: &str,
+        callee_name: &str,
+    ) -> KnowledgeRelationship {
+        KnowledgeRelationship {
+            id: Id::from(format!("rel-{caller_name}-{callee_name}")),
+            graph_id: None,
+            subject: ref_named(caller_id, caller_name),
+            predicate: "calls".to_owned(),
+            object: ref_named(callee_id, callee_name),
+            scope: Scope {
+                tenant: "t".to_owned(),
+                subject: None,
+                workspace: None,
+                session: None,
+                environment: None,
+            },
+            evidence: Vec::new(),
+            confidence: None,
+            provenance: provenance(),
+            created_at: fixed_now(),
+            updated_at: None,
         }
     }
 

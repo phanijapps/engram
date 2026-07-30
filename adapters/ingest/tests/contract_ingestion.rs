@@ -66,6 +66,7 @@ fn scan_opts(
         source_name: source_name.to_owned(),
         max_bytes: 0,
         manifest,
+        scan_filter: engram_ingest::ScanFilter::default(),
     }
 }
 

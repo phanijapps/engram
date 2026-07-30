@@ -18,10 +18,12 @@ use rayon::prelude::*;
 use crate::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
     MarkdownChunker, PlainTextChunker, PlainTextChunkerOptions,
-    classifier::{classify_file, is_denylisted, is_secret_file, is_within_root},
+    classifier::{classify_file, is_secret_file, is_within_root},
     content_hash, contract,
     git_detect::detect_git,
-    reconcile, stable_source_key,
+    reconcile,
+    scan_filter::ScanFilter,
+    stable_source_key,
 };
 
 pub use crate::classifier::FileKind;
@@ -61,6 +63,9 @@ pub struct ScanOptions {
     pub max_bytes: u64,
     /// Prior manifest (rel path -> content hash) for incremental skip-unchanged.
     pub manifest: std::collections::HashMap<String, String>,
+    /// Tunable concept-link + file-denylist filter. Defaults to the builtin
+    /// (prior hardcoded) behavior; a host merges a user config into it.
+    pub scan_filter: ScanFilter,
 }
 
 impl ScanOptions {
@@ -207,7 +212,7 @@ where
         // Observe the path BEFORE any filter that could skip it so that
         // skipped-but-present files are never classified as removals (FIX 3).
         observed_paths.insert(rel.clone());
-        if is_denylisted(&rel) || is_secret_file(&rel) {
+        if opts.scan_filter.is_denylisted(&rel) || is_secret_file(&rel) {
             summary.skipped += 1;
             continue;
         }
@@ -450,7 +455,7 @@ where
                             // concepts from different documents are connected.
                             if rel.predicate == "mentions" && rel.object.id.is_none() {
                                 if let Some(name) = &rel.object.name {
-                                    if should_link_concept(name) {
+                                    if opts.scan_filter.should_link_concept(name) {
                                         if let Some(id) = idx.get(name) {
                                             rel.object.id = Some(Id::from(id.clone()));
                                         }
@@ -954,84 +959,6 @@ where
     }
 }
 
-/// `true` if a concept name is specific enough to create a cross-document
-/// `mentions` edge. Filters out generic/short names that would create
-/// false-positive links at enterprise scale (1000+ docs).
-fn should_link_concept(name: &str) -> bool {
-    // Must be longer than 8 characters (filters "Config", "Error", "Handler").
-    if name.len() <= 8 {
-        return false;
-    }
-    // Must not be a common generic term.
-    const GENERIC: &[&str] = &[
-        "authentication",
-        "authorization",
-        "configuration",
-        "documentation",
-        "implementation",
-        "initialization",
-        "integration",
-        "management",
-        "processing",
-        "connection",
-        "database",
-        "controller",
-        "middleware",
-        "application",
-        "environment",
-        "repository",
-        "component",
-        "interface",
-        "structure",
-        "parameter",
-        "attribute",
-        "operation",
-        "function",
-        "response",
-        "request",
-        "service",
-        "handler",
-        "config",
-        "module",
-        "entity",
-        "system",
-        "server",
-        "client",
-        "router",
-        "engine",
-        "factory",
-        "builder",
-        "reader",
-        "writer",
-        "parser",
-        "loader",
-        "runner",
-        "worker",
-        "manager",
-        "provider",
-        "listener",
-        "observer",
-        "visitor",
-        "strategy",
-        "adapter",
-        "wrapper",
-        "proxy",
-        "filter",
-        "validator",
-        "converter",
-        "serializer",
-        "deserializer",
-        "executor",
-        "scheduler",
-        "dispatcher",
-        "resolver",
-        "formatter",
-        "iterator",
-        "generator",
-    ];
-    !GENERIC.contains(&name.to_lowercase().as_str())
-}
-
 /// `true` for entity kinds that represent structural code symbols (the targets
 /// a doc concept can `describe`).
 fn is_code_symbol(kind: &EntityKind) -> bool {
@@ -1095,54 +1022,6 @@ fn describes_relationship(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn should_link_concept_rejects_short_names() {
-        // <=8 chars: too ambiguous at enterprise scale — never link.
-        assert!(!should_link_concept("Config"));
-        assert!(!should_link_concept("Error"));
-        assert!(!should_link_concept("Handler"));
-        assert!(!should_link_concept("Route"));
-    }
-
-    #[test]
-    fn should_link_concept_rejects_generic_terms() {
-        // Long but generic — would create false-positive links across 1000+ docs.
-        assert!(!should_link_concept("authentication"));
-        assert!(!should_link_concept("authorization"));
-        assert!(!should_link_concept("configuration"));
-        assert!(!should_link_concept("documentation"));
-        assert!(!should_link_concept("implementation"));
-        assert!(!should_link_concept("repository"));
-        assert!(!should_link_concept("component"));
-        assert!(!should_link_concept("middleware"));
-    }
-
-    #[test]
-    fn should_link_concept_case_insensitive_for_generic() {
-        // Generic-term filter matches regardless of case.
-        assert!(!should_link_concept("Authentication"));
-        assert!(!should_link_concept("AUTHORIZATION"));
-        assert!(!should_link_concept("Configuration"));
-    }
-
-    #[test]
-    fn should_link_concept_accepts_specific_names() {
-        // Specific, domain-named concepts >8 chars and not in the generic set:
-        // these are the cross-document links we *want* to create.
-        assert!(should_link_concept("RetrievalIndex"));
-        assert!(should_link_concept("BeliefRepository"));
-        assert!(should_link_concept("ConsolidationPlanner"));
-        assert!(should_link_concept("SqlBeliefStore"));
-        assert!(should_link_concept("CrossEncoderRerank"));
-    }
-
-    #[test]
-    fn should_link_concept_boundary_length() {
-        // Boundary: exactly 8 chars rejected, 9+ accepted (when not generic).
-        assert!(!should_link_concept("12345678"));
-        assert!(should_link_concept("SpecificName")); // 12 chars, not generic
-    }
 
     #[test]
     fn within_root_checks_prefix() {

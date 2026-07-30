@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "engram": {
+      "command": "./target/release/engram-mcp",
+      "args": [
+        "--storage", "./.engram",
+        "--project", "memalpha",
+        "--ontology", "./mcp/engram-mcp/examples/sdlc-ontology.json",
+        "--taxonomy", "./mcp/engram-mcp/examples/sdlc-taxonomy.json"
+      ]
+    }
+  }
+}

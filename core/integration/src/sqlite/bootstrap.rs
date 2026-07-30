@@ -273,13 +273,13 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         }
     }
 
-    // Procedures (RFC-0016 Layer 6). No conformance gate yet — attach when the
-    // store opens; a procedures CapabilityReport key + conformance probe are
-    // follow-up polish.
-    if let Ok(store) = SqlProcedureStore::open_file(&paths.procedures) {
-        let store: Arc<SqlProcedureStore> = Arc::new(store);
-        procedures = Some(store);
-        procedures_state = CapabilityState::Supported;
+    // Procedures (RFC-0016 Layer 6).
+    if conformance::procedures_ok() {
+        if let Ok(store) = SqlProcedureStore::open_file(&paths.procedures) {
+            let store: Arc<SqlProcedureStore> = Arc::new(store);
+            procedures = Some(store);
+            procedures_state = CapabilityState::Supported;
+        }
     }
 
     // unified_recall (S4): construct the SqlUnifiedRecall handle from the wired

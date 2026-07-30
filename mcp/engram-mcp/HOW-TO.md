@@ -94,6 +94,52 @@ cp mcp/engram-mcp/examples/sdlc-taxonomy.json  ~/.engram/sdlc-taxonomy.json
 
 ---
 
+## Step 4b — Tune the scanner (optional)
+
+`scan_repo` has two tuning lists that are hardcoded by default: which concept
+names earn a cross-document `mentions` link, and which files/dirs are always
+skipped. For a large or unusual codebase you can override both with a small
+JSON file. A checked starter is at `examples/scan.json`. Drop it at your
+repo root:
+
+```bash
+cp mcp/engram-mcp/examples/scan.json  /path/to/repo/.engram/scan.json
+```
+
+…then `scan_repo { "path": "/path/to/repo" }` picks it up automatically. Or
+point at it explicitly: `scan_repo { "path": "...", "scan_config": "/abs/scan.json" }`.
+A missing or malformed file **soft-fails** to the defaults — it never breaks a
+scan; the result text says which source applied.
+
+```json
+{
+  "concepts": {
+    "min_name_length": 10,
+    "blocklist":     ["KafkaConsumer", "EventDispatcher"],
+    "allowlist":     ["api", "Auth"]
+  },
+  "deny": {
+    "dirs":        ["generated", "vendor", "third_party"],
+    "extensions":  ["map", "svg", "proto"]
+  }
+}
+```
+
+- **`concepts`** — cross-document linking. `blocklist` adds project-specific
+  words that are common-but-meaningless in *your* repo (merged with the
+  built-in ~50 generics). `allowlist` force-links a name even if it’s short or
+  blocklisted (checked first; wins). `min_name_length` overrides the default
+  8-char threshold. Both lists match case-insensitively.
+- **`deny`** — files to skip on top of `.gitignore`/`.ignore` (already honored)
+  and the built-in skip list (`node_modules`, `target`, `.db`, `.log`, …).
+  `dirs` match path segments **case-sensitively**; `extensions` are
+  **case-insensitive** and take the segment after the *last* dot — so use
+  `svg`, not `min.js` (a file `app.min.js` has extension `js`).
+
+All fields are optional and additive. With no file, behavior is unchanged.
+
+---
+
 ## Step 5 — Wire it into Claude (`.mcp.json`)
 
 In your **project folder** (the one you open with Claude Code), create a file named

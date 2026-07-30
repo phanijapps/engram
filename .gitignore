@@ -46,3 +46,6 @@ artifacts/
 .adapt-discovery.toml
 .adapt-pending.md
 .adapt-install-marker.toml
+
+# engram-mcp self-hosting storage (project-local, hidden from the walker)
+.engram/

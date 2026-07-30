@@ -52,6 +52,8 @@ impl TreeSitterChunker {
         reg!("cxx", tree_sitter_cpp::LANGUAGE, cpp_kinds());
         reg!("hpp", tree_sitter_cpp::LANGUAGE, cpp_kinds());
         reg!("hxx", tree_sitter_cpp::LANGUAGE, cpp_kinds());
+        // Go
+        reg!("go", tree_sitter_go::LANGUAGE, go_kinds());
         // C#
         reg!("cs", tree_sitter_c_sharp::LANGUAGE, csharp_kinds());
         reg!("csx", tree_sitter_c_sharp::LANGUAGE, csharp_kinds());
@@ -92,6 +94,8 @@ impl TreeSitterChunker {
         // Perl
         reg!("pl", tree_sitter_perl::LANGUAGE, perl_kinds());
         reg!("pm", tree_sitter_perl::LANGUAGE, perl_kinds());
+        // Ruby
+        reg!("rb", tree_sitter_ruby::LANGUAGE, ruby_kinds());
         // Bash
         reg!("sh", tree_sitter_bash::LANGUAGE, bash_kinds());
         reg!("bash", tree_sitter_bash::LANGUAGE, bash_kinds());
@@ -366,6 +370,22 @@ fn rust_kinds() -> HashMap<&'static str, &'static str> {
         ("struct_item", "struct"),
         ("enum_item", "enum"),
         ("trait_item", "trait"),
+    ]
+    .into()
+}
+fn go_kinds() -> HashMap<&'static str, &'static str> {
+    [
+        ("function_declaration", "fn"),
+        ("method_declaration", "fn"),
+        ("type_declaration", "type"),
+    ]
+    .into()
+}
+fn ruby_kinds() -> HashMap<&'static str, &'static str> {
+    [
+        ("method", "def"),
+        ("singleton_method", "def"),
+        ("class", "class"),
     ]
     .into()
 }

@@ -886,6 +886,15 @@ pub struct NativeOntologyApi {
 
 #[napi]
 impl NativeOntologyApi {
+    #[napi(js_name = "getOntologyJson")]
+    pub fn get_ontology_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let id = id_field(&value, "id")?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.handle.get_ontology(&id, &scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
     #[napi(js_name = "ping")]
     pub fn ping(&self) -> Result<String> {
         Ok("ontology".to_owned())
@@ -899,6 +908,16 @@ pub struct NativeTaxonomyApi {
 
 #[napi]
 impl NativeTaxonomyApi {
+    #[napi(js_name = "listConceptsJson")]
+    pub fn list_concepts_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scheme_id = id_field(&value, "schemeId")?;
+        let scope = scope_field(&value)?;
+        let result =
+            block_on(self.handle.list_concepts(&scheme_id, &scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
     #[napi(js_name = "ping")]
     pub fn ping(&self) -> Result<String> {
         Ok("taxonomy".to_owned())
@@ -912,6 +931,13 @@ pub struct NativeRetrievalApi {
 
 #[napi]
 impl NativeRetrievalApi {
+    #[napi(js_name = "retrieveCandidatesJson")]
+    pub fn retrieve_candidates_json(&self, request_json: String) -> Result<String> {
+        let request: engram_domain::RetrievalRequest = decode(&request_json)?;
+        let result = block_on(self.handle.retrieve_candidates(&request)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
     #[napi(js_name = "ping")]
     pub fn ping(&self) -> Result<String> {
         Ok("retrieval".to_owned())
@@ -925,6 +951,12 @@ pub struct NativeVectorsApi {
 
 #[napi]
 impl NativeVectorsApi {
+    #[napi(js_name = "embeddingSpace")]
+    pub fn embedding_space(&self) -> Result<String> {
+        let space = self.handle.embedding_space();
+        encode(&space)
+    }
+
     #[napi(js_name = "ping")]
     pub fn ping(&self) -> Result<String> {
         Ok("vectors".to_owned())
@@ -938,6 +970,13 @@ pub struct NativeMigrationApi {
 
 #[napi]
 impl NativeMigrationApi {
+    #[napi(js_name = "dryRunImportJson")]
+    pub fn dry_run_import_json(&self, import_json: String) -> Result<String> {
+        let import: engram_integration::ImportData = decode(&import_json)?;
+        let result = self.handle.dry_run_import(&import).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
     #[napi(js_name = "ping")]
     pub fn ping(&self) -> Result<String> {
         Ok("migration".to_owned())
@@ -951,6 +990,17 @@ pub struct NativeEmbeddingProviderApi {
 
 #[napi]
 impl NativeEmbeddingProviderApi {
+    #[napi(js_name = "embeddingSpace")]
+    pub fn embedding_space(&self) -> Result<String> {
+        let space = self.handle.embedding_space();
+        encode(&space)
+    }
+
+    #[napi(js_name = "providerId")]
+    pub fn provider_id(&self) -> String {
+        self.handle.provider_id().to_owned()
+    }
+
     #[napi(js_name = "ping")]
     pub fn ping(&self) -> Result<String> {
         Ok("embedding_provider".to_owned())

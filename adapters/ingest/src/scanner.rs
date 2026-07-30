@@ -17,7 +17,7 @@ use rayon::prelude::*;
 
 use crate::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
-    PlainTextChunker, PlainTextChunkerOptions,
+    MarkdownChunker, PlainTextChunker, PlainTextChunkerOptions,
     classifier::{classify_file, is_denylisted, is_secret_file, is_within_root},
     content_hash, contract,
     git_detect::detect_git,
@@ -153,6 +153,7 @@ where
     let code_ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
     let text_ingestor =
         KnowledgeIngestor::new(PlainTextChunker::new(PlainTextChunkerOptions::default())?);
+    let markdown_ingestor = KnowledgeIngestor::new(MarkdownChunker::new()?);
     let ts_chunker = crate::tree_sitter_chunker::TreeSitterChunker::new().ok();
     let extractor = GraphExtractor::new();
 
@@ -329,7 +330,7 @@ where
     );
 
     let name_index: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
-    let outcomes: Vec<(String, Outcome)> = to_ingest
+    let outcomes: Vec<(String, Outcome, Vec<KnowledgeEntity>)> = to_ingest
         .par_iter()
         .map(|item| {
             let rel = &item.rel;
@@ -337,7 +338,7 @@ where
             if item.content.len() as u64 > max_bytes {
                 // Defense-in-depth TOCTOU guard (shouldn't fire; pre-pass
                 // already checked).
-                return (rel.clone(), Outcome::Skipped);
+                return (rel.clone(), Outcome::Skipped, Vec::new());
             }
             let text = String::from_utf8_lossy(&item.content).into_owned();
             let text_for_ast = text.clone(); // keep a copy for AST call extraction
@@ -367,7 +368,7 @@ where
                 if ts.supports(ext) {
                     let candidates = match ts.chunk_with_ext(&text, ext) {
                         Ok(c) => c,
-                        Err(_) => return (rel.clone(), Outcome::Error),
+                        Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
                     };
                     let mut req = request;
                     req.text = text;
@@ -377,6 +378,9 @@ where
                     req.text = text;
                     match kind {
                         FileKind::Code => block_on(code_ingestor.ingest(repo, req)),
+                        FileKind::Text if is_markdown_ext(ext) => {
+                            block_on(markdown_ingestor.ingest(repo, req))
+                        }
                         FileKind::Text => block_on(text_ingestor.ingest(repo, req)),
                     }
                 }
@@ -385,12 +389,15 @@ where
                 req.text = text;
                 match kind {
                     FileKind::Code => block_on(code_ingestor.ingest(repo, req)),
+                    FileKind::Text if is_markdown_ext(ext) => {
+                        block_on(markdown_ingestor.ingest(repo, req))
+                    }
                     FileKind::Text => block_on(text_ingestor.ingest(repo, req)),
                 }
             };
             let ingested = match ingested {
                 Ok(i) => i,
-                Err(_) => return (rel.clone(), Outcome::Error),
+                Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
             };
             // AST-level call extraction using the GLOBAL entity name set (not
             // just this file's symbols). This preserves cross-file call edges.
@@ -470,7 +477,7 @@ where
                         Some(&mut *idx),
                     )) {
                         Ok(e) => e,
-                        Err(_) => return (rel.clone(), Outcome::Error),
+                        Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
                     }
                 }
             };
@@ -488,6 +495,7 @@ where
                     &ingested.source.provenance,
                 );
 
+            let emitted_entities = extracted.entities.clone();
             (
                 rel.clone(),
                 Outcome::Ingested {
@@ -498,9 +506,43 @@ where
                     contract_parse_failed,
                     contract_had_write_error,
                 },
+                emitted_entities,
             )
         })
         .collect();
+
+    // T6: doc↔code bridge — connect each concept to the code entity sharing its
+    // name (heading/symbol exact match) via a `describes` edge. This is what
+    // makes documentation a layer of the unified knowledge graph rather than a
+    // parallel silo. Race-free: runs after the parallel ingest, over every
+    // emitted entity. Additive only; existing calls/belongs_to/mentions edges
+    // are untouched. The edge carries the concept's graph_id so it retracts with
+    // the document that sourced the concept.
+    let mut code_by_name: HashMap<String, KnowledgeEntity> = HashMap::new();
+    for (_, _, entities) in &outcomes {
+        for e in entities {
+            if is_code_symbol(&e.kind) {
+                code_by_name
+                    .entry(e.name.clone())
+                    .or_insert_with(|| e.clone());
+            }
+        }
+    }
+    let mut bridged: usize = 0;
+    for (_, _, entities) in &outcomes {
+        for concept in entities {
+            if concept.kind != EntityKind::Concept {
+                continue;
+            }
+            if let Some(code) = code_by_name.get(&concept.name) {
+                let rel = describes_relationship(concept, code, &opts.scope);
+                if block_on(repo.put_relationship(rel)).is_ok() {
+                    bridged += 1;
+                }
+            }
+        }
+    }
+    summary.relationships += bridged;
 
     // FIX 1(c): Serial post-pass — delete graphs for paths that were in the
     // prior manifest but were never observed during this scan (genuinely-absent
@@ -558,7 +600,7 @@ where
     // so a transient write failure cannot permanently retract a still-declared op.
     let mut write_error_rels: Vec<String> = Vec::new();
 
-    for (rel, outcome) in outcomes {
+    for (rel, outcome, _entities) in outcomes {
         match outcome {
             Outcome::Ingested {
                 entities,
@@ -897,6 +939,66 @@ where
             }
             (keys, false, had_write_error)
         }
+    }
+}
+
+/// `true` for entity kinds that represent structural code symbols (the targets
+/// a doc concept can `describe`).
+fn is_code_symbol(kind: &EntityKind) -> bool {
+    matches!(
+        kind,
+        EntityKind::Function
+            | EntityKind::Method
+            | EntityKind::Class
+            | EntityKind::Struct
+            | EntityKind::Enum
+            | EntityKind::Trait
+            | EntityKind::Interface
+            | EntityKind::TypeAlias
+            | EntityKind::Module
+    )
+}
+
+/// `true` for Markdown extensions routed through the structure-aware chunker.
+fn is_markdown_ext(ext: &str) -> bool {
+    matches!(ext.to_ascii_lowercase().as_str(), "md" | "markdown")
+}
+
+/// A `describes` edge from a doc-derived concept to the code entity that
+/// realizes it (T6: doc↔code bridge). Carries the concept's `graph_id` so the
+/// edge retracts when the document graph that sourced the concept is removed.
+fn describes_relationship(
+    concept: &KnowledgeEntity,
+    code: &KnowledgeEntity,
+    scope: &Scope,
+) -> KnowledgeRelationship {
+    let id = Id::from(format!(
+        "describes-{}",
+        content_hash(format!("{}\u{1f}describes\u{1f}{}", concept.id, code.id))
+            .trim_start_matches("sha256:")
+    ));
+    KnowledgeRelationship {
+        id,
+        graph_id: concept.graph_id.clone(),
+        subject: EntityRef {
+            id: Some(concept.id.clone()),
+            kind: Some("concept".to_owned()),
+            name: Some(concept.name.clone()),
+            aliases: Vec::new(),
+        },
+        predicate: "describes".to_owned(),
+        object: EntityRef {
+            id: Some(code.id.clone()),
+            kind: Some("code".to_owned()),
+            name: Some(code.name.clone()),
+            aliases: Vec::new(),
+        },
+        scope: scope.clone(),
+        evidence: Vec::new(),
+        confidence: Some(0.8),
+        provenance: concept.provenance.clone(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
     }
 }
 

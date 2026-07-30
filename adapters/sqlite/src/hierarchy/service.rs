@@ -38,7 +38,9 @@ impl SqlHierarchyStore {
 
     /// Opens a file-backed hierarchy store and initializes its schema.
     pub fn open_file(path: impl AsRef<Path>) -> CoreResult<Self> {
-        Self::from_connection(Connection::open(path).map_err(sql_error)?)
+        Self::open_with_options(SqliteOpenOptions::file_wal_concurrent(
+            path.as_ref().to_path_buf(),
+        ))
     }
 
     /// Opens a SQLite hierarchy store with explicit configuration options.
@@ -58,7 +60,7 @@ impl SqlHierarchyStore {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
+    /// use engram_store_sqlite::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
     /// use engram_store_sqlite::SqlHierarchyStore;
     ///
     /// let options = SqliteOpenOptions {

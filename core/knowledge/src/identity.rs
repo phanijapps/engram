@@ -2,7 +2,7 @@
 //! for knowledge-graph entities and relationships (RFC-0014).
 //!
 //! The port trait (`EntityIdentityRepository`) defines the contract; adapters
-//! (SQLite, SurrealDB) implement it behind engine-private indexes/tables.
+//! implement it behind engine-private indexes/tables.
 //! The pure functions (`normalize_name`, `compute_identity_key`,
 //! `compute_relationship_key`, `merge_entities`) are shared across all adapters
 //! and tested here, not in adapter crates.
@@ -14,8 +14,8 @@ use engram_runtime::CoreResult;
 // ── Port trait ───────────────────────────────────────────────────────────────
 
 /// Identity-aware entity + relationship operations, plus transactional
-/// consolidation. Storage-neutral; SQLite indexes, SurrealDB unique constraints,
-/// and transaction strategy are adapter-private.
+/// consolidation. Storage-neutral; engine-private uniqueness indexes and
+/// transaction strategy are adapter-private.
 #[async_trait]
 pub trait EntityIdentityRepository: Send + Sync {
     /// Atomically resolve an entity under a declared identity policy.

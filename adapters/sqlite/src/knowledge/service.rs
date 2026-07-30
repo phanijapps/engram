@@ -47,8 +47,9 @@ impl SqlKnowledgeStore {
 
     /// Opens a file-backed SQLite knowledge store and initializes its schema.
     pub fn open_file(path: impl AsRef<Path>) -> CoreResult<Self> {
-        let connection = Connection::open(path).map_err(sql_error)?;
-        Self::from_connection(connection)
+        Self::open_with_options(SqliteOpenOptions::file_wal_concurrent(
+            path.as_ref().to_path_buf(),
+        ))
     }
 
     /// Opens a SQLite knowledge store with explicit configuration options.
@@ -68,7 +69,7 @@ impl SqlKnowledgeStore {
     /// # Examples
     ///
     /// ```no_run
-    /// use crate::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
+    /// use engram_store_sqlite::{SqliteOpenOptions, SqliteJournalMode, SqlitePath};
     /// use engram_store_sqlite::SqlKnowledgeStore;
     ///
     /// let options = SqliteOpenOptions {

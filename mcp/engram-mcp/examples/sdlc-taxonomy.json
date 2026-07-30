@@ -1,0 +1,19 @@
+{
+  "_comment": "Lightweight SKOS-style taxonomy for the engram-mcp server. `label` ~ skos:prefLabel, `broader` ~ skos:broader. A simple SDLC concept tree the recall pipeline uses to broaden/narrow queries. Extend it with your own concepts; every concept needs a `label`, and `broader` must name another label (or be omitted for a root).",
+  "name": "sdlc",
+  "concepts": [
+    { "label": "Software Development" },
+    { "label": "Source Code",       "broader": "Software Development" },
+    { "label": "Tests",             "broader": "Source Code" },
+    { "label": "Dependencies",      "broader": "Source Code" },
+    { "label": "Documentation",     "broader": "Software Development" },
+    { "label": "Architecture",      "broader": "Documentation" },
+    { "label": "Process",           "broader": "Software Development" },
+    { "label": "Requirements",      "broader": "Process" },
+    { "label": "Backlog",           "broader": "Process" },
+    { "label": "Delivery",          "broader": "Process" },
+    { "label": "CI-CD",             "broader": "Delivery" },
+    { "label": "Releases",          "broader": "Delivery" },
+    { "label": "Incidents",         "broader": "Delivery" }
+  ]
+}

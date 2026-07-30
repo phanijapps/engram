@@ -55,7 +55,7 @@ pub(crate) fn policy() -> Policy {
     }
 }
 
-fn provenance(method: &str) -> Provenance {
+pub(crate) fn provenance(method: &str) -> Provenance {
     Provenance {
         source: "engram-mcp".to_owned(),
         actor: system_actor(),
@@ -998,6 +998,241 @@ mod tests {
                 .iter()
                 .any(|e| e.name == "alpha" || e.name == "beta"),
             "scan_repo must index the functions: {entities:?}"
+        );
+    }
+
+    /// AC4 + AC6 — a markdown section whose heading matches a code symbol is
+    /// bridged to it: the concept `flange` (from docs/flange.md) `describes` the
+    /// function `flange` (from src/lib.rs), connecting docs to code.
+    #[test]
+    fn scan_repo_bridges_doc_concept_to_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("docs")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/lib.rs"),
+            "pub fn flange() {}\npub fn other() { flange(); }\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo_dir.path().join("docs/flange.md"),
+            "# flange\nThe flange connects the widgets.\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+        let q = app
+            .provider
+            .require_knowledge_query()
+            .expect("knowledge_query handle");
+        let rels = block_on(q.list_relationships(&app.scope)).unwrap();
+        assert!(
+            rels.iter().any(|r| r.predicate == "describes"
+                && r.subject.name.as_deref() == Some("flange")
+                && r.object.name.as_deref() == Some("flange")),
+            "expected a concept -[describes]-> function edge for 'flange': {rels:?}"
+        );
+    }
+
+    /// P1 AC1–AC3 — graph tools traverse the unified graph (concept ↔ code).
+    #[test]
+    fn graph_tools_traverse_doc_code_bridge() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("docs")).unwrap();
+        std::fs::write(repo_dir.path().join("src/lib.rs"), "pub fn flange() {}\n").unwrap();
+        std::fs::write(
+            repo_dir.path().join("docs/flange.md"),
+            "# flange\ndocs body\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+
+        // AC1: neighbors shows the describes bridge.
+        let nbrs = crate::graph::graph_neighbors(&app, &json!({ "name": "flange" })).unwrap();
+        let nbody = nbrs["content"][0]["text"].as_str().unwrap();
+        assert!(
+            nbody.contains("describes"),
+            "neighbors must show describes: {nbody}"
+        );
+
+        // AC2: subgraph includes the describes bridge.
+        let sub =
+            crate::graph::graph_subgraph(&app, &json!({ "name": "flange", "depth": 2 })).unwrap();
+        let sbody = sub["content"][0]["text"].as_str().unwrap();
+        assert!(
+            sbody.contains("describes"),
+            "subgraph must include describes: {sbody}"
+        );
+
+        // AC3: resolve finds flange.
+        let res = crate::graph::resolve_entity(&app, &json!({ "name": "flange" })).unwrap();
+        let rbody = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            rbody.contains("Resolved") && rbody.contains("flange"),
+            "resolve must find flange: {rbody}"
+        );
+    }
+
+    /// P2 AC1–AC3 — belief surface: put → get round-trip, retract closes it.
+    #[test]
+    fn belief_tools_put_get_retract() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+
+        // AC1: put then get round-trips.
+        let put = crate::belief::belief_put(
+            &app,
+            &json!({ "subject": "svc-a", "statement": "svc-a is healthy", "confidence": 0.9 }),
+        )
+        .unwrap();
+        let pbody = put["content"][0]["text"].as_str().unwrap();
+        assert!(pbody.contains("Belief stored"), "{pbody}");
+
+        let get = crate::belief::belief_get(&app, &json!({ "subject": "svc-a" })).unwrap();
+        let gbody = get["content"][0]["text"].as_str().unwrap();
+        assert!(
+            gbody.contains("svc-a is healthy"),
+            "get must return the statement: {gbody}"
+        );
+
+        // Extract the stored belief id from the put response.
+        let id = pbody.rsplit_once("id ").unwrap().1.trim_end_matches(']');
+        assert!(!id.is_empty(), "parse id from: {pbody}");
+
+        // AC2: retract then get no longer returns it as live.
+        crate::belief::belief_retract(&app, &json!({ "id": id })).unwrap();
+        let after = crate::belief::belief_get(&app, &json!({ "subject": "svc-a" })).unwrap();
+        let abody = after["content"][0]["text"].as_str().unwrap();
+        assert!(
+            abody.contains("No live belief"),
+            "after retract, get must not return it as live: {abody}"
+        );
+
+        // AC3: stale_list runs (empty here — retract closes, not stale).
+        let stale = crate::belief::belief_stale_list(&app, &json!({})).unwrap();
+        assert!(
+            stale["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("stale"),
+            "stale_list must run"
+        );
+    }
+
+    /// P3 — agentic semantic bridge: a concept linked to a DIFFERENTLY-named scanned
+    /// function via a `describes` relationship (what the engram-distill skill does;
+    /// distinct from P0's exact-name auto-bridge).
+    #[test]
+    fn agentic_semantic_bridge_links_concept_to_code() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/mw.rs"),
+            "pub fn auth_middleware() {}\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        // 1. Scan code → the function entity "auth_middleware" exists.
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+        // 2. Agent distills: concept "Authentication" describes "auth_middleware"
+        //    (semantic bridge — names differ, the link the scan cannot infer).
+        put_entity(
+            &app,
+            &json!({ "name": "Authentication", "kind": "concept" }),
+        )
+        .unwrap();
+        put_relationship(
+            &app,
+            &json!({ "subject": "Authentication", "predicate": "describes", "object": "auth_middleware" }),
+        )
+        .unwrap();
+        // 3. graph_neighbors confirms the semantic bridge.
+        let nbrs =
+            crate::graph::graph_neighbors(&app, &json!({ "name": "Authentication" })).unwrap();
+        let body = nbrs["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("describes") && body.contains("auth_middleware"),
+            "semantic bridge must link Authentication -> auth_middleware: {body}"
+        );
+    }
+
+    /// P4 — get_context surfaces the unified-graph links ([Graph] section).
+    #[test]
+    fn get_context_includes_graph_links() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        // Written directly (avoids scan_repo + recall in one process — the known
+        // nested-executor limitation: recall panics after scan's internal block_on).
+        put_entity(
+            &app,
+            &json!({ "name": "auth_middleware", "kind": "function" }),
+        )
+        .unwrap();
+        put_entity(
+            &app,
+            &json!({ "name": "Authentication", "kind": "concept" }),
+        )
+        .unwrap();
+        put_relationship(
+            &app,
+            &json!({ "subject": "Authentication", "predicate": "describes", "object": "auth_middleware" }),
+        )
+        .unwrap();
+        let res =
+            crate::codegraph::get_context(&app, &json!({ "focus": "auth_middleware" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("[Graph]"),
+            "get_context must include a [Graph] section: {body}"
+        );
+        assert!(
+            body.contains("describes"),
+            "[Graph] must show the describes link: {body}"
+        );
+    }
+
+    /// Regression: get_context (which recalls) works in the SAME process after
+    /// scan_repo — the scan now runs on a dedicated thread, so its internal
+    /// block_on no longer poisons this thread's executor. This is the prior
+    /// nested-executor panic that killed the MCP subprocess ("Transport closed").
+    #[test]
+    fn get_context_works_after_scan_in_one_process() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/mw.rs"),
+            "pub fn auth_middleware() {}\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+        put_entity(
+            &app,
+            &json!({ "name": "Authentication", "kind": "concept" }),
+        )
+        .unwrap();
+        put_relationship(
+            &app,
+            &json!({ "subject": "Authentication", "predicate": "describes", "object": "auth_middleware" }),
+        )
+        .unwrap();
+        // Previously panicked here (nested block_on after scan on the same thread).
+        let res =
+            crate::codegraph::get_context(&app, &json!({ "focus": "auth_middleware" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("[Graph]") && body.contains("describes"),
+            "get_context after scan must work + show the graph link: {body}"
         );
     }
 

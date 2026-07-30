@@ -12,9 +12,12 @@
 //! [`EngramProvider`]: engram_integration::EngramProvider
 
 mod app;
+mod belief;
 mod bootstrap;
 mod codegraph;
 mod config;
+mod graph;
+mod hierarchy;
 mod ontology;
 mod protocol;
 mod registry;
@@ -32,7 +35,9 @@ fn main() {
         eprintln!("engram-mcp: {message}");
         eprintln!(
             "usage: engram-mcp --storage <path> [--project <name>] \
-             [--ontology <path>] [--taxonomy <path>]"
+             [--org <name> --domain <name> [--subdomain <name>]] \
+             [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
+             [--db-file <name>]"
         );
         std::process::exit(2);
     });
@@ -57,7 +62,12 @@ fn main() {
 
     let app = App {
         provider,
-        scope: scope::project_scope(&config.project, "default"),
+        scope: scope::resolve_scope(
+            config.org.as_deref(),
+            config.domain.as_deref(),
+            config.subdomain.as_deref(),
+            &config.project,
+        ),
         ontology,
         taxonomy,
     };
@@ -212,6 +222,105 @@ fn register_all(registry: &mut ToolRegistry<App>) {
         description: "Keyword search over indexed code symbols.",
         input_schema: json!({ "type": "object", "properties": { "query": { "type": "string" }, "limit": { "type": "integer" } }, "required": ["query"] }),
         handler: codegraph::search,
+    });
+    registry.register(ToolRecord {
+        name: "graph_neighbors",
+        description: "Entities directly connected to a node (any kind) and the edges between \
+                      them. Bidirectional — e.g. a concept describes a function, or a function \
+                      calls another.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "limit": { "type": "integer", "description": "Max edges (default 100)." }
+            },
+            "required": ["name"]
+        }),
+        handler: graph::graph_neighbors,
+    });
+    registry.register(ToolRecord {
+        name: "graph_subgraph",
+        description: "Breadth-first subgraph around a node up to `depth` hops (default 2). Edges \
+                      are labelled with their natural direction; explores doc↔code links.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" },
+                "depth": { "type": "integer", "description": "Hop limit (default 2)." },
+                "limit": { "type": "integer", "description": "Max edges (default 100)." }
+            },
+            "required": ["name"]
+        }),
+        handler: graph::graph_subgraph,
+    });
+    registry.register(ToolRecord {
+        name: "resolve_entity",
+        description: "Resolve a name to its entity (exact, else first substring): kind, id, graph, \
+                      source-ref count, aliases. The \"is X in the graph?\" lookup.",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "name": { "type": "string" } },
+            "required": ["name"]
+        }),
+        handler: graph::resolve_entity,
+    });
+    registry.register(ToolRecord {
+        name: "belief_get",
+        description: "Read the live belief for a subject (valid at `as_of`, default now). The \
+                      \"what do we believe about X?\" lookup.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "subject": { "type": "string" },
+                "as_of": { "type": "string", "description": "Optional RFC3339 timestamp; defaults to now." }
+            },
+            "required": ["subject"]
+        }),
+        handler: belief::belief_get,
+    });
+    registry.register(ToolRecord {
+        name: "belief_put",
+        description: "Assert or update a belief (a new valid-time version) for a subject.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "subject": { "type": "string" },
+                "statement": { "type": "string" },
+                "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0, "description": "Default 0.8." }
+            },
+            "required": ["subject", "statement"]
+        }),
+        handler: belief::belief_put,
+    });
+    registry.register(ToolRecord {
+        name: "belief_retract",
+        description: "Retract a belief by id (closes its valid interval).",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "id": { "type": "string" } },
+            "required": ["id"]
+        }),
+        handler: belief::belief_retract,
+    });
+    registry.register(ToolRecord {
+        name: "belief_stale_list",
+        description: "List beliefs flagged stale in the project scope (need review).",
+        input_schema: json!({ "type": "object", "properties": {} }),
+        handler: belief::belief_stale_list,
+    });
+    registry.register(ToolRecord {
+        name: "hierarchy_path",
+        description: "Navigation path (LCA + nodes + relations) for seed entity ids over the \
+                      clustered hierarchy. Empty until a hierarchy is built for the scope.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "seeds": { "type": "array", "items": { "type": "string" } },
+                "max_layer": { "type": "integer" }
+            },
+            "required": ["seeds"]
+        }),
+        handler: hierarchy::hierarchy_path,
     });
     registry.register(ToolRecord {
         name: "symbol_context",

@@ -15,13 +15,14 @@
 //!
 //! # Sync resolvers + async store
 //!
-//! Both resolver traits are synchronous (the adapter lanes call them inline),
-//! while `KnowledgeRepository::get_chunk` is async-by-convention — its body is
-//! pure synchronous rusqlite (mutex lock + query + deserialize) with no async
-//! I/O. `block_on` therefore polls the future to completion in a single step
-//! without yielding, so re-entry from within the unified-recall async path is
-//! safe (unlike a tokio runtime, `futures::executor::block_on` does not panic on
-//! re-entry, and the polled future never needs the outer executor to progress).
+//! The lexical resolver is **async** (it awaits the store's `get_chunk`), so it
+//! composes safely inside the unified-recall async path. (Earlier it was sync
+//! and drove `get_chunk` via `block_on` — but `futures::executor::block_on`
+//! *does* panic on re-entry into an already-running `LocalPool`, so any caller
+//! that drives recall with its own `block_on` — e.g. the MCP transport — hit a
+//! nested-`block_on` panic, observed as the subprocess dying. Awaiting is the
+//! fix.) The fastembed-gated vector resolver still uses the sync `resolve_chunk`
+//! helper and wants the same treatment.
 
 use std::sync::Arc;
 
@@ -39,6 +40,7 @@ use engram_store_lexical::{LexicalResolvedTarget, LexicalTargetResolver};
 use engram_store_sqlite::SqlKnowledgeStore;
 #[cfg(feature = "fastembed")]
 use engram_store_sqlite::{VectorResolvedTarget, VectorSearchResult, VectorTargetResolver};
+#[cfg(feature = "fastembed")]
 use futures::executor::block_on;
 
 /// Orphan-rule wrapper adapting `SqlKnowledgeStore` to the associative-graph
@@ -93,13 +95,15 @@ impl KnowledgeLexicalResolver {
     }
 }
 
+#[async_trait]
 impl LexicalTargetResolver for KnowledgeLexicalResolver {
-    fn resolve(
+    async fn resolve(
         &self,
         target_id: &str,
         request: &RetrievalRequest,
     ) -> CoreResult<Option<LexicalResolvedTarget>> {
-        let chunk = resolve_chunk(&self.store, target_id, &request.scope)?;
+        let id = ChunkId::from(target_id);
+        let chunk = self.store.get_chunk(&id, &request.scope).await?;
         Ok(chunk.map(chunk_to_lexical))
     }
 }
@@ -133,9 +137,11 @@ impl VectorTargetResolver for KnowledgeVectorResolver {
 
 /// Looks up a chunk by id + scope from the knowledge store.
 ///
-/// `target_id` comes from a secondary index hit (lexical / vector); the store
-/// is the canonical source, so a stale or scope-invisible hit returns `None`
-/// (the lane skips it) rather than synthesizing a phantom candidate.
+/// `target_id` comes from a vector secondary-index hit; the store is the
+/// canonical source, so a stale or scope-invisible hit returns `None` (the lane
+/// skips it) rather than synthesizing a phantom candidate. (fastembed-only; the
+/// lexical resolver awaits `get_chunk` directly — see `KnowledgeLexicalResolver`.)
+#[cfg(feature = "fastembed")]
 fn resolve_chunk(
     store: &Arc<SqlKnowledgeStore>,
     target_id: &str,

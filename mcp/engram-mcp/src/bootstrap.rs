@@ -4,9 +4,9 @@
 //! [`EngramConfig`] (embedding-`none`, SQLite) and calls
 //! [`EngramProvider::open`]. No tool opens a store directly.
 
-use engram_integration::{EngramConfig, EngramProvider};
+use engram_integration::{EngramConfig, EngramProvider, SqliteStorageLayout};
 
-use crate::config::McpConfig;
+use crate::config::{McpConfig, McpSqliteLayout};
 
 /// Open the provider described by `config`. Errors are surfaced as a string
 /// for the caller (`main`) to report.
@@ -20,6 +20,12 @@ pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
         .parent()
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("."));
+    let layout = match config.sqlite_layout {
+        McpSqliteLayout::Single => SqliteStorageLayout::SingleFile {
+            file_name: config.db_file.clone(),
+        },
+        McpSqliteLayout::Multi => SqliteStorageLayout::MultiFileDirectory,
+    };
     let engram_config = EngramConfig::new(
         config.storage_path.clone(),
         trusted_root,
@@ -27,7 +33,8 @@ pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
         config.embedding.clone(),
         config.migration_mode,
         config.capability_policy,
-    );
+    )
+    .with_sqlite_storage_layout(layout);
     EngramProvider::open(&engram_config).map_err(|e| format!("failed to open engram provider: {e}"))
 }
 
@@ -39,7 +46,8 @@ mod tests {
 
     fn test_config(dir: &std::path::Path) -> McpConfig {
         McpConfig {
-            storage_path: dir.join("engram_data.db"),
+            // `storage_path` is the directory the shared database file lives in.
+            storage_path: dir.to_path_buf(),
             project: "test".to_string(),
             scope_strategy: ScopeMappingStrategy::Strict,
             embedding: EmbeddingProviderConfig {
@@ -53,6 +61,11 @@ mod tests {
             capability_policy: CapabilityPolicy::FailClosed,
             ontology_path: None,
             taxonomy_path: None,
+            sqlite_layout: McpSqliteLayout::default(),
+            db_file: "engram_data.db".to_string(),
+            org: None,
+            domain: None,
+            subdomain: None,
         }
     }
 
@@ -76,6 +89,33 @@ mod tests {
             ("consolidation", provider.consolidation().is_some()),
         ] {
             assert!(present, "expected `{label}` handle to be wired");
+        }
+    }
+
+    /// AC1 — single-file layout (the default) creates one `engram_data.db` and
+    /// the per-store file names do not appear. Mirrors the agentzero adapter
+    /// invariant (`agentzero/.../persistence_factory.rs` single-file assertion).
+    #[test]
+    fn open_provider_produces_single_file_by_default() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = test_config(dir.path());
+        let _provider = open_provider(&config).expect("provider opens single-file");
+
+        assert!(
+            dir.path().join("engram_data.db").exists(),
+            "single-file layout should create engram_data.db"
+        );
+        for per_store in [
+            "memory.db",
+            "knowledge.db",
+            "belief.db",
+            "hierarchy.db",
+            "vectors.db",
+        ] {
+            assert!(
+                !dir.path().join(per_store).exists(),
+                "{per_store} should be folded into engram_data.db in single-file mode"
+            );
         }
     }
 }

@@ -163,7 +163,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
 // --- composites (T2–T8) ------------------------------------------------------
 
 /// Fetch all relationships in the project scope (returns empty vec on error).
-fn fetch_rels(app: &App) -> Vec<KnowledgeRelationship> {
+pub(crate) fn fetch_rels(app: &App) -> Vec<KnowledgeRelationship> {
     app.provider
         .require_knowledge_query()
         .ok()
@@ -331,8 +331,31 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let rels = fetch_rels(app);
     let code_ctx = engram_codegraph_queries::symbol_context(&rels, focus, depth);
 
+    // 3. Unified-graph links — doc/concept `describes`/`mentions` edges for the
+    //    focus, on top of the code neighborhood. This is the doc↔code connection
+    //    surfacing in one context packet.
+    let links: Vec<String> = rels
+        .iter()
+        .filter_map(|r| {
+            let (s, o) = (r.subject.name.as_deref()?, r.object.name.as_deref()?);
+            if s == focus {
+                Some(format!("{focus} -[{}]-> {o}", r.predicate))
+            } else if o == focus {
+                Some(format!("{s} -[{}]-> {focus}", r.predicate))
+            } else {
+                None
+            }
+        })
+        .take(20)
+        .collect();
+    let graph_text = if links.is_empty() {
+        "(none)".to_owned()
+    } else {
+        links.join("\n")
+    };
+
     Ok(protocol::text_content(format!(
-        "=== Context for '{focus}' ===\n\n[Recall]\n{recall_text}\n\n[Code]\n{code_ctx:?}"
+        "=== Context for '{focus}' ===\n\n[Recall]\n{recall_text}\n\n[Graph]\n{graph_text}\n\n[Code]\n{code_ctx:?}"
     )))
 }
 
@@ -349,6 +372,7 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
         ("batch", app.provider.batch().is_some()),
         ("ontology", app.provider.ontology().is_some()),
         ("taxonomy", app.provider.taxonomy().is_some()),
+        ("beliefs", app.provider.beliefs().is_some()),
         ("hierarchy", app.provider.hierarchy().is_some()),
         ("identity", app.provider.identity().is_some()),
     ]

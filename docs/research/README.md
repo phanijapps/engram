@@ -50,6 +50,7 @@ policy/provenance/scope governance baked into every path. See
 | [`memtrace-survey.md`](./memtrace-survey.md) | prior-art survey (memory trace + visualization) | reference |
 | [`engram-framing-synthesis.md`](./engram-framing-synthesis.md) | how engram is framed for techno-functional + functional audiences | reference |
 | [`agentzero-engram-memory-integration-comparison-matrix.md`](./agentzero-engram-memory-integration-comparison-matrix.md) | the AgentZero adapter integration contract | applied study |
+| [`engram-mcp-connectivity-and-single-file-storage.md`](./engram-mcp-connectivity-and-single-file-storage.md) | disconnected KG subgraph + multi-file SQLite defects in `engram-mcp`; fix plan | plan |
 
 
 ## How to use this folder

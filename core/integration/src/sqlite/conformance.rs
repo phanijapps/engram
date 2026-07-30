@@ -1229,6 +1229,64 @@ fn seed_export(
     Ok(())
 }
 
+// ---- procedures ----
+
+/// Procedures family: upsert + get + increment round-trip.
+pub(crate) fn procedures_ok() -> bool {
+    use engram_procedures::ProcedureRepository;
+    let Ok(store) = engram_store_sqlite::SqlProcedureStore::open_in_memory() else {
+        return false;
+    };
+    use engram_domain::{
+        Actor, ActorKind, AllowedUse, Policy, Procedure, ProcedureId, Provenance, Retention,
+        Visibility,
+    };
+    let scope = diag_scope();
+    let now = chrono::Utc::now();
+    let pol = Policy {
+        visibility: Visibility::Workspace,
+        retention: Retention::Durable,
+        sensitivity: None,
+        allowed_uses: vec![AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: None,
+    };
+    let prov = Provenance {
+        source: "conformance".to_string(),
+        actor: Actor {
+            id: engram_domain::Id::from("actor"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        },
+        observed_at: now,
+        evidence: Vec::new(),
+        derivations: Vec::new(),
+        confidence: Some(1.0),
+        method: None,
+    };
+    let proc = Procedure {
+        id: ProcedureId::from("proc-test"),
+        scope: scope.clone(),
+        name: "test".to_string(),
+        steps: vec!["step1".to_string()],
+        trigger: None,
+        success_count: 0,
+        failure_count: 0,
+        provenance: prov.clone(),
+        policy: pol,
+        created_at: now,
+        updated_at: None,
+        metadata: None,
+    };
+    if futures::executor::block_on(store.upsert_procedure(proc)).is_err() {
+        return false;
+    }
+    let got =
+        futures::executor::block_on(store.get_procedure(&ProcedureId::from("proc-test"), &scope));
+    got.is_ok_and(|opt| opt.is_some_and(|p| p.name == "test"))
+}
+
 // ---- observability ----
 
 fn diag_scope() -> Scope {

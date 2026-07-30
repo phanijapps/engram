@@ -192,6 +192,14 @@ pub fn forget(app: &App, args: &Value) -> Result<Value, ToolError> {
 pub fn put_entity(app: &App, args: &Value) -> Result<Value, ToolError> {
     let name = req_str(args, "name")?;
     let kind = parse_entity_kind(args["kind"].as_str().unwrap_or("concept"))?;
+    let valid_from = args["valid_from"]
+        .as_str()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&Utc));
+    let valid_until = args["valid_until"]
+        .as_str()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.with_timezone(&Utc));
     let knowledge = app.provider.require_knowledge().map_err(internal)?;
     let entity = KnowledgeEntity {
         id: Id::from(name),
@@ -206,8 +214,8 @@ pub fn put_entity(app: &App, args: &Value) -> Result<Value, ToolError> {
         provenance: provenance("mcp-put-entity"),
         created_at: Utc::now(),
         updated_at: None,
-        valid_from: None,
-        valid_until: None,
+        valid_from,
+        valid_until,
         metadata: None,
     };
     let stored = block_on(knowledge.put_entity(entity)).map_err(internal)?;
@@ -1530,7 +1538,11 @@ impl Store {
         assert!(
             rels.iter().any(|r| r.predicate == "sends_request"
                 && r.subject.name.as_deref() == Some("listItems")
-                && r.object.name.as_deref().map(|n| n.contains("/api/items/")).unwrap_or(false)),
+                && r.object
+                    .name
+                    .as_deref()
+                    .map(|n| n.contains("/api/items/"))
+                    .unwrap_or(false)),
             "listItems should connect to endpoint via wrapper propagation: {rels:?}"
         );
     }

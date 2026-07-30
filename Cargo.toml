@@ -27,8 +27,6 @@ members = [
     "examples/rust-integration",
     "codegraph/queries",
     "codegraph/temporal",
-    "codegraph/mcp-server",
-    "memory/mcp-server",
     "mcp/engram-mcp",
 ]
 resolver = "3"

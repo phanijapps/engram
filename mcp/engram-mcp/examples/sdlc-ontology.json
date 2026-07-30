@@ -1,0 +1,34 @@
+{
+  "_comment": "SDLC ontology for the engram-mcp server. Three layers (code / process / team). `classes` guide how the distill skill CLASSIFIES an entity; the stored entity `kind` is still a built-in variant (function, class, struct, concept, api, ...). `within` predicates relate things inside a layer; `across` predicates bridge layers (e.g. a Requirement `realizes` a Feature, a Feature `describes` a function). Edit freely — it is read at server launch.",
+  "layers": [
+    {
+      "name": "code",
+      "classes": [
+        "Repository", "Module", "Package", "Function", "Method", "Class",
+        "Struct", "Interface", "Trait", "Type", "Endpoint", "Service",
+        "Component", "Test", "Configuration", "Dependency"
+      ]
+    },
+    {
+      "name": "process",
+      "classes": [
+        "Requirement", "Feature", "UserStory", "Task", "Ticket", "Bug",
+        "Epic", "Sprint", "Milestone", "Release"
+      ]
+    },
+    {
+      "name": "team",
+      "classes": ["Person", "Team", "Role", "Stakeholder"]
+    }
+  ],
+  "predicates": {
+    "within": [
+      "calls", "depends_on", "implements", "contains", "part_of", "uses",
+      "tests", "blocks", "defined_in"
+    ],
+    "across": [
+      "realizes", "describes", "owns", "governs", "produces",
+      "extracted_from", "distilled_from", "contradicts"
+    ]
+  }
+}

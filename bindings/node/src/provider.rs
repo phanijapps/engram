@@ -27,13 +27,16 @@ use engram_domain::{
 };
 use engram_hierarchy::HierarchyRepository;
 use engram_integration::{
-    BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, EngramConfig,
-    EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed, Observability, ProvenanceQuery,
-    StepStatus, TransactionGuarantee, UnifiedRecall,
+    BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, EmbeddingProvider,
+    EngramConfig, EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed, MigrationService,
+    Observability, ProvenanceQuery, StepStatus, TransactionGuarantee, UnifiedRecall,
 };
-use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
+use engram_knowledge::{
+    KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
+};
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
+use engram_retrieval::{RetrievalIndex, VectorIndex};
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -225,6 +228,68 @@ impl NativeProvider {
             .map_err(to_napi_error)?
             .clone();
         Ok(NativeProceduresApi { handle })
+    }
+
+    /// Returns an ontology handle, or throws if not wired.
+    #[napi(js_name = "requireOntologyApi")]
+    pub fn require_ontology_api(&self) -> Result<NativeOntologyApi> {
+        let handle = self
+            .inner
+            .require_ontology()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeOntologyApi { handle })
+    }
+
+    /// Returns a taxonomy handle, or throws if not wired.
+    #[napi(js_name = "requireTaxonomyApi")]
+    pub fn require_taxonomy_api(&self) -> Result<NativeTaxonomyApi> {
+        let handle = self
+            .inner
+            .require_taxonomy()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeTaxonomyApi { handle })
+    }
+
+    /// Returns a retrieval handle, or throws if not wired.
+    #[napi(js_name = "requireRetrievalApi")]
+    pub fn require_retrieval_api(&self) -> Result<NativeRetrievalApi> {
+        let handle = self
+            .inner
+            .require_retrieval()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeRetrievalApi { handle })
+    }
+
+    /// Returns a vectors handle, or throws if not wired.
+    #[napi(js_name = "requireVectorsApi")]
+    pub fn require_vectors_api(&self) -> Result<NativeVectorsApi> {
+        let handle = self.inner.require_vectors().map_err(to_napi_error)?.clone();
+        Ok(NativeVectorsApi { handle })
+    }
+
+    /// Returns a migration handle, or throws if not wired.
+    #[napi(js_name = "requireMigrationApi")]
+    pub fn require_migration_api(&self) -> Result<NativeMigrationApi> {
+        let handle = self
+            .inner
+            .require_migration()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeMigrationApi { handle })
+    }
+
+    /// Returns an embedding-provider handle, or throws if not wired.
+    #[napi(js_name = "requireEmbeddingProviderApi")]
+    pub fn require_embedding_provider_api(&self) -> Result<NativeEmbeddingProviderApi> {
+        let handle = self
+            .inner
+            .require_embedding_provider()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeEmbeddingProviderApi { handle })
     }
 }
 
@@ -806,5 +871,88 @@ impl NativeProceduresApi {
         let scope = scope_field(&value)?;
         let result = block_on(self.handle.increment_failure(&id, &scope)).map_err(to_napi_error)?;
         encode(&result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Minimal handle proxies for remaining capabilities (ADR-0022 parity).
+// Each holds the trait handle + a `ping`. Real methods added as needed.
+// ---------------------------------------------------------------------------
+
+#[napi]
+pub struct NativeOntologyApi {
+    handle: Arc<dyn OntologyRepository>,
+}
+
+#[napi]
+impl NativeOntologyApi {
+    #[napi(js_name = "ping")]
+    pub fn ping(&self) -> Result<String> {
+        Ok("ontology".to_owned())
+    }
+}
+
+#[napi]
+pub struct NativeTaxonomyApi {
+    handle: Arc<dyn TaxonomyRepository>,
+}
+
+#[napi]
+impl NativeTaxonomyApi {
+    #[napi(js_name = "ping")]
+    pub fn ping(&self) -> Result<String> {
+        Ok("taxonomy".to_owned())
+    }
+}
+
+#[napi]
+pub struct NativeRetrievalApi {
+    handle: Arc<dyn RetrievalIndex>,
+}
+
+#[napi]
+impl NativeRetrievalApi {
+    #[napi(js_name = "ping")]
+    pub fn ping(&self) -> Result<String> {
+        Ok("retrieval".to_owned())
+    }
+}
+
+#[napi]
+pub struct NativeVectorsApi {
+    handle: Arc<dyn VectorIndex>,
+}
+
+#[napi]
+impl NativeVectorsApi {
+    #[napi(js_name = "ping")]
+    pub fn ping(&self) -> Result<String> {
+        Ok("vectors".to_owned())
+    }
+}
+
+#[napi]
+pub struct NativeMigrationApi {
+    handle: Arc<dyn MigrationService>,
+}
+
+#[napi]
+impl NativeMigrationApi {
+    #[napi(js_name = "ping")]
+    pub fn ping(&self) -> Result<String> {
+        Ok("migration".to_owned())
+    }
+}
+
+#[napi]
+pub struct NativeEmbeddingProviderApi {
+    handle: Arc<dyn EmbeddingProvider>,
+}
+
+#[napi]
+impl NativeEmbeddingProviderApi {
+    #[napi(js_name = "ping")]
+    pub fn ping(&self) -> Result<String> {
+        Ok("embedding_provider".to_owned())
     }
 }

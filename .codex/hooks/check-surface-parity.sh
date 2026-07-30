@@ -31,7 +31,7 @@ SPECIAL_CASES=(
 # Acknowledged debt: provider handles with NO N-API proxy yet. These are
 # low-level composition/embedding seams; shrink this list by adding proxies,
 # then removing the entry here.
-DEBT_ALLOWLIST=(embedding_provider migration ontology retrieval taxonomy vectors)
+DEBT_ALLOWLIST=()
 
 [ -f "$FACADE" ] || { echo "facade not found: $FACADE"; exit 2; }
 [ -f "$BINDING" ] || { echo "binding not found: $BINDING"; exit 2; }

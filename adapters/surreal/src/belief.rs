@@ -218,6 +218,15 @@ impl BeliefRepository for SurrealBeliefStore {
             .collect())
     }
 
+    async fn list_contradictions(&self, scope: &Scope) -> CoreResult<Vec<Contradiction>> {
+        Ok(self
+            .load_all_contradictions()
+            .await?
+            .into_iter()
+            .filter(|c| scope_allows(&c.scope, scope))
+            .collect())
+    }
+
     async fn beliefs_referencing_source(
         &self,
         query: BeliefReferenceQuery,

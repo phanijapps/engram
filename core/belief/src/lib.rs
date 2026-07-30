@@ -85,6 +85,9 @@ pub trait BeliefRepository: Send + Sync {
     /// Lists currently stale beliefs visible to the supplied scope.
     async fn list_stale(&self, scope: &Scope) -> CoreResult<Vec<Belief>>;
 
+    /// Lists open contradiction review records visible to the supplied scope.
+    async fn list_contradictions(&self, scope: &Scope) -> CoreResult<Vec<Contradiction>>;
+
     /// Lists live beliefs that cite the requested evidence source.
     async fn beliefs_referencing_source(
         &self,

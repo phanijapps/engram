@@ -9,7 +9,7 @@
 
 use chrono::Utc;
 use engram_belief::BeliefQuery;
-use engram_domain::{Belief, BeliefStatus, BeliefSubject, Id};
+use engram_domain::{Belief, BeliefStatus, BeliefSubject, Contradiction, Id};
 use futures::executor::block_on;
 use serde_json::Value;
 
@@ -111,6 +111,27 @@ pub fn belief_stale_list(app: &App, _args: &Value) -> Result<Value, ToolError> {
                 format!(
                     "- {} ({}): {} [conf {:.2}]",
                     b.id, b.subject.key, b.content, b.confidence
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    Ok(protocol::text_content(body))
+}
+
+/// `contradiction_list`: lists open contradiction review records in the scope.
+pub fn contradiction_list(app: &App, _args: &Value) -> Result<Value, ToolError> {
+    let repo = app.provider.require_beliefs().map_err(internal)?;
+    let contradictions = block_on(repo.list_contradictions(&app.scope)).map_err(internal)?;
+    let body = if contradictions.is_empty() {
+        "No contradictions.".to_owned()
+    } else {
+        contradictions
+            .iter()
+            .map(|c| {
+                format!(
+                    "- {:?}: {:?} [{:?}] {:?} | {}",
+                    c.kind, c.status, c.severity, c.reasoning, c.id
                 )
             })
             .collect::<Vec<_>>()

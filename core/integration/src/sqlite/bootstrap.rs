@@ -168,6 +168,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut knowledge: Option<Arc<dyn KnowledgeRepository>> = None;
     let mut knowledge_query: Option<Arc<dyn crate::KnowledgeQuery>> = None;
     let mut lexical_feed: Option<Arc<dyn crate::LexicalFeed>> = None;
+    #[allow(unused_mut)]
     let mut embedding_provider: Option<Arc<dyn crate::EmbeddingProvider>> = None;
     let mut graph: Option<Arc<dyn KnowledgeGraphRepository>> = None;
     let mut ontology: Option<Arc<dyn OntologyRepository>> = None;

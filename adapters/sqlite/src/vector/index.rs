@@ -20,6 +20,7 @@ use crate::vector::{
 use engram_retrieval::VectorIndex;
 
 /// SQLite-backed vector index using the sqlite-vec extension.
+#[derive(Clone)]
 pub struct SqliteVectorIndex {
     connection: Arc<StdMutex<Connection>>,
     dimensions: u32,

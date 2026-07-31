@@ -18,6 +18,8 @@ mod bootstrap;
 mod conformance;
 mod consolidation_adapters;
 mod export_import;
+#[cfg(feature = "fastembed")]
+pub mod fastembed_embedding;
 mod knowledge_query;
 mod lexical_feed;
 mod migration_service;

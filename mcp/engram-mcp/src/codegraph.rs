@@ -160,8 +160,39 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         }
     }
 
+    // Embed chunks into the vector index (when fastembed is wired).
+    // Lists all chunks in scope, embeds each via the EmbeddingProvider, and
+    // inserts into the VectorIndex so semantic search works.
+    let mut embedded = 0usize;
+    if let (Ok(query), Some(embedder), Ok(vector_index)) = (
+        app.provider.require_knowledge_query(),
+        app.provider.embedding_provider(),
+        app.provider.require_vectors(),
+    ) {
+        let chunks = block_on(query.list_chunks(&app.scope)).unwrap_or_default();
+        let space = embedder.embedding_space();
+        for chunk in &chunks {
+            let text = &chunk.text;
+            if text.is_empty() {
+                continue;
+            }
+            match embedder.embed_passage(text) {
+                Ok(vector) => {
+                    if let Err(e) = block_on(vector_index.insert(&chunk.id, &space, vector)) {
+                        eprintln!("engram-mcp: embed warning for {}: {e}", chunk.id);
+                    } else {
+                        embedded += 1;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("engram-mcp: embed error for {}: {e}", chunk.id);
+                }
+            }
+        }
+    }
+
     Ok(protocol::text_content(format!(
-        "{summary:?}\n{filter_note}"
+        "{summary:?}\n{filter_note}\nembedded {embedded} chunks"
     )))
 }
 

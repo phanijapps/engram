@@ -1,12 +1,12 @@
 {
   "mcpServers": {
     "engram": {
-      "command": "./target/release/engram-mcp",
+      "command": "/home/videogamer/projects/mem-alpha/target/release/engram-mcp",
       "args": [
-        "--storage", "./.engram",
-        "--project", "memalpha",
-        "--ontology", "./mcp/engram-mcp/examples/sdlc-ontology.json",
-        "--taxonomy", "./mcp/engram-mcp/examples/sdlc-taxonomy.json"
+        "--storage", "/home/videogamer/.engram/agentzero",
+        "--project", "agentzero",
+        "--ontology", "/home/videogamer/.engram/agentzero-ontology.json",
+        "--taxonomy", "/home/videogamer/.engram/agentzero-taxonomy.json"
       ]
     }
   }

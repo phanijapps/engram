@@ -1,0 +1,13 @@
+[package]
+name = "engram-store-pgvector"
+version.workspace = true
+edition = "2021"
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Postgres driver + pgvector support land in T2 (the postgres 0.12 sync crate
+# does not compile on Rust 1.85; the next commit resolves this via tokio-postgres
+# + a shared tokio runtime, or sqlx). This PR ships the foundation: Docker setup
+# + crate scaffold + schema DDL + a DDL-verification test.
+

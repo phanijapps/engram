@@ -37,7 +37,7 @@ impl SurrealBeliefStore {
     async fn write_belief(&self, belief: &Belief) -> CoreResult<()> {
         let db = self.conn.db().await?;
         let key = belief.id.to_string();
-        db.query(&format!(
+        db.query(format!(
             "UPSERT type::thing('{BELIEF_TABLE}', $key) SET data = $belief"
         ))
         .bind(("key", key))
@@ -50,7 +50,7 @@ impl SurrealBeliefStore {
     async fn load_all_beliefs(&self) -> CoreResult<Vec<Belief>> {
         let db = self.conn.db().await?;
         let mut res = db
-            .query(&format!("SELECT data FROM {BELIEF_TABLE}"))
+            .query(format!("SELECT data FROM {BELIEF_TABLE}"))
             .await
             .map_err(surreal_err)?;
         let rows: Vec<DataWrapper<Belief>> = res.take(0).map_err(surreal_err)?;
@@ -60,7 +60,7 @@ impl SurrealBeliefStore {
     async fn load_belief_by_id(&self, id: &BeliefId) -> CoreResult<Option<Belief>> {
         let db = self.conn.db().await?;
         let mut res = db
-            .query(&format!(
+            .query(format!(
                 "SELECT data FROM type::thing('{BELIEF_TABLE}', $key)"
             ))
             .bind(("key", id.to_string()))
@@ -87,7 +87,7 @@ impl SurrealBeliefStore {
     async fn write_contradiction(&self, contradiction: &Contradiction) -> CoreResult<()> {
         let db = self.conn.db().await?;
         let key = contradiction.id.to_string();
-        db.query(&format!(
+        db.query(format!(
             "UPSERT type::thing('{CONTRADICTION_TABLE}', $key) SET data = $contradiction"
         ))
         .bind(("key", key))
@@ -100,7 +100,7 @@ impl SurrealBeliefStore {
     async fn load_all_contradictions(&self) -> CoreResult<Vec<Contradiction>> {
         let db = self.conn.db().await?;
         let mut res = db
-            .query(&format!("SELECT data FROM {CONTRADICTION_TABLE}"))
+            .query(format!("SELECT data FROM {CONTRADICTION_TABLE}"))
             .await
             .map_err(surreal_err)?;
         let rows: Vec<DataWrapper<Contradiction>> = res.take(0).map_err(surreal_err)?;
@@ -113,7 +113,7 @@ impl SurrealBeliefStore {
     ) -> CoreResult<Option<Contradiction>> {
         let db = self.conn.db().await?;
         let mut res = db
-            .query(&format!(
+            .query(format!(
                 "SELECT data FROM type::thing('{CONTRADICTION_TABLE}', $key)"
             ))
             .bind(("key", id.to_string()))

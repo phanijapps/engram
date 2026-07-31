@@ -1,6 +1,8 @@
 //! Code-intelligence tools (RFC-0015 Phase 2 + 3): `scan_repo` + the composites
-//! + `search` + `get_context`. `scan_repo` uses a fan-in adapter so treesitter
-//! ingestion routes through the provider's handles (no engine-store bypass).
+//! + `search` + `get_context`.
+//!
+//! `scan_repo` uses a fan-in adapter so treesitter ingestion routes through
+//! the provider's handles (no engine-store bypass).
 
 use std::collections::HashMap;
 use std::path::Path;

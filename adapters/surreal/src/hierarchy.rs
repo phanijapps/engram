@@ -35,7 +35,7 @@ impl HierarchyRepository for SurrealHierarchyStore {
     async fn put_node(&self, node: HierarchyNode) -> CoreResult<HierarchyNode> {
         let db = self.conn.db().await?;
         let key = node.id.to_string();
-        db.query(&format!(
+        db.query(format!(
             "UPSERT type::thing('{NODE_TABLE}', $key) SET data = $node"
         ))
         .bind(("key", key))
@@ -48,7 +48,7 @@ impl HierarchyRepository for SurrealHierarchyStore {
     async fn put_relation(&self, relation: HierarchyRelation) -> CoreResult<HierarchyRelation> {
         let db = self.conn.db().await?;
         let key = relation.id.to_string();
-        db.query(&format!(
+        db.query(format!(
             "UPSERT type::thing('{RELATION_TABLE}', $key) SET data = $relation"
         ))
         .bind(("key", key))
@@ -66,12 +66,12 @@ impl HierarchyRepository for SurrealHierarchyStore {
     ) -> CoreResult<HierarchyPath> {
         let db = self.conn.db().await?;
         let mut node_res = db
-            .query(&format!("SELECT data FROM {NODE_TABLE}"))
+            .query(format!("SELECT data FROM {NODE_TABLE}"))
             .await
             .map_err(surreal_err)?;
         let node_rows: Vec<DataWrapper<HierarchyNode>> = node_res.take(0).map_err(surreal_err)?;
         let mut rel_res = db
-            .query(&format!("SELECT data FROM {RELATION_TABLE}"))
+            .query(format!("SELECT data FROM {RELATION_TABLE}"))
             .await
             .map_err(surreal_err)?;
         let rel_rows: Vec<DataWrapper<HierarchyRelation>> = rel_res.take(0).map_err(surreal_err)?;

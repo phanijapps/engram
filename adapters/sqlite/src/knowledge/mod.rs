@@ -13,6 +13,7 @@
 
 mod graph;
 mod identity;
+#[allow(clippy::module_inception)]
 mod knowledge;
 mod ontology;
 mod retrieval;

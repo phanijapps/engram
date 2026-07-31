@@ -53,7 +53,7 @@ impl SurrealKnowledgeStore {
         record: &T,
     ) -> CoreResult<()> {
         let db = self.conn.db().await?;
-        db.query(&format!(
+        db.query(format!(
             "UPSERT type::thing('{table}', $key) SET data = $record"
         ))
         .bind(("key", key))
@@ -70,7 +70,7 @@ impl SurrealKnowledgeStore {
     ) -> CoreResult<Option<T>> {
         let db = self.conn.db().await?;
         let mut res = db
-            .query(&format!("SELECT data FROM type::thing('{table}', $key)"))
+            .query(format!("SELECT data FROM type::thing('{table}', $key)"))
             .bind(("key", key.to_string()))
             .await
             .map_err(surreal_err)?;
@@ -81,7 +81,7 @@ impl SurrealKnowledgeStore {
     async fn list_records<T: DeserializeOwned + 'static>(&self, table: &str) -> CoreResult<Vec<T>> {
         let db = self.conn.db().await?;
         let mut res = db
-            .query(&format!("SELECT data FROM {table}"))
+            .query(format!("SELECT data FROM {table}"))
             .await
             .map_err(surreal_err)?;
         let rows: Vec<DataWrapper<T>> = res.take(0).map_err(surreal_err)?;

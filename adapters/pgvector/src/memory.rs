@@ -19,7 +19,7 @@ pub struct PgMemoryRow {
 
 /// Writes a memory row into Postgres. Returns the stored row.
 pub fn write_memory(conn: &PgConnection, row: &PgMemoryRow) -> Result<PgMemoryRow, String> {
-    let json = serde_json::to_value(&row).map_err(|e| e.to_string())?;
+    let json = serde_json::to_value(row).map_err(|e| e.to_string())?;
     conn.block_on(async {
         conn.client
             .execute(

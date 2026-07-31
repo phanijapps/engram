@@ -1,12 +1,16 @@
-//! P2 cells: BeliefRepository, HierarchyRepository, ProcedureRepository over Postgres.
-//! (MemoryService + UnifiedRecall land in a follow-on — complex domain types.)
+//! P2 cells: MemoryService, BeliefRepository, HierarchyRepository,
+//! ProcedureRepository over Postgres.
 //!
 //! All use the same JSONB pattern: put/get/delete/list by (table, id, scope).
 
 use async_trait::async_trait;
+use engram_domain::operations::{
+    ForgetRequest, ForgetResult, ForgetStatus, WriteMemoryRequest, WriteMemoryResponse,
+};
 use engram_domain::*;
+use engram_memory::MemoryRepository;
 use engram_runtime::{CoreError, CoreResult};
-use serde_json;
+use serde_json::{self, json};
 
 use crate::connection::PgConnection;
 
@@ -122,6 +126,233 @@ fn update_jsonb_field(
         ).await.map_err(|e| pg_err(e.to_string()))?;
         Ok(n > 0)
     })
+}
+
+// === PgMemoryService ===
+
+pub struct PgMemoryService {
+    conn: PgConnection,
+}
+
+impl PgMemoryService {
+    pub fn new(conn: PgConnection) -> Self {
+        Self { conn }
+    }
+}
+
+#[async_trait]
+impl engram_memory::MemoryRepository for PgMemoryService {
+    async fn put_memory(&self, record: MemoryRecord) -> CoreResult<MemoryRecord> {
+        let json = serde_json::to_value(&record).map_err(|e| pg_err(e.to_string()))?;
+        put_scoped(
+            &self.conn,
+            "memories",
+            &record.id.to_string(),
+            json,
+            &record.scope,
+        )?;
+        Ok(record)
+    }
+    async fn get_memory(&self, id: &MemoryId, s: &Scope) -> CoreResult<Option<MemoryRecord>> {
+        get_scoped(&self.conn, "memories", &id.to_string(), s)
+    }
+    async fn append_event(&self, event: MemoryEvent) -> CoreResult<MemoryEvent> {
+        let json = serde_json::to_value(&event).map_err(|e| pg_err(e.to_string()))?;
+        put_scoped(
+            &self.conn,
+            "memory_events",
+            &event.id.to_string(),
+            json,
+            &event.scope,
+        )?;
+        Ok(event)
+    }
+    async fn update_memory_status(
+        &self,
+        id: &MemoryId,
+        s: &Scope,
+        status: MemoryStatus,
+    ) -> CoreResult<MemoryRecord> {
+        let mut record: MemoryRecord =
+            self.get_memory(id, s).await?.ok_or(CoreError::NotFound {
+                target_type: "memory",
+                target_id: id.to_string(),
+            })?;
+        record.status = status;
+        record.updated_at = Some(chrono::Utc::now());
+        let json = serde_json::to_value(&record).map_err(|e| pg_err(e.to_string()))?;
+        put_scoped(&self.conn, "memories", &id.to_string(), json, s)?;
+        Ok(record)
+    }
+}
+
+#[async_trait]
+impl engram_memory::MemoryEventRepository for PgMemoryService {
+    async fn get_event(&self, id: &EventId, s: &Scope) -> CoreResult<Option<MemoryEvent>> {
+        get_scoped(&self.conn, "memory_events", &id.to_string(), s)
+    }
+    async fn list_events_for_memory(
+        &self,
+        memory_id: &MemoryId,
+        s: &Scope,
+    ) -> CoreResult<Vec<MemoryEvent>> {
+        self.conn.block_on(async {
+            let rows = self
+                .conn
+                .client
+                .query(
+                    "SELECT record_json FROM memory_events WHERE tenant=$1 \
+                     AND (subject IS NULL OR subject=$2) AND (workspace IS NULL OR workspace=$3) \
+                     AND record_json->>'memoryId' = $4",
+                    &[&s.tenant, &s.subject, &s.workspace, &memory_id.to_string()],
+                )
+                .await
+                .map_err(|e| pg_err(e.to_string()))?;
+            rows.iter()
+                .map(|r| {
+                    serde_json::from_value::<MemoryEvent>(r.get(0))
+                        .map_err(|e| pg_err(e.to_string()))
+                })
+                .collect()
+        })
+    }
+    async fn list_events_for_scope(&self, s: &Scope) -> CoreResult<Vec<MemoryEvent>> {
+        list_scoped(&self.conn, "memory_events", s)
+    }
+}
+
+#[async_trait]
+impl engram_memory::MemoryService for PgMemoryService {
+    async fn write_memory(&self, request: WriteMemoryRequest) -> CoreResult<WriteMemoryResponse> {
+        let now = chrono::Utc::now();
+        let memory_id = MemoryId::from(format!("mem-{}", now.timestamp_nanos_opt().unwrap_or(0)));
+        let record = MemoryRecord {
+            id: memory_id.clone(),
+            kind: request.kind,
+            content: request.content,
+            scope: request.scope.clone(),
+            provenance: request.provenance.clone(),
+            policy: request.policy,
+            status: MemoryStatus::Active,
+            links: request.links,
+            assertions: vec![],
+            created_at: now,
+            updated_at: None,
+            metadata: None,
+        };
+        let event = MemoryEvent {
+            id: EventId::from(format!("evt-{}", now.timestamp_nanos_opt().unwrap_or(0))),
+            kind: MemoryEventKind::Written,
+            scope: request.scope,
+            actor: request.requester.actor,
+            memory_id: Some(memory_id),
+            payload: request
+                .idempotency_key
+                .as_ref()
+                .map_or_else(|| json!({}), |key| json!({ "idempotencyKey": key })),
+            provenance: request.provenance,
+            occurred_at: now,
+            recorded_at: now,
+        };
+        self.put_memory(record.clone()).await?;
+        self.append_event(event.clone()).await?;
+        Ok(WriteMemoryResponse {
+            record,
+            event,
+            deduplicated: None,
+        })
+    }
+
+    async fn retrieve(&self, request: RetrievalRequest) -> CoreResult<ContextPayload> {
+        let records: Vec<MemoryRecord> = list_scoped(&self.conn, "memories", &request.scope)?;
+        let items: Vec<RetrievalResult> = records
+            .into_iter()
+            .filter(|r| r.status == MemoryStatus::Active)
+            .map(|r| RetrievalResult {
+                id: format!("result-{}", r.id),
+                target_type: RetrievalTargetType::Memory,
+                target_id: r.id.to_string(),
+                content: r.content.text,
+                score: RetrievalScore {
+                    total: 1.0,
+                    relevance: None,
+                    recency: None,
+                    confidence: None,
+                    cue_match: None,
+                    hierarchical_fit: None,
+                    policy_fit: Some(1.0),
+                },
+                provenance: r.provenance,
+                policy: r.policy,
+                explanation: None,
+                fusion_trace: None,
+                metadata: None,
+            })
+            .collect();
+        Ok(ContextPayload {
+            items,
+            budget: None,
+            source_failures: vec![],
+            omitted: vec![],
+            created_at: chrono::Utc::now(),
+        })
+    }
+
+    async fn forget(&self, request: ForgetRequest) -> CoreResult<ForgetResult> {
+        let memory_id = MemoryId::from(request.target_id.clone());
+        let deleted = delete_scoped(&self.conn, "memories", &request.target_id, &request.scope)?;
+        let event = if deleted {
+            let now = chrono::Utc::now();
+            let ev = MemoryEvent {
+                id: EventId::from(format!("evt-{}", now.timestamp_nanos_opt().unwrap_or(0))),
+                kind: match request.mode {
+                    DeleteMode::Delete => MemoryEventKind::Forgotten,
+                    DeleteMode::Redact => MemoryEventKind::Redacted,
+                    DeleteMode::Tombstone => MemoryEventKind::Forgotten,
+                    DeleteMode::Archive => MemoryEventKind::Forgotten,
+                },
+                scope: request.scope,
+                actor: request.requester.actor,
+                memory_id: Some(memory_id),
+                payload: json!({}),
+                provenance: Provenance {
+                    source: "pgvector-forget".into(),
+                    actor: Actor {
+                        id: Id::from("system"),
+                        kind: ActorKind::System,
+                        display_name: None,
+                        metadata: None,
+                    },
+                    observed_at: now,
+                    evidence: vec![],
+                    derivations: vec![],
+                    confidence: None,
+                    method: None,
+                },
+                occurred_at: now,
+                recorded_at: now,
+            };
+            self.append_event(ev.clone()).await?;
+            Some(ev)
+        } else {
+            None
+        };
+        Ok(ForgetResult {
+            target_type: "memory".to_owned(),
+            target_id: request.target_id,
+            status: if deleted {
+                match request.mode {
+                    DeleteMode::Delete => ForgetStatus::Deleted,
+                    DeleteMode::Tombstone => ForgetStatus::Tombstoned,
+                    DeleteMode::Archive => ForgetStatus::Archived,
+                    _ => ForgetStatus::Deleted,
+                }
+            } else {
+                ForgetStatus::NotFound
+            },
+            event,
+        })
+    }
 }
 
 // === PgBeliefStore ===

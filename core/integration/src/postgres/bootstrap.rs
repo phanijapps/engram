@@ -5,8 +5,8 @@ use std::sync::Arc;
 use engram_domain::{CapabilityState, EmbeddingSpace};
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_pgvector::{
-    PgBeliefStore, PgConnection, PgHierarchyStore, PgKnowledgeStore, PgProcedureStore,
-    PgVectorIndex, schema,
+    PgBeliefStore, PgConnection, PgHierarchyStore, PgKnowledgeStore, PgMemoryService,
+    PgProcedureStore, PgVectorIndex, schema,
 };
 
 use crate::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder, UnifiedRecall};
@@ -41,6 +41,7 @@ pub fn bootstrap_pgvector(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let mk_conn = || PgConnection::connect(conn_str).map_err(pg_err);
 
     let knowledge = Arc::new(PgKnowledgeStore::new(mk_conn()?));
+    let memory = Arc::new(PgMemoryService::new(mk_conn()?));
     let beliefs = Arc::new(PgBeliefStore::new(mk_conn()?));
     let hierarchy = Arc::new(PgHierarchyStore::new(mk_conn()?));
     let procedures = Arc::new(PgProcedureStore::new(mk_conn()?));
@@ -54,7 +55,14 @@ pub fn bootstrap_pgvector(config: &EngramConfig) -> CoreResult<EngramProvider> {
     );
     let vectors = Arc::new(PgVectorIndex::new(mk_conn()?, space));
 
+    // Unified recall: composes memory.retrieve + beliefs via RRF.
+    let recall = Arc::new(PgUnifiedRecall {
+        memory: memory.clone(),
+        beliefs: beliefs.clone(),
+    });
+
     let report = CapabilityReport::builder()
+        .memory(CapabilityState::Supported)
         .knowledge(CapabilityState::Supported)
         .graph(CapabilityState::Supported)
         .beliefs(CapabilityState::Supported)
@@ -62,23 +70,25 @@ pub fn bootstrap_pgvector(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .hierarchy(CapabilityState::Supported)
         .procedures(CapabilityState::Supported)
         .vectors(CapabilityState::Supported)
+        .unified_recall(CapabilityState::Supported)
         .build();
 
     let provider = EngramProviderBuilder::new(report)
+        .memory(memory)
         .knowledge(knowledge.clone())
         .graph(knowledge)
         .beliefs(beliefs)
         .hierarchy(hierarchy)
         .procedures(procedures)
-        .vectors(vectors);
+        .vectors(vectors)
+        .recall(recall);
 
     Ok(provider.build())
 }
 
-/// Postgres-backed UnifiedRecall: composes beliefs via RRF.
-/// (Memory + knowledge-graph lanes land in a follow-on.)
-#[allow(dead_code)]
+/// Postgres-backed UnifiedRecall: composes memory.retrieve + beliefs via RRF.
 struct PgUnifiedRecall {
+    memory: Arc<PgMemoryService>,
     beliefs: Arc<PgBeliefStore>,
 }
 
@@ -88,18 +98,22 @@ impl UnifiedRecall for PgUnifiedRecall {
         &self,
         request: engram_domain::RetrievalRequest,
     ) -> CoreResult<engram_domain::ContextPayload> {
-        use engram_belief::BeliefQuery;
+        use engram_belief::{BeliefQuery, BeliefRepository};
         use engram_domain::{RetrievalResult, RetrievalScore, RetrievalTargetType};
+        use engram_memory::MemoryService;
         use engram_retrieval::{ReciprocalRankFusion, RetrievalCompositionInput, compose_context};
 
         let now = chrono::Utc::now();
+        let mut candidates: Vec<engram_domain::RetrievalResult> = Vec::new();
+
+        // Facts lane: memory.retrieve.
+        if let Ok(payload) = self.memory.retrieve(request.clone()).await {
+            candidates.extend(payload.items);
+        }
 
         // Beliefs lane.
         let bq = BeliefQuery::live_subject(request.scope.clone(), request.query.clone(), now);
-        let mut candidates = Vec::new();
-        if let Ok(Some(belief)) =
-            engram_belief::BeliefRepository::get_belief(self.beliefs.as_ref(), bq).await
-        {
+        if let Ok(Some(belief)) = self.beliefs.get_belief(bq).await {
             candidates.push(RetrievalResult {
                 id: format!("result-{}", belief.id),
                 target_type: RetrievalTargetType::Belief,

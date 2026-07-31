@@ -15,7 +15,7 @@ pub mod memory;
 pub mod schema;
 pub mod vector;
 
-pub use cells::{PgBeliefStore, PgHierarchyStore, PgProcedureStore};
+pub use cells::{PgBeliefStore, PgHierarchyStore, PgMemoryService, PgProcedureStore};
 pub use connection::PgConnection;
 pub use knowledge::PgKnowledgeStore;
 pub use memory::{read_recent, write_memory, PgMemoryRow};

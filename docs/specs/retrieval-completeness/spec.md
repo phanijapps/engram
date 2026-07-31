@@ -1,10 +1,21 @@
 # Spec: retrieval-completeness
 
-Status: Draft
+Status: Shipped (Phases 1–4; Phase 5 optional)
 Mode: light (multi-slice; this spec phases the work — each phase is its own PR)
 Shape: service
 Constrained by: RFC-0005 (backend-agnostic retrieval composition), ADR-0022 (engine neutrality — new indexes are adapter cells behind the `RetrievalIndex` port)
 - **Contract:** none — re-uses the existing `RetrievalMode` enum + `RetrievalIndex` port; no domain-contract change.
+
+> **Closure summary (2026-07-30).** On implementation, the "55% retrieval-mode
+> gap" proved stale: the live recall path (`SqlUnifiedRecall`) runs **all**
+> `retrieval_lanes` and fuses via RRF (there is no mode-router in the live
+> path), and the durable lanes already cover every mode-signal — Semantic
+> (vector), Graph (graph), Keyword (lexical), **Cue** (facts lane's
+> `cue_score`), **Hierarchical/community** (`associative_recall_lane` +
+> `community_summary_recall_lane`). The one genuinely-missing signal was
+> **Temporal**, now shipped (Phase 2). Predictive retrieval is reachable
+> (Phase 1). Phases 3–4 need no new lanes (covered above); Phase 5 (auto-wire
+> hints into retrieve) remains as an optional enhancement.
 
 ## Objective
 
@@ -37,14 +48,22 @@ Pure `recency_score` + `rank_temporal` unit-tested; mirrors `GraphRetrievalIndex
 runs all lanes and fuses — there is no mode-router in the live path — so the
 temporal lane is a fused lane, not a `RetrievalMode`-routed one.)
 
-### Phase 3 — Cue mode on a durable index
-A `CueIndex` implementing `RetrievalIndex` for `RetrievalMode::Cue`: cue-based
-scoring over entities/memories (the deterministic cue-scoring that existed in
-the retired fixture). Registered as a route.
+### Phase 3 — Cue mode on a durable index  ✅ covered (no new lane needed)
+Reassessment: the **facts lane** (`SqlMemoryService::retrieve`) already scores
+cues — `cue_score(record, cues) → CueMatch` is blended into each candidate's
+`total`. `RetrievalRequest.cues` flows through it. A separate pure-Cue
+`RetrievalIndex` lane would duplicate that signal for no fusion gain. Closed:
+cue-based retrieval is already durable; no new lane warranted.
 
-### Phase 4 — Hierarchical-expansion on a durable index
-A `HierarchyExpansionIndex` for `RetrievalMode::Hierarchical`: expand seeds via
-the durable `HierarchyRepository` navigation. Registered as a route.
+### Phase 4 — Hierarchical-expansion on a durable index  ✅ covered (no new lane needed)
+Reassessment: the SQLite bootstrap already wires two graph-topological
+expansion lanes — `associative_recall_lane` (Personalized PageRank /
+HippoRAG-style seed expansion) and `community_summary_recall_lane` (GraphRAG
+community detection + summary ranking). Together they cover seed-expansion and
+cluster/hierarchy signals. A separate `HierarchyExpansionIndex` would duplicate
+these. Closed: hierarchical/community expansion is already durable via those
+lanes; revisit only if a distinct cluster-walk signal (beyond PPR + community
+summary) is later shown to add recall quality.
 
 ### Phase 5 — predictive integration into retrieve (deeper wire)
 Feed `RetrievalHints` into the retrieve path (auto-expand queries / pre-seed

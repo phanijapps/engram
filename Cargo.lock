@@ -1891,11 +1891,15 @@ dependencies = [
 name = "engram-store-pgvector"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "chrono",
  "engram-domain",
+ "engram-knowledge",
+ "engram-retrieval",
  "engram-runtime",
  "serde",
  "serde_json",
+ "sha2 0.11.0",
  "tokio",
  "tokio-postgres",
 ]

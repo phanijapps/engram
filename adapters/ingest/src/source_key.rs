@@ -14,6 +14,13 @@ pub const STABLE_SOURCE_KEY: &str = "stableSourceKey";
 /// `KnowledgeGraph`'s metadata map.
 pub const SOURCE_PATH_KEY: &str = "path";
 
+/// Metadata key under which the source document id is carried on a
+/// `KnowledgeGraph`'s metadata map. The reconcile path reads this from a prior
+/// graph to cascade-delete the document's chunks + embeddings + the document
+/// itself on re-ingest (knowledge-source-retraction), since `graph_id` is a
+/// non-reversible hash of `document_id`.
+pub const DOCUMENT_ID_KEY: &str = "documentId";
+
 /// Derives the stable-source-key from an optional git remote, falling back to
 /// `fallback` (the un-enriched source name / repo root) for non-git sources or
 /// remotes that cannot be normalized.

@@ -5,6 +5,13 @@
 //! procedures are feature-disabled (default Unsupported) — they attach in
 //! follow-on cells.
 //!
+//! Conformance: the schema application is the gate — if Postgres is reachable
+//! and the DDL applies (tables + pgvector extension + HNSW index), the cells
+//! are wired. If the connection or schema fails, the bootstrap errors. This
+//! mirrors the SQLite pattern (where in-memory probes test each cell) but is
+//! appropriate for Postgres (there is no in-memory Postgres; a reachable +
+//! schema'd instance is the precondition).
+//!
 //! ADR-0022: engine-specific zone — exempt from the neutrality gate.
 
 use std::sync::Arc;
@@ -31,7 +38,8 @@ pub fn bootstrap_pgvector(config: &EngramConfig) -> CoreResult<EngramProvider> {
         message: e,
     };
 
-    // Connect + apply schema (idempotent).
+    // Connect + apply schema (idempotent). This is the conformance gate:
+    // if Postgres is unreachable or the DDL fails, the bootstrap errors.
     let schema_conn = PgConnection::connect(conn_str).map_err(pg_err)?;
     let dims = config.embedding_provider.dimensions;
     schema_conn
@@ -58,19 +66,19 @@ pub fn bootstrap_pgvector(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let v_conn = PgConnection::connect(conn_str).map_err(pg_err)?;
     let vectors = Arc::new(PgVectorIndex::new(v_conn, space));
 
-    // Build a capability report marking the P0 cells Supported; the rest are
-    // feature-disabled (their cells land in follow-on work).
+    // Build a capability report marking the P0 cells Supported.
     let report = CapabilityReport::builder()
         .knowledge(CapabilityState::Supported)
         .graph(CapabilityState::Supported)
         .vectors(CapabilityState::Supported)
         .build();
 
-    // Build the provider with the P0 cells wired; the rest are feature-disabled.
-    let builder = EngramProviderBuilder::new(report)
+    // Wire the cells.
+    let provider = EngramProviderBuilder::new(report)
         .knowledge(knowledge.clone())
         .graph(knowledge)
-        .vectors(vectors);
+        .vectors(vectors)
+        .build();
 
-    Ok(builder.build())
+    Ok(provider)
 }

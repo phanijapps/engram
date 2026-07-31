@@ -83,4 +83,4 @@ surreal = ["dep:engram-store-surreal", "dep:tokio", "dep:chrono"]
 # The pgvector (Postgres) backend. Constructs the adapter cells under
 # src/postgres/ and makes EngramProvider::open dispatch to it when
 # pgvector_connection_string is set in the config.
-pgvector = ["dep:engram-store-pgvector"]
+pgvector = ["dep:engram-store-pgvector", "dep:futures", "dep:chrono"]

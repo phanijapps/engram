@@ -145,6 +145,58 @@ CREATE TABLE IF NOT EXISTS contradictions (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- === Hierarchy ===
+CREATE TABLE IF NOT EXISTS hierarchy_nodes (
+    id             TEXT PRIMARY KEY,
+    record_json    JSONB NOT NULL,
+    tenant         TEXT NOT NULL,
+    subject        TEXT,
+    workspace      TEXT,
+    session        TEXT,
+    environment    TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_hierarchy_scope ON hierarchy_nodes (tenant, subject, workspace);
+
+CREATE TABLE IF NOT EXISTS hierarchy_relations (
+    id             TEXT PRIMARY KEY,
+    record_json    JSONB NOT NULL,
+    tenant         TEXT NOT NULL,
+    subject        TEXT,
+    workspace      TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- === Procedures ===
+CREATE TABLE IF NOT EXISTS procedures (
+    id             TEXT PRIMARY KEY,
+    record_json    JSONB NOT NULL,
+    tenant         TEXT NOT NULL,
+    subject        TEXT,
+    workspace      TEXT,
+    session        TEXT,
+    environment    TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_procedures_scope ON procedures (tenant, subject, workspace);
+
+-- === Memory events ===
+CREATE TABLE IF NOT EXISTS memory_events (
+    id             TEXT PRIMARY KEY,
+    record_json    JSONB NOT NULL,
+    tenant         TEXT NOT NULL,
+    subject        TEXT,
+    workspace      TEXT,
+    session        TEXT,
+    environment    TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_events_scope ON memory_events (tenant, subject, workspace);
 "#;
 
 /// Substitutes the vector dimensions into the schema SQL.

@@ -8,12 +8,14 @@
 //! Feature-gated behind `pgvector` in `core/integration`; SQLite stays the
 //! zero-dep default.
 
+pub mod cells;
 pub mod connection;
 pub mod knowledge;
 pub mod memory;
 pub mod schema;
 pub mod vector;
 
+pub use cells::{PgBeliefStore, PgHierarchyStore, PgMemoryService, PgProcedureStore};
 pub use connection::PgConnection;
 pub use knowledge::PgKnowledgeStore;
 pub use memory::{read_recent, write_memory, PgMemoryRow};

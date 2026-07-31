@@ -8,8 +8,13 @@ rust-version.workspace = true
 [dependencies]
 engram-domain = { path = "../../core/domain" }
 engram-runtime = { path = "../../core/runtime" }
+engram-memory = { path = "../../core/memory" }
 engram-knowledge = { path = "../../core/knowledge" }
+engram-belief = { path = "../../core/belief" }
+engram-hierarchy = { path = "../../core/hierarchy" }
+engram-procedures = { path = "../../core/procedures" }
 engram-retrieval = { path = "../../core/retrieval" }
+engram-consolidation = { path = "../../core/consolidation" }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true, features = ["with-serde_json-1", "with-chrono-0_4"] }
 serde = { workspace = true }

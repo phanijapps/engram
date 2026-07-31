@@ -29,6 +29,10 @@ use crate::{
 pub use crate::classifier::FileKind;
 
 const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
+/// Prefix for contract-op manifest keys. Uses the ASCII Unit Separator (U+001F)
+/// which cannot appear in a file path on any OS, so a repo file named
+/// `contract:...` cannot collide with contract-op manifest entries.
+const CONTRACT_PREFIX: &str = "\u{1f}contract:";
 const WORKSPACE_MARKER: &str = ".engram-workspace";
 
 /// Summary returned by a scan.
@@ -582,7 +586,7 @@ where
     let removed_paths: Vec<String> = opts
         .manifest
         .keys()
-        .filter(|k| !k.starts_with("contract:") && !observed_paths.contains(*k))
+        .filter(|k| !k.starts_with(CONTRACT_PREFIX) && !observed_paths.contains(*k))
         .cloned()
         .collect();
     let mut removed_delete_failed: std::collections::HashSet<String> =
@@ -718,7 +722,7 @@ where
     let prior_union: HashSet<String> = opts
         .manifest
         .iter()
-        .filter(|(k, _)| k.starts_with("contract:"))
+        .filter(|(k, _)| k.starts_with(CONTRACT_PREFIX))
         .flat_map(|(_, v)| serde_json::from_str::<Vec<String>>(v).unwrap_or_default())
         .collect();
 
@@ -729,7 +733,7 @@ where
         .collect();
     // Keys from unchanged files (still present and declared).
     for rel in &unchanged_rels {
-        let mk = format!("contract:{rel}");
+        let mk = format!("{CONTRACT_PREFIX}{rel}");
         if let Some(json) = opts.manifest.get(&mk) {
             current_union.extend(serde_json::from_str::<Vec<String>>(json).unwrap_or_default());
         }
@@ -737,14 +741,14 @@ where
     // Keys from files whose graph-delete failed (not re-processed this scan;
     // declarations carry forward until the retry succeeds).
     for rel in &delete_failed {
-        let mk = format!("contract:{rel}");
+        let mk = format!("{CONTRACT_PREFIX}{rel}");
         if let Some(json) = opts.manifest.get(&mk) {
             current_union.extend(serde_json::from_str::<Vec<String>>(json).unwrap_or_default());
         }
     }
     // Keys from removed paths where delete failed (kept in manifest for retry).
     for rel in &removed_delete_failed {
-        let mk = format!("contract:{rel}");
+        let mk = format!("{CONTRACT_PREFIX}{rel}");
         if let Some(json) = opts.manifest.get(&mk) {
             current_union.extend(serde_json::from_str::<Vec<String>>(json).unwrap_or_default());
         }
@@ -753,7 +757,7 @@ where
     // their prior declarations still stand (the file reprocesses next scan), so a
     // transient write failure cannot retract a still-declared op.
     for rel in &write_error_rels {
-        let mk = format!("contract:{rel}");
+        let mk = format!("{CONTRACT_PREFIX}{rel}");
         if let Some(json) = opts.manifest.get(&mk) {
             current_union.extend(serde_json::from_str::<Vec<String>>(json).unwrap_or_default());
         }
@@ -783,7 +787,7 @@ where
             new_manifest.insert(rel.clone(), h.clone());
         }
         // Carry forward contract manifest entry for unchanged files.
-        let ck = format!("contract:{rel}");
+        let ck = format!("{CONTRACT_PREFIX}{rel}");
         if let Some(j) = opts.manifest.get(&ck) {
             new_manifest.insert(ck, j.clone());
         }
@@ -797,7 +801,7 @@ where
     for (rel, keys) in &current_contract_ops {
         if !keys.is_empty() {
             if let Ok(json) = serde_json::to_string(keys) {
-                new_manifest.insert(format!("contract:{rel}"), json);
+                new_manifest.insert(format!("{CONTRACT_PREFIX}{rel}"), json);
             }
         }
     }
@@ -806,7 +810,7 @@ where
     // file hash was not recorded, so they reprocess next scan; keep the prior
     // declaration meanwhile so prior_union stays consistent).
     for rel in &write_error_rels {
-        let ck = format!("contract:{rel}");
+        let ck = format!("{CONTRACT_PREFIX}{rel}");
         if let Some(j) = opts.manifest.get(&ck) {
             new_manifest.insert(ck, j.clone());
         }
@@ -820,7 +824,7 @@ where
             new_manifest.insert(rel.clone(), h.clone());
         }
         // Also carry forward contract manifest entries for these files.
-        let ck = format!("contract:{rel}");
+        let ck = format!("{CONTRACT_PREFIX}{rel}");
         if let Some(j) = opts.manifest.get(&ck) {
             new_manifest.insert(ck, j.clone());
         }
@@ -833,7 +837,7 @@ where
             new_manifest.insert(rel.clone(), h.clone());
         }
         // Also carry forward contract manifest entries for these files.
-        let ck = format!("contract:{rel}");
+        let ck = format!("{CONTRACT_PREFIX}{rel}");
         if let Some(j) = opts.manifest.get(&ck) {
             new_manifest.insert(ck, j.clone());
         }

@@ -822,7 +822,7 @@ fn contract_write_failure_does_not_retract_still_declared_op() {
     );
     // Prior contract manifest entry carried forward via write_error_rels.
     assert!(
-        manifest2.contains_key("contract:openapi.yaml"),
+        manifest2.contains_key("\u{1f}contract:openapi.yaml"),
         "scan 2: prior contract manifest entry must be carried forward"
     );
 

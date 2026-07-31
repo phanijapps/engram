@@ -1,0 +1,2 @@
+tokio = "1"
+tokio-postgres = "0.7"

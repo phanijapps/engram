@@ -26,12 +26,16 @@ to feed into `recall`. Also adds the missing `predict.rs` unit tests (the
 predictor currently has none). No contract change; the predictor is
 dependency-free.
 
-### Phase 2 — Temporal mode on a durable index
-A `TemporalMemoryIndex` (`adapters/retrieval/...`) implementing `RetrievalIndex`
-for `RetrievalMode::Temporal`: recency-weighted memory candidates over the SQLite
-memory store (reuses `codegraph/temporal/scoring.rs` recency logic where
-applicable). Registered as a route so `RetrievalMode::Temporal` resolves instead
-of degrading.
+### Phase 2 — Temporal mode on a durable index  ✅ shipped
+A `TemporalRetrievalIndex` in `engram_store_sqlite/src/memory/temporal_retrieval.rs`
+implementing `RetrievalIndex`: recency-weighted (exponential half-life decay)
+memory candidates over `SqlMemoryService::list_memories_in_scope`, filtered to
+active + newest-first. Wired as a `retrieval_lanes` entry in the SQLite
+bootstrap so recall gains a recency signal fused alongside graph/vector/lexical.
+Pure `recency_score` + `rank_temporal` unit-tested; mirrors `GraphRetrievalIndex`.
+(The original "registered as a route" framing was revised: `SqlUnifiedRecall`
+runs all lanes and fuses — there is no mode-router in the live path — so the
+temporal lane is a fused lane, not a `RetrievalMode`-routed one.)
 
 ### Phase 3 — Cue mode on a durable index
 A `CueIndex` implementing `RetrievalIndex` for `RetrievalMode::Cue`: cue-based

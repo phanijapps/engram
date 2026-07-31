@@ -326,6 +326,14 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             )));
         }
     }
+    // Temporal lane (recency-weighted memories): available whenever the memory
+    // store is wired, independent of the knowledge store. Gives recall a recency
+    // signal alongside the relevance lanes (graph/vector/lexical).
+    if let Some(memory_handle) = &memory_store {
+        retrieval_lanes.push(Arc::new(engram_store_sqlite::TemporalRetrievalIndex::new(
+            memory_handle.clone(),
+        )));
+    }
     // Vector lane (fastembed-gated): construct the vector index + FastEmbed
     // query provider + knowledge-store resolver. Skipped entirely when the
     // feature is off (default build) or when construction fails — recall then

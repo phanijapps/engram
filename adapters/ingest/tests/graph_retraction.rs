@@ -17,7 +17,7 @@ use std::fs;
 
 use engram_domain::*;
 use engram_ingest::{ScanOptions, scan_repository};
-use engram_knowledge::KnowledgeGraphRepository;
+use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
 use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
@@ -569,6 +569,73 @@ fn oversize_file_present_on_disk_keeps_its_graph() {
         graphs_after_scan2.len(),
         1,
         "graph must be preserved when the file is oversize-but-present (FIX 3)"
+    );
+
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn re_ingest_retracts_prior_document_and_chunks() {
+    // Source-reingest retraction (knowledge-source-retraction): re-ingesting a
+    // changed file must retract the prior document + its chunks, not just the
+    // graph. The prior document id is read from the v1 graph's metadata
+    // ("documentId"); after re-ingest, its chunks must be gone.
+    let root = std::env::temp_dir().join(format!(
+        "engram-retract-ksr-{}-{}",
+        std::process::id(),
+        "docchunks"
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+
+    let source_name = "ksr-test-source";
+    let source_key = source_name;
+
+    // Scan 1: file has "alpha".
+    fs::write(root.join("a.rs"), "fn alpha() {}\n").expect("write a.rs v1");
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let (_, manifest1) = scan_repository(
+        &root,
+        &scan_opts(source_name, Default::default()),
+        &store,
+        |_| {},
+    )
+    .expect("scan 1");
+
+    // Read the v1 document id from the v1 graph's metadata.
+    let graphs1 = block_on(store.list_graphs_by_source(&scope(), source_key))
+        .expect("list graphs after scan 1");
+    let doc_id_v1 = graphs1
+        .iter()
+        .find_map(|g| {
+            g.metadata
+                .as_ref()
+                .and_then(|m| m.get("documentId"))
+                .and_then(|v| v.as_str())
+        })
+        .expect("v1 graph carries documentId metadata")
+        .to_owned();
+    let doc_id_v1 = DocumentId::from(doc_id_v1);
+
+    // v1 chunks exist after scan 1.
+    let chunks_v1 =
+        block_on(store.list_chunks_by_document(&doc_id_v1, &scope())).expect("list v1 chunks");
+    assert!(
+        !chunks_v1.is_empty(),
+        "v1 document must have chunks after scan 1"
+    );
+
+    // Scan 2: change the file content ("alpha" → "beta").
+    fs::write(root.join("a.rs"), "fn beta() {}\n").expect("write a.rs v2");
+    let _ =
+        scan_repository(&root, &scan_opts(source_name, manifest1), &store, |_| {}).expect("scan 2");
+
+    // The prior document's chunks must be retracted (no lingering v1 chunks).
+    let chunks_v1_after = block_on(store.list_chunks_by_document(&doc_id_v1, &scope()))
+        .expect("list v1 chunks after");
+    assert!(
+        chunks_v1_after.is_empty(),
+        "v1 document's chunks must be retracted on re-ingest (knowledge-source-retraction)"
     );
 
     let _ = fs::remove_dir_all(&root);

@@ -125,6 +125,72 @@ impl KnowledgeRepository for SqlKnowledgeStore {
         }
     }
 
+    /// Lists a document's chunks within `scope` (scope resolved via the source
+    /// join, mirroring `get_chunk`). Used by retraction to find prior chunks.
+    async fn list_chunks_by_document(
+        &self,
+        document_id: &DocumentId,
+        scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeChunk>> {
+        let connection = self.lock()?;
+        let mut stmt = connection
+            .prepare(
+                r#"
+                SELECT c.record_json
+                FROM knowledge_chunks c
+                JOIN knowledge_sources s ON c.source_id = s.id
+                WHERE c.document_id = ?1
+                    AND s.tenant = ?2
+                    AND (s.subject IS NULL OR s.subject = ?3)
+                    AND (s.workspace IS NULL OR s.workspace = ?4)
+                "#,
+            )
+            .map_err(sql_error)?;
+        let rows = stmt
+            .query_map(
+                rusqlite::params![
+                    document_id.to_string(),
+                    scope.tenant,
+                    scope.subject,
+                    scope.workspace,
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(sql_error)?;
+        let mut chunks = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            chunks.push(serde_json::from_str(&json).map_err(crate::knowledge::schema::json_error)?);
+        }
+        Ok(chunks)
+    }
+
+    /// Hard-deletes a document by id. The reconcile path is scope-bounded
+    /// (the document id was read from a scope-filtered prior graph), so this
+    /// deletes by id directly.
+    async fn delete_document(&self, id: &DocumentId, _scope: &Scope) -> CoreResult<bool> {
+        let connection = self.lock()?;
+        let n = connection
+            .execute(
+                "DELETE FROM knowledge_documents WHERE id = ?1",
+                rusqlite::params![id.to_string()],
+            )
+            .map_err(sql_error)?;
+        Ok(n > 0)
+    }
+
+    /// Hard-deletes a single chunk by id (scope-bounded by the reconcile caller).
+    async fn delete_chunk(&self, id: &ChunkId, _scope: &Scope) -> CoreResult<bool> {
+        let connection = self.lock()?;
+        let n = connection
+            .execute(
+                "DELETE FROM knowledge_chunks WHERE id = ?1",
+                rusqlite::params![id.to_string()],
+            )
+            .map_err(sql_error)?;
+        Ok(n > 0)
+    }
+
     async fn put_entity(&self, entity: KnowledgeEntity) -> CoreResult<KnowledgeEntity> {
         let json = serde_json::to_string(&entity).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;

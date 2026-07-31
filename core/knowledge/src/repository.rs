@@ -88,4 +88,29 @@ pub trait KnowledgeRepository: Send + Sync {
             message: "relationship deletes are not supported".to_owned(),
         })
     }
+
+    /// Lists the chunks belonging to a document, within the caller's scope.
+    /// Used by source-reingest retraction to find a prior document's chunks
+    /// before deleting them + their embeddings. Default: empty (unsupported).
+    async fn list_chunks_by_document(
+        &self,
+        _document_id: &DocumentId,
+        _scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeChunk>> {
+        Ok(Vec::new())
+    }
+
+    /// Hard-deletes a source document by id within the caller's scope.
+    /// Default: not supported (returns `false`). Caller is responsible for
+    /// deleting the document's chunks + embeddings first (children before
+    /// parents).
+    async fn delete_document(&self, _id: &DocumentId, _scope: &Scope) -> CoreResult<bool> {
+        Ok(false)
+    }
+
+    /// Hard-deletes a single chunk by id within the caller's scope.
+    /// Default: not supported (returns `false`).
+    async fn delete_chunk(&self, _id: &ChunkId, _scope: &Scope) -> CoreResult<bool> {
+        Ok(false)
+    }
 }

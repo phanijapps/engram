@@ -13,7 +13,7 @@
 use engram_domain::*;
 use engram_knowledge::{CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
 
-use crate::{extractor::repo_entity_id, source_key::SOURCE_PATH_KEY};
+use crate::{extractor::repo_entity_id, source_key::DOCUMENT_ID_KEY, source_key::SOURCE_PATH_KEY};
 
 /// Deletes any prior graph(s) for `(stable_source_key, path)` and, if the
 /// last document graph for the key was just removed, deletes the per-source
@@ -50,6 +50,28 @@ where
         .collect();
 
     for graph in &prior_graphs {
+        // Source-reingest retraction: before deleting the prior graph, cascade
+        // its document's chunks + the document itself (children-first). The
+        // document id is stamped into the graph's metadata by the extractor
+        // (graph_id is a non-reversible hash of document_id, so the id must be
+        // carried explicitly). Best-effort per item — a failed chunk/document
+        // delete does not abort the graph retraction (the scan summary tracks
+        // errors). Embedding retraction is fastembed-gated and handled by the
+        // dead-vector GC sweep, not here.
+        if let Some(doc_id) = graph
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get(DOCUMENT_ID_KEY))
+            .and_then(|v| v.as_str())
+        {
+            let doc_id = DocumentId::from(doc_id.to_owned());
+            if let Ok(chunks) = repo.list_chunks_by_document(&doc_id, scope).await {
+                for chunk in &chunks {
+                    let _ = repo.delete_chunk(&chunk.id, scope).await;
+                }
+            }
+            let _ = repo.delete_document(&doc_id, scope).await;
+        }
         // Hard-delete: entities and relationships cascade inside delete_graph.
         repo.delete_graph(&graph.id, scope).await?;
     }

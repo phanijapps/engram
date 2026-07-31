@@ -16,7 +16,7 @@ use serde_json::Value as JsonValue;
 
 use crate::{
     hash::content_hash,
-    source_key::{SOURCE_PATH_KEY, STABLE_SOURCE_KEY},
+    source_key::{DOCUMENT_ID_KEY, SOURCE_PATH_KEY, STABLE_SOURCE_KEY},
 };
 
 /// The graph records produced by one extraction pass.
@@ -85,6 +85,15 @@ impl GraphExtractor {
             if let Some(path) = &document.path {
                 m.insert(SOURCE_PATH_KEY.to_owned(), JsonValue::String(path.clone()));
             }
+            // Stamp the document id so the reconcile path can cascade-delete
+            // this document's chunks + embeddings + the document itself when
+            // the file is re-ingested (knowledge-source-retraction). graph_id
+            // is a non-reversible hash of document_id, so the id must be
+            // carried explicitly.
+            m.insert(
+                DOCUMENT_ID_KEY.to_owned(),
+                JsonValue::String(document.id.to_string()),
+            );
             if m.is_empty() { None } else { Some(m) }
         };
 

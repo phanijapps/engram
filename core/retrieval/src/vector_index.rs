@@ -52,6 +52,12 @@ pub trait VectorIndex: Send + Sync {
     /// Deletes a vector target by ID.
     async fn delete_target(&self, target_id: &Id) -> CoreResult<()>;
 
+    /// Garbage-collects orphan vectors: removes any vector whose target id is not
+    /// in `live_target_ids`. Returns the count of removed vectors. Used after
+    /// source-reingest retraction (when chunks are deleted, their embeddings
+    /// become orphans) to close the repair loop end-to-end.
+    async fn gc_orphan_targets(&self, live_target_ids: &[Id]) -> CoreResult<usize>;
+
     /// Clears all vectors from the index (destructive).
     async fn clear(&self) -> CoreResult<()>;
 }
@@ -132,6 +138,10 @@ mod tests {
 
         async fn delete_target(&self, _target_id: &Id) -> CoreResult<()> {
             Ok(())
+        }
+
+        async fn gc_orphan_targets(&self, _live_target_ids: &[Id]) -> CoreResult<usize> {
+            Ok(0)
         }
 
         async fn clear(&self) -> CoreResult<()> {

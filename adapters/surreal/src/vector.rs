@@ -129,6 +129,13 @@ impl VectorIndex for SurrealVectorIndex {
         Ok(())
     }
 
+    async fn gc_orphan_targets(&self, _live_target_ids: &[Id]) -> CoreResult<usize> {
+        // Deferred: the SurrealDB record-id enumeration differs from SQLite's
+        // plain-id SELECT. The surreal adapter is not the active backend; a
+        // correct GC impl lands when surreal is promoted. Returns 0 (no-op).
+        Ok(0)
+    }
+
     async fn clear(&self) -> CoreResult<()> {
         let db = self.conn.db().await?;
         db.query(&format!("DELETE {TABLE}"))

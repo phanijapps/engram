@@ -52,3 +52,10 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   adapters (currently enum-only; the impls died with the process-local fixture) and
   wire predictive retrieval. Phased; Phase 1 (predict_context tool + predictor tests)
   is the first slice. Constrained by RFC-0005, ADR-0022. Draft.
+- [`knowledge-source-retraction`](knowledge-source-retraction/spec.md): on re-ingest of a
+  changed/removed file, retract not just the knowledge graph (RFC-0009, already converges)
+  but also the prior `SourceDocument`s, `KnowledgeChunk`s, and their sqlite-vec embeddings
+  (which linger today — keyed by content-derived ids, not graph_id). Adds document
+  source-key/path lookup + `delete_document`/`delete_chunk` ports + vector `delete_by_target_id`,
+  cascaded children-first in reconcile. Done before pgvector so ports are defined once.
+  Constrained by RFC-0009, ADR-0022. Draft.

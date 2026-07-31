@@ -11,10 +11,10 @@
 //! directly; this port removes that need).
 
 use async_trait::async_trait;
-use engram_domain::{KnowledgeEntity, KnowledgeRelationship, Scope};
+use engram_domain::{KnowledgeChunk, KnowledgeEntity, KnowledgeRelationship, Scope};
 use engram_runtime::CoreResult;
 
-/// Read port: list the entities / relationships visible to a scope.
+/// Read port: list the entities / relationships / chunks visible to a scope.
 #[async_trait]
 pub trait KnowledgeQuery: Send + Sync {
     /// All entities in `scope`.
@@ -22,4 +22,9 @@ pub trait KnowledgeQuery: Send + Sync {
 
     /// All relationships in `scope`.
     async fn list_relationships(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeRelationship>>;
+
+    /// All chunks in `scope` (for embedding/indexing). Default: empty (not supported).
+    async fn list_chunks(&self, _scope: &Scope) -> CoreResult<Vec<KnowledgeChunk>> {
+        Ok(Vec::new())
+    }
 }

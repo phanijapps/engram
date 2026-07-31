@@ -72,12 +72,8 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ## contract-first-ingestion (deferred hardening)
 
-- **Contract manifest namespace fragility:** contract-op manifest entries live under
-  `contract:<rel>` keys in the same flat `HashMap` as raw file-path keys; a repo
-  file literally named `contract:...` at its root would collide. It fails safe
-  today (`unwrap_or_default` → empty, no mis-retraction), so this is a robustness
-  Nit. Fix: use a separate manifest map for contract keys, or a delimiter/prefix
-  that cannot appear in a relative path.
+> **Closed:** Contract manifest namespace fixed (#78) — entries now use the ASCII
+> Unit Separator (U+001F) as a prefix, which cannot appear in a file path on any OS.
 - **Rust SCA gate + YAML crate re-eval:** `serde_yml` (a fork of the deprecated
   `serde_yaml`, RUSTSEC-2024-0320) parses untrusted OpenAPI docs, but CI runs only
   fmt/check/clippy/test — no `cargo audit`/`cargo deny`. Wire an advisory SCA gate
@@ -96,14 +92,11 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ## lexical-wiring
 
-- **End-to-end keyword retrieval (deferred: lexical-wiring):** wire the shipped
-  lexical `RetrievalIndex` (`engram-store-lexical`, B1) into the live pipeline so
-  `RetrievalMode::Keyword` returns BM25-ranked chunks composed with graph + vector
-  via the bindings-layer RRF fusion — a `lexical_candidates_json` binding +
-  `SqlKnowledgeStore`-backed resolver. Deferred from
-  [`lexical-keyword-retrieval`](product/engram.md) (eval
-  fixture, router/fusion composition, full workspace gates). Blocked on: the
-  composition layer is bindings-layer RRF fusion (`RetrievalRouter` is unused).
+> **Closed:** Lexical BM25 lane is wired into the live recall pipeline —
+> `LexicalRetrievalIndex` (Tantivy) is pushed into `retrieval_lanes` in the
+> SQLite bootstrap, fed via `scan_repo` through the `LexicalFeed` handle,
+> and fused with graph + vector + temporal via RRF. Keyword `search`/`recall`
+> return BM25-ranked candidates.
   Tracked in `lexical-wiring` (see `docs/backlog.md`).
 - **L6 — persistent lexical index + ingest feed (deferred: lexical-persistent-index):**
   populate-on-query (current) rebuilds the index per request — fine for demo

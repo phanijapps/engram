@@ -7,9 +7,11 @@
 //! `engram-retrieval` core. Scoring is injected through [`RerankScorer`], so
 //! tests use a deterministic stub and the real model is feature-gated (T2).
 //!
-//! Wiring into `compose_context` (a `RetrievalReranker` port + hook between
-//! fusion and budget) is a follow-up spec; this crate ships the adapter unit.
+//! The [`CrossEncoderRerankerAdapter`] bridges the shipped `CrossEncoderReranker`
+//! to the `RetrievalReranker` port, enabling wiring into `compose_context`.
 
+mod adapter;
 mod rerank;
 
+pub use adapter::CrossEncoderRerankerAdapter;
 pub use rerank::{CrossEncoderReranker, RerankScorer};

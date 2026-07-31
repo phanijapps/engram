@@ -61,6 +61,7 @@ pub struct SqlUnifiedRecall {
     memory: Arc<dyn MemoryService>,
     retrieval_lanes: Vec<Arc<dyn RetrievalIndex>>,
     beliefs: Arc<dyn BeliefRepository>,
+    reranker: Option<Arc<dyn engram_retrieval::RetrievalReranker>>,
 }
 
 impl SqlUnifiedRecall {
@@ -70,10 +71,22 @@ impl SqlUnifiedRecall {
         retrieval_lanes: Vec<Arc<dyn RetrievalIndex>>,
         beliefs: Arc<dyn BeliefRepository>,
     ) -> Self {
+        Self::with_reranker(memory, retrieval_lanes, beliefs, None)
+    }
+
+    /// Like [`new`] but with an optional cross-encoder reranker wired into
+    /// `compose_context` between fusion and budget.
+    pub fn with_reranker(
+        memory: Arc<dyn MemoryService>,
+        retrieval_lanes: Vec<Arc<dyn RetrievalIndex>>,
+        beliefs: Arc<dyn BeliefRepository>,
+        reranker: Option<Arc<dyn engram_retrieval::RetrievalReranker>>,
+    ) -> Self {
         Self {
             memory,
             retrieval_lanes,
             beliefs,
+            reranker,
         }
     }
 }
@@ -130,7 +143,7 @@ impl UnifiedRecall for SqlUnifiedRecall {
         compose_context(RetrievalCompositionInput {
             request: &request,
             fusion: &ReciprocalRankFusion::default(),
-            reranker: None,
+            reranker: self.reranker.as_deref(),
             candidates,
             omitted,
             source_failures,

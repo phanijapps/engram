@@ -438,6 +438,12 @@ let provider = EngramProvider::open(&config)?;
 
 ## Connect via MCP
 
+> **The current server is the unified `engram-mcp`** (RFC-0015) — one server
+> covering memory + knowledge graph + beliefs + hierarchy + code intelligence.
+> See [`mcp/engram-mcp/HOW-TO.md`](mcp/engram-mcp/HOW-TO.md) to build + wire it.
+> The two-server (`engram-memory-mcp` / `engram-codegraph-mcp`) model below is
+> **retired — those crates are deleted**; the table is kept as historical reference.
+
 Engram ships two MCP servers exposing memory + codegraph operations as
 agent-callable tools (stdio JSON-RPC 2.0), so any client — Claude Desktop,
 Cursor, Copilot — can read and write engram with no code on your side:

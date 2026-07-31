@@ -65,18 +65,15 @@ codegraph/                 On-top codegraph layer (RFC-0012): code-specific
   queries/                 crates built on engram (dead-code / blast-radius /
                            dependency-path over call edges).
   temporal/                Temporal scoring (recent / impact / compound) over versioned symbols.
-  mcp-server/              MCP server exposing codegraph queries to AI agents.
-
-memory/                   Memory MCP server: exposes engram's memory operations as
-  mcp-server/              agent-callable MCP tools (write_memory, recall, forget,
-                           put_entity, put_relationship) over stdio JSON-RPC 2.0.
+                           The standalone codegraph MCP server is RETIRED — its
+                           queries are surfaced through the unified engram-mcp.
 
 mcp/                      Unified agent MCP server (RFC-0015): one EngramProvider,
   engram-mcp/              fused-per-project scope, multi-layer ontology/taxonomy
                            as launch config, generic memory + KG + doc-ingestion
-                           tools, and the `engram-distill` agent skill. Supersedes
-                           `codegraph/mcp-server` + `memory/mcp-server` (those stay
-                           until the Phase 3 deprecation).
+                           tools, and the `engram-distill` agent skill. The sole
+                           server — the interim `codegraph/mcp-server` and
+                           `memory/mcp-server` are both RETIRED (deleted).
 
 packages/                  TypeScript workspace.
   contracts/               Generated TypeScript types and schemas.

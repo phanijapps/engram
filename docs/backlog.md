@@ -32,9 +32,10 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ## backend-agnostic-retrieval
 
-- **Durable dedup (deferred: durable-dedup):** `content_hash`-keyed `ON CONFLICT`
-  upsert so re-indexing a repo reuses unchanged embeddings, plus a dead-vector GC
-  sweep — blocked on nothing; unblocked by a `sqlite-vec` adapter slice. [spec O2]
+- **Durable dedup (deferred: durable-dedup):** `content_hash`-keyed vector reuse
+  on re-index is partially done — the `gc_orphan_targets` sweep + upsert-by-id
+  shipped (#72). The full `content_hash`-skip-reembed path (check hash before
+  calling the embedder) remains. Blocked on nothing. [spec O2]
 - **Rust composition orchestrator (deferred: rust-orchestrator):** a composition
   orchestrator in `core/orchestration` (the demo currently orchestrates in TS) —
   blocked on a second backend making TS-side orchestration insufficient;
@@ -51,14 +52,12 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   client. Mechanical proxies already green: graph-model unit tests, MCP in-memory
   protocol tests, and a stdout-clean `initialize` smoke. [spec manual-QA ACs]
 
-## deployment-adapters (intent only — no spec yet)
+## deployment-adapters
 
-- **pgvector(graph+vector) adapter:** one Postgres holding graph + chunks +
-  embeddings. Elevated to a target-state decision in
-  [RFC-0017](rfcs/0017-three-module-architecture-pgvector.md) (the second backend;
-  Phase A). Documented target in RFC-0005 §Target deployments; needs a spec before work.
-- **pgvector(vector) + neo4j(graph) adapter:** split deployment. Alternative layout,
-  still backlog; RFC-0017 adopts the single-Postgres pgvector(graph+vector) shape first.
+> **Closed:** pgvector(graph+vector) adapter shipped (RFC-0017 Phase A, #76/#77) —
+> knowledge/graph + memory + belief + hierarchy + procedures + vectors + recall
+> over Postgres. The pgvector(vector) + neo4j(graph) split deployment remains
+> an alternative layout if a graph-native engine is needed.
 
 ## knowledge-graph-retraction (deferred nits — self-healing, demo-scale)
 
@@ -87,16 +86,13 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   (A code-level YAML-bomb depth/alias guard ships with the feature; this is the
   dependency-hygiene follow-up.)
 
-## knowledge-source-retraction (intent only — no spec yet)
+## knowledge-source-retraction
 
-- **Document/chunk/embedding retraction on re-ingest:** `knowledge-graph-retraction`
-  converges the knowledge *graph* (entities/relationships/graphs + Repository node),
-  but not the underlying `SourceDocument`s, `KnowledgeChunk`s, or their sqlite-vec
-  embeddings (keyed by `document_id`/`source_id`, not `graph_id`). A changed/removed
-  file's prior document + chunks + vectors currently linger. Needs `delete_document`/
-  `delete_chunk` ports, a vec-index delete-by-target-id, and a stable-key handle on
-  documents so the reconcile can find prior documents by `(stable_source_key, path)`.
-  RFC-0009 flagged the embedding cascade (OQ2). Needs a spec before work.
+> **Closed:** Document/chunk retraction on re-ingest shipped (#71) — the reconcile
+> cascade now retracts prior SourceDocuments + KnowledgeChunks alongside the graph.
+> Embedding GC (dead-vector sweep) shipped (#72) via `gc_orphan_targets`.
+> The only remaining tail is the fastembed-gated full-dedup path (skip re-embed
+> on unchanged content_hash), tracked under durable-dedup above.
 
 ## lexical-wiring
 

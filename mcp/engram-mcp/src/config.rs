@@ -104,7 +104,13 @@ impl McpConfig {
             project: project.unwrap_or_else(|| "default".to_string()),
             scope_strategy: ScopeMappingStrategy::Strict,
             embedding: EmbeddingProviderConfig {
+                #[cfg(feature = "fastembed")]
+                provider_type: "fastembed".to_owned(),
+                #[cfg(not(feature = "fastembed"))]
                 provider_type: "none".to_owned(),
+                #[cfg(feature = "fastembed")]
+                model: "BAAI/bge-small-en-v1.5".to_owned(),
+                #[cfg(not(feature = "fastembed"))]
                 model: "none".to_owned(),
                 dimensions: 384,
                 prompt_profile: "query".to_owned(),

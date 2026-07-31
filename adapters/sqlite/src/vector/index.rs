@@ -134,6 +134,11 @@ impl SqliteVectorIndex {
         validate_dimensions(entry.dimensions, self.dimensions, entry.embedding.len())?;
         let embedding = serialize_f32_vector(&entry.embedding)?;
         let conn = self.connection.lock().unwrap();
+        // Durable dedup: upsert by id (= target_id). vec0 virtual tables don't
+        // support ON CONFLICT, so delete-then-insert — idempotent on re-index
+        // (replaces rather than erroring on the PK constraint or duplicating).
+        conn.execute("DELETE FROM vectors WHERE id = ?1", [&entry.id])
+            .map_err(sql_error)?;
         conn.execute(
             r#"
                 INSERT INTO vectors
@@ -304,6 +309,28 @@ impl VectorIndex for SqliteVectorIndex {
         conn.execute("DELETE FROM vectors WHERE id = ?1", [target_id.as_str()])
             .map_err(sql_error)?;
         Ok(())
+    }
+
+    async fn gc_orphan_targets(&self, live_target_ids: &[Id]) -> CoreResult<usize> {
+        let conn = self.connection.lock().unwrap();
+        let all_ids: Vec<String> = conn
+            .prepare("SELECT id FROM vectors")
+            .map_err(sql_error)?
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
+        let live: std::collections::HashSet<&str> =
+            live_target_ids.iter().map(|id| id.as_str()).collect();
+        let mut deleted = 0;
+        for id in &all_ids {
+            if !live.contains(id.as_str()) {
+                conn.execute("DELETE FROM vectors WHERE id = ?1", [id.as_str()])
+                    .map_err(sql_error)?;
+                deleted += 1;
+            }
+        }
+        Ok(deleted)
     }
 
     async fn clear(&self) -> CoreResult<()> {

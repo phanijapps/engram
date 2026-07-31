@@ -4,7 +4,7 @@
 //! Planning stays in Rust so TypeScript can display or submit consolidation
 //! plans without duplicating strategy-to-operation rules.
 
-use engram_core::plan_consolidation_operations;
+use engram_consolidation::plan_consolidation_operations;
 use engram_domain::ConsolidationRequest;
 use engram_domain::Timestamp;
 use napi::bindgen_prelude::*;

@@ -4,7 +4,7 @@
 //! Owns one SQLite-backed `SqlBeliefStore` so belief and contradiction calls
 //! observe the same scoped state.
 
-use engram_core::{BeliefRepository, ContradictionDetector};
+use engram_belief::{BeliefRepository, ContradictionDetector};
 use engram_domain::{Belief, Contradiction, ContradictionResolution};
 use engram_store_sqlite::SqlBeliefStore;
 use futures::executor::block_on;

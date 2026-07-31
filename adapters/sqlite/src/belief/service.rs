@@ -15,7 +15,7 @@ use std::{
 use crate::{SqliteOpenOptions, SqlitePath};
 use async_trait::async_trait;
 use chrono::Utc;
-use engram_core::{
+use engram_belief::{
     BeliefQuery, BeliefQueryOrder, BeliefReferenceQuery, BeliefRepository,
     belief_references_source, canonical_pair_key, canonicalize_pair, clear_stale_state, mark_stale,
     retract_belief, supersede_belief,

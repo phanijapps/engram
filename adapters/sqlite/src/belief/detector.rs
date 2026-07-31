@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
 use chrono::Utc;
-use engram_core::ContradictionDetector;
+use engram_belief::ContradictionDetector;
 use engram_domain::*;
 use engram_runtime::CoreResult;
 use sha2::{Digest, Sha256};

@@ -1,5 +1,5 @@
-use engram_core::EvaluationRunner;
 use engram_domain::*;
+use engram_eval::EvaluationRunner;
 use engram_eval::{MemoryContractRunner, MemoryFixtureRunner, accepted_examples};
 use engram_memory::{MemoryEventRepository, MemoryRepository, MemoryService};
 use engram_store_sqlite::SqlMemoryService;

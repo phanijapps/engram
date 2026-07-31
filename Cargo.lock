@@ -1728,6 +1728,7 @@ dependencies = [
  "engram-ingest",
  "engram-integration",
  "engram-knowledge",
+ "engram-retrieval",
  "futures",
  "regex",
  "serde",

@@ -47,3 +47,8 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   entities + `owns` edges) — turning the graph into a multi-team/multi-repo program
   view. Mirrors `scan_protocols`; routes through `require_knowledge()`. Constrained
   by RFC-0012, ADR-0022. Draft.
+- [`retrieval-completeness`](retrieval-completeness/spec.md): close the retrieval-mode
+  gap — re-land `Temporal` / `Cue` / `Hierarchical` modes on durable `RetrievalIndex`
+  adapters (currently enum-only; the impls died with the process-local fixture) and
+  wire predictive retrieval. Phased; Phase 1 (predict_context tool + predictor tests)
+  is the first slice. Constrained by RFC-0005, ADR-0022. Draft.

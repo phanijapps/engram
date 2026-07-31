@@ -100,3 +100,62 @@ fn tokenize(text: &str) -> impl Iterator<Item = String> + '_ {
             (!term.is_empty()).then_some(term)
         })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn empty_state_yields_empty_hints() {
+        let predictor = RecentActivityPredictor::new();
+        let hints = predictor
+            .predict_context(&AgentState::default())
+            .await
+            .unwrap();
+        assert!(hints.queries.is_empty());
+        assert!(hints.target_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn recent_queries_are_tokenized_into_predicted_queries() {
+        let predictor = RecentActivityPredictor::new();
+        let state = AgentState {
+            recent_queries: vec!["auth login".to_owned(), "session-token".to_owned()],
+            ..Default::default()
+        };
+        let hints = predictor.predict_context(&state).await.unwrap();
+        // Tokenized (lowercased, split on non-alphanumeric), deduped via BTreeSet.
+        assert!(hints.queries.contains(&"auth".to_owned()));
+        assert!(hints.queries.contains(&"login".to_owned()));
+        assert!(hints.queries.contains(&"session".to_owned()));
+        assert!(hints.queries.contains(&"token".to_owned()));
+        // No duplicates.
+        assert_eq!(hints.queries.len(), 4);
+        assert!(hints.target_ids.is_empty());
+    }
+
+    #[tokio::test]
+    async fn task_terms_are_added_to_predicted_queries() {
+        let predictor = RecentActivityPredictor::new();
+        let state = AgentState {
+            task: Some("Refactor the payment service".to_owned()),
+            ..Default::default()
+        };
+        let hints = predictor.predict_context(&state).await.unwrap();
+        assert!(hints.queries.contains(&"refactor".to_owned()));
+        assert!(hints.queries.contains(&"payment".to_owned()));
+        assert!(hints.queries.contains(&"service".to_owned()));
+    }
+
+    #[tokio::test]
+    async fn recent_target_ids_pass_through_deduped() {
+        let predictor = RecentActivityPredictor::new();
+        let state = AgentState {
+            recent_target_ids: vec!["e1".to_owned(), "e2".to_owned(), "e1".to_owned()],
+            ..Default::default()
+        };
+        let hints = predictor.predict_context(&state).await.unwrap();
+        assert_eq!(hints.target_ids, vec!["e1".to_owned(), "e2".to_owned()]);
+        assert!(hints.queries.is_empty());
+    }
+}

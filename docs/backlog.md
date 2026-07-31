@@ -74,13 +74,11 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 > **Closed:** Contract manifest namespace fixed (#78) — entries now use the ASCII
 > Unit Separator (U+001F) as a prefix, which cannot appear in a file path on any OS.
-- **Rust SCA gate + YAML crate re-eval:** `serde_yml` (a fork of the deprecated
-  `serde_yaml`, RUSTSEC-2024-0320) parses untrusted OpenAPI docs, but CI runs only
-  fmt/check/clippy/test — no `cargo audit`/`cargo deny`. Wire an advisory SCA gate
-  in CI + a pre-handoff hook, and re-evaluate whether a maintained YAML crate with
-  built-in parser limits (e.g. depth budget) is preferable for untrusted input.
-  (A code-level YAML-bomb depth/alias guard ships with the feature; this is the
-  dependency-hygiene follow-up.)
+- **Rust SCA gate + YAML crate re-eval:** The `cargo audit` SCA gate is now
+  wired in CI (#81). `serde_yml` 0.0.12 is the maintained fork of the deprecated
+  `serde_yaml`; RUSTSEC-2024-0320 applies to `serde_yaml`, not `serde_yml`. The
+  code-level YAML-bomb depth/alias guard (yaml_safety.rs) remains. If `cargo audit`
+  ever flags `serde_yml`, swap to a crate with built-in parser limits.
 
 ## knowledge-source-retraction
 

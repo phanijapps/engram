@@ -23,6 +23,7 @@ members = [
     "adapters/consolidation/decay",
     "adapters/surreal",
     "adapters/sqlite",
+    "adapters/pgvector",
     "bindings/node",
     "examples/rust-integration",
     "codegraph/queries",

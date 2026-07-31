@@ -16,7 +16,7 @@ engram-memory = { path = "../../core/memory" }
 engram-runtime = { path = "../../core/runtime" }
 engram-knowledge = { path = "../../core/knowledge" }
 engram-retrieval = { path = "../../core/retrieval" }
-engram-core = { path = "../../core/orchestration" }
+engram-belief = { path = "../../core/belief" }
 engram-hierarchy = { path = "../../core/hierarchy" }
 engram-procedures = { path = "../../core/procedures" }
 sha2.workspace = true
@@ -25,7 +25,6 @@ sqlite-vec.workspace = true
 fastembed = { version = "5.17.2", optional = true }
 
 [dev-dependencies]
-engram-core = { path = "../../core/orchestration" }
 engram-eval = { path = "../../core/eval" }
 futures.workspace = true
 tempfile = "3"

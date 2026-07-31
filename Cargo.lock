@@ -1571,24 +1571,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "engram-core"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "chrono",
- "engram-belief",
- "engram-consolidation",
- "engram-domain",
- "engram-eval",
- "engram-hierarchy",
- "engram-knowledge",
- "engram-memory",
- "engram-retrieval",
- "engram-runtime",
- "futures",
-]
-
-[[package]]
 name = "engram-decay"
 version = "0.1.0"
 dependencies = [
@@ -1772,8 +1754,8 @@ dependencies = [
  "engram-codegraph-queries",
  "engram-conformance",
  "engram-consolidation",
- "engram-core",
  "engram-domain",
+ "engram-eval",
  "engram-hierarchy",
  "engram-ingest",
  "engram-integration",
@@ -1916,7 +1898,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "engram-core",
+ "engram-belief",
  "engram-domain",
  "engram-eval",
  "engram-hierarchy",

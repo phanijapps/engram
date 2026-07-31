@@ -12,9 +12,10 @@ crate-type = ["cdylib", "rlib"]
 async-trait.workspace = true
 chrono.workspace = true
 engram-codegraph-queries = { path = "../../codegraph/queries" }
-engram-core = { path = "../../core/orchestration" }
 engram-domain = { path = "../../core/domain" }
 engram-belief = { path = "../../core/belief" }
+engram-consolidation = { path = "../../core/consolidation" }
+engram-eval = { path = "../../core/eval" }
 engram-hierarchy = { path = "../../core/hierarchy" }
 engram-procedures = { path = "../../core/procedures" }
 engram-conformance = { path = "../../adapters/integration" }
@@ -26,7 +27,6 @@ engram-retrieval = { path = "../../core/retrieval" }
 engram-runtime = { path = "../../core/runtime" }
 engram-store-sqlite = { path = "../../adapters/sqlite" }
 engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph" }
-engram-consolidation = { path = "../../core/consolidation" }
 engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical" }
 futures.workspace = true
 napi.workspace = true

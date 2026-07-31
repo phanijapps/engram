@@ -3,7 +3,7 @@
 //! Stateless architecture evaluation behavior exposed to Node through N-API.
 //! Evaluates architecture coverage against required capabilities.
 
-use engram_core::{
+use engram_eval::{
     ArchitectureEvalCase, required_architecture_capabilities, summarize_architecture_coverage,
 };
 use napi::bindgen_prelude::*;

@@ -100,9 +100,10 @@ contracts, eval, node) now that the stack ADR (ADR-0003) is accepted.
 - `engram-knowledge` owns source-grounded knowledge, graph, ontology, source
   reader, chunker, and ingestion ports. It must not own memory write, lifecycle
   event, or forget service contracts.
-- `engram-core` is an orchestration facade and compatibility re-export layer
-  above split behavior crates. It must not become the canonical owner of memory
-  or knowledge ports again.
+- The `engram-core` orchestration facade has been **retired** — consumers now
+  import from the underlying behavior crates (`engram-memory`, `engram-belief`,
+  `engram-knowledge`, etc.) directly. No re-export facade exists; do not
+  re-introduce one.
 - `engram-store-sql` is the active local memory adapter. It owns memory records,
   lifecycle events, idempotency, write/retrieve/forget behavior, and local
   in-memory/file-backed SQLite construction only.

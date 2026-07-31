@@ -5,7 +5,6 @@ members = [
     "core/memory",
     "core/knowledge",
     "core/retrieval",
-    "core/orchestration",
     "core/eval",
     "core/belief",
     "core/consolidation",

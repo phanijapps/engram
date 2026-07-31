@@ -4,8 +4,8 @@
 //! This transport validates hierarchy build outputs with Rust-owned rules. It
 //! does not persist nodes or replace the SQLite hierarchy adapter.
 
-use engram_core::validate_hierarchy_parentage;
 use engram_domain::HierarchyNode;
+use engram_hierarchy::validate_hierarchy_parentage;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 

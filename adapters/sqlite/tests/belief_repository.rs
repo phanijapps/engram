@@ -1,5 +1,5 @@
 use chrono::{TimeZone, Utc};
-use engram_core::{BeliefQuery, BeliefReferenceQuery, BeliefRepository, ContradictionDetector};
+use engram_belief::{BeliefQuery, BeliefReferenceQuery, BeliefRepository, ContradictionDetector};
 use engram_domain::*;
 use engram_store_sqlite::SqlBeliefStore;
 use futures::executor::block_on;

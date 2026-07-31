@@ -187,6 +187,11 @@ impl EngramProvider {
             reason: format!("configuration validation failed: {e}"),
         })?;
 
+        #[cfg(feature = "pgvector")]
+        if config.pgvector_connection_string.is_some() {
+            return crate::postgres::bootstrap_pgvector(config);
+        }
+
         #[cfg(feature = "sqlite")]
         {
             crate::sqlite::bootstrap_sqlite(config)

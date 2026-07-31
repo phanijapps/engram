@@ -57,6 +57,9 @@ pub mod sqlite;
 #[cfg(feature = "surreal")]
 pub mod surreal;
 
+#[cfg(feature = "pgvector")]
+pub mod postgres;
+
 pub use batch::{
     ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, StepOutcome,
     StepStatus, TransactionGuarantee, aggregate_status,

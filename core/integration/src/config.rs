@@ -180,6 +180,12 @@ pub struct EngramConfig {
     /// field deserialize to `MultiFileDirectory`.
     #[serde(default)]
     pub sqlite_storage_layout: SqliteStorageLayout,
+
+    /// Optional Postgres connection string for the pgvector backend. When set
+    /// (and the `pgvector` feature is compiled), `EngramProvider::open` dispatches
+    /// to the Postgres backend instead of SQLite/Surreal. A config string (not an
+    /// engine type), so it stays within ADR-0022's neutrality rule.
+    pub pgvector_connection_string: Option<String>,
 }
 
 impl EngramConfig {
@@ -200,6 +206,7 @@ impl EngramConfig {
             migration_mode,
             capability_policy,
             sqlite_storage_layout: SqliteStorageLayout::MultiFileDirectory,
+            pgvector_connection_string: None,
         }
     }
 
@@ -214,6 +221,12 @@ impl EngramConfig {
     #[must_use]
     pub fn with_sqlite_storage_layout(mut self, layout: SqliteStorageLayout) -> Self {
         self.sqlite_storage_layout = layout;
+        self
+    }
+
+    /// Opts into the Postgres (pgvector) backend with the given connection string.
+    pub fn with_pgvector(mut self, connection_string: impl Into<String>) -> Self {
+        self.pgvector_connection_string = Some(connection_string.into());
         self
     }
 
@@ -292,6 +305,7 @@ impl EngramConfig {
             sqlite_storage_layout: profile
                 .sqlite_storage_layout
                 .unwrap_or(SqliteStorageLayout::MultiFileDirectory),
+            pgvector_connection_string: None,
         })
     }
 

@@ -40,6 +40,7 @@ futures = { workspace = true, optional = true }
 # SurrealKV store; tokio::sync::OnceCell for the lazy connection open (the
 # Surreal SDK needs a Tokio reactor, opened under the consumer's runtime).
 engram-store-surreal = { path = "../../adapters/surreal", optional = true }
+engram-store-pgvector = { path = "../../adapters/pgvector", optional = true }
 tokio = { version = "1", features = ["sync", "rt", "macros"], optional = true }
 
 [dev-dependencies]
@@ -79,3 +80,7 @@ sqlite = [
 # provider when selected. Mutually exclusive with `sqlite` at dispatch time
 # (sqlite wins if both are enabled). Capability cells attach incrementally.
 surreal = ["dep:engram-store-surreal", "dep:tokio", "dep:chrono"]
+# The pgvector (Postgres) backend. Constructs the adapter cells under
+# src/postgres/ and makes EngramProvider::open dispatch to it when
+# pgvector_connection_string is set in the config.
+pgvector = ["dep:engram-store-pgvector"]

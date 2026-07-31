@@ -59,3 +59,9 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   source-key/path lookup + `delete_document`/`delete_chunk` ports + vector `delete_by_target_id`,
   cascaded children-first in reconcile. Done before pgvector so ports are defined once.
   Constrained by RFC-0009, ADR-0022. Draft.
+- [`pgvector-backend`](pgvector-backend/spec.md): Postgres + pgvector as the second
+  storage backend (RFC-0017 Phase A). One Postgres holds graph + chunks + memory +
+  embeddings (pgvector type) + keyword (tsvector). Feature-gated engine submodule
+  (`core/integration/src/pgvector/`) + `adapters/pgvector/` crate; reuses every port
+  trait (no domain change). SQLite stays default. Conformance-gated. Constrained by
+  ADR-0022, RFC-0017. Draft.

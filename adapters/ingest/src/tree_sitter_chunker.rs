@@ -349,8 +349,7 @@ fn extract_name(node: &tree_sitter::Node, source: &[u8]) -> String {
     if text.contains('.') || text.contains("::") {
         return text
             .split(['.', ':'])
-            .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_'))
-            .last()
+            .rfind(|s| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_'))
             .unwrap_or(&text)
             .to_owned();
     }
@@ -362,8 +361,7 @@ fn extract_name(node: &tree_sitter::Node, source: &[u8]) -> String {
         }
     }
     text.split(|c: char| !c.is_alphanumeric() && c != '_')
-        .filter(|s| !s.is_empty() && s.len() > 1)
-        .last()
+        .rfind(|s| !s.is_empty() && s.len() > 1)
         .unwrap_or(&text)
         .to_owned()
 }

@@ -9,6 +9,7 @@ mod extension;
 mod fastembed_provider;
 mod index;
 mod retrieval;
+#[allow(clippy::module_inception)]
 mod vector;
 
 pub use entry::{VectorEntry, VectorSearchResult};

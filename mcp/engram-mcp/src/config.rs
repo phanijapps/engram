@@ -10,16 +10,11 @@ use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, MigrationMod
 /// shared database file — matching the agentzero adapter invariant so the same
 /// database is consumable by the gateway. `Multi` keeps the per-store default
 /// (one file per family) for tests and advanced use.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum McpSqliteLayout {
+    #[default]
     Single,
     Multi,
-}
-
-impl Default for McpSqliteLayout {
-    fn default() -> Self {
-        Self::Single
-    }
 }
 
 /// Everything the server needs to open a provider and resolve scope.

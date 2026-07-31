@@ -133,7 +133,7 @@ impl SurrealMemoryService {
     async fn list_records(&self) -> CoreResult<Vec<MemoryRecord>> {
         let db = self.conn.db().await?;
         let mut res = db
-            .query(&format!("SELECT data FROM {MEMORY_TABLE}"))
+            .query(format!("SELECT data FROM {MEMORY_TABLE}"))
             .await
             .map_err(surreal_err)?;
         let rows: Vec<DataWrapper<MemoryRecord>> = res.take(0).map_err(surreal_err)?;
@@ -143,7 +143,7 @@ impl SurrealMemoryService {
     async fn list_events(&self) -> CoreResult<Vec<MemoryEvent>> {
         let db = self.conn.db().await?;
         let mut res = db
-            .query(&format!("SELECT data FROM {EVENT_TABLE}"))
+            .query(format!("SELECT data FROM {EVENT_TABLE}"))
             .await
             .map_err(surreal_err)?;
         let rows: Vec<DataWrapper<MemoryEvent>> = res.take(0).map_err(surreal_err)?;
@@ -152,7 +152,7 @@ impl SurrealMemoryService {
 
     async fn remove_memory(&self, id: &MemoryId) -> CoreResult<()> {
         let db = self.conn.db().await?;
-        db.query(&format!("DELETE type::thing('{MEMORY_TABLE}', $key)"))
+        db.query(format!("DELETE type::thing('{MEMORY_TABLE}', $key)"))
             .bind(("key", id.to_string()))
             .await
             .map_err(surreal_err)?;
@@ -165,7 +165,7 @@ impl MemoryRepository for SurrealMemoryService {
     async fn put_memory(&self, record: MemoryRecord) -> CoreResult<MemoryRecord> {
         let db = self.conn.db().await?;
         let key = record.id.to_string();
-        db.query(&format!(
+        db.query(format!(
             "UPSERT type::thing('{MEMORY_TABLE}', $key) SET data = $record"
         ))
         .bind(("key", key))
@@ -178,7 +178,7 @@ impl MemoryRepository for SurrealMemoryService {
     async fn get_memory(&self, id: &MemoryId, scope: &Scope) -> CoreResult<Option<MemoryRecord>> {
         let db = self.conn.db().await?;
         let mut res = db
-            .query(&format!(
+            .query(format!(
                 "SELECT data FROM type::thing('{MEMORY_TABLE}', $key)"
             ))
             .bind(("key", id.to_string()))
@@ -195,7 +195,7 @@ impl MemoryRepository for SurrealMemoryService {
     async fn append_event(&self, event: MemoryEvent) -> CoreResult<MemoryEvent> {
         let db = self.conn.db().await?;
         let key = event.id.to_string();
-        db.query(&format!(
+        db.query(format!(
             "UPSERT type::thing('{EVENT_TABLE}', $key) SET data = $event"
         ))
         .bind(("key", key))
@@ -227,7 +227,7 @@ impl MemoryEventRepository for SurrealMemoryService {
     async fn get_event(&self, id: &EventId, scope: &Scope) -> CoreResult<Option<MemoryEvent>> {
         let db = self.conn.db().await?;
         let mut res = db
-            .query(&format!(
+            .query(format!(
                 "SELECT data FROM type::thing('{EVENT_TABLE}', $key)"
             ))
             .bind(("key", id.to_string()))

@@ -379,10 +379,7 @@ impl engram_belief::BeliefRepository for PgBeliefStore {
     async fn get_belief(&self, q: engram_belief::BeliefQuery) -> CoreResult<Option<Belief>> {
         let beliefs: Vec<Belief> = list_scoped(&self.conn, "beliefs", &q.scope)?;
         let now = chrono::Utc::now();
-        Ok(beliefs
-            .into_iter()
-            .filter(|b| q.matches_after_scope(b, now))
-            .next())
+        Ok(beliefs.into_iter().find(|b| q.matches_after_scope(b, now)))
     }
     async fn get_belief_by_id(&self, id: &BeliefId, s: &Scope) -> CoreResult<Option<Belief>> {
         get_scoped(&self.conn, "beliefs", &id.to_string(), s)

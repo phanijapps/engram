@@ -73,12 +73,12 @@ impl VectorIndex for SurrealVectorIndex {
         // Ensure the MTREE index exists (idempotent — ignore "already exists").
         let dim = self.embedding_space.dimensions;
         let _ = db
-            .query(&format!(
+            .query(format!(
                 "DEFINE INDEX vec_idx ON {TABLE} FIELDS embedding MTREE DIMENSION {dim}"
             ))
             .await;
         let vec_lit = vector_literal(&vector);
-        db.query(&format!(
+        db.query(format!(
             "UPSERT type::thing('{TABLE}', $key) SET target_id = $target, embedding = {vec_lit}"
         ))
         .bind(("key", target_id.to_string()))
@@ -98,7 +98,7 @@ impl VectorIndex for SurrealVectorIndex {
         let db = self.conn.db().await?;
         let q_lit = vector_literal(&query_vector);
         let mut res = db
-            .query(&format!(
+            .query(format!(
                 "SELECT target_id, embedding FROM {TABLE} WHERE embedding<|{limit}|>{q_lit}"
             ))
             .await
@@ -122,7 +122,7 @@ impl VectorIndex for SurrealVectorIndex {
 
     async fn delete_target(&self, target_id: &Id) -> CoreResult<()> {
         let db = self.conn.db().await?;
-        db.query(&format!("DELETE type::thing('{TABLE}', $key)"))
+        db.query(format!("DELETE type::thing('{TABLE}', $key)"))
             .bind(("key", target_id.to_string()))
             .await
             .map_err(surreal_err)?;
@@ -138,7 +138,7 @@ impl VectorIndex for SurrealVectorIndex {
 
     async fn clear(&self) -> CoreResult<()> {
         let db = self.conn.db().await?;
-        db.query(&format!("DELETE {TABLE}"))
+        db.query(format!("DELETE {TABLE}"))
             .await
             .map_err(surreal_err)?;
         Ok(())

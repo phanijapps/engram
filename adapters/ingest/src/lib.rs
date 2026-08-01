@@ -18,6 +18,7 @@ mod ingestor;
 mod markdown_chunker;
 mod openapi_types;
 mod reconcile;
+mod repo_graph;
 mod request;
 mod scan_filter;
 mod scanner;
@@ -37,6 +38,7 @@ pub use git_detect::detect_git;
 pub use hash::content_hash;
 pub use ingestor::{IngestedKnowledge, KnowledgeIngestor};
 pub use markdown_chunker::MarkdownChunker;
+pub use repo_graph::KnowledgeRepoGraph;
 pub use request::{DocumentIngestRequest, DocumentMetadata};
 pub use scan_filter::{ConceptFilterConfig, DenyFilterConfig, ScanFilter, ScanFilterConfig};
 pub use scanner::{

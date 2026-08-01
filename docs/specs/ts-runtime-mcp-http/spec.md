@@ -1,6 +1,6 @@
 # Spec: TS runtime HTTP-MCP module
 
-- **Status:** Draft <!-- Draft | Implementing | Shipped | Deferred -->
+- **Status:** Shipped <!-- Draft | Implementing | Shipped | Deferred -->
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0017 (Phase D / Module 2, Accepted), ADR-0022, the Phase A facade + Phase C `@engram/runtime` (shipped); the framework decision (research, 2026-08-01): the official `@modelcontextprotocol/sdk` on `node:http`
@@ -55,12 +55,12 @@ backed by the facade and mount the transport on `node:http` behind the SDK's
 - **Manual / integration QA** — an in-process test (or real bin + an MCP client / JSON-RPC POST) lists tools + calls `recall`/`write_memory` against the real addon.
 
 ## Acceptance Criteria
-- [ ] An `engram-mcp-http` bin exists in `@engram/runtime`, serving MCP over HTTP (loopback) via `@modelcontextprotocol/node`'s transport on `node:http`.
-- [ ] An MCP client can `tools/list` and `tools/call` the Module-2 tools (`recall`, `write_memory`, `put_entity`), backed by the facade (integration test / smoke). `belief_put`+`forget` deferred (deferred: runtime-facade-belief-forget); `put_relationship` deferred (deferred: runtime-binding-put-relationship).
-- [ ] The server applies `localhostHostValidation` + `localhostOriginValidation` and rejects non-local requests — a bad Host/Origin is refused (non-2xx; the exact status pinned from the SDK at execute) (TDD).
-- [ ] Tool handlers are thin (delegate to the facade; verified by the mock-transport TDD).
-- [ ] `pnpm run typecheck` (recursive) + `pnpm --filter @engram/runtime test` green.
-- [ ] `@engram/runtime` `package.json` declares the new dep (`@modelcontextprotocol/server` + `@modelcontextprotocol/node`) and the `engram-mcp-http` bin; `tsup.config.ts` external includes the MCP packages.
+- [x] An `engram-mcp-http` bin exists in `@engram/runtime`, serving MCP over HTTP (loopback) via `@modelcontextprotocol/node`'s transport on `node:http`.
+- [x] An MCP client can `tools/list` and `tools/call` the Module-2 tools (`recall`, `write_memory`, `put_entity`), backed by the facade (integration test / smoke). `belief_put`+`forget` deferred (deferred: runtime-facade-belief-forget); `put_relationship` deferred (deferred: runtime-binding-put-relationship).
+- [x] The server applies `localhostHostValidation` + `localhostOriginValidation` and rejects non-local requests — a bad Host/Origin is refused (non-2xx; the exact status pinned from the SDK at execute) (TDD).
+- [x] Tool handlers are thin (delegate to the facade; verified by the mock-transport TDD).
+- [x] `pnpm run typecheck` (recursive) + `pnpm --filter @engram/runtime test` green.
+- [x] `@engram/runtime` `package.json` declares the new dep (`@modelcontextprotocol/server` + `@modelcontextprotocol/node`) and the `engram-mcp-http` bin; `tsup.config.ts` external includes the MCP packages.
 
 ## Assumptions
 - Technical: the official MCP SDK v2 exposes `McpServer` (`@modelcontextprotocol/server`) + `NodeStreamableHTTPServerTransport` + `localhostHostValidation`/`localhostOriginValidation` (`@modelcontextprotocol/node`), mountable on `node:http` (verified via the SDK docs / context7, 2026-08-01). The exact tool-registration API is verified at execute time (contract-acquisition).

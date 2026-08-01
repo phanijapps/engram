@@ -1,7 +1,7 @@
 # Plan: TS runtime HTTP-MCP module
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting <!-- Drafting | Executing | Done -->
+- **Status:** Done <!-- Drafting | Executing | Done -->
 
 ## Approach
 

@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-import type { MemoryKind } from "@engram/contracts";
 import type { NativeProviderTransport } from "@engram/node";
 import type { McpServer } from "@modelcontextprotocol/server";
 
@@ -45,7 +44,17 @@ export function registerTools(
       inputSchema: z.object({
         text: z.string(),
         scope: scopeSchema,
-        kind: z.string().optional()
+        kind: z
+          .enum([
+            "observation",
+            "fact",
+            "preference",
+            "episode",
+            "artifact",
+            "relationship",
+            "procedure"
+          ])
+          .optional()
       })
     },
     async ({ text, scope, kind }) => {
@@ -53,7 +62,7 @@ export function registerTools(
         buildWriteMemoryRequest({
           text,
           scope: buildScope(scope),
-          ...(kind !== undefined ? { kind: kind as MemoryKind } : {})
+          ...(kind !== undefined ? { kind } : {})
         })
       );
       return textResult(result);

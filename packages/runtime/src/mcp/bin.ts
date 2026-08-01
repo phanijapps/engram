@@ -19,7 +19,11 @@ if (!values.config) {
 }
 
 const configJson = buildEngramConfig(values.config);
-const port = values.port ? Number(values.port) : 3000;
+const port = values.port ? Number.parseInt(values.port, 10) : 3000;
+if (!Number.isInteger(port) || port < 1 || port > 65535) {
+  console.error(`engram-mcp-http: invalid --port ${values.port ?? ""}`);
+  process.exit(2);
+}
 
 const server = await startMcpHttpServer({ configJson, port });
 console.error(`engram-mcp-http listening on http://127.0.0.1:${port}/mcp (loopback)`);

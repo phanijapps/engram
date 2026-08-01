@@ -49,6 +49,15 @@ describe.skipIf(!ready)("engram-mcp-http (real addon)", () => {
         "recall",
         "write_memory"
       ]);
+
+      // tools/call against the REAL provider (recall → facade → binding → sqlite).
+      const callResult = await client.callTool({
+        name: "recall",
+        arguments: { query: "anything", scope: { tenant: "t" } }
+      });
+      expect(callResult.content).toBeInstanceOf(Array);
+      expect(callResult.content.length).toBeGreaterThan(0);
+
       await client.close();
     } finally {
       await new Promise<void>((r) => server.close(() => r()));

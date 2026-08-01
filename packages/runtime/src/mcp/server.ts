@@ -43,7 +43,6 @@ export async function startMcpHttpServer(opts: McpHttpOptions): Promise<Server> 
       return createNativeProviderTransport({ configJson: opts.configJson });
     })();
 
-  const mcp = createMcpServer(transport);
   const validateHost = localhostHostValidation();
   const validateOrigin = localhostOriginValidation();
   const port = opts.port ?? 3000;
@@ -51,10 +50,32 @@ export async function startMcpHttpServer(opts: McpHttpOptions): Promise<Server> 
   const httpServer = createServer(async (req, res) => {
     // Guard: refuse non-local Host/Origin (the SDK's DNS-rebinding protection).
     if (!validateHost(req, res) || !validateOrigin(req, res)) return;
-    // Stateless: a fresh transport per request.
+    // Stateless: a FRESH McpServer + transport per request (the SDK's canonical
+    // stateless pattern — a shared server would race on `_transport` under
+    // concurrency and leak SSE state). Close the transport after handling so no
+    // per-request state escapes.
     const t = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    await mcp.connect(t);
-    await t.handleRequest(req, res);
+    try {
+      await createMcpServer(transport).connect(t);
+      await t.handleRequest(req, res);
+    } catch (err) {
+      if (!res.headersSent) {
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            error: { code: -32603, message: String(err) }
+          })
+        );
+      }
+    } finally {
+      await t.close();
+    }
+  });
+
+  httpServer.on("error", (err) => {
+    console.error(`engram-mcp-http: listen failed: ${err.message}`);
+    process.exit(1);
   });
 
   await new Promise<void>((resolve) => {

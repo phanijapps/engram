@@ -48,11 +48,11 @@ export function parseIngestArgs(argv: string[]): IngestArgs {
     }
   }
 
-  const every =
-    values.every !== undefined ? Number(values.every) : undefined;
-  if (every !== undefined && (!Number.isFinite(every) || every < 0)) {
+  const rawEvery = values.every;
+  const every = rawEvery !== undefined ? Number(rawEvery) : undefined;
+  if (rawEvery !== undefined && !/^\d+$/.test(rawEvery)) {
     throw new Error(
-      `engram-ingest: --every must be a non-negative integer (ms), got: ${values.every}`
+      `engram-ingest: --every must be a non-negative integer (ms), got: ${rawEvery}`
     );
   }
 
@@ -68,11 +68,13 @@ export function parseIngestArgs(argv: string[]): IngestArgs {
 /**
  * Runs ingestion over the held-provider facade. One-shot when `every` is unset or
  * `<= 0`; otherwise schedules on `setInterval` (cron-like — first run at `every`
- * ms, not immediately). In periodic mode, SIGINT/SIGTERM clear the interval and
- * exit cleanly. Scan errors propagate in one-shot mode and are logged + swallowed
- * in periodic mode (the schedule survives).
+ * ms, not immediately). Scan errors propagate in one-shot mode and are logged +
+ * swallowed in periodic mode (the schedule survives).
  *
- * Returns an {@link IngestHandle} in periodic mode so tests can stop the schedule.
+ * This is a library function: it does NOT install signal handlers or call
+ * `process.exit` (those would hijack a host process). In periodic mode it
+ * returns an {@link IngestHandle} whose `stop()` clears the interval; the bin
+ * wires SIGINT/SIGTERM to `stop()` + exit.
  */
 export async function runIngest(
   opts: IngestOptions
@@ -99,24 +101,18 @@ export async function runIngest(
     return;
   }
 
-  // Periodic: schedule (no immediate run) + clean shutdown on signals.
+  // Periodic: schedule (no immediate run). No signal handling here — see the bin.
   const interval = setInterval(() => {
     void scan();
   }, opts.every);
-  const stop = (): void => {
-    clearInterval(interval);
-  };
-  const shutdown = (): never => {
-    stop();
-    process.exit(0);
-  };
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
-  return { stop };
+  return { stop: () => clearInterval(interval) };
 }
 
-/** Parses argv, builds config + scope, constructs the transport, and runs. */
-export async function runIngestFromArgs(argv: string[]): Promise<void> {
+/** Parses argv, builds config + scope, constructs the transport, and runs.
+ *  Returns the {@link IngestHandle} in periodic mode so the bin can wire signals. */
+export async function runIngestFromArgs(
+  argv: string[]
+): Promise<IngestHandle | void> {
   const args = parseIngestArgs(argv);
   const configJson = buildEngramConfig(args.config);
   const scope = buildScope({
@@ -124,7 +120,7 @@ export async function runIngestFromArgs(argv: string[]): Promise<void> {
     ...(args.workspace !== undefined ? { workspace: args.workspace } : {})
   });
   const transport = createNativeProviderTransport({ configJson });
-  await runIngest({
+  return runIngest({
     transport,
     path: args.path,
     scope,

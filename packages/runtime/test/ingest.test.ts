@@ -74,12 +74,46 @@ describe("runIngest periodic (fake timers)", () => {
       every: 50
     });
     expect(handle).toBeDefined();
-    expect(t.scan).toHaveBeenCalledTimes(0); // cron-like: no immediate run
+    try {
+      expect(t.scan).toHaveBeenCalledTimes(0); // cron-like: no immediate run
+      await vi.advanceTimersByTimeAsync(150);
+      expect(t.scan).toHaveBeenCalledTimes(3); // at 50, 100, 150
+    } finally {
+      handle?.stop();
+    }
+  });
 
-    await vi.advanceTimersByTimeAsync(150);
-    expect(t.scan).toHaveBeenCalledTimes(3); // at 50, 100, 150
-
+  it("stop() clears the interval — no further scans after stop", async () => {
+    const t = mockTransport();
+    const handle = await runIngest({
+      transport: t,
+      path: "/r",
+      scope: { tenant: "t" },
+      every: 50
+    });
+    await vi.advanceTimersByTimeAsync(100);
+    expect(t.scan).toHaveBeenCalledTimes(2);
     handle?.stop();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(t.scan).toHaveBeenCalledTimes(2); // no more after stop
+  });
+
+  it("periodic scan errors are swallowed — the schedule survives", async () => {
+    const t = mockTransport(async () => {
+      throw new Error("boom");
+    });
+    const handle = await runIngest({
+      transport: t,
+      path: "/r",
+      scope: { tenant: "t" },
+      every: 50
+    });
+    try {
+      await vi.advanceTimersByTimeAsync(150);
+      expect(t.scan).toHaveBeenCalledTimes(3); // schedule survived each throw
+    } finally {
+      handle?.stop();
+    }
   });
 });
 
@@ -115,11 +149,12 @@ describe("parseIngestArgs", () => {
     expect(() => parseIngestArgs(["--path", "/r"])).toThrow(/required/);
   });
 
-  it("rejects negative or non-numeric --every", () => {
+  it("rejects negative, non-numeric, or non-integer --every", () => {
     const base = ["--config", "{}", "--path", "/r", "--tenant", "t"];
     // `--every=-5` (parseArgs passes the value through; space-separated `-5` is
     // an ambiguous-flag error at the parseArgs layer, which also rejects it).
     expect(() => parseIngestArgs([...base, "--every=-5"])).toThrow(/non-negative/);
     expect(() => parseIngestArgs([...base, "--every", "abc"])).toThrow(/non-negative/);
+    expect(() => parseIngestArgs([...base, "--every", "50.5"])).toThrow(/non-negative/);
   });
 });

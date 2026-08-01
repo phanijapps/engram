@@ -43,7 +43,7 @@ describe.skipIf(!ready)("engram-ingest CLI (subprocess, real addon)", () => {
     );
 
     const summaryLine = stdout.trim().split("\n").pop();
-    expect(summaryLine, `stdout was: ${stdout}`).toBeDefined();
+    expect(summaryLine, `stdout was: ${stdout}`).toBeTruthy();
     const summary = JSON.parse(summaryLine as string) as { entities?: number };
     expect(summary.entities).toBeGreaterThanOrEqual(1);
   }, 60_000);

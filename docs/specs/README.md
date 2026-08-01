@@ -71,4 +71,4 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   composition + conformance; the only place a backend identity exists). The recipe
   becomes the pgvector host entry; `EngramProvider::open` stays engine-neutral
   (sqlite default) and rejects pgvector configs. Constrained by RFC-0017,
-  ADR-0022. Draft.
+  ADR-0022. Shipped.

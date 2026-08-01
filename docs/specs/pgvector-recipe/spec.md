@@ -1,6 +1,6 @@
 # Spec: pgvector backend recipe (backends/pgvector)
 
-- **Status:** Draft <!-- Draft | Implementing | Shipped | Deferred -->
+- **Status:** Shipped <!-- Draft | Implementing | Shipped | Deferred -->
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0017 (Phase B, Accepted), ADR-0022 (engine neutrality, backend = recipe crate, the only place a backend identity exists)
@@ -72,26 +72,26 @@ The three-tier guard that keeps an implementing agent inside the lines.
 
 ## Acceptance Criteria
 
-- [ ] A `backends/pgvector` crate exists and exposes
+- [x] A `backends/pgvector` crate exists and exposes
   `pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider>` owning
   connection lifecycle + schema + cell composition (moved out of
   `core/integration`).
-- [ ] `engram-integration` no longer names pgvector: the `postgres/` module is
+- [x] `engram-integration` no longer names pgvector: the `postgres/` module is
   gone, the `pgvector` cargo feature + `engram-store-pgvector` dep are removed,
   and `EngramProvider::open` no longer routes pgvector configs. Verified by direct
   `grep -rn "pgvector\|postgres\|Pg[A-Z]" core/integration/src` — only the
   permitted `pgvector_connection_string` config field remains (the neutrality
   lint's regex misses lowercase `crate::postgres`, so the grep is authoritative).
-- [ ] `EngramProvider::open` rejects a config carrying
+- [x] `EngramProvider::open` rejects a config carrying
   `pgvector_connection_string` with a clear error pointing to
-  `backends_pgvector::open` — it does NOT silently fall through to sqlite.
-- [ ] The N-API binding opens a pgvector provider through the recipe when the
+  `engram_backend_pgvector::open` — it does NOT silently fall through to sqlite.
+- [x] The N-API binding opens a pgvector provider through the recipe when the
   config carries a `pgvector_connection_string` (and sqlite via `open`
   otherwise).
-- [ ] The `pgvector_bootstrap` test passes against the live Postgres via the
+- [x] The `pgvector_bootstrap` test passes against the live Postgres via the
   recipe (`pg_round_trip` is the unchanged cell-level regression net — it calls
   the cell directly, not the provider, so it is not repointed).
-- [ ] `check-engine-neutrality.sh`, `check-surface-parity.sh`, `cargo check
+- [x] `check-engine-neutrality.sh`, `check-surface-parity.sh`, `cargo check
   --workspace`, `clippy`, and `fmt` are all green.
 
 ## Assumptions

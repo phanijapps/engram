@@ -57,7 +57,8 @@ at execute — `server.tool(name, schema, handler)` shape) + the transport's
 - `src/index.ts` — export `createHttpMcpServer`.
 
 ### Failure, edge cases & resilience
-- Bad Host/Origin → guard returns 403 (the SDK pattern).
+- Bad Host/Origin → the guard refuses the request (non-2xx; exact status pinned
+  from the SDK at execute).
 - Missing addon → facade load error, bin exits non-zero.
 - Tool error → surfaced as an MCP error result (the SDK wraps handler throws).
 
@@ -65,7 +66,9 @@ at execute — `server.tool(name, schema, handler)` shape) + the transport's
 
 ### T1: MCP SDK deps + scaffold src/mcp/
 **Depends on:** none
-**Tests:** no stub (goal-based). `pnpm --filter @engram/runtime typecheck` after T2.
+**Tests:** goal-based — `pnpm install` resolves both `@modelcontextprotocol/server`
++ `@modelcontextprotocol/node`; `src/mcp/tools.ts` exists; the SDK's
+tool-registration API is confirmed (contract-acquisition).
 **Approach:** `pnpm --filter @engram/runtime add @modelcontextprotocol/server @modelcontextprotocol/node`;
 `src/mcp/tools.ts` stub `registerTools`; verify the SDK's tool-registration API
 (contract-acquisition — exact `server.tool(...)` signature).
@@ -90,9 +93,9 @@ wire package.json bin + tsup entry + external; export from `src/index.ts`.
 
 ### T4: guard + in-process client tests
 **Depends on:** T3
-**Tests:** a request with a bad Host (or Origin) is refused (403); an in-process
-MCP client (`@modelcontextprotocol/client` if available, else a raw JSON-RPC POST)
-calls `tools/list` → the 3 tools + `tools/call recall` → facade dispatch.
+**Tests:** a request with a bad Host (or Origin) is refused (non-2xx); an
+in-process MCP client (`@modelcontextprotocol/client`, added as a devDep) calls
+`tools/list` → the 3 tools + `tools/call recall` → facade dispatch.
 **Done when:** guard + client tests green.
 
 ### T5: Smoke + gates

@@ -326,11 +326,30 @@ a different path than `get_entity` queries, or `get_entity` has a kind/scoping
 bug. Pre-existing cell behavior (not introduced by the recipe move); investigate
 when a consumer relies on `get_entity` for Concept entities.
 
-## runtime-facade-belief-relationship
+## runtime-facade-belief-forget
 
 The Phase A facade `createNativeProviderTransport` (@engram/node) dispatches
 recall/write/putEntity/scan/consolidate/batchIngest but NOT `beliefPut` or
-`putRelationship`. Phase D (HTTP-MCP) scopes its tool surface to the current
-facade dispatch (recall/write_memory/put_entity) and defers `belief_put`/
-`put_relationship` MCP tools until the facade is widened (mirror `putEntity` for
-the beliefs + graph proxies).
+`forget`. The N-API binding already exposes them
+(`requireBeliefsApi().upsertBeliefJson`, `requireMemoryApi().forgetJson`), so
+these are TS facade widenings (mirror `putEntity`). Phase D (HTTP-MCP) scopes its
+v1 tools to the facade's current dispatch and defers `belief_put` + `forget` MCP
+tools to here.
+
+## runtime-binding-put-relationship
+
+`put_relationship` is NOT a TS facade widening — the held provider's graph proxy
+`NativeGraphApiBinding` exposes only `getEntityJson`/`putEntityJson`/
+`neighborsJson` (`packages/node/src/binding.ts`); `putRelationshipJson` exists only
+on the flat `NativeKnowledgeEngineBinding`. Adding a `put_relationship` MCP tool
+requires widening the Rust binding first: a `put_relationship_json` method on
+`NativeGraphApi` (`bindings/node/src/provider.rs`) + the `NativeGraphApiBinding`
+TS interface. Tracked here; do before exposing `put_relationship` over HTTP-MCP.
+
+## mcp-http-remote-tls
+
+Phase D (HTTP-MCP) v1 binds loopback (`127.0.0.1`) with the MCP SDK's
+`localhostHostValidation` + `localhostOriginValidation` guards — no TLS, no auth,
+no non-loopback path. The Objective's "networked/remote" framing is realized here:
+TLS termination, an auth layer, and a documented non-loopback bind before the
+server is exposed beyond the host.

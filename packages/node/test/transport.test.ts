@@ -83,6 +83,9 @@ class StubNativeProvider {
       putEntityJson(): string {
         return "null";
       },
+      putRelationshipJson(): string {
+        return "null";
+      },
       neighborsJson(): string {
         return "[]";
       }

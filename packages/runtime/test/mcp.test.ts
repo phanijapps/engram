@@ -15,6 +15,9 @@ function mockTransport(): NativeProviderTransport {
     scan: vi.fn(async () => ({})),
     consolidate: vi.fn(async () => ({})),
     putEntity: vi.fn(async () => ({})),
+    putRelationship: vi.fn(async () => ({})),
+    beliefPut: vi.fn(async () => ({})),
+    forget: vi.fn(async () => ({})),
     batchIngest: vi.fn(async () => ({}))
   } as unknown as NativeProviderTransport;
 }
@@ -83,7 +86,7 @@ describe("engram-mcp-http guard", () => {
 });
 
 describe("engram-mcp-http client (MCP protocol)", () => {
-  it("lists the 3 tools and recall dispatches to the facade", async () => {
+  it("lists the 6 tools and recall dispatches to the facade", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -97,7 +100,10 @@ describe("engram-mcp-http client (MCP protocol)", () => {
 
     const { tools } = await client.listTools();
     expect(tools.map((x) => x.name).sort()).toEqual([
+      "belief_put",
+      "forget",
       "put_entity",
+      "put_relationship",
       "recall",
       "write_memory"
     ]);

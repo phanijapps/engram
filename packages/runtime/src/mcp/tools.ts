@@ -80,4 +80,40 @@ export function registerTools(
       return textResult(result);
     }
   );
+
+  server.registerTool(
+    "put_relationship",
+    {
+      description: "Upsert a knowledge relationship (full KnowledgeRelationship JSON object).",
+      inputSchema: z.object({ relationship: z.record(z.string(), z.unknown()) })
+    },
+    async ({ relationship }) => {
+      const result = await transport.putRelationship(relationship);
+      return textResult(result);
+    }
+  );
+
+  server.registerTool(
+    "belief_put",
+    {
+      description: "Upsert a belief (full Belief JSON object).",
+      inputSchema: z.object({ belief: z.record(z.string(), z.unknown()) })
+    },
+    async ({ belief }) => {
+      const result = await transport.beliefPut(belief);
+      return textResult(result);
+    }
+  );
+
+  server.registerTool(
+    "forget",
+    {
+      description: "Forget (delete/redact/tombstone/archive) a memory — full ForgetRequest JSON.",
+      inputSchema: z.object({ request: z.record(z.string(), z.unknown()) })
+    },
+    async ({ request }) => {
+      const result = await transport.forget(request);
+      return textResult(result);
+    }
+  );
 }

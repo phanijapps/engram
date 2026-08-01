@@ -45,7 +45,10 @@ describe.skipIf(!ready)("engram-mcp-http (real addon)", () => {
       );
       const { tools } = await client.listTools();
       expect(tools.map((t) => t.name).sort()).toEqual([
+        "belief_put",
+        "forget",
         "put_entity",
+        "put_relationship",
         "recall",
         "write_memory"
       ]);

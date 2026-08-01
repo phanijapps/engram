@@ -1,18 +1,34 @@
-//! Postgres (pgvector) backend bootstrap — engine-specific zone (ADR-0022 exempt).
+//! pgvector (Postgres) backend recipe (ADR-0022).
+//!
+//! This crate is the **pgvector host entry**: it owns Postgres connection
+//! lifecycle, schema application, adapter-cell composition, and per-engine
+//! conformance — the only place a "pgvector" backend identity exists. Hosts open
+//! a Postgres-backed [`EngramProvider`] via [`open`]; the SDK facade
+//! (`engram-integration`) stays engine-neutral and does not route pgvector (an
+//! `integration → backends` dependency would be a cycle, so the recipe — not
+//! `EngramProvider::open` — is the entry point).
+
+mod recall;
 
 use std::sync::Arc;
 
 use engram_domain::{CapabilityState, EmbeddingSpace};
+use engram_integration::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder};
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_pgvector::{
     PgBeliefStore, PgConnection, PgHierarchyStore, PgKnowledgeStore, PgMemoryService,
     PgProcedureStore, PgVectorIndex, schema,
 };
 
-use crate::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder, UnifiedRecall};
+use recall::PgUnifiedRecall;
 
-/// Bootstraps a Postgres-backed provider.
-pub fn bootstrap_pgvector(config: &EngramConfig) -> CoreResult<EngramProvider> {
+/// Opens a Postgres (pgvector)-backed [`EngramProvider`] from a config carrying
+/// a `pgvector_connection_string`.
+///
+/// Connects, applies the schema (idempotent), and composes the adapter cells —
+/// memory / knowledge+graph / beliefs / hierarchy / procedures / vectors /
+/// unified-recall — into one provider.
+pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let conn_str = config
         .pgvector_connection_string
         .as_deref()
@@ -84,66 +100,4 @@ pub fn bootstrap_pgvector(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .recall(recall);
 
     Ok(provider.build())
-}
-
-/// Postgres-backed UnifiedRecall: composes memory.retrieve + beliefs via RRF.
-struct PgUnifiedRecall {
-    memory: Arc<PgMemoryService>,
-    beliefs: Arc<PgBeliefStore>,
-}
-
-#[async_trait::async_trait]
-impl UnifiedRecall for PgUnifiedRecall {
-    async fn recall(
-        &self,
-        request: engram_domain::RetrievalRequest,
-    ) -> CoreResult<engram_domain::ContextPayload> {
-        use engram_belief::{BeliefQuery, BeliefRepository};
-        use engram_domain::{RetrievalResult, RetrievalScore, RetrievalTargetType};
-        use engram_memory::MemoryService;
-        use engram_retrieval::{ReciprocalRankFusion, RetrievalCompositionInput, compose_context};
-
-        let now = chrono::Utc::now();
-        let mut candidates: Vec<engram_domain::RetrievalResult> = Vec::new();
-
-        // Facts lane: memory.retrieve.
-        if let Ok(payload) = self.memory.retrieve(request.clone()).await {
-            candidates.extend(payload.items);
-        }
-
-        // Beliefs lane.
-        let bq = BeliefQuery::live_subject(request.scope.clone(), request.query.clone(), now);
-        if let Ok(Some(belief)) = self.beliefs.get_belief(bq).await {
-            candidates.push(RetrievalResult {
-                id: format!("result-{}", belief.id),
-                target_type: RetrievalTargetType::Belief,
-                target_id: belief.id.to_string(),
-                content: belief.content,
-                score: RetrievalScore {
-                    total: belief.confidence,
-                    relevance: Some(belief.confidence),
-                    recency: None,
-                    confidence: Some(belief.confidence),
-                    cue_match: None,
-                    hierarchical_fit: None,
-                    policy_fit: Some(1.0),
-                },
-                provenance: belief.provenance,
-                policy: belief.policy,
-                explanation: None,
-                fusion_trace: None,
-                metadata: belief.metadata,
-            });
-        }
-
-        compose_context(RetrievalCompositionInput {
-            request: &request,
-            fusion: &ReciprocalRankFusion::default(),
-            reranker: None,
-            candidates,
-            omitted: vec![],
-            source_failures: vec![],
-            created_at: now,
-        })
-    }
 }

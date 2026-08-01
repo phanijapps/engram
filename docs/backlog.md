@@ -298,3 +298,30 @@ Most items shipped (A1-A2, B1-B8, C1-C9, D3-D4, D6-D8). What remains:
   IDs are not chunk IDs, so every hit resolves to None and is dropped. Needs a sibling
   entity-id resolver lane (resolve via `get_entity` + return `RetrievalTargetType::Entity`)
   wired in bootstrap. Blocked on: the resolver design + bootstrap wiring.
+
+## backends-sqlite-extraction
+
+Phase B (`pgvector-recipe`) promotes pgvector to a `backends/pgvector` recipe and
+removes pgvector from `engram-integration`, but leaves the SQLite composition in
+`EngramProvider::open` (sqlite stays the in-process default per RFC-0017). Full
+ADR-0022 neutrality — extracting `backends/sqlite` and making `open` engine-neutral
+(hosts call `backends::<engine>::open`) — is deferred to here. Trigger: when a
+third engine arrives or when `open`'s sqlite-default coupling blocks a host.
+
+## pgvector-conformance-suite
+
+`ConformanceHarness::new()` (adapters/integration/src/harness.rs) takes no
+provider — it builds its own via `bootstrap_provider` (sqlite). To run the full
+conformance fixture suite against the pgvector recipe, the harness needs a
+provider-injection refactor (`run_all(provider)` or `new_for(provider)`).
+Phase B ships a recipe-level bootstrap test (capabilities + knowledge
+round-trip) instead; full-suite parity with SQLite waits on this.
+
+## pgvector-get-entity-concepts
+
+Observation (Phase B): `PgKnowledgeStore::get_entity(id, scope)` returns `None`
+for a `Concept`-kind entity that `put_entity` stored and `delete_entity` can
+resolve by the same id + scope. Either Concept entities are stored/read through
+a different path than `get_entity` queries, or `get_entity` has a kind/scoping
+bug. Pre-existing cell behavior (not introduced by the recipe move); investigate
+when a consumer relies on `get_entity` for Concept entities.

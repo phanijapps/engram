@@ -187,9 +187,13 @@ impl EngramProvider {
             reason: format!("configuration validation failed: {e}"),
         })?;
 
-        #[cfg(feature = "pgvector")]
         if config.pgvector_connection_string.is_some() {
-            return crate::postgres::bootstrap_pgvector(config);
+            return Err(CoreError::InvalidRequest {
+                reason: "pgvector configs must be opened via the `engram-backend-pgvector` recipe \
+                         (engram_backend_pgvector::open); EngramProvider::open is engine-neutral \
+                         and defaults to SQLite"
+                    .to_owned(),
+            });
         }
 
         #[cfg(feature = "sqlite")]

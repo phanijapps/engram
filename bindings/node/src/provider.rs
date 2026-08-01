@@ -77,11 +77,34 @@ impl NativeProvider {
     #[napi(constructor)]
     pub fn new(config_json: String) -> Result<Self> {
         let config: EngramConfig = decode(&config_json)?;
-        let provider = EngramProvider::open(&config).map_err(to_napi_error)?;
+        // pgvector configs route to the backends/pgvector recipe (the SDK facade's
+        // open() is engine-neutral and sqlite-default). When this binding is built
+        // without the `pgvector` feature, surface a clear error instead of a silent
+        // sqlite open.
+        let provider = if config.pgvector_connection_string.is_some() {
+            #[cfg(feature = "pgvector")]
+            {
+                engram_backend_pgvector::open(&config).map_err(to_napi_error)?
+            }
+            #[cfg(not(feature = "pgvector"))]
+            {
+                return Err(to_napi_error(engram_runtime::CoreError::InvalidRequest {
+                    reason: "pgvector config requires the `pgvector` feature on @engram/node; \
+                             rebuild with --features pgvector"
+                        .to_owned(),
+                }));
+            }
+        } else {
+            EngramProvider::open(&config).map_err(to_napi_error)?
+        };
         Ok(Self { inner: provider })
     }
 
     /// Opens a provider from a profile file path (e.g. `semantic-engine.toml`).
+    ///
+    /// Profile files reject the Postgres backend, so this always opens sqlite;
+    /// a pgvector provider is reachable only through [`Self::new`] with a config
+    /// carrying `pgvector_connection_string`.
     #[napi(js_name = "fromProfileFile")]
     pub fn from_profile_file(path: String) -> Result<Self> {
         let config = EngramConfig::from_profile_file(&path).map_err(Error::from_reason)?;

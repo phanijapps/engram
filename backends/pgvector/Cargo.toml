@@ -1,0 +1,22 @@
+[package]
+name = "engram-backend-pgvector"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+engram-domain = { path = "../../core/domain" }
+engram-runtime = { path = "../../core/runtime" }
+engram-integration = { path = "../../core/integration" }
+engram-store-pgvector = { path = "../../adapters/pgvector" }
+engram-belief = { path = "../../core/belief" }
+engram-memory = { path = "../../core/memory" }
+engram-retrieval = { path = "../../core/retrieval" }
+
+[dev-dependencies]
+engram-domain = { path = "../../core/domain" }
+engram-integration = { path = "../../core/integration" }
+futures.workspace = true

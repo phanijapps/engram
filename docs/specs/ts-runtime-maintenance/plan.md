@@ -18,22 +18,25 @@ Three tasks:
    gates. Export `runMaintain` from the package-root facade; declare the bin in
    `package.json`; extend `tsup.config.ts` entry.
 
-The module is a near-clone of ingest; the only semantic difference is `consolidate`
-returns a `ConsolidationRun` (logged as JSON) and takes `dryRun` instead of a path.
+The module is a near-clone of ingest; the differences: `consolidate` returns a
+`ConsolidationRun` (logged as JSON), takes `dryRun` (+ optional `--since`/`--until`
+for delta consolidation) instead of a `--path`, and there is no `--path` flag.
 
 ## Constraints
 - RFC-0017 Phase E; ADR-0022; the Phase A facade + Phase C runtime package.
 - AGENTS.md — no god-packages; reuse shared helpers.
 
 ## Design (LLD)
-- `runMaintain({transport, scope, dryRun?, every?})` → one-shot
-  `await transport.consolidate({scope, dryRun})` + log the run; periodic via
-  `setInterval`. Returns `{stop}` in periodic mode. No `process.exit`/signals
-  (those live in `bin.ts`, mirroring ingest).
+- `runMaintain({transport, scope, dryRun?, since?, until?, every?})` → one-shot
+  `await transport.consolidate({scope, dryRun, since, until})` + log the run;
+  periodic via `setInterval`. Returns `{stop}` in periodic mode. No
+  `process.exit`/signals (those live in `bin.ts`, mirroring ingest).
 - `parseMaintainArgs`: `--config/--tenant/--workspace` required; `--dry-run`
-  (boolean flag), `--every <ms>` (integer, `/^\d+$/`).
+  (boolean flag), `--since <iso>` / `--until <iso>` (forwarded as-is),
+  `--every <ms>` (integer, `/^\d+$/`).
 - `ConsolidationRun` is logged as JSON (the facade returns `unknown`); a minimal
-  local type `{ status: string; tasks: unknown[] }` for the subprocess assertion.
+  local type `{ status: string; tasks?: unknown[] }` (`tasks` is
+  `skip_serializing_if = Vec::is_empty`, `core/domain/src/operations.rs:277`).
 
 ## Tasks
 
@@ -48,15 +51,16 @@ returns a `ConsolidationRun` (logged as JSON) and takes `dryRun` instead of a pa
 ### T2: TDD dispatch + scheduling
 **Depends on:** T1
 **Tests:** mock transport + fake timers: one-shot calls `consolidate` once with
-`{scope, dryRun}`; `--dry-run` forwards; periodic cadence; stop-clears-interval;
-error-survival; argv validation (required flags, integer `--every`).
+`{scope, dryRun}`; `--dry-run` forwards `dryRun: true`; `--since`/`--until`
+forward; periodic cadence; stop-clears-interval; consolidate-error-survival; argv
+validation (required flags, integer `--every`).
 **Done when:** maintenance tests green.
 
 ### T3: Subprocess test + gates
 **Depends:** T2
 **Tests:** spawn the real bin against the live addon (temp sqlite config) → assert
-stdout is a `ConsolidationRun` (has `status` + `tasks`). Skips if the build chain
-isn't ready.
+stdout is a `ConsolidationRun` with a present `status` (`tasks` may be absent —
+empty corpus, `skip_serializing_if`). Skips if the build chain isn't ready.
 **Done when:** subprocess test green/skipped; recursive typecheck + runtime tests
 green; `git status` clean.
 

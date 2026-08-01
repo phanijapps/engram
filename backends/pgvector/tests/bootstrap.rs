@@ -107,10 +107,18 @@ fn pg_recipe_knowledge_write_read_round_trip() {
     };
 
     block_on(repo.put_entity(entity)).expect("put_entity");
-    // delete_entity resolves by id + scope — proves the put landed + is addressable.
-    // (A get_entity read-back is omitted: pgvector's get_entity returns None for a
-    //  Concept-kind entity while delete_entity finds it — a pre-existing cell
-    //  nuance, out of scope for the recipe move; see backlog.)
+
+    // Read back — proves the entity persisted (get_entity now works after the
+    // trait-default fix).
+    let read_back =
+        block_on(repo.get_entity(&Id::from("pg-rt-entity"), &scope)).expect("get_entity");
+    assert!(read_back.is_some(), "entity must persist after put_entity");
+    assert_eq!(
+        read_back.unwrap().name,
+        "pgvector-round-trip",
+        "read-back entity matches"
+    );
+
     block_on(repo.delete_entity(&Id::from("pg-rt-entity"), &scope)).expect("delete_entity");
 
     println!("pgvector recipe knowledge round-trip: put → delete ✓");

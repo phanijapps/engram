@@ -64,13 +64,17 @@ The three-tier guard that keeps an implementing agent inside the lines.
 
 - [ ] A `packages/runtime` package (`@engram/runtime`) exists, workspace-wired,
   with an `engram-ingest` bin + `typecheck`/`build`/`test` scripts.
-- [ ] `engram-ingest --config <json|path> --path <repo>` scans the repo over the
-  facade (one-shot) and the scanned entities land in the knowledge store (manual
-  QA smoke).
-- [ ] `engram-ingest ... --every <duration>` runs the scan on a `setInterval`
-  schedule (TDD: the scheduling logic is unit-tested with a mock transport).
-- [ ] Config + scope construction is shared (`src/shared/`), not inlined in the
-  ingest module.
+- [ ] `engram-ingest --config <json|path> --path <repo> --tenant <t> --workspace <w>`
+  scans the repo over the facade (one-shot) and the scanned entities land in the
+  knowledge store — verified by a subprocess integration test (the automated
+  regression net) + a manual smoke. `--config` auto-detects inline JSON (`{`-prefixed)
+  vs a file path.
+- [ ] `engram-ingest ... --every <ms>` (integer milliseconds) runs the scan on a
+  `setInterval` schedule, and SIGINT/SIGTERM clears the interval + exits cleanly
+  (TDD: scheduling + shutdown unit-tested with a mock transport + fake timers).
+- [ ] Config + scope construction is shared (`src/shared/`), the package-root
+  `src/index.ts` is a narrow facade (`runIngest`, `buildEngramConfig`,
+  `buildScope`, `ScanSummary`), and each module lives in its own sub-directory.
 - [ ] `pnpm run typecheck` (recursive) + `pnpm --filter @engram/runtime test` are
   green.
 

@@ -29,6 +29,7 @@ members = [
     "codegraph/temporal",
     "mcp/engram-mcp",
     "backends/pgvector",
+    "backends/sqlite",
 ]
 resolver = "3"
 

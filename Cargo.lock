@@ -1525,6 +1525,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-backend-sqlite"
+version = "0.1.0"
+dependencies = [
+ "engram-integration",
+ "engram-runtime",
+]
+
+[[package]]
 name = "engram-belief"
 version = "0.1.0"
 dependencies = [

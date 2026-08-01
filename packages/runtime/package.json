@@ -9,7 +9,8 @@
   },
   "bin": {
     "engram-ingest": "./dist/ingest/bin.js",
-    "engram-mcp-http": "./dist/mcp/bin.js"
+    "engram-mcp-http": "./dist/mcp/bin.js",
+    "engram-maintain": "./dist/maintenance/bin.js"
   },
   "files": [
     "dist"

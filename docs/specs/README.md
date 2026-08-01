@@ -73,6 +73,11 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   (`core/integration/src/pgvector/`) + `adapters/pgvector/` crate; reuses every port
   trait (no domain change). SQLite stays default. Conformance-gated. Constrained by
   ADR-0022, RFC-0017. Draft.
+- [`ts-runtime-maintenance`](ts-runtime-maintenance/spec.md): RFC-0017 Phase E /
+  Module 3 — the maintenance module in @engram/runtime: an `engram-maintain` CLI that
+  runs consolidation (reflection + decay) over the held provider facade, one-shot or
+  on an `--every` setInterval. Mirrors the ingest module (scan→consolidate). Light
+  mode. Constrained by RFC-0017, ADR-0022. Shipped.
 - [`ts-runtime-ingest`](ts-runtime-ingest/spec.md): RFC-0017 Phase C / Module 1 — the TS
   operational layer (`@engram/runtime`) and its first module, `engram-ingest`: a
   CLI that scans a repo into the held provider over the Phase A facade, one-shot

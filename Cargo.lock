@@ -1693,7 +1693,6 @@ dependencies = [
  "engram-store-associative-graph",
  "engram-store-community-summary",
  "engram-store-lexical",
- "engram-store-pgvector",
  "engram-store-sqlite",
  "engram-store-surreal",
  "futures",

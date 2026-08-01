@@ -181,10 +181,11 @@ pub struct EngramConfig {
     #[serde(default)]
     pub sqlite_storage_layout: SqliteStorageLayout,
 
-    /// Optional Postgres connection string for the pgvector backend. When set
-    /// (and the `pgvector` feature is compiled), `EngramProvider::open` dispatches
-    /// to the Postgres backend instead of SQLite/Surreal. A config string (not an
-    /// engine type), so it stays within ADR-0022's neutrality rule.
+    /// Optional Postgres connection string for the pgvector backend. A config
+    /// string (not an engine type), so it stays within ADR-0022's neutrality
+    /// rule. `EngramProvider::open` rejects a config carrying this — it is
+    /// engine-neutral and sqlite-default; open a pgvector provider through the
+    /// `engram-backend-pgvector` recipe (`backends_pgvector::open`).
     pub pgvector_connection_string: Option<String>,
 }
 
@@ -276,8 +277,9 @@ impl EngramConfig {
                 // string. Surface an explicit, typed message rather than a
                 // confusing path-confinement failure.
                 return Err(format!(
-                    "backend `postgres` (connection_string={connection_string}) has no \
-                     active backend feature — open() will report CapabilityUnsupported"
+                    "backend `postgres` (connection_string={connection_string}) must be \
+                     opened via the `engram-backend-pgvector` recipe (backends_pgvector::open); \
+                     EngramProvider::open is sqlite-default"
                 ));
             }
             BackendProfile::Surreal { data_root } => PathBuf::from(data_root),

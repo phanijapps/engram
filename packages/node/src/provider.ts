@@ -50,6 +50,12 @@ export interface NativeProviderTransport {
   }): Promise<unknown>;
   /** Upsert a knowledge entity. */
   putEntity(entity: unknown): Promise<unknown>;
+  /** Upsert a knowledge relationship. */
+  putRelationship(relationship: unknown): Promise<unknown>;
+  /** Upsert a belief. */
+  beliefPut(belief: unknown): Promise<unknown>;
+  /** Forget (delete/redact/tombstone/archive) a memory. */
+  forget(request: unknown): Promise<unknown>;
   /** Best-effort batch ingest. */
   batchIngest(request: unknown): Promise<unknown>;
 }
@@ -111,6 +117,20 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async putEntity(entity: unknown): Promise<unknown> {
     return decode(this.provider.requireGraphApi().putEntityJson(encode(entity)));
+  }
+
+  async putRelationship(relationship: unknown): Promise<unknown> {
+    return decode(
+      this.provider.requireGraphApi().putRelationshipJson(encode(relationship))
+    );
+  }
+
+  async beliefPut(belief: unknown): Promise<unknown> {
+    return decode(this.provider.requireBeliefsApi().upsertBeliefJson(encode(belief)));
+  }
+
+  async forget(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireMemoryApi().forgetJson(encode(request)));
   }
 
   async batchIngest(request: unknown): Promise<unknown> {

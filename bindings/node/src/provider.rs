@@ -22,9 +22,9 @@
 use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
     Actor, ActorKind, AllowedUse, Belief, ConsolidationRequest, ContextPayload, DeleteMode,
-    EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id, KnowledgeEntity, Policy,
-    Procedure, Provenance, Retention, RetrievalRequest, Scope, Sensitivity, Visibility,
-    WriteMemoryRequest, WriteMemoryResponse,
+    EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id, KnowledgeEntity,
+    KnowledgeRelationship, Policy, Procedure, Provenance, Retention, RetrievalRequest, Scope,
+    Sensitivity, Visibility, WriteMemoryRequest, WriteMemoryResponse,
 };
 use engram_hierarchy::HierarchyRepository;
 use engram_ingest::{
@@ -413,6 +413,16 @@ impl NativeGraphApi {
     pub fn put_entity_json(&self, entity_json: String) -> Result<String> {
         let entity: KnowledgeEntity = decode(&entity_json)?;
         let result = block_on(self.knowledge.put_entity(entity)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Stores or updates a relationship. Takes a `KnowledgeRelationship` JSON,
+    /// returns the persisted `KnowledgeRelationship` JSON.
+    #[napi(js_name = "putRelationshipJson")]
+    pub fn put_relationship_json(&self, relationship_json: String) -> Result<String> {
+        let relationship: KnowledgeRelationship = decode(&relationship_json)?;
+        let result =
+            block_on(self.knowledge.put_relationship(relationship)).map_err(to_napi_error)?;
         encode(&result)
     }
 

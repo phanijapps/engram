@@ -138,10 +138,11 @@ export interface NativeRecallApiBinding {
   recallJson(requestJson: string): string;
 }
 
-/** Graph API handle proxy: entity reads/writes + neighbors. */
+/** Graph API handle proxy: entity/relationship reads/writes + neighbors. */
 export interface NativeGraphApiBinding {
   getEntityJson(requestJson: string): string;
   putEntityJson(entityJson: string): string;
+  putRelationshipJson(relationshipJson: string): string;
   neighborsJson(requestJson: string): string;
 }
 

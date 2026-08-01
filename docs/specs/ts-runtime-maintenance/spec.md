@@ -1,6 +1,6 @@
 # Spec: TS runtime maintenance module
 
-- **Status:** Draft <!-- Draft | Implementing | Shipped | Deferred -->
+- **Status:** Shipped <!-- Draft | Implementing | Shipped | Deferred -->
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0017 (Phase E / Module 3, Accepted), ADR-0022, the Phase A facade + Phase C `@engram/runtime` (shipped)
@@ -37,10 +37,10 @@ ingest module exactly (same package, same scheduling/signal pattern), swapping
 - **Manual / integration QA** — a subprocess test (real bin → `consolidate` execution → a `ConsolidationRun`).
 
 ## Acceptance Criteria
-- [ ] An `engram-maintain` bin exists in `@engram/runtime` and runs consolidation over the facade (one-shot), emitting a `ConsolidationRun`.
-- [ ] `--dry-run` forwards `dryRun: true` to `consolidate`; `--since <iso>` / `--until <iso>` forward into the request (delta consolidation) — TDD-asserted.
-- [ ] `engram-maintain ... --every <ms>` runs consolidate on a `setInterval`; SIGINT/SIGTERM (in the bin) clear the interval + exit cleanly.
-- [ ] `runMaintain` is a pure library function (no `process.exit`/signal listeners), exported from the package-root facade alongside `runIngest`.
-- [ ] TDD: dispatch + scheduling + stop-clears-interval + consolidate-error-survival (mock transport, fake timers) green; argv validation (required flags, integer `--every`) covered.
-- [ ] A subprocess test runs the real bin against the live addon and observes a `ConsolidationRun` — asserts `status` is present (`tasks` is `skip_serializing_if = Vec::is_empty`, so an empty corpus omits it).
-- [ ] `pnpm run typecheck` (recursive) + `pnpm --filter @engram/runtime test` green.
+- [x] An `engram-maintain` bin exists in `@engram/runtime` and runs consolidation over the facade (one-shot), emitting a `ConsolidationRun`.
+- [x] `--dry-run` forwards `dryRun: true` to `consolidate`; `--since <iso>` / `--until <iso>` forward into the request (delta consolidation) — TDD-asserted.
+- [x] `engram-maintain ... --every <ms>` runs consolidate on a `setInterval`; SIGINT/SIGTERM (in the bin) clear the interval + exit cleanly.
+- [x] `runMaintain` is a pure library function (no `process.exit`/signal listeners), exported from the package-root facade alongside `runIngest`.
+- [x] TDD: dispatch + scheduling + stop-clears-interval + consolidate-error-survival (mock transport, fake timers) green; argv validation (required flags, integer `--every`) covered.
+- [x] A subprocess test runs the real bin against the live addon and observes a `ConsolidationRun` — asserts `status` is present (`tasks` is `skip_serializing_if = Vec::is_empty`, so an empty corpus omits it).
+- [x] `pnpm run typecheck` (recursive) + `pnpm --filter @engram/runtime test` green.

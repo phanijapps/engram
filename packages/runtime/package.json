@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "bin": {
-    "engram-ingest": "./dist/ingest/cli.js"
+    "engram-ingest": "./dist/ingest/bin.js"
   },
   "files": [
     "dist"

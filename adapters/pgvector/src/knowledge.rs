@@ -171,6 +171,21 @@ impl KnowledgeRepository for PgKnowledgeStore {
         self.delete_scoped("knowledge_relationships", &id.to_string(), scope)
     }
 
+    async fn get_entity(
+        &self,
+        id: &EntityId,
+        scope: &Scope,
+    ) -> CoreResult<Option<KnowledgeEntity>> {
+        self.get_scoped("knowledge_entities", &id.to_string(), scope)
+    }
+    async fn get_relationship(
+        &self,
+        id: &RelationshipId,
+        scope: &Scope,
+    ) -> CoreResult<Option<KnowledgeRelationship>> {
+        self.get_scoped("knowledge_relationships", &id.to_string(), scope)
+    }
+
     async fn list_chunks_by_document(
         &self,
         doc_id: &DocumentId,

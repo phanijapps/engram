@@ -107,11 +107,82 @@ fn pg_recipe_knowledge_write_read_round_trip() {
     };
 
     block_on(repo.put_entity(entity)).expect("put_entity");
-    // delete_entity resolves by id + scope — proves the put landed + is addressable.
-    // (A get_entity read-back is omitted: pgvector's get_entity returns None for a
-    //  Concept-kind entity while delete_entity finds it — a pre-existing cell
-    //  nuance, out of scope for the recipe move; see backlog.)
+
+    // Read back — proves the entity persisted (get_entity now works after the
+    // trait-default fix).
+    let read_back =
+        block_on(repo.get_entity(&Id::from("pg-rt-entity"), &scope)).expect("get_entity");
+    assert!(read_back.is_some(), "entity must persist after put_entity");
+    assert_eq!(
+        read_back.unwrap().name,
+        "pgvector-round-trip",
+        "read-back entity matches"
+    );
+
     block_on(repo.delete_entity(&Id::from("pg-rt-entity"), &scope)).expect("delete_entity");
 
     println!("pgvector recipe knowledge round-trip: put → delete ✓");
+}
+
+#[test]
+#[ignore]
+fn pg_recipe_relationship_round_trip() {
+    use engram_domain::*;
+
+    let config = pg_config();
+    let provider = open(&config).expect("recipe opens");
+    let repo = provider.require_knowledge().expect("knowledge handle");
+
+    let scope = Scope {
+        tenant: "pgvector-test".to_owned(),
+        subject: None,
+        workspace: Some("test".to_owned()),
+        session: None,
+        environment: Some("test".to_owned()),
+    };
+    let rel = KnowledgeRelationship {
+        id: Id::from("pg-rt-rel"),
+        graph_id: None,
+        subject: EntityRef {
+            id: Some(Id::from("pg-rt-src")),
+            kind: None,
+            name: None,
+            aliases: Vec::new(),
+        },
+        predicate: "depends_on".to_owned(),
+        object: EntityRef {
+            id: Some(Id::from("pg-rt-dst")),
+            kind: None,
+            name: None,
+            aliases: Vec::new(),
+        },
+        scope: scope.clone(),
+        evidence: Vec::new(),
+        confidence: Some(1.0),
+        provenance: Provenance {
+            source: "test".to_owned(),
+            actor: Actor {
+                id: Id::from("test"),
+                kind: ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
+            observed_at: chrono::Utc::now(),
+            evidence: Vec::new(),
+            derivations: Vec::new(),
+            confidence: Some(1.0),
+            method: None,
+        },
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+    };
+
+    block_on(repo.put_relationship(rel)).expect("put_relationship");
+    let read =
+        block_on(repo.get_relationship(&Id::from("pg-rt-rel"), &scope)).expect("get_relationship");
+    assert!(read.is_some(), "relationship must persist after put");
+    block_on(repo.delete_relationship(&Id::from("pg-rt-rel"), &scope))
+        .expect("delete_relationship");
+
+    println!("pgvector recipe relationship round-trip: put → get → delete ✓");
 }

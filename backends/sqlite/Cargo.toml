@@ -1,0 +1,10 @@
+[package]
+name = "engram-backend-sqlite"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+engram-integration = { path = "../../core/integration", features = ["sqlite"] }
+engram-runtime = { path = "../../core/runtime" }

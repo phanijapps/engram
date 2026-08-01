@@ -104,6 +104,44 @@ the target, `scan_repo` and friends are **Module-1 ingestion jobs**; the MCP nar
 — the heavy lifting is out of the request path. An agent that wants to scan invokes
 Module 1 (or a thin MCP action that *enqueues* a Module-1 job), never blocks the query loop.
 
+### Realization: a TS operational layer over a held N-API provider
+
+The three modules are realized as **TypeScript entry points over one long-lived
+`EngramProvider` handle**, not as three Rust binaries:
+
+- **Rust core** owns deterministic operations only — `scan`, `ingest`, `recall`,
+  `write_memory`, `consolidation.plan` / `run_maintenance_step` / `apply_decay`,
+  `build_hierarchy`. No scheduler, no network, no LLM, no async runtime (the
+  existing boundary rules + ADR-0022 engine neutrality).
+- **TypeScript layer** (`packages/` + a runtime/app) owns the operational glue —
+  the Kafka/queue consumer, the webhook receiver, the lightweight HTTP MCP, the
+  consolidation worker/scheduler, and the distill LLM. These are JS-ecosystem
+  strengths and AGENTS.md assigns model integrations + transport to TypeScript.
+
+> **Keystone invariant (surface parity, ADR-0022).** A capability is reachable
+> from the TS modules only if it crosses the N-API boundary on a **single held,
+> engine-routed provider** — `NativeProvider` (`bindings/node/src/provider.rs`),
+> which holds an `EngramProvider` and reaches every capability through typed
+> handle proxies, **including consolidation execution** (`consolidate_json` →
+> `ConsolidationService::consolidate`). The surface-parity gate passes with **zero
+> acknowledged debt**. What is *not* yet done: no TS facade consumes
+> `NativeProvider` (`packages/` still uses the flat `NativeKnowledgeEngine`), and
+> `scan` is composed at the call site (knowledge + graph handles) rather than
+> exposed as a dedicated method. The `engram-mcp` Rust binary stays as the **stdio
+> MCP** — the single-agent default and deterministic fallback — while the TS
+> modules are the deployable multi-worker surface.
+
+### One write-path, many triggers (consolidating ingestion + streaming)
+
+"Consolidate ingestion and streaming" is **not** three things to build — it is
+three trigger shapes over one Module-1 write-path. Engram ships the write entry
+point (`scan` / `ingest` / `store_knowledge` over the held provider); the TS
+layer ships reference transport adapters (cron, a queue consumer, a webhook
+receiver) that each call that entry point per record. Engram does **not** ship a
+Kafka framework, a cron daemon, or a worker runtime — the **deployment owns the
+scheduler, the transport, and the LLM** (mirroring the agentzero integration
+rule: engram = pure library of operations; the consumer owns timers/triggers).
+
 ### pgvector as a store (Module 0 — the substrate)
 
 Add **Postgres + pgvector** as the second backend:
@@ -131,15 +169,18 @@ Add **Postgres + pgvector** as the second backend:
 | D4 | Module 3 **formalizes** consolidation/reflection/decay/hierarchy/taxonomy/GC as a service (builds on existing crates). | The maintenance foundation exists; it needs a service shell + scheduler, not new domain logic. |
 | D5 | **pgvector** is the second backend (graph+vector in one Postgres), via ADR-0022 adapter cells + recipe; SQLite stays default. | Concurrent writers + scale; backend swap-by-config preserved; no core/contract change. |
 | D6 | All three modules share **one `EngramProvider`** + fused-per-project scope; no module owns storage. | Modules compose adapter cells; storage neutrality stays intact. |
+| D7 | The modules are realized as **TS entry points over the existing held `EngramProvider` N-API handle (`NativeProvider`)**, not three Rust binaries. That handle + consolidation execution already exist and pass the parity gate (0 debt); the remaining work is the TS facade + a scan entry point the modules sit on. | Kafka/HTTP-MCP/scheduler/LLM are JS-ecosystem strengths + AGENTS.md assigns them to TS; one held provider preserves engine routing + surface parity; the stdio `engram-mcp` binary stays as the single-agent default. |
+| D8 | The **scheduler, transport, and LLM live out-of-process** in the TS layer; engram ships the write/query/maintain operations + reference adapters, never a framework. | One write-path / many triggers; mirrors the agentzero rule (engram = pure library of operations); avoids a god-module that couples timers, queues, and model wiring. |
 
 ## Current state → target
 
 | | Current | Target |
 |---|---|---|
-| Ingestion | `scan_*` live as MCP tools; no event/stream/scheduled framework | Module-1 service/CLI; scheduled first, then events + streaming |
-| Retrieval + mutation | MCP ~32 tools (query + mutation + ingestion mixed) | MCP = query + light mutation only; `scan_*` moved out |
-| Maintenance | `consolidate` + reflection + decay adapter exist, not a service | Module-3 scheduled service |
-| Storage | SQLite single-file WAL (single writer) | SQLite default **+ pgvector** (concurrent writers) |
+| N-API | `NativeProvider` holds the provider + reaches all 20 capabilities incl. consolidation **execution** (parity gate: 0 debt); BUT `packages/` still use the flat `NativeKnowledgeEngine`, and `scan` is composed at the call site rather than a dedicated method | TS facade over `NativeProvider` (flat engine retired); scan reachable as a first-class entry point |
+| Ingestion | `scan_*` live as MCP tools; no event/stream/scheduled framework | TS Module 1 over the held provider; cron first, then queue/webhook adapters |
+| Retrieval + mutation | MCP ~37 tools (query + mutation + ingestion mixed) | TS HTTP MCP + the stdio binary, narrowed to query + light mutation; `scan_*` moved out |
+| Maintenance | `consolidate` + reflection + decay wired into the provider, not driven as a job | TS Module 3 worker; `plan` → `run_maintenance_step` → `apply_decay` |
+| Storage | SQLite single-file WAL (single writer) | SQLite default **+ pgvector recipe** (concurrent writers) |
 
 ## Phased plan
 
@@ -147,15 +188,20 @@ Each phase → its own spec under `docs/specs/`, run through `work-loop`.
 
 | Phase | Scope | Decisions | Depends on |
 |---|---|---|---|
-| **A — pgvector backend** | extract `backends/sqlite` recipe; add pgvector adapter cells (memory/knowledge/graph/vector/lexical/belief/hierarchy) + `backends/pgvector` recipe + conformance | D5, D6 | ADR-0022 (done) |
-| **B — Ingestion module (scheduled)** | move `scan_*` into an `ingest` CLI/service (scheduled trigger); MCP keeps query + light mutation (D2) | D1, D2, D3 | — |
-| **C — Maintenance service** | formalize consolidation/reflection/decay/hierarchy/taxonomy/GC behind a scheduler (Module 3) | D1, D4 | — |
-| **D — Events + Streaming** | webhook/queue consumer ingestion triggers (Module 1) | D3 | B |
+| **A — TS facade + scan entry point** | The held `NativeProvider` + consolidation execution **already exist** (parity gate: 0 debt). Add a TS facade over `NativeProvider` in `packages/` (replacing flat `NativeKnowledgeEngine` usage) + make `scan` reachable as a first-class entry point (compose knowledge+graph handles, as the MCP does, or a dedicated binding method). | D6, D7, D8 | ADR-0022 (done) |
+| **B — pgvector recipe** | promote the existing 8 adapter cells into a `backends/pgvector` recipe crate + conformance (cells + postgres bootstrap exist; the recipe crate does not); SQLite stays local default | D5 | ADR-0022 (done) |
+| **C — TS Module 1: ingest** | TS ingest entry point over the held provider; cron first, then queue/webhook adapters | D1, D2, D3, D8 | A |
+| **D — TS Module 2: HTTP MCP** | lightweight HTTP MCP + query/mutation API over the held provider; MCP narrowed to query + light mutation | D2 | A |
+| **E — TS Module 3: maintenance** | TS maintenance worker over `consolidate_json` (`ConsolidationRequest` with `dry_run`/`since`/`until`); scheduler/timer owned by the deployment | D1, D4, D8 | A |
+| **F — Events + streaming** | queue-consumer + webhook transport adapters feeding Module 1's write-path | D3, D8 | C |
 
-**Sequencing rationale.** pgvector (A) unblocks the concurrent-writer requirement the
-three modules create, so it lands first. B is the cheapest structural win (move scan out
-of the MCP). C builds on existing crates. D (streaming/events) is the furthest out and
-the most operationally involved.
+**Sequencing rationale.** The held provider + consolidation execution are **already
+built** — Phase A is mostly *adoption*: a TS facade over `NativeProvider` (retiring the
+flat `NativeKnowledgeEngine`) + a scan entry point. C/D/E are the three TS modules, each
+one PR-width on top of A's facade. pgvector-as-recipe (B) unblocks the concurrent-writer
+requirement the three workers create; it is independent of A and can land in parallel.
+F (streaming/events) is the furthest out and the most operationally involved; it needs a
+transport probe (NATS/Redpanda/Redis Streams) before speccing.
 
 ## Risks
 
@@ -171,21 +217,28 @@ the most operationally involved.
 
 ## Open questions
 
-1. **One binary, three modes** vs three binaries? (Leaning: one binary, `--mode` flag —
-   simplest to operate, deployable as one or three.)
-2. Does Module 2's **API** transport (alongside MCP) carry the full mutation surface, or
-   read-only? (Leaning: full mutation, since "add/update memories" is in scope.)
-3. **Streaming** substrate — Kafka/Redpanda/NATS/Redis Streams? Defer the choice to
-   Phase D with a probe.
+1. ~~**One binary, three modes** vs three binaries?~~ **Resolved (D7):** neither — the
+   modules are **TS entry points over a held N-API provider**. The Rust `engram-mcp`
+   binary stays as the stdio MCP (single-agent default); the three modules are TS
+   programs/apps the deployment runs as one or three processes.
+2. ~~Does Module 2's **API** transport carry the full mutation surface?~~ **Resolved (D2):**
+   yes — query + light agent mutation (`write_memory`, `put_entity`, `belief_put`, `forget`).
+   Bulk ingestion (`scan_*`) is excluded; it lives in Module 1.
+3. **Streaming substrate** — Kafka/Redpanda/NATS/Redis Streams? Defer to Phase F with a
+   transport probe before speccing.
 4. pgvector **keyword lane** — `tsvector`, `pg_trgm`, or keep Tantivy behind a lexical
    adapter cell? (Leaning: Tantivy adapter cell reused, to avoid a second keyword impl.)
 
 ## What "done" looks like (for the accepted scope)
 
+- A **TS facade over the existing `NativeProvider`** on which query, mutation, scan, and
+  consolidation **execution** are all reachable — retiring the flat
+  `NativeKnowledgeEngine` usage in `packages/` (D6, D7, D8).
 - A pgvector backend that passes the same conformance suite as SQLite, swappable by
-  config (D5).
-- A Module-1 ingestion entry point that runs the `scan_*` family on a schedule, with the
+  config, shaped as a `backends/pgvector` recipe (D5).
+- A TS Module-1 ingest entry point that runs the `scan_*` family on a schedule, with the
   MCP narrowed to query + light mutation (D1, D2, D3).
-- A Module-3 maintenance entry point running consolidation/reflection/decay on a
-  schedule (D1, D4).
-- All three sharing one `EngramProvider` + fused-per-project scope, engine-neutral (D6).
+- A TS Module-3 maintenance worker running `plan` → `run_maintenance_step` →
+  `apply_decay`, scheduler owned by the deployment (D1, D4, D8).
+- All three sharing one held `EngramProvider` + fused-per-project scope, engine-neutral
+  (D6).

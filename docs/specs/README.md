@@ -35,6 +35,14 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   new `engram-integration` exposure (`KnowledgeQuery` list methods + a lexical feed)
   so code-intel routes through `EngramProvider` with no provider bypass. Constrained
   by RFC-0015, ADR-0008, ADR-0009, ADR-0022, ADR-0020, ADR-0025. Draft.
+- [`ts-provider-facade`](ts-provider-facade/spec.md): RFC-0017 Phase A keystone —
+  make the held `NativeProvider` (held `EngramProvider`, 20 capabilities incl.
+  consolidation execution; parity gate 0 debt) consumable from TypeScript: a
+  `NativeProvider` binding surface in `@engram/node`, a `scanRepositoryJson`
+  method (promoting the scan fan-in to `engram-ingest`), and a thin provider
+  facade dispatching recall/write/scan/consolidate. The adoption slice the ingest /
+  HTTP-MCP / maintenance modules compose on. Constrained by RFC-0017, ADR-0022,
+  RFC-0015. Draft.
 - [`scan-filter-config`](scan-filter-config/spec.md): externalize the scanner's
   two hardcoded tuning lists — the cross-document concept-link filter
   (`should_link_concept`) and the file denylist (`is_denylisted`) — behind an

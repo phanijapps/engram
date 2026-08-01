@@ -23,10 +23,13 @@ use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
     Actor, ActorKind, AllowedUse, Belief, ConsolidationRequest, ContextPayload, DeleteMode,
     EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id, KnowledgeEntity, Policy,
-    Procedure, Provenance, RetrievalRequest, Retention, Scope, Sensitivity, Visibility,
+    Procedure, Provenance, Retention, RetrievalRequest, Scope, Sensitivity, Visibility,
     WriteMemoryRequest, WriteMemoryResponse,
 };
 use engram_hierarchy::HierarchyRepository;
+use engram_ingest::{
+    KnowledgeRepoGraph, ScanFilter, ScanFilterConfig, ScanOptions, ScanSummary, scan_repository,
+};
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, EmbeddingProvider,
     EngramConfig, EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed, MigrationService,
@@ -35,13 +38,10 @@ use engram_integration::{
 use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
 };
-use engram_ingest::{
-    KnowledgeRepoGraph, ScanFilter, ScanFilterConfig, ScanOptions, ScanSummary, scan_repository,
-};
-use engram_runtime::CoreResult;
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
 use engram_retrieval::{RetrievalIndex, VectorIndex};
+use engram_runtime::CoreResult;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -1045,7 +1045,10 @@ struct ScanRepoRequest {
 /// Runs `scan_repository` against the held provider's knowledge + graph handles.
 ///
 /// Extracted from the napi method so it is unit-testable without the napi wrapper.
-fn scan_via_provider(provider: &EngramProvider, request: &ScanRepoRequest) -> CoreResult<ScanSummary> {
+fn scan_via_provider(
+    provider: &EngramProvider,
+    request: &ScanRepoRequest,
+) -> CoreResult<ScanSummary> {
     let knowledge = provider.require_knowledge()?.clone();
     let graph = provider.require_graph()?.clone();
     let repo = KnowledgeRepoGraph::new(knowledge, graph);
@@ -1097,8 +1100,8 @@ mod tests {
 
     #[test]
     fn scan_via_provider_writes_entities() {
-        let dir = std::env::temp_dir()
-            .join(format!("engram-node-scan-test-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("engram-node-scan-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         // A fixture source file with a parseable symbol.
@@ -1133,7 +1136,10 @@ mod tests {
             scan_filter: None,
         };
         let summary = scan_via_provider(&provider, &request).expect("scan runs");
-        assert!(summary.scanned >= 1, "fixture should be scanned: {summary:?}");
+        assert!(
+            summary.scanned >= 1,
+            "fixture should be scanned: {summary:?}"
+        );
         assert!(
             summary.entities >= 1,
             "fixture symbol should extract to an entity: {summary:?}"

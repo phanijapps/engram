@@ -58,12 +58,16 @@ export interface NativeProviderTransport {
 export function createNativeProviderTransport(
   options: NativeProviderTransportOptions
 ): NativeProviderTransport {
-  const provider =
-    options.provider ??
-    new (options.binding ?? loadNativeBinding(options.loader)).NativeProvider(
-      options.configJson ?? "{}"
+  if (options.provider) {
+    return new JsonNativeProviderTransport(options.provider);
+  }
+  if (!options.configJson) {
+    throw new Error(
+      "createNativeProviderTransport: configJson is required when provider is not injected"
     );
-  return new JsonNativeProviderTransport(provider);
+  }
+  const binding = options.binding ?? loadNativeBinding(options.loader);
+  return new JsonNativeProviderTransport(new binding.NativeProvider(options.configJson));
 }
 
 class JsonNativeProviderTransport implements NativeProviderTransport {

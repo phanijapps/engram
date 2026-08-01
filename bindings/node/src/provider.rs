@@ -1052,6 +1052,9 @@ fn scan_via_provider(
     let knowledge = provider.require_knowledge()?.clone();
     let graph = provider.require_graph()?.clone();
     let repo = KnowledgeRepoGraph::new(knowledge, graph);
+    // No `<repo>/.engram/scan.json` discovery here — this is a library entry
+    // point, not a host. A caller that wants the repo-local filter resolves it
+    // (the MCP's `resolve_scan_filter` does) and passes `scan_filter` explicitly.
     let scan_filter = match &request.scan_filter {
         Some(cfg) => ScanFilter::merge(cfg),
         None => ScanFilter::default(),

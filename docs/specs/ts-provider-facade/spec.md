@@ -1,6 +1,6 @@
 # Spec: TypeScript provider facade over NativeProvider
 
-- **Status:** Draft <!-- Draft | Implementing | Shipped | Deferred -->
+- **Status:** Shipped <!-- Draft | Implementing | Shipped | Deferred -->
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0017 (Phase A), ADR-0022 (engine neutrality + surface parity), RFC-0015 D4 (LLM stays agent-side)
@@ -71,7 +71,7 @@ The three-tier guard that keeps an implementing agent inside the lines.
 
 ## Acceptance Criteria
 
-- [ ] `@engram/node` exports a typed `NativeProvider` surface covering the
+- [x] `@engram/node` exports a typed `NativeProvider` surface covering the
   operations Phase A delivers — constructor from config JSON, `fromProfileFile`,
   `capabilitiesJson`, the two direct methods (`consolidateJson`,
   `scanRepositoryJson`), and the five handle proxies the facade dispatches
@@ -79,15 +79,15 @@ The three-tier guard that keeps an implementing agent inside the lines.
   `requireBeliefsApi`) with their sub-interfaces; `pnpm run typecheck` passes.
   The remaining 13 `require*Api` proxies are out of scope here — typed on demand
   when a module in Phases C–E needs one.
-- [ ] A TS consumer can scan a fixture repository over the held provider and the
+- [x] A TS consumer can scan a fixture repository over the held provider and the
   scanned entities land in the knowledge store (manual QA smoke).
-- [ ] A TS consumer can run consolidation execution over the held provider
+- [x] A TS consumer can run consolidation execution over the held provider
   (`consolidateJson`) and observe a `ConsolidationRun` with task-level outcomes
   (manual QA smoke).
-- [ ] The TS facade dispatches `recall`, `write`, `scan`, `consolidate`,
+- [x] The TS facade dispatches `recall`, `write`, `scan`, `consolidate`,
   `putEntity`, and `batchIngest` to `NativeProvider` (TDD: mock-binding unit
   tests green).
-- [ ] `pnpm run typecheck` and `pnpm run test` are green; the scan fan-in
+- [x] `pnpm run typecheck` and `pnpm run test` are green; the scan fan-in
   (`KnowledgeRepoGraph`) lives in `engram-ingest`, not duplicated in the binding
   or MCP.
 

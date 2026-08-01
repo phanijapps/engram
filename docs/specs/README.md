@@ -42,7 +42,7 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   method (promoting the scan fan-in to `engram-ingest`), and a thin provider
   facade dispatching recall/write/scan/consolidate. The adoption slice the ingest /
   HTTP-MCP / maintenance modules compose on. Constrained by RFC-0017, ADR-0022,
-  RFC-0015. Draft.
+  RFC-0015. Shipped.
 - [`scan-filter-config`](scan-filter-config/spec.md): externalize the scanner's
   two hardcoded tuning lists — the cross-document concept-link filter
   (`should_link_concept`) and the file denylist (`is_denylisted`) — behind an

@@ -1,6 +1,6 @@
 # RFC-0017: Three-module target architecture (Ingestion / Retrieval+Mutation / Maintenance) + pgvector backend
 
-Status: Draft
+Status: Accepted
 Constrained by: ADR-0003 (implementation stack), ADR-0022 (engine neutrality, capability × engine grid, backend = recipe), RFC-0015/0016 (unified MCP, code as the final layer)
 
 ## Reviewer brief

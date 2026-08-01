@@ -65,3 +65,10 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   (`core/integration/src/pgvector/`) + `adapters/pgvector/` crate; reuses every port
   trait (no domain change). SQLite stays default. Conformance-gated. Constrained by
   ADR-0022, RFC-0017. Draft.
+- [`pgvector-recipe`](pgvector-recipe/spec.md): RFC-0017 Phase B — promote the
+  pgvector backend from an engine module inside the SDK facade into a
+  `backends/pgvector` recipe crate (ADR-0022: recipe owns connection lifecycle +
+  composition + conformance; the only place a backend identity exists). The recipe
+  becomes the pgvector host entry; `EngramProvider::open` stays engine-neutral
+  (sqlite default) and rejects pgvector configs. Constrained by RFC-0017,
+  ADR-0022. Draft.

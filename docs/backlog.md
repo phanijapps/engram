@@ -298,3 +298,12 @@ Most items shipped (A1-A2, B1-B8, C1-C9, D3-D4, D6-D8). What remains:
   IDs are not chunk IDs, so every hit resolves to None and is dropped. Needs a sibling
   entity-id resolver lane (resolve via `get_entity` + return `RetrievalTargetType::Entity`)
   wired in bootstrap. Blocked on: the resolver design + bootstrap wiring.
+
+## backends-sqlite-extraction
+
+Phase B (`pgvector-recipe`) promotes pgvector to a `backends/pgvector` recipe and
+removes pgvector from `engram-integration`, but leaves the SQLite composition in
+`EngramProvider::open` (sqlite stays the in-process default per RFC-0017). Full
+ADR-0022 neutrality — extracting `backends/sqlite` and making `open` engine-neutral
+(hosts call `backends::<engine>::open`) — is deferred to here. Trigger: when a
+third engine arrives or when `open`'s sqlite-default coupling blocks a host.

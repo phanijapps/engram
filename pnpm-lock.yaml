@@ -115,6 +115,15 @@ importers:
         specifier: workspace:*
         version: link:../contracts
 
+  packages/runtime:
+    dependencies:
+      '@engram/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@engram/node':
+        specifier: workspace:*
+        version: link:../node
+
   prototype/backend:
     dependencies:
       '@earendil-works/pi-coding-agent':

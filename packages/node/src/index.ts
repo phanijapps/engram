@@ -56,3 +56,8 @@ export {
   type RetrievalIndexChunkResult,
   type RetrievalSearchHit
 } from "./transport.js";
+export {
+  createNativeProviderTransport,
+  type NativeProviderTransport,
+  type NativeProviderTransportOptions
+} from "./provider.js";

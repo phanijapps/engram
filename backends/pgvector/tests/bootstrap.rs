@@ -123,3 +123,66 @@ fn pg_recipe_knowledge_write_read_round_trip() {
 
     println!("pgvector recipe knowledge round-trip: put → delete ✓");
 }
+
+#[test]
+#[ignore]
+fn pg_recipe_relationship_round_trip() {
+    use engram_domain::*;
+
+    let config = pg_config();
+    let provider = open(&config).expect("recipe opens");
+    let repo = provider.require_knowledge().expect("knowledge handle");
+
+    let scope = Scope {
+        tenant: "pgvector-test".to_owned(),
+        subject: None,
+        workspace: Some("test".to_owned()),
+        session: None,
+        environment: Some("test".to_owned()),
+    };
+    let rel = KnowledgeRelationship {
+        id: Id::from("pg-rt-rel"),
+        graph_id: None,
+        subject: EntityRef {
+            id: Some(Id::from("pg-rt-src")),
+            kind: None,
+            name: None,
+            aliases: Vec::new(),
+        },
+        predicate: "depends_on".to_owned(),
+        object: EntityRef {
+            id: Some(Id::from("pg-rt-dst")),
+            kind: None,
+            name: None,
+            aliases: Vec::new(),
+        },
+        scope: scope.clone(),
+        evidence: Vec::new(),
+        confidence: Some(1.0),
+        provenance: Provenance {
+            source: "test".to_owned(),
+            actor: Actor {
+                id: Id::from("test"),
+                kind: ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
+            observed_at: chrono::Utc::now(),
+            evidence: Vec::new(),
+            derivations: Vec::new(),
+            confidence: Some(1.0),
+            method: None,
+        },
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+    };
+
+    block_on(repo.put_relationship(rel)).expect("put_relationship");
+    let read =
+        block_on(repo.get_relationship(&Id::from("pg-rt-rel"), &scope)).expect("get_relationship");
+    assert!(read.is_some(), "relationship must persist after put");
+    block_on(repo.delete_relationship(&Id::from("pg-rt-rel"), &scope))
+        .expect("delete_relationship");
+
+    println!("pgvector recipe relationship round-trip: put → get → delete ✓");
+}

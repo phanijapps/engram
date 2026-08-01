@@ -6,8 +6,8 @@ use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
     ContextPayload, RetrievalRequest, RetrievalResult, RetrievalScore, RetrievalTargetType,
 };
-use engram_memory::MemoryService;
 use engram_integration::UnifiedRecall;
+use engram_memory::MemoryService;
 use engram_retrieval::{ReciprocalRankFusion, RetrievalCompositionInput, compose_context};
 use engram_runtime::CoreResult;
 use engram_store_pgvector::{PgBeliefStore, PgMemoryService};

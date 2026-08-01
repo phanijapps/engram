@@ -307,3 +307,12 @@ removes pgvector from `engram-integration`, but leaves the SQLite composition in
 ADR-0022 neutrality — extracting `backends/sqlite` and making `open` engine-neutral
 (hosts call `backends::<engine>::open`) — is deferred to here. Trigger: when a
 third engine arrives or when `open`'s sqlite-default coupling blocks a host.
+
+## pgvector-conformance-suite
+
+`ConformanceHarness::new()` (adapters/integration/src/harness.rs) takes no
+provider — it builds its own via `bootstrap_provider` (sqlite). To run the full
+conformance fixture suite against the pgvector recipe, the harness needs a
+provider-injection refactor (`run_all(provider)` or `new_for(provider)`).
+Phase B ships a recipe-level bootstrap test (capabilities + knowledge
+round-trip) instead; full-suite parity with SQLite waits on this.

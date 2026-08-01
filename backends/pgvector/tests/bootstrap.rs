@@ -11,9 +11,7 @@
 
 use engram_backend_pgvector::open;
 use engram_domain::ScopeMappingStrategy;
-use engram_integration::{
-    CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode,
-};
+use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode};
 use futures::executor::block_on;
 use std::path::PathBuf;
 
@@ -45,9 +43,17 @@ fn pg_recipe_opens_and_reports_capabilities() {
 
     // Hot-path capabilities must be wired.
     let caps = provider.capabilities();
-    assert_eq!(caps.knowledge, CapabilityState::Supported, "knowledge Supported");
+    assert_eq!(
+        caps.knowledge,
+        CapabilityState::Supported,
+        "knowledge Supported"
+    );
     assert_eq!(caps.graph, CapabilityState::Supported, "graph Supported");
-    assert_eq!(caps.vectors, CapabilityState::Supported, "vectors Supported");
+    assert_eq!(
+        caps.vectors,
+        CapabilityState::Supported,
+        "vectors Supported"
+    );
 
     println!("pgvector recipe: provider opens, knowledge + graph + vectors Supported ✓");
 }

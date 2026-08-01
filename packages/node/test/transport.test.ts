@@ -41,10 +41,89 @@ class FakeNativeMemoryEngine {
   }
 }
 
+/** Minimal NativeProvider stub for fixtures that mock NativeBinding.
+ *  The transport tests do not exercise the provider; this only satisfies the
+ *  NativeBinding shape now that NativeProvider is a required member. */
+class StubNativeProvider {
+  constructor(_configJson?: string) {}
+  capabilitiesJson(): string {
+    return "{}";
+  }
+  consolidateJson(): string {
+    return '{"status":"Complete","tasks":[]}';
+  }
+  scanRepositoryJson(): string {
+    return '{"scanned":0,"ingested":0,"unchanged":0,"skipped":0,"entities":0,"relationships":0,"errors":0}';
+  }
+  requireMemoryApi() {
+    return {
+      searchJson(): string {
+        return "";
+      },
+      writeJson(): string {
+        return "";
+      },
+      forgetJson(): string {
+        return "";
+      }
+    };
+  }
+  requireRecallApi() {
+    return {
+      recallJson(): string {
+        return "";
+      }
+    };
+  }
+  requireGraphApi() {
+    return {
+      getEntityJson(): string {
+        return "null";
+      },
+      putEntityJson(): string {
+        return "null";
+      },
+      neighborsJson(): string {
+        return "[]";
+      }
+    };
+  }
+  requireBatchApi() {
+    return {
+      ingestJson(): string {
+        return "";
+      },
+      transactionGuarantee(): string {
+        return '"BestEffort"';
+      }
+    };
+  }
+  requireBeliefsApi() {
+    return {
+      getBeliefJson(): string {
+        return "null";
+      },
+      upsertBeliefJson(): string {
+        return "null";
+      },
+      retractBeliefJson(): string {
+        return "null";
+      },
+      listStaleBeliefsJson(): string {
+        return "[]";
+      }
+    };
+  }
+  static fromProfileFile(_path: string): StubNativeProvider {
+    return new StubNativeProvider();
+  }
+}
+
 describe("@engram/node", () => {
   it("translates generated contract objects through the native JSON binding", async () => {
     let engine: FakeNativeMemoryEngine | undefined;
     const binding: NativeBinding = {
+      NativeProvider: StubNativeProvider,
       NativeMemoryEngine: class extends FakeNativeMemoryEngine {
         constructor() {
           super();
@@ -133,6 +212,7 @@ describe("@engram/node", () => {
   it("delegates architecture surfaces to native JSON transports", async () => {
     const calls: string[] = [];
     const binding: NativeBinding = {
+      NativeProvider: StubNativeProvider,
       NativeMemoryEngine: class extends FakeNativeMemoryEngine {},
       NativeKnowledgeEngine: class {
         putEntityJson(): string { return "null"; }

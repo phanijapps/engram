@@ -316,3 +316,12 @@ conformance fixture suite against the pgvector recipe, the harness needs a
 provider-injection refactor (`run_all(provider)` or `new_for(provider)`).
 Phase B ships a recipe-level bootstrap test (capabilities + knowledge
 round-trip) instead; full-suite parity with SQLite waits on this.
+
+## pgvector-get-entity-concepts
+
+Observation (Phase B): `PgKnowledgeStore::get_entity(id, scope)` returns `None`
+for a `Concept`-kind entity that `put_entity` stored and `delete_entity` can
+resolve by the same id + scope. Either Concept entities are stored/read through
+a different path than `get_entity` queries, or `get_entity` has a kind/scoping
+bug. Pre-existing cell behavior (not introduced by the recipe move); investigate
+when a consumer relies on `get_entity` for Concept entities.

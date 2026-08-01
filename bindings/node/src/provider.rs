@@ -96,6 +96,10 @@ impl NativeProvider {
     }
 
     /// Opens a provider from a profile file path (e.g. `semantic-engine.toml`).
+    ///
+    /// Profile files reject the Postgres backend, so this always opens sqlite;
+    /// a pgvector provider is reachable only through [`Self::new`] with a config
+    /// carrying `pgvector_connection_string`.
     #[napi(js_name = "fromProfileFile")]
     pub fn from_profile_file(path: String) -> Result<Self> {
         let config = EngramConfig::from_profile_file(&path).map_err(Error::from_reason)?;

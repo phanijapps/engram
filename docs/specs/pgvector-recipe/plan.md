@@ -179,8 +179,10 @@ clear error when off; sqlite path unchanged.
 - Leave `adapters/pgvector/tests/pg_round_trip.rs` untouched — it calls
   `engram_store_pgvector` cell methods directly (not the provider), so it is the
   unchanged cell-level regression net, not a recipe test.
-- Add `backends/pgvector/tests/conformance.rs` running the conformance fixtures
-  through `backends_pgvector::open` (gated/ignored, live Postgres).
+- ~~Add `backends/pgvector/tests/conformance.rs`~~ — **deferred
+  (deferred: pgvector-conformance-suite)**: `ConformanceHarness::new()` is
+  sqlite-coupled (builds its own provider), so reusing the fixture suite against
+  the recipe needs a provider-injection refactor, tracked in `docs/backlog.md`.
 
 **Done when:** all pgvector tests green via the recipe.
 

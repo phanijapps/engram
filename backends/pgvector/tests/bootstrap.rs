@@ -43,6 +43,7 @@ fn pg_recipe_opens_and_reports_capabilities() {
 
     // Hot-path capabilities must be wired.
     let caps = provider.capabilities();
+    assert_eq!(caps.memory, CapabilityState::Supported, "memory Supported");
     assert_eq!(
         caps.knowledge,
         CapabilityState::Supported,
@@ -55,7 +56,7 @@ fn pg_recipe_opens_and_reports_capabilities() {
         "vectors Supported"
     );
 
-    println!("pgvector recipe: provider opens, knowledge + graph + vectors Supported ✓");
+    println!("pgvector recipe: provider opens, memory + knowledge + graph + vectors Supported ✓");
 }
 
 #[test]
@@ -106,7 +107,11 @@ fn pg_recipe_knowledge_write_read_round_trip() {
     };
 
     block_on(repo.put_entity(entity)).expect("put_entity");
+    // delete_entity resolves by id + scope — proves the put landed + is addressable.
+    // (A get_entity read-back is omitted: pgvector's get_entity returns None for a
+    //  Concept-kind entity while delete_entity finds it — a pre-existing cell
+    //  nuance, out of scope for the recipe move; see backlog.)
     block_on(repo.delete_entity(&Id::from("pg-rt-entity"), &scope)).expect("delete_entity");
 
-    println!("pgvector recipe knowledge round-trip: put_entity → delete_entity ✓");
+    println!("pgvector recipe knowledge round-trip: put → delete ✓");
 }

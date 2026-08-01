@@ -122,8 +122,72 @@ export interface NativeRetrievalEngineConstructor {
   new (path?: string | null): NativeRetrievalEngineBinding;
 }
 
+// ---------------------------------------------------------------------------
+// NativeProvider — held EngramProvider surface (RFC-0017 Phase A)
+// ---------------------------------------------------------------------------
+
+/** Memory API handle proxy: retrieve / write / forget. */
+export interface NativeMemoryApiBinding {
+  searchJson(requestJson: string): string;
+  writeJson(requestJson: string): string;
+  forgetJson(requestJson: string): string;
+}
+
+/** Unified-recall API handle proxy: one query fused across lanes. */
+export interface NativeRecallApiBinding {
+  recallJson(requestJson: string): string;
+}
+
+/** Graph API handle proxy: entity reads/writes + neighbors. */
+export interface NativeGraphApiBinding {
+  getEntityJson(requestJson: string): string;
+  putEntityJson(entityJson: string): string;
+  neighborsJson(requestJson: string): string;
+}
+
+/** Batch-ingest API handle proxy: best-effort batch write + guarantee. */
+export interface NativeBatchApiBinding {
+  ingestJson(requestJson: string): string;
+  transactionGuarantee(): string;
+}
+
+/** Beliefs API handle proxy: belief lifecycle. */
+export interface NativeBeliefsApiBinding {
+  getBeliefJson(requestJson: string): string;
+  upsertBeliefJson(beliefJson: string): string;
+  retractBeliefJson(requestJson: string): string;
+  listStaleBeliefsJson(scopeJson: string): string;
+}
+
+/**
+ * Native class shape for the held `EngramProvider`
+ * (`bindings/node/src/provider.rs`): one provider opened from a config, reaching
+ * every wired capability through typed handle proxies plus the direct
+ * `consolidateJson` / `scanRepositoryJson` methods. The remaining `require*Api`
+ * proxies (provenance, hierarchy, ontology, taxonomy, procedures, lexical_feed,
+ * knowledge_query, retrieval, vectors, migration, embedding_provider,
+ * export_import, observability) are typed on demand when a module needs them.
+ */
+export interface NativeProviderBinding {
+  capabilitiesJson(): string;
+  consolidateJson(requestJson: string): string;
+  scanRepositoryJson(requestJson: string): string;
+  requireMemoryApi(): NativeMemoryApiBinding;
+  requireRecallApi(): NativeRecallApiBinding;
+  requireGraphApi(): NativeGraphApiBinding;
+  requireBatchApi(): NativeBatchApiBinding;
+  requireBeliefsApi(): NativeBeliefsApiBinding;
+}
+
+/** Constructor shape for the held `EngramProvider`. */
+export interface NativeProviderConstructor {
+  new (configJson: string): NativeProviderBinding;
+  fromProfileFile(path: string): NativeProviderBinding;
+}
+
 /** Native addon surface consumed by `@engram/node`. */
 export interface NativeBinding {
+  NativeProvider: NativeProviderConstructor;
   NativeMemoryEngine: NativeMemoryEngineConstructor;
   NativeKnowledgeEngine: NativeKnowledgeEngineConstructor;
   NativeIngestEngine: NativeIngestEngineConstructor;

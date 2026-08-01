@@ -21,11 +21,15 @@
 
 use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
-    Belief, ConsolidationRequest, ContextPayload, EvidenceRef, EvidenceTargetType, ForgetRequest,
-    ForgetResult, Id, KnowledgeEntity, Procedure, Provenance, RetrievalRequest, Scope,
+    Actor, ActorKind, AllowedUse, Belief, ConsolidationRequest, ContextPayload, DeleteMode,
+    EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id, KnowledgeEntity, Policy,
+    Procedure, Provenance, Retention, RetrievalRequest, Scope, Sensitivity, Visibility,
     WriteMemoryRequest, WriteMemoryResponse,
 };
 use engram_hierarchy::HierarchyRepository;
+use engram_ingest::{
+    KnowledgeRepoGraph, ScanFilter, ScanFilterConfig, ScanOptions, ScanSummary, scan_repository,
+};
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, EmbeddingProvider,
     EngramConfig, EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed, MigrationService,
@@ -37,10 +41,11 @@ use engram_knowledge::{
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
 use engram_retrieval::{RetrievalIndex, VectorIndex};
+use engram_runtime::CoreResult;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::{decode, encode, id_field, scope_field, to_napi_error};
@@ -152,6 +157,19 @@ impl NativeProvider {
             .clone();
         let run = block_on(handle.consolidate(request)).map_err(to_napi_error)?;
         encode(&run)
+    }
+
+    /// Treesitter-indexes a code repository into the project workspace through
+    /// the provider's knowledge + graph handles (no engine-store bypass). Takes a
+    /// `{ path, scope, scanFilter? }` JSON, returns the serialized `ScanSummary`.
+    ///
+    /// Lexical-lane feeding and embed-on-scan are Module-1 concerns (Phase C);
+    /// this method writes entities/relationships/graph only.
+    #[napi(js_name = "scanRepositoryJson")]
+    pub fn scan_repository_json(&self, request_json: String) -> Result<String> {
+        let request: ScanRepoRequest = decode(&request_json)?;
+        let summary = scan_via_provider(&self.inner, &request).map_err(to_napi_error)?;
+        encode(&summary)
     }
 
     /// Returns an export-import handle, or throws if not wired.
@@ -1004,5 +1022,144 @@ impl NativeEmbeddingProviderApi {
     #[napi(js_name = "ping")]
     pub fn ping(&self) -> Result<String> {
         Ok("embedding_provider".to_owned())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// scan_repo — fan-in scan over the held provider's knowledge + graph handles
+// ---------------------------------------------------------------------------
+
+/// Request shape for [`NativeProvider::scan_repository_json`].
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ScanRepoRequest {
+    /// Filesystem path to the repository root to scan.
+    path: String,
+    /// Scope the scanned entities/relationships/graph land in.
+    scope: Scope,
+    /// Optional scan-filter config merged over the builtin defaults.
+    #[serde(default)]
+    scan_filter: Option<ScanFilterConfig>,
+}
+
+/// Runs `scan_repository` against the held provider's knowledge + graph handles.
+///
+/// Extracted from the napi method so it is unit-testable without the napi wrapper.
+fn scan_via_provider(
+    provider: &EngramProvider,
+    request: &ScanRepoRequest,
+) -> CoreResult<ScanSummary> {
+    let knowledge = provider.require_knowledge()?.clone();
+    let graph = provider.require_graph()?.clone();
+    let repo = KnowledgeRepoGraph::new(knowledge, graph);
+    // No `<repo>/.engram/scan.json` discovery here — this is a library entry
+    // point, not a host. A caller that wants the repo-local filter resolves it
+    // (the MCP's `resolve_scan_filter` does) and passes `scan_filter` explicitly.
+    let scan_filter = match &request.scan_filter {
+        Some(cfg) => ScanFilter::merge(cfg),
+        None => ScanFilter::default(),
+    };
+    let opts = ScanOptions {
+        scope: request.scope.clone(),
+        policy: scan_policy(),
+        actor: scan_actor(),
+        source_name: "engram-node-scan".to_owned(),
+        max_bytes: 0,
+        manifest: std::collections::HashMap::new(),
+        scan_filter,
+    };
+    let (summary, _manifest) =
+        scan_repository(std::path::Path::new(&request.path), &opts, &repo, |_| ())?;
+    Ok(summary)
+}
+
+/// Default write policy for scanned knowledge (workspace-visible, durable).
+fn scan_policy() -> Policy {
+    Policy {
+        visibility: Visibility::Workspace,
+        retention: Retention::Durable,
+        sensitivity: Some(Sensitivity::Low),
+        allowed_uses: vec![AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: Some(DeleteMode::Tombstone),
+    }
+}
+
+/// System actor attributed to scans performed through the binding.
+fn scan_actor() -> Actor {
+    Actor {
+        id: Id::from("engram-node"),
+        kind: ActorKind::Agent,
+        display_name: Some("engram-node".to_owned()),
+        metadata: None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use engram_domain::ScopeMappingStrategy;
+    use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, MigrationMode};
+
+    #[test]
+    fn scan_via_provider_writes_entities() {
+        let dir =
+            std::env::temp_dir().join(format!("engram-node-scan-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // A fixture source file with a parseable symbol.
+        std::fs::write(dir.join("fixture.rs"), "pub fn hello() {}\n").unwrap();
+
+        let config = EngramConfig::new(
+            dir.join("store"),
+            dir.clone(),
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "test".to_owned(),
+                model: "test_model".to_owned(),
+                dimensions: 384,
+                prompt_profile: "query".to_owned(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        );
+        let provider = EngramProvider::open(&config).expect("provider opens");
+
+        let scope = Scope {
+            tenant: "test".to_owned(),
+            subject: None,
+            workspace: Some("test".to_owned()),
+            session: None,
+            environment: None,
+        };
+        let request = ScanRepoRequest {
+            path: dir.to_string_lossy().to_string(),
+            scope: scope.clone(),
+            scan_filter: None,
+        };
+        let summary = scan_via_provider(&provider, &request).expect("scan runs");
+        assert!(
+            summary.scanned >= 1,
+            "fixture should be scanned: {summary:?}"
+        );
+        assert!(
+            summary.entities >= 1,
+            "fixture symbol should extract to an entity: {summary:?}"
+        );
+
+        let entities = block_on(
+            provider
+                .require_knowledge_query()
+                .expect("query wired")
+                .list_entities(&scope),
+        )
+        .expect("list entities");
+        assert!(
+            !entities.is_empty(),
+            "scanned entities should persist in the knowledge store"
+        );
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

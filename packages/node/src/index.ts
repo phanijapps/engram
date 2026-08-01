@@ -2,6 +2,13 @@ export {
   loadNativeBinding,
   type NativeBinding,
   type NativeBindingLoader,
+  type NativeBatchApiBinding,
+  type NativeBeliefsApiBinding,
+  type NativeGraphApiBinding,
+  type NativeMemoryApiBinding,
+  type NativeProviderBinding,
+  type NativeProviderConstructor,
+  type NativeRecallApiBinding,
   type NativeBeliefEngineBinding,
   type NativeBeliefEngineConstructor,
   type NativeConsolidationEngineBinding,
@@ -49,3 +56,8 @@ export {
   type RetrievalIndexChunkResult,
   type RetrievalSearchHit
 } from "./transport.js";
+export {
+  createNativeProviderTransport,
+  type NativeProviderTransport,
+  type NativeProviderTransportOptions
+} from "./provider.js";

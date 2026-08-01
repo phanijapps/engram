@@ -6,6 +6,9 @@ describe("@engram/client native transport", () => {
   it("creates a client over the node native transport boundary", async () => {
     const client = createNativeEngramClient({
       binding: {
+        NativeProvider: class {
+          // Unused by the client transport; satisfies the widened NativeBinding.
+        } as never,
         NativeMemoryEngine: class {
           writeMemoryJson(): string {
             return JSON.stringify({

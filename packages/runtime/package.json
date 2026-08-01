@@ -9,6 +9,7 @@
   },
   "bin": {
     "engram-ingest": "./dist/ingest/bin.js",
+    "engram-mcp-http": "./dist/mcp/bin.js",
     "engram-maintain": "./dist/maintenance/bin.js"
   },
   "files": [
@@ -29,6 +30,12 @@
   },
   "dependencies": {
     "@engram/contracts": "workspace:*",
-    "@engram/node": "workspace:*"
+    "@engram/node": "workspace:*",
+    "@modelcontextprotocol/node": "^2.0.0",
+    "@modelcontextprotocol/server": "^2.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.0.0"
   }
 }

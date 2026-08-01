@@ -19,3 +19,4 @@ engram-retrieval = { path = "../../core/retrieval" }
 [dev-dependencies]
 engram-domain = { path = "../../core/domain" }
 engram-integration = { path = "../../core/integration" }
+futures.workspace = true

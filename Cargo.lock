@@ -1521,6 +1521,7 @@ dependencies = [
  "engram-retrieval",
  "engram-runtime",
  "engram-store-pgvector",
+ "futures",
 ]
 
 [[package]]

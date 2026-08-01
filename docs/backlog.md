@@ -325,3 +325,12 @@ resolve by the same id + scope. Either Concept entities are stored/read through
 a different path than `get_entity` queries, or `get_entity` has a kind/scoping
 bug. Pre-existing cell behavior (not introduced by the recipe move); investigate
 when a consumer relies on `get_entity` for Concept entities.
+
+## runtime-facade-belief-relationship
+
+The Phase A facade `createNativeProviderTransport` (@engram/node) dispatches
+recall/write/putEntity/scan/consolidate/batchIngest but NOT `beliefPut` or
+`putRelationship`. Phase D (HTTP-MCP) scopes its tool surface to the current
+facade dispatch (recall/write_memory/put_entity) and defers `belief_put`/
+`put_relationship` MCP tools until the facade is widened (mirror `putEntity` for
+the beliefs + graph proxies).

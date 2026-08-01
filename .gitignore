@@ -52,3 +52,6 @@ artifacts/
 
 # generated architecture report (not committed)
 engram-architecture-report.html
+
+# work-loop loop-cohort session scratch (per-spec)
+docs/specs/*/state.json

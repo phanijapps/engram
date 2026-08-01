@@ -1,0 +1,33 @@
+{
+  "name": "@engram/runtime",
+  "version": "0.1.0",
+  "description": "TS operational layer: deployable modules (ingest / maintenance / mcp) over the held Engram provider facade.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "engram-ingest": "./dist/ingest/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@engram/contracts": "workspace:*",
+    "@engram/node": "workspace:*"
+  }
+}

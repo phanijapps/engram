@@ -41,7 +41,7 @@ export function buildEngramConfig(configArg: string): string {
  */
 export function buildScope(opts: {
   tenant: string;
-  workspace?: string;
+  workspace?: string | undefined;
 }): Scope {
   const scope: Scope = { tenant: opts.tenant };
   if (opts.workspace !== undefined) {

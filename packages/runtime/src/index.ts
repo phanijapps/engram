@@ -10,3 +10,4 @@
  */
 export { buildEngramConfig, buildScope, type ScanSummary } from "./shared/config.js";
 export { runIngest } from "./ingest/cli.js";
+export { runMaintain, type ConsolidationRun } from "./maintenance/cli.js";

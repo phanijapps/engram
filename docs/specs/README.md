@@ -77,7 +77,7 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   operational layer (`@engram/runtime`) and its first module, `engram-ingest`: a
   CLI that scans a repo into the held provider over the Phase A facade, one-shot
   or on an `--every` setInterval schedule. Cron-first; queue/webhook adapters are
-  later. Constrained by RFC-0017, ADR-0022. Draft.
+  later. Constrained by RFC-0017, ADR-0022. Shipped.
 - [`pgvector-recipe`](pgvector-recipe/spec.md): RFC-0017 Phase B — promote the
   pgvector backend from an engine module inside the SDK facade into a
   `backends/pgvector` recipe crate (ADR-0022: recipe owns connection lifecycle +

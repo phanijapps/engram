@@ -9,3 +9,4 @@
  * (and, once the ingest module lands, `runIngest`).
  */
 export { buildEngramConfig, buildScope, type ScanSummary } from "./shared/config.js";
+export { runIngest } from "./ingest/cli.js";

@@ -1,7 +1,7 @@
 # Plan: TS runtime layer + ingest module
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Drafting <!-- Drafting | Executing | Done -->
+- **Status:** Done <!-- Drafting | Executing | Done -->
 
 > **Plan contract:** the implementation strategy; changes noted in the changelog.
 

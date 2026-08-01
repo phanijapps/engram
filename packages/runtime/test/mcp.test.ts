@@ -117,3 +117,44 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     await client.close();
   }, 15000);
 });
+
+describe("engram-mcp-http auth (non-loopback)", () => {
+  it("rejects a request without a Bearer token (401)", async () => {
+    const port = 6000 + Math.floor(Math.random() * 1000);
+    servers.push(
+      await startMcpHttpServer({
+        transport: mockTransport(),
+        port,
+        host: "0.0.0.0",
+        authToken: "secret"
+      })
+    );
+    const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("accepts a request with the correct Bearer token (not 401)", async () => {
+    const port = 6100 + Math.floor(Math.random() * 1000);
+    servers.push(
+      await startMcpHttpServer({
+        transport: mockTransport(),
+        port,
+        host: "0.0.0.0",
+        authToken: "secret"
+      })
+    );
+    const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer secret"
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} })
+    });
+    expect(res.status).not.toBe(401);
+  });
+});

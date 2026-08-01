@@ -1,0 +1,45 @@
+# Spec: TS runtime maintenance module
+
+- **Status:** Draft <!-- Draft | Implementing | Shipped | Deferred -->
+- **Owner:** phanijapps
+- **Plan:** [`plan.md`](plan.md)
+- **Constrained by:** RFC-0017 (Phase E / Module 3, Accepted), ADR-0022, the Phase A facade + Phase C `@engram/runtime` (shipped)
+- **Mode: light** — a new module within the existing `@engram/runtime` package, mirroring the shipped ingest module (`ts-provider-facade` → `ts-runtime-ingest`); no new package, no new dep, no Rust change. No structural risk trigger fires.
+- **Contract:** none — composes `NativeProviderTransport.consolidate`; no new surface
+- **Shape:** service
+
+> **Spec contract:** this document defines what "done" means.
+
+## Objective
+
+The third deployable TS module: **`engram-maintain`**, a CLI that runs
+consolidation (reflection + decay) over the held provider on the Phase A facade —
+one-shot or on an `--every <ms>` schedule. This is RFC-0017's Module 3 (the
+"sleep-time" keeper), the maintenance leg of the 3-mode target. It mirrors the
+ingest module exactly (same package, same scheduling/signal pattern), swapping
+`scan` for `consolidate`. No new dependency.
+
+## Boundaries
+
+### Always do
+- Route through `createNativeProviderTransport` (the held provider); reuse the shared helpers from `@engram/runtime`.
+- Mirror the ingest module's structure (`src/maintenance/`) + scheduling/signal pattern (signals in the bin, not the library).
+
+### Ask first
+- Adding a runtime dependency; changing the consolidation contract.
+
+### Never do
+- Bypass the facade; put the scheduler in Rust; re-implement domain logic in TS; make `@engram/runtime` a god-package (each module isolated).
+
+## Testing Strategy
+- **TDD** — `runMaintain` dispatch + scheduling over a mock transport + fake timers (mirror the ingest tests).
+- **Goal-based** — recursive typecheck + `@engram/runtime` build; the `engram-maintain` bin resolves.
+- **Manual / integration QA** — a subprocess test (real bin → `consolidate` execution → a `ConsolidationRun`).
+
+## Acceptance Criteria
+- [ ] An `engram-maintain` bin exists in `@engram/runtime` and runs consolidation over the facade (one-shot).
+- [ ] `engram-maintain ... --every <ms>` runs consolidate on a `setInterval`; SIGINT/SIGTERM (in the bin) clear the interval + exit cleanly.
+- [ ] `runMaintain` is a pure library function (no `process.exit`/signal listeners), exported from the package-root facade alongside `runIngest`.
+- [ ] TDD: dispatch + scheduling + stop-clears-interval + scan-error-survival (mock transport, fake timers) green; argv validation covered.
+- [ ] A subprocess test runs the real bin against the live addon and observes a `ConsolidationRun`.
+- [ ] `pnpm run typecheck` (recursive) + `pnpm --filter @engram/runtime test` green.

@@ -190,8 +190,8 @@ impl EngramProvider {
         if config.pgvector_connection_string.is_some() {
             return Err(CoreError::InvalidRequest {
                 reason: "pgvector configs must be opened via the `engram-backend-pgvector` recipe \
-                         (backends_pgvector::open); EngramProvider::open is engine-neutral and \
-                         defaults to SQLite"
+                         (engram_backend_pgvector::open); EngramProvider::open is engine-neutral \
+                         and defaults to SQLite"
                     .to_owned(),
             });
         }

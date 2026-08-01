@@ -72,7 +72,26 @@ impl NativeProvider {
     #[napi(constructor)]
     pub fn new(config_json: String) -> Result<Self> {
         let config: EngramConfig = decode(&config_json)?;
-        let provider = EngramProvider::open(&config).map_err(to_napi_error)?;
+        // pgvector configs route to the backends/pgvector recipe (the SDK facade's
+        // open() is engine-neutral and sqlite-default). When this binding is built
+        // without the `pgvector` feature, surface a clear error instead of a silent
+        // sqlite open.
+        let provider = if config.pgvector_connection_string.is_some() {
+            #[cfg(feature = "pgvector")]
+            {
+                engram_backend_pgvector::open(&config).map_err(to_napi_error)?
+            }
+            #[cfg(not(feature = "pgvector"))]
+            {
+                return Err(to_napi_error(engram_runtime::CoreError::InvalidRequest {
+                    reason: "pgvector config requires the `pgvector` feature on @engram/node; \
+                             rebuild with --features pgvector"
+                        .to_owned(),
+                }));
+            }
+        } else {
+            EngramProvider::open(&config).map_err(to_napi_error)?
+        };
         Ok(Self { inner: provider })
     }
 

@@ -20,6 +20,7 @@ engram-hierarchy = { path = "../../core/hierarchy" }
 engram-procedures = { path = "../../core/procedures" }
 engram-conformance = { path = "../../adapters/integration" }
 engram-integration = { path = "../../core/integration", features = ["sqlite"] }
+engram-backend-pgvector = { path = "../../backends/pgvector", optional = true }
 engram-ingest = { path = "../../adapters/ingest" }
 engram-knowledge = { path = "../../core/knowledge" }
 engram-memory = { path = "../../core/memory" }
@@ -39,6 +40,10 @@ serde_json.workspace = true
 # build turns this on; default builds stay free of model-bearing code.
 default = []
 fastembed = ["engram-store-sqlite/fastembed"]
+# Enables the pgvector (Postgres) backend: routes a config carrying
+# pgvector_connection_string to backends_pgvector::open. Opt-in (default builds
+# stay SQLite + FastEmbed).
+pgvector = ["dep:engram-backend-pgvector"]
 
 [build-dependencies]
 napi-build = "2.3.2"

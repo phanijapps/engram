@@ -185,7 +185,7 @@ pub struct EngramConfig {
     /// string (not an engine type), so it stays within ADR-0022's neutrality
     /// rule. `EngramProvider::open` rejects a config carrying this — it is
     /// engine-neutral and sqlite-default; open a pgvector provider through the
-    /// `engram-backend-pgvector` recipe (`backends_pgvector::open`).
+    /// `engram-backend-pgvector` recipe (`engram_backend_pgvector::open`).
     pub pgvector_connection_string: Option<String>,
 }
 
@@ -278,8 +278,8 @@ impl EngramConfig {
                 // confusing path-confinement failure.
                 return Err(format!(
                     "backend `postgres` (connection_string={connection_string}) must be \
-                     opened via the `engram-backend-pgvector` recipe (backends_pgvector::open); \
-                     EngramProvider::open is sqlite-default"
+                     opened via the `engram-backend-pgvector` recipe \
+                     (engram_backend_pgvector::open); EngramProvider::open is sqlite-default"
                 ));
             }
             BackendProfile::Surreal { data_root } => PathBuf::from(data_root),

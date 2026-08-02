@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://engram.local/contracts/v1/schemas/recall-fusion.schema.json",
+  "title": "RecallFusionConfig",
+  "description": "External recall-fusion configuration (RFC-0019). Operator-facing, serializable config loaded from a `[recall_fusion]` profile section or `.engram/recall.json`. Drives weighted reciprocal-rank fusion (vector + lexical + graph + facts + ...) and optional reranking in engram's unified recall. Absent config falls back to equal-weight RRF (today's behavior).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "rrf_k": {
+      "description": "RRF constant (>= 1). Lower values make top ranks dominate more aggressively; higher values flatten. Conventional default 60 (Cormack et al. 2009).",
+      "type": "integer",
+      "minimum": 1,
+      "default": 60
+    },
+    "default_source_weight": {
+      "description": "Weight applied to any lane source not named in `source_weights`. Default 1.0 (pure RRF when no overrides are set).",
+      "type": "number",
+      "minimum": 0,
+      "default": 1.0
+    },
+    "source_weights": {
+      "description": "Per-lane-source weight overrides. Keys are the normalized lane source tags (the weight keys): `vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`. A zero weight keeps a source visible for traceability while contributing nothing to its fused score.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "number",
+        "minimum": 0
+      },
+      "default": {}
+    },
+    "rerank": {
+      "description": "Optional reranker selection + parameters. When absent, no reranking is applied (fusion output is the final ranking).",
+      "$ref": "#/$defs/RerankConfig"
+    }
+  },
+  "$defs": {
+    "RerankConfig": {
+      "title": "RerankConfig",
+      "description": "Reranker selection + parameters. `strategy` reuses the domain RerankStrategy enum (snake_case); engram wires `none`/`mmr`/`cross_encoder` today (the other variants deserialize but are not dispatched).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "description": "Which reranker to apply between fusion and budget.",
+          "type": "string",
+          "enum": ["none", "mmr", "cross_encoder", "llm_judge", "policy_priority"],
+          "default": "none"
+        },
+        "lambda": {
+          "description": "MMR relevance/diversity trade-off in [0, 1] (1 = pure relevance, 0 = max diversity). Only consulted for `strategy = \"mmr\"`.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5
+        }
+      }
+    }
+  }
+}

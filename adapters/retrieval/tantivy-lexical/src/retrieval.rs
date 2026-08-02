@@ -151,7 +151,7 @@ fn lexical_result(
             vector_index: None,
             embedding_time_ms: None,
             search_time_ms: None,
-            source: "lexical.keyword".to_owned(),
+            source: "lexical".to_owned(),
             source_rank: Some((rank + 1) as u32),
             source_score: Some(score),
             score: None,
@@ -200,7 +200,7 @@ mod tests {
         assert!(results[0].score.total > results[1].score.total);
 
         let trace = results[0].fusion_trace.as_ref().expect("fusion trace");
-        assert_eq!(trace.source, "lexical.keyword");
+        assert_eq!(trace.source, "lexical");
         assert_eq!(trace.source_rank, Some(1));
         assert_eq!(trace.fusion_strategy, Some(FusionStrategy::None));
     }

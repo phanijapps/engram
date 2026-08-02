@@ -8,6 +8,15 @@ use engram_domain::types::ScopeMappingStrategy;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+/// Serde default for `EngramConfig::enable_vector` — `true`. Kept as a named
+/// fn (rather than `#[serde(default = "default_true")]` inline) so the field
+/// deserializes to `true` when omitted from a legacy config file (backward
+/// compatibility: a deployment that never set the field keeps vector wiring on
+/// when the `fastembed` feature is compiled in).
+fn default_true() -> bool {
+    true
+}
+
 /// Capability policy determines how unsupported capabilities are handled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CapabilityPolicy {
@@ -116,6 +125,19 @@ struct ProfileFile {
     capability_policy: Option<CapabilityPolicy>,
     #[serde(default)]
     sqlite_storage_layout: Option<SqliteStorageLayout>,
+    /// Optional `[recall_fusion]` section (RFC-0019). An explicit profile
+    /// section is the first rung of the discovery ladder; `.engram/recall.json`
+    /// (see [`EngramConfig::discover_recall_fusion`]) is the second.
+    #[serde(default)]
+    recall_fusion: Option<engram_retrieval::RecallFusionConfig>,
+    /// Optional runtime kill-switch for the vector lane (RFC-0019 D3 reversed).
+    /// When `false`, `bootstrap_sqlite` skips constructing the vector index,
+    /// the embedding provider/model, and the vector recall lane entirely — even
+    /// when the `fastembed` feature is compiled in — so a deployment can avoid
+    /// the model download/load without a rebuild. Defaults to `true` (omitted ⇒
+    /// vector on when compiled in).
+    #[serde(default)]
+    enable_vector: Option<bool>,
 }
 
 /// The default embedding-provider config used when a profile file omits the
@@ -154,7 +176,10 @@ pub struct EmbeddingProviderConfig {
 /// This configuration defines the storage path, trusted root, scope policy,
 /// embedding provider, and capability/migration policies that control how
 /// the Engram provider behaves.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Eq` is intentionally NOT derived: `recall_fusion` carries `f32`
+/// weights/lambda, and `f32` does not implement `Eq`. `PartialEq` remains.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EngramConfig {
     /// Path to the storage directory where all data is persisted.
     pub storage_path: PathBuf,
@@ -187,6 +212,27 @@ pub struct EngramConfig {
     /// engine-neutral and sqlite-default; open a pgvector provider through the
     /// `engram-backend-pgvector` recipe (`engram_backend_pgvector::open`).
     pub pgvector_connection_string: Option<String>,
+
+    /// Optional external recall-fusion config (RFC-0019): RRF `k`, per-lane
+    /// `source_weights`, and a reranker strategy. When `None`, unified recall
+    /// falls back to equal-weight RRF (today's behavior). Loaded from a
+    /// `[recall_fusion]` profile section or discovered at
+    /// `<root>/.engram/recall.json`; validated on load via
+    /// [`RecallFusionConfig::to_reciprocal_config`].
+    #[serde(default)]
+    pub recall_fusion: Option<engram_retrieval::RecallFusionConfig>,
+
+    /// Runtime kill-switch for the vector lane (RFC-0019 D3 reversed). Defaults
+    /// to `true`. When `false`, `bootstrap_sqlite` skips constructing the
+    /// `SqliteVectorIndex`, the `FastEmbed` embedding provider/model, and the
+    /// vector recall lane — even when the `fastembed` cargo feature is compiled
+    /// in — so a deployment built with fastembed can still avoid the model
+    /// download/load at boot. Build-time disable remains
+    /// `--no-default-features`. The field is NOT behind a `#[cfg(feature =
+    /// "fastembed")]`: it is always present (defaults `true`) so the config
+    /// type is identical under both feature builds.
+    #[serde(default = "default_true")]
+    pub enable_vector: bool,
 }
 
 impl EngramConfig {
@@ -208,6 +254,8 @@ impl EngramConfig {
             capability_policy,
             sqlite_storage_layout: SqliteStorageLayout::MultiFileDirectory,
             pgvector_connection_string: None,
+            recall_fusion: None,
+            enable_vector: true,
         }
     }
 
@@ -229,6 +277,85 @@ impl EngramConfig {
     pub fn with_pgvector(mut self, connection_string: impl Into<String>) -> Self {
         self.pgvector_connection_string = Some(connection_string.into());
         self
+    }
+
+    /// Sets the external recall-fusion config (RFC-0019). When set, unified
+    /// recall honors the configured RRF `k` + per-lane `source_weights` +
+    /// reranker strategy; when absent (`None`), recall falls back to
+    /// equal-weight RRF. The config is validated when unified recall builds
+    /// its internal [`engram_retrieval::ReciprocalFusionConfig`].
+    #[must_use]
+    pub fn with_recall_fusion(mut self, fusion: engram_retrieval::RecallFusionConfig) -> Self {
+        self.recall_fusion = Some(fusion);
+        self
+    }
+
+    /// Sets the runtime vector kill-switch (RFC-0019 D3 reversed). `false`
+    /// causes `bootstrap_sqlite` to skip the vector index, the embedding
+    /// provider/model, and the vector recall lane at boot — even when the
+    /// `fastembed` cargo feature is compiled in — so a fastembed build can
+    /// avoid the model download/load. Defaults to `true` (see [`EngramConfig::new`]).
+    #[must_use]
+    pub fn with_enable_vector(mut self, enable: bool) -> Self {
+        self.enable_vector = enable;
+        self
+    }
+
+    /// Discovers a recall-fusion config from `<discovery_root>/.engram/recall.json`
+    /// (RFC-0019 rung 2 of the ladder). This is the repo-local fallback when an
+    /// explicit `[recall_fusion]` profile section is absent.
+    ///
+    /// Discovery mirrors the `scan.json` ladder in `engram-mcp::codegraph`:
+    /// read directly (no `exists()` probe) so a transient removal between probe
+    /// and read cannot produce a misleading error; `NotFound` simply means no
+    /// config.
+    ///
+    /// # Errors
+    ///
+    /// - `Ok(None)` — no `recall.json` present (backward-compatible equal-weight
+    ///   default applies).
+    /// - `Ok(Some(cfg))` — a present, valid config (validated via
+    ///   [`RecallFusionConfig::to_reciprocal_config`]).
+    /// - `Err(message)` — the file exists but cannot be read, parsed, or
+    ///   validated. The caller decides whether to abort or soft-fail; the MCP
+    ///   bootstrap (`engram_mcp::bootstrap::open_provider`) treats `Err` as a
+    ///   boot error so a malformed operator config surfaces at startup rather
+    ///   than silently degrading to equal-weight recall. (An *absent* file is
+    ///   `Ok(None)`, never `Err`.)
+    pub fn discover_recall_fusion(
+        discovery_root: &Path,
+    ) -> Result<Option<engram_retrieval::RecallFusionConfig>, String> {
+        let path = discovery_root.join(".engram").join("recall.json");
+        let json = match std::fs::read_to_string(&path) {
+            Ok(j) => j,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => {
+                return Err(format!("read {}: {e}", path.display()));
+            }
+        };
+        let cfg: engram_retrieval::RecallFusionConfig =
+            serde_json::from_str(&json).map_err(|e| format!("parse {}: {e}", path.display()))?;
+        cfg.to_reciprocal_config()
+            .map_err(|e| format!("invalid recall fusion config at {}: {e}", path.display()))?;
+        Ok(Some(cfg))
+    }
+
+    /// Resolves the recall-fusion config via the discovery ladder
+    /// (RFC-0019): an explicit value (e.g. a `[recall_fusion]` profile section
+    /// already loaded) wins; otherwise `<discovery_root>/.engram/recall.json`
+    /// is consulted; otherwise `None` (equal-weight default).
+    ///
+    /// A discovered file that fails to read/parse/validate is reported via
+    /// `Err` but does NOT abort — callers that want the soft-fail semantics
+    /// (matching `scan.json`) should treat `Err` as `None`.
+    pub fn resolve_recall_fusion(
+        explicit: Option<engram_retrieval::RecallFusionConfig>,
+        discovery_root: &Path,
+    ) -> Result<Option<engram_retrieval::RecallFusionConfig>, String> {
+        if explicit.is_some() {
+            return Ok(explicit);
+        }
+        Self::discover_recall_fusion(discovery_root)
     }
 
     /// Builds an [`EngramConfig`] from a TOML profile file.
@@ -295,6 +422,18 @@ impl EngramConfig {
         });
 
         let embedding_provider = profile.embedding_provider.unwrap_or_else(default_embedding);
+        // Validate an explicit `[recall_fusion]` section eagerly: a malformed
+        // operator config should surface at load, not silently degrade to
+        // equal-weight recall. Discovered `.engram/recall.json` files soft-fail
+        // (see `discover_recall_fusion`); an explicit profile section does not.
+        if let Some(ref fusion) = profile.recall_fusion
+            && let Err(e) = fusion.to_reciprocal_config()
+        {
+            return Err(format!(
+                "invalid [recall_fusion] section in profile {}: {e}",
+                path.display()
+            ));
+        }
         Ok(Self {
             storage_path,
             trusted_root,
@@ -308,6 +447,8 @@ impl EngramConfig {
                 .sqlite_storage_layout
                 .unwrap_or(SqliteStorageLayout::MultiFileDirectory),
             pgvector_connection_string: None,
+            recall_fusion: profile.recall_fusion,
+            enable_vector: profile.enable_vector.unwrap_or(true),
         })
     }
 
@@ -740,5 +881,231 @@ mod tests {
         let result = config.validate();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("outside trusted_root"));
+    }
+
+    // ---- RFC-0019 recall-fusion loading (T1c) -----------------------------
+
+    use std::collections::BTreeMap;
+
+    fn base_profile_toml(data_root: &str) -> String {
+        format!("[backend]\nkind = \"sqlite\"\ndata_root = \"{data_root}\"\n")
+    }
+
+    #[test]
+    fn profile_recall_fusion_section_loads_and_round_trips() {
+        let temp_dir = TempDir::new().unwrap();
+        let data_root = temp_dir.path().join("data");
+        std::fs::create_dir_all(&data_root).unwrap();
+        let toml = format!(
+            "{base}\n[recall_fusion]\nrrf_k = 42\ndefault_source_weight = 1.0\n\n[recall_fusion.source_weights]\nvector = 0.7\nlexical = 0.3\n",
+            base = base_profile_toml(data_root.to_str().unwrap())
+        );
+        let profile_path = temp_dir.path().join("profile.toml");
+        std::fs::write(&profile_path, &toml).unwrap();
+
+        let cfg = EngramConfig::from_profile_file(&profile_path).expect("profile loads");
+        let fusion = cfg.recall_fusion.expect("recall_fusion section present");
+        assert_eq!(fusion.rrf_k, 42);
+        let recip = fusion.to_reciprocal_config().expect("valid");
+        assert_eq!(recip.source_weight("vector"), 0.7);
+        assert_eq!(recip.source_weight("lexical"), 0.3);
+    }
+
+    #[test]
+    fn profile_without_recall_fusion_section_defaults_to_none() {
+        // A profile without [recall_fusion] must load with recall_fusion = None
+        // (backward-compatible equal-weight default).
+        let temp_dir = TempDir::new().unwrap();
+        let data_root = temp_dir.path().join("data");
+        std::fs::create_dir_all(&data_root).unwrap();
+        let toml = base_profile_toml(data_root.to_str().unwrap());
+        let profile_path = temp_dir.path().join("profile.toml");
+        std::fs::write(&profile_path, &toml).unwrap();
+
+        let cfg = EngramConfig::from_profile_file(&profile_path).expect("profile loads");
+        assert!(cfg.recall_fusion.is_none(), "absent section => None");
+    }
+
+    #[test]
+    fn profile_recall_fusion_section_rejects_invalid_k() {
+        // An explicit profile section is validated eagerly: k = 0 must surface
+        // a load error rather than silently degrade.
+        let temp_dir = TempDir::new().unwrap();
+        let data_root = temp_dir.path().join("data");
+        std::fs::create_dir_all(&data_root).unwrap();
+        let toml = format!(
+            "{base}\n[recall_fusion]\nrrf_k = 0\n",
+            base = base_profile_toml(data_root.to_str().unwrap())
+        );
+        let profile_path = temp_dir.path().join("profile.toml");
+        std::fs::write(&profile_path, &toml).unwrap();
+
+        let err = EngramConfig::from_profile_file(&profile_path).expect_err("k=0 must reject");
+        assert!(
+            err.contains("recall_fusion"),
+            "error names the section: {err}"
+        );
+    }
+
+    #[test]
+    fn discover_recall_fusion_absent_returns_none() {
+        let temp_dir = TempDir::new().unwrap();
+        let resolved = EngramConfig::discover_recall_fusion(temp_dir.path())
+            .expect("absent file is Ok(None), not Err");
+        assert!(resolved.is_none(), "no .engram/recall.json => None");
+    }
+
+    #[test]
+    fn discover_recall_fusion_present_loads_validated() {
+        let temp_dir = TempDir::new().unwrap();
+        let engram_dir = temp_dir.path().join(".engram");
+        std::fs::create_dir_all(&engram_dir).unwrap();
+        std::fs::write(
+            engram_dir.join("recall.json"),
+            r#"{"rrf_k":50,"default_source_weight":1.0,"source_weights":{"vector":0.7}}"#,
+        )
+        .unwrap();
+
+        let cfg = EngramConfig::discover_recall_fusion(temp_dir.path())
+            .expect("valid file loads")
+            .expect("Some when present");
+        assert_eq!(cfg.rrf_k, 50);
+        assert_eq!(
+            cfg.to_reciprocal_config().unwrap().source_weight("vector"),
+            0.7
+        );
+    }
+
+    #[test]
+    fn discover_recall_fusion_invalid_surfaces_error() {
+        let temp_dir = TempDir::new().unwrap();
+        let engram_dir = temp_dir.path().join(".engram");
+        std::fs::create_dir_all(&engram_dir).unwrap();
+        std::fs::write(engram_dir.join("recall.json"), r#"{"rrf_k":0}"#).unwrap();
+
+        let err = EngramConfig::discover_recall_fusion(temp_dir.path())
+            .expect_err("invalid file surfaces Err");
+        assert!(err.contains("recall"), "error references the file: {err}");
+    }
+
+    #[test]
+    fn resolve_recall_fusion_explicit_wins_over_file() {
+        // The ladder: an explicit value must win over a discovered file.
+        let temp_dir = TempDir::new().unwrap();
+        let engram_dir = temp_dir.path().join(".engram");
+        std::fs::create_dir_all(&engram_dir).unwrap();
+        std::fs::write(engram_dir.join("recall.json"), r#"{"rrf_k":50}"#).unwrap();
+
+        let explicit = engram_retrieval::RecallFusionConfig {
+            rrf_k: 99,
+            default_source_weight: 1.0,
+            source_weights: {
+                let mut m = BTreeMap::new();
+                m.insert("lexical".to_string(), 0.2);
+                m
+            },
+            rerank: None,
+        };
+        let resolved = EngramConfig::resolve_recall_fusion(Some(explicit.clone()), temp_dir.path())
+            .expect("ladder resolves")
+            .expect("Some");
+        assert_eq!(resolved.rrf_k, 99, "explicit wins over discovered file");
+        assert_eq!(
+            resolved
+                .to_reciprocal_config()
+                .unwrap()
+                .source_weight("lexical"),
+            0.2
+        );
+    }
+
+    // ---- RFC-0019 D3 (reversed): enable_vector runtime kill-switch --------
+
+    fn base_engram_config(temp_dir: &TempDir) -> EngramConfig {
+        EngramConfig::new(
+            temp_dir.path().join("engram"),
+            temp_dir.path(),
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "fastembed".to_string(),
+                model: "BAAI/bge-small-en-v1.5".to_string(),
+                dimensions: 384,
+                prompt_profile: "query".to_string(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        )
+    }
+
+    #[test]
+    fn enable_vector_defaults_to_true() {
+        // The default is ON: a deployment that never touches the field keeps
+        // vector wiring on when fastembed is compiled in (RFC-0019 D3 reversed).
+        let temp_dir = TempDir::new().unwrap();
+        let config = base_engram_config(&temp_dir);
+        assert!(config.enable_vector, "enable_vector must default to true");
+    }
+
+    #[test]
+    fn with_enable_vector_sets_false() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = base_engram_config(&temp_dir).with_enable_vector(false);
+        assert!(
+            !config.enable_vector,
+            "with_enable_vector(false) must stick"
+        );
+        // And back to true.
+        let config = config.with_enable_vector(true);
+        assert!(config.enable_vector, "with_enable_vector(true) must stick");
+    }
+
+    #[test]
+    fn profile_enable_vector_section_loads() {
+        // An explicit `enable_vector = false` in a profile file is honored.
+        // TOML requires a bare top-level key to precede any `[section]`, so it
+        // goes before `[backend]` (a key after `[backend]` would parse as
+        // `backend.enable_vector`).
+        let temp_dir = TempDir::new().unwrap();
+        let data_root = temp_dir.path().join("data");
+        std::fs::create_dir_all(&data_root).unwrap();
+        let toml = format!(
+            "enable_vector = false\n\n{base}",
+            base = base_profile_toml(data_root.to_str().unwrap())
+        );
+        let profile_path = temp_dir.path().join("profile.toml");
+        std::fs::write(&profile_path, &toml).unwrap();
+
+        let cfg = EngramConfig::from_profile_file(&profile_path).expect("profile loads");
+        assert!(!cfg.enable_vector, "profile enable_vector=false must load");
+    }
+
+    #[test]
+    fn profile_without_enable_vector_defaults_true() {
+        // A legacy profile without the field deserializes to true (backward
+        // compatibility — existing configs keep vector wiring on).
+        let temp_dir = TempDir::new().unwrap();
+        let data_root = temp_dir.path().join("data");
+        std::fs::create_dir_all(&data_root).unwrap();
+        let toml = base_profile_toml(data_root.to_str().unwrap());
+        let profile_path = temp_dir.path().join("profile.toml");
+        std::fs::write(&profile_path, &toml).unwrap();
+
+        let cfg = EngramConfig::from_profile_file(&profile_path).expect("profile loads");
+        assert!(cfg.enable_vector, "absent field => true (default-on)");
+    }
+
+    #[test]
+    fn enable_vector_round_trips_through_serde_with_default() {
+        // A legacy JSON config without the field deserializes to true (serde
+        // default), matching the in-memory default.
+        let temp_dir = TempDir::new().unwrap();
+        let config = base_engram_config(&temp_dir);
+        let json = serde_json::to_string(&config).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value.as_object_mut().unwrap().remove("enable_vector");
+        let legacy = serde_json::to_string(&value).unwrap();
+        let parsed: EngramConfig = serde_json::from_str(&legacy).unwrap();
+        assert!(parsed.enable_vector, "absent serde field => true");
     }
 }

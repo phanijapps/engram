@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use engram_belief::BeliefRepository;
-use engram_domain::{CapabilityReason, CapabilityState};
+use engram_domain::{CapabilityReason, CapabilityState, RerankStrategy};
 use engram_hierarchy::HierarchyRepository;
 use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
@@ -313,15 +313,14 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         ));
         // Lexical lane: an in-RAM Tantivy index shared with the lexical feed —
         // `scan_repo` feeds code-symbol names via the `LexicalFeed` handle so
-        // keyword `search`/`recall` return them.
+        // keyword `search`/`recall` return them. The lane's target resolver is
+        // entity-aware (it resolves entity-id BM25 hits to their code symbol),
+        // so multi-term symbol queries return ranked hits through unified recall.
         if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::new() {
             let lexical_index = Arc::new(lexical_index);
-            let resolver = recall_lanes::KnowledgeLexicalResolver::new(knowledge_handle.clone());
-            retrieval_lanes.push(Arc::new(
-                engram_store_lexical::LexicalRetrievalIndex::from_arc(
-                    lexical_index.clone(),
-                    Arc::new(resolver),
-                ),
+            retrieval_lanes.push(recall_lanes::lexical_recall_lane(
+                knowledge_handle.clone(),
+                lexical_index.clone(),
             ));
             lexical_feed = Some(Arc::new(crate::sqlite::lexical_feed::SqlLexicalFeed::new(
                 lexical_index,
@@ -345,9 +344,19 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // query provider + knowledge-store resolver. Skipped entirely when the
     // feature is off (default build) or when construction fails — recall then
     // runs degraded for vector (fewer candidates), never errors.
+    //
+    // RFC-0019 D3 (reversed): additionally gated on `config.enable_vector`
+    // (default `true`). When an operator passes `enable_vector = false` (MCP
+    // `--no-vector`), the whole block is skipped — no `SqliteVectorIndex`, no
+    // `FastEmbedBgeSmallQueryProvider` (so no model download/load), no vector
+    // recall lane — even though fastembed is compiled in. The capability is
+    // left `Unsupported` with `vectors = None`.
     #[cfg(feature = "fastembed")]
     {
-        if let (Some(knowledge_handle), Some(path_str)) = (&knowledge_store, paths.vectors.to_str())
+        if !config.enable_vector {
+            eprintln!("engram-mcp: vector lane disabled by config (enable_vector=false)");
+        } else if let (Some(knowledge_handle), Some(path_str)) =
+            (&knowledge_store, paths.vectors.to_str())
         {
             let dims = config.embedding_provider.dimensions;
             let space = engram_domain::EmbeddingSpace::new(
@@ -398,10 +407,38 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     if let (Some(memory_handle), Some(belief_handle)) = (&memory_store, &belief_store)
         && conformance::recall_ok()
     {
-        let unified = SqlUnifiedRecall::new(
+        // RFC-0019: build the weighted-RRF fusion config from the operator-facing
+        // `recall_fusion` config (`[recall_fusion]` profile section or
+        // `.engram/recall.json`); fall back to equal-weight default when absent.
+        // Validation already ran at load, so `to_reciprocal_config()` only
+        // errors if the config was constructed directly with bad weights —
+        // surfaced as a typed boot error rather than a silent degrade.
+        let fusion = match config.recall_fusion.as_ref() {
+            Some(cfg) => cfg
+                .to_reciprocal_config()
+                .map_err(|e| CoreError::InvalidRequest {
+                    reason: format!("invalid recall_fusion config: {e}"),
+                })?,
+            None => engram_retrieval::ReciprocalFusionConfig::default(),
+        };
+        // RFC-0019 T3/T4: select the reranker from `recall_fusion.rerank`.
+        // `None`/`Mmr`/`CrossEncoder` dispatched by strategy. MMR needs a wired
+        // `EmbeddingProvider` (fastembed on); it degrades to relevance-only
+        // with a warning when absent, never a panic. Cross-encoder is behind
+        // its feature gate; it warns + falls back when no scorer is wired.
+        let reranker = select_reranker(
+            config
+                .recall_fusion
+                .as_ref()
+                .and_then(|c| c.rerank.as_ref()),
+            embedding_provider.as_ref(),
+        );
+        let unified = SqlUnifiedRecall::with_reranker(
             memory_handle.clone(),
             retrieval_lanes,
             belief_handle.clone(),
+            fusion,
+            reranker,
         );
         recall = Some(Arc::new(unified));
         unified_recall_state = CapabilityState::Supported;
@@ -438,7 +475,12 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // Vectors: construct a file-backed SqliteVectorIndex configured with the
     // embedding space from configuration, then attach it. The check proves the
     // VectorIndex contract; the attached index is the usable instance.
-    if conformance::vector_ok() {
+    //
+    // Also gated on `config.enable_vector` (RFC-0019 D3 reversed): when an
+    // operator disables vector at runtime, neither this block nor the
+    // fastembed lane above constructs a vector index, so `vectors` stays `None`
+    // and `vectors_state` stays `Unsupported`.
+    if config.enable_vector && conformance::vector_ok() {
         let dims = config.embedding_provider.dimensions;
         let path = &paths.vectors;
         let space = engram_domain::EmbeddingSpace::new(
@@ -637,5 +679,184 @@ fn diagnostic_scope() -> engram_domain::Scope {
         workspace: None,
         session: None,
         environment: None,
+    }
+}
+
+// ---- RFC-0019 T3/T4: reranker dispatch -----------------------------------
+// Selects the reranker for unified recall from the operator-facing
+// `recall_fusion.rerank` config. ADR-0022: this is the engine-specific wiring
+// site (names adapter crates + the integration `EmbeddingProvider`); the
+// reranker port + dispatch contract stay engine-neutral.
+
+/// Selects the reranker by `rerank.strategy`. Returns `None` (no rerank) when
+/// no rerank config is set, strategy is `None`, or the selected reranker's
+/// prerequisites are unmet (MMR without an embedder; cross-encoder without its
+/// feature/scorer). Unmet prerequisites degrade with a warning, never a panic.
+fn select_reranker(
+    rerank: Option<&engram_retrieval::RerankConfig>,
+    embedding_provider: Option<&Arc<dyn crate::EmbeddingProvider>>,
+) -> Option<Arc<dyn engram_retrieval::RetrievalReranker>> {
+    let Some(cfg) = rerank else {
+        return None;
+    };
+    match cfg.strategy {
+        RerankStrategy::None => None,
+        RerankStrategy::Mmr => select_mmr(embedding_provider, cfg.lambda),
+        RerankStrategy::CrossEncoder => select_cross_encoder(),
+        // `LlmJudge` / `PolicyPriority` are not dispatched by engram today.
+        _ => None,
+    }
+}
+
+/// MMR needs an `EmbeddingProvider` to embed candidate texts (RFC-0019 D4 — the
+/// `RetrievalReranker` port exposes no embeddings). The embedder is wired only
+/// under the `fastembed` feature; without it (or when construction failed), MMR
+/// degrades to relevance-only ordering with a warning.
+fn select_mmr(
+    embedding_provider: Option<&Arc<dyn crate::EmbeddingProvider>>,
+    lambda: f32,
+) -> Option<Arc<dyn engram_retrieval::RetrievalReranker>> {
+    #[cfg(feature = "fastembed")]
+    {
+        if let Some(emb) = embedding_provider {
+            // Bridge the integration `EmbeddingProvider` to the MMR adapter's
+            // local `MmrEmbedder` trait (the adapter cannot depend on the
+            // facade without a package cycle — see `engram-rerank-mmr` docs).
+            let embedder: Arc<dyn engram_rerank_mmr::MmrEmbedder> =
+                Arc::new(FastEmbedMmrEmbedder { inner: emb.clone() });
+            return Some(Arc::new(engram_rerank_mmr::MmrReranker::new(
+                Some(embedder),
+                lambda,
+            )));
+        }
+        eprintln!(
+            "engram-mcp: MMR reranker selected but no embedding provider is wired \
+             (enable the `fastembed` feature); falling back to no rerank"
+        );
+        None
+    }
+    #[cfg(not(feature = "fastembed"))]
+    {
+        let _ = embedding_provider;
+        let _ = lambda;
+        eprintln!(
+            "engram-mcp: MMR reranker selected but the `fastembed` feature is disabled \
+             (no embedding provider); falling back to no rerank"
+        );
+        None
+    }
+}
+
+/// Cross-encoder is behind the `cross-encoder-rerank` feature (RFC-0019 T4 /
+/// D2.1c). The adapter is constructible when a deployer wires a `RerankScorer`;
+/// no model ships in-tree today (backlog `cross-encoder-rerank`), so selection
+/// warns + falls back to no rerank rather than inventing a scorer.
+fn select_cross_encoder() -> Option<Arc<dyn engram_retrieval::RetrievalReranker>> {
+    #[cfg(feature = "cross-encoder-rerank")]
+    {
+        eprintln!(
+            "engram-mcp: cross-encoder reranker selected but no RerankScorer model is \
+             wired; falling back to no rerank (see backlog `cross-encoder-rerank`)"
+        );
+        None
+    }
+    #[cfg(not(feature = "cross-encoder-rerank"))]
+    {
+        eprintln!(
+            "engram-mcp: cross-encoder reranker selected but the `cross-encoder-rerank` \
+             feature is disabled; falling back to no rerank"
+        );
+        None
+    }
+}
+
+/// Bridge: adapts the integration [`crate::EmbeddingProvider`] to the MMR
+/// adapter's local `MmrEmbedder` trait. Only the fastembed build wires an
+/// embedding provider, so the bridge lives behind that feature.
+#[cfg(feature = "fastembed")]
+struct FastEmbedMmrEmbedder {
+    inner: Arc<dyn crate::EmbeddingProvider>,
+}
+
+#[cfg(feature = "fastembed")]
+impl engram_rerank_mmr::MmrEmbedder for FastEmbedMmrEmbedder {
+    fn embed(&self, text: &str) -> CoreResult<Vec<f32>> {
+        // Candidate texts are passages (not queries), so embed as a passage.
+        self.inner.embed_passage(text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode};
+    use engram_domain::ScopeMappingStrategy;
+
+    fn vector_config(dir: &std::path::Path, enable_vector: bool) -> EngramConfig {
+        let mut cfg = EngramConfig::new(
+            dir.join("engram"),
+            dir,
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "fastembed".to_string(),
+                model: "BAAI/bge-small-en-v1.5".to_string(),
+                dimensions: 384,
+                prompt_profile: "query".to_string(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        );
+        cfg = cfg.with_enable_vector(enable_vector);
+        cfg
+    }
+
+    /// RFC-0019 D3 (reversed): when `enable_vector = false`, the vector lane is
+    /// skipped entirely even though the `fastembed` feature is compiled in — no
+    /// `SqliteVectorIndex`, no `FastEmbedBgeSmallQueryProvider` (so no model
+    /// download/load), no vector recall lane. The capability must report
+    /// `Unsupported` with no handle. Gated on `fastembed` because the runtime
+    /// disable is specifically the "compiled-in but turned off" path; without
+    /// the feature there is no model to skip.
+    #[cfg(feature = "fastembed")]
+    #[test]
+    fn enable_vector_false_skips_vector_lane_under_fastembed() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = vector_config(dir.path(), false);
+        let provider = bootstrap_sqlite(&config).expect("bootstrap opens with vector disabled");
+
+        // No vector handle attaches.
+        assert!(
+            provider.vectors().is_none(),
+            "enable_vector=false must not wire a vector handle"
+        );
+        // The capability is not Supported.
+        assert!(
+            !provider.capabilities().vectors_supported(),
+            "enable_vector=false must leave the vectors capability unsupported"
+        );
+    }
+
+    /// The matching half: with `enable_vector = true` (the default) the vector
+    /// lane is wired. Gated to the non-fastembed build so the assertion stays
+    /// deterministic (under fastembed the first vector block attempts a model
+    /// load; the SQLite-only second block wires `vectors` here without any
+    /// model). The fastembed-gated disable test above plus this positive test
+    /// together pin the gate from both sides.
+    #[cfg(not(feature = "fastembed"))]
+    #[test]
+    fn enable_vector_true_wires_vector_lane() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = vector_config(dir.path(), true);
+        let provider = bootstrap_sqlite(&config).expect("bootstrap opens with vector enabled");
+
+        assert!(
+            provider.vectors().is_some(),
+            "enable_vector=true must wire a vector handle"
+        );
+        assert!(
+            provider.capabilities().vectors_supported(),
+            "enable_vector=true must mark the vectors capability supported"
+        );
     }
 }

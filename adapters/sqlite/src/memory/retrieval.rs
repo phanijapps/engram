@@ -244,10 +244,10 @@ enum MatchMode {
 
 impl MatchMode {
     fn source(&self) -> &'static str {
+        // All facts-lane variants share the normalized lane tag "facts" so the
+        // external fusion config can weight the memory lane as a whole.
         match self {
-            Self::KeywordOnly => "sql.memory.keyword",
-            Self::CueOnly => "sql.memory.cue",
-            Self::Both => "sql.memory.keyword+cue",
+            Self::KeywordOnly | Self::CueOnly | Self::Both => "facts",
         }
     }
     fn fusion_strategy(&self) -> FusionStrategy {

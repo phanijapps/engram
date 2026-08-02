@@ -463,11 +463,13 @@ fn both_modes_distinct_records_each_carry_correct_score_fields() {
         "cue-only matched_cues should be populated"
     );
 
-    // fusion_trace source labels
+    // fusion_trace source labels: all facts-lane variants share the normalized
+    // lane tag "facts" (RFC-0019 D5); keyword vs cue is distinguished by score
+    // fields + matched_cues/rerank_score below, not by the source string.
     let kw_trace = kw.fusion_trace.as_ref().expect("kw fusion_trace");
     let cue_trace = cue.fusion_trace.as_ref().expect("cue fusion_trace");
-    assert_eq!(kw_trace.source, "sql.memory.keyword");
-    assert_eq!(cue_trace.source, "sql.memory.cue");
+    assert_eq!(kw_trace.source, "facts");
+    assert_eq!(cue_trace.source, "facts");
     assert!(
         kw_trace.rerank_score.is_some(),
         "keyword-only rerank_score set"
@@ -516,7 +518,7 @@ fn both_modes_same_record_matched_by_both() {
     );
 
     let trace = item.fusion_trace.as_ref().expect("fusion_trace");
-    assert_eq!(trace.source, "sql.memory.keyword+cue");
+    assert_eq!(trace.source, "facts");
     assert_eq!(trace.fusion_strategy, Some(FusionStrategy::MaxScore));
     assert!(
         trace.rerank_score.is_none(),

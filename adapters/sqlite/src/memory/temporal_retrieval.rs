@@ -17,8 +17,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use engram_domain::{
-    MemoryRecord, MemoryStatus, RetrievalRequest, RetrievalResult, RetrievalScore,
-    RetrievalTargetType, Scope,
+    FusionStrategy, FusionTrace, MemoryRecord, MemoryStatus, RerankStrategy, RetrievalRequest,
+    RetrievalResult, RetrievalScore, RetrievalTargetType, Scope,
 };
 use engram_retrieval::RetrievalIndex;
 use engram_runtime::CoreResult;
@@ -125,7 +125,23 @@ fn memory_result(record: &MemoryRecord, score: f32) -> RetrievalResult {
         provenance: record.provenance.clone(),
         policy: record.policy.clone(),
         explanation: None,
-        fusion_trace: None,
+        fusion_trace: Some(FusionTrace {
+            query_id: None,
+            vector_index: None,
+            embedding_time_ms: None,
+            search_time_ms: None,
+            source: "temporal".to_owned(),
+            source_rank: None,
+            source_score: Some(score),
+            score: None,
+            rank: None,
+            fusion_strategy: Some(FusionStrategy::None),
+            fusion_score: Some(score),
+            rerank_strategy: Some(RerankStrategy::None),
+            rerank_score: None,
+            discard_reason: None,
+            deduplicated_with: Vec::new(),
+        }),
         metadata: None,
     }
 }

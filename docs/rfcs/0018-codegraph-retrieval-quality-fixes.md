@@ -137,3 +137,7 @@ This is a bandage over the name-collapse root cause — it does **not** change i
 (To be filled on acceptance.)
 - Spec: `docs/specs/codegraph-retrieval-fixes/` — three slices (bounded traversal, BM25 search, honest fetch_rels).
 - No ADR required (no frozen-v1 contract change; one additive facade method). The deferred items (qualified identity, no-full-load backend, provenance, field-level, code lane, composite parity) each warrant their own RFC when taken up.
+
+## Errata
+
+- **2026-08-01 — D2 + §6.2 deferral superseded by RFC-0019.** RFC-0019 ("Hybrid recall fusion + externally configurable ranking") retracts this RFC's §"Why BM25 (lexical) here, and not vector + reranking?" deferral and supersedes its D2 (BM25-only `search`). The hybrid vector+BM25+RRF+reranking work — deliberately out of scope here — is now in scope under RFC-0019 / `docs/specs/recall-fusion-config/`. D1 (bounded traversal) and D3 (honest `fetch_rels`) remain as decided here.

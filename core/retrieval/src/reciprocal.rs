@@ -72,6 +72,7 @@ impl RetrievalFusion for ReciprocalRankFusion {
 
         for candidate in candidates {
             let source = candidate_source(&candidate);
+            let raw_score = candidate.fusion_trace.as_ref().and_then(|t| t.source_score);
             let rank = {
                 let entry = source_ranks.entry(source.clone()).or_insert(0);
                 *entry += 1;
@@ -82,9 +83,13 @@ impl RetrievalFusion for ReciprocalRankFusion {
             let key = CandidateKey::from(&candidate);
             match groups.entry(key) {
                 std::collections::btree_map::Entry::Occupied(mut occupied) => {
-                    occupied
-                        .get_mut()
-                        .add(source, rank, contribution, candidate.id.clone());
+                    occupied.get_mut().add(
+                        source,
+                        rank,
+                        contribution,
+                        candidate.id.clone(),
+                        raw_score,
+                    );
                 }
                 std::collections::btree_map::Entry::Vacant(vacant) => {
                     vacant.insert(Group::new(candidate, source, rank, contribution));
@@ -121,11 +126,18 @@ impl From<&RetrievalResult> for CandidateKey {
 /// `best_rank` / `best_contribution` track the strongest single contribution
 /// (the rank-1 source), not the first-arriving one, so the emitted
 /// `FusionTrace` reports the most relevant contributor rather than an ordering
-/// artifact.
+/// artifact. `best_raw_score` preserves the raw per-lane score (cosine, BM25,
+/// …) that the best-contributing source set BEFORE fusion — without this, RRF
+/// would overwrite it with the contribution term and downstream renderers
+/// could not surface "how strongly did this lane match on its own scale".
 struct Group {
     representative: RetrievalResult,
     best_rank: u32,
     best_contribution: f32,
+    /// Raw `source_score` carried by the best-contributing source's candidate
+    /// (captured before fusion overwrites it). `None` when that source did not
+    /// set a raw score.
+    best_raw_score: Option<f32>,
     rrf_score: f32,
     sources: Vec<String>,
     dedup_ids: Vec<String>,
@@ -134,21 +146,34 @@ struct Group {
 impl Group {
     fn new(representative: RetrievalResult, source: String, rank: u32, contribution: f32) -> Self {
         let rrf_score = contribution;
+        let best_raw_score = representative
+            .fusion_trace
+            .as_ref()
+            .and_then(|t| t.source_score);
         Self {
             representative,
             best_rank: rank,
             best_contribution: contribution,
+            best_raw_score,
             rrf_score,
             sources: vec![source],
             dedup_ids: Vec::new(),
         }
     }
 
-    fn add(&mut self, source: String, rank: u32, contribution: f32, id: String) {
+    fn add(
+        &mut self,
+        source: String,
+        rank: u32,
+        contribution: f32,
+        id: String,
+        raw_score: Option<f32>,
+    ) {
         self.rrf_score += contribution;
         if contribution > self.best_contribution {
             self.best_contribution = contribution;
             self.best_rank = rank;
+            self.best_raw_score = raw_score;
         }
         if !self.sources.contains(&source) {
             self.sources.push(source);
@@ -159,6 +184,12 @@ impl Group {
     fn finalize(self) -> RetrievalResult {
         let mut result = self.representative;
         result.score = with_fused_score(result.score, self.rrf_score);
+        // Preserve the best contributor's RAW lane score when available so
+        // callers can distinguish per-lane match strength (cosine/BM25) from the
+        // fused RRF score. Fall back to the best contribution only when no raw
+        // score was set — preserves the prior observable behavior for sources
+        // that never populate `source_score` pre-fusion.
+        let source_score = self.best_raw_score.or(Some(self.best_contribution));
         result.fusion_trace = Some(FusionTrace {
             query_id: None,
             vector_index: None,
@@ -166,7 +197,7 @@ impl Group {
             search_time_ms: None,
             source: self.sources.join("+"),
             source_rank: Some(self.best_rank),
-            source_score: Some(self.best_contribution),
+            source_score,
             score: None,
             rank: None,
             fusion_strategy: Some(FusionStrategy::ReciprocalRankFusion),

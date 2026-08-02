@@ -146,16 +146,23 @@ fn provenance_repo_label(source: &str) -> String {
         .to_owned()
 }
 
-/// Renders a provenance bracket for one recall item: `[retriever, score=X.XX]`.
-/// Used as a per-item suffix in `search` and `get_context` output so a caller
-/// can see WHERE each result came from without leaving the result line.
+/// Renders a provenance bracket for one recall item, surfacing BOTH the raw
+/// per-lane score and the fused RRF score (Option B): `[lane, raw=X.XX, rrf=Y.YY]`.
+/// When the lane did not set a raw score, falls back to `[lane, rrf=Y.YY]`. Used
+/// as a per-item suffix in `get_context` evidence output so a caller can see
+/// WHERE each result came from AND how strongly that lane matched on its own
+/// scale (cosine / BM25 / …), not just the fused rank score.
 fn recall_provenance_suffix(item: &RetrievalResult) -> String {
-    let retriever = item
-        .fusion_trace
-        .as_ref()
-        .map(|t| t.source.as_str())
-        .unwrap_or("?");
-    format!("[{retriever}, score={:.2}]", item.score.total)
+    match item.fusion_trace.as_ref() {
+        Some(t) => match t.source_score {
+            Some(raw) => format!(
+                "[{}, raw={:.2}, rrf={:.2}]",
+                t.source, raw, item.score.total
+            ),
+            None => format!("[{}, rrf={:.2}]", t.source, item.score.total),
+        },
+        None => format!("[?, rrf={:.2}]", item.score.total),
+    }
 }
 
 /// Builds the concise diagnostics appended after "No results." when recall
@@ -464,6 +471,17 @@ fn name_matches_query(name: &str, query: &str) -> bool {
     false
 }
 
+/// True when `name` is an EXACT (case-insensitive, trimmed) match for `query`
+/// — the query IS the identifier, nothing more. Used by `inject_exact_matches`
+/// (Option B) to give a true identifier match a higher injected score than a
+/// substring/partial match. Distinct from [`name_matches_query`], which also
+/// accepts substring containment.
+fn name_exact_match(name: &str, query: &str) -> bool {
+    let n = name.trim().to_ascii_lowercase();
+    let q = query.trim().to_ascii_lowercase();
+    !q.is_empty() && n == q
+}
+
 /// A resolved `search` hit carrying everything needed for rendering and the
 /// diversity/score gates (Fixes 1–5). Built from a recall `RetrievalResult`
 /// (the normal path) or an exact-match-injected entity (Fix 2).
@@ -480,9 +498,18 @@ struct SearchHit {
     /// Fusion-trace source (`"lexical"`, `"vector"`, …) or `"exact-match"` for
     /// Fix 2 injected hits.
     retriever: String,
+    /// Raw per-lane score from `fusion_trace.source_score` (Option B): the best
+    /// contributor's pre-fusion score (cosine / BM25 / …) — how strongly the
+    /// lane matched on its own scale. `None` for lanes that didn't set one and
+    /// for synthetic exact-match hits (no lane produced them).
+    source_score: Option<f32>,
+    /// The fused RRF score (`item.score.total`). Drives ranking + the score
+    /// threshold; surfaced alongside `source_score` so an agent can tell a
+    /// strong raw match from a weak one without the artificial 1.0 floor.
     score: f32,
     /// True when the entity name is an exact/normalized match for the query
-    /// (Fix 2). Sorts the hit to the top.
+    /// (Fix 2). Used for the `[exact-match]` render tag + sort priority. It is
+    /// NOT used for score manipulation (Option B removed the 1.0 boost).
     is_exact: bool,
 }
 
@@ -493,12 +520,10 @@ impl SearchHit {
     /// back to the item's content and `kind_label`/`path` are empty/None.
     fn from_recall(item: &RetrievalResult, by_id: &HashMap<String, KnowledgeEntity>) -> Self {
         let repo = provenance_repo_label(&item.provenance.source);
-        let retriever = item
-            .fusion_trace
-            .as_ref()
-            .map(|t| t.source.as_str())
-            .unwrap_or("?")
-            .to_owned();
+        let trace = item.fusion_trace.as_ref();
+        let retriever = trace.map(|t| t.source.as_str()).unwrap_or("?").to_owned();
+        // Option B: surface the raw per-lane score alongside the fused RRF.
+        let source_score = trace.and_then(|t| t.source_score);
         match by_id.get(&item.target_id) {
             Some(e) => SearchHit {
                 entity_id: item.target_id.clone(),
@@ -507,6 +532,7 @@ impl SearchHit {
                 repo,
                 path: entity_source_path(e),
                 retriever,
+                source_score,
                 score: item.score.total,
                 is_exact: false,
             },
@@ -521,17 +547,20 @@ impl SearchHit {
                 repo,
                 path: None,
                 retriever,
+                source_score,
                 score: item.score.total,
                 is_exact: false,
             },
         }
     }
 
-    /// Build a synthetic hit for an entity that matches the query exactly but
-    /// was not surfaced by recall (Fix 2). Score is floored to 1.0 (top-rank);
-    /// retriever is labeled `exact-match` so the boost is visible in
-    /// diagnostics mode.
-    fn from_exact_match(entity: &KnowledgeEntity) -> Self {
+    /// Build a synthetic hit for an entity that matches the query but was not
+    /// surfaced by recall (Fix 2). Option B: the score is ANCHOR-based (caller
+    /// passes the max RRF score for exact matches, or 80% of it for partial
+    /// matches) — NOT an artificial 1.0. `source_score` is `None` (no lane
+    /// produced the hit). `retriever` is labeled `exact-match` so the injection
+    /// is visible in diagnostics mode and the `[exact-match]` render tag fires.
+    fn from_exact_match(entity: &KnowledgeEntity, score: f32) -> Self {
         SearchHit {
             entity_id: entity.id.to_string(),
             name: entity.name.clone(),
@@ -539,38 +568,59 @@ impl SearchHit {
             repo: provenance_repo_label(&entity.provenance.source),
             path: entity_source_path(entity),
             retriever: "exact-match".to_owned(),
-            score: 1.0,
+            source_score: None,
+            score,
             is_exact: true,
         }
     }
 }
 
-/// Boost exact/normalized name matches to the top of the results (Fix 2).
+/// Mark + inject exact/normalized name matches (Fix 2, Option B: no score boost).
 ///
 /// 1. Mark any existing hit (already in `hits`) whose entity name matches the
-///    query as `is_exact` and floor its score to 1.0 so it sorts first.
+///    query as `is_exact`. Its RRF score is LEFT UNCHANGED — the raw lane score
+///    (now surfaced in rendering) shows whether it's a strong match, so the
+///    artificial 1.0 floor is gone. `is_exact` still sorts it first and tags it
+///    `[exact-match]` in diagnostics.
 /// 2. Inject entities from `by_id` that match the query but are NOT already in
-///    `hits` (by entity_id), as synthetic `from_exact_match` hits. Injected
-///    entities are deduped among themselves by `(repo, name)`.
+///    `hits` (by entity_id), as synthetic `from_exact_match` hits. Because these
+///    weren't in recall (no RRF score), they get an ANCHOR-based score derived
+///    from the existing hits' max RRF:
+///      - exact identifier match (query == name):     max_rrf        (top rank)
+///      - substring / partial match:                  0.8 * max_rrf
+///
+///    This ranks them realistically instead of flooding the packet with 1.0s.
+///    Injected entities are deduped among themselves by `(repo, name)`.
 ///
 /// Returns the count of newly-injected hits (existing matches that were merely
-/// boosted are NOT counted). The injection is a cheap O(entities) scan —
+/// marked are NOT counted). The injection is a cheap O(entities) scan —
 /// `by_id` is already in memory via [`entity_lookup`].
 fn inject_exact_matches(
     hits: &mut Vec<SearchHit>,
     by_id: &HashMap<String, KnowledgeEntity>,
     query: &str,
 ) -> usize {
+    // (1) Mark existing matches; do NOT touch their scores (Option B).
     let mut seen_ids: HashSet<String> = HashSet::new();
     for h in hits.iter_mut() {
         if name_matches_query(&h.name, query) {
             h.is_exact = true;
-            if h.score < 1.0 {
-                h.score = 1.0;
-            }
         }
         seen_ids.insert(h.entity_id.clone());
     }
+
+    // Anchor for injected matches: the max RRF score among existing hits, so an
+    // injected exact identifier ranks at the top with a realistic score. When
+    // there are no hits to anchor against (recall returned nothing for this
+    // query), fall back to a small constant above DEFAULT_MIN_SCORE so the
+    // injected match still clears the score threshold rather than being dropped.
+    let max_rrf = hits.iter().map(|h| h.score).fold(0.0_f32, f32::max);
+    let anchor = if max_rrf > 0.0 {
+        max_rrf
+    } else {
+        DEFAULT_MIN_SCORE * 5.0 // 0.05 — above the 0.01 score floor
+    };
+
     let mut seen_names: HashSet<(String, String)> = HashSet::new();
     for h in hits.iter() {
         seen_names.insert((h.repo.clone(), h.name.clone()));
@@ -584,7 +634,14 @@ fn inject_exact_matches(
         if seen_ids.contains(&id) {
             continue;
         }
-        let hit = SearchHit::from_exact_match(e);
+        // Score by match quality (Option B): exact identifier → anchor (top),
+        // substring/partial → 80% of anchor.
+        let score = if name_exact_match(&e.name, query) {
+            anchor
+        } else {
+            anchor * 0.8
+        };
+        let hit = SearchHit::from_exact_match(e, score);
         if !seen_names.insert((hit.repo.clone(), hit.name.clone())) {
             continue;
         }
@@ -645,13 +702,36 @@ fn apply_score_threshold(hits: Vec<SearchHit>, min_score: f32) -> (Vec<SearchHit
     (kept, dropped)
 }
 
-/// Render a hit to a single result line (Fix 1 + Fix 5).
+/// Build the score bracket for a hit, surfacing BOTH the raw per-lane score
+/// and the fused RRF score (Option B). Three shapes:
+///
+/// - Injected exact-match (`retriever == "exact-match"`, no raw score):
+///   `[exact-match, rrf=X.XX]` — same in both modes; the tag is the signal.
+/// - Lane set a raw score:
+///   - compact:     `[lane:raw, rrf=X.XX]`  (e.g. `[vector:0.92, rrf=0.02]`)
+///   - diagnostics: `[lane, raw=X.XX, rrf=X.XX]`
+/// - Lane did not set a raw score (None):
+///   - compact:     `[rrf=X.XX]`
+///   - diagnostics: `[lane, rrf=X.XX]`  (lane still named for traceability)
+fn score_bracket(h: &SearchHit, diagnostics: bool) -> String {
+    if h.retriever == "exact-match" {
+        return format!("[exact-match, rrf={:.2}]", h.score);
+    }
+    match (h.source_score, diagnostics) {
+        (Some(raw), false) => format!("[{}:{:.2}, rrf={:.2}]", h.retriever, raw, h.score),
+        (Some(raw), true) => format!("[{}, raw={:.2}, rrf={:.2}]", h.retriever, raw, h.score),
+        (None, false) => format!("[rrf={:.2}]", h.score),
+        (None, true) => format!("[{}, rrf={:.2}]", h.retriever, h.score),
+    }
+}
+
+/// Render a hit to a single result line (Fix 1 + Fix 5 + Option B raw scores).
 ///
 /// - Diagnostics (`diagnostics = true`): full format with kind + retriever —
-///   `name (kind) — org/repo, path [retriever, score=X.XX]`.
-/// - Compact (default): `name — repo, path [X.XX]` — kind dropped (redundant
-///   for code), repo shortened to the name segment, retriever dropped, score
-///   rounded to 2 decimals. ~50% shorter than the diagnostics line.
+///   `name (kind) — org/repo, path [lane, raw=X.XX, rrf=Y.YY]`.
+/// - Compact (default): `name — repo, path [lane:raw, rrf=Y.YY]` — kind dropped
+///   (redundant for code), repo shortened to the name segment, score rounded to
+///   2 decimals. ~50% shorter than the diagnostics line.
 ///
 /// The path (Fix 1) is included in both modes when available.
 fn render_hit(h: &SearchHit, diagnostics: bool) -> String {
@@ -659,38 +739,43 @@ fn render_hit(h: &SearchHit, diagnostics: bool) -> String {
         Some(p) if !p.is_empty() => format!(", {p}"),
         _ => String::new(),
     };
+    let bracket = score_bracket(h, diagnostics);
     if diagnostics {
         let kind_part = if h.kind_label.is_empty() {
             String::new()
         } else {
             format!(" ({})", h.kind_label)
         };
-        format!(
-            "{}{kind_part} — {}{path_part} [{}, score={:.2}]",
-            h.name, h.repo, h.retriever, h.score
-        )
+        format!("{}{kind_part} — {}{path_part} {bracket}", h.name, h.repo)
     } else {
         let repo = shorten_repo_label(&h.repo);
-        format!("{} — {}{path_part} [{:.2}]", h.name, repo, h.score)
+        format!("{} — {}{path_part} {bracket}", h.name, repo)
     }
 }
 
-/// Render a one-line discovery header for a recall item (Fix 4): the result
-/// metadata WITHOUT the content body. Format:
-/// `name (kind) — org/repo, path [X.XX]`. Falls back to a short content
-/// snippet when the entity is not resolvable (memories, chunks). ~80 chars vs
-/// ~2000 for an evidence excerpt, so a discovery packet costs ~25x less context.
+/// Render a one-line discovery header for a recall item (Fix 4 + Option B): the
+/// result metadata WITHOUT the content body, surfacing the raw per-lane score
+/// alongside the fused RRF score. Format:
+/// `name (kind) — org/repo, path [lane, raw=X.XX, rrf=Y.YY]`. Falls back to a
+/// short content snippet when the entity is not resolvable (memories, chunks).
+/// ~80 chars vs ~2000 for an evidence excerpt, so a discovery packet costs
+/// ~25x less context.
 fn discovery_header(item: &RetrievalResult, by_id: &HashMap<String, KnowledgeEntity>) -> String {
     let repo = provenance_repo_label(&item.provenance.source);
+    let trace = item.fusion_trace.as_ref();
+    let lane = trace.map(|t| t.source.as_str()).unwrap_or("?").to_owned();
+    let raw = trace.and_then(|t| t.source_score);
+    let rrf = item.score.total;
+    let bracket = match raw {
+        Some(r) => format!("[{lane}, raw={r:.2}, rrf={rrf:.2}]"),
+        None => format!("[{lane}, rrf={rrf:.2}]"),
+    };
     match by_id.get(&item.target_id) {
         Some(e) => {
             let path_part = entity_source_path(e)
                 .map(|p| format!(", {p}"))
                 .unwrap_or_default();
-            format!(
-                "{} ({:?}) — {}{path_part} [{:.2}]",
-                e.name, e.kind, repo, item.score.total
-            )
+            format!("{} ({:?}) — {}{path_part} {bracket}", e.name, e.kind, repo)
         }
         None => {
             // Non-entity item (memory/chunk/belief): show a short snippet +
@@ -707,10 +792,7 @@ fn discovery_header(item: &RetrievalResult, by_id: &HashMap<String, KnowledgeEnt
                     .take(80)
                     .collect()
             };
-            format!(
-                "{snippet} {:?} — {} [{:.2}]",
-                item.target_type, repo, item.score.total
-            )
+            format!("{snippet} {:?} — {} {bracket}", item.target_type, repo)
         }
     }
 }
@@ -827,9 +909,11 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                     .map(|i| SearchHit::from_recall(i, &by_id))
                     .collect();
 
-                // Fix 2: exact-match injection — boost/inject entities whose
+                // Fix 2: exact-match injection — mark/inject entities whose
                 // name exactly or split-matches the query, so an identifier
-                // match never loses to semantic similarity.
+                // match never loses to semantic similarity. Option B: NO score
+                // boost — existing matches keep their RRF score, injected ones
+                // get an anchor-based score (max RRF for exact, 80% for partial).
                 inject_exact_matches(&mut hits, &by_id, query);
 
                 // Re-sort: exact matches first, then by score descending.
@@ -843,8 +927,9 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
 
                 // Fix 5: score threshold — drop barely-relevant noise before
                 // the per-file cap so capped noise doesn't consume per-file
-                // slots. Exact-match hits are floored to 1.0 above and always
-                // survive the default 0.01 floor.
+                // slots. Option B: exact matches are no longer floored to 1.0,
+                // so a low-ranked exact match CAN be dropped here — that's
+                // correct (if recall ranked it low, the raw score will say why).
                 let min_score = args["min_score"]
                     .as_f64()
                     .map(|v| v as f32)
@@ -1964,7 +2049,8 @@ mod tests {
     }
 
     /// Build a `SearchHit` with the fields the gate/render tests read. The other
-    /// fields default to empty / `false`.
+    /// fields default to empty / `false`. `source_score` defaults to `None`;
+    /// use [`hit_with_raw`] when a test needs a raw per-lane score.
     fn hit(name: &str, path: Option<&str>, score: f32) -> SearchHit {
         SearchHit {
             entity_id: format!("id-{name}"),
@@ -1973,8 +2059,18 @@ mod tests {
             repo: "phanijapps/zbot".to_owned(),
             path: path.map(|p| p.to_owned()),
             retriever: "lexical".to_owned(),
+            source_score: None,
             score,
             is_exact: false,
+        }
+    }
+
+    /// Like [`hit`] but sets the raw per-lane score (Option B) for render tests
+    /// that assert on the `[lane:raw, rrf=…]` / `[lane, raw=…, rrf=…]` format.
+    fn hit_with_raw(name: &str, path: Option<&str>, score: f32, raw: f32) -> SearchHit {
+        SearchHit {
+            source_score: Some(raw),
+            ..hit(name, path, score)
         }
     }
 
@@ -2043,8 +2139,10 @@ mod tests {
     }
 
     #[test]
-    fn inject_exact_matches_boosts_existing_and_injects_missing() {
-        // by_id has alpha (already in hits) + anthropicOAuth (not in hits) + gamma (unrelated).
+    fn inject_exact_matches_marks_existing_without_boosting_score() {
+        // Option B: existing matches are marked is_exact but their RRF score is
+        // LEFT UNCHANGED (no 1.0 floor). The raw lane score surfaced in rendering
+        // shows whether it's a strong match.
         let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
         by_id.insert(
             "e1".into(),
@@ -2055,6 +2153,47 @@ mod tests {
                 Some("a.rs"),
             ),
         );
+        by_id.insert(
+            "e3".into(),
+            make_entity(
+                "e3",
+                "gamma",
+                engram_domain::EntityKind::Struct,
+                Some("d.rs"),
+            ),
+        );
+
+        // alpha is already in hits with a low RRF score (0.05).
+        let mut hits = vec![SearchHit {
+            entity_id: "e1".into(),
+            name: "alpha".into(),
+            kind_label: "Function".into(),
+            repo: "phanijapps/zbot".into(),
+            path: Some("a.rs".into()),
+            retriever: "lexical".into(),
+            source_score: Some(0.41),
+            score: 0.05,
+            is_exact: false,
+        }];
+
+        let injected = inject_exact_matches(&mut hits, &by_id, "alpha");
+        assert_eq!(injected, 0, "alpha already present → not re-injected");
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].is_exact, "alpha marked exact");
+        // Score UNCHANGED — no 1.0 boost.
+        assert!(
+            (hits[0].score - 0.05).abs() < 1e-6,
+            "alpha score unchanged (was 0.05, no 1.0 floor)"
+        );
+        assert_eq!(hits[0].source_score, Some(0.41), "raw lane score preserved");
+    }
+
+    #[test]
+    fn inject_exact_matches_injects_exact_identifier_at_max_rrf() {
+        // Option B: an injected EXACT identifier match (query == name) gets the
+        // max RRF score among existing hits — NOT 1.0. It ranks at the top with
+        // a realistic score.
+        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
         by_id.insert(
             "e2".into(),
             make_entity(
@@ -2074,42 +2213,90 @@ mod tests {
             ),
         );
 
-        // hits has one recall item: alpha (entity_id e1, low score).
-        let mut hits = vec![SearchHit {
-            entity_id: "e1".into(),
-            name: "alpha".into(),
-            kind_label: "Function".into(),
-            repo: "phanijapps/zbot".into(),
-            path: Some("a.rs".into()),
-            retriever: "lexical".into(),
-            score: 0.05,
-            is_exact: false,
-        }];
+        // One existing hit with score 0.05 → that is the anchor (max RRF).
+        let mut hits = vec![hit("unrelated", Some("z.rs"), 0.05)];
 
-        // Query "alpha": alpha is already present → boosted (is_exact + score 1.0),
-        // NOT re-injected. anthropicOAuth does not match "alpha".
-        let injected = inject_exact_matches(&mut hits, &by_id, "alpha");
-        assert_eq!(injected, 0, "alpha already present → not re-injected");
-        assert_eq!(hits.len(), 1);
-        assert!(hits[0].is_exact, "alpha boosted to exact");
-        assert!(
-            (hits[0].score - 1.0).abs() < 1e-6,
-            "alpha score floored to 1.0"
-        );
-
-        // Query "anthropicOAuth": not in hits → injected as a new synthetic hit.
         let injected = inject_exact_matches(&mut hits, &by_id, "anthropicOAuth");
         assert_eq!(injected, 1, "anthropicOAuth injected");
-        // The injected hit is at the end (caller re-sorts).
-        let inj = hits.last().unwrap();
-        assert_eq!(inj.name, "anthropicOAuth");
+        let inj = hits.iter().find(|h| h.name == "anthropicOAuth").unwrap();
         assert!(inj.is_exact);
-        assert!((inj.score - 1.0).abs() < 1e-6);
+        // Score = max RRF of existing hits = 0.05, NOT 1.0.
+        assert!(
+            (inj.score - 0.05).abs() < 1e-6,
+            "injected exact match scored at max RRF (0.05), not 1.0"
+        );
         assert_eq!(inj.retriever, "exact-match");
+        assert!(
+            inj.source_score.is_none(),
+            "injected hits carry no raw lane score"
+        );
         assert_eq!(inj.path.as_deref(), Some("c.rs"));
-
-        // gamma never matched either query → never injected.
+        // gamma never matched → never injected.
         assert!(hits.iter().all(|h| h.name != "gamma"));
+    }
+
+    #[test]
+    fn inject_exact_matches_injects_partial_match_at_80_pct_of_anchor() {
+        // Option B: a substring/partial match (not exact identifier) gets 80%
+        // of the anchor (max RRF). query "login" → name "loginAnthropic".
+        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        by_id.insert(
+            "e9".into(),
+            make_entity(
+                "e9",
+                "loginAnthropic",
+                engram_domain::EntityKind::Function,
+                Some("l.rs"),
+            ),
+        );
+
+        // Existing hit at 0.10 → anchor = 0.10.
+        let mut hits = vec![hit("unrelated", Some("z.rs"), 0.10)];
+        let injected = inject_exact_matches(&mut hits, &by_id, "login");
+        assert_eq!(injected, 1);
+        let inj = hits.iter().find(|h| h.name == "loginAnthropic").unwrap();
+        // Partial match → 0.8 * 0.10 = 0.08.
+        assert!(
+            (inj.score - 0.08).abs() < 1e-6,
+            "partial match at 80% of anchor: expected 0.08, got {}",
+            inj.score
+        );
+    }
+
+    #[test]
+    fn inject_exact_matches_anchor_fallback_when_no_existing_hits() {
+        // When recall returned nothing (no existing hits to anchor against), the
+        // injected match gets DEFAULT_MIN_SCORE * 5 (0.05) so it still clears the
+        // 0.01 score floor instead of being dropped.
+        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        by_id.insert(
+            "e2".into(),
+            make_entity(
+                "e2",
+                "lonelyFunc",
+                engram_domain::EntityKind::Function,
+                Some("l.rs"),
+            ),
+        );
+        let mut hits: Vec<SearchHit> = Vec::new();
+        let injected = inject_exact_matches(&mut hits, &by_id, "lonelyFunc");
+        assert_eq!(injected, 1);
+        assert!(
+            (hits[0].score - 0.05).abs() < 1e-6,
+            "fallback anchor = 0.05 when no existing hits"
+        );
+    }
+
+    #[test]
+    fn name_exact_match_distinguishes_identifier_from_substring() {
+        // Exact: query IS the identifier.
+        assert!(name_exact_match("anthropicOAuth", "anthropicOAuth"));
+        assert!(name_exact_match("anthropicOAuth", "AnthropicOAuth"));
+        // Substring is NOT exact.
+        assert!(!name_exact_match("loginAnthropic", "login"));
+        // Empty / whitespace.
+        assert!(!name_exact_match("alpha", ""));
+        assert!(!name_exact_match("alpha", "   "));
     }
 
     #[test]
@@ -2161,40 +2348,100 @@ mod tests {
     }
 
     #[test]
-    fn render_hit_compact_drops_kind_and_shortens_repo() {
-        let h = hit(
+    fn render_hit_compact_shows_raw_and_rrf_when_source_score_set() {
+        // Option B: compact format surfaces the raw lane score alongside rrf.
+        // Format: `name — repo, path [lane:raw, rrf=Y.YY]`.
+        let h = hit_with_raw(
             "loginAnthropic",
             Some("packages/ai/src/auth/oauth/anthropic.ts"),
             0.0382,
+            0.917,
         );
-        // Compact: name — repo_name, path [score]  (no kind, no retriever).
         let compact = render_hit(&h, false);
         assert!(
             compact.starts_with("loginAnthropic — zbot, packages/ai/src/auth/oauth/anthropic.ts"),
             "compact format: {compact}"
         );
+        // Raw lane score (lexical:0.92) + rrf (0.04), both rounded to 2 decimals.
         assert!(
-            compact.contains("[0.04]"),
-            "score rounded to 2 decimals: {compact}"
+            compact.contains("[lexical:0.92, rrf=0.04]"),
+            "raw + rrf bracket: {compact}"
         );
+        // Kind + retriever label dropped in compact (lane shows in the bracket).
+        assert!(!compact.contains("Function"), "kind dropped: {compact}");
+    }
+
+    #[test]
+    fn render_hit_compact_shows_only_rrf_when_no_source_score() {
+        // When source_score is None, compact shows `[rrf=Y.YY]` only.
+        let h = hit("someEntity", Some("src/lib.rs"), 0.031);
+        let compact = render_hit(&h, false);
         assert!(
-            !compact.contains("Function"),
-            "kind dropped in compact: {compact}"
+            compact.contains("[rrf=0.03]"),
+            "rrf-only bracket when raw absent: {compact}"
         );
         assert!(
             !compact.contains("lexical"),
-            "retriever dropped in compact: {compact}"
+            "lane name not duplicated outside bracket: {compact}"
         );
+    }
 
-        // Diagnostics: full format with kind + retriever + score.
+    #[test]
+    fn render_hit_diagnostics_shows_lane_raw_rrf() {
+        // Diagnostics format: `name (kind) — repo, path [lane, raw=X.XX, rrf=Y.YY]`.
+        let h = hit_with_raw(
+            "loginAnthropic",
+            Some("packages/ai/src/auth/oauth/anthropic.ts"),
+            0.0382,
+            0.917,
+        );
         let diag = render_hit(&h, true);
         assert!(
-            diag.starts_with("loginAnthropic (Function) — phanijapps/zbot, packages/ai/src/auth/oauth/anthropic.ts"),
+            diag.starts_with(
+                "loginAnthropic (Function) — phanijapps/zbot, packages/ai/src/auth/oauth/anthropic.ts"
+            ),
             "diagnostics format: {diag}"
         );
         assert!(
-            diag.contains("[lexical, score=0.04]"),
-            "full provenance: {diag}"
+            diag.contains("[lexical, raw=0.92, rrf=0.04]"),
+            "diagnostics bracket with raw + rrf: {diag}"
+        );
+    }
+
+    #[test]
+    fn render_hit_diagnostics_shows_lane_rrf_when_no_source_score() {
+        // Diagnostics without raw: `[lane, rrf=Y.YY]` (lane still named).
+        let h = hit("someEntity", Some("src/lib.rs"), 0.031);
+        let diag = render_hit(&h, true);
+        assert!(
+            diag.contains("[lexical, rrf=0.03]"),
+            "diagnostics bracket without raw: {diag}"
+        );
+    }
+
+    #[test]
+    fn render_hit_exact_match_injected_shows_tag() {
+        // Injected exact-match hit: `[exact-match, rrf=Y.YY]` (no raw lane score).
+        let h = SearchHit {
+            entity_id: "e1".into(),
+            name: "alpha".into(),
+            kind_label: "Function".into(),
+            repo: "phanijapps/zbot".into(),
+            path: Some("a.rs".into()),
+            retriever: "exact-match".into(),
+            source_score: None,
+            score: 0.05,
+            is_exact: true,
+        };
+        let compact = render_hit(&h, false);
+        assert!(
+            compact.contains("[exact-match, rrf=0.05]"),
+            "injected exact-match tag in compact: {compact}"
+        );
+        let diag = render_hit(&h, true);
+        assert!(
+            diag.contains("[exact-match, rrf=0.05]"),
+            "injected exact-match tag in diagnostics: {diag}"
         );
     }
 
@@ -2202,15 +2449,18 @@ mod tests {
     fn render_hit_omits_path_gracefully_when_absent() {
         let h = hit("noPath", None, 0.5);
         let compact = render_hit(&h, false);
-        // No ", path" segment — just "name — repo [score]".
-        assert_eq!(compact, "noPath — zbot [0.50]");
+        // No ", path" segment — just "name — repo [rrf=…]" (no source_score).
+        assert_eq!(compact, "noPath — zbot [rrf=0.50]");
     }
 
     #[test]
-    fn discovery_header_formats_name_kind_repo_path_score() {
-        // Entity resolvable → "name (kind) — repo, path [score]".
-        // (`recall_item` sets provenance.source = "test", so the repo label is
-        // "test" — the test asserts the FORMAT, not a specific remote.)
+    fn discovery_header_formats_name_kind_repo_path_raw_rrf() {
+        // Option B: discovery header surfaces raw lane score + rrf.
+        // Format: `name (kind) — repo, path [lane, raw=X.XX, rrf=Y.YY]`.
+        // (`recall_item` sets provenance.source = "test" and no fusion_trace, so
+        // the lane is "?" and raw is absent → the bracket is `[?, rrf=1.00]`.
+        // This asserts the FORMAT path with no raw score; the raw-bearing path
+        // is covered by discovery_header_includes_raw_when_trace_sets_it.)
         let item = recall_item(RetrievalTargetType::Entity, "e1");
         let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
         by_id.insert(
@@ -2227,12 +2477,61 @@ mod tests {
             header.starts_with("alpha (Function) — test, src/lib.rs"),
             "discovery header: {header}"
         );
-        assert!(header.contains("[1.00]"), "score included: {header}");
+        assert!(
+            header.contains("[?, rrf=1.00]"),
+            "rrf bracket (no raw): {header}"
+        );
         // Discovery mode must NOT include the content body.
         assert!(
             !header.contains("content-e1"),
             "no content in discovery: {header}"
         );
+    }
+
+    #[test]
+    fn discovery_header_includes_raw_when_trace_sets_it() {
+        // When the recall item carries a fusion_trace with a raw source_score,
+        // the discovery header shows `[lane, raw=X.XX, rrf=Y.YY]`.
+        let mut item = recall_item(RetrievalTargetType::Entity, "e1");
+        item.fusion_trace = Some(make_trace("vector", Some(0.88)));
+        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        by_id.insert(
+            "e1".into(),
+            make_entity(
+                "e1",
+                "alpha",
+                engram_domain::EntityKind::Function,
+                Some("src/lib.rs"),
+            ),
+        );
+        let header = discovery_header(&item, &by_id);
+        assert!(
+            header.contains("[vector, raw=0.88, rrf=1.00]"),
+            "raw + rrf bracket when trace sets source_score: {header}"
+        );
+    }
+
+    /// Build a minimal `FusionTrace` for render tests (only `source` + raw
+    /// `source_score` vary; the rest is fixture filler — render reads only
+    /// those two fields).
+    fn make_trace(source: &str, source_score: Option<f32>) -> engram_domain::FusionTrace {
+        engram_domain::FusionTrace {
+            query_id: None,
+            vector_index: None,
+            embedding_time_ms: None,
+            search_time_ms: None,
+            source: source.to_owned(),
+            source_rank: None,
+            source_score,
+            score: None,
+            rank: None,
+            fusion_strategy: None,
+            fusion_score: None,
+            rerank_strategy: None,
+            rerank_score: None,
+            discard_reason: None,
+            deduplicated_with: Vec::new(),
+        }
     }
 
     #[test]
@@ -2249,5 +2548,38 @@ mod tests {
             header.contains("content-m1"),
             "content snippet shown as label: {header}"
         );
+    }
+
+    #[test]
+    fn recall_provenance_suffix_shows_raw_and_rrf() {
+        // Option B: evidence-mode suffix surfaces raw lane score + rrf.
+        let mut item = recall_item(RetrievalTargetType::Entity, "e1");
+        item.fusion_trace = Some(make_trace("vector", Some(0.92)));
+        item.score.total = 0.024;
+        let suffix = recall_provenance_suffix(&item);
+        assert!(
+            suffix.contains("[vector, raw=0.92, rrf=0.02]"),
+            "raw + rrf provenance suffix: {suffix}"
+        );
+    }
+
+    #[test]
+    fn recall_provenance_suffix_shows_only_rrf_when_raw_absent() {
+        let mut item = recall_item(RetrievalTargetType::Entity, "e1");
+        item.fusion_trace = Some(make_trace("lexical", None));
+        item.score.total = 0.031;
+        let suffix = recall_provenance_suffix(&item);
+        assert!(
+            suffix == "[lexical, rrf=0.03]",
+            "rrf-only suffix when raw absent: {suffix}"
+        );
+    }
+
+    #[test]
+    fn recall_provenance_suffix_handles_missing_trace() {
+        // No fusion_trace at all → `[?, rrf=Y.YY]`.
+        let item = recall_item(RetrievalTargetType::Entity, "e1");
+        let suffix = recall_provenance_suffix(&item);
+        assert_eq!(suffix, "[?, rrf=1.00]", "missing trace fallback: {suffix}");
     }
 }

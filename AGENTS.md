@@ -293,3 +293,7 @@ feature-specific traps.
   boundaries); do not change v1 contract fields or generated TypeScript types;
   `OntologyRepository` is durable (ADR-0008); its `validate_graph` is advisory
   only.
+
+  # engram-mcp Memory Layer
+  All your findings can be saved in engram mcp. If you have any doubt, use engram mcp to query.
+  Also periodically reindex after Code merges to main to keep the knowledge current.

@@ -16,4 +16,6 @@ mod reachability;
 pub use betweenness::betweenness;
 pub use communities::communities;
 pub use pagerank::{pagerank, personalized_pagerank};
-pub use reachability::{ancestors, descendants, in_degree, shortest_path};
+pub use reachability::{
+    ancestors, ancestors_bounded, descendants, descendants_bounded, in_degree, shortest_path,
+};

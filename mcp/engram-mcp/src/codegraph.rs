@@ -18,6 +18,11 @@ use crate::protocol;
 use crate::registry::ToolError;
 use crate::tools::{internal, policy, req_str, system_actor};
 
+/// Default per-direction visited cap for bounded code-graph neighborhoods. The
+/// depth defaults (`symbol_context`=1, `change_impact`=2) are the primary flood
+/// bound; this cap is the safety net for raised-depth or super-hub queries.
+const DEFAULT_NEIGHBORHOOD_CAP: usize = 64;
+
 /// `scan_repo`: treesitter-index a code repository into the project workspace,
 /// routed through the provider via the fan-in adapter. Feeds code-symbol names
 /// to the lexical lane so `search`/`recall` find them.
@@ -202,23 +207,29 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// `symbol_context`: callers, callees, and community for one symbol.
 pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let symbol = req_str(args, "symbol")?;
-    let depth = args["depth"].as_u64().unwrap_or(2) as usize;
+    let depth = args["depth"].as_u64().unwrap_or(1) as usize;
+    let cap = args["cap"]
+        .as_u64()
+        .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
     let rels = fetch_rels(app);
-    let ctx = engram_codegraph_queries::symbol_context(&rels, symbol, depth);
+    let ctx = engram_codegraph_queries::symbol_context_bounded(&rels, symbol, depth, cap);
     Ok(protocol::text_content(format!("{ctx:?}")))
 }
 
 /// `change_impact`: blast radius + dependency path from a change site.
 pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
     let target = req_str(args, "target")?;
-    let depth = args["depth"].as_u64().unwrap_or(3) as usize;
+    let depth = args["depth"].as_u64().unwrap_or(2) as usize;
+    let cap = args["cap"]
+        .as_u64()
+        .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
     let rels = fetch_rels(app);
-    let radius = engram_codegraph_queries::blast_radius(&rels, target, depth);
+    let radius = engram_codegraph_queries::blast_radius_bounded(&rels, target, depth, cap);
     let path = args["to"]
         .as_str()
         .and_then(|to| engram_codegraph_queries::dependency_path(&rels, target, to));
     Ok(protocol::text_content(format!(
-        "Blast radius ({depth} hops): {radius:?}\nDependency path: {path:?}"
+        "Blast radius ({depth} hops, cap {cap}): {radius:?}\nDependency path: {path:?}"
     )))
 }
 

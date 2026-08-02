@@ -9,7 +9,6 @@
 //! and `bindings/node`) source-compatible. New host code should call
 //! [`engram_integration::EngramProvider::open`] directly.
 
-pub mod fastembed_provider;
 pub mod fixtures;
 pub mod harness;
 pub mod wiring;

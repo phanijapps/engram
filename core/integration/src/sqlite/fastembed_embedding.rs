@@ -52,4 +52,16 @@ impl EmbeddingProvider for FastEmbedEmbeddingProvider {
     fn embed_passage(&self, text: &str) -> CoreResult<Vec<f32>> {
         self.inner.embed_passage(text)
     }
+
+    /// Real batch embedding: one FastEmbed model call over all texts.
+    ///
+    /// Overrides the default per-item loop with FastEmbed's native batched
+    /// `TextEmbedding::embed`, so ingest paths embed a whole chunk batch through
+    /// the model once instead of N times. Slot-aligned with the per-item path
+    /// (each non-empty result matches `embed_passage` within tolerance; empty
+    /// trimmed texts yield an empty vector in their slot and are skipped by the
+    /// ingest loop).
+    fn embed_batch(&self, texts: &[String]) -> CoreResult<Vec<Vec<f32>>> {
+        self.inner.embed_passage_batch(texts)
+    }
 }

@@ -92,6 +92,58 @@ impl FastEmbedBgeSmallQueryProvider {
             message: "FastEmbed returned no passage embedding".to_owned(),
         })
     }
+
+    /// Embeds many passage texts in one native model call.
+    ///
+    /// This uses FastEmbed's batched `TextEmbedding::embed` (which itself splits
+    /// the input into internal batches) so ingest paths can embed a whole chunk
+    /// batch through the model once instead of N times. Each input text is
+    /// trimmed and prefixed exactly as [`embed_passage`](Self::embed_passage)
+    /// does, so a batched embedding matches the per-item embedding for the same
+    /// text (within floating-point tolerance). Empty inputs return an empty
+    /// vector; empty-text items are skipped (no embedding for them) to mirror
+    /// the skip-empty-text behavior of the ingest loop.
+    pub fn embed_passage_batch(&self, texts: &[String]) -> CoreResult<Vec<Vec<f32>>> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+        // Trim each passage and remember its position so we can re-expand the
+        // model's dense output back into a slot-aligned vector (empty trimmed
+        // texts are dropped from the model call and left absent in the output).
+        let trimmed: Vec<String> = texts.iter().map(|t| t.trim().to_owned()).collect();
+        let live: Vec<(usize, String)> = trimmed
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| !t.is_empty())
+            .map(|(i, t)| (i, t.clone()))
+            .collect();
+        if live.is_empty() {
+            return Ok(vec![Vec::new(); texts.len()]);
+        }
+        let inputs: Vec<String> = live.iter().map(|(_, t)| t.clone()).collect();
+        let mut model = self.model.lock().map_err(|_| CoreError::Adapter {
+            adapter: ADAPTER_NAME.to_owned(),
+            message: "FastEmbed model lock poisoned".to_owned(),
+        })?;
+        let embeddings = model.embed(inputs, None).map_err(adapter_error)?;
+        if embeddings.len() != live.len() {
+            return Err(CoreError::Adapter {
+                adapter: ADAPTER_NAME.to_owned(),
+                message: format!(
+                    "FastEmbed batch returned {} embeddings for {} inputs",
+                    embeddings.len(),
+                    live.len()
+                ),
+            });
+        }
+        // Re-expand into the original slot order; empty-trimmed slots get an
+        // empty vec so callers can skip them as in the per-item path.
+        let mut out: Vec<Vec<f32>> = vec![Vec::new(); texts.len()];
+        for (slot, emb) in live.iter().zip(embeddings.into_iter()) {
+            out[slot.0] = emb;
+        }
+        Ok(out)
+    }
 }
 
 impl VectorQueryProvider for FastEmbedBgeSmallQueryProvider {

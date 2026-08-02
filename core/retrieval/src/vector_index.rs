@@ -9,6 +9,7 @@
 use async_trait::async_trait;
 use engram_domain::{EmbeddingSpace, Id};
 use engram_runtime::CoreResult;
+use std::collections::HashSet;
 
 /// Vector index with embedding-space validation.
 ///
@@ -48,6 +49,17 @@ pub trait VectorIndex: Send + Sync {
         query_vector: Vec<f32>,
         limit: usize,
     ) -> CoreResult<Vec<(Id, f32)>>;
+
+    /// Returns the set of target ids that already have a vector in this index.
+    ///
+    /// Used by ingest paths to skip re-embedding chunks that are already
+    /// present (incremental indexing). The default returns an empty set so
+    /// existing implementations keep behaving as before (embed everything);
+    /// adapter implementations override this with a real key-listing query.
+    /// The returned set is keyed by the same `Id` passed to [`insert`](Self::insert).
+    async fn embedded_ids(&self) -> CoreResult<HashSet<Id>> {
+        Ok(HashSet::new())
+    }
 
     /// Deletes a vector target by ID.
     async fn delete_target(&self, target_id: &Id) -> CoreResult<()>;

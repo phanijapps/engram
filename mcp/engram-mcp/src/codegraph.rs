@@ -190,13 +190,16 @@ fn resolve_scan_filter(repo_root: &str, args: &Value) -> (ScanFilter, String) {
 
 // --- composites (T2–T8) ------------------------------------------------------
 
-/// Fetch all relationships in the project scope (returns empty vec on error).
-pub(crate) fn fetch_rels(app: &App) -> Vec<KnowledgeRelationship> {
-    app.provider
+/// Fetch all relationships in the project scope. Errors (rather than returning
+/// an empty vec) when the knowledge-query capability is unwired or the store
+/// fails — so graph tools fail loudly instead of masquerading as "no relations".
+pub(crate) fn fetch_rels(app: &App) -> Result<Vec<KnowledgeRelationship>, ToolError> {
+    let query = app
+        .provider
         .require_knowledge_query()
-        .ok()
-        .and_then(|q| block_on(q.list_relationships(&app.scope)).ok())
-        .unwrap_or_default()
+        .map_err(|_| internal("knowledge query capability not configured"))?;
+    block_on(query.list_relationships(&app.scope))
+        .map_err(|e| internal(format!("knowledge query failed: {e}")))
 }
 
 /// `search`: ranked code-symbol search over indexed entities.
@@ -312,7 +315,7 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let cap = args["cap"]
         .as_u64()
         .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
-    let rels = fetch_rels(app);
+    let rels = fetch_rels(app)?;
     let ctx = engram_codegraph_queries::symbol_context_bounded(&rels, symbol, depth, cap);
     Ok(protocol::text_content(format!("{ctx:?}")))
 }
@@ -324,7 +327,7 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
     let cap = args["cap"]
         .as_u64()
         .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
-    let rels = fetch_rels(app);
+    let rels = fetch_rels(app)?;
     let radius = engram_codegraph_queries::blast_radius_bounded(&rels, target, depth, cap);
     let path = args["to"]
         .as_str()
@@ -336,7 +339,7 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
 
 /// `code_health`: dead code (zero-caller symbols) + repository stats.
 pub fn code_health(app: &App, _args: &Value) -> Result<Value, ToolError> {
-    let rels = fetch_rels(app);
+    let rels = fetch_rels(app)?;
     let dead = engram_codegraph_queries::dead_code(&rels);
     let stats = engram_codegraph_queries::repository_stats(&rels);
     Ok(protocol::text_content(format!(
@@ -348,7 +351,7 @@ pub fn code_health(app: &App, _args: &Value) -> Result<Value, ToolError> {
 /// `architecture`: central symbols, bridges, communities, stats — one map.
 pub fn architecture(app: &App, args: &Value) -> Result<Value, ToolError> {
     let limit = args["limit"].as_u64().unwrap_or(10) as usize;
-    let rels = fetch_rels(app);
+    let rels = fetch_rels(app)?;
     let central = engram_codegraph_queries::central_symbols(&rels, limit);
     let bridges = engram_codegraph_queries::bridge_symbols(&rels, limit);
     let communities = engram_codegraph_queries::call_communities(&rels, 3);
@@ -363,7 +366,7 @@ pub fn architecture(app: &App, args: &Value) -> Result<Value, ToolError> {
 pub fn whats_changed(app: &App, _args: &Value) -> Result<Value, ToolError> {
     let query = app.provider.require_knowledge_query().map_err(internal)?;
     let entities = block_on(query.list_entities(&app.scope)).unwrap_or_default();
-    let rels = fetch_rels(app);
+    let rels = fetch_rels(app)?;
     let versions: Vec<engram_codegraph_temporal::VersionedSymbol> = entities
         .iter()
         .map(|e| {
@@ -436,7 +439,10 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     };
 
     // 2. Code neighborhood (callers/callees/community for the focus symbol).
-    let rels = fetch_rels(app);
+    let (rels, graph_status) = match fetch_rels(app) {
+        Ok(r) => (r, String::new()),
+        Err(e) => (Vec::new(), format!("(graph unavailable: {})", e.message)),
+    };
     let code_ctx = engram_codegraph_queries::symbol_context(&rels, focus, depth);
 
     // 3. Unified-graph links — doc/concept `describes`/`mentions` edges for the
@@ -456,7 +462,9 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         })
         .take(20)
         .collect();
-    let graph_text = if links.is_empty() {
+    let graph_text = if !graph_status.is_empty() {
+        graph_status
+    } else if links.is_empty() {
         "(none)".to_owned()
     } else {
         links.join("\n")

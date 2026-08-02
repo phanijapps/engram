@@ -66,8 +66,12 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     }
 
     // Embed chunks into the vector index (when fastembed is wired).
-    // Lists all chunks in scope, embeds each via the EmbeddingProvider, and
-    // inserts into the VectorIndex so semantic search works.
+    //
+    // Incremental + batched (indexing-embed-performance): only chunks whose id
+    // is NOT already in the vector index are embedded, and the embedding work
+    // runs in batches through `embed_batch` (one FastEmbed model call per batch
+    // instead of one per chunk). Re-scanning an unchanged repo embeds ~0 chunks;
+    // adding a repo to a populated DB embeds only the new repo's chunks.
     let mut embedded = 0usize;
     if let (Ok(query), Some(embedder), Ok(vector_index)) = (
         app.provider.require_knowledge_query(),
@@ -76,21 +80,42 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     ) {
         let chunks = block_on(query.list_chunks(&app.scope)).unwrap_or_default();
         let space = embedder.embedding_space();
-        for chunk in &chunks {
-            let text = &chunk.text;
-            if text.is_empty() {
-                continue;
-            }
-            match embedder.embed_passage(text) {
-                Ok(vector) => {
-                    if let Err(e) = block_on(vector_index.insert(&chunk.id, &space, vector)) {
-                        eprintln!("engram-mcp: embed warning for {}: {e}", chunk.id);
-                    } else {
-                        embedded += 1;
+
+        // Skip chunks that already have a vector — the incremental win. A
+        // failed listing degrades to "embed everything" (current behavior).
+        let have: std::collections::HashSet<engram_domain::Id> =
+            block_on(vector_index.embedded_ids()).unwrap_or_default();
+        let pending: Vec<&engram_domain::KnowledgeChunk> = chunks
+            .iter()
+            .filter(|c| !c.text.is_empty() && !have.contains(&c.id))
+            .collect();
+
+        const EMBED_BATCH_SIZE: usize = 64;
+        for batch in pending.chunks(EMBED_BATCH_SIZE) {
+            let texts: Vec<String> = batch.iter().map(|c| c.text.clone()).collect();
+            // Skip empty-text chunks defensively (the filter above already
+            // dropped them) and warn per-chunk on insert errors, as before.
+            match embedder.embed_batch(&texts) {
+                Ok(vectors) => {
+                    for (chunk, vector) in batch.iter().zip(vectors.into_iter()) {
+                        if vector.is_empty() {
+                            // Mirrors the skip-empty-text behavior for slots
+                            // the batch path left empty.
+                            continue;
+                        }
+                        if let Err(e) = block_on(vector_index.insert(&chunk.id, &space, vector)) {
+                            eprintln!("engram-mcp: embed warning for {}: {e}", chunk.id);
+                        } else {
+                            embedded += 1;
+                        }
                     }
                 }
                 Err(e) => {
-                    eprintln!("engram-mcp: embed error for {}: {e}", chunk.id);
+                    // Whole batch failed — do not abort the scan; warn and move
+                    // on so a single bad batch never blocks indexing.
+                    for chunk in batch {
+                        eprintln!("engram-mcp: embed error for {}: {e}", chunk.id);
+                    }
                 }
             }
         }

@@ -305,6 +305,22 @@ impl VectorIndex for SqliteVectorIndex {
         Ok(converted)
     }
 
+    async fn embedded_ids(&self) -> CoreResult<std::collections::HashSet<Id>> {
+        let conn = self.connection.lock().unwrap();
+        let rows: Vec<String> = conn
+            .prepare("SELECT id FROM vectors")
+            .map_err(sql_error)?
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(sql_error)?;
+        // A stored id that fails validation is adapter-level corruption; skip
+        // it rather than failing the whole listing (the per-chunk insert path
+        // still validates ids on read).
+        let set = rows.into_iter().filter_map(|id| Id::new(id).ok()).collect();
+        Ok(set)
+    }
+
     async fn delete_target(&self, target_id: &Id) -> CoreResult<()> {
         let conn = self.connection.lock().unwrap();
         conn.execute("DELETE FROM vectors WHERE id = ?1", [target_id.as_str()])
@@ -495,6 +511,65 @@ mod tests {
     use super::*;
     use crate::vector::entry::VectorEntry;
     use engram_domain::EmbeddingTargetType;
+    use futures::executor::block_on;
+
+    #[test]
+    fn embedded_ids_empty_on_fresh_index() {
+        let index = SqliteVectorIndex::open_in_memory(4).expect("open");
+        let ids = block_on(index.embedded_ids()).expect("embedded_ids");
+        assert!(
+            ids.is_empty(),
+            "fresh index must report no embedded ids (got {ids:?})"
+        );
+    }
+
+    #[test]
+    fn embedded_ids_grows_after_inserts_and_skips_reinserts() {
+        let index = SqliteVectorIndex::open_in_memory(4).expect("open");
+
+        // Fresh: nothing embedded.
+        assert!(block_on(index.embedded_ids()).unwrap().is_empty());
+
+        // Insert two chunks via the inherent upsert path (the trait async
+        // `insert` delegates to this; using the inherent method avoids the
+        // inherent/trait name-shadowing in this test).
+        let insert = |id: &str, emb: Vec<f32>| {
+            index
+                .insert(VectorEntry {
+                    id: id.to_owned(),
+                    target_type: EmbeddingTargetType::Chunk,
+                    target_id: id.to_owned(),
+                    model: "test".to_owned(),
+                    dimensions: 4,
+                    content_hash: id.to_owned(),
+                    embedding: emb,
+                })
+                .expect("insert")
+        };
+        insert("chunk-1", vec![0.1, 0.2, 0.3, 0.4]);
+        insert("chunk-2", vec![0.4, 0.3, 0.2, 0.1]);
+
+        let ids = block_on(index.embedded_ids()).unwrap();
+        assert_eq!(ids.len(), 2, "both inserted ids must be reported");
+        assert!(
+            ids.contains(&Id::new("chunk-1").unwrap()),
+            "ids must contain chunk-1 (got {ids:?})"
+        );
+        assert!(
+            ids.contains(&Id::new("chunk-2").unwrap()),
+            "ids must contain chunk-2 (got {ids:?})"
+        );
+
+        // Re-inserting chunk-1 (upsert) must NOT grow the set — incremental
+        // scan relies on the set being exactly the live embedded ids.
+        insert("chunk-1", vec![0.9, 0.8, 0.7, 0.6]);
+        let ids = block_on(index.embedded_ids()).unwrap();
+        assert_eq!(
+            ids.len(),
+            2,
+            "re-insert of an existing id must not duplicate the key"
+        );
+    }
 
     #[test]
     fn file_backed_index_survives_reopen() {

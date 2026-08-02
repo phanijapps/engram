@@ -25,6 +25,31 @@ use crate::tools::{internal, policy, req_str, requester, system_actor};
 /// bound; this cap is the safety net for raised-depth or super-hub queries.
 const DEFAULT_NEIGHBORHOOD_CAP: usize = 64;
 
+/// Per-item excerpt cap for `get_context` recall text. A single class-level
+/// chunk can be thousands of lines; bounding item COUNT (the `limit` arg, up to
+/// 50) does not bound SIZE. Each item is excerpted to this many chars.
+const CONTEXT_ITEM_EXCERPT_CHARS: usize = 2000;
+
+/// Total joined-recall cap for `get_context`. Once the assembled recall text
+/// reaches this size, remaining items are dropped and a budget-reached note is
+/// appended. Prevents 58k-token context bloat.
+const CONTEXT_TOTAL_CHAR_BUDGET: usize = 50_000;
+
+/// Excerpt `content` to at most `max_chars` Unicode scalar values, appending a
+/// `[truncated]` marker when cut. Slices on a char boundary so multi-byte UTF-8
+/// never panics. Returns the content unchanged when it already fits.
+fn excerpt(content: &str, max_chars: usize) -> String {
+    if content.chars().count() <= max_chars {
+        return content.to_owned();
+    }
+    let end = content
+        .char_indices()
+        .nth(max_chars)
+        .map(|(idx, _)| idx)
+        .unwrap_or(content.len());
+    format!("{}\n... [truncated]", &content[..end])
+}
+
 /// `scan_repo`: treesitter-index a code repository into the project workspace,
 /// routed through the provider via the fan-in adapter. Feeds code-symbol names
 /// to the lexical lane so `search`/`recall` find them.
@@ -244,15 +269,27 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
             // rendering regardless of which lane produced the hit (lexical
             // content = "name Kind"; graph content = name). Falls back to the
             // item's resolved content if the entity is no longer present.
+            //
+            // Each line also carries the source path (from the item's
+            // provenance) so two distinct symbols that share a name remain
+            // uniquely identifiable in the result list.
             let by_id = entity_lookup(app);
             payload
                 .items
                 .iter()
                 .filter(|i| i.target_type == RetrievalTargetType::Entity)
-                .filter_map(|i| match by_id.get(&i.target_id) {
-                    Some(e) => Some(format!("{} ({:?})", e.name, e.kind)),
-                    None if !i.content.is_empty() => Some(i.content.clone()),
-                    None => None,
+                .filter_map(|i| {
+                    let path = i.provenance.source.trim();
+                    let suffix = if path.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" — {path}")
+                    };
+                    match by_id.get(&i.target_id) {
+                        Some(e) => Some(format!("{} ({:?}){suffix}", e.name, e.kind)),
+                        None if !i.content.is_empty() => Some(format!("{}{suffix}", i.content)),
+                        None => None,
+                    }
                 })
                 .take(limit)
                 .collect()
@@ -423,17 +460,33 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
                 include_explanations: Some(true),
             };
             let payload = block_on(handle.recall(req)).map_err(internal)?;
-            let items: Vec<&str> = payload
-                .items
-                .iter()
-                .take(limit as usize)
-                .map(|i| i.content.as_str())
-                .collect();
-            if items.is_empty() {
-                String::new()
-            } else {
-                items.join("\n---\n")
+            // Cap both per-item SIZE (a class-level chunk can be thousands of
+            // lines) and TOTAL assembled size so `get_context` cannot bloat a
+            // downstream prompt by tens of thousands of tokens. The `limit`
+            // arg still bounds item COUNT; these caps bound character SIZE.
+            let taken: Vec<&engram_domain::RetrievalResult> =
+                payload.items.iter().take(limit as usize).collect();
+            let total = taken.len();
+            let mut joined = String::new();
+            let mut added = 0usize;
+            for i in &taken {
+                let item_excerpt = excerpt(&i.content, CONTEXT_ITEM_EXCERPT_CHARS);
+                let sep = if joined.is_empty() { "" } else { "\n---\n" };
+                if joined.len() + sep.len() + item_excerpt.len() > CONTEXT_TOTAL_CHAR_BUDGET {
+                    // This item would blow the budget; stop adding items.
+                    break;
+                }
+                joined.push_str(sep);
+                joined.push_str(&item_excerpt);
+                added += 1;
             }
+            let omitted = total - added;
+            if omitted > 0 {
+                joined.push_str(&format!(
+                    "\n... [budget reached, {omitted} more items omitted]"
+                ));
+            }
+            joined
         }
         Err(_) => String::new(),
     };
@@ -492,6 +545,10 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
         ("procedures", app.provider.procedures().is_some()),
         ("hierarchy", app.provider.hierarchy().is_some()),
         ("identity", app.provider.identity().is_some()),
+        (
+            "vector",
+            app.provider.embedding_provider().is_some() && app.provider.require_vectors().is_ok(),
+        ),
     ]
     .into_iter()
     .map(|(name, ok)| format!("  {name}: {}", if ok { "supported" } else { "unsupported" }))

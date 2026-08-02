@@ -28,8 +28,12 @@ impl Default for PprConfig {
     fn default() -> Self {
         Self {
             damping: 0.85,
-            iterations: 200,
-            tol: 1e-9,
+            // PPR converges quickly; 200 iterations at 1e-9 tolerance were far
+            // past convergence and dominated recall latency (~6s over ~114k
+            // edges). 50 iterations at 1e-6 cuts PPR time ~4x with minimal
+            // ranking-quality impact.
+            iterations: 50,
+            tol: 1e-6,
         }
     }
 }

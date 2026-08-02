@@ -1697,6 +1697,8 @@ dependencies = [
  "engram-memory",
  "engram-procedures",
  "engram-reflection",
+ "engram-rerank-cross-encoder",
+ "engram-rerank-mmr",
  "engram-retrieval",
  "engram-runtime",
  "engram-store-associative-graph",
@@ -1823,6 +1825,16 @@ dependencies = [
 
 [[package]]
 name = "engram-rerank-cross-encoder"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "engram-domain",
+ "engram-retrieval",
+ "engram-runtime",
+]
+
+[[package]]
+name = "engram-rerank-mmr"
 version = "0.1.0"
 dependencies = [
  "chrono",

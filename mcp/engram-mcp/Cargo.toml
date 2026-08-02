@@ -29,6 +29,9 @@ serde_json = { workspace = true }
 [features]
 default = []
 fastembed = ["engram-integration/fastembed"]
+# Cross-encoder reranker (RFC-0019 T4). Forwards to the integration feature so
+# an mcp build can opt into the cross-encoder dispatch path.
+cross-encoder-rerank = ["engram-integration/cross-encoder-rerank"]
 
 [dev-dependencies]
 tempfile = "3"

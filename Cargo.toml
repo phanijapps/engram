@@ -17,6 +17,7 @@ members = [
     "adapters/integration",
     "adapters/retrieval/tantivy-lexical",
     "adapters/retrieval/cross-encoder-rerank",
+    "adapters/retrieval/mmr-rerank",
     "adapters/retrieval/associative-graph",
     "adapters/retrieval/community-summary",
     "adapters/consolidation/decay",

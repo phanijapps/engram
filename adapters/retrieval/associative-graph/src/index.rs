@@ -20,7 +20,7 @@ use engram_domain::{
     Policy, RerankStrategy, Retention, RetrievalRequest, RetrievalResult, RetrievalScore,
     RetrievalTargetType, Sensitivity, Visibility,
 };
-use engram_retrieval::RetrievalIndex;
+use engram_retrieval::{GraphCache, GraphSnapshot, RetrievalIndex};
 use engram_runtime::CoreResult;
 use futures::future::try_join;
 use serde_json::Value;
@@ -38,10 +38,17 @@ const SOURCE: &str = "associative_graph";
 /// Engine-neutral — no SQL or storage-engine type lives here. Scope isolation is
 /// inherited from the injected [`GraphRelationshipSource`] (it scope-filters
 /// before returning), so the walk cannot reach out-of-scope nodes.
+///
+/// An optional shared [`GraphCache`] lets the lane skip the per-query store
+/// reload on a cache hit: the in-scope entities + relationships are served from
+/// a materialized snapshot instead. On a miss the lane loads from the source as
+/// before and populates the cache, so the next query (and the sibling graph
+/// lanes sharing the same cache) hit.
 pub struct AssociativeGraphIndex {
     source: Arc<dyn GraphRelationshipSource>,
     config: PprConfig,
     default_limit: u32,
+    cache: Option<Arc<dyn GraphCache>>,
 }
 
 impl AssociativeGraphIndex {
@@ -61,6 +68,7 @@ impl AssociativeGraphIndex {
             source,
             config: PprConfig::default(),
             default_limit,
+            cache: None,
         }
     }
 
@@ -72,6 +80,24 @@ impl AssociativeGraphIndex {
             source,
             config,
             default_limit: 20,
+            cache: None,
+        }
+    }
+
+    /// Attaches a shared graph cache so the lane serves the in-scope entities +
+    /// relationships from a materialized snapshot on a cache hit, populating it
+    /// on a miss. The cache is shared across the graph lanes — a miss here still
+    /// benefits the sibling lanes on their next query.
+    pub fn with_cache(
+        source: Arc<dyn GraphRelationshipSource>,
+        config: PprConfig,
+        cache: Arc<dyn GraphCache>,
+    ) -> Self {
+        Self {
+            source,
+            config,
+            default_limit: 20,
+            cache: Some(cache),
         }
     }
 }
@@ -88,13 +114,40 @@ impl RetrievalIndex for AssociativeGraphIndex {
             .unwrap_or(self.default_limit);
         let scope = &request.scope;
 
-        // Edges and entities are scope-filtered by the source before they reach
-        // the walk — this is the scope-isolation boundary.
-        let (entities, relationships) = try_join(
-            self.source.entities(scope),
-            self.source.relationships(scope),
-        )
-        .await?;
+        // Cache hit: serve the in-scope entities + relationships from the
+        // materialized snapshot, skipping the per-query store reload. A miss
+        // (or no cache) loads from the source as before and populates the
+        // cache. Because this lane reads BOTH entities and relationships, it
+        // always populates a full snapshot — so a sibling lane sharing the same
+        // cache (e.g. the community-summary lane) hits on its next query.
+        let (entities, relationships): (
+            Vec<engram_domain::KnowledgeEntity>,
+            Vec<engram_domain::KnowledgeRelationship>,
+        ) = if let Some(cache) = &self.cache
+            && let Some(snap) = cache.get(scope).await
+        {
+            (snap.entities.clone(), snap.relationships.clone())
+        } else {
+            // Edges and entities are scope-filtered by the source before they
+            // reach the walk — this is the scope-isolation boundary.
+            let (ents, rels) = try_join(
+                self.source.entities(scope),
+                self.source.relationships(scope),
+            )
+            .await?;
+            if let Some(cache) = &self.cache {
+                cache
+                    .put(
+                        scope,
+                        Arc::new(GraphSnapshot {
+                            entities: ents.clone(),
+                            relationships: rels.clone(),
+                        }),
+                    )
+                    .await;
+            }
+            (ents, rels)
+        };
 
         let entity_pairs: Vec<(String, String)> = entities
             .iter()
@@ -122,7 +175,7 @@ impl RetrievalIndex for AssociativeGraphIndex {
         ranked.truncate(limit.max(1) as usize);
 
         // Recover entity content/provenance by key. A ranked key with no
-        // discoverable entity (e.g. a relationship endpoint absent from the
+        // discoverable entity (e.g. a relationship endpoints absent from the
         // entity list) is skipped — this slice only emits fully describable
         // entities.
         let by_key: HashMap<&str, &KnowledgeEntity> =

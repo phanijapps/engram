@@ -186,6 +186,15 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut observability: Option<Arc<dyn crate::Observability>> = None;
     let mut consolidation: Option<Arc<dyn ConsolidationService>> = None;
     let mut identity: Option<Arc<dyn engram_knowledge::EntityIdentityRepository>> = None;
+    // Shared graph snapshot cache: one Arc shared across the three graph lanes
+    // (graph / associative / community-summary) so a cache miss in one lane
+    // benefits the others on the next query — they all need the same scope's
+    // entities + relationships. Eliminates the per-query store reload
+    // (~300k JSON deserializations across the lanes) on every query after the
+    // first. `scan_repo` invalidates it after a write so stale entries never
+    // serve wrong results.
+    let graph_cache: Arc<dyn engram_retrieval::GraphCache> =
+        Arc::new(engram_retrieval::InMemoryGraphCache::new());
     // Concrete Sql* handles, kept alongside the trait handles so the batch /
     // export / observability adapters (which compose the concrete stores) can be
     // wired without a trait-to-concrete downcast. Populated only when the
@@ -298,25 +307,43 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     //   - beliefs — passed to the SqlUnifiedRecall constructor below.
     let mut retrieval_lanes: Vec<Arc<dyn engram_retrieval::RetrievalIndex>> = Vec::new();
     if let Some(knowledge_handle) = &knowledge_store {
-        // Graph lane: SqlKnowledgeStore implements GraphCandidateSource.
-        retrieval_lanes.push(Arc::new(engram_store_sqlite::GraphRetrievalIndex::new(
-            knowledge_handle.clone(),
-        )));
+        // Graph lane: SqlKnowledgeStore implements GraphCandidateSource. The
+        // lane reads ENTITIES from the shared cache on a hit; chunks are always
+        // loaded from the store (not part of the snapshot).
+        retrieval_lanes.push(Arc::new(
+            engram_store_sqlite::GraphRetrievalIndex::with_cache(
+                knowledge_handle.clone(),
+                20,
+                graph_cache.clone(),
+            ),
+        ));
         // Associative-graph lane: PPR-ranked entities over the knowledge graph
         // (HippoRAG-style), fused alongside the other unified-recall lanes.
+        // Populates the shared cache (entities + relationships) on a miss.
         retrieval_lanes.push(recall_lanes::associative_recall_lane(
             knowledge_handle.clone(),
+            Some(graph_cache.clone()),
         ));
         // Community-summary lane (GraphRAG): community detection + summary ranking.
+        // Populates the shared cache (entities + relationships) on a miss.
         retrieval_lanes.push(recall_lanes::community_summary_recall_lane(
             knowledge_handle.clone(),
+            Some(graph_cache.clone()),
         ));
-        // Lexical lane: an in-RAM Tantivy index shared with the lexical feed —
-        // `scan_repo` feeds code-symbol names via the `LexicalFeed` handle so
-        // keyword `search`/`recall` return them. The lane's target resolver is
-        // entity-aware (it resolves entity-id BM25 hits to their code symbol),
-        // so multi-term symbol queries return ranked hits through unified recall.
-        if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::new() {
+        // Lexical lane: a **file-backed** Tantivy index shared with the lexical
+        // feed, persisted at `<storage_path>/lexical` so it survives process
+        // restarts. `scan_repo` feeds code-symbol names via the `LexicalFeed`
+        // handle so keyword `search`/`recall` return them; with the index on
+        // disk, those writes are visible to a FRESH process that has not run
+        // `scan_repo` (the cross-process search guarantee). `LexicalIndex::open`
+        // creates the directory if missing, loads an existing same-schema index,
+        // or falls back to an ephemeral in-RAM index (with a warning) on any
+        // open/corruption failure — it never aborts bootstrap. The lane's target
+        // resolver is entity-aware (it resolves entity-id BM25 hits to their
+        // code symbol), so multi-term symbol queries return ranked hits through
+        // unified recall.
+        let lexical_dir = storage.join("lexical");
+        if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::open(&lexical_dir) {
             let lexical_index = Arc::new(lexical_index);
             retrieval_lanes.push(recall_lanes::lexical_recall_lane(
                 knowledge_handle.clone(),
@@ -663,6 +690,11 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     if let Some(h) = identity {
         builder = builder.identity(h);
     }
+    // Attach the shared graph cache so `scan_repo` (and any host) can reach it
+    // through the facade to invalidate after a graph-mutating write. The cache
+    // is always present under the SQLite backend (no fallback when a lane is
+    // absent — it is a benign empty cache in that case).
+    builder = builder.graph_cache(graph_cache);
     Ok(builder.build())
 }
 

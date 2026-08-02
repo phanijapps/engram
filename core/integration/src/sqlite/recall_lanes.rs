@@ -33,7 +33,7 @@ use engram_domain::{
     Sensitivity, Visibility,
 };
 use engram_knowledge::KnowledgeRepository;
-use engram_retrieval::RetrievalIndex;
+use engram_retrieval::{GraphCache, RetrievalIndex};
 use engram_runtime::CoreResult;
 use engram_store_associative_graph::{AssociativeGraphIndex, GraphRelationshipSource};
 use engram_store_community_summary::CommunitySummaryIndex;
@@ -69,18 +69,41 @@ impl GraphRelationshipSource for KnowledgeRelationshipSource {
 /// and assert lane-level behavior in isolation from `bootstrap_sqlite`; the
 /// production bootstrap consumes it via the same call. One orphan-rule newtype,
 /// no per-consumer wrapper duplication.
-pub fn associative_recall_lane(store: Arc<SqlKnowledgeStore>) -> Arc<dyn RetrievalIndex> {
-    Arc::new(AssociativeGraphIndex::new(Arc::new(
-        KnowledgeRelationshipSource(store),
-    )))
+///
+/// Pass a shared `cache` so the lane serves the in-scope entities +
+/// relationships from a materialized snapshot on a cache hit (the snapshot is
+/// shared across the graph lanes — a miss here still benefits the sibling lanes
+/// on their next query). Pass `None` for the no-cache / test path.
+pub fn associative_recall_lane(
+    store: Arc<SqlKnowledgeStore>,
+    cache: Option<Arc<dyn GraphCache>>,
+) -> Arc<dyn RetrievalIndex> {
+    let source: Arc<dyn GraphRelationshipSource> = Arc::new(KnowledgeRelationshipSource(store));
+    match cache {
+        Some(cache) => Arc::new(AssociativeGraphIndex::with_cache(
+            source,
+            Default::default(),
+            cache,
+        )),
+        None => Arc::new(AssociativeGraphIndex::new(source)),
+    }
 }
 
 /// Builds the community-summary retrieval lane (GraphRAG-style) over a
 /// knowledge store. Mirrors [`associative_recall_lane`].
-pub fn community_summary_recall_lane(store: Arc<SqlKnowledgeStore>) -> Arc<dyn RetrievalIndex> {
-    Arc::new(CommunitySummaryIndex::new(Arc::new(
-        KnowledgeRelationshipSource(store),
-    )))
+///
+/// Pass a shared `cache` so the lane serves the in-scope entities +
+/// relationships from a materialized snapshot on a cache hit. Pass `None` for
+/// the no-cache / test path.
+pub fn community_summary_recall_lane(
+    store: Arc<SqlKnowledgeStore>,
+    cache: Option<Arc<dyn GraphCache>>,
+) -> Arc<dyn RetrievalIndex> {
+    let source: Arc<dyn GraphRelationshipSource> = Arc::new(KnowledgeRelationshipSource(store));
+    match cache {
+        Some(cache) => Arc::new(CommunitySummaryIndex::with_cache(source, 20, cache)),
+        None => Arc::new(CommunitySummaryIndex::new(source)),
+    }
 }
 
 /// Builds the lexical (BM25) retrieval lane over a shared Tantivy index + the

@@ -159,7 +159,7 @@ fn associative_lane_contributes_and_dedups_with_lexical() {
 
     // Both graph-mode lanes: lexical (entity-name match) + associative (PPR).
     let lexical: Arc<dyn RetrievalIndex> = Arc::new(GraphRetrievalIndex::new(knowledge.clone()));
-    let associative = engram_integration::sqlite::associative_recall_lane(knowledge.clone());
+    let associative = engram_integration::sqlite::associative_recall_lane(knowledge.clone(), None);
     let recall = SqlUnifiedRecall::new(memory, vec![lexical, associative], beliefs);
     let payload = block_on(recall.recall(request("Alice"))).expect("recall");
 

@@ -14,7 +14,7 @@ use engram_domain::{
     Provenance, RerankStrategy, Retention, RetrievalRequest, RetrievalResult, RetrievalScore,
     RetrievalTargetType, Scope, Sensitivity, Visibility,
 };
-use engram_retrieval::RetrievalIndex;
+use engram_retrieval::{GraphCache, RetrievalIndex};
 use engram_runtime::CoreResult;
 use futures::future::try_join;
 
@@ -36,9 +36,19 @@ pub trait GraphCandidateSource: Send + Sync {
 /// Fetches entities + chunks visible to the request scope, ranks them by
 /// query-term relevance, and emits `RetrievalResult`s tagged `source = "graph"`
 /// for downstream RRF fusion with vector candidates.
+///
+/// An optional shared [`GraphCache`] lets the lane serve the in-scope ENTITIES
+/// from a materialized snapshot on a cache hit (the snapshot is populated by the
+/// associative/community lanes, which read both entities and relationships).
+/// Chunks are always loaded from the store — they are not part of the snapshot
+/// and their N+1 was already fixed. This lane never populates the cache (its
+/// source exposes no relationships, so it could only store a partial snapshot);
+/// on a miss it loads entities + chunks exactly as before, and benefits from the
+/// cache once a sibling lane has populated it.
 pub struct GraphRetrievalIndex {
     source: Arc<dyn GraphCandidateSource>,
     default_limit: u32,
+    cache: Option<Arc<dyn GraphCache>>,
 }
 
 impl GraphRetrievalIndex {
@@ -52,6 +62,23 @@ impl GraphRetrievalIndex {
         Self {
             source,
             default_limit,
+            cache: None,
+        }
+    }
+
+    /// Attaches a shared graph cache so the lane serves in-scope ENTITIES from a
+    /// materialized snapshot on a cache hit. Chunks are still loaded from the
+    /// store. See the struct docs for why this lane reads but does not write the
+    /// cache.
+    pub fn with_cache(
+        source: Arc<dyn GraphCandidateSource>,
+        default_limit: u32,
+        cache: Arc<dyn GraphCache>,
+    ) -> Self {
+        Self {
+            source,
+            default_limit,
+            cache: Some(cache),
         }
     }
 }
@@ -67,8 +94,21 @@ impl RetrievalIndex for GraphRetrievalIndex {
             .or_else(|| request.budget.as_ref().and_then(|budget| budget.max_items))
             .unwrap_or(self.default_limit);
         let scope = &request.scope;
-        let (entities, chunks) =
-            try_join(self.source.entities(scope), self.source.chunks(scope)).await?;
+
+        // Cache hit: serve in-scope ENTITIES from the materialized snapshot
+        // (populated by a sibling graph lane) and load only chunks from the
+        // store. On a miss — or when no cache is wired — load entities + chunks
+        // concurrently (preserving the original try_join). This lane never
+        // populates the cache: its source exposes no relationships, so it could
+        // only store a partial snapshot that would starve a later
+        // associative/community lane hit.
+        let (entities, chunks) = if let Some(cache) = &self.cache
+            && let Some(snap) = cache.get(scope).await
+        {
+            (snap.entities.clone(), self.source.chunks(scope).await?)
+        } else {
+            try_join(self.source.entities(scope), self.source.chunks(scope)).await?
+        };
 
         let mut views = Vec::with_capacity(entities.len() + chunks.len());
         for e in &entities {

@@ -10,6 +10,10 @@ async-trait.workspace = true
 engram-domain = { path = "../domain" }
 engram-runtime = { path = "../runtime" }
 serde = { workspace = true }
+# tokio::sync::RwLock backs the default InMemoryGraphCache (the shared graph
+# snapshot cache). Only `sync` is needed — no runtime pulled into this
+# otherwise pure-algorithm crate.
+tokio = { version = "1", features = ["sync"] }
 
 [dev-dependencies]
 chrono.workspace = true

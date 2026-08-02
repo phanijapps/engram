@@ -6,6 +6,7 @@
 
 mod composer;
 mod config;
+mod graph_cache;
 mod ports;
 mod predict;
 mod reciprocal;
@@ -18,6 +19,7 @@ pub use config::{
     KNOWN_LANE_TAGS, RecallFusionConfig, ReciprocalFusionConfig, RerankConfig,
     WeightedFusionConfig, unknown_lane_keys,
 };
+pub use graph_cache::{GraphCache, GraphSnapshot, InMemoryGraphCache, scope_key};
 pub use ports::{ContextComposer, RetrievalFusion, RetrievalIndex, RetrievalReranker};
 pub use predict::{AgentState, PredictiveRetriever, RecentActivityPredictor, RetrievalHints};
 pub use reciprocal::{DEFAULT_RRF_K, ReciprocalRankFusion};

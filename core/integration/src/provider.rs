@@ -77,6 +77,7 @@ pub struct EngramProvider {
     identity: Option<Arc<dyn EntityIdentityRepository>>,
     knowledge_query: Option<Arc<dyn KnowledgeQuery>>,
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
+    graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -352,6 +353,18 @@ impl EngramProvider {
             })
     }
 
+    /// Returns the shared graph snapshot cache, if wired.
+    ///
+    /// The cache is an internal optimization (not a user-facing capability): it
+    /// holds materialized per-scope graph snapshots so the graph retrieval lanes
+    /// skip the per-query store reload. Hosts that mutate the graph (e.g.
+    /// `scan_repo`) should call [`GraphCache::invalidate`] /
+    /// [`GraphCache::invalidate_all`] on the returned handle so a stale snapshot
+    /// never serves a newer graph.
+    pub fn graph_cache(&self) -> Option<&Arc<dyn engram_retrieval::GraphCache>> {
+        self.graph_cache.as_ref()
+    }
+
     // ---- require_*: error-on-absent variants for hosts that prefer a typed
     // error over `Option` unwrapping. Each returns `CapabilityUnsupported` when
     // the handle is not wired, naming the capability so callers can branch on a
@@ -584,6 +597,7 @@ impl EngramProvider {
             identity: None,
             knowledge_query: None,
             lexical_feed: None,
+            graph_cache: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -620,6 +634,7 @@ pub struct EngramProviderBuilder {
     identity: Option<Arc<dyn EntityIdentityRepository>>,
     knowledge_query: Option<Arc<dyn KnowledgeQuery>>,
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
+    graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -650,6 +665,7 @@ impl EngramProviderBuilder {
             identity: None,
             knowledge_query: None,
             lexical_feed: None,
+            graph_cache: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -781,6 +797,15 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the shared graph snapshot cache (internal optimization: lets the
+    /// graph retrieval lanes skip the per-query store reload). Hosts reach it
+    /// through [`EngramProvider::graph_cache`] to invalidate after a
+    /// graph-mutating write.
+    pub fn graph_cache(mut self, handle: Arc<dyn engram_retrieval::GraphCache>) -> Self {
+        self.graph_cache = Some(handle);
+        self
+    }
+
     /// Sets the storage schema version reported by provider diagnostics.
     pub fn schema_version(mut self, version: impl Into<String>) -> Self {
         self.schema_version = version.into();
@@ -818,6 +843,7 @@ impl EngramProviderBuilder {
             identity: self.identity,
             knowledge_query: self.knowledge_query,
             lexical_feed: self.lexical_feed,
+            graph_cache: self.graph_cache,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }

@@ -72,6 +72,14 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     let (summary, _manifest) =
         scan_repository(std::path::Path::new(path), &opts, &repo, |_| ()).map_err(internal)?;
 
+    // The scan just wrote entities + relationships for this scope. Invalidate
+    // the graph snapshot cache for this scope so the next `search`/`recall`
+    // reloads fresh data instead of serving a stale pre-scan snapshot. Without
+    // this, a re-scan would leave recall answering from the old graph.
+    if let Some(cache) = app.provider.graph_cache() {
+        block_on(cache.invalidate(&app.scope));
+    }
+
     // Feed code-symbol names to the lexical lane so keyword search finds them.
     if let (Ok(query), Ok(feed)) = (
         app.provider.require_knowledge_query(),
@@ -312,7 +320,23 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// Builds an `entity_id → KnowledgeEntity` lookup over the project scope for
 /// consistent symbol rendering. Empty when the knowledge-query capability is
 /// unavailable (callers fall back to recall item content).
+///
+/// Prefers the shared graph snapshot cache: a search already populated it via
+/// the recall lanes, so re-resolving result entity ids reuses the materialized
+/// entities instead of reloading all ~36k of them from the store on every query.
+/// Falls back to `list_entities` on a miss (or no cache); it does not populate
+/// the cache itself (it reads entities only, no relationships — see the graph
+/// lane docs for the same reasoning).
 fn entity_lookup(app: &App) -> HashMap<String, KnowledgeEntity> {
+    if let Some(cache) = app.provider.graph_cache()
+        && let Some(snap) = block_on(cache.get(&app.scope))
+    {
+        return snap
+            .entities
+            .iter()
+            .map(|e| (e.id.to_string(), e.clone()))
+            .collect();
+    }
     app.provider
         .require_knowledge_query()
         .ok()

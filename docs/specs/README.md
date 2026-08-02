@@ -90,3 +90,8 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   becomes the pgvector host entry; `EngramProvider::open` stays engine-neutral
   (sqlite default) and rejects pgvector configs. Constrained by RFC-0017,
   ADR-0022. Shipped.
+- [`codegraph-retrieval-fixes`](codegraph-retrieval-fixes/spec.md): the three
+  easy/high-impact code-intel retrieval fixes from RFC-0018 — D1 bounded traversal
+  (additive `*_bounded` variants + lowered depth defaults + `truncated` signal),
+  D3 honest `fetch_rels`, D2 BM25 `search` via an additive `LexicalSearch` facade
+  trait. Three loops; D1 is first. Constrained by RFC-0018, ADR-0022. Implementing.

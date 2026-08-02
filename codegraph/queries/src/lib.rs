@@ -9,8 +9,9 @@
 mod queries;
 
 pub use queries::{
-    HttpEndpoint, SymbolContext, blast_radius, bridge_symbols, call_communities, call_edges,
-    central_symbols, cyclomatic_complexity, dead_code, dependency_path, entity_key, find_api_calls,
-    find_endpoints, find_entry_points, match_api_topology, most_complex, process_flow,
-    repository_stats, resolve_call_targets, service_diagram, symbol_context,
+    BlastRadiusBounded, HttpEndpoint, SymbolContext, SymbolContextBounded, blast_radius,
+    blast_radius_bounded, bridge_symbols, call_communities, call_edges, central_symbols,
+    cyclomatic_complexity, dead_code, dependency_path, entity_key, find_api_calls, find_endpoints,
+    find_entry_points, match_api_topology, most_complex, process_flow, repository_stats,
+    resolve_call_targets, service_diagram, symbol_context, symbol_context_bounded,
 };

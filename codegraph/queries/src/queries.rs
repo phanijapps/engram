@@ -155,6 +155,76 @@ pub fn symbol_context(
     }
 }
 
+/// A bounded 360° view of one symbol: the [`SymbolContext`] plus a `truncated`
+/// flag that is `true` iff the visited cap cut off either the callers (ancestors)
+/// or callees (descendants) direction. Additive sibling of [`symbol_context`];
+/// the original `symbol_context` / [`SymbolContext`] are unchanged.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct SymbolContextBounded {
+    pub ctx: SymbolContext,
+    pub truncated: bool,
+}
+
+/// Like [`symbol_context`], but bounds callers and callees each to at most `cap`
+/// nodes (per-direction) and reports whether either direction was truncated.
+/// `depth` is the outer hop bound; `cap` is the inner visited bound (safety net
+/// for raised-depth or super-hub queries). `truncated` is the OR of the two
+/// directions' truncation flags.
+pub fn symbol_context_bounded(
+    relationships: &[KnowledgeRelationship],
+    symbol: &str,
+    depth: usize,
+    cap: usize,
+) -> SymbolContextBounded {
+    let edges = call_edges(relationships);
+    let (anc, anc_truncated) =
+        engram_graph_analytics::ancestors_bounded(&edges, &symbol.to_owned(), depth, cap);
+    let (desc, desc_truncated) =
+        engram_graph_analytics::descendants_bounded(&edges, &symbol.to_owned(), depth, cap);
+    let mut callers: Vec<String> = anc.into_iter().collect();
+    callers.sort();
+    let mut callees: Vec<String> = desc.into_iter().collect();
+    callees.sort();
+    let community = engram_graph_analytics::communities(&edges, 20)
+        .get(symbol)
+        .copied();
+    SymbolContextBounded {
+        ctx: SymbolContext {
+            callers,
+            callees,
+            community,
+        },
+        truncated: anc_truncated || desc_truncated,
+    }
+}
+
+/// A bounded blast radius: the transitive callers of a target, capped, plus a
+/// `truncated` flag. Additive sibling of [`blast_radius`]; the original
+/// `blast_radius` (returning `HashSet<String>`) is unchanged so its N-API JSON
+/// consumer is unaffected.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct BlastRadiusBounded {
+    pub callers: Vec<String>,
+    pub truncated: bool,
+}
+
+/// Like [`blast_radius`], but bounds the callers to at most `cap` nodes and
+/// reports whether the cap cut off further exploration. `callers` is sorted for
+/// determinism (mirrors [`SymbolContext::callers`]).
+pub fn blast_radius_bounded(
+    relationships: &[KnowledgeRelationship],
+    target: &str,
+    depth: usize,
+    cap: usize,
+) -> BlastRadiusBounded {
+    let edges = call_edges(relationships);
+    let (anc, truncated) =
+        engram_graph_analytics::ancestors_bounded(&edges, &target.to_owned(), depth, cap);
+    let mut callers: Vec<String> = anc.into_iter().collect();
+    callers.sort();
+    BlastRadiusBounded { callers, truncated }
+}
+
 /// Estimates cyclomatic complexity from source text: 1 + count of decision-point
 /// patterns (`if`/`for`/`while`/`match`/`switch`/`case`/`catch` + `&&`/`||`).
 /// A language-agnostic text heuristic — not AST-precise, but useful for ranking
@@ -800,6 +870,50 @@ mod tests {
         let ctx = symbol_context(&rels, "caller_fn", 2);
         assert!(!ctx.callees.is_empty(), "callees by name: {ctx:?}");
         assert!(ctx.callees.contains(&"callee_fn".to_owned()));
+    }
+
+    #[test]
+    fn symbol_context_bounded_not_truncated_under_cap() {
+        // b called by a; b calls c. cap 64 -> no truncation.
+        let rels = vec![rel("a", "b"), rel("b", "c")];
+        let sc = symbol_context_bounded(&rels, "b", 5, 64);
+        assert_eq!(sc.ctx.callers, vec!["a".to_owned()]);
+        assert_eq!(sc.ctx.callees, vec!["c".to_owned()]);
+        assert!(!sc.truncated, "under cap -> not truncated");
+    }
+
+    #[test]
+    fn symbol_context_bounded_truncates_when_callees_exceed_cap() {
+        // symbol -> n0 -> n1 -> ... -> n9 (10 callees). cap 5 -> callees capped, truncated.
+        let mut rels = vec![rel("symbol", "n0")];
+        for i in 0..9usize {
+            rels.push(rel(
+                format!("n{i}").as_str(),
+                format!("n{}", i + 1).as_str(),
+            ));
+        }
+        let sc = symbol_context_bounded(&rels, "symbol", 10, 5);
+        assert_eq!(sc.ctx.callees.len(), 5, "callees capped at 5");
+        assert!(sc.truncated, "callees (10) exceed cap (5) -> truncated");
+        assert!(sc.ctx.callers.is_empty(), "symbol has no callers");
+    }
+
+    #[test]
+    fn blast_radius_bounded_truncates_and_sorts_callers() {
+        // target <- n0 <- n1 <- ... <- n9 (10 callers). cap 5 -> truncated, callers sorted.
+        let mut rels = vec![rel("n0", "target")];
+        for i in 1..=9usize {
+            rels.push(rel(
+                format!("n{i}").as_str(),
+                format!("n{}", i - 1).as_str(),
+            ));
+        }
+        let br = blast_radius_bounded(&rels, "target", 10, 5);
+        assert_eq!(br.callers.len(), 5, "callers capped at 5");
+        assert!(br.truncated, "callers (10) exceed cap (5) -> truncated");
+        let mut sorted = br.callers.clone();
+        sorted.sort();
+        assert_eq!(br.callers, sorted, "callers sorted for determinism");
     }
 
     // --- fixtures ---

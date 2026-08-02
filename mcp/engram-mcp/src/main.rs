@@ -284,7 +284,22 @@ fn register_all(registry: &mut ToolRegistry<App>) {
     registry.register(ToolRecord {
         name: "search",
         description: "Keyword search over indexed code symbols.",
-        input_schema: json!({ "type": "object", "properties": { "query": { "type": "string" }, "limit": { "type": "integer" } }, "required": ["query"] }),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string" },
+                "limit": { "type": "integer" },
+                "repository": {
+                    "type": "string",
+                    "description": "Optional repository filter (e.g. \"phanijapps/engram\", \
+                                    \"github.com/phanijapps/engram\"). When set, results are \
+                                    narrowed to that repository by provenance, eliminating \
+                                    cross-repo contamination in a shared-scope DB. Absent = \
+                                    all repositories."
+                }
+            },
+            "required": ["query"]
+        }),
         handler: codegraph::search,
     });
     registry.register(ToolRecord {
@@ -476,7 +491,15 @@ fn register_all(registry: &mut ToolRegistry<App>) {
             "properties": {
                 "focus": { "type": "string", "description": "Symbol, file, concept, or free-text." },
                 "depth": { "type": "integer" },
-                "limit": { "type": "integer" }
+                "limit": { "type": "integer" },
+                "repository": {
+                    "type": "string",
+                    "description": "Optional repository filter (e.g. \"phanijapps/engram\", \
+                                    \"github.com/phanijapps/engram\"). When set, the [Recall], \
+                                    [Graph], and [Code] sections are narrowed to that repository \
+                                    by provenance, eliminating cross-repo contamination in a \
+                                    shared-scope DB. Absent = all repositories."
+                }
             },
             "required": ["focus"]
         }),

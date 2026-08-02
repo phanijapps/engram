@@ -50,6 +50,57 @@ fn excerpt(content: &str, max_chars: usize) -> String {
     format!("{}\n... [truncated]", &content[..end])
 }
 
+/// Reduce a caller-supplied repository spelling to the `org/name` core that
+/// reliably appears inside a git-remote provenance source. Strips an optional
+/// leading host (`github.com/`, `github.com:`, `git@github.com/`,
+/// `git@github.com:`) so a fully-qualified name matches the SSH-remote form
+/// embedded by `scan_repo` (`engram-mcp-scan [git@github.com:org/name.git@...]`).
+/// Lowercased and trimmed. Returns the empty string when the input has no
+/// `org/name` core (e.g. a bare host like `"github.com"`), so a degenerate
+/// filter never matches every GitHub-sourced row.
+fn normalize_repository_key(repository: &str) -> String {
+    let lower = repository.trim().to_ascii_lowercase();
+    let prefixes = [
+        "github.com/",
+        "github.com:",
+        "git@github.com/",
+        "git@github.com:",
+    ];
+    let core = prefixes
+        .iter()
+        .find_map(|p| lower.strip_prefix(p))
+        .unwrap_or(&lower);
+    if core.contains('/') {
+        core.to_owned()
+    } else {
+        String::new()
+    }
+}
+
+/// True when `provenance_source` originates from `repository`. Matching is
+/// intentionally flexible: a caller may pass `"phanijapps/engram"`,
+/// `"github.com/phanijapps/engram"`, or `"git@github.com:phanijapps/engram"`,
+/// and any of them must match a source like
+/// `engram-mcp-scan [git@github.com:phanijapps/engram.git@feat/x:sha]`. Both
+/// sides are lowercased; the repository is reduced to its `org/name` core (see
+/// [`normalize_repository_key`]) before a substring test against the source. An
+/// empty key (bare host / empty input) matches nothing.
+fn source_matches_repository(source: &str, repository: &str) -> bool {
+    let needle = normalize_repository_key(repository);
+    if needle.is_empty() {
+        return false;
+    }
+    source.to_ascii_lowercase().contains(&needle)
+}
+
+/// Diagnostic appended when a `repository` filter removes every result, so a
+/// cross-repo filter never silently returns an empty packet.
+fn repository_empty_note(repo: &str) -> String {
+    format!(
+        "(filtered to repository '{repo}'; 0 matches. Try without repository filter or a different repository.)"
+    )
+}
+
 /// `scan_repo`: treesitter-index a code repository into the project workspace,
 /// routed through the provider via the fan-in adapter. Feeds code-symbol names
 /// to the lexical lane so `search`/`recall` find them.
@@ -235,6 +286,41 @@ pub(crate) fn fetch_rels(app: &App) -> Result<Vec<KnowledgeRelationship>, ToolEr
         .map_err(|e| internal(format!("knowledge query failed: {e}")))
 }
 
+/// In-scope relationships, preferring the shared graph snapshot cache (the same
+/// materialized edge set the recall graph lanes — associative-PPR and
+/// community-summary — traverse) and falling back to a direct store read when
+/// the cache is cold. Using the snapshot keeps the structural
+/// `[Code]`/`[Graph]` sections of `get_context` consistent with the edge set
+/// recall just served.
+fn graph_relationships(app: &App) -> Result<Vec<KnowledgeRelationship>, ToolError> {
+    if let Some(cache) = app.provider.graph_cache()
+        && let Some(snap) = block_on(cache.get(&app.scope))
+    {
+        return Ok(snap.relationships.clone());
+    }
+    fetch_rels(app)
+}
+
+/// [`graph_relationships`] narrowed to a single repository when `repository` is
+/// `Some`, else the full in-scope set. Filtering the edge set BEFORE running
+/// `symbol_context` / link extraction is the high-leverage graph pre-filter:
+/// non-target-repo symbols no longer compete in the neighborhood walk. Each
+/// relationship carries its own `provenance.source`, so a cross-repo edge (e.g.
+/// an engram→zbot `describes` link) is excluded by the filter.
+fn graph_relationships_filtered(
+    app: &App,
+    repository: Option<&str>,
+) -> Result<Vec<KnowledgeRelationship>, ToolError> {
+    let rels = graph_relationships(app)?;
+    match repository {
+        Some(repo) if !normalize_repository_key(repo).is_empty() => Ok(rels
+            .into_iter()
+            .filter(|r| source_matches_repository(&r.provenance.source, repo))
+            .collect()),
+        _ => Ok(rels),
+    }
+}
+
 /// `search`: ranked code-symbol search over indexed entities.
 ///
 /// Routes through the unified (hybrid) recall — lexical (BM25) + graph +
@@ -251,6 +337,16 @@ pub(crate) fn fetch_rels(app: &App) -> Result<Vec<KnowledgeRelationship>, ToolEr
 /// direct entity-list scan (the old path) rather than erroring.
 pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
     let query = req_str(args, "query")?;
+    // Optional repository filter (e.g. "phanijapps/engram",
+    // "github.com/phanijapps/engram"). When present, recall hits and the
+    // fallback scan are narrowed to that repository by provenance, eliminating
+    // cross-repo contamination in a shared-scope DB. Absent = all repos
+    // (current behavior). A blank/empty value is treated as absent.
+    let repository = args
+        .get("repository")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_owned());
     let limit = args["limit"]
         .as_u64()
         .map(|n| n as usize)
@@ -281,11 +377,21 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
             // Each line also carries the source path (from the item's
             // provenance) so two distinct symbols that share a name remain
             // uniquely identifiable in the result list.
+            //
+            // Repository post-filter: when `repository` is set, drop any item
+            // whose provenance source is not from that repo. The recall lanes
+            // themselves cannot be repo-scoped without a domain-level filter
+            // (deferred to a future RFC), so this post-filter is the
+            // contamination guard for the search output.
             let by_id = entity_lookup(app);
             payload
                 .items
                 .iter()
                 .filter(|i| i.target_type == RetrievalTargetType::Entity)
+                .filter(|i| match repository.as_deref() {
+                    Some(repo) => source_matches_repository(&i.provenance.source, repo),
+                    None => true,
+                })
                 .filter_map(|i| {
                     let path = i.provenance.source.trim();
                     let suffix = if path.is_empty() {
@@ -305,12 +411,15 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
         Err(_) => {
             // Degrade to a direct scan when recall is not wired (e.g. a
             // capability-check failure) so search still works without hybrid.
-            substring_symbol_scan(app, query, limit)
+            substring_symbol_scan(app, query, limit, repository.as_deref())
         }
     };
 
     let body = if hits.is_empty() {
-        "No results.".to_owned()
+        match repository.as_deref() {
+            Some(repo) => format!("No results.\n{}", repository_empty_note(repo)),
+            None => "No results.".to_owned(),
+        }
     } else {
         hits.join("\n")
     };
@@ -349,8 +458,15 @@ fn entity_lookup(app: &App) -> HashMap<String, KnowledgeEntity> {
 
 /// Fallback symbol scan (the pre-hybrid path): lists entities and keeps those
 /// whose `"{name} {kind}"` contains the query as a substring. Used only when
-/// unified recall is unavailable.
-fn substring_symbol_scan(app: &App, query: &str, limit: usize) -> Vec<String> {
+/// unified recall is unavailable. When `repository` is set, entities are
+/// additionally narrowed by provenance so the degrade path does not reintroduce
+/// cross-repo contamination.
+fn substring_symbol_scan(
+    app: &App,
+    query: &str,
+    limit: usize,
+    repository: Option<&str>,
+) -> Vec<String> {
     let knowledge_query = match app.provider.require_knowledge_query() {
         Ok(q) => q,
         Err(_) => return Vec::new(),
@@ -363,6 +479,10 @@ fn substring_symbol_scan(app: &App, query: &str, limit: usize) -> Vec<String> {
             format!("{} {:?}", e.name, e.kind)
                 .to_lowercase()
                 .contains(&needle)
+        })
+        .filter(|e| match repository {
+            Some(repo) => source_matches_repository(&e.provenance.source, repo),
+            None => true,
         })
         .take(limit)
         .map(|e| format!("{} ({:?})", e.name, e.kind))
@@ -468,6 +588,15 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let focus = req_str(args, "focus")?;
     let depth = args["depth"].as_u64().unwrap_or(2) as usize;
     let limit = args["limit"].as_u64().unwrap_or(10).clamp(1, 50) as u32;
+    // Optional repository filter — see `search`. Narrows the [Recall] section
+    // (post-filter on items) AND the [Code]/[Graph] sections (pre-filter on the
+    // graph edge set) so a query about one repo never returns another repo's
+    // symbols, docs, or edges. Absent = all repos.
+    let repository = args
+        .get("repository")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_owned());
 
     // 1. Fused recall (docs + memories + beliefs matching the focus). The
     //    payload is retained alongside the rendered text so the top-scoring
@@ -487,7 +616,17 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
                 budget: None,
                 include_explanations: Some(true),
             };
-            let payload = block_on(handle.recall(req)).map_err(internal)?;
+            let mut payload = block_on(handle.recall(req)).map_err(internal)?;
+            // Repository post-filter on the recall items. This narrows BOTH the
+            // rendered [Recall] section and the anchor derivation (step 1b) to
+            // the target repo. Recall lanes themselves stay unscoped (a
+            // domain-level filter is deferred), so this is the contamination
+            // guard for the [Recall] output.
+            if let Some(repo) = repository.as_deref() {
+                payload
+                    .items
+                    .retain(|i| source_matches_repository(&i.provenance.source, repo));
+            }
             // Cap both per-item SIZE (a class-level chunk can be thousands of
             // lines) and TOTAL assembled size so `get_context` cannot bloat a
             // downstream prompt by tens of thousands of tokens. The `limit`
@@ -521,16 +660,20 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
 
     // 1b. Derive an anchor symbol: the name of the top-scoring Entity recall
     //     hit (recall items are fused-ranked, so the first Entity item is the
-    //     best symbol match for the focus). Falls back to the raw focus when
-    //     recall found no entity.
+    //     best symbol match for the focus). The NL focus still drives recall;
+    //     this anchor only drives the structural [Code]/[Graph] sections, which
+    //     need an exact symbol name. Falls back to the raw focus when recall
+    //     found no entity. When a repository filter is active the items are
+    //     already repo-narrowed, so the anchor resolves to a target-repo symbol.
     let anchor_symbol = recall_items
         .iter()
         .find(|i| i.target_type == RetrievalTargetType::Entity)
         .and_then(|i| entity_lookup(app).get(&i.target_id).map(|e| e.name.clone()))
         .unwrap_or_else(|| focus.to_owned());
 
-    // 2. Code neighborhood keyed on the anchor symbol. Degrade on graph error.
-    let (rels, graph_status) = match fetch_rels(app) {
+    // 2. Code neighborhood keyed on the anchor symbol. When a repository filter
+    //    is active the edge set is pre-filtered to that repo. Degrade on error.
+    let (rels, graph_status) = match graph_relationships_filtered(app, repository.as_deref()) {
         Ok(r) => (r, String::new()),
         Err(e) => (Vec::new(), format!("(graph unavailable: {})", e.message)),
     };
@@ -538,7 +681,8 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
 
     // 3. Unified-graph links — doc/concept `describes`/`mentions` edges for the
     //    anchor symbol, on top of the code neighborhood. This is the doc↔code
-    //    connection surfacing in one context packet.
+    //    connection surfacing in one context packet. `rels` is already
+    //    repo-filtered when a filter is set, so cross-repo edges are excluded.
     let links: Vec<String> = rels
         .iter()
         .filter_map(|r| {
@@ -570,8 +714,20 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         format!(" (anchor symbol: {anchor_symbol})")
     };
 
+    // When a repository filter is active and it removed EVERY result (no
+    // recall text and no graph links), surface a diagnostic instead of a
+    // silently empty packet. `[Code]` derives from the same filtered `rels` +
+    // anchor, so empty recall + empty links implies an empty code section too.
+    let repo_note = match (
+        repository.as_deref(),
+        recall_text.is_empty() && links.is_empty(),
+    ) {
+        (Some(repo), true) => format!("\n\n{}", repository_empty_note(repo)),
+        _ => String::new(),
+    };
+
     Ok(protocol::text_content(format!(
-        "=== Context for '{focus}'{anchor_note} ===\n\n[Recall]\n{recall_text}\n\n[Graph]\n{graph_text}\n\n[Code]\n{code_ctx:?}"
+        "=== Context for '{focus}'{anchor_note} ===\n\n[Recall]\n{recall_text}\n\n[Graph]\n{graph_text}\n\n[Code]\n{code_ctx:?}{repo_note}"
     )))
 }
 
@@ -682,6 +838,75 @@ mod tests {
         assert!(note.contains("ignored"), "note: {note}");
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn normalize_repository_key_strips_host_prefixes() {
+        // org/name passes through, lowercased + trimmed.
+        assert_eq!(
+            normalize_repository_key("phanijapps/engram"),
+            "phanijapps/engram"
+        );
+        assert_eq!(
+            normalize_repository_key("  PhanijApps/Engram "),
+            "phanijapps/engram"
+        );
+        assert_eq!(
+            normalize_repository_key("earendil-works/pi"),
+            "earendil-works/pi"
+        );
+
+        // Fully-qualified spellings collapse to the org/name core regardless of
+        // separator, so the SSH-remote form inside provenance.source matches.
+        assert_eq!(
+            normalize_repository_key("github.com/phanijapps/engram"),
+            "phanijapps/engram"
+        );
+        assert_eq!(
+            normalize_repository_key("github.com:phanijapps/engram"),
+            "phanijapps/engram"
+        );
+        assert_eq!(
+            normalize_repository_key("git@github.com:phanijapps/engram"),
+            "phanijapps/engram"
+        );
+
+        // A bare host (no org/name) is degenerate — it must NOT match every
+        // GitHub-sourced row.
+        assert_eq!(normalize_repository_key("github.com"), "");
+        assert_eq!(normalize_repository_key(""), "");
+        assert_eq!(normalize_repository_key("   "), "");
+    }
+
+    #[test]
+    fn source_matches_repository_against_scan_provenance() {
+        // The exact bracketed form `scan_repo` writes into provenance.source.
+        let src = "engram-mcp-scan [git@github.com:phanijapps/engram.git@feat/x:abc123]";
+        // All three caller spellings of the same repo must match.
+        assert!(source_matches_repository(src, "phanijapps/engram"));
+        assert!(source_matches_repository(
+            src,
+            "github.com/phanijapps/engram"
+        ));
+        assert!(source_matches_repository(
+            src,
+            "git@github.com:phanijapps/engram"
+        ));
+        assert!(source_matches_repository(src, "PhanijApps/Engram"));
+
+        // A different repo does not match.
+        assert!(!source_matches_repository(src, "phanijapps/zbot"));
+        assert!(!source_matches_repository(src, "earendil-works/pi"));
+
+        // Degenerate filters match nothing (no false positives).
+        assert!(!source_matches_repository(src, "github.com"));
+        assert!(!source_matches_repository(src, ""));
+
+        // A non-github remote form is also handled (substring after the
+        // org/name core), so a self-hosted repo spelled as org/name matches.
+        let other = "engram-mcp-scan [git@git.internal.corp:earendil-works/pi.git@main:dead]";
+        assert!(source_matches_repository(other, "earendil-works/pi"));
+        assert!(!source_matches_repository(other, "phanijapps/engram"));
     }
 
     #[test]

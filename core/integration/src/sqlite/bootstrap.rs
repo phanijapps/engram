@@ -311,12 +311,20 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         retrieval_lanes.push(recall_lanes::community_summary_recall_lane(
             knowledge_handle.clone(),
         ));
-        // Lexical lane: an in-RAM Tantivy index shared with the lexical feed —
-        // `scan_repo` feeds code-symbol names via the `LexicalFeed` handle so
-        // keyword `search`/`recall` return them. The lane's target resolver is
-        // entity-aware (it resolves entity-id BM25 hits to their code symbol),
-        // so multi-term symbol queries return ranked hits through unified recall.
-        if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::new() {
+        // Lexical lane: a **file-backed** Tantivy index shared with the lexical
+        // feed, persisted at `<storage_path>/lexical` so it survives process
+        // restarts. `scan_repo` feeds code-symbol names via the `LexicalFeed`
+        // handle so keyword `search`/`recall` return them; with the index on
+        // disk, those writes are visible to a FRESH process that has not run
+        // `scan_repo` (the cross-process search guarantee). `LexicalIndex::open`
+        // creates the directory if missing, loads an existing same-schema index,
+        // or falls back to an ephemeral in-RAM index (with a warning) on any
+        // open/corruption failure — it never aborts bootstrap. The lane's target
+        // resolver is entity-aware (it resolves entity-id BM25 hits to their
+        // code symbol), so multi-term symbol queries return ranked hits through
+        // unified recall.
+        let lexical_dir = storage.join("lexical");
+        if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::open(&lexical_dir) {
             let lexical_index = Arc::new(lexical_index);
             retrieval_lanes.push(recall_lanes::lexical_recall_lane(
                 knowledge_handle.clone(),

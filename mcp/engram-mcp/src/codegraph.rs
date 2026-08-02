@@ -445,8 +445,12 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let depth = args["depth"].as_u64().unwrap_or(2) as usize;
     let limit = args["limit"].as_u64().unwrap_or(10).clamp(1, 50) as u32;
 
-    // 1. Fused recall (docs + memories + beliefs matching the focus).
-    let recall_text = match app.provider.require_recall() {
+    // 1. Fused recall (docs + memories + beliefs matching the focus). The
+    //    payload is retained alongside the rendered text so the top-scoring
+    //    Entity hit can drive the code/graph anchor (step 2/3) — a NL focus
+    //    never matches a symbol name exactly, so without that anchor the
+    //    structural sections would always be empty for NL queries.
+    let (recall_text, recall_items) = match app.provider.require_recall() {
         Ok(handle) => {
             let req = RetrievalRequest {
                 query: focus.to_owned(),
@@ -486,29 +490,39 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
                     "\n... [budget reached, {omitted} more items omitted]"
                 ));
             }
-            joined
+            (joined, payload.items)
         }
-        Err(_) => String::new(),
+        Err(_) => (String::new(), Vec::new()),
     };
 
-    // 2. Code neighborhood (callers/callees/community for the focus symbol).
+    // 1b. Derive an anchor symbol: the name of the top-scoring Entity recall
+    //     hit (recall items are fused-ranked, so the first Entity item is the
+    //     best symbol match for the focus). Falls back to the raw focus when
+    //     recall found no entity.
+    let anchor_symbol = recall_items
+        .iter()
+        .find(|i| i.target_type == RetrievalTargetType::Entity)
+        .and_then(|i| entity_lookup(app).get(&i.target_id).map(|e| e.name.clone()))
+        .unwrap_or_else(|| focus.to_owned());
+
+    // 2. Code neighborhood keyed on the anchor symbol. Degrade on graph error.
     let (rels, graph_status) = match fetch_rels(app) {
         Ok(r) => (r, String::new()),
         Err(e) => (Vec::new(), format!("(graph unavailable: {})", e.message)),
     };
-    let code_ctx = engram_codegraph_queries::symbol_context(&rels, focus, depth);
+    let code_ctx = engram_codegraph_queries::symbol_context(&rels, &anchor_symbol, depth);
 
     // 3. Unified-graph links — doc/concept `describes`/`mentions` edges for the
-    //    focus, on top of the code neighborhood. This is the doc↔code connection
-    //    surfacing in one context packet.
+    //    anchor symbol, on top of the code neighborhood. This is the doc↔code
+    //    connection surfacing in one context packet.
     let links: Vec<String> = rels
         .iter()
         .filter_map(|r| {
             let (s, o) = (r.subject.name.as_deref()?, r.object.name.as_deref()?);
-            if s == focus {
-                Some(format!("{focus} -[{}]-> {o}", r.predicate))
-            } else if o == focus {
-                Some(format!("{s} -[{}]-> {focus}", r.predicate))
+            if s == anchor_symbol {
+                Some(format!("{anchor_symbol} -[{}]-> {o}", r.predicate))
+            } else if o == anchor_symbol {
+                Some(format!("{s} -[{}]-> {anchor_symbol}", r.predicate))
             } else {
                 None
             }
@@ -523,8 +537,17 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         links.join("\n")
     };
 
+    // Surface the anchor resolution so a caller can see which symbol the
+    // structural sections resolved to (empty for an exact-symbol focus that
+    // also has no matching entity, since anchor == focus in that case).
+    let anchor_note = if anchor_symbol == focus {
+        String::new()
+    } else {
+        format!(" (anchor symbol: {anchor_symbol})")
+    };
+
     Ok(protocol::text_content(format!(
-        "=== Context for '{focus}' ===\n\n[Recall]\n{recall_text}\n\n[Graph]\n{graph_text}\n\n[Code]\n{code_ctx:?}"
+        "=== Context for '{focus}'{anchor_note} ===\n\n[Recall]\n{recall_text}\n\n[Graph]\n{graph_text}\n\n[Code]\n{code_ctx:?}"
     )))
 }
 

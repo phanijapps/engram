@@ -1905,6 +1905,7 @@ dependencies = [
  "engram-runtime",
  "futures",
  "tantivy",
+ "tempfile",
 ]
 
 [[package]]

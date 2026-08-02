@@ -1,11 +1,13 @@
-//! SQLite-backed [`LexicalFeed`] over the in-RAM Tantivy [`LexicalIndex`] that
-//! [`bootstrap_sqlite`] shares with unified recall's lexical lane.
+//! SQLite-backed [`LexicalFeed`] over the file-backed Tantivy [`LexicalIndex`]
+//! that [`bootstrap_sqlite`] shares with unified recall's lexical lane.
 //!
 //! Engine-specific (names `LexicalIndex`, gated behind the `sqlite` feature).
 //! The [`LexicalFeed`] trait (parent crate's [`lexical_feed`] module) stays
 //! engine-neutral. One `Arc<LexicalIndex>` is shared between this feed (writes)
 //! and [`LexicalRetrievalIndex`] (reads), so a `scan_repo` feed is immediately
-//! visible to `search`/`recall`.
+//! visible to `search`/`recall`. Because the index is file-backed, those writes
+//! also persist across process restarts — a fresh MCP process sees the lexical
+//! lane without re-running `scan_repo`.
 //!
 //! [`bootstrap_sqlite`]: crate::sqlite::bootstrap_sqlite
 //! [`lexical_feed`]: crate::lexical_feed
@@ -18,7 +20,7 @@ use std::sync::Arc;
 
 use crate::lexical_feed::LexicalFeed;
 
-/// Feeds the shared in-RAM Tantivy lexical index.
+/// Feeds the shared file-backed Tantivy lexical index.
 pub struct SqlLexicalFeed {
     index: Arc<LexicalIndex>,
 }

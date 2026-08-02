@@ -296,6 +296,17 @@ fn register_all(registry: &mut ToolRegistry<App>) {
                                     narrowed to that repository by provenance, eliminating \
                                     cross-repo contamination in a shared-scope DB. Absent = \
                                     all repositories."
+                },
+                "min_score": {
+                    "type": "number",
+                    "description": "Minimum fused score (default 0.01). Items below this are \
+                                    dropped as noise. Lower to surface more; raise to tighten."
+                },
+                "diagnostics": {
+                    "type": "boolean",
+                    "description": "When true, emit the full format per result \
+                                    (\"name (kind) — org/repo, path [retriever, score=X.XX]\"). \
+                                    Default is compact: \"name — repo, path [X.XX]\"."
                 }
             },
             "required": ["query"]
@@ -492,6 +503,15 @@ fn register_all(registry: &mut ToolRegistry<App>) {
                 "focus": { "type": "string", "description": "Symbol, file, concept, or free-text." },
                 "depth": { "type": "integer" },
                 "limit": { "type": "integer" },
+                "mode": {
+                    "type": "string",
+                    "enum": ["evidence", "discovery", "compact"],
+                    "description": "Recall rendering mode (default \"evidence\"). \
+                                    \"evidence\" — return content excerpts (up to 2000 chars/item). \
+                                    \"discovery\" (alias \"compact\") — return ONLY result headers \
+                                    (name, kind, repo, path, score), ~80 chars/item. Use discovery \
+                                    to scan what exists before paying for content."
+                },
                 "repository": {
                     "type": "string",
                     "description": "Optional repository filter (e.g. \"phanijapps/engram\", \

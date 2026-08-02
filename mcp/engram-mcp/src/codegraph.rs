@@ -36,6 +36,16 @@ const CONTEXT_ITEM_EXCERPT_CHARS: usize = 2000;
 /// appended. Prevents 58k-token context bloat.
 const CONTEXT_TOTAL_CHAR_BUDGET: usize = 50_000;
 
+/// Default minimum fused score for `search` results (Fix 5). Items below this
+/// are barely-relevant noise that bloats context. Overridable via the
+/// `min_score` arg.
+const DEFAULT_MIN_SCORE: f32 = 0.01;
+
+/// Maximum results kept per source file in `search` (Fix 3: diversity). Caps
+/// the "5 methods from the same file" case; over-cap items are dropped with a
+/// per-file note.
+const MAX_PER_FILE: usize = 2;
+
 /// Excerpt `content` to at most `max_chars` Unicode scalar values, appending a
 /// `[truncated]` marker when cut. Slices on a char boundary so multi-byte UTF-8
 /// never panics. Returns the content unchanged when it already fits.
@@ -394,6 +404,300 @@ fn graph_relationships_filtered(
     }
 }
 
+// --- accurate + compact retrieval helpers (Fixes 1–5) -----------------------
+
+/// Resolve the source file path for an entity from its `source_refs` (Fix 1).
+/// Each code-symbol entity written by `scan_repo` carries a `SourceLocation
+/// .path` on its first evidence ref (the document it was extracted from — see
+/// `adapters/ingest/src/extractor.rs`). Returns the first non-empty path, or
+/// `None` when the entity has no location-bearing ref (e.g. a manually-written
+/// concept entity). Lets `search`/`get_context` surface WHERE code lives
+/// without the caller having to read the file.
+fn entity_source_path(entity: &KnowledgeEntity) -> Option<String> {
+    entity.source_refs.iter().find_map(|r| {
+        r.location
+            .as_ref()
+            .and_then(|l| l.path.clone())
+            .filter(|p| !p.is_empty())
+    })
+}
+
+/// Shorten an `org/name` label to just the repo name (the segment after the
+/// last `/`), e.g. `"phanijapps/zbot"` → `"zbot"` (Fix 5 compact format).
+/// Returns the input unchanged when there is no `/`.
+fn shorten_repo_label(label: &str) -> &str {
+    label
+        .rsplit_once('/')
+        .map(|(_, name)| name)
+        .unwrap_or(label)
+}
+
+/// True when `name` is an exact/normalized match for `query` (Fix 2). The query
+/// equals the name (case-insensitive), or one contains the other after
+/// lowercasing + trimming. Handles both `"anthropicOAuth"` → exact, and
+/// `"Anthropic OAuth"` → split-match (the name contains the query, or the query
+/// contains the name). Short queries (< 3 chars) never match — a 1–2 char
+/// needle would inject a flood of false positives.
+fn name_matches_query(name: &str, query: &str) -> bool {
+    let n = name.trim().to_ascii_lowercase();
+    let q = query.trim().to_ascii_lowercase();
+    if q.len() < 3 || n.is_empty() {
+        return false;
+    }
+    n == q || n.contains(&q) || q.contains(&n)
+}
+
+/// A resolved `search` hit carrying everything needed for rendering and the
+/// diversity/score gates (Fixes 1–5). Built from a recall `RetrievalResult`
+/// (the normal path) or an exact-match-injected entity (Fix 2).
+#[derive(Clone)]
+struct SearchHit {
+    entity_id: String,
+    name: String,
+    kind_label: String,
+    /// Full `org/name` provenance repo label (shortened only at render time).
+    repo: String,
+    /// Source file path from [`entity_source_path`] (Fix 1). `None` for items
+    /// whose entity is unresolvable or carries no location.
+    path: Option<String>,
+    /// Fusion-trace source (`"lexical"`, `"vector"`, …) or `"exact-match"` for
+    /// Fix 2 injected hits.
+    retriever: String,
+    score: f32,
+    /// True when the entity name is an exact/normalized match for the query
+    /// (Fix 2). Sorts the hit to the top.
+    is_exact: bool,
+}
+
+impl SearchHit {
+    /// Build a hit from a recall item + the entity it resolved to. The `by_id`
+    /// lookup is the caller's responsibility (the recall item carries only the
+    /// id). When the entity is no longer present (lookup miss), `name` falls
+    /// back to the item's content and `kind_label`/`path` are empty/None.
+    fn from_recall(item: &RetrievalResult, by_id: &HashMap<String, KnowledgeEntity>) -> Self {
+        let repo = provenance_repo_label(&item.provenance.source);
+        let retriever = item
+            .fusion_trace
+            .as_ref()
+            .map(|t| t.source.as_str())
+            .unwrap_or("?")
+            .to_owned();
+        match by_id.get(&item.target_id) {
+            Some(e) => SearchHit {
+                entity_id: item.target_id.clone(),
+                name: e.name.clone(),
+                kind_label: format!("{:?}", e.kind),
+                repo,
+                path: entity_source_path(e),
+                retriever,
+                score: item.score.total,
+                is_exact: false,
+            },
+            None => SearchHit {
+                entity_id: item.target_id.clone(),
+                name: if item.content.is_empty() {
+                    item.target_id.clone()
+                } else {
+                    item.content.clone()
+                },
+                kind_label: String::new(),
+                repo,
+                path: None,
+                retriever,
+                score: item.score.total,
+                is_exact: false,
+            },
+        }
+    }
+
+    /// Build a synthetic hit for an entity that matches the query exactly but
+    /// was not surfaced by recall (Fix 2). Score is floored to 1.0 (top-rank);
+    /// retriever is labeled `exact-match` so the boost is visible in
+    /// diagnostics mode.
+    fn from_exact_match(entity: &KnowledgeEntity) -> Self {
+        SearchHit {
+            entity_id: entity.id.to_string(),
+            name: entity.name.clone(),
+            kind_label: format!("{:?}", entity.kind),
+            repo: provenance_repo_label(&entity.provenance.source),
+            path: entity_source_path(entity),
+            retriever: "exact-match".to_owned(),
+            score: 1.0,
+            is_exact: true,
+        }
+    }
+}
+
+/// Boost exact/normalized name matches to the top of the results (Fix 2).
+///
+/// 1. Mark any existing hit (already in `hits`) whose entity name matches the
+///    query as `is_exact` and floor its score to 1.0 so it sorts first.
+/// 2. Inject entities from `by_id` that match the query but are NOT already in
+///    `hits` (by entity_id), as synthetic `from_exact_match` hits. Injected
+///    entities are deduped among themselves by `(repo, name)`.
+///
+/// Returns the count of newly-injected hits (existing matches that were merely
+/// boosted are NOT counted). The injection is a cheap O(entities) scan —
+/// `by_id` is already in memory via [`entity_lookup`].
+fn inject_exact_matches(
+    hits: &mut Vec<SearchHit>,
+    by_id: &HashMap<String, KnowledgeEntity>,
+    query: &str,
+) -> usize {
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    for h in hits.iter_mut() {
+        if name_matches_query(&h.name, query) {
+            h.is_exact = true;
+            if h.score < 1.0 {
+                h.score = 1.0;
+            }
+        }
+        seen_ids.insert(h.entity_id.clone());
+    }
+    let mut seen_names: HashSet<(String, String)> = HashSet::new();
+    for h in hits.iter() {
+        seen_names.insert((h.repo.clone(), h.name.clone()));
+    }
+    let mut injected = 0usize;
+    for e in by_id.values() {
+        if !name_matches_query(&e.name, query) {
+            continue;
+        }
+        let id = e.id.to_string();
+        if seen_ids.contains(&id) {
+            continue;
+        }
+        let hit = SearchHit::from_exact_match(e);
+        if !seen_names.insert((hit.repo.clone(), hit.name.clone())) {
+            continue;
+        }
+        seen_ids.insert(id);
+        hits.push(hit);
+        injected += 1;
+    }
+    injected
+}
+
+/// Keep at most `max_per_file` hits per source file (Fix 3: diversity). Hits
+/// are taken in their current order (exact-first, score-desc), so the
+/// top-scoring items per file survive. Returns the kept hits (in order) plus a
+/// note line per file that was trimmed. Hits without a path pass through
+/// uncapped (per the spec: "If paths aren't available, skip this cap").
+fn apply_per_file_cap(hits: Vec<SearchHit>, max_per_file: usize) -> (Vec<SearchHit>, Vec<String>) {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut dropped_by_file: HashMap<String, usize> = HashMap::new();
+    let mut kept = Vec::with_capacity(hits.len());
+    for h in hits {
+        match h.path.as_deref() {
+            Some(p) if !p.is_empty() => {
+                let count = counts.entry(p.to_owned()).or_insert(0);
+                if *count < max_per_file {
+                    *count += 1;
+                    kept.push(h);
+                } else {
+                    *dropped_by_file.entry(p.to_owned()).or_insert(0) += 1;
+                }
+            }
+            _ => kept.push(h),
+        }
+    }
+    // Sort notes by file path for deterministic output.
+    let mut notes: Vec<String> = dropped_by_file
+        .into_iter()
+        .map(|(file, n)| format!("... [{n} results from {file} capped for diversity]"))
+        .collect();
+    notes.sort();
+    (kept, notes)
+}
+
+/// Drop hits whose score is below `min_score` (Fix 5: score threshold). Returns
+/// the kept hits (in order) + the count dropped, so a note can be appended.
+fn apply_score_threshold(hits: Vec<SearchHit>, min_score: f32) -> (Vec<SearchHit>, usize) {
+    let mut dropped = 0usize;
+    let kept: Vec<SearchHit> = hits
+        .into_iter()
+        .filter(|h| {
+            if h.score >= min_score {
+                true
+            } else {
+                dropped += 1;
+                false
+            }
+        })
+        .collect();
+    (kept, dropped)
+}
+
+/// Render a hit to a single result line (Fix 1 + Fix 5).
+///
+/// - Diagnostics (`diagnostics = true`): full format with kind + retriever —
+///   `name (kind) — org/repo, path [retriever, score=X.XX]`.
+/// - Compact (default): `name — repo, path [X.XX]` — kind dropped (redundant
+///   for code), repo shortened to the name segment, retriever dropped, score
+///   rounded to 2 decimals. ~50% shorter than the diagnostics line.
+///
+/// The path (Fix 1) is included in both modes when available.
+fn render_hit(h: &SearchHit, diagnostics: bool) -> String {
+    let path_part = match h.path.as_deref() {
+        Some(p) if !p.is_empty() => format!(", {p}"),
+        _ => String::new(),
+    };
+    if diagnostics {
+        let kind_part = if h.kind_label.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", h.kind_label)
+        };
+        format!(
+            "{}{kind_part} — {}{path_part} [{}, score={:.2}]",
+            h.name, h.repo, h.retriever, h.score
+        )
+    } else {
+        let repo = shorten_repo_label(&h.repo);
+        format!("{} — {}{path_part} [{:.2}]", h.name, repo, h.score)
+    }
+}
+
+/// Render a one-line discovery header for a recall item (Fix 4): the result
+/// metadata WITHOUT the content body. Format:
+/// `name (kind) — org/repo, path [X.XX]`. Falls back to a short content
+/// snippet when the entity is not resolvable (memories, chunks). ~80 chars vs
+/// ~2000 for an evidence excerpt, so a discovery packet costs ~25x less context.
+fn discovery_header(item: &RetrievalResult, by_id: &HashMap<String, KnowledgeEntity>) -> String {
+    let repo = provenance_repo_label(&item.provenance.source);
+    match by_id.get(&item.target_id) {
+        Some(e) => {
+            let path_part = entity_source_path(e)
+                .map(|p| format!(", {p}"))
+                .unwrap_or_default();
+            format!(
+                "{} ({:?}) — {}{path_part} [{:.2}]",
+                e.name, e.kind, repo, item.score.total
+            )
+        }
+        None => {
+            // Non-entity item (memory/chunk/belief): show a short snippet +
+            // target_type so the line is still informative without the body.
+            let snippet: String = if item.content.is_empty() {
+                item.target_id.clone()
+            } else {
+                item.content
+                    .lines()
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .chars()
+                    .take(80)
+                    .collect()
+            };
+            format!(
+                "{snippet} {:?} — {} [{:.2}]",
+                item.target_type, repo, item.score.total
+            )
+        }
+    }
+}
+
 /// `search`: ranked code-symbol search over indexed entities.
 ///
 /// Routes through the unified (hybrid) recall — lexical (BM25) + graph +
@@ -432,114 +736,148 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
     // Returns the rendered hits PLUS an optional no-results diagnostic (built
     // from the raw recall payload before the Entity filter) so an empty packet
     // is never silent.
-    let (hits, no_results_diag): (Vec<String>, Option<String>) = match app.provider.require_recall()
-    {
-        Ok(handle) => {
-            let request = RetrievalRequest {
-                query: query.to_owned(),
-                scope: app.scope.clone(),
-                requester: requester(),
-                modes: Vec::new(),
-                filters: None,
-                cues: Vec::new(),
-                limit: Some(limit as u32),
-                budget: None,
-                include_explanations: Some(true),
-            };
-            let payload = block_on(handle.recall(request)).map_err(internal)?;
-            let by_id = entity_lookup(app);
+    let (result_lines, notes, no_results_diag): (Vec<String>, Vec<String>, Option<String>) =
+        match app.provider.require_recall() {
+            Ok(handle) => {
+                let request = RetrievalRequest {
+                    query: query.to_owned(),
+                    scope: app.scope.clone(),
+                    requester: requester(),
+                    modes: Vec::new(),
+                    filters: None,
+                    cues: Vec::new(),
+                    limit: Some(limit as u32),
+                    budget: None,
+                    include_explanations: Some(true),
+                };
+                let payload = block_on(handle.recall(request)).map_err(internal)?;
+                let by_id = entity_lookup(app);
 
-            // Diagnostics captured BEFORE the Entity filter so an empty
-            // result can report how much recall actually found.
-            let total_recall = payload.items.len();
-            let lanes: HashSet<&str> = payload
-                .items
-                .iter()
-                .filter_map(|i| i.fusion_trace.as_ref().map(|t| t.source.as_str()))
-                .collect();
+                // Diagnostics captured BEFORE the Entity filter so an empty
+                // result can report how much recall actually found.
+                let total_recall = payload.items.len();
+                let lanes: HashSet<&str> = payload
+                    .items
+                    .iter()
+                    .filter_map(|i| i.fusion_trace.as_ref().map(|t| t.source.as_str()))
+                    .collect();
 
-            // Repository post-filter: when `repository` is set, drop any
-            // item whose provenance source is not from that repo. The recall
-            // lanes themselves cannot be repo-scoped without a domain-level
-            // filter (deferred to a future RFC), so this post-filter is the
-            // contamination guard for the search output.
-            let mut filtered: Vec<&RetrievalResult> = payload
-                .items
-                .iter()
-                .filter(|i| i.target_type == RetrievalTargetType::Entity)
-                .filter(|i| match repository.as_deref() {
-                    Some(repo) => source_matches_repository(&i.provenance.source, repo),
-                    None => true,
-                })
-                .collect();
+                // Repository post-filter: when `repository` is set, drop any
+                // item whose provenance source is not from that repo. The recall
+                // lanes themselves cannot be repo-scoped without a domain-level
+                // filter (deferred to a future RFC), so this post-filter is the
+                // contamination guard for the search output.
+                let mut filtered: Vec<&RetrievalResult> = payload
+                    .items
+                    .iter()
+                    .filter(|i| i.target_type == RetrievalTargetType::Entity)
+                    .filter(|i| match repository.as_deref() {
+                        Some(repo) => source_matches_repository(&i.provenance.source, repo),
+                        None => true,
+                    })
+                    .collect();
 
-            // Stable source-identity dedup: collapse items that share the
-            // same (repo, entity_name, entity_kind), keeping the
-            // higher-scoring one. The recall fusion already dedups by
-            // (target_type, target_id), but two entities with different IDs
-            // but the same name+repo (e.g. entity vs chunk dual
-            // representation, or re-scan duplicates) should not both appear.
-            filtered.sort_by(|a, b| {
-                b.score
-                    .total
-                    .partial_cmp(&a.score.total)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            });
-            let mut seen: HashSet<(String, String, String)> = HashSet::new();
-            let deduped: Vec<&RetrievalResult> = filtered
-                .into_iter()
-                .filter(|i| {
-                    let repo = provenance_repo_label(&i.provenance.source);
-                    let (name, kind) = match by_id.get(&i.target_id) {
-                        Some(e) => (e.name.clone(), format!("{:?}", e.kind)),
-                        None => (i.content.clone(), "?".to_owned()),
-                    };
-                    seen.insert((repo, name, kind))
-                })
-                .collect();
-            let entity_hits = deduped.len();
+                // Stable source-identity dedup: collapse items that share the
+                // same (repo, entity_name, entity_kind), keeping the
+                // higher-scoring one. The recall fusion already dedups by
+                // (target_type, target_id), but two entities with different IDs
+                // but the same name+repo (e.g. entity vs chunk dual
+                // representation, or re-scan duplicates) should not both appear.
+                filtered.sort_by(|a, b| {
+                    b.score
+                        .total
+                        .partial_cmp(&a.score.total)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
+                let mut seen: HashSet<(String, String, String)> = HashSet::new();
+                let deduped: Vec<&RetrievalResult> = filtered
+                    .into_iter()
+                    .filter(|i| {
+                        let repo = provenance_repo_label(&i.provenance.source);
+                        let (name, kind) = match by_id.get(&i.target_id) {
+                            Some(e) => (e.name.clone(), format!("{:?}", e.kind)),
+                            None => (i.content.clone(), "?".to_owned()),
+                        };
+                        seen.insert((repo, name, kind))
+                    })
+                    .collect();
+                let entity_hits = deduped.len();
 
-            // Render with provenance: `name (kind) — org/repo [retriever, score=X.XX]`.
-            // Falls back to the item's resolved content when the entity is
-            // no longer present (lookup miss).
-            let hits: Vec<String> = deduped
-                .iter()
-                .take(limit)
-                .filter_map(|i| {
-                    let repo = provenance_repo_label(&i.provenance.source);
-                    let bracket = recall_provenance_suffix(i);
-                    let suffix = format!(" — {repo} {bracket}");
-                    match by_id.get(&i.target_id) {
-                        Some(e) => Some(format!("{} ({:?}){suffix}", e.name, e.kind)),
-                        None if !i.content.is_empty() => Some(format!("{}{suffix}", i.content)),
-                        None => None,
-                    }
-                })
-                .collect();
+                // Build structured hits (Fix 1: file path resolved here, inside
+                // SearchHit::from_recall).
+                let mut hits: Vec<SearchHit> = deduped
+                    .iter()
+                    .map(|i| SearchHit::from_recall(i, &by_id))
+                    .collect();
 
-            let diag = if hits.is_empty() {
-                Some(format_no_results_diag(
-                    total_recall,
-                    entity_hits,
-                    lanes.len(),
-                    &payload.source_failures,
-                ))
-            } else {
-                None
-            };
-            (hits, diag)
-        }
-        Err(_) => {
-            // Degrade to a direct scan when recall is not wired (e.g. a
-            // capability-check failure) so search still works without hybrid.
-            (
-                substring_symbol_scan(app, query, limit, repository.as_deref()),
-                None,
-            )
-        }
-    };
+                // Fix 2: exact-match injection — boost/inject entities whose
+                // name exactly or split-matches the query, so an identifier
+                // match never loses to semantic similarity.
+                inject_exact_matches(&mut hits, &by_id, query);
 
-    let body = if hits.is_empty() {
+                // Re-sort: exact matches first, then by score descending.
+                hits.sort_by(|a, b| {
+                    b.is_exact.cmp(&a.is_exact).then_with(|| {
+                        b.score
+                            .partial_cmp(&a.score)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                });
+
+                // Fix 5: score threshold — drop barely-relevant noise before
+                // the per-file cap so capped noise doesn't consume per-file
+                // slots. Exact-match hits are floored to 1.0 above and always
+                // survive the default 0.01 floor.
+                let min_score = args["min_score"]
+                    .as_f64()
+                    .map(|v| v as f32)
+                    .unwrap_or(DEFAULT_MIN_SCORE);
+                let (hits, threshold_dropped) = apply_score_threshold(hits, min_score);
+
+                // Fix 3: per-file diversity cap — keep at most 2 per source file.
+                let (hits, file_notes) = apply_per_file_cap(hits, MAX_PER_FILE);
+
+                // Render. Compact is the default (Fix 5); `diagnostics = true`
+                // selects the full kind + retriever format.
+                let diagnostics = args["diagnostics"].as_bool().unwrap_or(false);
+                let result_lines: Vec<String> = hits
+                    .iter()
+                    .take(limit)
+                    .map(|h| render_hit(h, diagnostics))
+                    .collect();
+
+                let mut notes: Vec<String> = Vec::new();
+                if threshold_dropped > 0 {
+                    notes.push(format!(
+                        "... [{threshold_dropped} items below score threshold]"
+                    ));
+                }
+                notes.extend(file_notes);
+
+                let diag = if result_lines.is_empty() {
+                    Some(format_no_results_diag(
+                        total_recall,
+                        entity_hits,
+                        lanes.len(),
+                        &payload.source_failures,
+                    ))
+                } else {
+                    None
+                };
+                (result_lines, notes, diag)
+            }
+            Err(_) => {
+                // Degrade to a direct scan when recall is not wired (e.g. a
+                // capability-check failure) so search still works without hybrid.
+                (
+                    substring_symbol_scan(app, query, limit, repository.as_deref()),
+                    Vec::new(),
+                    None,
+                )
+            }
+        };
+
+    let mut body = if result_lines.is_empty() {
         let mut msg = "No results.".to_owned();
         if let Some(diag) = no_results_diag {
             msg.push_str(&format!(" ({diag})"));
@@ -550,8 +888,12 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
         }
         msg
     } else {
-        hits.join("\n")
+        result_lines.join("\n")
     };
+    for note in &notes {
+        body.push('\n');
+        body.push_str(note);
+    }
     Ok(protocol::text_content(body))
 }
 
@@ -932,6 +1274,22 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     // output header (`query shape: Code`).
     let shape = classify_query_shape(focus);
 
+    // Fix 4: discovery vs evidence mode. `discovery` (alias: `compact`) returns
+    // ONLY result headers (name, kind, repo, path, score) — no content body —
+    // so a discovery packet costs ~80 chars/item vs ~2000 for evidence. Default
+    // is `evidence` (the prior behavior: content excerpts up to
+    // CONTEXT_ITEM_EXCERPT_CHARS).
+    let mode = args
+        .get("mode")
+        .and_then(|v| v.as_str())
+        .unwrap_or("evidence");
+    let discovery = mode == "discovery" || mode == "compact";
+
+    // Built once and reused for both the [Recall] rendering (discovery headers
+    // need entity name/kind/path) and the anchor derivation below — avoids the
+    // double `entity_lookup` store read the prior code did.
+    let by_id = entity_lookup(app);
+
     // 1. Fused recall (docs + memories + beliefs matching the focus). The
     //    payload is retained alongside the rendered text so the top-scoring
     //    Entity hit can drive the code/graph anchor (step 2/3) — a NL focus
@@ -978,22 +1336,37 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             let total = taken.len();
             let mut joined = String::new();
             let mut added = 0usize;
-            for i in &taken {
-                let item_excerpt = excerpt(&i.content, CONTEXT_ITEM_EXCERPT_CHARS);
-                // Per-item provenance suffix so a caller can see which retriever
-                // produced each recall item + its fused score, mirroring `search`.
-                let prov = recall_provenance_suffix(i);
-                let sep = if joined.is_empty() { "" } else { "\n---\n" };
-                if joined.len() + sep.len() + item_excerpt.len() + prov.len()
-                    > CONTEXT_TOTAL_CHAR_BUDGET
-                {
-                    // This item would blow the budget; stop adding items.
-                    break;
+            if discovery {
+                // Fix 4: headers only — `name (kind) — repo, path [score]`,
+                // one line per item, no content body.
+                for i in &taken {
+                    let header = discovery_header(i, &by_id);
+                    let sep = if joined.is_empty() { "" } else { "\n" };
+                    if joined.len() + sep.len() + header.len() > CONTEXT_TOTAL_CHAR_BUDGET {
+                        break;
+                    }
+                    joined.push_str(sep);
+                    joined.push_str(&header);
+                    added += 1;
                 }
-                joined.push_str(sep);
-                joined.push_str(&item_excerpt);
-                joined.push_str(&prov);
-                added += 1;
+            } else {
+                for i in &taken {
+                    let item_excerpt = excerpt(&i.content, CONTEXT_ITEM_EXCERPT_CHARS);
+                    // Per-item provenance suffix so a caller can see which retriever
+                    // produced each recall item + its fused score, mirroring `search`.
+                    let prov = recall_provenance_suffix(i);
+                    let sep = if joined.is_empty() { "" } else { "\n---\n" };
+                    if joined.len() + sep.len() + item_excerpt.len() + prov.len()
+                        > CONTEXT_TOTAL_CHAR_BUDGET
+                    {
+                        // This item would blow the budget; stop adding items.
+                        break;
+                    }
+                    joined.push_str(sep);
+                    joined.push_str(&item_excerpt);
+                    joined.push_str(&prov);
+                    added += 1;
+                }
             }
             let omitted = total - added;
             if omitted > 0 {
@@ -1021,7 +1394,7 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let anchor_symbol = recall_items
         .iter()
         .find(|i| i.target_type == RetrievalTargetType::Entity)
-        .and_then(|i| entity_lookup(app).get(&i.target_id).map(|e| e.name.clone()))
+        .and_then(|i| by_id.get(&i.target_id).map(|e| e.name.clone()))
         .unwrap_or_else(|| focus.to_owned());
 
     // 2. Code neighborhood keyed on the anchor symbol. When a repository filter
@@ -1509,6 +1882,338 @@ mod tests {
             notes[0].contains("1 other items capped by lane budget"),
             "{}",
             notes[0]
+        );
+    }
+
+    // --- accurate + compact retrieval (Fixes 1–5) -----------------------------
+
+    /// Build a minimal `KnowledgeEntity` for the path/exact-match/cap tests.
+    /// `path` populates the first `source_ref.location.path` (Fix 1). The
+    /// `provenance.source` is set to a scan-style string so `provenance_repo_label`
+    /// resolves an org/name.
+    fn make_entity(
+        id: &str,
+        name: &str,
+        kind: engram_domain::EntityKind,
+        path: Option<&str>,
+    ) -> KnowledgeEntity {
+        use engram_domain::{
+            Actor, ActorKind, EvidenceRef, EvidenceTargetType, Id, SourceLocation,
+        };
+        let source_refs = vec![EvidenceRef {
+            target_type: EvidenceTargetType::Document,
+            target_id: None,
+            uri: None,
+            quote: None,
+            location: path.map(|p| SourceLocation {
+                path: Some(p.to_owned()),
+                start_line: None,
+                end_line: None,
+                start_offset: None,
+                end_offset: None,
+                anchor: None,
+            }),
+        }];
+        KnowledgeEntity {
+            id: Id::from(id),
+            graph_id: None,
+            kind,
+            name: name.to_owned(),
+            aliases: Vec::new(),
+            scope: crate::scope::project_scope("test-project", "default"),
+            source_refs,
+            concept_refs: Vec::new(),
+            ontology_class_refs: Vec::new(),
+            provenance: engram_domain::Provenance {
+                source: format!("engram-mcp-scan [git@github.com:phanijapps/zbot.git@main:abc]"),
+                actor: Actor {
+                    id: Id::from("tester"),
+                    kind: ActorKind::Agent,
+                    display_name: None,
+                    metadata: None,
+                },
+                observed_at: chrono::Utc::now(),
+                evidence: Vec::new(),
+                derivations: Vec::new(),
+                confidence: None,
+                method: None,
+            },
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            valid_from: None,
+            valid_until: None,
+            metadata: None,
+        }
+    }
+
+    /// Build a `SearchHit` with the fields the gate/render tests read. The other
+    /// fields default to empty / `false`.
+    fn hit(name: &str, path: Option<&str>, score: f32) -> SearchHit {
+        SearchHit {
+            entity_id: format!("id-{name}"),
+            name: name.to_owned(),
+            kind_label: "Function".to_owned(),
+            repo: "phanijapps/zbot".to_owned(),
+            path: path.map(|p| p.to_owned()),
+            retriever: "lexical".to_owned(),
+            score,
+            is_exact: false,
+        }
+    }
+
+    #[test]
+    fn entity_source_path_resolves_from_source_refs() {
+        // Entity with a path on its first source_ref → path returned.
+        let e = make_entity(
+            "e1",
+            "alpha",
+            engram_domain::EntityKind::Function,
+            Some("src/lib.rs"),
+        );
+        assert_eq!(entity_source_path(&e).as_deref(), Some("src/lib.rs"));
+
+        // Entity with no path on the ref → None.
+        let e_no_path = make_entity("e2", "beta", engram_domain::EntityKind::Struct, None);
+        assert!(entity_source_path(&e_no_path).is_none());
+    }
+
+    #[test]
+    fn name_matches_query_exact_case_insensitive_and_split() {
+        // Exact, case-insensitive.
+        assert!(name_matches_query("anthropicOAuth", "anthropicOAuth"));
+        assert!(name_matches_query("anthropicOAuth", "AnthropicOAuth"));
+
+        // Query contains the name (split-match: "Anthropic OAuth" contains "oauth").
+        assert!(name_matches_query("oauth", "Anthropic OAuth handler"));
+
+        // Name contains the query.
+        assert!(name_matches_query("loginAnthropic", "login"));
+
+        // Too-short query never matches (avoids false-positive flood).
+        assert!(!name_matches_query("loginAnthropic", "fn"));
+        assert!(!name_matches_query("loginAnthropic", ""));
+
+        // Unrelated name does not match.
+        assert!(!name_matches_query(
+            "reciprocalRankFusion",
+            "anthropicOAuth"
+        ));
+    }
+
+    #[test]
+    fn shorten_repo_label_drops_org_prefix() {
+        assert_eq!(shorten_repo_label("phanijapps/zbot"), "zbot");
+        assert_eq!(shorten_repo_label("earendil-works/pi"), "pi");
+        // No slash → unchanged.
+        assert_eq!(shorten_repo_label("local"), "local");
+    }
+
+    #[test]
+    fn inject_exact_matches_boosts_existing_and_injects_missing() {
+        // by_id has alpha (already in hits) + anthropicOAuth (not in hits) + gamma (unrelated).
+        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        by_id.insert(
+            "e1".into(),
+            make_entity(
+                "e1",
+                "alpha",
+                engram_domain::EntityKind::Function,
+                Some("a.rs"),
+            ),
+        );
+        by_id.insert(
+            "e2".into(),
+            make_entity(
+                "e2",
+                "anthropicOAuth",
+                engram_domain::EntityKind::Function,
+                Some("c.rs"),
+            ),
+        );
+        by_id.insert(
+            "e3".into(),
+            make_entity(
+                "e3",
+                "gamma",
+                engram_domain::EntityKind::Struct,
+                Some("d.rs"),
+            ),
+        );
+
+        // hits has one recall item: alpha (entity_id e1, low score).
+        let mut hits = vec![SearchHit {
+            entity_id: "e1".into(),
+            name: "alpha".into(),
+            kind_label: "Function".into(),
+            repo: "phanijapps/zbot".into(),
+            path: Some("a.rs".into()),
+            retriever: "lexical".into(),
+            score: 0.05,
+            is_exact: false,
+        }];
+
+        // Query "alpha": alpha is already present → boosted (is_exact + score 1.0),
+        // NOT re-injected. anthropicOAuth does not match "alpha".
+        let injected = inject_exact_matches(&mut hits, &by_id, "alpha");
+        assert_eq!(injected, 0, "alpha already present → not re-injected");
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].is_exact, "alpha boosted to exact");
+        assert!(
+            (hits[0].score - 1.0).abs() < 1e-6,
+            "alpha score floored to 1.0"
+        );
+
+        // Query "anthropicOAuth": not in hits → injected as a new synthetic hit.
+        let injected = inject_exact_matches(&mut hits, &by_id, "anthropicOAuth");
+        assert_eq!(injected, 1, "anthropicOAuth injected");
+        // The injected hit is at the end (caller re-sorts).
+        let inj = hits.last().unwrap();
+        assert_eq!(inj.name, "anthropicOAuth");
+        assert!(inj.is_exact);
+        assert!((inj.score - 1.0).abs() < 1e-6);
+        assert_eq!(inj.retriever, "exact-match");
+        assert_eq!(inj.path.as_deref(), Some("c.rs"));
+
+        // gamma never matched either query → never injected.
+        assert!(hits.iter().all(|h| h.name != "gamma"));
+    }
+
+    #[test]
+    fn apply_per_file_cap_keeps_two_per_file_and_notes_rest() {
+        // Three hits from a.rs, one from b.rs, one path-less (passthrough).
+        let hits = vec![
+            hit("m1", Some("a.rs"), 0.9),
+            hit("m2", Some("a.rs"), 0.8),
+            hit("m3", Some("a.rs"), 0.7),
+            hit("m4", Some("b.rs"), 0.6),
+            hit("m5", None, 0.5),
+        ];
+        let (kept, notes) = apply_per_file_cap(hits, 2);
+        // 2 from a.rs + 1 from b.rs + 1 path-less = 4 kept.
+        assert_eq!(kept.len(), 4);
+        // The top-2 from a.rs survive (m1, m2); m3 dropped.
+        let names: Vec<&str> = kept.iter().map(|h| h.name.as_str()).collect();
+        assert!(names.contains(&"m1"));
+        assert!(names.contains(&"m2"));
+        assert!(!names.contains(&"m3"), "m3 should be capped");
+        assert!(names.contains(&"m4"));
+        assert!(
+            names.contains(&"m5"),
+            "path-less hit passes through uncapped"
+        );
+        // One note, for a.rs, reporting 1 dropped.
+        assert_eq!(notes.len(), 1);
+        assert!(
+            notes[0].contains("1 results from a.rs capped for diversity"),
+            "{}",
+            notes[0]
+        );
+    }
+
+    #[test]
+    fn apply_score_threshold_drops_low_score_and_counts() {
+        let hits = vec![
+            hit("keep1", Some("a.rs"), 0.5),
+            hit("drop", Some("b.rs"), 0.005),
+            hit("keep2", Some("c.rs"), 0.02),
+        ];
+        let (kept, dropped) = apply_score_threshold(hits, 0.01);
+        assert_eq!(kept.len(), 2);
+        assert_eq!(dropped, 1);
+        let names: Vec<&str> = kept.iter().map(|h| h.name.as_str()).collect();
+        assert!(names.contains(&"keep1"));
+        assert!(names.contains(&"keep2"));
+        assert!(!names.contains(&"drop"));
+    }
+
+    #[test]
+    fn render_hit_compact_drops_kind_and_shortens_repo() {
+        let h = hit(
+            "loginAnthropic",
+            Some("packages/ai/src/auth/oauth/anthropic.ts"),
+            0.0382,
+        );
+        // Compact: name — repo_name, path [score]  (no kind, no retriever).
+        let compact = render_hit(&h, false);
+        assert!(
+            compact.starts_with("loginAnthropic — zbot, packages/ai/src/auth/oauth/anthropic.ts"),
+            "compact format: {compact}"
+        );
+        assert!(
+            compact.contains("[0.04]"),
+            "score rounded to 2 decimals: {compact}"
+        );
+        assert!(
+            !compact.contains("Function"),
+            "kind dropped in compact: {compact}"
+        );
+        assert!(
+            !compact.contains("lexical"),
+            "retriever dropped in compact: {compact}"
+        );
+
+        // Diagnostics: full format with kind + retriever + score.
+        let diag = render_hit(&h, true);
+        assert!(
+            diag.starts_with("loginAnthropic (Function) — phanijapps/zbot, packages/ai/src/auth/oauth/anthropic.ts"),
+            "diagnostics format: {diag}"
+        );
+        assert!(
+            diag.contains("[lexical, score=0.04]"),
+            "full provenance: {diag}"
+        );
+    }
+
+    #[test]
+    fn render_hit_omits_path_gracefully_when_absent() {
+        let h = hit("noPath", None, 0.5);
+        let compact = render_hit(&h, false);
+        // No ", path" segment — just "name — repo [score]".
+        assert_eq!(compact, "noPath — zbot [0.50]");
+    }
+
+    #[test]
+    fn discovery_header_formats_name_kind_repo_path_score() {
+        // Entity resolvable → "name (kind) — repo, path [score]".
+        // (`recall_item` sets provenance.source = "test", so the repo label is
+        // "test" — the test asserts the FORMAT, not a specific remote.)
+        let item = recall_item(RetrievalTargetType::Entity, "e1");
+        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        by_id.insert(
+            "e1".into(),
+            make_entity(
+                "e1",
+                "alpha",
+                engram_domain::EntityKind::Function,
+                Some("src/lib.rs"),
+            ),
+        );
+        let header = discovery_header(&item, &by_id);
+        assert!(
+            header.starts_with("alpha (Function) — test, src/lib.rs"),
+            "discovery header: {header}"
+        );
+        assert!(header.contains("[1.00]"), "score included: {header}");
+        // Discovery mode must NOT include the content body.
+        assert!(
+            !header.contains("content-e1"),
+            "no content in discovery: {header}"
+        );
+    }
+
+    #[test]
+    fn discovery_header_falls_back_to_snippet_for_non_entity() {
+        // A Memory item whose target_id is not in by_id → snippet + target_type.
+        let item = recall_item(RetrievalTargetType::Memory, "m1");
+        let by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        let header = discovery_header(&item, &by_id);
+        assert!(
+            header.contains("Memory"),
+            "target_type shown for non-entity: {header}"
+        );
+        assert!(
+            header.contains("content-m1"),
+            "content snippet shown as label: {header}"
         );
     }
 }

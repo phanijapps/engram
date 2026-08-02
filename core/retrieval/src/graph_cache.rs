@@ -47,6 +47,12 @@ pub struct GraphSnapshot {
     /// (the directed edge set the graph lanes traverse). Empty when the
     /// populating lane only reads entities (e.g. the lexical graph lane).
     pub relationships: Vec<KnowledgeRelationship>,
+    /// Cached Louvain community labels (entity-key → community-id), populated
+    /// by the community-summary lane after its first detection pass. `None`
+    /// until computed; `Some` lets every subsequent community/associative query
+    /// skip the ~57k-edge Louvain recompute. Refreshed together with the
+    /// entities/relationships on a cache miss or invalidation.
+    pub community_labels: Option<HashMap<String, usize>>,
 }
 
 /// Pluggable graph cache: stores materialized [`GraphSnapshot`]s keyed by
@@ -184,6 +190,7 @@ mod tests {
         Arc::new(GraphSnapshot {
             entities: Vec::new(),
             relationships: Vec::new(),
+            community_labels: None,
         })
     }
 

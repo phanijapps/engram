@@ -241,6 +241,17 @@ impl Chunker for TreeSitterChunker {
 /// Recursively walks the AST, checking each named node's kind against the map.
 /// When a declaration is found, extracts its name from the `name` field (or a
 /// fallback field) + produces a ChunkCandidate.
+///
+/// Container declarations — a class/struct/trait/interface that itself contains
+/// named declaration children (methods, nested functions) — emit an
+/// **anchor-only** candidate: empty `text` with the anchor/location preserved.
+/// This keeps the declaration visible to the graph extractor (which derives the
+/// `KnowledgeEntity` from the chunk's anchor, not its text) so the class entity
+/// still exists for graph/codegraph queries, while eliminating the bloated
+/// whole-body chunk from the vector index. The child declarations are emitted
+/// by the recursion below, so every method/function is still individually
+/// indexed + embedded — no information loss. Leaf declarations (functions,
+/// methods with no declaration children) emit their full text as before.
 fn walk_declarations(
     node: &tree_sitter::Node,
     source: &[u8],
@@ -259,10 +270,19 @@ fn walk_declarations(
             if !name_text.is_empty() {
                 let start_line = (node.start_position().row + 1) as u32;
                 let end_line = (node.end_position().row + 1) as u32;
-                let node_text = node.utf8_text(source).unwrap_or("").to_owned();
+                // A container (e.g. a class with method children) emits empty
+                // text — the entity is created from the anchor, but the
+                // multi-thousand-line body is never embedded. Empty-text chunks
+                // are skipped by the embedder (scan_repo filters them) and by
+                // every retrieval lane, so they are graph-only anchors.
+                let text = if has_declaration_descendant(node, kind_map) {
+                    String::new()
+                } else {
+                    node.utf8_text(source).unwrap_or("").to_owned()
+                };
                 chunks.push(ChunkCandidate {
                     kind: KnowledgeChunkKind::CodeSymbol,
-                    text: node_text,
+                    text,
                     location: Some(SourceLocation {
                         path: None,
                         start_line: Some(start_line),
@@ -280,6 +300,29 @@ fn walk_declarations(
     for child in node.named_children(&mut cursor) {
         walk_declarations(&child, source, kind_map, chunks);
     }
+}
+
+/// True when `node`'s subtree contains at least one named descendant whose
+/// tree-sitter kind is a recognized declaration (present in `kind_map`). Used
+/// to detect container declarations (class/struct/trait/interface with method
+/// or function children) whose whole-body chunk would duplicate every child's
+/// content.
+///
+/// Descendants (not just direct named children) are checked because many
+/// tree-sitter grammars wrap a class's members in a body node
+/// (`class_declaration` → `class_body` → `method_declaration`), so the
+/// declaration children are not direct children of the class node. Since
+/// `walk_declarations` recurses into the entire subtree, any declaration
+/// descendant is already emitted as its own chunk — the parent's whole-body
+/// chunk is therefore redundant bloat and is suppressed.
+fn has_declaration_descendant(node: &tree_sitter::Node, kind_map: &HashMap<&str, &str>) -> bool {
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        if kind_map.contains_key(child.kind()) || has_declaration_descendant(&child, kind_map) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Walks the AST collecting: (1) function declaration spans for scope tracking,

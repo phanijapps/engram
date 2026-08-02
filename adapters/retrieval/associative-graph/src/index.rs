@@ -142,6 +142,7 @@ impl RetrievalIndex for AssociativeGraphIndex {
                         Arc::new(GraphSnapshot {
                             entities: ents.clone(),
                             relationships: rels.clone(),
+                            community_labels: None,
                         }),
                     )
                     .await;

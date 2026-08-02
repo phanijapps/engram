@@ -164,7 +164,7 @@ fn vector_result(
             vector_index: None,
             embedding_time_ms: None,
             search_time_ms: None,
-            source: "vector.semantic".to_owned(),
+            source: "vector".to_owned(),
             source_rank: Some((rank + 1) as u32),
             source_score: Some(score),
             score: None,

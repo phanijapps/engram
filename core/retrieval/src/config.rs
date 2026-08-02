@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use engram_domain::RerankStrategy;
 use engram_runtime::{CoreError, CoreResult};
 use serde::{Deserialize, Serialize};
 
@@ -192,26 +193,13 @@ fn default_weight() -> f32 {
     1.0
 }
 
-/// Reranker strategy, selectable via `recall_fusion.rerank.strategy`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RerankStrategy {
-    None,
-    Mmr,
-    CrossEncoder,
-}
-
-impl Default for RerankStrategy {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
-/// Reranker selection + parameters.
+/// Reranker selection + parameters. `strategy` reuses the domain
+/// [`engram_domain::RerankStrategy`] enum; engram wires `None`/`Mmr`/
+/// `CrossEncoder` today (the other variants deserialize but are not dispatched).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RerankConfig {
     /// Which reranker to apply.
-    #[serde(default)]
+    #[serde(default = "default_rerank_strategy")]
     pub strategy: RerankStrategy,
     /// MMR relevance/diversity trade-off in `[0, 1]` (1 ⇒ pure relevance,
     /// 0 ⇒ max diversity). Only consulted for [`RerankStrategy::Mmr`].
@@ -222,10 +210,14 @@ pub struct RerankConfig {
 impl Default for RerankConfig {
     fn default() -> Self {
         Self {
-            strategy: RerankStrategy::default(),
+            strategy: default_rerank_strategy(),
             lambda: default_mmr_lambda(),
         }
     }
+}
+
+fn default_rerank_strategy() -> RerankStrategy {
+    RerankStrategy::None
 }
 
 fn default_mmr_lambda() -> f32 {

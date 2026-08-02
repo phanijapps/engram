@@ -14,9 +14,7 @@ mod vector_index;
 mod weighted;
 
 pub use composer::{RetrievalCompositionInput, compose_context};
-pub use config::{
-    RecallFusionConfig, ReciprocalFusionConfig, RerankConfig, RerankStrategy, WeightedFusionConfig,
-};
+pub use config::{RecallFusionConfig, ReciprocalFusionConfig, RerankConfig, WeightedFusionConfig};
 pub use ports::{ContextComposer, RetrievalFusion, RetrievalIndex, RetrievalReranker};
 pub use predict::{AgentState, PredictiveRetriever, RecentActivityPredictor, RetrievalHints};
 pub use reciprocal::{DEFAULT_RRF_K, ReciprocalRankFusion};

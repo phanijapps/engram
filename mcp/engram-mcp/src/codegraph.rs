@@ -441,10 +441,27 @@ fn shorten_repo_label(label: &str) -> &str {
 fn name_matches_query(name: &str, query: &str) -> bool {
     let n = name.trim().to_ascii_lowercase();
     let q = query.trim().to_ascii_lowercase();
-    if q.len() < 3 || n.is_empty() {
+    // Guard: query too short, name too short/empty → no match.
+    if q.len() < 3 || n.len() < 3 || n.is_empty() {
         return false;
     }
-    n == q || n.contains(&q) || q.contains(&n)
+    // Exact: query IS the identifier.
+    if n == q {
+        return true;
+    }
+    // Name contains the query (short query → longer identifier).
+    // e.g., query "login" → name "loginAnthropic".
+    if n.contains(&q) {
+        return true;
+    }
+    // Query contains the name — ONLY for short (≤2 token) queries.
+    // For multi-token NL queries, this would match any common word
+    // ("request", "model", "log") that appears in the query → false positives.
+    let q_tokens = q.split_whitespace().count();
+    if q_tokens <= 2 && q.contains(&n) {
+        return true;
+    }
+    false
 }
 
 /// A resolved `search` hit carrying everything needed for rendering and the
@@ -1983,14 +2000,31 @@ mod tests {
         assert!(name_matches_query("anthropicOAuth", "anthropicOAuth"));
         assert!(name_matches_query("anthropicOAuth", "AnthropicOAuth"));
 
-        // Query contains the name (split-match: "Anthropic OAuth" contains "oauth").
-        assert!(name_matches_query("oauth", "Anthropic OAuth handler"));
-
-        // Name contains the query.
+        // Name contains the query (short query → longer identifier).
         assert!(name_matches_query("loginAnthropic", "login"));
 
-        // Too-short query never matches (avoids false-positive flood).
+        // Too-short query or name never matches.
         assert!(!name_matches_query("loginAnthropic", "fn"));
+        assert!(!name_matches_query("loginAnthropic", ""));
+
+        // Query contains the name — ONLY for ≤2-token queries.
+        // 2-token: "Anthropic OAuth" contains "oauth" → match.
+        assert!(name_matches_query("oauth", "Anthropic OAuth"));
+        // 3+ token NL query: "Anthropic OAuth handler" → NO match (the flood fix).
+        assert!(!name_matches_query("oauth", "Anthropic OAuth handler"));
+
+        // Multi-token NL query must NOT match common words (the bug this fixes).
+        // "pi coding agent Anthropic login OAuth request model usage" has 9 tokens.
+        let nl = "pi coding agent Anthropic login OAuth request model usage";
+        assert!(!name_matches_query("request", nl));
+        assert!(!name_matches_query("model", nl));
+        assert!(!name_matches_query("log", nl));
+        assert!(!name_matches_query("m", nl));
+        assert!(!name_matches_query("R", nl));
+
+        // But an identifier typed as the query still matches.
+        assert!(name_matches_query("anthropicOAuth", "anthropicOAuth"));
+        assert!(name_matches_query("loginAnthropic", "loginAnthropic"));
         assert!(!name_matches_query("loginAnthropic", ""));
 
         // Unrelated name does not match.

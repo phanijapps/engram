@@ -5,7 +5,7 @@
 //! the provider's handles (no engine-store bypass).
 
 use engram_domain::{
-    KnowledgeEntity, KnowledgeRelationship, RetrievalRequest, RetrievalResult,
+    KnowledgeChunk, KnowledgeEntity, KnowledgeRelationship, RetrievalRequest, RetrievalResult,
     RetrievalSourceFailure, RetrievalTargetType,
 };
 use engram_ingest::{
@@ -40,6 +40,12 @@ const CONTEXT_TOTAL_CHAR_BUDGET: usize = 50_000;
 /// are barely-relevant noise that bloats context. Overridable via the
 /// `min_score` arg.
 const DEFAULT_MIN_SCORE: f32 = 0.01;
+
+/// Excerpt length for chunk text surfaced in `search` results. Enough to see
+/// decisive code values (`sk-ant-oat`, `Authorization: Bearer`, `PKCE`) that
+/// live in function bodies, not entity names. Bounds context cost while
+/// surfacing the code TEXT the agent actually needs.
+const CHUNK_EXCERPT_CHARS: usize = 500;
 
 /// Maximum results kept per source file in `search` (Fix 3: diversity). Caps
 /// the "5 methods from the same file" case; over-cap items are dropped with a
@@ -166,19 +172,19 @@ fn recall_provenance_suffix(item: &RetrievalResult) -> String {
 }
 
 /// Builds the concise diagnostics appended after "No results." when recall
-/// returned zero usable Entity hits. Surfaces (1) how many raw items recall
-/// produced before the Entity filter, (2) how many Entity hits survived (after
-/// dedup), (3) how many lanes contributed, and (4) any lane that errored. This
-/// turns a silent empty packet into an actionable signal.
+/// returned zero usable hits (Entity or Chunk). Surfaces (1) how many raw items
+/// recall produced before the target-type filter, (2) how many hits survived
+/// (after dedup), (3) how many lanes contributed, and (4) any lane that errored.
+/// This turns a silent empty packet into an actionable signal.
 fn format_no_results_diag(
     total_recall: usize,
-    entity_hits: usize,
+    deduped_hits: usize,
     lanes: usize,
     failures: &[RetrievalSourceFailure],
 ) -> String {
     let mut parts = vec![
         format!("recall returned {total_recall} items"),
-        format!("{entity_hits} entity hits after filter+dedup"),
+        format!("{deduped_hits} hits after filter+dedup"),
         format!("{lanes} lanes contributed"),
     ];
     if !failures.is_empty() {
@@ -429,6 +435,38 @@ fn entity_source_path(entity: &KnowledgeEntity) -> Option<String> {
     })
 }
 
+/// Build a short label for a chunk's content: the first non-empty line,
+/// truncated to 60 chars. Used as the `name` in a chunk [`SearchHit`] so the
+/// header line is informative without dumping the whole chunk text (which can
+/// be thousands of chars). Returns `"(empty chunk)"` for whitespace-only
+/// content so the hit still renders something.
+fn chunk_label(content: &str) -> String {
+    let first_line = content.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
+    let trimmed = first_line.trim();
+    let label: String = trimmed.chars().take(60).collect();
+    if label.is_empty() {
+        "(empty chunk)".to_owned()
+    } else {
+        label
+    }
+}
+
+/// Build a `chunk_id → KnowledgeChunk` lookup over the project scope, used to
+/// resolve the source file path for chunk recall items (the `RetrievalResult`
+/// carries only `target_id` + `content`, not the path). Empty when the
+/// knowledge-query capability is unavailable. Built lazily by `search` ONLY
+/// when chunk recall items are present (entity-only searches skip this).
+fn chunk_lookup(app: &App) -> HashMap<String, KnowledgeChunk> {
+    app.provider
+        .require_knowledge_query()
+        .ok()
+        .and_then(|q| block_on(q.list_chunks(&app.scope)).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|c| (c.id.to_string(), c))
+        .collect()
+}
+
 /// Shorten an `org/name` label to just the repo name (the segment after the
 /// last `/`), e.g. `"phanijapps/zbot"` → `"zbot"` (Fix 5 compact format).
 /// Returns the input unchanged when there is no `/`.
@@ -511,6 +549,13 @@ struct SearchHit {
     /// (Fix 2). Used for the `[exact-match]` render tag + sort priority. It is
     /// NOT used for score manipulation (Option B removed the 1.0 boost).
     is_exact: bool,
+    /// For Chunk results: a bounded excerpt (first [`CHUNK_EXCERPT_CHARS`] chars)
+    /// of the chunk text, rendered as a second line after the header. `None`
+    /// for Entity hits (the normal case). When `Some`, this hit is a Chunk and
+    /// the excerpt surfaces the code TEXT (function bodies, credential strings,
+    /// request construction) that filesystem grep would find but entity-name
+    /// search cannot.
+    chunk_excerpt: Option<String>,
 }
 
 impl SearchHit {
@@ -535,6 +580,7 @@ impl SearchHit {
                 source_score,
                 score: item.score.total,
                 is_exact: false,
+                chunk_excerpt: None,
             },
             None => SearchHit {
                 entity_id: item.target_id.clone(),
@@ -550,6 +596,7 @@ impl SearchHit {
                 source_score,
                 score: item.score.total,
                 is_exact: false,
+                chunk_excerpt: None,
             },
         }
     }
@@ -571,6 +618,35 @@ impl SearchHit {
             source_score: None,
             score,
             is_exact: true,
+            chunk_excerpt: None,
+        }
+    }
+
+    /// Build a hit for a Chunk recall item. Chunks carry the code TEXT (function
+    /// bodies, credential strings, request construction), not symbol names — so
+    /// the `name` is a short label derived from the first non-empty line
+    /// ([`chunk_label`]), and the full bounded excerpt (first
+    /// [`CHUNK_EXCERPT_CHARS`] chars) is carried in `chunk_excerpt` for rendering
+    /// as a second line. The path comes from the chunk's `SourceLocation` when
+    /// available (looked up from the store via [`chunk_lookup`]).
+    fn from_recall_chunk(item: &RetrievalResult, chunk_path: Option<&str>) -> Self {
+        let repo = provenance_repo_label(&item.provenance.source);
+        let trace = item.fusion_trace.as_ref();
+        let retriever = trace.map(|t| t.source.as_str()).unwrap_or("?").to_owned();
+        let source_score = trace.and_then(|t| t.source_score);
+        let name = chunk_label(&item.content);
+        let excerpt_text = excerpt(&item.content, CHUNK_EXCERPT_CHARS);
+        SearchHit {
+            entity_id: item.target_id.clone(),
+            name,
+            kind_label: "Chunk".to_owned(),
+            repo,
+            path: chunk_path.map(|p| p.to_owned()),
+            retriever,
+            source_score,
+            score: item.score.total,
+            is_exact: false,
+            chunk_excerpt: Some(excerpt_text),
         }
     }
 }
@@ -600,10 +676,12 @@ fn inject_exact_matches(
     by_id: &HashMap<String, KnowledgeEntity>,
     query: &str,
 ) -> usize {
-    // (1) Mark existing matches; do NOT touch their scores (Option B).
+    // (1) Mark existing matches; do NOT touch their scores (Option B). Chunks
+    // are skipped — `is_exact` means "identifier match," and a chunk's `name`
+    // is a content label, not a symbol name.
     let mut seen_ids: HashSet<String> = HashSet::new();
     for h in hits.iter_mut() {
-        if name_matches_query(&h.name, query) {
+        if h.chunk_excerpt.is_none() && name_matches_query(&h.name, query) {
             h.is_exact = true;
         }
         seen_ids.insert(h.entity_id.clone());
@@ -734,13 +812,19 @@ fn score_bracket(h: &SearchHit, diagnostics: bool) -> String {
 ///   2 decimals. ~50% shorter than the diagnostics line.
 ///
 /// The path (Fix 1) is included in both modes when available.
+///
+/// For Chunk hits (`chunk_excerpt` is `Some`): the header line is followed by a
+/// second line containing the bounded excerpt (first CHUNK_EXCERPT_CHARS chars
+/// of the chunk text). This surfaces the decisive code VALUES (credential
+/// strings, constants, request construction) that live in function bodies, not
+/// symbol names — the key addition over Entity-only search.
 fn render_hit(h: &SearchHit, diagnostics: bool) -> String {
     let path_part = match h.path.as_deref() {
         Some(p) if !p.is_empty() => format!(", {p}"),
         _ => String::new(),
     };
     let bracket = score_bracket(h, diagnostics);
-    if diagnostics {
+    let header = if diagnostics {
         let kind_part = if h.kind_label.is_empty() {
             String::new()
         } else {
@@ -750,6 +834,11 @@ fn render_hit(h: &SearchHit, diagnostics: bool) -> String {
     } else {
         let repo = shorten_repo_label(&h.repo);
         format!("{} — {}{path_part} {bracket}", h.name, repo)
+    };
+    // For Chunk hits, append the content excerpt after the header line.
+    match &h.chunk_excerpt {
+        Some(excerpt_text) => format!("{header}\n{excerpt_text}"),
+        None => header,
     }
 }
 
@@ -797,17 +886,34 @@ fn discovery_header(item: &RetrievalResult, by_id: &HashMap<String, KnowledgeEnt
     }
 }
 
-/// `search`: ranked code-symbol search over indexed entities.
+/// True when a recall item's target type should be kept in `search` results,
+/// given the `include_chunks` setting. Entity (code-symbol) items always pass;
+/// Chunk (code-text) items pass only when `include_chunks` is true (the
+/// default); all other target types (Memory, Belief, …) are dropped — `search`
+/// is a code search, and those lanes are served by `recall` / `get_context`.
+fn should_keep_target_type(tt: &RetrievalTargetType, include_chunks: bool) -> bool {
+    match tt {
+        RetrievalTargetType::Entity => true,
+        RetrievalTargetType::Chunk => include_chunks,
+        _ => false,
+    }
+}
+
+/// `search`: ranked code-symbol + code-text search over indexed entities and
+/// chunks.
 ///
 /// Routes through the unified (hybrid) recall — lexical (BM25) + graph +
 /// associative-graph + community-summary lanes fuse over weighted RRF — so
 /// multi-term and natural-language queries (e.g. `"reciprocal rank fusion"`)
 /// return ranked symbol hits. The lexical lane resolves entity-id BM25 hits to
 /// their code symbol (the resolver is entity-aware), so symbols indexed by
-/// `scan_repo` are reachable. Replaces the prior whole-string `.contains()`
-/// loop, which missed any query that was not a verbatim substring of
-/// `"{name} {kind}"` (the §6.3 defect: `search "reciprocal rank fusion"` →
-/// "No results").
+/// `scan_repo` are reachable.
+///
+/// By default (`include_chunks: true`), the results include BOTH Entity (code
+/// symbol) hits AND Chunk (code text) hits. Chunk hits surface the decisive
+/// code VALUES (`sk-ant-oat`, `Authorization: Bearer`, `PKCE`) that live in
+/// function bodies, not entity names — each chunk hit includes a bounded
+/// 500-char excerpt. Set `include_chunks: false` for Entity-only results.
 ///
 /// Backward compatible: when recall is unavailable, search degrades to the
 /// direct entity-list scan (the old path) rather than erroring.
@@ -828,6 +934,13 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
         .map(|n| n as usize)
         .unwrap_or(10)
         .clamp(1, 100);
+
+    // include_chunks (default true): when true, keep BOTH Entity (symbol) AND
+    // Chunk (code text) recall items. Chunks surface the decisive code VALUES
+    // (`sk-ant-oat`, `Authorization: Bearer`, `PKCE`) that live in function
+    // bodies, not entity names — each chunk hit includes a bounded excerpt.
+    // When false, only Entity results are returned (the prior behavior).
+    let include_chunks = args["include_chunks"].as_bool().unwrap_or(true);
 
     // Prefer the hybrid-recall path. Each recall item carries the fused rank;
     // entity (code-symbol) hits are kept and rendered as `name (kind)`.
@@ -861,15 +974,15 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                     .filter_map(|i| i.fusion_trace.as_ref().map(|t| t.source.as_str()))
                     .collect();
 
-                // Repository post-filter: when `repository` is set, drop any
-                // item whose provenance source is not from that repo. The recall
-                // lanes themselves cannot be repo-scoped without a domain-level
-                // filter (deferred to a future RFC), so this post-filter is the
-                // contamination guard for the search output.
+                // Repository post-filter + target-type filter. When
+                // `include_chunks` is true, keep BOTH Entity and Chunk items;
+                // when false, Entity-only (the prior behavior). The repository
+                // filter narrows to the target repo by provenance so a
+                // cross-repo query never returns another repo's items.
                 let mut filtered: Vec<&RetrievalResult> = payload
                     .items
                     .iter()
-                    .filter(|i| i.target_type == RetrievalTargetType::Entity)
+                    .filter(|i| should_keep_target_type(&i.target_type, include_chunks))
                     .filter(|i| match repository.as_deref() {
                         Some(repo) => source_matches_repository(&i.provenance.source, repo),
                         None => true,
@@ -877,11 +990,13 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                     .collect();
 
                 // Stable source-identity dedup: collapse items that share the
-                // same (repo, entity_name, entity_kind), keeping the
-                // higher-scoring one. The recall fusion already dedups by
-                // (target_type, target_id), but two entities with different IDs
-                // but the same name+repo (e.g. entity vs chunk dual
-                // representation, or re-scan duplicates) should not both appear.
+                // same (repo, name, kind), keeping the higher-scoring one. The
+                // recall fusion already dedups by (target_type, target_id), but
+                // two entities with different IDs but the same name+repo (e.g.
+                // entity vs chunk dual representation, or re-scan duplicates)
+                // should not both appear. For chunks, the name is the short
+                // [`chunk_label`] (not the full text) so the dedup key stays
+                // small.
                 filtered.sort_by(|a, b| {
                     b.score
                         .total
@@ -893,20 +1008,48 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                     .into_iter()
                     .filter(|i| {
                         let repo = provenance_repo_label(&i.provenance.source);
-                        let (name, kind) = match by_id.get(&i.target_id) {
-                            Some(e) => (e.name.clone(), format!("{:?}", e.kind)),
-                            None => (i.content.clone(), "?".to_owned()),
+                        let (name, kind) = if i.target_type == RetrievalTargetType::Chunk {
+                            (chunk_label(&i.content), "Chunk".to_owned())
+                        } else {
+                            match by_id.get(&i.target_id) {
+                                Some(e) => (e.name.clone(), format!("{:?}", e.kind)),
+                                None => (i.content.clone(), "?".to_owned()),
+                            }
                         };
                         seen.insert((repo, name, kind))
                     })
                     .collect();
-                let entity_hits = deduped.len();
+                let deduped_hits = deduped.len();
 
-                // Build structured hits (Fix 1: file path resolved here, inside
-                // SearchHit::from_recall).
+                // Build chunk lookup lazily — only when chunk items survived
+                // the filter+dedup. Entity-only searches skip the store read.
+                let chunks_by_id = if deduped
+                    .iter()
+                    .any(|i| i.target_type == RetrievalTargetType::Chunk)
+                {
+                    chunk_lookup(app)
+                } else {
+                    HashMap::new()
+                };
+
+                // Build structured hits. Entity items use `from_recall` (Fix 1:
+                // file path resolved from source_refs); Chunk items use
+                // `from_recall_chunk` (bounded text excerpt + path from the
+                // chunk's SourceLocation).
                 let mut hits: Vec<SearchHit> = deduped
                     .iter()
-                    .map(|i| SearchHit::from_recall(i, &by_id))
+                    .map(|i| {
+                        if i.target_type == RetrievalTargetType::Chunk {
+                            let path = chunks_by_id
+                                .get(&i.target_id)
+                                .and_then(|c| c.location.as_ref())
+                                .and_then(|l| l.path.clone())
+                                .filter(|p| !p.is_empty());
+                            SearchHit::from_recall_chunk(i, path.as_deref())
+                        } else {
+                            SearchHit::from_recall(i, &by_id)
+                        }
+                    })
                     .collect();
 
                 // Fix 2: exact-match injection — mark/inject entities whose
@@ -959,7 +1102,7 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                 let diag = if result_lines.is_empty() {
                     Some(format_no_results_diag(
                         total_recall,
-                        entity_hits,
+                        deduped_hits,
                         lanes.len(),
                         &payload.source_failures,
                     ))
@@ -1807,7 +1950,7 @@ mod tests {
         // No failures: just counts.
         let diag = format_no_results_diag(15, 3, 4, &[]);
         assert!(diag.contains("recall returned 15 items"), "{diag}");
-        assert!(diag.contains("3 entity hits"), "{diag}");
+        assert!(diag.contains("3 hits after filter+dedup"), "{diag}");
         assert!(diag.contains("4 lanes contributed"), "{diag}");
         assert!(!diag.contains("errored"), "{diag}");
 
@@ -2062,6 +2205,7 @@ mod tests {
             source_score: None,
             score,
             is_exact: false,
+            chunk_excerpt: None,
         }
     }
 
@@ -2174,6 +2318,7 @@ mod tests {
             source_score: Some(0.41),
             score: 0.05,
             is_exact: false,
+            chunk_excerpt: None,
         }];
 
         let injected = inject_exact_matches(&mut hits, &by_id, "alpha");
@@ -2432,6 +2577,7 @@ mod tests {
             source_score: None,
             score: 0.05,
             is_exact: true,
+            chunk_excerpt: None,
         };
         let compact = render_hit(&h, false);
         assert!(
@@ -2581,5 +2727,221 @@ mod tests {
         let item = recall_item(RetrievalTargetType::Entity, "e1");
         let suffix = recall_provenance_suffix(&item);
         assert_eq!(suffix, "[?, rrf=1.00]", "missing trace fallback: {suffix}");
+    }
+
+    // --- chunk-in-search behavior (Fix: chunks + entities) -------------------
+
+    /// Build a `SearchHit` for a Chunk with the given content + optional path +
+    /// score. Mirrors [`hit`] for entity hits; sets `chunk_excerpt` to the
+    /// bounded excerpt of `content`.
+    fn hit_chunk(content: &str, path: Option<&str>, score: f32) -> SearchHit {
+        SearchHit {
+            entity_id: "chunk-1".to_owned(),
+            name: chunk_label(content),
+            kind_label: "Chunk".to_owned(),
+            repo: "phanijapps/zbot".to_owned(),
+            path: path.map(|p| p.to_owned()),
+            retriever: "vector".to_owned(),
+            source_score: Some(0.88),
+            score,
+            is_exact: false,
+            chunk_excerpt: Some(excerpt(content, CHUNK_EXCERPT_CHARS)),
+        }
+    }
+
+    #[test]
+    fn chunk_label_extracts_first_non_empty_line_truncated() {
+        // First non-empty line is the label.
+        assert_eq!(
+            chunk_label("const TOKEN = 'sk-ant-oat';\nfn main() {}"),
+            "const TOKEN = 'sk-ant-oat';"
+        );
+
+        // Leading blank lines are skipped.
+        assert_eq!(
+            chunk_label("\n\n\nexport async function loginAnthropic() {"),
+            "export async function loginAnthropic() {"
+        );
+
+        // Long first line is truncated to 60 chars.
+        let long_line = "x".repeat(200);
+        assert_eq!(chunk_label(&long_line).len(), 60);
+
+        // Whitespace-only content → fallback label.
+        assert_eq!(chunk_label("   \n  \n"), "(empty chunk)");
+        assert_eq!(chunk_label(""), "(empty chunk)");
+    }
+
+    #[test]
+    fn from_recall_chunk_builds_hit_with_excerpt_and_label() {
+        let mut item = recall_item(RetrievalTargetType::Chunk, "chunk-42");
+        item.content =
+            "const API_KEY = 'sk-ant-oat-12345';\nfetch(url, { headers: { Authorization: Bearer } });"
+                .to_owned();
+        item.score.total = 0.04;
+        item.fusion_trace = Some(make_trace("vector", Some(0.91)));
+
+        let h = SearchHit::from_recall_chunk(&item, Some("src/auth/anthropic.ts"));
+        assert_eq!(h.entity_id, "chunk-42");
+        assert_eq!(
+            h.name, "const API_KEY = 'sk-ant-oat-12345';",
+            "name is the first line (chunk_label)"
+        );
+        assert_eq!(h.kind_label, "Chunk");
+        assert_eq!(h.path.as_deref(), Some("src/auth/anthropic.ts"));
+        assert_eq!(h.retriever, "vector");
+        assert!((h.source_score.unwrap() - 0.91).abs() < 1e-6);
+        assert!((h.score - 0.04).abs() < 1e-6);
+        assert!(!h.is_exact, "chunks are never is_exact");
+        // The excerpt carries the decisive code text.
+        let excerpt_text = h.chunk_excerpt.as_ref().expect("chunk has excerpt");
+        assert!(
+            excerpt_text.contains("sk-ant-oat-12345"),
+            "excerpt must surface the credential value: {excerpt_text}"
+        );
+        assert!(
+            excerpt_text.contains("Authorization: Bearer"),
+            "excerpt must surface the header: {excerpt_text}"
+        );
+    }
+
+    #[test]
+    fn from_recall_chunk_truncates_excerpt_to_500_chars() {
+        let mut item = recall_item(RetrievalTargetType::Chunk, "chunk-long");
+        // 1000 chars of content → excerpt is 500 + truncation marker.
+        item.content = "A".repeat(1000);
+        let h = SearchHit::from_recall_chunk(&item, None);
+        let excerpt_text = h.chunk_excerpt.as_ref().unwrap();
+        // excerpt() appends "\n... [truncated]" when cutting.
+        assert!(
+            excerpt_text.contains("... [truncated]"),
+            "long chunk excerpt is truncated: {excerpt_text}"
+        );
+        // The excerpt body (excluding the marker) is at most 500 chars.
+        let body = excerpt_text.split("\n... [truncated]").next().unwrap();
+        assert!(
+            body.chars().count() <= 500,
+            "excerpt body ≤ 500 chars: got {}",
+            body.chars().count()
+        );
+    }
+
+    #[test]
+    fn render_hit_chunk_appends_excerpt_after_header_compact() {
+        let h = hit_chunk(
+            "const TOKEN = 'sk-ant-oat-xxxxx';\nconst HOST = 'api.anthropic.com';",
+            Some("src/auth.ts"),
+            0.04,
+        );
+        let compact = render_hit(&h, false);
+        // Header line: label — repo, path [vector:raw, rrf=Y.YY]
+        let header_line = compact.lines().next().unwrap();
+        assert!(
+            header_line.contains("const TOKEN = 'sk-ant-oat-xxxxx';"),
+            "header shows chunk label: {header_line}"
+        );
+        assert!(
+            header_line.contains("— zbot, src/auth.ts"),
+            "header shows repo + path: {header_line}"
+        );
+        assert!(
+            header_line.contains("[vector:0.88, rrf=0.04]"),
+            "header shows raw + rrf: {header_line}"
+        );
+        // Excerpt (after the header) surfaces the decisive code VALUES.
+        // The excerpt may span multiple lines, so check the full output.
+        assert!(
+            compact.contains("sk-ant-oat-xxxxx"),
+            "excerpt surfaces the credential: {compact}"
+        );
+        assert!(
+            compact.contains("api.anthropic.com"),
+            "excerpt surfaces the host: {compact}"
+        );
+        // Two distinct blocks: header (line 0) + excerpt (line 1+).
+        assert!(
+            compact.lines().count() >= 2,
+            "compact output has header + excerpt: {compact}"
+        );
+    }
+
+    #[test]
+    fn render_hit_chunk_appends_excerpt_after_header_diagnostics() {
+        let h = hit_chunk(
+            "async function loginAnthropic() {",
+            Some("packages/ai/src/auth/oauth/anthropic.ts"),
+            0.04,
+        );
+        let diag = render_hit(&h, true);
+        // Header includes (Chunk) kind label.
+        let header_line = diag.lines().next().unwrap();
+        assert!(
+            header_line.contains("(Chunk)"),
+            "diagnostics header shows Chunk kind: {header_line}"
+        );
+        assert!(
+            header_line.contains("[vector, raw=0.88, rrf=0.04]"),
+            "diagnostics bracket: {header_line}"
+        );
+    }
+
+    #[test]
+    fn render_hit_chunk_without_path_omits_path_segment() {
+        let h = hit_chunk("const BEARER = 'Bearer xyz';", None, 0.03);
+        let compact = render_hit(&h, false);
+        let header_line = compact.lines().next().unwrap();
+        // No path between repo and bracket: "label — repo [bracket]"
+        // (not "label — repo, path [bracket]"). The bracket follows the repo
+        // directly.
+        assert!(
+            header_line.contains("— zbot ["),
+            "bracket immediately follows repo when path is None: {header_line}"
+        );
+        assert!(
+            !header_line.contains(", src"),
+            "no source path segment when path is None: {header_line}"
+        );
+        // Excerpt still present.
+        assert!(
+            compact.contains("Bearer xyz"),
+            "excerpt present even without path: {compact}"
+        );
+    }
+
+    #[test]
+    fn should_keep_target_type_filters_correctly() {
+        // Entity always passes.
+        assert!(should_keep_target_type(&RetrievalTargetType::Entity, true));
+        assert!(should_keep_target_type(&RetrievalTargetType::Entity, false));
+
+        // Chunk passes ONLY when include_chunks is true.
+        assert!(
+            should_keep_target_type(&RetrievalTargetType::Chunk, true),
+            "Chunk kept when include_chunks=true"
+        );
+        assert!(
+            !should_keep_target_type(&RetrievalTargetType::Chunk, false),
+            "Chunk filtered when include_chunks=false"
+        );
+
+        // Memory, Belief, etc. are ALWAYS filtered (search is code search).
+        assert!(!should_keep_target_type(&RetrievalTargetType::Memory, true));
+        assert!(!should_keep_target_type(&RetrievalTargetType::Belief, true));
+    }
+
+    #[test]
+    fn inject_exact_matches_skips_chunk_hits() {
+        // A chunk whose label happens to match the query must NOT be marked
+        // is_exact — that tag means "identifier match," not "content match."
+        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        let mut hits = vec![hit_chunk("alphaFunction body text", Some("a.rs"), 0.05)];
+        let injected = inject_exact_matches(&mut hits, &by_id, "alphaFunction");
+        // No entities in by_id → nothing injected.
+        assert_eq!(injected, 0);
+        // The chunk is NOT marked is_exact (it's a content label, not a symbol).
+        assert!(
+            !hits[0].is_exact,
+            "chunk hits must not be marked is_exact even if label matches"
+        );
     }
 }

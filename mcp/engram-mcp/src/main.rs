@@ -172,11 +172,17 @@ fn register_all(registry: &mut ToolRegistry<App>) {
     });
     registry.register(ToolRecord {
         name: "recall",
-        description: "Fused retrieval across memory + knowledge + beliefs for the project.",
+        description: "General evidence discovery: fuses vector + lexical + graph + temporal + belief \
+                      lanes over ALL entity kinds (code symbols, docs, memories, beliefs, concepts). \
+                      The right FIRST call for any question — not just code. Returns fused + ranked \
+                      items with per-lane provenance (raw lane score + fused RRF score). Parameters: \
+                      `query` (natural language), optional `lanes` filter (memory|knowledge|docs|beliefs), \
+                      `limit` (default 10, max 100). Use `search` for exact-identifier code lookup; \
+                      use `recall` for broad discovery across every knowledge kind.",
         input_schema: json!({
             "type": "object",
             "properties": {
-                "query": { "type": "string" },
+                "query": { "type": "string", "description": "Natural-language query. Matched across all lanes + entity kinds." },
                 "lanes": {
                     "type": "array",
                     "items": { "type": "string" },
@@ -283,7 +289,12 @@ fn register_all(registry: &mut ToolRegistry<App>) {
     });
     registry.register(ToolRecord {
         name: "search",
-        description: "Keyword search over indexed code symbols.",
+        description: "Ranked code search over indexed symbols (entities) + code text (chunks). \
+                      Fuses lexical (BM25) + graph + associative-graph + community-summary lanes. \
+                      By default returns BOTH entity hits (symbol name + path) AND chunk hits \
+                      (code text excerpt — surfaces credential strings, constants, request \
+                      construction that live in function bodies). Set include_chunks=false for \
+                      entity-only results.",
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -301,6 +312,13 @@ fn register_all(registry: &mut ToolRegistry<App>) {
                     "type": "number",
                     "description": "Minimum fused score (default 0.01). Items below this are \
                                     dropped as noise. Lower to surface more; raise to tighten."
+                },
+                "include_chunks": {
+                    "type": "boolean",
+                    "description": "When true (default), include code Chunk results alongside \
+                                    Entity results. Each chunk hit includes a 500-char excerpt \
+                                    of the code text. When false, only Entity (symbol) results \
+                                    are returned."
                 },
                 "diagnostics": {
                     "type": "boolean",

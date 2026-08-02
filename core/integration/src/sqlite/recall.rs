@@ -44,6 +44,7 @@ use engram_retrieval::{
     ReciprocalFusionConfig, ReciprocalRankFusion, RetrievalCompositionInput, RetrievalIndex,
 };
 use engram_runtime::{CoreError, CoreResult};
+use futures::future::join_all;
 
 use crate::UnifiedRecall;
 
@@ -137,8 +138,32 @@ impl UnifiedRecall for SqlUnifiedRecall {
         }
 
         // ---- Graph/vector/lexical lanes: each RetrievalIndex lane -----------
-        for (index, lane) in self.retrieval_lanes.iter().enumerate() {
-            match lane.retrieve_candidates(&request).await {
+        // Parallel fan-out: every lane's `retrieve_candidates` is polled
+        // concurrently (their async I/O interleaves on this task) instead of
+        // being awaited one at a time. This is a primary latency win — the
+        // sequential loop paid the *sum* of all lane latencies, so a recall
+        // backed by N lanes took ~N× the slowest lane. `join_all` returns
+        // outcomes in input order, so candidate ordering and `source_failures`
+        // tags are byte-for-byte stable with the previous sequential behavior
+        // (each lane index is carried alongside its result). A lane `Err`
+        // still degrades into `source_failures` rather than aborting the
+        // recall; an all-lanes-failure still yields `Ok` with empty items.
+        // Bind a shared reference once; each per-lane future copies this `&`
+        // (references are `Copy`) rather than moving the owned `request`, which
+        // is still needed downstream (beliefs lane + `compose_context`).
+        let request_ref = &request;
+        let lane_futures = self
+            .retrieval_lanes
+            .iter()
+            .enumerate()
+            .map(|(index, lane)| {
+                // Clone the Arc (cheap refcount bump) so each future owns its lane
+                // handle independently of `self`'s borrow.
+                let lane = Arc::clone(lane);
+                async move { (index, lane.retrieve_candidates(request_ref).await) }
+            });
+        for (index, outcome) in join_all(lane_futures).await {
+            match outcome {
                 Ok(results) => candidates.extend(results),
                 Err(e) => {
                     source_failures.push(lane_failure(&format!("retrieval_lane_{index}"), &e));

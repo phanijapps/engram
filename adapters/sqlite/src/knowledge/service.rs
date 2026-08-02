@@ -7,6 +7,7 @@
 //! concepts, and relations inherit visibility from their owning source or scheme.
 
 use std::{
+    collections::HashMap,
     path::Path,
     sync::{Arc, Mutex, MutexGuard},
 };
@@ -270,6 +271,18 @@ impl SqlKnowledgeStore {
     /// call-graph edges).
     pub async fn list_chunks(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeChunk>> {
         let connection = self.lock()?;
+        // Eager-load every source and document ONCE into HashMaps so chunk
+        // visibility resolves via two in-memory lookups instead of two SQL
+        // queries per chunk. The previous implementation issued an N+1 — for
+        // each of ~40k chunks it ran `source_for_chunk`, which did a
+        // `knowledge_documents` lookup plus a `knowledge_sources` lookup
+        // (~80k queries total). Resolution order is unchanged: chunk.document_id
+        // -> document.source_id -> source.scope; a chunk whose document or
+        // source is absent is still excluded (mirrors `source_for_chunk`
+        // returning `None`).
+        let sources = load_all_sources(&connection)?;
+        let documents = load_all_documents(&connection)?;
+
         let mut statement = connection
             .prepare("SELECT record_json FROM knowledge_chunks ORDER BY document_id, id")
             .map_err(sql_error)?;
@@ -281,11 +294,11 @@ impl SqlKnowledgeStore {
             let json = row.map_err(sql_error)?;
             let chunk = serde_json::from_str::<KnowledgeChunk>(&json).map_err(json_error)?;
             // Chunks inherit visibility from their source.
-            let source = source_for_chunk(&connection, &chunk)?;
-            if source
-                .map(|s| scope_allows(&s.scope, scope))
-                .unwrap_or(false)
-            {
+            let visible = documents
+                .get(&chunk.document_id)
+                .and_then(|doc| sources.get(&doc.source_id))
+                .is_some_and(|s| scope_allows(&s.scope, scope));
+            if visible {
                 chunks.push(chunk);
             }
         }
@@ -478,32 +491,39 @@ fn source_by_id(
         .transpose()
 }
 
-/// Loads the `KnowledgeSource` that owns a chunk (chunk -> document -> source).
-fn source_for_chunk(
-    connection: &Connection,
-    chunk: &KnowledgeChunk,
-) -> CoreResult<Option<KnowledgeSource>> {
-    let document = connection
-        .query_row(
-            "SELECT record_json FROM knowledge_documents WHERE id = ?1",
-            params![chunk.document_id.to_string()],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(sql_error)?
-        .map(|json| serde_json::from_str::<SourceDocument>(&json).map_err(json_error))
-        .transpose()?;
-    let Some(document) = document else {
-        return Ok(None);
-    };
-    connection
-        .query_row(
-            "SELECT record_json FROM knowledge_sources WHERE id = ?1",
-            params![document.source_id.to_string()],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
-        .map_err(sql_error)?
-        .map(|json| serde_json::from_str::<KnowledgeSource>(&json).map_err(json_error))
-        .transpose()
+/// Loads every `KnowledgeSource` keyed by its id. Used to resolve chunk and
+/// document visibility in bulk (via [`load_all_documents`]), replacing an N+1
+/// that issued a per-chunk SQL query in `list_chunks`.
+fn load_all_sources(connection: &Connection) -> CoreResult<HashMap<SourceId, KnowledgeSource>> {
+    let mut statement = connection
+        .prepare("SELECT record_json FROM knowledge_sources")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(sql_error)?;
+    let mut sources = HashMap::new();
+    for row in rows {
+        let json = row.map_err(sql_error)?;
+        let source = serde_json::from_str::<KnowledgeSource>(&json).map_err(json_error)?;
+        sources.insert(source.id.clone(), source);
+    }
+    Ok(sources)
+}
+
+/// Loads every `SourceDocument` keyed by its id. Used with [`load_all_sources`]
+/// to resolve chunk visibility in bulk, replacing an N+1 in `list_chunks`.
+fn load_all_documents(connection: &Connection) -> CoreResult<HashMap<DocumentId, SourceDocument>> {
+    let mut statement = connection
+        .prepare("SELECT record_json FROM knowledge_documents")
+        .map_err(sql_error)?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .map_err(sql_error)?;
+    let mut documents = HashMap::new();
+    for row in rows {
+        let json = row.map_err(sql_error)?;
+        let document = serde_json::from_str::<SourceDocument>(&json).map_err(json_error)?;
+        documents.insert(document.id.clone(), document);
+    }
+    Ok(documents)
 }

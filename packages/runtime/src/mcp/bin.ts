@@ -7,7 +7,11 @@ import { startMcpHttpServer } from "./server.js";
 const { values } = parseArgs({
   options: {
     config: { type: "string" },
-    port: { type: "string" }
+    port: { type: "string" },
+    host: { type: "string" },
+    "auth-token": { type: "string" },
+    "tls-cert": { type: "string" },
+    "tls-key": { type: "string" }
   },
   args: process.argv.slice(2),
   strict: true
@@ -25,8 +29,33 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   process.exit(2);
 }
 
-const server = await startMcpHttpServer({ configJson, port });
-console.error(`engram-mcp-http listening on http://127.0.0.1:${port}/mcp (loopback)`);
+const host = values.host ?? "127.0.0.1";
+const loopback =
+  host === "127.0.0.1" || host === "localhost" || host === "::1";
+
+if (!loopback && !values["auth-token"]) {
+  console.error(
+    "engram-mcp-http: --auth-token is required when binding to a non-loopback host"
+  );
+  process.exit(2);
+}
+
+const scheme = values["tls-cert"] && values["tls-key"] ? "https" : "http";
+
+const server = await startMcpHttpServer({
+  configJson,
+  port,
+  host,
+  ...(values["auth-token"] !== undefined
+    ? { authToken: values["auth-token"] }
+    : {}),
+  ...(values["tls-cert"] !== undefined ? { tlsCert: values["tls-cert"] } : {}),
+  ...(values["tls-key"] !== undefined ? { tlsKey: values["tls-key"] } : {})
+});
+console.error(
+  `engram-mcp-http listening on ${scheme}://${host}:${port}/mcp` +
+    (loopback ? " (loopback)" : " (auth: bearer-token)")
+);
 
 const shutdown = (): void => {
   server.close();

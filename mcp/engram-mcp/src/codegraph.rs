@@ -709,6 +709,205 @@ pub fn whats_changed(app: &App, _args: &Value) -> Result<Value, ToolError> {
 
 // --- Phase 3 -----------------------------------------------------------------
 
+/// The shape of a `get_context` focus, used to set per-lane budgets. A
+/// code-shaped question should surface code symbols; a doc/concept question
+/// should surface durable memory + text. See [`classify_query_shape`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum QueryShape {
+    Code,
+    Mixed,
+    Doc,
+}
+
+impl QueryShape {
+    /// Human-readable label for the output header (`query shape: Code`).
+    fn label(self) -> &'static str {
+        match self {
+            QueryShape::Code => "Code",
+            QueryShape::Mixed => "Mixed",
+            QueryShape::Doc => "Doc",
+        }
+    }
+
+    /// Per-bucket budget percentages in order `(entity, chunk, memory, other)`.
+    /// These are independent caps (not a partition): each only bounds its own
+    /// lane, so the sum may drift above or below `limit`.
+    fn budgets(self) -> (u32, u32, u32, u32) {
+        match self {
+            // Code-shaped: code symbols dominate; durable memory held back.
+            QueryShape::Code => (60, 25, 10, 5),
+            // Neutral split.
+            QueryShape::Mixed => (35, 35, 20, 10),
+            // Doc-shaped: durable memory + text dominate; symbols are sparse.
+            QueryShape::Doc => (15, 40, 35, 10),
+        }
+    }
+}
+
+/// Coarse target-type bucket for lane-budget accounting. `Entity` (code
+/// symbols), `Chunk` (code/doc text), and `Memory` (durable memory) are
+/// first-class lanes; everything else (belief, relationship, concept, …) falls
+/// into `Other`, which carries the smallest budget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum TargetBucket {
+    Entity,
+    Chunk,
+    Memory,
+    Other,
+}
+
+impl TargetBucket {
+    /// Lowercase label for the per-lane cap note (`2 memory items capped`).
+    fn label(self) -> &'static str {
+        match self {
+            TargetBucket::Entity => "entity",
+            TargetBucket::Chunk => "chunk",
+            TargetBucket::Memory => "memory",
+            TargetBucket::Other => "other",
+        }
+    }
+}
+
+/// Map a [`RetrievalTargetType`] into its budget lane.
+fn target_bucket(tt: &RetrievalTargetType) -> TargetBucket {
+    match tt {
+        RetrievalTargetType::Entity => TargetBucket::Entity,
+        RetrievalTargetType::Chunk => TargetBucket::Chunk,
+        RetrievalTargetType::Memory => TargetBucket::Memory,
+        _ => TargetBucket::Other,
+    }
+}
+
+/// Classify a `get_context` focus as [`QueryShape::Code`], [`QueryShape::Mixed`],
+/// or [`QueryShape::Doc`] by counting how many code-shape signals it carries.
+///
+/// Signals (each is a code indicator; the COUNT sets the shape):
+/// 1. camelCase / PascalCase identifiers — `[a-z][A-Z]` or `[A-Z][a-z]+[A-Z]`.
+/// 2. ALL_CAPS snake_case constants — `[A-Z]{2,}_`.
+/// 3. Source-tree markers — file extensions (`.rs`, `.ts`, …) or path segments
+///    (`/src/`, `crates/`, …).
+/// 4. Code keywords as whole words — `fn`, `function`, `class`, `struct`,
+///    `def`, `impl`, `enum`, `trait`, `interface`, `method`, `return`, `async`,
+///    `import`.
+/// 5. Backtick-quoted identifiers.
+///
+/// 0 signals → `Doc`; 1–2 → `Mixed`; 3+ → `Code`.
+fn classify_query_shape(focus: &str) -> QueryShape {
+    use std::sync::OnceLock;
+    static CASE_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static CONST_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static PATH_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static KEYWORD_RE: OnceLock<regex::Regex> = OnceLock::new();
+    static BACKTICK_RE: OnceLock<regex::Regex> = OnceLock::new();
+
+    let case = CASE_RE.get_or_init(|| {
+        regex::Regex::new(r"[a-z][A-Z]|[A-Z][a-z]+[A-Z]").expect("query-shape case regex")
+    });
+    let const_re =
+        CONST_RE.get_or_init(|| regex::Regex::new(r"[A-Z]{2,}_").expect("query-shape const regex"));
+    let path = PATH_RE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)\.(rs|ts|tsx|jsx|py|go|java|kt|cpp|cc|h|hpp|rb|js|swift|scala)\b|(?:^|[/\\])(?:src|crates|core|adapters|bindings|packages|mcp|lib)(?:[/\\]|$)",
+        )
+        .expect("query-shape path regex")
+    });
+    let keyword = KEYWORD_RE.get_or_init(|| {
+        regex::Regex::new(
+            r"\b(fn|function|class|struct|def|impl|enum|trait|interface|method|return|async|import)\b",
+        )
+        .expect("query-shape keyword regex")
+    });
+    let backtick = BACKTICK_RE
+        .get_or_init(|| regex::Regex::new(r"`[^`]+`").expect("query-shape backtick regex"));
+
+    let mut signals = 0;
+    if case.is_match(focus) {
+        signals += 1;
+    }
+    if const_re.is_match(focus) {
+        signals += 1;
+    }
+    if path.is_match(focus) {
+        signals += 1;
+    }
+    if keyword.is_match(focus) {
+        signals += 1;
+    }
+    if backtick.is_match(focus) {
+        signals += 1;
+    }
+
+    match signals {
+        0 => QueryShape::Doc,
+        1 | 2 => QueryShape::Mixed,
+        _ => QueryShape::Code,
+    }
+}
+
+/// Apply per-target-type lane budgets to a rank-ordered recall slice.
+///
+/// Items are taken in RRF rank order, but each [`TargetBucket`] is capped at its
+/// budget share of `limit`; over-cap items (the lowest-ranked of the over-budget
+/// type) are dropped. Returns the kept items (still in rank order) plus a
+/// per-bucket note for each lane that was trimmed.
+///
+/// The RRF fusion itself stays equal-weight — this is an output-assembly cap,
+/// not a re-weighting. The caller passes the slice AFTER any repository filter,
+/// so budgets apply to the already-filtered set.
+fn apply_lane_budgets<'a>(
+    items: &[&'a RetrievalResult],
+    shape: QueryShape,
+    limit: usize,
+) -> (Vec<&'a RetrievalResult>, Vec<String>) {
+    let (e_pct, c_pct, m_pct, o_pct) = shape.budgets();
+    // Floor of `limit * pct / 100`, with a minimum of 1 for any non-zero share
+    // so a small `limit` never zeroes a lane entirely (a single belief still
+    // survives a code query when room allows).
+    let cap_for = |pct: u32| -> usize {
+        let cap = limit * pct as usize / 100;
+        if pct > 0 { cap.max(1) } else { 0 }
+    };
+    let caps = [
+        (TargetBucket::Entity, cap_for(e_pct)),
+        (TargetBucket::Chunk, cap_for(c_pct)),
+        (TargetBucket::Memory, cap_for(m_pct)),
+        (TargetBucket::Other, cap_for(o_pct)),
+    ]
+    .into_iter()
+    .collect::<HashMap<_, _>>();
+
+    let mut counts: HashMap<TargetBucket, usize> = HashMap::new();
+    let mut dropped: HashMap<TargetBucket, usize> = HashMap::new();
+    let mut kept: Vec<&'a RetrievalResult> = Vec::with_capacity(items.len());
+    for item in items {
+        let bucket = target_bucket(&item.target_type);
+        let cap = caps[&bucket];
+        let count = counts.entry(bucket).or_insert(0);
+        if *count < cap {
+            *count += 1;
+            kept.push(*item);
+        } else {
+            *dropped.entry(bucket).or_insert(0) += 1;
+        }
+    }
+
+    // One note per lane that was trimmed, in a stable bucket order.
+    let notes = [
+        TargetBucket::Entity,
+        TargetBucket::Chunk,
+        TargetBucket::Memory,
+        TargetBucket::Other,
+    ]
+    .into_iter()
+    .filter_map(|b| {
+        dropped
+            .get(&b)
+            .map(|n| format!("\n... [{n} {} items capped by lane budget]", b.label()))
+    })
+    .collect();
+    (kept, notes)
+}
+
 /// `get_context`: compose a task-aware context packet for a focus (symbol, file,
 /// concept, or free-text). Fuses recall (docs + memories + beliefs) with the
 /// code neighborhood (callers/callees/community) — a pragmatic first version of
@@ -726,6 +925,12 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         .and_then(|v| v.as_str())
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.to_owned());
+
+    // Classify the query shape (Code / Mixed / Doc) from the focus so per-lane
+    // budgets can prioritize code evidence for code-shaped queries. Computed
+    // once here — used both to budget the [Recall] lanes and to label the
+    // output header (`query shape: Code`).
+    let shape = classify_query_shape(focus);
 
     // 1. Fused recall (docs + memories + beliefs matching the focus). The
     //    payload is retained alongside the rendered text so the top-scoring
@@ -760,8 +965,16 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             // lines) and TOTAL assembled size so `get_context` cannot bloat a
             // downstream prompt by tens of thousands of tokens. The `limit`
             // arg still bounds item COUNT; these caps bound character SIZE.
-            let taken: Vec<&engram_domain::RetrievalResult> =
+            //
+            // Lane budgets (GC-6): AFTER the repo filter, truncate to `limit`
+            // (defensive — recall should already respect it), then cap how many
+            // of each `RetrievalTargetType` survive into [Recall]. This keeps
+            // durable memory + docs from crowding out code evidence on a
+            // code-shaped query. The RRF fusion stays equal-weight; this is an
+            // output-assembly cap only.
+            let ranked: Vec<&engram_domain::RetrievalResult> =
                 payload.items.iter().take(limit as usize).collect();
+            let (taken, cap_notes) = apply_lane_budgets(&ranked, shape, limit as usize);
             let total = taken.len();
             let mut joined = String::new();
             let mut added = 0usize;
@@ -787,6 +1000,11 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
                 joined.push_str(&format!(
                     "\n... [budget reached, {omitted} more items omitted]"
                 ));
+            }
+            // Per-lane cap notes: one line per bucket trimmed by the lane
+            // budgets (distinct from the character-budget note above).
+            for note in &cap_notes {
+                joined.push_str(note);
             }
             (joined, payload.items)
         }
@@ -849,6 +1067,10 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         format!(" (anchor symbol: {anchor_symbol})")
     };
 
+    // Surface the detected query shape so a caller can see why the [Recall]
+    // lanes were budgeted the way they were.
+    let shape_note = format!(" (query shape: {})", shape.label());
+
     // When a repository filter is active and it removed EVERY result (no
     // recall text and no graph links), surface a diagnostic instead of a
     // silently empty packet. `[Code]` derives from the same filtered `rels` +
@@ -862,7 +1084,7 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     };
 
     Ok(protocol::text_content(format!(
-        "=== Context for '{focus}'{anchor_note} ===\n\n[Recall]\n{recall_text}\n\n[Graph]\n{graph_text}\n\n[Code]\n{code_ctx:?}{repo_note}"
+        "=== Context for '{focus}'{anchor_note}{shape_note} ===\n\n[Recall]\n{recall_text}\n\n[Graph]\n{graph_text}\n\n[Code]\n{code_ctx:?}{repo_note}"
     )))
 }
 
@@ -1125,5 +1347,168 @@ mod tests {
         };
         let diag = format_no_results_diag(0, 0, 0, &[failure]);
         assert!(diag.contains("errored: lexical (source_error)"), "{diag}");
+    }
+
+    // --- query-shape classification + lane budgets (GC-6) -------------------
+
+    /// Build a minimal `RetrievalResult` for lane-budget tests. Only
+    /// `target_type` and the id vary; everything else is fixture filler (the
+    /// budget logic reads `target_type` only).
+    fn recall_item(tt: RetrievalTargetType, id: &str) -> RetrievalResult {
+        use engram_domain::{
+            Actor, ActorKind, AllowedUse, Id, Policy, Provenance, Retention, RetrievalScore,
+            Visibility,
+        };
+        RetrievalResult {
+            id: id.to_owned(),
+            target_type: tt,
+            target_id: id.to_owned(),
+            content: format!("content-{id}"),
+            score: RetrievalScore {
+                total: 1.0,
+                relevance: None,
+                recency: None,
+                confidence: None,
+                cue_match: None,
+                hierarchical_fit: None,
+                policy_fit: None,
+            },
+            provenance: Provenance {
+                source: "test".to_owned(),
+                actor: Actor {
+                    id: Id::from("tester"),
+                    kind: ActorKind::Agent,
+                    display_name: None,
+                    metadata: None,
+                },
+                observed_at: chrono::Utc::now(),
+                evidence: Vec::new(),
+                derivations: Vec::new(),
+                confidence: None,
+                method: None,
+            },
+            policy: Policy {
+                visibility: Visibility::Workspace,
+                retention: Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: None,
+            },
+            explanation: None,
+            fusion_trace: None,
+            metadata: None,
+        }
+    }
+
+    #[test]
+    fn classify_doc_focus_when_no_code_signals() {
+        // No camelCase, no ALL_CAPS, no path, no keyword, no backticks → Doc.
+        assert_eq!(
+            classify_query_shape("What are the project principles?"),
+            QueryShape::Doc
+        );
+        assert_eq!(
+            classify_query_shape("summarize the design philosophy"),
+            QueryShape::Doc
+        );
+    }
+
+    #[test]
+    fn classify_mixed_focus_with_one_or_two_signals() {
+        // camelCase (vaultExplorer) + keyword (import) = 2 signals → Mixed.
+        assert_eq!(
+            classify_query_shape("How does vaultExplorer handle the import?"),
+            QueryShape::Mixed
+        );
+        // A single keyword alone = 1 signal → Mixed.
+        assert_eq!(
+            classify_query_shape("Explain the function of this layer"),
+            QueryShape::Mixed
+        );
+    }
+
+    #[test]
+    fn classify_code_focus_with_three_or_more_signals() {
+        // path (.rs) + camelCase (vaultExplorer) + keyword (struct) + backtick
+        // = 4 signals → Code.
+        assert_eq!(
+            classify_query_shape(
+                "In codegraph.rs, how does vaultExplorer struct work? See `RetrievalResult`"
+            ),
+            QueryShape::Code
+        );
+        // ALL_CAPS constant + keyword (struct) + file path (.rs) = 3 signals → Code.
+        assert_eq!(
+            classify_query_shape("Where is MAX_NEIGHBORHOOD_CAP set on the struct in src/lib.rs?"),
+            QueryShape::Code
+        );
+    }
+
+    #[test]
+    fn lane_budget_caps_memory_on_code_query() {
+        // limit = 24, Code shape → memory cap = floor(24 * 10 / 100) = 2.
+        // Five memory items ranked ahead of an entity → only the top 2 memory
+        // items survive; the rest are dropped with a cap note. The entity is
+        // unaffected (entity cap = 14).
+        let items = vec![
+            recall_item(RetrievalTargetType::Memory, "m1"),
+            recall_item(RetrievalTargetType::Memory, "m2"),
+            recall_item(RetrievalTargetType::Memory, "m3"),
+            recall_item(RetrievalTargetType::Memory, "m4"),
+            recall_item(RetrievalTargetType::Memory, "m5"),
+            recall_item(RetrievalTargetType::Entity, "e1"),
+        ];
+        let refs: Vec<&RetrievalResult> = items.iter().collect();
+        let (kept, notes) = apply_lane_budgets(&refs, QueryShape::Code, 24);
+
+        // Highest-ranked memory kept first, then the entity; rank order preserved.
+        let kept_ids: Vec<&str> = kept.iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(kept_ids, vec!["m1", "m2", "e1"]);
+
+        // Exactly one cap note, for the memory lane, reporting 3 dropped.
+        assert_eq!(notes.len(), 1, "notes: {notes:?}");
+        assert!(
+            notes[0].contains("3 memory items capped by lane budget"),
+            "{}",
+            notes[0]
+        );
+    }
+
+    #[test]
+    fn lane_budget_gives_memory_more_room_on_doc_query() {
+        // limit = 20, Doc shape → memory cap = floor(20 * 35 / 100) = 7.
+        // Five memory items all survive under the Doc budget (under Code they
+        // would cap at 2). No lanes trimmed → no notes.
+        let items = vec![
+            recall_item(RetrievalTargetType::Memory, "m1"),
+            recall_item(RetrievalTargetType::Memory, "m2"),
+            recall_item(RetrievalTargetType::Memory, "m3"),
+            recall_item(RetrievalTargetType::Memory, "m4"),
+            recall_item(RetrievalTargetType::Memory, "m5"),
+        ];
+        let refs: Vec<&RetrievalResult> = items.iter().collect();
+        let (kept, notes) = apply_lane_budgets(&refs, QueryShape::Doc, 20);
+        assert_eq!(kept.len(), 5, "all memory survives under Doc budget");
+        assert!(notes.is_empty(), "no lanes capped: {notes:?}");
+    }
+
+    #[test]
+    fn lane_budget_caps_other_lane_and_emits_note() {
+        // limit = 10, Mixed → other cap = max(floor(10 * 10 / 100), 1) = 1.
+        // Two beliefs (Other bucket) → one kept, one dropped, note for 'other'.
+        let items = vec![
+            recall_item(RetrievalTargetType::Belief, "b1"),
+            recall_item(RetrievalTargetType::Belief, "b2"),
+        ];
+        let refs: Vec<&RetrievalResult> = items.iter().collect();
+        let (kept, notes) = apply_lane_budgets(&refs, QueryShape::Mixed, 10);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(notes.len(), 1);
+        assert!(
+            notes[0].contains("1 other items capped by lane budget"),
+            "{}",
+            notes[0]
+        );
     }
 }

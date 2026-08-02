@@ -3,7 +3,7 @@
 - **Status:** Implementing <!-- Draft | Implementing | Shipped | Deferred -->
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
-- **Constrained by:** RFC-0018 (Accepted), ADR-0022 (engine grid / surface parity)
+- **Constrained by:** RFC-0018 (D1/D3), ADR-0022 (engine grid / surface parity). D2 superseded by RFC-0019.
 - **Brief:** none
 - **Contract:** none <!-- internal Rust API; no contracts/<type>/ surface -->
 - **Shape:** mixed <!-- core graph logic + MCP tool wiring -->
@@ -13,15 +13,9 @@
 
 ## Objective
 
-The code-intelligence tools return **correct, bounded, and honest** results. An
-agent debugging real code gets the few relevant symbols, not floods or silent
-empties: `symbol_context` / `change_impact` return a bounded neighborhood with a
-truncation signal instead of a transitive explosion through generic hub names;
-`search` returns ranked symbol hits for multi-term queries instead of "no
-results"; and the graph tools surface store/capability errors instead of
-masquerading them as empty graphs. The three fixes ship as three loops under
-this spec — **D1 (bounded traversal) is this loop**; D3 (honest `fetch_rels`)
-and D2 (BM25 `search` via a `LexicalSearch` facade trait) are subsequent loops.
+The code-intelligence tools return **correct, bounded, and honest** results. **D1 (bounded traversal) shipped** (PR #95): `symbol_context` / `change_impact` return a bounded neighborhood with a truncation signal. **D3 (honest `fetch_rels`)** remains: graph tools surface store/capability errors instead of silent empties.
+
+**D2 (search) + the hybrid-recall work (D2.1a/b/c) moved out** — they are repo-wide recall, not codegraph-scoped, and live under RFC-0019 / [`docs/specs/recall-fusion-config/`](../recall-fusion-config/spec.md).
 
 ## Boundaries
 
@@ -49,7 +43,7 @@ The three-tier guard that keeps an implementing agent inside the lines.
 
 - **D1 bounded-traversal logic — TDD.** Pure functions with compressible invariants (cap truncation, depth interaction, per-direction independence). Unit tests in `engram-graph-analytics` and `engram-codegraph-queries`. This is where the bound's correctness lives.
 - **D1 MCP wiring (depth defaults, `truncated` print) — goal-based check.** `cargo check --workspace` + `cargo test --workspace` green; the depth-default reduction verified by code, the bounded output proven through the bounded-variant unit tests the wiring calls. The MCP tool fns take `&App` and have no App-fixture harness, so the logic is tested at the layer below and the wiring is verified by build + grep.
-- **D3 / D2 — per their own loops** (D3: goal-based, behavior change in `fetch_rels`; D2: TDD on the `LexicalSearch` trait + goal-based on the MCP wiring).
+- **D3 — goal-based.** Behavior change in `fetch_rels` (propagate vs degrade). (D2 moved to recall-fusion-config.)
 
 ## Acceptance Criteria
 
@@ -61,13 +55,11 @@ D1 — bounded traversal (this loop):
 - [x] Existing `ancestors` / `descendants` / `symbol_context` / `blast_radius` public signatures are unchanged (additive only); the N-API binding builds unchanged.
 - [x] `symbol_context` and `change_impact` accept a `cap` arg (default 64) so a caller can widen the bound.
 
-D3 — honest `fetch_rels` (subsequent loop):
+> **D2 + D2.1a/b/c (hybrid recall fusion + externally configurable ranking) moved to [`recall-fusion-config`](../recall-fusion-config/spec.md) under RFC-0019.**
+
+D3 — honest `fetch_rels`:
 
 - [ ] `fetch_rels` propagates store errors and unwired-capability as `ToolError` in the five pure graph tools; `get_context` degrades with a `(graph unavailable: …)` note.
-
-D2 — BM25 `search` (subsequent loop):
-
-- [ ] MCP `search` returns ranked symbol hits for multi-term queries via the additive `LexicalSearch` facade trait; the whole-string `.contains()` loop is removed.
 
 ## Assumptions
 
@@ -77,4 +69,4 @@ D2 — BM25 `search` (subsequent loop):
 - Technical: gates are `cargo fmt --all` / `cargo check --workspace` / `cargo test` (AGENTS.md §Validation).
 - Process: full mode — public-API additions to published crates. Constrained by RFC-0018 (Accepted) + ADR-0022 (binding unchanged).
 - Process: `codegraph/queries` may depend only on `engram-domain` / `engram-graph-analytics` (AGENTS.md:156).
-- Product: visited cap = 64 per direction (calibrated: depth-1 `recall` = 38 < 64); this loop implements D1 only, order D1 → D3 → D2 (user confirmation 2026-08-01).
+- Product: D1 shipped (PR #95); D3 remains in this spec. D2 + D2.1a/b/c moved to `recall-fusion-config` under RFC-0019 (user confirmation 2026-08-01).

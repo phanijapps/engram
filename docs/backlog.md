@@ -353,3 +353,12 @@ Phase D (HTTP-MCP) v1 binds loopback (`127.0.0.1`) with the MCP SDK's
 no non-loopback path. The Objective's "networked/remote" framing is realized here:
 TLS termination, an auth layer, and a documented non-loopback bind before the
 server is exposed beyond the host.
+
+## pgvector-recall-fusion
+
+The `[recall_fusion]` config (RFC-0019 / `recall-fusion-config` spec) wires
+weighted fusion + reranker into the default SQLite `SqlUnifiedRecall`. The
+pgvector backend's `PgUnifiedRecall` (`backends/pgvector/src/recall.rs:59`) also
+hard-codes `ReciprocalRankFusion::default()` + `reranker=None`; threading the
+same config through it is deferred until pgvector is the active backend. Unblocks
+when pgvector moves out of recipe/preview into a deployed backend.

@@ -90,8 +90,12 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   becomes the pgvector host entry; `EngramProvider::open` stays engine-neutral
   (sqlite default) and rejects pgvector configs. Constrained by RFC-0017,
   ADR-0022. Shipped.
-- [`codegraph-retrieval-fixes`](codegraph-retrieval-fixes/spec.md): the three
-  easy/high-impact code-intel retrieval fixes from RFC-0018 — D1 bounded traversal
-  (additive `*_bounded` variants + lowered depth defaults + `truncated` signal),
-  D3 honest `fetch_rels`, D2 BM25 `search` via an additive `LexicalSearch` facade
-  trait. Three loops; D1 is first. Constrained by RFC-0018, ADR-0022. Implementing.
+- [`codegraph-retrieval-fixes`](codegraph-retrieval-fixes/spec.md): code-intel
+  tool fixes from RFC-0018 — D1 bounded traversal (shipped, PR #95) + D3 honest
+  `fetch_rels`. D2 + the hybrid-recall work moved to `recall-fusion-config`
+  (RFC-0019). Constrained by RFC-0018, ADR-0022. Implementing.
+- [`recall-fusion-config`](recall-fusion-config/spec.md): full hybrid recall
+  (vector + BM25 + RRF + reranking) with an externally configurable
+  `[recall_fusion]` contract (per-lane weights + reranker strategy), vector
+  opt-in, MMR + cross-encoder rerankers, and `search` via hybrid recall.
+  Supersedes RFC-0018 §6.2 + D2. Constrained by RFC-0019, ADR-0022. Draft.

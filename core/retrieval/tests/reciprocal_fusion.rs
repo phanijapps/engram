@@ -164,13 +164,15 @@ fn config_rejects_zero_k_and_negative_weight() {
 fn trace_reports_best_contributor_not_first_arriving() {
     // target X arrives from graph at rank 2 (first), then from vector at rank 1
     // (stronger). The trace must report the rank-1 contributor, not rank 2.
+    // Raw scores are distinct so the source_score assertion is meaningful:
+    // graph=0.41, vector=0.92 (the best contributor).
     let fused = ReciprocalRankFusion::default()
         .fuse(
             &request(None),
             vec![
-                result("graph-1", "A", 0.0, "graph"),   // graph rank 1
-                result("graph-2", "X", 0.0, "graph"),   // graph rank 2 (X first arrival)
-                result("vector-1", "X", 0.0, "vector"), // vector rank 1 (X, stronger)
+                result("graph-1", "A", 0.10, "graph"),   // graph rank 1
+                result("graph-2", "X", 0.41, "graph"),   // graph rank 2 (X first arrival)
+                result("vector-1", "X", 0.92, "vector"), // vector rank 1 (X, stronger)
             ],
         )
         .expect("fuse");
@@ -184,10 +186,40 @@ fn trace_reports_best_contributor_not_first_arriving() {
         Some(1),
         "trace rank = best (rank-1), not first (rank-2)"
     );
-    let expected_best = 1.0 / (60.0 + 1.0);
+    // source_score preserves the best contributor's RAW lane score (0.92 from
+    // vector), NOT the RRF contribution — so downstream renderers can show how
+    // strongly the lane matched on its own scale alongside the fused score.
     assert!(
-        (trace.source_score.unwrap_or(-1.0) - expected_best).abs() < 1e-9,
-        "trace score = best contribution"
+        (trace.source_score.unwrap_or(-1.0) - 0.92).abs() < 1e-9,
+        "trace source_score = best contributor raw score (0.92), got {:?}",
+        trace.source_score
+    );
+    // The fused RRF score is still the sum of contributions (independent of raw).
+    let expected_fused = 1.0 / (60.0 + 1.0) + 1.0 / (60.0 + 2.0);
+    assert!(
+        (trace.fusion_score.unwrap_or(-1.0) - expected_fused).abs() < 1e-9,
+        "fusion_score = sum of RRF contributions"
+    );
+}
+
+#[test]
+fn trace_source_score_falls_back_to_contribution_when_lane_unset() {
+    // When a source never sets a raw `source_score` pre-fusion (None), the
+    // fuser falls back to the best RRF contribution so the field is still
+    // populated (preserves the pre-raw-preservation observable behavior).
+    let mut cand = result("vector-1", "Y", 0.0, "vector");
+    // Strip the raw score the fixture set so the candidate carries None.
+    if let Some(t) = cand.fusion_trace.as_mut() {
+        t.source_score = None;
+    }
+    let fused = ReciprocalRankFusion::default()
+        .fuse(&request(None), vec![cand])
+        .expect("fuse");
+    let trace = fused[0].fusion_trace.as_ref().expect("trace");
+    let expected_contrib = 1.0 / (60.0 + 1.0);
+    assert!(
+        (trace.source_score.unwrap_or(-1.0) - expected_contrib).abs() < 1e-9,
+        "source_score falls back to best contribution when raw unset"
     );
 }
 

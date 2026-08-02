@@ -277,8 +277,10 @@ impl EngramConfig {
     ///   [`RecallFusionConfig::to_reciprocal_config`]).
     /// - `Err(message)` — the file exists but cannot be read, parsed, or
     ///   validated. The caller decides whether to abort or soft-fail; the MCP
-    ///   bootstrap soft-fails (logs + equal-weight) so a bad file never aborts
-    ///   boot, mirroring `scan.json`.
+    ///   bootstrap (`engram_mcp::bootstrap::open_provider`) treats `Err` as a
+    ///   boot error so a malformed operator config surfaces at startup rather
+    ///   than silently degrading to equal-weight recall. (An *absent* file is
+    ///   `Ok(None)`, never `Err`.)
     pub fn discover_recall_fusion(
         discovery_root: &Path,
     ) -> Result<Option<engram_retrieval::RecallFusionConfig>, String> {

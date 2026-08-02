@@ -1,6 +1,6 @@
 # Spec: recall-fusion-config
 
-- **Status:** Draft <!-- Draft | Implementing | Shipped | Deferred -->
+- **Status:** Shipped <!-- Draft | Implementing | Shipped | Deferred -->
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0019, ADR-0022 (engine neutrality)
@@ -43,22 +43,22 @@ Engram's unified recall is a **competent generic full-hybrid retriever**: vector
 
 D2.1a — external fusion config + weighted wiring + vector activation:
 
-- [ ] A serde `[recall_fusion]` config (`rrf_k`, `default_source_weight`, per-lane `source_weights`, `rerank`) loads from the launch profile and/or `.engram/recall.json`; validated; defaults to equal-weight RRF when absent. The schema lands at `contracts/v1/schemas/recall-fusion.schema.json`.
-- [ ] `SqlUnifiedRecall` honors the configured weights via weighted RRF (the `with_reranker` constructor takes the `ReciprocalFusionConfig`); no hard-coded `default()`.
-- [ ] Lane source tags are normalized to a stable vocabulary (`vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`) and documented as the weight keys.
-- [ ] The vector lane is activatable (opt-in `fastembed` build); when on, it contributes candidates fused at `source_weights["vector"]`; `capability_report` reflects it.
+- [x] A serde `[recall_fusion]` config (`rrf_k`, `default_source_weight`, per-lane `source_weights`, `rerank`) loads from the launch profile and/or `.engram/recall.json`; validated; defaults to equal-weight RRF when absent. The schema lands at `contracts/v1/schemas/recall-fusion.schema.json`. (Profile section + `.engram/recall.json` ladder landed in T1c; the MCP `open_provider` feeder landed with the review pass — `mcp/engram-mcp/src/bootstrap.rs` resolves `<storage_path>/.engram/recall.json` and applies `.with_recall_fusion`, surfacing a malformed file as a boot error. ADR-0026 records the contract.)
+- [x] `SqlUnifiedRecall` honors the configured weights via weighted RRF (the `with_reranker` constructor takes the `ReciprocalFusionConfig`); no hard-coded `default()`.
+- [x] Lane source tags are normalized to a stable vocabulary (`vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`) and documented as the weight keys. (Vocabulary surfaced as `engram_retrieval::KNOWN_LANE_TAGS`; `to_reciprocal_config` warns on keys outside it so a typo like `"vectors"` does not silently no-op.)
+- [x] The vector lane is activatable (opt-in `fastembed` build); when on, it contributes candidates fused at `source_weights["vector"]`; `capability_report` reflects it. (Verified under `--features fastembed`: vector lane + embedding provider wire on, `vectors_state = Supported`.)
 
 D2.1b — MMR diversity reranker:
 
-- [ ] An `MmrReranker` adapter (new `adapters/retrieval/mmr-rerank/`) implements `RetrievalReranker`, **injecting an `EmbeddingProvider`** to embed candidate texts (the port exposes no embeddings); selectable via `rerank.strategy = "mmr"` (+ `lambda`).
+- [x] An `MmrReranker` adapter (new `adapters/retrieval/mmr-rerank/`) implements `RetrievalReranker`, **injecting an `EmbeddingProvider`** to embed candidate texts (the port exposes no embeddings); selectable via `rerank.strategy = "mmr"` (+ `lambda`). (`lambda ∈ [0,1]` is now validated in `to_reciprocal_config`.)
 
 D2.1c — cross-encoder reranker wiring:
 
-- [ ] The existing `CrossEncoderRerankerAdapter` is wired behind a feature gate, selectable via `rerank.strategy = "cross_encoder"`.
+- [ ] The existing `CrossEncoderRerankerAdapter` is wired behind a feature gate, selectable via `rerank.strategy = "cross_encoder"`. (deferred: `cross-encoder-rerank`) — the dispatch recognition + warning landed (`select_cross_encoder` in `core/integration/src/sqlite/bootstrap.rs`), but `select_cross_encoder()` returns `None` today: no in-tree `RerankScorer` model is wired, so selecting `cross_encoder` warns + falls back rather than re-scoring. The backlog anchor `cross-encoder-rerank` (feature-gated real model) tracks the remaining model-integration work.
 
 D2 — search via full-hybrid recall:
 
-- [ ] MCP `search` returns ranked symbol hits for multi-term queries by routing through the (now-hybrid) recall with entity-id resolution; the whole-string `.contains()` loop is removed. A regression test (not a manual run) guards it.
+- [x] MCP `search` returns ranked symbol hits for multi-term queries by routing through the (now-hybrid) recall with entity-id resolution; the whole-string `.contains()` loop is removed. A regression test (not a manual run) guards it.
 
 ## Assumptions
 

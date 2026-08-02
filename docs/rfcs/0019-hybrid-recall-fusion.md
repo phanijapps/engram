@@ -6,7 +6,7 @@
 - **Date opened:** 2026-08-01
 - **Date closed:**
 - **Decision weight:** standard
-- **Related:** supersedes RFC-0018 §"Why BM25 not vector+reranking?" + its D2; ADR-0022 (engine neutrality); ADR for the `[recall_fusion]` config contract (to be filed). Evidence: the zbot-vs-engram recall gap analysis (in-session; summarized in `docs/specs/recall-fusion-config/plan.md`).
+- **Related:** supersedes RFC-0018 §"Why BM25 not vector+reranking?" + its D2; ADR-0022 (engine neutrality); [ADR-0026](../adr/0026-recall-fusion-config-contract.md) (the `[recall_fusion]` config contract). Evidence: the zbot-vs-engram recall gap analysis (in-session; summarized in `docs/specs/recall-fusion-config/plan.md`).
 
 ## Reviewer brief
 
@@ -80,5 +80,5 @@ Cascade per decision (see `docs/specs/recall-fusion-config/plan.md` for the task
 ## Follow-on artifacts
 
 - Spec: `docs/specs/recall-fusion-config/` (D2.1a/b/c + reframed D2).
-- ADR: the `[recall_fusion]` config contract (filed when the schema lands).
+- ADR: [ADR-0026](../adr/0026-recall-fusion-config-contract.md) — the `[recall_fusion]` config contract (filed).
 - Erratum on RFC-0018 recording that its §6.2 deferral + D2 are superseded by this RFC.

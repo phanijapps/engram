@@ -1,6 +1,6 @@
 # Spec: codegraph-retrieval-fixes
 
-- **Status:** Implementing <!-- Draft | Implementing | Shipped | Deferred -->
+- **Status:** Shipped <!-- Draft | Implementing | Shipped | Deferred -->
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0018 (D1/D3), ADR-0022 (engine grid / surface parity). D2 superseded by RFC-0019.
@@ -59,7 +59,7 @@ D1 — bounded traversal (this loop):
 
 D3 — honest `fetch_rels`:
 
-- [ ] `fetch_rels` propagates store errors and unwired-capability as `ToolError` in the five pure graph tools; `get_context` degrades with a `(graph unavailable: …)` note.
+- [x] `fetch_rels` propagates store errors and unwired-capability as `ToolError` in the pure graph tools (`symbol_context`/`change_impact`/`code_health`/`architecture`/`whats_changed` + `graph_neighbors`/`graph_subgraph`/`hierarchy_build`); `get_context` degrades with a `(graph unavailable: …)` note.
 
 ## Assumptions
 

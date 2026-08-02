@@ -29,7 +29,7 @@ pub fn hierarchy_build(app: &App, args: &Value) -> Result<Value, ToolError> {
     let max_passes = args["max_passes"].as_u64().unwrap_or(3) as usize;
     let query = app.provider.require_knowledge_query().map_err(internal)?;
     let entities = block_on(query.list_entities(&app.scope)).unwrap_or_default();
-    let rels = fetch_rels(app);
+    let rels = fetch_rels(app)?;
     if rels.is_empty() {
         return Ok(protocol::text_content(
             "No relationships in scope — scan_repo first, then build the hierarchy.",

@@ -38,7 +38,7 @@ pub fn graph_neighbors(app: &App, args: &Value) -> Result<Value, ToolError> {
         .map(|n| n as usize)
         .unwrap_or(100)
         .clamp(1, 1000);
-    let rels = fetch_rels(app);
+    let rels = fetch_rels(app)?;
     let mut edges: Vec<String> = Vec::new();
     for r in &rels {
         let (Some(s), Some(o)) = (r.subject.name.as_deref(), r.object.name.as_deref()) else {
@@ -76,7 +76,7 @@ pub fn graph_subgraph(app: &App, args: &Value) -> Result<Value, ToolError> {
         .map(|n| n as usize)
         .unwrap_or(100)
         .clamp(1, 1000);
-    let rels = fetch_rels(app);
+    let rels = fetch_rels(app)?;
 
     // Adjacency: node -> [(neighbor, predicate, node_is_subject)]. Both
     // directions are added so BFS can traverse into a node via an incoming edge,

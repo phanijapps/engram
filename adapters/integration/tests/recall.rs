@@ -656,3 +656,184 @@ fn facts_lane_source_failures_and_omitted_merge_into_outer_payload() {
         "facts-lane candidate should be in the fused payload"
     );
 }
+
+// ---- RFC-0019 T1d: weighted fusion reorders recall ---------------------
+
+#[test]
+fn weighted_fusion_reorders_candidates_vs_equal_weight_default() {
+    // A weighted `RecallFusionConfig` biases vector over lexical at equal
+    // source_rank, reordering the fused output versus the equal-weight default.
+    // Proves the lane source tags (T1b) + weighted config (T1a) +
+    // `SqlUnifiedRecall` wiring (T1d) work end-to-end.
+    use engram_retrieval::RecallFusionConfig;
+    use std::collections::BTreeMap;
+
+    // Two stub lanes, each contributing one candidate at source_rank 1. The
+    // target_ids are chosen so that on an equal-weight tie RRF's secondary sort
+    // (target_id ascending) places lexical first ("l" < "v"); the weighted
+    // config (vector=0.7 > lexical=0.3) must flip that ordering.
+    let vector_lane = || {
+        Arc::new(StubLane {
+            results: vec![lane_candidate("vector-weighted", "vector")],
+            fail: false,
+        })
+    };
+    let lexical_lane = || {
+        Arc::new(StubLane {
+            results: vec![lane_candidate("lexical-weighted", "lexical")],
+            fail: false,
+        })
+    };
+
+    let empty_payload = ContextPayload {
+        items: Vec::new(),
+        budget: None,
+        omitted: Vec::new(),
+        source_failures: Vec::new(),
+        created_at: chrono::Utc::now(),
+    };
+    let beliefs = Arc::new(SqlBeliefStore::open_in_memory().expect("beliefs open"));
+
+    // (1) Equal-weight default (new()): both candidates score 1.0/(60+1), tie,
+    // and RRF breaks the tie by target_id ascending -> lexical first.
+    let recall_default = SqlUnifiedRecall::new(
+        Arc::new(StubMemory::new(empty_payload.clone())),
+        vec![vector_lane(), lexical_lane()],
+        beliefs.clone(),
+    );
+    let default_out =
+        block_on(recall_default.recall(request("weighted-fusion"))).expect("recall default");
+    let default_order: Vec<String> = default_out
+        .items
+        .iter()
+        .map(|i| i.target_id.clone())
+        .collect();
+    assert_eq!(
+        default_order.len(),
+        2,
+        "exactly two candidates (vector + lexical) expected: {default_order:?}"
+    );
+    assert_eq!(
+        default_order[0], "lexical-weighted",
+        "equal-weight default must tie-break lexical first (target_id ascending): {default_order:?}"
+    );
+
+    // (2) Weighted (vector=0.7, lexical=0.3) via with_reranker: vector's RRF
+    // contribution 0.7/(60+1) > lexical's 0.3/(60+1), so vector ranks first.
+    let mut weights = BTreeMap::new();
+    weights.insert("vector".to_string(), 0.7_f32);
+    weights.insert("lexical".to_string(), 0.3_f32);
+    let weighted_fusion = RecallFusionConfig {
+        rrf_k: 60,
+        default_source_weight: 1.0,
+        source_weights: weights,
+        rerank: None,
+    }
+    .to_reciprocal_config()
+    .expect("weighted config validates");
+
+    let recall_weighted = SqlUnifiedRecall::with_reranker(
+        Arc::new(StubMemory::new(empty_payload)),
+        vec![vector_lane(), lexical_lane()],
+        beliefs,
+        weighted_fusion,
+        None,
+    );
+    let weighted_out =
+        block_on(recall_weighted.recall(request("weighted-fusion"))).expect("recall weighted");
+    let weighted_order: Vec<String> = weighted_out
+        .items
+        .iter()
+        .map(|i| i.target_id.clone())
+        .collect();
+    assert_eq!(
+        weighted_order.len(),
+        2,
+        "exactly two candidates expected after weighting: {weighted_order:?}"
+    );
+    assert_eq!(
+        weighted_order[0], "vector-weighted",
+        "weighted config (vector=0.7) must rank vector first: {weighted_order:?}"
+    );
+
+    // The fusion_score actually reflects the weighting (vector > lexical), not
+    // just the tie-break.
+    let vector_score = weighted_out
+        .items
+        .iter()
+        .find(|i| i.target_id == "vector-weighted")
+        .and_then(|i| i.fusion_trace.as_ref())
+        .and_then(|t| t.fusion_score)
+        .expect("vector has a fusion_score");
+    let lexical_score = weighted_out
+        .items
+        .iter()
+        .find(|i| i.target_id == "lexical-weighted")
+        .and_then(|i| i.fusion_trace.as_ref())
+        .and_then(|t| t.fusion_score)
+        .expect("lexical has a fusion_score");
+    assert!(
+        vector_score > lexical_score,
+        "vector fusion_score {vector_score} must exceed lexical {lexical_score}"
+    );
+}
+
+#[test]
+fn zero_weight_keeps_candidate_visible_but_scoreless() {
+    // RFC-0019: a zero weight keeps a source visible (the candidate still
+    // appears) while contributing nothing to its fused score — the documented
+    // zero-weight semantics. A vector candidate at rank 1 with weight 0 fuses
+    // to a 0 contribution; a lexical candidate with the default weight (1.0)
+    // outranks it.
+    use engram_retrieval::RecallFusionConfig;
+    use std::collections::BTreeMap;
+
+    let empty_payload = ContextPayload {
+        items: Vec::new(),
+        budget: None,
+        omitted: Vec::new(),
+        source_failures: Vec::new(),
+        created_at: chrono::Utc::now(),
+    };
+    let beliefs = Arc::new(SqlBeliefStore::open_in_memory().expect("beliefs open"));
+
+    let mut weights = BTreeMap::new();
+    weights.insert("vector".to_string(), 0.0_f32); // vector silenced
+    let fusion = RecallFusionConfig {
+        rrf_k: 60,
+        default_source_weight: 1.0,
+        source_weights: weights,
+        rerank: None,
+    }
+    .to_reciprocal_config()
+    .expect("zero weight validates");
+
+    let recall = SqlUnifiedRecall::with_reranker(
+        Arc::new(StubMemory::new(empty_payload)),
+        vec![
+            Arc::new(StubLane {
+                results: vec![lane_candidate("vector-zero", "vector")],
+                fail: false,
+            }),
+            Arc::new(StubLane {
+                results: vec![lane_candidate("lexical-zero", "lexical")],
+                fail: false,
+            }),
+        ],
+        beliefs,
+        fusion,
+        None,
+    );
+    let out = block_on(recall.recall(request("zero-weight"))).expect("recall");
+    let order: Vec<String> = out.items.iter().map(|i| i.target_id.clone()).collect();
+    // The vector candidate is still present (zero weight keeps it visible)...
+    assert!(
+        order.iter().any(|t| t == "vector-zero"),
+        "zero-weight vector candidate must remain visible: {order:?}"
+    );
+    // ...but lexical (weight 1.0) outranks it.
+    assert_eq!(
+        order[0], "lexical-zero",
+        "lexical (weight 1.0) must outrank vector (weight 0): {order:?}"
+    );
+}

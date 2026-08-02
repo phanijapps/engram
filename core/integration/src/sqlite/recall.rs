@@ -40,7 +40,9 @@ use engram_domain::{
 };
 use engram_memory::MemoryService;
 use engram_retrieval::compose_context;
-use engram_retrieval::{ReciprocalRankFusion, RetrievalCompositionInput, RetrievalIndex};
+use engram_retrieval::{
+    ReciprocalFusionConfig, ReciprocalRankFusion, RetrievalCompositionInput, RetrievalIndex,
+};
 use engram_runtime::{CoreError, CoreResult};
 
 use crate::UnifiedRecall;
@@ -56,36 +58,56 @@ const FACTS_LANE: &str = "facts";
 ///
 /// Construct with [`SqlUnifiedRecall::new`] from the memory handle, the
 /// retrieval lanes, and the beliefs handle. The recall is stateless after
-/// construction; each `recall` runs the lanes independently.
+/// construction; each `recall` runs the lanes independently. Use
+/// [`SqlUnifiedRecall::with_reranker`] to inject an externally-configured
+/// weighted-RRF fusion (RFC-0019) and/or a reranker.
 pub struct SqlUnifiedRecall {
     memory: Arc<dyn MemoryService>,
     retrieval_lanes: Vec<Arc<dyn RetrievalIndex>>,
     beliefs: Arc<dyn BeliefRepository>,
+    /// Weighted-RRF fusion config (RFC-0019). Built from the operator-facing
+    /// [`engram_retrieval::RecallFusionConfig`] by the bootstrap; `default()`
+    /// (equal-weight) when no config is supplied.
+    fusion: ReciprocalFusionConfig,
     reranker: Option<Arc<dyn engram_retrieval::RetrievalReranker>>,
 }
 
 impl SqlUnifiedRecall {
     /// Wraps the memory + retrieval-lane + beliefs handles to expose unified recall.
+    ///
+    /// Fuses with equal-weight RRF ([`ReciprocalFusionConfig::default`]); pass a
+    /// configured fusion via [`Self::with_reranker`] to honor an external
+    /// `[recall_fusion]` config (RFC-0019).
     pub fn new(
         memory: Arc<dyn MemoryService>,
         retrieval_lanes: Vec<Arc<dyn RetrievalIndex>>,
         beliefs: Arc<dyn BeliefRepository>,
     ) -> Self {
-        Self::with_reranker(memory, retrieval_lanes, beliefs, None)
+        Self::with_reranker(
+            memory,
+            retrieval_lanes,
+            beliefs,
+            ReciprocalFusionConfig::default(),
+            None,
+        )
     }
 
-    /// Like [`new`] but with an optional cross-encoder reranker wired into
-    /// `compose_context` between fusion and budget.
+    /// Like [`new`] but with an externally-configured weighted-RRF `fusion`
+    /// (RFC-0019) and an optional reranker wired into `compose_context` between
+    /// fusion and budget. Passing [`ReciprocalFusionConfig::default`] reproduces
+    /// [`new`]'s equal-weight behavior.
     pub fn with_reranker(
         memory: Arc<dyn MemoryService>,
         retrieval_lanes: Vec<Arc<dyn RetrievalIndex>>,
         beliefs: Arc<dyn BeliefRepository>,
+        fusion: ReciprocalFusionConfig,
         reranker: Option<Arc<dyn engram_retrieval::RetrievalReranker>>,
     ) -> Self {
         Self {
             memory,
             retrieval_lanes,
             beliefs,
+            fusion,
             reranker,
         }
     }
@@ -138,11 +160,14 @@ impl UnifiedRecall for SqlUnifiedRecall {
         }
 
         // ---- Fuse + compose via the existing RRF + compose_context -----------
+        // The fusion carries the operator-facing weighted-RRF config (RFC-0019):
+        // `ReciprocalFusionConfig::default()` (equal-weight) when no config is
+        // supplied, or the configured `source_weights`/`k` otherwise.
         // compose_context disables request-level fusion truncation (keeps all
         // candidates) so there is no double-budget against the facts lane.
         compose_context(RetrievalCompositionInput {
             request: &request,
-            fusion: &ReciprocalRankFusion::default(),
+            fusion: &ReciprocalRankFusion::new(self.fusion.clone()),
             reranker: self.reranker.as_deref(),
             candidates,
             omitted,

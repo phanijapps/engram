@@ -69,7 +69,7 @@ fn vector_retrieval_returns_nearest_rehydrated_candidates() {
     assert_eq!(results[0].target_type, RetrievalTargetType::Chunk);
     assert!(results[0].score.total > results[1].score.total);
     let trace = results[0].fusion_trace.as_ref().expect("fusion trace");
-    assert_eq!(trace.source, "vector.semantic");
+    assert_eq!(trace.source, "vector");
     assert_eq!(trace.source_rank, Some(1));
     assert_eq!(trace.fusion_strategy, Some(FusionStrategy::None));
 }

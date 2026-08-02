@@ -398,10 +398,27 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     if let (Some(memory_handle), Some(belief_handle)) = (&memory_store, &belief_store)
         && conformance::recall_ok()
     {
-        let unified = SqlUnifiedRecall::new(
+        // RFC-0019: build the weighted-RRF fusion config from the operator-facing
+        // `recall_fusion` config (`[recall_fusion]` profile section or
+        // `.engram/recall.json`); fall back to equal-weight default when absent.
+        // Validation already ran at load, so `to_reciprocal_config()` only
+        // errors if the config was constructed directly with bad weights —
+        // surfaced as a typed boot error rather than a silent degrade. Reranker
+        // stays None here (T3/T4 wire MMR/cross-encoder on `rerank.strategy`).
+        let fusion = match config.recall_fusion.as_ref() {
+            Some(cfg) => cfg
+                .to_reciprocal_config()
+                .map_err(|e| CoreError::InvalidRequest {
+                    reason: format!("invalid recall_fusion config: {e}"),
+                })?,
+            None => engram_retrieval::ReciprocalFusionConfig::default(),
+        };
+        let unified = SqlUnifiedRecall::with_reranker(
             memory_handle.clone(),
             retrieval_lanes,
             belief_handle.clone(),
+            fusion,
+            None,
         );
         recall = Some(Arc::new(unified));
         unified_recall_state = CapabilityState::Supported;

@@ -41,4 +41,6 @@ pub use migration_service::SqlMigrationService;
 pub use observability::SqlObservability;
 pub use provenance::SqlProvenanceQuery;
 pub use recall::SqlUnifiedRecall;
-pub use recall_lanes::{associative_recall_lane, community_summary_recall_lane};
+pub use recall_lanes::{
+    associative_recall_lane, community_summary_recall_lane, lexical_recall_lane,
+};

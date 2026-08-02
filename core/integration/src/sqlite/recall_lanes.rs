@@ -28,15 +28,18 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use engram_domain::{
-    ChunkId, KnowledgeChunk, KnowledgeEntity, KnowledgeRelationship, RetrievalRequest,
-    RetrievalTargetType, Scope,
+    AllowedUse, ChunkId, DeleteMode, EntityId, KnowledgeChunk, KnowledgeEntity,
+    KnowledgeRelationship, Policy, Retention, RetrievalRequest, RetrievalTargetType, Scope,
+    Sensitivity, Visibility,
 };
 use engram_knowledge::KnowledgeRepository;
 use engram_retrieval::RetrievalIndex;
 use engram_runtime::CoreResult;
 use engram_store_associative_graph::{AssociativeGraphIndex, GraphRelationshipSource};
 use engram_store_community_summary::CommunitySummaryIndex;
-use engram_store_lexical::{LexicalResolvedTarget, LexicalTargetResolver};
+use engram_store_lexical::{
+    LexicalIndex, LexicalResolvedTarget, LexicalRetrievalIndex, LexicalTargetResolver,
+};
 use engram_store_sqlite::SqlKnowledgeStore;
 #[cfg(feature = "fastembed")]
 use engram_store_sqlite::{VectorResolvedTarget, VectorSearchResult, VectorTargetResolver};
@@ -80,6 +83,26 @@ pub fn community_summary_recall_lane(store: Arc<SqlKnowledgeStore>) -> Arc<dyn R
     )))
 }
 
+/// Builds the lexical (BM25) retrieval lane over a shared Tantivy index + the
+/// knowledge store's entity-aware target resolver. Exposed `pub` (mirrors
+/// [`associative_recall_lane`] / [`community_summary_recall_lane`]) so the
+/// conformance tests construct the lane directly over a seeded store — the
+/// production bootstrap wiring and the tests exercise the same constructor.
+///
+/// The lexical index is shared by-value (`Arc`) so a `LexicalFeed` (writes) and
+/// this lane (reads) operate over one in-RAM Tantivy index — exactly how
+/// `scan_repo` feeds code-symbol names that this lane then ranks.
+pub fn lexical_recall_lane(
+    store: Arc<SqlKnowledgeStore>,
+    lexical_index: Arc<LexicalIndex>,
+) -> Arc<dyn RetrievalIndex> {
+    let resolver = KnowledgeLexicalResolver::new(store);
+    Arc::new(LexicalRetrievalIndex::from_arc(
+        lexical_index,
+        Arc::new(resolver),
+    ))
+}
+
 /// Lexical-lane target resolver backed by the knowledge store: rehydrates a
 /// BM25 hit's chunk id into its canonical `KnowledgeChunk`.
 pub(crate) struct KnowledgeLexicalResolver {
@@ -100,9 +123,26 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
         target_id: &str,
         request: &RetrievalRequest,
     ) -> CoreResult<Option<LexicalResolvedTarget>> {
-        let id = ChunkId::from(target_id);
-        let chunk = self.store.get_chunk(&id, &request.scope).await?;
-        Ok(chunk.map(chunk_to_lexical))
+        // (1) Chunk resolution — the common case for docs/memories. Preserves
+        // the prior behavior exactly: a chunk-id hit rehydrates its canonical
+        // `KnowledgeChunk`.
+        let chunk_id = ChunkId::from(target_id);
+        if let Some(chunk) = self.store.get_chunk(&chunk_id, &request.scope).await? {
+            return Ok(Some(chunk_to_lexical(chunk)));
+        }
+        // (2) Entity resolution — code symbols. `scan_repo` feeds the lexical
+        // index keyed by *entity id* (one entry per code symbol, text
+        // `"{name} {kind}"`), so a BM25 hit on an entity id must resolve to its
+        // entity. Before this branch such hits resolved to `Ok(None)` and were
+        // silently dropped by the lane (`let Some(..) else continue`), so
+        // multi-term symbol queries returned nothing. Trying chunk-first keeps
+        // chunk resolution unchanged; the entity branch is purely additive —
+        // entity ids that previously dropped now resolve instead.
+        let entity_id = EntityId::from(target_id);
+        if let Some(entity) = self.store.get_entity(&entity_id, &request.scope).await? {
+            return Ok(Some(entity_to_lexical(entity)));
+        }
+        Ok(None)
     }
 }
 
@@ -160,6 +200,37 @@ fn chunk_to_lexical(chunk: KnowledgeChunk) -> LexicalResolvedTarget {
         policy: chunk.policy,
         explanation: None,
         metadata: chunk.metadata,
+    }
+}
+
+/// Shapes a resolved entity as a lexical-lane retrieval target (code symbols).
+/// The content mirrors what `scan_repo` indexed (`"{name} {kind:?}"`) so the
+/// lane's hit text stays consistent with the indexed document.
+fn entity_to_lexical(entity: KnowledgeEntity) -> LexicalResolvedTarget {
+    LexicalResolvedTarget {
+        target_type: RetrievalTargetType::Entity,
+        target_id: entity.id.to_string(),
+        content: format!("{} {:?}", entity.name, entity.kind),
+        provenance: entity.provenance,
+        // `KnowledgeEntity` carries no policy field; code symbols index
+        // workspace-visible + durable + retrieval-allowed, mirroring the policy
+        // the graph / associative-graph lanes assign their entity candidates.
+        policy: entity_symbol_policy(),
+        explanation: None,
+        metadata: entity.metadata,
+    }
+}
+
+/// Default retrieval policy for indexed code-symbol entities (entities carry no
+/// policy field). Mirrors the graph / associative-graph lanes' entity policy.
+fn entity_symbol_policy() -> Policy {
+    Policy {
+        visibility: Visibility::Workspace,
+        retention: Retention::Durable,
+        sensitivity: Some(Sensitivity::Low),
+        allowed_uses: vec![AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: Some(DeleteMode::Tombstone),
     }
 }
 

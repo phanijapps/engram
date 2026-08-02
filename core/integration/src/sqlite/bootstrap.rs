@@ -313,15 +313,14 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         ));
         // Lexical lane: an in-RAM Tantivy index shared with the lexical feed —
         // `scan_repo` feeds code-symbol names via the `LexicalFeed` handle so
-        // keyword `search`/`recall` return them.
+        // keyword `search`/`recall` return them. The lane's target resolver is
+        // entity-aware (it resolves entity-id BM25 hits to their code symbol),
+        // so multi-term symbol queries return ranked hits through unified recall.
         if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::new() {
             let lexical_index = Arc::new(lexical_index);
-            let resolver = recall_lanes::KnowledgeLexicalResolver::new(knowledge_handle.clone());
-            retrieval_lanes.push(Arc::new(
-                engram_store_lexical::LexicalRetrievalIndex::from_arc(
-                    lexical_index.clone(),
-                    Arc::new(resolver),
-                ),
+            retrieval_lanes.push(recall_lanes::lexical_recall_lane(
+                knowledge_handle.clone(),
+                lexical_index.clone(),
             ));
             lexical_feed = Some(Arc::new(crate::sqlite::lexical_feed::SqlLexicalFeed::new(
                 lexical_index,

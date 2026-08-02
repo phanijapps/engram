@@ -4,7 +4,9 @@
 //! `scan_repo` uses a fan-in adapter so treesitter ingestion routes through
 //! the provider's handles (no engine-store bypass).
 
-use engram_domain::{KnowledgeRelationship, RetrievalRequest};
+use engram_domain::{
+    KnowledgeEntity, KnowledgeRelationship, RetrievalRequest, RetrievalTargetType,
+};
 use engram_ingest::{
     KnowledgeRepoGraph, ScanFilter, ScanFilterConfig, ScanOptions, scan_repository,
 };
@@ -16,7 +18,7 @@ use std::path::Path;
 use crate::app::App;
 use crate::protocol;
 use crate::registry::ToolError;
-use crate::tools::{internal, policy, req_str, system_actor};
+use crate::tools::{internal, policy, req_str, requester, system_actor};
 
 /// Default per-direction visited cap for bounded code-graph neighborhoods. The
 /// depth defaults (`symbol_context`=1, `change_impact`=2) are the primary flood
@@ -172,11 +174,20 @@ pub(crate) fn fetch_rels(app: &App) -> Vec<KnowledgeRelationship> {
         .unwrap_or_default()
 }
 
-/// `search`: keyword search over indexed code symbols by entity name/kind.
-/// Uses `KnowledgeQuery` directly (list entities, filter by substring) — no
-/// dependency on the lexical resolver (which is chunk-based; entity-ID hits
-/// would be dropped). The `LexicalFeed` remains wired for future BM25 ranking
-/// once an entity-id resolver lane is added.
+/// `search`: ranked code-symbol search over indexed entities.
+///
+/// Routes through the unified (hybrid) recall — lexical (BM25) + graph +
+/// associative-graph + community-summary lanes fuse over weighted RRF — so
+/// multi-term and natural-language queries (e.g. `"reciprocal rank fusion"`)
+/// return ranked symbol hits. The lexical lane resolves entity-id BM25 hits to
+/// their code symbol (the resolver is entity-aware), so symbols indexed by
+/// `scan_repo` are reachable. Replaces the prior whole-string `.contains()`
+/// loop, which missed any query that was not a verbatim substring of
+/// `"{name} {kind}"` (the §6.3 defect: `search "reciprocal rank fusion"` →
+/// "No results").
+///
+/// Backward compatible: when recall is unavailable, search degrades to the
+/// direct entity-list scan (the old path) rather than erroring.
 pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
     let query = req_str(args, "query")?;
     let limit = args["limit"]
@@ -184,24 +195,89 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
         .map(|n| n as usize)
         .unwrap_or(10)
         .clamp(1, 100);
-    let knowledge_query = app.provider.require_knowledge_query().map_err(internal)?;
+
+    // Prefer the hybrid-recall path. Each recall item carries the fused rank;
+    // entity (code-symbol) hits are kept and rendered as `name (kind)`.
+    let hits: Vec<String> = match app.provider.require_recall() {
+        Ok(handle) => {
+            let request = RetrievalRequest {
+                query: query.to_owned(),
+                scope: app.scope.clone(),
+                requester: requester(),
+                modes: Vec::new(),
+                filters: None,
+                cues: Vec::new(),
+                limit: Some(limit as u32),
+                budget: None,
+                include_explanations: Some(true),
+            };
+            let payload = block_on(handle.recall(request)).map_err(internal)?;
+            // Resolve target_ids back to entities for a consistent `name (kind)`
+            // rendering regardless of which lane produced the hit (lexical
+            // content = "name Kind"; graph content = name). Falls back to the
+            // item's resolved content if the entity is no longer present.
+            let by_id = entity_lookup(app);
+            payload
+                .items
+                .iter()
+                .filter(|i| i.target_type == RetrievalTargetType::Entity)
+                .filter_map(|i| match by_id.get(&i.target_id) {
+                    Some(e) => Some(format!("{} ({:?})", e.name, e.kind)),
+                    None if !i.content.is_empty() => Some(i.content.clone()),
+                    None => None,
+                })
+                .take(limit)
+                .collect()
+        }
+        Err(_) => {
+            // Degrade to a direct scan when recall is not wired (e.g. a
+            // capability-check failure) so search still works without hybrid.
+            substring_symbol_scan(app, query, limit)
+        }
+    };
+
+    let body = if hits.is_empty() {
+        "No results.".to_owned()
+    } else {
+        hits.join("\n")
+    };
+    Ok(protocol::text_content(body))
+}
+
+/// Builds an `entity_id → KnowledgeEntity` lookup over the project scope for
+/// consistent symbol rendering. Empty when the knowledge-query capability is
+/// unavailable (callers fall back to recall item content).
+fn entity_lookup(app: &App) -> HashMap<String, KnowledgeEntity> {
+    app.provider
+        .require_knowledge_query()
+        .ok()
+        .and_then(|q| block_on(q.list_entities(&app.scope)).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|e| (e.id.to_string(), e))
+        .collect()
+}
+
+/// Fallback symbol scan (the pre-hybrid path): lists entities and keeps those
+/// whose `"{name} {kind}"` contains the query as a substring. Used only when
+/// unified recall is unavailable.
+fn substring_symbol_scan(app: &App, query: &str, limit: usize) -> Vec<String> {
+    let knowledge_query = match app.provider.require_knowledge_query() {
+        Ok(q) => q,
+        Err(_) => return Vec::new(),
+    };
     let entities = block_on(knowledge_query.list_entities(&app.scope)).unwrap_or_default();
     let needle = query.to_lowercase();
-    let matches: Vec<String> = entities
+    entities
         .iter()
         .filter(|e| {
-            let haystack = format!("{} {:?}", e.name, e.kind).to_lowercase();
-            haystack.contains(&needle)
+            format!("{} {:?}", e.name, e.kind)
+                .to_lowercase()
+                .contains(&needle)
         })
         .take(limit)
         .map(|e| format!("{} ({:?})", e.name, e.kind))
-        .collect();
-    let body = if matches.is_empty() {
-        "No results.".to_owned()
-    } else {
-        matches.join("\n")
-    };
-    Ok(protocol::text_content(body))
+        .collect()
 }
 
 /// `symbol_context`: callers, callees, and community for one symbol.

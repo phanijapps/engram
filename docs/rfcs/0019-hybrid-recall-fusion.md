@@ -12,7 +12,7 @@
 
 - **Decision:** Approve making engram's unified recall a full hybrid retriever — vector + BM25 + RRF + reranking — with **externally configurable fusion weights and reranker strategy**, and formally retract RFC-0018's deferral of this work.
 - **Recommended outcome:** accept.
-- **Change if accepted:** a `[recall_fusion]` config contract (RRF `k`, per-lane `source_weights`, `rerank` strategy); lane source-tag normalization; `SqlUnifiedRecall` honors configured weights; an `MmrReranker` adapter; cross-encoder wiring; MCP `search` routes through hybrid recall. Vector stays an opt-in build feature.
+- **Change if accepted:** a `[recall_fusion]` config contract (RRF `k`, per-lane `source_weights`, `rerank` strategy); lane source-tag normalization; `SqlUnifiedRecall` honors configured weights; an `MmrReranker` adapter; cross-encoder wiring; MCP `search` routes through hybrid recall. Vector is **default-on for the MCP** (D3 reversed: operators get a working vector lane out-of-the-box) with a runtime `--no-vector` disable and a build-time `--no-default-features` disable.
 - **Affected surface:** `engram-retrieval` (config types), `engram-integration` (`EngramConfig` + `SqlUnifiedRecall` + bootstrap), new `adapters/retrieval/mmr-rerank`, `engram-mcp` (search), `contracts/v1/schemas/recall-fusion.schema.json`. Engine-neutral; no storage/domain change.
 - **Stakes:** reversible (config-driven; absent config ⇒ today's behavior) except the lane-tag normalization (a one-time rename consumed by traces/tests).
 - **Review focus:** (1) the lane-tag normalization is real work, not wiring — does the chosen vocabulary hold? (2) MMR via an injected `EmbeddingProvider` (not the `RetrievalReranker` port) — is the cost acceptable?
@@ -33,7 +33,7 @@
   | --- | --- | --- | --- | --- | --- |
   | D1 | Config contract for ranking? | A serde `[recall_fusion]` section (`rrf_k`, `default_source_weight`, per-lane `source_weights`, `rerank`) on `EngramConfig`, discovered as `[recall_fusion]` or `.engram/recall.json`. | Operators tune vector/BM25/graph weights without code changes (zbot's `vector_weight`/`bm25_weight` pattern, engram-neutral). | This review | Confirm the contract surface + JSON-schema artifact. |
   | D2 | Reranker selection? | A `rerank.strategy` enum: `none` \| `mmr` \| `cross_encoder`, dispatched in bootstrap. | Reuses the `RetrievalReranker` port + composer's existing rerank slot. | This review | Confirm. |
-  | D3 | Vector activation? | Opt-in Cargo feature (`fastembed`), not default-on; the config sets its *weight*. | Model download + embed cost is a deployment decision. | This review | Confirm opt-in (not default-on). |
+  | D3 | Vector activation? | **Default-on for the MCP** (the `fastembed` cargo feature is in `engram-mcp`'s `default`), with a **runtime disable** (`--no-vector` / `enable_vector = false` skips wiring the vector lane + embedding model at boot) and a **build disable** (`--no-default-features`). The config sets the lane's *weight*. | Reverses the original opt-in choice — operator preference is "works out-of-the-box"; the runtime disable lets a fastembed build still skip the model download/load without a rebuild. | This review | Confirm default-on + runtime/build disable (reverses prior opt-in). |
   | D4 | MMR's embedding source? | `MmrReranker` **injects an `EmbeddingProvider`** and embeds candidate texts per call (the `RetrievalReranker` port exposes no embeddings). | Keeps the port unchanged; candidate sets are top-K (bounded cost). | This review | Confirm injected-embedder over extending the port/`RetrievalResult`. |
   | D5 | Lane source-tag vocabulary? | Normalize to stable short names (`vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`) — rename the stamped strings. | Weighted config is keyed by these; the current mixed strings (`vector.semantic`, `unknown`, …) would make weights silently inert. | This review | Confirm the vocabulary + one-time rename. |
   | D6 | App-policy fence? | zbot product-policy (category weights, contradiction penalty, KG decay, episodes, intent boost) stays in gateway-memory. | Engine neutrality + no-god-module; those are application epistemics, not generic IR. | This review | Confirm the fence. |
@@ -42,9 +42,9 @@
 
 Out-of-box engram recall is not full hybrid: vector off, reranker unwired, equal-weight fusion. zbot's gateway-memory *is* full hybrid but is a separate, application-specific pipeline over its own store — not reusable as engram's generic recall. The goal: engram's own recall becomes a competent generic full-hybrid retriever with operator-tunable ranking, closing the IR gap while leaving application policy to consumers.
 
-**Goals.** (1) Weighted vector+BM25+graph fusion via external config; (2) pluggable MMR + cross-encoder reranking; (3) opt-in vector; (4) backward compatible (absent config ⇒ today's behavior).
+**Goals.** (1) Weighted vector+BM25+graph fusion via external config; (2) pluggable MMR + cross-encoder reranking; (3) vector default-on for the MCP with runtime + build disable (D3 reversed); (4) backward compatible (absent config ⇒ today's behavior).
 
-**Non-goals.** Porting zbot's category/contradiction/KG-decay/episode/intent policy into engram; making vector default-on; changing the storage schema or domain types; a new fusion algorithm (reuse weighted RRF).
+**Non-goals.** Porting zbot's category/contradiction/KG-decay/episode/intent policy into engram; making vector unconditional (the runtime + build disables remain escape hatches); changing the storage schema or domain types; a new fusion algorithm (reuse weighted RRF).
 
 ## Proposal
 
@@ -54,7 +54,7 @@ Cascade per decision (see `docs/specs/recall-fusion-config/plan.md` for the task
 
 - **Fusion:** weighted RRF (reuse `ReciprocalFusionConfig`) — recommended; vs weighted-sum (`WeightedFusionConfig`, also exists) — rejected (RRF is rank-based, less score-scale-sensitive); vs new algorithm — rejected (YAGNI).
 - **MMR embeddings:** injected `EmbeddingProvider` — recommended; vs extending `RetrievalReranker`/`RetrievalResult` to carry vectors — rejected (domain-truth change for one adapter); vs text-overlap "diversity" — rejected (not real MMR).
-- **Vector:** opt-in feature — recommended; vs default-on — rejected (heavy dep); vs external provider only — deferred (fastembed suffices for now).
+- **Vector:** default-on for the MCP with runtime + build disable — recommended (D3 reversed; operator preference: works out-of-the-box); vs opt-in feature (original D3) — superseded; vs external provider only — deferred (fastembed suffices for now).
 - **Do-nothing:** engram recall stays non-hybrid — cost = the gap the user flagged persists.
 
 ## Risks & what would make this wrong
@@ -62,7 +62,7 @@ Cascade per decision (see `docs/specs/recall-fusion-config/plan.md` for the task
 - *Weight tuning is deployment-specific.* Engram ships sane defaults + the mechanism; deployments tune. Mitigation: documented vocabulary + example config.
 - *Lane-tag rename breaks trace/test consumers.* Mitigation: D5 is a flagged one-time migration with a note; traces/logs updated.
 - *MMR re-embed cost.* Mitigation: top-K only; cache embeddings where feasible.
-- *fastembed-off surprises users.* Mitigation: `capability_report` + README make vector presence explicit.
+- *Default-on model download surprises users.* Mitigation: the runtime `--no-vector` disable (and build-time `--no-default-features`) let a deployment skip the model load without a rebuild; `capability_report` makes vector presence explicit.
 - Drawback: this is more surface than RFC-0018's narrow D2 — accepted, because the narrow fix wouldn't deliver hybrid retrieval.
 
 ## Evidence & prior art

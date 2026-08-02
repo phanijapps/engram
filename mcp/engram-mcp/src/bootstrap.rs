@@ -34,7 +34,12 @@ pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
         config.migration_mode,
         config.capability_policy,
     )
-    .with_sqlite_storage_layout(layout);
+    .with_sqlite_storage_layout(layout)
+    // RFC-0019 D3 (reversed): thread the runtime vector kill-switch through to
+    // `EngramConfig` so `bootstrap_sqlite` honors `--no-vector` without a
+    // rebuild. Default `true`; `--no-vector` skips the vector index + embedding
+    // provider/model + vector recall lane.
+    .with_enable_vector(config.enable_vector);
     // RFC-0019 (Blocker 1): resolve the operator-facing `[recall_fusion]` config
     // through the discovery ladder and apply it to the `EngramConfig` before
     // `EngramProvider::open`. Without this, the MCP path always builds with
@@ -92,6 +97,13 @@ mod tests {
             org: None,
             domain: None,
             subdomain: None,
+            // These MCP-level tests exercise the core/memory/knowledge/recall
+            // handles and the single-file layout, not the vector lane. Disabling
+            // vector keeps them fast and deterministic under the new fastembed
+            // default (no FastEmbed model load attempt). The vector lane's
+            // enable_vector gate is covered by the integration-crate bootstrap
+            // tests directly.
+            enable_vector: false,
         }
     }
 

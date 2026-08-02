@@ -24,7 +24,7 @@ Engram's unified recall is a **competent generic full-hybrid retriever**: vector
 
 ### Ask first
 - Extending the `RetrievalReranker` port or `RetrievalResult` (domain-truth surface) — prefer injecting an embedder into the adapter.
-- Making `fastembed` (vector) default-on — it is opt-in by decision (RFC-0019 D3).
+- Removing the runtime (`--no-vector`) or build (`--no-default-features`) disable for vector — both escape hatches stay (RFC-0019 D3 reversed: vector is default-on for the MCP, but never unconditional).
 
 ### Never do
 - Port zbot product-policy (category weights, contradiction penalty, KG decay, episodes, intent boost) into `engram-retrieval`, `engram-integration`, or any adapter — those stay in gateway-memory.
@@ -46,7 +46,7 @@ D2.1a — external fusion config + weighted wiring + vector activation:
 - [x] A serde `[recall_fusion]` config (`rrf_k`, `default_source_weight`, per-lane `source_weights`, `rerank`) loads from the launch profile and/or `.engram/recall.json`; validated; defaults to equal-weight RRF when absent. The schema lands at `contracts/v1/schemas/recall-fusion.schema.json`. (Profile section + `.engram/recall.json` ladder landed in T1c; the MCP `open_provider` feeder landed with the review pass — `mcp/engram-mcp/src/bootstrap.rs` resolves `<storage_path>/.engram/recall.json` and applies `.with_recall_fusion`, surfacing a malformed file as a boot error. ADR-0026 records the contract.)
 - [x] `SqlUnifiedRecall` honors the configured weights via weighted RRF (the `with_reranker` constructor takes the `ReciprocalFusionConfig`); no hard-coded `default()`.
 - [x] Lane source tags are normalized to a stable vocabulary (`vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`) and documented as the weight keys. (Vocabulary surfaced as `engram_retrieval::KNOWN_LANE_TAGS`; `to_reciprocal_config` warns on keys outside it so a typo like `"vectors"` does not silently no-op.)
-- [x] The vector lane is activatable (opt-in `fastembed` build); when on, it contributes candidates fused at `source_weights["vector"]`; `capability_report` reflects it. (Verified under `--features fastembed`: vector lane + embedding provider wire on, `vectors_state = Supported`.)
+- [x] The vector lane is **default-on for the MCP** (the `fastembed` cargo feature is in `engram-mcp`'s `default`) and contributes candidates fused at `source_weights["vector"]`; `capability_report` reflects it. Two disable paths exist: **runtime** — `--no-vector` / `enable_vector = false` skips wiring the vector index + embedding provider/model + vector recall lane at boot (leaving `vectors = None`, `vectors_state` not `Supported`) even when fastembed is compiled in; **build-time** — `--no-default-features` drops fastembed entirely. (Verified: default build wires vector on, `vectors_state = Supported`; `enable_vector = false` leaves `vectors = None` even under the fastembed build.)
 
 D2.1b — MMR diversity reranker:
 
@@ -68,6 +68,6 @@ D2 — search via full-hybrid recall:
 - Technical: `CrossEncoderRerankerAdapter` is built but unwired (`adapters/retrieval/cross-encoder-rerank`); `SqlUnifiedRecall::new()` wires `reranker=None` (`core/integration/src/sqlite/recall.rs`).
 - Technical: `EngramConfig` + a profile-loading mechanism exist (`core/integration/src/config.rs:158`); a `[recall_fusion]` section plugs in additively.
 - Process: full mode — public config contract + new adapter crate + `EngramConfig` field. Constrained by RFC-0019 (supersedes RFC-0018 §6.2 + D2) + ADR-0022.
-- Product: vector opt-in (not default-on); no zbot app-policy in engram (user confirmation 2026-08-01).
+- Product: vector default-on for the MCP (RFC-0019 D3 reversed) with runtime (`--no-vector`) + build (`--no-default-features`) disable; no zbot app-policy in engram (user confirmation 2026-08-01).
 - Technical (parity): `[recall_fusion]` reaches the N-API binding transitively — `NativeProvider` holds an `EngramProvider` built from `EngramConfig`, so `provider.recall()` uses the configured fusion. If `bindings/node` fuses independently of `provider.recall`, that is a parity gap to verify at T1.
 - Process: the pgvector backend's `PgUnifiedRecall` is **not** wired this spec (deferred: `pgvector-recall-fusion`); SQLite (default) is.

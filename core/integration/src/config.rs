@@ -8,6 +8,15 @@ use engram_domain::types::ScopeMappingStrategy;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+/// Serde default for `EngramConfig::enable_vector` — `true`. Kept as a named
+/// fn (rather than `#[serde(default = "default_true")]` inline) so the field
+/// deserializes to `true` when omitted from a legacy config file (backward
+/// compatibility: a deployment that never set the field keeps vector wiring on
+/// when the `fastembed` feature is compiled in).
+fn default_true() -> bool {
+    true
+}
+
 /// Capability policy determines how unsupported capabilities are handled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum CapabilityPolicy {
@@ -121,6 +130,14 @@ struct ProfileFile {
     /// (see [`EngramConfig::discover_recall_fusion`]) is the second.
     #[serde(default)]
     recall_fusion: Option<engram_retrieval::RecallFusionConfig>,
+    /// Optional runtime kill-switch for the vector lane (RFC-0019 D3 reversed).
+    /// When `false`, `bootstrap_sqlite` skips constructing the vector index,
+    /// the embedding provider/model, and the vector recall lane entirely — even
+    /// when the `fastembed` feature is compiled in — so a deployment can avoid
+    /// the model download/load without a rebuild. Defaults to `true` (omitted ⇒
+    /// vector on when compiled in).
+    #[serde(default)]
+    enable_vector: Option<bool>,
 }
 
 /// The default embedding-provider config used when a profile file omits the
@@ -204,6 +221,18 @@ pub struct EngramConfig {
     /// [`RecallFusionConfig::to_reciprocal_config`].
     #[serde(default)]
     pub recall_fusion: Option<engram_retrieval::RecallFusionConfig>,
+
+    /// Runtime kill-switch for the vector lane (RFC-0019 D3 reversed). Defaults
+    /// to `true`. When `false`, `bootstrap_sqlite` skips constructing the
+    /// `SqliteVectorIndex`, the `FastEmbed` embedding provider/model, and the
+    /// vector recall lane — even when the `fastembed` cargo feature is compiled
+    /// in — so a deployment built with fastembed can still avoid the model
+    /// download/load at boot. Build-time disable remains
+    /// `--no-default-features`. The field is NOT behind a `#[cfg(feature =
+    /// "fastembed")]`: it is always present (defaults `true`) so the config
+    /// type is identical under both feature builds.
+    #[serde(default = "default_true")]
+    pub enable_vector: bool,
 }
 
 impl EngramConfig {
@@ -226,6 +255,7 @@ impl EngramConfig {
             sqlite_storage_layout: SqliteStorageLayout::MultiFileDirectory,
             pgvector_connection_string: None,
             recall_fusion: None,
+            enable_vector: true,
         }
     }
 
@@ -257,6 +287,17 @@ impl EngramConfig {
     #[must_use]
     pub fn with_recall_fusion(mut self, fusion: engram_retrieval::RecallFusionConfig) -> Self {
         self.recall_fusion = Some(fusion);
+        self
+    }
+
+    /// Sets the runtime vector kill-switch (RFC-0019 D3 reversed). `false`
+    /// causes `bootstrap_sqlite` to skip the vector index, the embedding
+    /// provider/model, and the vector recall lane at boot — even when the
+    /// `fastembed` cargo feature is compiled in — so a fastembed build can
+    /// avoid the model download/load. Defaults to `true` (see [`EngramConfig::new`]).
+    #[must_use]
+    pub fn with_enable_vector(mut self, enable: bool) -> Self {
+        self.enable_vector = enable;
         self
     }
 
@@ -407,6 +448,7 @@ impl EngramConfig {
                 .unwrap_or(SqliteStorageLayout::MultiFileDirectory),
             pgvector_connection_string: None,
             recall_fusion: profile.recall_fusion,
+            enable_vector: profile.enable_vector.unwrap_or(true),
         })
     }
 
@@ -975,5 +1017,95 @@ mod tests {
                 .source_weight("lexical"),
             0.2
         );
+    }
+
+    // ---- RFC-0019 D3 (reversed): enable_vector runtime kill-switch --------
+
+    fn base_engram_config(temp_dir: &TempDir) -> EngramConfig {
+        EngramConfig::new(
+            temp_dir.path().join("engram"),
+            temp_dir.path(),
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "fastembed".to_string(),
+                model: "BAAI/bge-small-en-v1.5".to_string(),
+                dimensions: 384,
+                prompt_profile: "query".to_string(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        )
+    }
+
+    #[test]
+    fn enable_vector_defaults_to_true() {
+        // The default is ON: a deployment that never touches the field keeps
+        // vector wiring on when fastembed is compiled in (RFC-0019 D3 reversed).
+        let temp_dir = TempDir::new().unwrap();
+        let config = base_engram_config(&temp_dir);
+        assert!(config.enable_vector, "enable_vector must default to true");
+    }
+
+    #[test]
+    fn with_enable_vector_sets_false() {
+        let temp_dir = TempDir::new().unwrap();
+        let config = base_engram_config(&temp_dir).with_enable_vector(false);
+        assert!(
+            !config.enable_vector,
+            "with_enable_vector(false) must stick"
+        );
+        // And back to true.
+        let config = config.with_enable_vector(true);
+        assert!(config.enable_vector, "with_enable_vector(true) must stick");
+    }
+
+    #[test]
+    fn profile_enable_vector_section_loads() {
+        // An explicit `enable_vector = false` in a profile file is honored.
+        // TOML requires a bare top-level key to precede any `[section]`, so it
+        // goes before `[backend]` (a key after `[backend]` would parse as
+        // `backend.enable_vector`).
+        let temp_dir = TempDir::new().unwrap();
+        let data_root = temp_dir.path().join("data");
+        std::fs::create_dir_all(&data_root).unwrap();
+        let toml = format!(
+            "enable_vector = false\n\n{base}",
+            base = base_profile_toml(data_root.to_str().unwrap())
+        );
+        let profile_path = temp_dir.path().join("profile.toml");
+        std::fs::write(&profile_path, &toml).unwrap();
+
+        let cfg = EngramConfig::from_profile_file(&profile_path).expect("profile loads");
+        assert!(!cfg.enable_vector, "profile enable_vector=false must load");
+    }
+
+    #[test]
+    fn profile_without_enable_vector_defaults_true() {
+        // A legacy profile without the field deserializes to true (backward
+        // compatibility — existing configs keep vector wiring on).
+        let temp_dir = TempDir::new().unwrap();
+        let data_root = temp_dir.path().join("data");
+        std::fs::create_dir_all(&data_root).unwrap();
+        let toml = base_profile_toml(data_root.to_str().unwrap());
+        let profile_path = temp_dir.path().join("profile.toml");
+        std::fs::write(&profile_path, &toml).unwrap();
+
+        let cfg = EngramConfig::from_profile_file(&profile_path).expect("profile loads");
+        assert!(cfg.enable_vector, "absent field => true (default-on)");
+    }
+
+    #[test]
+    fn enable_vector_round_trips_through_serde_with_default() {
+        // A legacy JSON config without the field deserializes to true (serde
+        // default), matching the in-memory default.
+        let temp_dir = TempDir::new().unwrap();
+        let config = base_engram_config(&temp_dir);
+        let json = serde_json::to_string(&config).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        value.as_object_mut().unwrap().remove("enable_vector");
+        let legacy = serde_json::to_string(&value).unwrap();
+        let parsed: EngramConfig = serde_json::from_str(&legacy).unwrap();
+        assert!(parsed.enable_vector, "absent serde field => true");
     }
 }

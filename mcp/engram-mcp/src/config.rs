@@ -36,11 +36,19 @@ pub struct McpConfig {
     pub org: Option<String>,
     pub domain: Option<String>,
     pub subdomain: Option<String>,
+    /// Runtime kill-switch for the vector lane (RFC-0019 D3 reversed). Defaults
+    /// to `true`. `--no-vector` sets it `false`, which causes the bootstrap to
+    /// skip the vector index + embedding provider/model + vector recall lane —
+    /// even when fastembed is compiled in — so a deployment can avoid the model
+    /// download/load without a rebuild.
+    pub enable_vector: bool,
 }
 
 impl McpConfig {
     /// Parse `--storage`, `--project`, `--ontology`, `--taxonomy` flags.
     /// `--storage` is required; `--project` defaults to `"default"`.
+    /// `--no-vector` / `--vector` are value-less switches (RFC-0019 D3
+    /// reversed) toggling `enable_vector` (default `true`).
     pub fn from_args(argv: &[String]) -> Result<Self, String> {
         let mut storage_path = None;
         let mut project = None;
@@ -51,9 +59,27 @@ impl McpConfig {
         let mut org: Option<String> = None;
         let mut domain: Option<String> = None;
         let mut subdomain: Option<String> = None;
+        // Default-on (RFC-0019 D3 reversed): vector compiles in with the
+        // `fastembed` default feature; `--no-vector` disables it at runtime
+        // without a rebuild.
+        let mut enable_vector = true;
         let mut i = 0;
         while i < argv.len() {
             let flag = argv[i].as_str();
+            // Value-less switches: handle before the value-consuming path.
+            match flag {
+                "--no-vector" => {
+                    enable_vector = false;
+                    i += 1;
+                    continue;
+                }
+                "--vector" => {
+                    enable_vector = true;
+                    i += 1;
+                    continue;
+                }
+                _ => {}
+            }
             if !matches!(
                 flag,
                 "--storage"
@@ -125,6 +151,7 @@ impl McpConfig {
             org,
             domain,
             subdomain,
+            enable_vector,
         })
     }
 }
@@ -151,6 +178,11 @@ mod tests {
             Some(std::path::Path::new("/tmp/o.toml"))
         );
         assert_eq!(c.taxonomy_path, None);
+        // `provider_type` is feature-dependent: fastembed (now the default)
+        // selects "fastembed"; a `--no-default-features` build selects "none".
+        #[cfg(feature = "fastembed")]
+        assert_eq!(c.embedding.provider_type, "fastembed");
+        #[cfg(not(feature = "fastembed"))]
         assert_eq!(c.embedding.provider_type, "none");
     }
 
@@ -219,5 +251,54 @@ mod tests {
         let argv = ["--storage".to_string(), "--project".to_string()];
         let err = McpConfig::from_args(&argv).unwrap_err();
         assert!(err.contains("requires a value"), "got: {err}");
+    }
+
+    // ---- RFC-0019 D3 (reversed): --no-vector / --vector runtime switch -----
+
+    #[test]
+    fn from_args_defaults_enable_vector_true() {
+        let argv = ["--storage".to_string(), "/tmp/x".to_string()];
+        let c = McpConfig::from_args(&argv).unwrap();
+        assert!(c.enable_vector, "enable_vector defaults to true");
+    }
+
+    #[test]
+    fn from_args_no_vector_disables_vector() {
+        let argv = [
+            "--storage".to_string(),
+            "/tmp/x".to_string(),
+            "--no-vector".to_string(),
+        ];
+        let c = McpConfig::from_args(&argv).unwrap();
+        assert!(!c.enable_vector, "--no-vector must set enable_vector=false");
+    }
+
+    #[test]
+    fn from_args_vector_re_enables_after_no_vector() {
+        // `--vector` re-enables; last-one-wins lets operators toggle in scripts.
+        let argv = [
+            "--storage".to_string(),
+            "/tmp/x".to_string(),
+            "--no-vector".to_string(),
+            "--vector".to_string(),
+        ];
+        let c = McpConfig::from_args(&argv).unwrap();
+        assert!(c.enable_vector, "--vector must re-enable vector");
+    }
+
+    #[test]
+    fn from_args_no_vector_does_not_consume_next_flag() {
+        // `--no-vector` is a value-less switch: the following `--project` must
+        // still parse (not be swallowed as --no-vector's value).
+        let argv = [
+            "--storage".to_string(),
+            "/tmp/x".to_string(),
+            "--no-vector".to_string(),
+            "--project".to_string(),
+            "p".to_string(),
+        ];
+        let c = McpConfig::from_args(&argv).unwrap();
+        assert!(!c.enable_vector);
+        assert_eq!(c.project, "p");
     }
 }

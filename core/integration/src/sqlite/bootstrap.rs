@@ -344,9 +344,19 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // query provider + knowledge-store resolver. Skipped entirely when the
     // feature is off (default build) or when construction fails — recall then
     // runs degraded for vector (fewer candidates), never errors.
+    //
+    // RFC-0019 D3 (reversed): additionally gated on `config.enable_vector`
+    // (default `true`). When an operator passes `enable_vector = false` (MCP
+    // `--no-vector`), the whole block is skipped — no `SqliteVectorIndex`, no
+    // `FastEmbedBgeSmallQueryProvider` (so no model download/load), no vector
+    // recall lane — even though fastembed is compiled in. The capability is
+    // left `Unsupported` with `vectors = None`.
     #[cfg(feature = "fastembed")]
     {
-        if let (Some(knowledge_handle), Some(path_str)) = (&knowledge_store, paths.vectors.to_str())
+        if !config.enable_vector {
+            eprintln!("engram-mcp: vector lane disabled by config (enable_vector=false)");
+        } else if let (Some(knowledge_handle), Some(path_str)) =
+            (&knowledge_store, paths.vectors.to_str())
         {
             let dims = config.embedding_provider.dimensions;
             let space = engram_domain::EmbeddingSpace::new(
@@ -465,7 +475,12 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // Vectors: construct a file-backed SqliteVectorIndex configured with the
     // embedding space from configuration, then attach it. The check proves the
     // VectorIndex contract; the attached index is the usable instance.
-    if conformance::vector_ok() {
+    //
+    // Also gated on `config.enable_vector` (RFC-0019 D3 reversed): when an
+    // operator disables vector at runtime, neither this block nor the
+    // fastembed lane above constructs a vector index, so `vectors` stays `None`
+    // and `vectors_state` stays `Unsupported`.
+    if config.enable_vector && conformance::vector_ok() {
         let dims = config.embedding_provider.dimensions;
         let path = &paths.vectors;
         let space = engram_domain::EmbeddingSpace::new(
@@ -768,5 +783,80 @@ impl engram_rerank_mmr::MmrEmbedder for FastEmbedMmrEmbedder {
     fn embed(&self, text: &str) -> CoreResult<Vec<f32>> {
         // Candidate texts are passages (not queries), so embed as a passage.
         self.inner.embed_passage(text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode};
+    use engram_domain::ScopeMappingStrategy;
+
+    fn vector_config(dir: &std::path::Path, enable_vector: bool) -> EngramConfig {
+        let mut cfg = EngramConfig::new(
+            dir.join("engram"),
+            dir,
+            ScopeMappingStrategy::Strict,
+            EmbeddingProviderConfig {
+                provider_type: "fastembed".to_string(),
+                model: "BAAI/bge-small-en-v1.5".to_string(),
+                dimensions: 384,
+                prompt_profile: "query".to_string(),
+                normalization: None,
+            },
+            MigrationMode::DryRun,
+            CapabilityPolicy::FailClosed,
+        );
+        cfg = cfg.with_enable_vector(enable_vector);
+        cfg
+    }
+
+    /// RFC-0019 D3 (reversed): when `enable_vector = false`, the vector lane is
+    /// skipped entirely even though the `fastembed` feature is compiled in — no
+    /// `SqliteVectorIndex`, no `FastEmbedBgeSmallQueryProvider` (so no model
+    /// download/load), no vector recall lane. The capability must report
+    /// `Unsupported` with no handle. Gated on `fastembed` because the runtime
+    /// disable is specifically the "compiled-in but turned off" path; without
+    /// the feature there is no model to skip.
+    #[cfg(feature = "fastembed")]
+    #[test]
+    fn enable_vector_false_skips_vector_lane_under_fastembed() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = vector_config(dir.path(), false);
+        let provider = bootstrap_sqlite(&config).expect("bootstrap opens with vector disabled");
+
+        // No vector handle attaches.
+        assert!(
+            provider.vectors().is_none(),
+            "enable_vector=false must not wire a vector handle"
+        );
+        // The capability is not Supported.
+        assert!(
+            !provider.capabilities().vectors_supported(),
+            "enable_vector=false must leave the vectors capability unsupported"
+        );
+    }
+
+    /// The matching half: with `enable_vector = true` (the default) the vector
+    /// lane is wired. Gated to the non-fastembed build so the assertion stays
+    /// deterministic (under fastembed the first vector block attempts a model
+    /// load; the SQLite-only second block wires `vectors` here without any
+    /// model). The fastembed-gated disable test above plus this positive test
+    /// together pin the gate from both sides.
+    #[cfg(not(feature = "fastembed"))]
+    #[test]
+    fn enable_vector_true_wires_vector_lane() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = vector_config(dir.path(), true);
+        let provider = bootstrap_sqlite(&config).expect("bootstrap opens with vector enabled");
+
+        assert!(
+            provider.vectors().is_some(),
+            "enable_vector=true must wire a vector handle"
+        );
+        assert!(
+            provider.capabilities().vectors_supported(),
+            "enable_vector=true must mark the vectors capability supported"
+        );
     }
 }

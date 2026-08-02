@@ -66,7 +66,7 @@ The MCP server (`engram_mcp::bootstrap::open_provider`) resolves from the storag
 
 - **Weighted RRF reuse.** `SqlUnifiedRecall::with_reranker` takes the `ReciprocalFusionConfig` built by `to_reciprocal_config`; it never re-implements fusion (ADR-0009). `ReciprocalFusionConfig::default()` reproduces equal-weight behavior.
 - **Reranker dispatch.** `bootstrap_sqlite::select_reranker` reads `recall_fusion.rerank` and dispatches `None`/`Mmr`/`CrossEncoder` by strategy. MMR **injects an `EmbeddingProvider`** (the `RetrievalReranker` port exposes no embeddings — RFC-0019 D4) and degrades to relevance-only with a warning when no embedder is wired; cross-encoder warns + falls back when no scorer is wired (deferred — see D2.1c).
-- **Vector opt-in (RFC-0019 D3).** The vector lane is feature-gated behind `fastembed` (off by default — model download + embed cost is a deployment decision). The config sets its *weight*; the feature gate sets its *presence*. `capability_report` reflects both.
+- **Vector default-on for the MCP (RFC-0019 D3 reversed).** The `fastembed` cargo feature is in `engram-mcp`'s `default`, so a fresh `cargo build -p engram-mcp` ships the vector lane + embedding provider out-of-the-box. Two disable paths remain: **runtime** — `enable_vector = false` (MCP `--no-vector`) skips wiring the vector index + embedding model + vector recall lane at boot, leaving `vectors = None` even when fastembed is compiled in (lets a deployment avoid the model download/load without a rebuild); **build-time** — `--no-default-features` drops fastembed entirely. The config sets the lane's *weight*; the runtime/build switches set its *presence*. `capability_report` reflects the resolved state. This reverses the original D3 opt-in choice (operator preference: works out-of-the-box).
 - **No application policy.** Category weights, contradiction penalty, KG decay, episodes, and intent boost (zbot's gateway-memory techniques) are **not** in this contract and do not belong in `engram-retrieval`, `engram-integration`, or any adapter (ADR-0022, no-god-module). They are consumer epistemics over a consumer's own store.
 
 ### 4. Vocab honesty — warn on unknown keys
@@ -85,7 +85,7 @@ The MCP server (`engram_mcp::bootstrap::open_provider`) resolves from the storag
 
 **Positive:**
 
-- Operators bias vector/BM25/graph + select a reranker by editing `.engram/recall.json` (or a profile section); no code change, no rebuild beyond the `fastembed` opt-in for vector.
+- Operators bias vector/BM25/graph + select a reranker by editing `.engram/recall.json` (or a profile section); no code change, no rebuild to activate vector (it is default-on for the MCP), and `--no-vector` skips the model load at boot without a rebuild.
 - The dormant weighted-fusion + reranker machinery is now reachable; engram's recall is a competent generic full-hybrid retriever.
 - The config ports to any future engine (pgvector's `PgUnifiedRecall` is the deferred follow-on — `docs/backlog.md` → `pgvector-recall-fusion`) because it is keyed on lane tags, not engine types.
 
@@ -108,13 +108,13 @@ The MCP server (`engram_mcp::bootstrap::open_provider`) resolves from the storag
 - **Weighted-sum fusion (`WeightedFusionConfig`) as the default.** Rejected: weighted-sum is score-scale-sensitive; weighted RRF is rank-based and more robust to heterogeneous lane scores. `WeightedFusionConfig` stays in-tree as a non-default option for a future selector.
 - **A new fusion algorithm.** Rejected (YAGNI): weighted RRF + MMR are standard hybrid-IR techniques; the gap was wiring + config, not algorithm.
 - **Extending `RetrievalReranker` / `RetrievalResult` to carry embeddings (for MMR).** Rejected: a domain-truth change for one adapter (RFC-0019 D4). MMR **injects an `EmbeddingProvider`** instead, leaving the port unchanged.
-- **Vector default-on.** Rejected (RFC-0019 D3): model download + embed cost is a deployment decision. The config sets the weight; the `fastembed` feature gate sets presence.
+- **Vector opt-in (original RFC-0019 D3).** Superseded — the original "off by default" choice is reversed: vector is now default-on for the MCP. The runtime `--no-vector` disable preserves the "skip the model download/load" escape hatch without forcing a rebuild, and `--no-default-features` preserves the build-time disable. The config still sets the weight; the runtime/build switches set presence.
 - **Silent soft-fail on a malformed discovered file (mirroring `scan.json`).** Rejected for the MCP feeder: an operator who wrote a `[recall_fusion]` config expecting weighted fusion should not have it silently ignored. An *absent* file is `Ok(None)` (equal-weight default); a *present-but-bad* file is a boot error. (`scan.json` soft-fails because a bad filter is a nicety; a bad fusion config is the operator's primary ranking knob.)
 - **Hard-error on unknown vocab keys.** Rejected: would break older configs the day a lane is added. Warn instead; the pure `unknown_lane_keys` helper lets tooling fail closed if it wants to.
 
 ## References
 
-- [RFC-0019](../rfcs/0019-hybrid-recall-fusion.md) — hybrid recall fusion; D1 (this contract), D2 (reranker selection), D3 (vector opt-in), D4 (MMR injected embedder), D5 (lane-tag vocabulary), D6 (app-policy fence).
+- [RFC-0019](../rfcs/0019-hybrid-recall-fusion.md) — hybrid recall fusion; D1 (this contract), D2 (reranker selection), D3 (vector default-on for the MCP + runtime/build disable — reverses the original opt-in), D4 (MMR injected embedder), D5 (lane-tag vocabulary), D6 (app-policy fence).
 - [ADR-0009](0009-retrieval-composition-seam.md) — retrieval composition seam; the RRF + `compose_context` machinery this reuses.
 - [ADR-0022](0022-engine-grid-vs-backend-recipe.md) — engine neutrality; why the config carries no engine type.
 - [ADR-0025](0025-framework-content-boundary.md) — framework/content boundary; the "mechanism, not application policy" framing this contract applies to recall fusion.

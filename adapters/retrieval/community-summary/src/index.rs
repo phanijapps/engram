@@ -95,6 +95,7 @@ impl RetrievalIndex for CommunitySummaryIndex {
                         Arc::new(GraphSnapshot {
                             entities: ents.clone(),
                             relationships: rels.clone(),
+                            community_labels: None,
                         }),
                     )
                     .await;
@@ -122,8 +123,34 @@ impl RetrievalIndex for CommunitySummaryIndex {
             return Ok(Vec::new());
         }
 
-        // Detect communities (deterministic single-level Louvain).
-        let labels = communities(&edges, 20);
+        // Detect communities (deterministic single-level Louvain). The Louvain
+        // pass over ~57k edges dominates recall latency (~3.6s) when run on
+        // every query, so the labels are cached in the graph snapshot: the first
+        // query after a miss (or invalidation) computes + stores them; every
+        // subsequent query reuses them until the graph changes. Entities and
+        // relationships are already cached (above), so this only adds the label
+        // map to the snapshot on the warm-up query.
+        let labels = if let Some(cache) = &self.cache
+            && let Some(snap) = cache.get(scope).await
+            && let Some(cached) = &snap.community_labels
+        {
+            cached.clone()
+        } else {
+            let computed = communities(&edges, 20);
+            if let Some(cache) = &self.cache {
+                cache
+                    .put(
+                        scope,
+                        Arc::new(GraphSnapshot {
+                            entities: entities.clone(),
+                            relationships: relationships.clone(),
+                            community_labels: Some(computed.clone()),
+                        }),
+                    )
+                    .await;
+            }
+            computed
+        };
 
         // Invert: label → sorted member keys.
         let mut groups: HashMap<usize, Vec<String>> = HashMap::new();

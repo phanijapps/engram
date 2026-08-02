@@ -137,3 +137,48 @@ fn unsupported_extension_returns_error() {
     let result = chunker.chunk_with_ext("fn x() {}", "vim");
     assert!(result.is_err(), "expected error for unsupported extension");
 }
+
+#[test]
+fn container_declarations_emit_empty_text_leaf_keeps_full_body() {
+    // A class with method children is a CONTAINER: its whole-body chunk would
+    // bloat the vector index (thousands of lines), so it emits empty text while
+    // keeping the anchor (so the graph extractor still creates the class
+    // entity). The methods are leaf declarations and keep their full text.
+    let code = "class Main {\n  void run() { return 1; }\n  String getName() { return \"\"; }\n}\n";
+    let chunks = chunk(code, "java");
+    let class = chunks
+        .iter()
+        .find(|(a, _, _, _)| a == "class Main")
+        .expect("class Main emitted");
+    assert!(
+        class.1.is_empty(),
+        "container (class) must emit empty text to avoid embedding the whole body, got: {:?}",
+        class.1
+    );
+    let run = chunks
+        .iter()
+        .find(|(a, _, _, _)| a == "fn run")
+        .expect("fn run emitted");
+    assert!(
+        !run.1.is_empty(),
+        "leaf (method) must keep its full text for embedding"
+    );
+    assert!(
+        run.1.contains("return 1"),
+        "leaf body should contain its implementation"
+    );
+}
+
+#[test]
+fn leaf_function_keeps_full_text() {
+    // A standalone function with no declaration children is a leaf — it keeps
+    // its full text (the common case, unchanged by the container optimization).
+    let code = "fn alpha() { beta(); }\n";
+    let chunks = chunk(code, "rs");
+    let alpha = chunks
+        .iter()
+        .find(|(a, _, _, _)| a == "fn alpha")
+        .expect("fn alpha emitted");
+    assert!(!alpha.1.is_empty(), "leaf function keeps full text");
+    assert!(alpha.1.contains("beta()"), "leaf body preserved");
+}

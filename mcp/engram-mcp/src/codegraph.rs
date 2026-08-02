@@ -5,14 +5,15 @@
 //! the provider's handles (no engine-store bypass).
 
 use engram_domain::{
-    KnowledgeEntity, KnowledgeRelationship, RetrievalRequest, RetrievalTargetType,
+    KnowledgeEntity, KnowledgeRelationship, RetrievalRequest, RetrievalResult,
+    RetrievalSourceFailure, RetrievalTargetType,
 };
 use engram_ingest::{
     KnowledgeRepoGraph, ScanFilter, ScanFilterConfig, ScanOptions, scan_repository,
 };
 use futures::executor::block_on;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::app::App;
@@ -99,6 +100,78 @@ fn repository_empty_note(repo: &str) -> String {
     format!(
         "(filtered to repository '{repo}'; 0 matches. Try without repository filter or a different repository.)"
     )
+}
+
+/// Extracts a concise `org/repo` label from a provenance `source` string (the
+/// field `scan_repo` populates). Git-backed sources embed the remote inside
+/// brackets, e.g. `"engram-mcp-scan [git@github.com:org/repo.git@branch:sha]"`;
+/// this pulls out `"org/repo"`. Falls back to the bare source name (before the
+/// `[`) when no recognizable git remote is embedded, so a non-git source still
+/// renders something meaningful. The result is lowercased (it derives from the
+/// lowercased remote) — acceptable for a display label.
+fn provenance_repo_label(source: &str) -> String {
+    let inner = source
+        .split_once('[')
+        .map(|(_, rest)| rest.trim_end_matches(']'))
+        .unwrap_or(source);
+    let lower = inner.to_ascii_lowercase();
+    // Strip a known host prefix and take up to ".git@" (the remote/sha boundary).
+    for sep in ["github.com/", "github.com:"] {
+        if let Some(rest) = lower.split_once(sep).map(|(_, r)| r) {
+            let repo = rest
+                .split_once(".git@")
+                .or_else(|| rest.split_once(' '))
+                .map(|(r, _)| r)
+                .unwrap_or(rest);
+            if repo.contains('/') {
+                return repo.to_owned();
+            }
+        }
+    }
+    // Fallback: the source name before the bracket.
+    source
+        .split_once('[')
+        .map(|(name, _)| name.trim())
+        .unwrap_or(source.trim())
+        .to_owned()
+}
+
+/// Renders a provenance bracket for one recall item: `[retriever, score=X.XX]`.
+/// Used as a per-item suffix in `search` and `get_context` output so a caller
+/// can see WHERE each result came from without leaving the result line.
+fn recall_provenance_suffix(item: &RetrievalResult) -> String {
+    let retriever = item
+        .fusion_trace
+        .as_ref()
+        .map(|t| t.source.as_str())
+        .unwrap_or("?");
+    format!("[{retriever}, score={:.2}]", item.score.total)
+}
+
+/// Builds the concise diagnostics appended after "No results." when recall
+/// returned zero usable Entity hits. Surfaces (1) how many raw items recall
+/// produced before the Entity filter, (2) how many Entity hits survived (after
+/// dedup), (3) how many lanes contributed, and (4) any lane that errored. This
+/// turns a silent empty packet into an actionable signal.
+fn format_no_results_diag(
+    total_recall: usize,
+    entity_hits: usize,
+    lanes: usize,
+    failures: &[RetrievalSourceFailure],
+) -> String {
+    let mut parts = vec![
+        format!("recall returned {total_recall} items"),
+        format!("{entity_hits} entity hits after filter+dedup"),
+        format!("{lanes} lanes contributed"),
+    ];
+    if !failures.is_empty() {
+        let errored: Vec<String> = failures
+            .iter()
+            .map(|f| format!("{} ({})", f.source, f.reason))
+            .collect();
+        parts.push(format!("errored: {}", errored.join(", ")));
+    }
+    parts.join("; ")
 }
 
 /// `scan_repo`: treesitter-index a code repository into the project workspace,
@@ -355,7 +428,12 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
 
     // Prefer the hybrid-recall path. Each recall item carries the fused rank;
     // entity (code-symbol) hits are kept and rendered as `name (kind)`.
-    let hits: Vec<String> = match app.provider.require_recall() {
+    //
+    // Returns the rendered hits PLUS an optional no-results diagnostic (built
+    // from the raw recall payload before the Entity filter) so an empty packet
+    // is never silent.
+    let (hits, no_results_diag): (Vec<String>, Option<String>) = match app.provider.require_recall()
+    {
         Ok(handle) => {
             let request = RetrievalRequest {
                 query: query.to_owned(),
@@ -369,22 +447,23 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                 include_explanations: Some(true),
             };
             let payload = block_on(handle.recall(request)).map_err(internal)?;
-            // Resolve target_ids back to entities for a consistent `name (kind)`
-            // rendering regardless of which lane produced the hit (lexical
-            // content = "name Kind"; graph content = name). Falls back to the
-            // item's resolved content if the entity is no longer present.
-            //
-            // Each line also carries the source path (from the item's
-            // provenance) so two distinct symbols that share a name remain
-            // uniquely identifiable in the result list.
-            //
-            // Repository post-filter: when `repository` is set, drop any item
-            // whose provenance source is not from that repo. The recall lanes
-            // themselves cannot be repo-scoped without a domain-level filter
-            // (deferred to a future RFC), so this post-filter is the
-            // contamination guard for the search output.
             let by_id = entity_lookup(app);
-            payload
+
+            // Diagnostics captured BEFORE the Entity filter so an empty
+            // result can report how much recall actually found.
+            let total_recall = payload.items.len();
+            let lanes: HashSet<&str> = payload
+                .items
+                .iter()
+                .filter_map(|i| i.fusion_trace.as_ref().map(|t| t.source.as_str()))
+                .collect();
+
+            // Repository post-filter: when `repository` is set, drop any
+            // item whose provenance source is not from that repo. The recall
+            // lanes themselves cannot be repo-scoped without a domain-level
+            // filter (deferred to a future RFC), so this post-filter is the
+            // contamination guard for the search output.
+            let mut filtered: Vec<&RetrievalResult> = payload
                 .items
                 .iter()
                 .filter(|i| i.target_type == RetrievalTargetType::Entity)
@@ -392,34 +471,84 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                     Some(repo) => source_matches_repository(&i.provenance.source, repo),
                     None => true,
                 })
-                .filter_map(|i| {
-                    let path = i.provenance.source.trim();
-                    let suffix = if path.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" — {path}")
+                .collect();
+
+            // Stable source-identity dedup: collapse items that share the
+            // same (repo, entity_name, entity_kind), keeping the
+            // higher-scoring one. The recall fusion already dedups by
+            // (target_type, target_id), but two entities with different IDs
+            // but the same name+repo (e.g. entity vs chunk dual
+            // representation, or re-scan duplicates) should not both appear.
+            filtered.sort_by(|a, b| {
+                b.score
+                    .total
+                    .partial_cmp(&a.score.total)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+            let mut seen: HashSet<(String, String, String)> = HashSet::new();
+            let deduped: Vec<&RetrievalResult> = filtered
+                .into_iter()
+                .filter(|i| {
+                    let repo = provenance_repo_label(&i.provenance.source);
+                    let (name, kind) = match by_id.get(&i.target_id) {
+                        Some(e) => (e.name.clone(), format!("{:?}", e.kind)),
+                        None => (i.content.clone(), "?".to_owned()),
                     };
+                    seen.insert((repo, name, kind))
+                })
+                .collect();
+            let entity_hits = deduped.len();
+
+            // Render with provenance: `name (kind) — org/repo [retriever, score=X.XX]`.
+            // Falls back to the item's resolved content when the entity is
+            // no longer present (lookup miss).
+            let hits: Vec<String> = deduped
+                .iter()
+                .take(limit)
+                .filter_map(|i| {
+                    let repo = provenance_repo_label(&i.provenance.source);
+                    let bracket = recall_provenance_suffix(i);
+                    let suffix = format!(" — {repo} {bracket}");
                     match by_id.get(&i.target_id) {
                         Some(e) => Some(format!("{} ({:?}){suffix}", e.name, e.kind)),
                         None if !i.content.is_empty() => Some(format!("{}{suffix}", i.content)),
                         None => None,
                     }
                 })
-                .take(limit)
-                .collect()
+                .collect();
+
+            let diag = if hits.is_empty() {
+                Some(format_no_results_diag(
+                    total_recall,
+                    entity_hits,
+                    lanes.len(),
+                    &payload.source_failures,
+                ))
+            } else {
+                None
+            };
+            (hits, diag)
         }
         Err(_) => {
             // Degrade to a direct scan when recall is not wired (e.g. a
             // capability-check failure) so search still works without hybrid.
-            substring_symbol_scan(app, query, limit, repository.as_deref())
+            (
+                substring_symbol_scan(app, query, limit, repository.as_deref()),
+                None,
+            )
         }
     };
 
     let body = if hits.is_empty() {
-        match repository.as_deref() {
-            Some(repo) => format!("No results.\n{}", repository_empty_note(repo)),
-            None => "No results.".to_owned(),
+        let mut msg = "No results.".to_owned();
+        if let Some(diag) = no_results_diag {
+            msg.push_str(&format!(" ({diag})"));
         }
+        if let Some(repo) = repository.as_deref() {
+            msg.push('\n');
+            msg.push_str(&repository_empty_note(repo));
+        }
+        msg
     } else {
         hits.join("\n")
     };
@@ -638,13 +767,19 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             let mut added = 0usize;
             for i in &taken {
                 let item_excerpt = excerpt(&i.content, CONTEXT_ITEM_EXCERPT_CHARS);
+                // Per-item provenance suffix so a caller can see which retriever
+                // produced each recall item + its fused score, mirroring `search`.
+                let prov = recall_provenance_suffix(i);
                 let sep = if joined.is_empty() { "" } else { "\n---\n" };
-                if joined.len() + sep.len() + item_excerpt.len() > CONTEXT_TOTAL_CHAR_BUDGET {
+                if joined.len() + sep.len() + item_excerpt.len() + prov.len()
+                    > CONTEXT_TOTAL_CHAR_BUDGET
+                {
                     // This item would blow the budget; stop adding items.
                     break;
                 }
                 joined.push_str(sep);
                 joined.push_str(&item_excerpt);
+                joined.push_str(&prov);
                 added += 1;
             }
             let omitted = total - added;
@@ -944,5 +1079,51 @@ mod tests {
         assert!(note.contains("scan_config applied"), "note: {note}");
 
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn provenance_repo_label_extracts_org_repo_from_git_remote() {
+        // SSH-remote form embedded by scan_repo.
+        let ssh = "engram-mcp-scan [git@github.com:phanijapps/engram.git@feat/x:abc123]";
+        assert_eq!(provenance_repo_label(ssh), "phanijapps/engram");
+
+        // HTTPS form.
+        let https = "engram-mcp-scan [https://github.com/phanijapps/engram.git@main:dead]";
+        assert_eq!(provenance_repo_label(https), "phanijapps/engram");
+
+        // A different repo.
+        let other = "engram-mcp-scan [git@github.com:earendil-works/pi.git@main:cafe]";
+        assert_eq!(provenance_repo_label(other), "earendil-works/pi");
+    }
+
+    #[test]
+    fn provenance_repo_label_falls_back_to_source_name_without_remote() {
+        // No bracketed remote → bare source name.
+        assert_eq!(provenance_repo_label("engram-mcp-scan"), "engram-mcp-scan");
+        // Empty string.
+        assert_eq!(provenance_repo_label(""), "");
+    }
+
+    #[test]
+    fn format_no_results_diag_reports_counts_and_errors() {
+        use engram_domain::{RetrievalMode, RetrievalSourceFailure, SourceFailureSeverity};
+        // No failures: just counts.
+        let diag = format_no_results_diag(15, 3, 4, &[]);
+        assert!(diag.contains("recall returned 15 items"), "{diag}");
+        assert!(diag.contains("3 entity hits"), "{diag}");
+        assert!(diag.contains("4 lanes contributed"), "{diag}");
+        assert!(!diag.contains("errored"), "{diag}");
+
+        // With a failed lane.
+        let failure = RetrievalSourceFailure {
+            source: "lexical".to_owned(),
+            mode: Some(RetrievalMode::Keyword),
+            severity: SourceFailureSeverity::Warning,
+            reason: "source_error".to_owned(),
+            message: None,
+            degraded: true,
+        };
+        let diag = format_no_results_diag(0, 0, 0, &[failure]);
+        assert!(diag.contains("errored: lexical (source_error)"), "{diag}");
     }
 }

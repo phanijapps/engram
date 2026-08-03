@@ -96,6 +96,7 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
             "symbol_context",
             "change_impact",
             "resolve_entity",
+            "graph_neighbors",
             "write_memory",
             "store_knowledge",
             "put_entity",

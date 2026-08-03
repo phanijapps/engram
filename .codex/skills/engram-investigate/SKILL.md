@@ -20,23 +20,29 @@ directly**. Optimized for accuracy + minimal context usage.
 
 ## Prerequisites
 
-Engram's MCP tools must be available (`search`, `get_context`,
+Engram's MCP tools must be available (`recall`, `search`, `get_context`,
 `symbol_context`, `change_impact`). The target repositories must be
 indexed via `scan_repo`.
 
 ## Workflow
 
-### Step 1 — Discover scope (broad search)
+### Step 1 — Discover scope (broad recall)
 
-Start with a broad `search` using key terms from the question:
+Call `recall` with the question as the query:
 
 ```json
-{"query": "key terms from the question", "limit": 10}
+{"query": "the question in natural language", "limit": 15}
 ```
 
-Check the results' **provenance** — which `org/repo` dominates? That is
-your target repository. If multiple repos appear, note which is most
-relevant to the question.
+`recall` fuses vector + lexical + graph + temporal + beliefs lanes over ALL
+entity kinds (code, docs, concepts, memories, beliefs). It finds relevant
+evidence regardless of whether it's code, documentation, decisions, or
+prior evaluations. Check the results' provenance — which repository/corpus
+dominates?
+
+Use `search` only for exact-identifier follow-ups (when you know a specific
+function/class name like `anthropicOAuth` and want its symbol definition +
+file path).
 
 ### Step 2 — Compact landscape (discovery mode)
 
@@ -128,7 +134,8 @@ is more useful than a confident guess.
 
 | Tool | Purpose | Context cost |
 | --- | --- | --- |
-| `search` | Find entities by name/keyword (with exact-match boost) | Low (~50 chars/result) |
+| `recall` | Broad evidence discovery across ALL kinds (code, docs, memories, beliefs) | Low (~content per item) |
+| `search` | Find code symbols + chunks by keyword (with exact-match boost) | Low (~50 chars/result, chunks +500) |
 | `get_context` (`mode: "discovery"`) | Compact landscape: names + paths + scores | Very low (~80 chars/item) |
 | `get_context` (`mode: "evidence"`) | Targeted excerpts with content | Medium (~2000 chars/item) |
 | `symbol_context` | Call graph neighborhood (callers + callees) | Low |

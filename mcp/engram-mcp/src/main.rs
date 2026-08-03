@@ -78,13 +78,101 @@ fn main() {
     };
 
     let mut registry: ToolRegistry<App> = ToolRegistry::new();
-    register_all(&mut registry);
+    register_all(&mut registry, &config.tool_profile);
     server::run(registry, &app);
 }
 
-/// Register every tool the server exposes. Phase 1 ships the placeholder `ping`
-/// plus the ontology/taxonomy read tools; T5+ adds the write/recall tools.
-fn register_all(registry: &mut ToolRegistry<App>) {
+/// Tool profiles — restrict which MCP tools are registered to reduce agent
+/// call count. An agent that sees 37 tools explores many; one that sees 8
+/// stays focused. Pass via `--tools <profile>`.
+fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
+    match profile {
+        "" | "all" => None, // None = register everything (backward compat).
+        "investigate" => Some(&[
+            "ping",
+            "recall",
+            "search",
+            "get_context",
+            "symbol_context",
+            "change_impact",
+            "resolve_entity",
+            "graph_neighbors",
+            "write_memory",
+            "store_knowledge",
+            "put_entity",
+            "put_relationship",
+            "capability_report",
+        ]),
+        "read" => Some(&[
+            "ping",
+            "recall",
+            "search",
+            "get_context",
+            "symbol_context",
+            "change_impact",
+            "resolve_entity",
+            "graph_neighbors",
+            "graph_subgraph",
+            "belief_get",
+            "contradiction_list",
+            "hierarchy_path",
+            "architecture",
+            "code_health",
+            "whats_changed",
+            "predict_context",
+            "capability_report",
+            "ontology_read",
+            "taxonomy_read",
+        ]),
+        "scan" => Some(&[
+            "ping",
+            "scan_repo",
+            "scan_protocols",
+            "scan_dependencies",
+            "scan_ownership",
+            "index_docs",
+            "search",
+            "capability_report",
+        ]),
+        "write" => Some(&[
+            "ping",
+            "write_memory",
+            "forget",
+            "put_entity",
+            "put_relationship",
+            "store_knowledge",
+            "index_docs",
+            "belief_put",
+            "belief_retract",
+            "procedure_put",
+            "procedure_increment",
+            "capability_report",
+        ]),
+        "maintain" => Some(&[
+            "ping",
+            "consolidate",
+            "belief_stale_list",
+            "contradiction_list",
+            "procedure_list",
+            "hierarchy_build",
+            "capability_report",
+        ]),
+        other => {
+            eprintln!("engram-mcp: unknown --tools profile '{other}', using all tools");
+            None
+        }
+    }
+}
+
+/// Register every tool the server exposes, filtered by the active profile.
+fn register_all(registry: &mut ToolRegistry<App>, profile: &str) {
+    let allowed = tool_profile_set(profile);
+    register_all_tools(registry);
+    registry.retain(allowed);
+}
+
+/// Register ALL tools unconditionally (internal — called by register_all).
+fn register_all_tools(registry: &mut ToolRegistry<App>) {
     registry.register(ToolRecord {
         name: "ping",
         description: "Transport health check. Returns \"pong\". (Phase-1 placeholder.)",
@@ -172,11 +260,17 @@ fn register_all(registry: &mut ToolRegistry<App>) {
     });
     registry.register(ToolRecord {
         name: "recall",
-        description: "Fused retrieval across memory + knowledge + beliefs for the project.",
+        description: "General evidence discovery: fuses vector + lexical + graph + temporal + belief \
+                      lanes over ALL entity kinds (code symbols, docs, memories, beliefs, concepts). \
+                      The right FIRST call for any question — not just code. Returns fused + ranked \
+                      items with per-lane provenance (raw lane score + fused RRF score). Parameters: \
+                      `query` (natural language), optional `lanes` filter (memory|knowledge|docs|beliefs), \
+                      `limit` (default 10, max 100). Use `search` for exact-identifier code lookup; \
+                      use `recall` for broad discovery across every knowledge kind.",
         input_schema: json!({
             "type": "object",
             "properties": {
-                "query": { "type": "string" },
+                "query": { "type": "string", "description": "Natural-language query. Matched across all lanes + entity kinds." },
                 "lanes": {
                     "type": "array",
                     "items": { "type": "string" },
@@ -283,7 +377,12 @@ fn register_all(registry: &mut ToolRegistry<App>) {
     });
     registry.register(ToolRecord {
         name: "search",
-        description: "Keyword search over indexed code symbols.",
+        description: "Ranked code search over indexed symbols (entities) + code text (chunks). \
+                      Fuses lexical (BM25) + graph + associative-graph + community-summary lanes. \
+                      By default returns BOTH entity hits (symbol name + path) AND chunk hits \
+                      (code text excerpt — surfaces credential strings, constants, request \
+                      construction that live in function bodies). Set include_chunks=false for \
+                      entity-only results.",
         input_schema: json!({
             "type": "object",
             "properties": {
@@ -301,6 +400,13 @@ fn register_all(registry: &mut ToolRegistry<App>) {
                     "type": "number",
                     "description": "Minimum fused score (default 0.01). Items below this are \
                                     dropped as noise. Lower to surface more; raise to tighten."
+                },
+                "include_chunks": {
+                    "type": "boolean",
+                    "description": "When true (default), include code Chunk results alongside \
+                                    Entity results. Each chunk hit includes a 500-char excerpt \
+                                    of the code text. When false, only Entity (symbol) results \
+                                    are returned."
                 },
                 "diagnostics": {
                     "type": "boolean",

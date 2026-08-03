@@ -42,6 +42,9 @@ pub struct McpConfig {
     /// even when fastembed is compiled in — so a deployment can avoid the model
     /// download/load without a rebuild.
     pub enable_vector: bool,
+    /// Tool profile: restricts which MCP tools are registered. Empty = all tools.
+    /// Values: "investigate", "read", "scan", "write", "maintain", or empty (all).
+    pub tool_profile: String,
 }
 
 impl McpConfig {
@@ -59,6 +62,7 @@ impl McpConfig {
         let mut org: Option<String> = None;
         let mut domain: Option<String> = None;
         let mut subdomain: Option<String> = None;
+        let mut tool_profile = String::new();
         // Default-on (RFC-0019 D3 reversed): vector compiles in with the
         // `fastembed` default feature; `--no-vector` disables it at runtime
         // without a rebuild.
@@ -91,6 +95,7 @@ impl McpConfig {
                     | "--org"
                     | "--domain"
                     | "--subdomain"
+                    | "--tools"
             ) {
                 return Err(format!("unknown argument: {flag}"));
             }
@@ -120,6 +125,7 @@ impl McpConfig {
                 "--org" => org = Some(value),
                 "--domain" => domain = Some(value),
                 "--subdomain" => subdomain = Some(value),
+                "--tools" => tool_profile = value,
                 _ => unreachable!("known flags are matched above"),
             }
             i += 2;
@@ -152,6 +158,7 @@ impl McpConfig {
             domain,
             subdomain,
             enable_vector,
+            tool_profile,
         })
     }
 }

@@ -78,13 +78,100 @@ fn main() {
     };
 
     let mut registry: ToolRegistry<App> = ToolRegistry::new();
-    register_all(&mut registry);
+    register_all(&mut registry, &config.tool_profile);
     server::run(registry, &app);
 }
 
-/// Register every tool the server exposes. Phase 1 ships the placeholder `ping`
-/// plus the ontology/taxonomy read tools; T5+ adds the write/recall tools.
-fn register_all(registry: &mut ToolRegistry<App>) {
+/// Tool profiles — restrict which MCP tools are registered to reduce agent
+/// call count. An agent that sees 37 tools explores many; one that sees 8
+/// stays focused. Pass via `--tools <profile>`.
+fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
+    match profile {
+        "" | "all" => None, // None = register everything (backward compat).
+        "investigate" => Some(&[
+            "ping",
+            "recall",
+            "search",
+            "get_context",
+            "symbol_context",
+            "change_impact",
+            "resolve_entity",
+            "write_memory",
+            "store_knowledge",
+            "put_entity",
+            "put_relationship",
+            "capability_report",
+        ]),
+        "read" => Some(&[
+            "ping",
+            "recall",
+            "search",
+            "get_context",
+            "symbol_context",
+            "change_impact",
+            "resolve_entity",
+            "graph_neighbors",
+            "graph_subgraph",
+            "belief_get",
+            "contradiction_list",
+            "hierarchy_path",
+            "architecture",
+            "code_health",
+            "whats_changed",
+            "predict_context",
+            "capability_report",
+            "ontology_read",
+            "taxonomy_read",
+        ]),
+        "scan" => Some(&[
+            "ping",
+            "scan_repo",
+            "scan_protocols",
+            "scan_dependencies",
+            "scan_ownership",
+            "index_docs",
+            "search",
+            "capability_report",
+        ]),
+        "write" => Some(&[
+            "ping",
+            "write_memory",
+            "forget",
+            "put_entity",
+            "put_relationship",
+            "store_knowledge",
+            "index_docs",
+            "belief_put",
+            "belief_retract",
+            "procedure_put",
+            "procedure_increment",
+            "capability_report",
+        ]),
+        "maintain" => Some(&[
+            "ping",
+            "consolidate",
+            "belief_stale_list",
+            "contradiction_list",
+            "procedure_list",
+            "hierarchy_build",
+            "capability_report",
+        ]),
+        other => {
+            eprintln!("engram-mcp: unknown --tools profile '{other}', using all tools");
+            None
+        }
+    }
+}
+
+/// Register every tool the server exposes, filtered by the active profile.
+fn register_all(registry: &mut ToolRegistry<App>, profile: &str) {
+    let allowed = tool_profile_set(profile);
+    register_all_tools(registry);
+    registry.retain(allowed);
+}
+
+/// Register ALL tools unconditionally (internal — called by register_all).
+fn register_all_tools(registry: &mut ToolRegistry<App>) {
     registry.register(ToolRecord {
         name: "ping",
         description: "Transport health check. Returns \"pong\". (Phase-1 placeholder.)",

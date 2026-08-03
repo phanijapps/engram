@@ -324,7 +324,7 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
 
     // Excerpt each item + cap total output.
     let mut joined = String::new();
-    let mut items_used = 0usize;
+    let mut _items_used = 0usize;
     let mut items_skipped = 0usize;
     for content in &filtered {
         let excerpt = if content.chars().count() <= RECALL_ITEM_EXCERPT_CHARS {
@@ -346,7 +346,7 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
             joined.push_str("\n---\n");
         }
         joined.push_str(&excerpt);
-        items_used += 1;
+        _items_used += 1;
     }
     if items_skipped > 0 {
         joined.push_str(&format!(

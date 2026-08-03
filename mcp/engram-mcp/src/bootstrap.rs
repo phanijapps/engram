@@ -104,6 +104,7 @@ mod tests {
             // enable_vector gate is covered by the integration-crate bootstrap
             // tests directly.
             enable_vector: false,
+            tool_profile: String::new(),
         }
     }
 

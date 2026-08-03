@@ -69,6 +69,13 @@ impl<C> ToolRegistry<C> {
         self.tools.push(tool);
     }
 
+    /// Remove tools whose names are NOT in `keep`. No-op if `keep` is None.
+    pub fn retain(&mut self, keep: Option<&[&str]>) {
+        if let Some(names) = keep {
+            self.tools.retain(|t| names.iter().any(|n| *n == t.name));
+        }
+    }
+
     /// The `tools/list` payload: one entry per registered tool.
     pub fn list(&self) -> Vec<Value> {
         self.tools

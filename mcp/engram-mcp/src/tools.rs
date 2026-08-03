@@ -276,6 +276,13 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
             .unwrap_or(10)
             .clamp(1, 100),
     );
+
+    // Output size bounding — prevents multi-million-token dumps.
+    // `recall` returns fused items whose `content` can be whole-class bodies
+    // (thousands of chars each). Without caps, limit=15 × 6000 chars = 90K.
+    const RECALL_ITEM_EXCERPT_CHARS: usize = 1000;
+    const RECALL_TOTAL_CHAR_BUDGET: usize = 20_000;
+
     let recall = app.provider.require_recall().map_err(internal)?;
     let request = RetrievalRequest {
         query: query.to_owned(),
@@ -289,18 +296,65 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
         include_explanations: Some(true),
     };
     let payload = block_on(recall.recall(request)).map_err(internal)?;
-    let items: Vec<&str> = payload
+
+    let filtered: Vec<&str> = payload
         .items
         .iter()
         .filter(|i| lanes.allows(&i.target_type))
         .map(|i| i.content.as_str())
         .collect();
-    let body = if items.is_empty() {
-        "No results.".to_owned()
-    } else {
-        items.join("\n---\n")
-    };
-    Ok(protocol::text_content(body))
+
+    if filtered.is_empty() {
+        let failures = payload.source_failures;
+        let body = if failures.is_empty() {
+            "No results.".to_owned()
+        } else {
+            format!(
+                "No results. ({} lane(s) contributed; errored: {})",
+                failures.len(),
+                failures
+                    .iter()
+                    .map(|f| f.source.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        };
+        return Ok(protocol::text_content(body));
+    }
+
+    // Excerpt each item + cap total output.
+    let mut joined = String::new();
+    let mut items_used = 0usize;
+    let mut items_skipped = 0usize;
+    for content in &filtered {
+        let excerpt = if content.chars().count() <= RECALL_ITEM_EXCERPT_CHARS {
+            (*content).to_owned()
+        } else {
+            let end = content
+                .char_indices()
+                .nth(RECALL_ITEM_EXCERPT_CHARS)
+                .map(|(idx, _)| idx)
+                .unwrap_or(content.len());
+            format!("{}\n... [truncated]", &content[..end])
+        };
+        let would_be = joined.len() + excerpt.len() + 5; // +5 for "\n---\n"
+        if joined.len() > 0 && would_be > RECALL_TOTAL_CHAR_BUDGET {
+            items_skipped += 1;
+            continue;
+        }
+        if !joined.is_empty() {
+            joined.push_str("\n---\n");
+        }
+        joined.push_str(&excerpt);
+        items_used += 1;
+    }
+    if items_skipped > 0 {
+        joined.push_str(&format!(
+            "\n... [budget reached: {items_skipped} more items omitted]"
+        ));
+    }
+
+    Ok(protocol::text_content(joined))
 }
 
 /// `consolidate`: run reflection + decay over the project scope.

@@ -572,14 +572,14 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
     });
     registry.register(ToolRecord {
         name: "symbol_context",
-        description: "Callers, callees, and community for one symbol.",
-        input_schema: json!({ "type": "object", "properties": { "symbol": { "type": "string" }, "depth": { "type": "integer" } }, "required": ["symbol"] }),
+        description: "Callers, callees, and community for one symbol — or, when `symbol` is an array, for each symbol in one call (batch).",
+        input_schema: json!({ "type": "object", "properties": { "symbol": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ], "description": "A single symbol name OR an array of symbol names to resolve in one call." }, "depth": { "type": "integer" }, "cap": { "type": "integer" } }, "required": ["symbol"] }),
         handler: codegraph::symbol_context,
     });
     registry.register(ToolRecord {
         name: "change_impact",
-        description: "Blast radius + dependency paths from a change site.",
-        input_schema: json!({ "type": "object", "properties": { "target": { "type": "string" }, "depth": { "type": "integer" }, "to": { "type": "string" } }, "required": ["target"] }),
+        description: "Blast radius + dependency paths from a change site — or, when `target` is an array, for each target in one call (batch).",
+        input_schema: json!({ "type": "object", "properties": { "target": { "oneOf": [ { "type": "string" }, { "type": "array", "items": { "type": "string" } } ], "description": "A single target symbol OR an array of target symbols to resolve in one call." }, "depth": { "type": "integer" }, "cap": { "type": "integer" }, "to": { "type": "string" } }, "required": ["target"] }),
         handler: codegraph::change_impact,
     });
     registry.register(ToolRecord {
@@ -602,11 +602,20 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
     });
     registry.register(ToolRecord {
         name: "get_context",
-        description: "Compose a task-aware context packet: fused recall + code neighborhood.",
+        description: "Compose a task-aware context packet: fused recall + code neighborhood. `focus` accepts a string OR an array of anchors (multi-anchor mode).",
         input_schema: json!({
             "type": "object",
             "properties": {
-                "focus": { "type": "string", "description": "Symbol, file, concept, or free-text." },
+                "focus": {
+                    "oneOf": [
+                        { "type": "string" },
+                        { "type": "array", "items": { "type": "string" } }
+                    ],
+                    "description": "Symbol, file, concept, or free-text. OR a JSON array of \
+                                    anchors: the first drives the [Code]/[Graph] sections and \
+                                    recall searches for all terms in one fused pass. \
+                                    e.g. \"loginAnthropic\" or [\"loginAnthropic\", \"resolveStoredOAuth\"]."
+                },
                 "depth": { "type": "integer" },
                 "limit": { "type": "integer" },
                 "mode": {

@@ -19,7 +19,7 @@ use std::path::Path;
 use crate::app::App;
 use crate::protocol;
 use crate::registry::ToolError;
-use crate::tools::{internal, policy, req_str, requester, system_actor};
+use crate::tools::{internal, invalid, policy, req_str, requester, system_actor};
 
 /// Default per-direction visited cap for bounded code-graph neighborhoods. The
 /// depth defaults (`symbol_context`=1, `change_impact`=2) are the primary flood
@@ -780,36 +780,60 @@ fn apply_score_threshold(hits: Vec<SearchHit>, min_score: f32) -> (Vec<SearchHit
     (kept, dropped)
 }
 
-/// Build the score bracket for a hit, surfacing BOTH the raw per-lane score
-/// and the fused RRF score (Option B). Three shapes:
+/// Build the score bracket for a hit, surfacing the raw per-lane score, the
+/// fused RRF score, AND the within-query normalized score (Fix 4: score
+/// calibration). The normalized score is `raw_rrf / max_rrf_in_result_set`, so
+/// the top result renders as ~1.00 and the rest scale proportionally — giving
+/// the agent meaningful separation (1.00 vs 0.80 vs 0.30) without changing the
+/// underlying fusion. Four shapes:
 ///
 /// - Injected exact-match (`retriever == "exact-match"`, no raw score):
-///   `[exact-match, rrf=X.XX]` — same in both modes; the tag is the signal.
+///   `[exact-match, rrf=X.XX (norm:Y.YY)]`.
 /// - Lane set a raw score:
-///   - compact:     `[lane:raw, rrf=X.XX]`  (e.g. `[vector:0.92, rrf=0.02]`)
-///   - diagnostics: `[lane, raw=X.XX, rrf=X.XX]`
+///   - compact:     `[lane:raw, rrf=X.XX (norm:Y.YY)]`
+///   - diagnostics: `[lane, raw=X.XX, rrf=X.XX (norm:Y.YY)]`
 /// - Lane did not set a raw score (None):
-///   - compact:     `[rrf=X.XX]`
-///   - diagnostics: `[lane, rrf=X.XX]`  (lane still named for traceability)
-fn score_bracket(h: &SearchHit, diagnostics: bool) -> String {
+///   - compact:     `[rrf=X.XX (norm:Y.YY)]`
+///   - diagnostics: `[lane, rrf=X.XX (norm:Y.YY)]`  (lane still named)
+///
+/// `norm_divisor` is the max RRF in the result set; the caller computes it once
+/// over the final hit list and passes it to every `render_hit` call. A
+/// non-positive divisor (empty result set) yields `norm:0.00` rather than NaN.
+fn score_bracket(h: &SearchHit, diagnostics: bool, norm_divisor: f32) -> String {
+    let norm = if norm_divisor > 0.0 {
+        h.score / norm_divisor
+    } else {
+        0.0
+    };
     if h.retriever == "exact-match" {
-        return format!("[exact-match, rrf={:.2}]", h.score);
+        return format!("[exact-match, rrf={:.2} (norm:{norm:.2})]", h.score);
     }
     match (h.source_score, diagnostics) {
-        (Some(raw), false) => format!("[{}:{:.2}, rrf={:.2}]", h.retriever, raw, h.score),
-        (Some(raw), true) => format!("[{}, raw={:.2}, rrf={:.2}]", h.retriever, raw, h.score),
-        (None, false) => format!("[rrf={:.2}]", h.score),
-        (None, true) => format!("[{}, rrf={:.2}]", h.retriever, h.score),
+        (Some(raw), false) => format!(
+            "[{}:{raw:.2}, rrf={:.2} (norm:{norm:.2})]",
+            h.retriever, h.score
+        ),
+        (Some(raw), true) => format!(
+            "[{}, raw={raw:.2}, rrf={:.2} (norm:{norm:.2})]",
+            h.retriever, h.score
+        ),
+        (None, false) => format!("[rrf={:.2} (norm:{norm:.2})]", h.score),
+        (None, true) => format!("[{}, rrf={:.2} (norm:{norm:.2})]", h.retriever, h.score),
     }
 }
 
-/// Render a hit to a single result line (Fix 1 + Fix 5 + Option B raw scores).
+/// Render a hit to a single result line (Fix 1 + Fix 4 + Fix 5 + Option B raw
+/// scores).
 ///
 /// - Diagnostics (`diagnostics = true`): full format with kind + retriever —
-///   `name (kind) — org/repo, path [lane, raw=X.XX, rrf=Y.YY]`.
-/// - Compact (default): `name — repo, path [lane:raw, rrf=Y.YY]` — kind dropped
-///   (redundant for code), repo shortened to the name segment, score rounded to
-///   2 decimals. ~50% shorter than the diagnostics line.
+///   `name (kind) — org/repo, path [lane, raw=X.XX, rrf=Y.YY (norm:Z.ZZ)]`.
+/// - Compact (default): `name — repo, path [lane:raw, rrf=Y.YY (norm:Z.ZZ)]` —
+///   kind dropped (redundant for code), repo shortened to the name segment,
+///   score rounded to 2 decimals. ~50% shorter than the diagnostics line.
+///
+/// `norm_divisor` (Fix 4) is the max RRF across the result set; it produces the
+/// within-query normalized score `raw_rrf / max` so the agent sees rank
+/// separation (top = 1.00, others scale down) alongside the raw lane score.
 ///
 /// The path (Fix 1) is included in both modes when available.
 ///
@@ -818,12 +842,12 @@ fn score_bracket(h: &SearchHit, diagnostics: bool) -> String {
 /// of the chunk text). This surfaces the decisive code VALUES (credential
 /// strings, constants, request construction) that live in function bodies, not
 /// symbol names — the key addition over Entity-only search.
-fn render_hit(h: &SearchHit, diagnostics: bool) -> String {
+fn render_hit(h: &SearchHit, diagnostics: bool, norm_divisor: f32) -> String {
     let path_part = match h.path.as_deref() {
         Some(p) if !p.is_empty() => format!(", {p}"),
         _ => String::new(),
     };
-    let bracket = score_bracket(h, diagnostics);
+    let bracket = score_bracket(h, diagnostics, norm_divisor);
     let header = if diagnostics {
         let kind_part = if h.kind_label.is_empty() {
             String::new()
@@ -1082,13 +1106,22 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                 // Fix 3: per-file diversity cap — keep at most 2 per source file.
                 let (hits, file_notes) = apply_per_file_cap(hits, MAX_PER_FILE);
 
+                // Fix 4: score calibration — normalize RRF within the result
+                // set so the top result renders as ~1.00 and the rest scale
+                // proportionally. The divisor is the max RRF over the FINAL
+                // (post-cap, post-threshold) hit list, which is what the agent
+                // actually sees. A single-hit set yields norm 1.00 for that
+                // hit; an empty set (handled by the max>0 guard in
+                // `score_bracket`) yields 0.00 rather than NaN.
+                let max_rrf = hits.iter().map(|h| h.score).fold(0.0_f32, f32::max);
+
                 // Render. Compact is the default (Fix 5); `diagnostics = true`
                 // selects the full kind + retriever format.
                 let diagnostics = args["diagnostics"].as_bool().unwrap_or(false);
                 let result_lines: Vec<String> = hits
                     .iter()
                     .take(limit)
-                    .map(|h| render_hit(h, diagnostics))
+                    .map(|h| render_hit(h, diagnostics, max_rrf))
                     .collect();
 
                 let mut notes: Vec<String> = Vec::new();
@@ -1205,33 +1238,118 @@ fn substring_symbol_scan(
         .collect()
 }
 
-/// `symbol_context`: callers, callees, and community for one symbol.
+/// Parse `args[key]` as EITHER a single string OR a JSON array of strings,
+/// returning a `Vec<String>`. This is the batch-call enabler (Fix 1 + Fix 2):
+/// `symbol_context` / `change_impact` / `get_context` all accept the legacy
+/// single-string form AND the new array form so an agent can resolve N anchors
+/// in one call instead of N.
+///
+/// Rejects:
+/// - missing key or null (`{key} is required`)
+/// - non-string / non-array value (`{key} is required`)
+/// - empty string or empty array (`{key} is required`)
+/// - array containing a non-string or empty-string element (`{key} array must
+///   contain only non-empty strings`)
+///
+/// On success, always returns a non-empty `Vec<String>` (length ≥ 1).
+fn parse_str_or_array(args: &Value, key: &str) -> Result<Vec<String>, ToolError> {
+    match &args[key] {
+        Value::String(s) if !s.is_empty() => Ok(vec![s.clone()]),
+        Value::Array(arr) => {
+            if arr.is_empty() {
+                return Err(invalid(format!("{key} is required")));
+            }
+            let mut out = Vec::with_capacity(arr.len());
+            for v in arr {
+                let s = v.as_str().filter(|s| !s.is_empty()).ok_or_else(|| {
+                    invalid(format!("{key} array must contain only non-empty strings"))
+                })?;
+                out.push(s.to_owned());
+            }
+            Ok(out)
+        }
+        _ => Err(invalid(format!("{key} is required"))),
+    }
+}
+
+/// `symbol_context`: callers, callees, and community for one symbol — or, when
+/// `symbol` is passed as a JSON array, for each symbol in one call (Fix 1:
+/// batch symbol_context). An agent that finds 5 distinctive identifiers makes
+/// one call instead of five.
+///
+/// - String `symbol` (legacy): returns the single `SymbolContextBounded` debug
+///   view, unchanged from prior behavior.
+/// - Array `symbol` (new): runs `symbol_context_bounded` for each + returns the
+///   results concatenated, one section per symbol with a header:
+///   `=== symbol_context: <name> (depth=N) ===`.
 pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
-    let symbol = req_str(args, "symbol")?;
+    let symbols = parse_str_or_array(args, "symbol")?;
     let depth = args["depth"].as_u64().unwrap_or(1) as usize;
     let cap = args["cap"]
         .as_u64()
         .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
     let rels = fetch_rels(app)?;
-    let ctx = engram_codegraph_queries::symbol_context_bounded(&rels, symbol, depth, cap);
-    Ok(protocol::text_content(format!("{ctx:?}")))
+
+    // Legacy single-string path: identical output to the prior implementation
+    // (`{ctx:?}` with no header) so existing callers and tests are unaffected.
+    if symbols.len() == 1 && args["symbol"].is_string() {
+        let symbol = symbols[0].as_str();
+        let ctx = engram_codegraph_queries::symbol_context_bounded(&rels, symbol, depth, cap);
+        return Ok(protocol::text_content(format!("{ctx:?}")));
+    }
+
+    // Batch path: one section per symbol with a header. The relationship set
+    // (`rels`) is fetched ONCE and reused across all symbols — the network/store
+    // cost is the same as a single call.
+    let mut sections = Vec::with_capacity(symbols.len());
+    for symbol in &symbols {
+        let ctx = engram_codegraph_queries::symbol_context_bounded(&rels, symbol, depth, cap);
+        sections.push(format!(
+            "=== symbol_context: {symbol} (depth={depth}) ===\n{ctx:?}"
+        ));
+    }
+    Ok(protocol::text_content(sections.join("\n\n")))
 }
 
-/// `change_impact`: blast radius + dependency path from a change site.
+/// `change_impact`: blast radius + dependency path from a change site — or, when
+/// `target` is passed as a JSON array, for each target in one call (Fix 1:
+/// batch change_impact). Mirrors [`symbol_context`]'s batch shape.
+///
+/// - String `target` (legacy): single blast radius + (optional) dependency path
+///   to `to`. Identical to prior output.
+/// - Array `target` (new): blast radius per target with a header
+///   `=== change_impact: <name> (depth=N) ===`. The `to` / dependency-path
+///   option is single-target-only and ignored in batch mode (a per-target `to`
+///   would need a parallel array shape that does not exist yet).
 pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
-    let target = req_str(args, "target")?;
+    let targets = parse_str_or_array(args, "target")?;
     let depth = args["depth"].as_u64().unwrap_or(2) as usize;
     let cap = args["cap"]
         .as_u64()
         .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
     let rels = fetch_rels(app)?;
-    let radius = engram_codegraph_queries::blast_radius_bounded(&rels, target, depth, cap);
-    let path = args["to"]
-        .as_str()
-        .and_then(|to| engram_codegraph_queries::dependency_path(&rels, target, to));
-    Ok(protocol::text_content(format!(
-        "Blast radius ({depth} hops, cap {cap}): {radius:?}\nDependency path: {path:?}"
-    )))
+
+    // Legacy single-string path: preserve the dependency-path option.
+    if targets.len() == 1 && args["target"].is_string() {
+        let target = targets[0].as_str();
+        let radius = engram_codegraph_queries::blast_radius_bounded(&rels, target, depth, cap);
+        let path = args["to"]
+            .as_str()
+            .and_then(|to| engram_codegraph_queries::dependency_path(&rels, target, to));
+        return Ok(protocol::text_content(format!(
+            "Blast radius ({depth} hops, cap {cap}): {radius:?}\nDependency path: {path:?}"
+        )));
+    }
+
+    // Batch path: blast radius per target with a header.
+    let mut sections = Vec::with_capacity(targets.len());
+    for target in &targets {
+        let radius = engram_codegraph_queries::blast_radius_bounded(&rels, target, depth, cap);
+        sections.push(format!(
+            "=== change_impact: {target} (depth={depth}, cap {cap}) ===\nBlast radius: {radius:?}"
+        ));
+    }
+    Ok(protocol::text_content(sections.join("\n\n")))
 }
 
 /// `code_health`: dead code (zero-caller symbols) + repository stats.
@@ -1499,8 +1617,30 @@ fn apply_lane_budgets<'a>(
 /// concept, or free-text). Fuses recall (docs + memories + beliefs) with the
 /// code neighborhood (callers/callees/community) — a pragmatic first version of
 /// RFC-0013's `ContextSubgraph` packet, built on existing capabilities.
+///
+/// **Fix 2 — multi-anchor focus.** `focus` accepts EITHER a single string
+/// (legacy) OR a JSON array of strings. When an array is passed:
+/// - The FIRST item is the primary anchor for the [Code]/[Graph] sections
+///   (current single-anchor behavior, just explicit).
+/// - The recall query is the items joined space-separated, so recall searches
+///   for ALL terms in one fused pass.
+/// - The output header carries `(anchors: [sym1, sym2, sym3])`.
+/// This lets an agent pass `focus: ["loginAnthropic", "resolveStoredOAuth",
+/// "createClient"]` in one call instead of 3 separate get_context calls.
+///
+/// **Fix 3 — escalation handoff.** The packet ends with an `=== Assessment ===`
+/// section: item counts by target type, graph/code neighborhood status, the
+/// resolved anchor, missing-evidence notes (when [Code] or [Graph] is empty),
+/// and suggested next-step calls referencing the actual focus terms + anchor.
 pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
-    let focus = req_str(args, "focus")?;
+    // Fix 2: focus may be a string (legacy) or an array of anchors. The FIRST
+    // array item is the primary anchor; the joined string drives recall + the
+    // shape classifier. For a single string, primary == joined == focus.
+    let focus_list = parse_str_or_array(args, "focus")?;
+    let focus_array_passed = args["focus"].is_array();
+    let primary_focus = focus_list[0].clone();
+    let focus = focus_list.join(" ");
+
     let depth = args["depth"].as_u64().unwrap_or(2) as usize;
     let limit = args["limit"].as_u64().unwrap_or(10).clamp(1, 50) as u32;
     // Optional repository filter — see `search`. Narrows the [Recall] section
@@ -1513,11 +1653,11 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         .filter(|s| !s.trim().is_empty())
         .map(|s| s.to_owned());
 
-    // Classify the query shape (Code / Mixed / Doc) from the focus so per-lane
-    // budgets can prioritize code evidence for code-shaped queries. Computed
-    // once here — used both to budget the [Recall] lanes and to label the
-    // output header (`query shape: Code`).
-    let shape = classify_query_shape(focus);
+    // Classify the query shape (Code / Mixed / Doc) from the joined focus so
+    // per-lane budgets can prioritize code evidence for code-shaped queries.
+    // Computed once here — used both to budget the [Recall] lanes and to label
+    // the output header (`query shape: Code`).
+    let shape = classify_query_shape(&focus);
 
     // Fix 4: discovery vs evidence mode. `discovery` (alias: `compact`) returns
     // ONLY result headers (name, kind, repo, path, score) — no content body —
@@ -1540,10 +1680,14 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     //    Entity hit can drive the code/graph anchor (step 2/3) — a NL focus
     //    never matches a symbol name exactly, so without that anchor the
     //    structural sections would always be empty for NL queries.
+    //
+    //    The recall query is the JOINED focus (all anchors space-separated) so
+    //    a multi-anchor packet searches for every term in one fused pass. For
+    //    a single string focus, joined == the focus (unchanged behavior).
     let (recall_text, recall_items) = match app.provider.require_recall() {
         Ok(handle) => {
             let req = RetrievalRequest {
-                query: focus.to_owned(),
+                query: focus.clone(),
                 scope: app.scope.clone(),
                 requester: crate::tools::requester(),
                 modes: Vec::new(),
@@ -1629,18 +1773,37 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         Err(_) => (String::new(), Vec::new()),
     };
 
+    // Fix 3: capture recall counts by target type (over the full recall payload,
+    // after the repo filter) for the Assessment section's missing-evidence
+    // detection. These reflect what RECALL found, which drives the "missing
+    // evidence" notes (a capped-empty display still counts as recall-found).
+    let recall_entity_count = recall_items
+        .iter()
+        .filter(|i| i.target_type == RetrievalTargetType::Entity)
+        .count();
+    let recall_chunk_count = recall_items
+        .iter()
+        .filter(|i| i.target_type == RetrievalTargetType::Chunk)
+        .count();
+    let recall_memory_count = recall_items
+        .iter()
+        .filter(|i| i.target_type == RetrievalTargetType::Memory)
+        .count();
+
     // 1b. Derive an anchor symbol: the name of the top-scoring Entity recall
     //     hit (recall items are fused-ranked, so the first Entity item is the
     //     best symbol match for the focus). The NL focus still drives recall;
     //     this anchor only drives the structural [Code]/[Graph] sections, which
-    //     need an exact symbol name. Falls back to the raw focus when recall
-    //     found no entity. When a repository filter is active the items are
-    //     already repo-narrowed, so the anchor resolves to a target-repo symbol.
+    //     need an exact symbol name. Falls back to the PRIMARY focus item (the
+    //     first anchor) when recall found no entity — NOT the joined string,
+    //     which would never match a symbol name. When a repository filter is
+    //     active the items are already repo-narrowed, so the anchor resolves to
+    //     a target-repo symbol.
     let anchor_symbol = recall_items
         .iter()
         .find(|i| i.target_type == RetrievalTargetType::Entity)
         .and_then(|i| by_id.get(&i.target_id).map(|e| e.name.clone()))
-        .unwrap_or_else(|| focus.to_owned());
+        .unwrap_or_else(|| primary_focus.clone());
 
     // 2. Code neighborhood keyed on the anchor symbol. When a repository filter
     //    is active the edge set is pre-filtered to that repo. Degrade on error.
@@ -1669,20 +1832,32 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         .take(20)
         .collect();
     let graph_text = if !graph_status.is_empty() {
-        graph_status
+        graph_status.clone()
     } else if links.is_empty() {
         "(none)".to_owned()
     } else {
         links.join("\n")
     };
+    // Whether the graph subsystem reported an error (vs OK-but-empty). Captured
+    // before `graph_status` is consumed by the Assessment builder below.
+    let graph_unavailable = !graph_status.is_empty();
 
     // Surface the anchor resolution so a caller can see which symbol the
-    // structural sections resolved to (empty for an exact-symbol focus that
-    // also has no matching entity, since anchor == focus in that case).
-    let anchor_note = if anchor_symbol == focus {
+    // structural sections resolved to. For a multi-anchor focus, compare against
+    // the PRIMARY anchor (the first item) — the joined string would never equal
+    // a single symbol name. Empty when the anchor resolved to the primary.
+    let anchor_note = if anchor_symbol == primary_focus {
         String::new()
     } else {
         format!(" (anchor symbol: {anchor_symbol})")
+    };
+
+    // Fix 2: surface the multi-anchor list in the header when an array was
+    // passed, so a caller can see which anchors drove the packet.
+    let anchors_note = if focus_array_passed {
+        format!(" (anchors: [{}])", focus_list.join(", "))
+    } else {
+        String::new()
     };
 
     // Surface the detected query shape so a caller can see why the [Recall]
@@ -1701,9 +1876,144 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         _ => String::new(),
     };
 
+    // Fix 3: Assessment section — escalation handoff. Reports item counts,
+    // graph/code neighborhood status, the resolved anchor, missing-evidence
+    // notes, and concrete suggested next-step calls referencing the actual
+    // focus terms + anchor symbol. Built from the already-computed pieces so
+    // there is no extra store/recall cost.
+    let assessment = build_assessment(
+        &recall_items,
+        recall_entity_count,
+        recall_chunk_count,
+        recall_memory_count,
+        &links,
+        &code_ctx,
+        &anchor_symbol,
+        &primary_focus,
+        &focus_list,
+        graph_unavailable,
+    );
+
     Ok(protocol::text_content(format!(
-        "=== Context for '{focus}'{anchor_note}{shape_note} ===\n\n[Recall]\n{recall_text}\n\n[Graph]\n{graph_text}\n\n[Code]\n{code_ctx:?}{repo_note}"
+        "=== Context for '{focus}'{anchor_note}{anchors_note}{shape_note} ===\n\n[Recall]\n{recall_text}\n\n[Graph]\n{graph_text}\n\n[Code]\n{code_ctx:?}{repo_note}\n\n{assessment}"
     )))
+}
+
+/// Build the `=== Assessment ===` section (Fix 3: escalation handoff) for a
+/// `get_context` packet. Surfaces, in one block at the end of the response:
+///
+/// - **Items returned:** total + per-target-type breakdown (Entity / Chunk /
+///   Memory), over the full recall payload (post-repo-filter), so the caller
+///   sees what recall FOUND regardless of display capping.
+/// - **Graph neighborhood:** `populated` when the anchor has unified-graph
+///   links (doc↔code `describes`/`mentions` edges), `empty` otherwise.
+/// - **Anchor symbol:** the resolved symbol name, or `none` with a hint when a
+///   NL focus did not resolve to a code symbol.
+/// - **Missing evidence:** targeted notes when [Graph] or [Code] is empty, or
+///   when recall returned no Entity items. Each note explains the gap + the
+///   likely cause. Omitted entirely when nothing is missing (clean packet).
+/// - **Suggested next steps:** concrete calls referencing the ACTUAL focus
+///   terms + anchor symbol (not generic placeholders): `search`, `symbol_context`
+///   (depth+1 for a deeper call chain), `graph_neighbors` (all relationship
+///   types, not just the call graph).
+fn build_assessment(
+    recall_items: &[engram_domain::RetrievalResult],
+    entity_count: usize,
+    chunk_count: usize,
+    memory_count: usize,
+    links: &[String],
+    code_ctx: &engram_codegraph_queries::SymbolContext,
+    anchor_symbol: &str,
+    primary_focus: &str,
+    focus_list: &[String],
+    graph_unavailable: bool,
+) -> String {
+    let total = recall_items.len();
+    let other_count = total.saturating_sub(entity_count + chunk_count + memory_count);
+
+    let graph_populated = !links.is_empty() && !graph_unavailable;
+    let code_populated = !code_ctx.callers.is_empty() || !code_ctx.callees.is_empty();
+
+    // Anchor line: name when resolved, else a hint that NL focus did not
+    // resolve. The anchor equals the primary focus only when recall found no
+    // entity AND no multi-anchor override — i.e. the fallback fired.
+    let anchor_line = if code_populated || graph_populated {
+        format!("Anchor symbol: {anchor_symbol}")
+    } else {
+        format!(
+            "Anchor symbol: none (focus '{primary_focus}' did not resolve to a code symbol with edges)"
+        )
+    };
+
+    // Missing-evidence notes — only the gaps that actually fired.
+    let mut missing: Vec<String> = Vec::new();
+    if links.is_empty() && !graph_unavailable {
+        missing.push(
+            "No graph relationships found for the anchor. The symbol may not have indexed call edges, or the anchor may not be a code symbol."
+                .to_owned(),
+        );
+    }
+    if !code_populated {
+        missing.push(
+            "No code neighborhood found. Try searching for the exact identifier first, then use it as the focus."
+                .to_owned(),
+        );
+    }
+    if entity_count == 0 {
+        missing.push(
+            "Recall found no code entities. The query may need more specific identifiers, or the code may not be indexed. Try scan_repo first."
+                .to_owned(),
+        );
+    }
+    let missing_block = if missing.is_empty() {
+        "Missing evidence: none — recall + graph + code all contributed.".to_owned()
+    } else {
+        let mut s = String::from("Missing evidence:");
+        for m in &missing {
+            s.push_str("\n  - ");
+            s.push_str(m);
+        }
+        s
+    };
+
+    // Suggested next steps reference the ACTUAL focus terms + anchor. Use the
+    // primary focus for `search` (the most distinctive single term) and the
+    // anchor for the graph expansions.
+    let search_term = primary_focus;
+    let suggest_symbol_context = if code_populated {
+        format!("symbol_context \"{anchor_symbol}\" depth=3 for deeper call chain")
+    } else {
+        format!("symbol_context \"{anchor_symbol}\" depth=2 to confirm the symbol exists")
+    };
+    let suggest_graph_neighbors = format!(
+        "graph_neighbors \"{anchor_symbol}\" for all relationship types (calls, describes, mentions, belongs_to)"
+    );
+    let suggest_search = format!("search \"{search_term}\" for exact-identifier lookup");
+    let mut steps = format!("Suggested next steps:\n  - {suggest_search}");
+    // When a multi-anchor focus was used, suggest batch symbol_context over the
+    // anchor list so the caller knows the batch shape is available.
+    if focus_list.len() > 1 {
+        let list = focus_list
+            .iter()
+            .map(|s| format!("\"{s}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        steps.push_str(&format!(
+            "\n  - symbol_context [{list}] depth=2 (batch: all anchors in one call)"
+        ));
+    } else {
+        steps.push_str(&format!("\n  - {suggest_symbol_context}"));
+    }
+    steps.push_str(&format!("\n  - {suggest_graph_neighbors}"));
+
+    format!(
+        "=== Assessment ===\nItems returned: {total} (Entity: {entity_count}, Chunk: {chunk_count}, Memory: {memory_count}, Other: {other_count})\nGraph neighborhood: {graph_label}\n{anchor_line}\n{missing_block}\n{steps}",
+        graph_label = if graph_populated {
+            "populated"
+        } else {
+            "empty"
+        },
+    )
 }
 
 /// `capability_report`: report which provider capabilities are wired.
@@ -2494,23 +2804,25 @@ mod tests {
 
     #[test]
     fn render_hit_compact_shows_raw_and_rrf_when_source_score_set() {
-        // Option B: compact format surfaces the raw lane score alongside rrf.
-        // Format: `name — repo, path [lane:raw, rrf=Y.YY]`.
+        // Option B + Fix 4: compact format surfaces the raw lane score, the rrf,
+        // AND the within-query normalized score. Format:
+        // `name — repo, path [lane:raw, rrf=Y.YY (norm:Z.ZZ)]`.
         let h = hit_with_raw(
             "loginAnthropic",
             Some("packages/ai/src/auth/oauth/anthropic.ts"),
             0.0382,
             0.917,
         );
-        let compact = render_hit(&h, false);
+        // Single-hit result set → divisor == score → norm 1.00.
+        let compact = render_hit(&h, false, h.score);
         assert!(
             compact.starts_with("loginAnthropic — zbot, packages/ai/src/auth/oauth/anthropic.ts"),
             "compact format: {compact}"
         );
-        // Raw lane score (lexical:0.92) + rrf (0.04), both rounded to 2 decimals.
+        // Raw lane score (lexical:0.92) + rrf (0.04) + norm (1.00).
         assert!(
-            compact.contains("[lexical:0.92, rrf=0.04]"),
-            "raw + rrf bracket: {compact}"
+            compact.contains("[lexical:0.92, rrf=0.04 (norm:1.00)]"),
+            "raw + rrf + norm bracket: {compact}"
         );
         // Kind + retriever label dropped in compact (lane shows in the bracket).
         assert!(!compact.contains("Function"), "kind dropped: {compact}");
@@ -2518,12 +2830,12 @@ mod tests {
 
     #[test]
     fn render_hit_compact_shows_only_rrf_when_no_source_score() {
-        // When source_score is None, compact shows `[rrf=Y.YY]` only.
+        // When source_score is None, compact shows `[rrf=Y.YY (norm:Z.ZZ)]` only.
         let h = hit("someEntity", Some("src/lib.rs"), 0.031);
-        let compact = render_hit(&h, false);
+        let compact = render_hit(&h, false, h.score);
         assert!(
-            compact.contains("[rrf=0.03]"),
-            "rrf-only bracket when raw absent: {compact}"
+            compact.contains("[rrf=0.03 (norm:1.00)]"),
+            "rrf-only + norm bracket when raw absent: {compact}"
         );
         assert!(
             !compact.contains("lexical"),
@@ -2533,14 +2845,14 @@ mod tests {
 
     #[test]
     fn render_hit_diagnostics_shows_lane_raw_rrf() {
-        // Diagnostics format: `name (kind) — repo, path [lane, raw=X.XX, rrf=Y.YY]`.
+        // Diagnostics format: `name (kind) — repo, path [lane, raw=X.XX, rrf=Y.YY (norm:Z.ZZ)]`.
         let h = hit_with_raw(
             "loginAnthropic",
             Some("packages/ai/src/auth/oauth/anthropic.ts"),
             0.0382,
             0.917,
         );
-        let diag = render_hit(&h, true);
+        let diag = render_hit(&h, true, h.score);
         assert!(
             diag.starts_with(
                 "loginAnthropic (Function) — phanijapps/zbot, packages/ai/src/auth/oauth/anthropic.ts"
@@ -2548,25 +2860,25 @@ mod tests {
             "diagnostics format: {diag}"
         );
         assert!(
-            diag.contains("[lexical, raw=0.92, rrf=0.04]"),
-            "diagnostics bracket with raw + rrf: {diag}"
+            diag.contains("[lexical, raw=0.92, rrf=0.04 (norm:1.00)]"),
+            "diagnostics bracket with raw + rrf + norm: {diag}"
         );
     }
 
     #[test]
     fn render_hit_diagnostics_shows_lane_rrf_when_no_source_score() {
-        // Diagnostics without raw: `[lane, rrf=Y.YY]` (lane still named).
+        // Diagnostics without raw: `[lane, rrf=Y.YY (norm:Z.ZZ)]` (lane still named).
         let h = hit("someEntity", Some("src/lib.rs"), 0.031);
-        let diag = render_hit(&h, true);
+        let diag = render_hit(&h, true, h.score);
         assert!(
-            diag.contains("[lexical, rrf=0.03]"),
+            diag.contains("[lexical, rrf=0.03 (norm:1.00)]"),
             "diagnostics bracket without raw: {diag}"
         );
     }
 
     #[test]
     fn render_hit_exact_match_injected_shows_tag() {
-        // Injected exact-match hit: `[exact-match, rrf=Y.YY]` (no raw lane score).
+        // Injected exact-match hit: `[exact-match, rrf=Y.YY (norm:Z.ZZ)]` (no raw lane score).
         let h = SearchHit {
             entity_id: "e1".into(),
             name: "alpha".into(),
@@ -2579,14 +2891,14 @@ mod tests {
             is_exact: true,
             chunk_excerpt: None,
         };
-        let compact = render_hit(&h, false);
+        let compact = render_hit(&h, false, h.score);
         assert!(
-            compact.contains("[exact-match, rrf=0.05]"),
+            compact.contains("[exact-match, rrf=0.05 (norm:1.00)]"),
             "injected exact-match tag in compact: {compact}"
         );
-        let diag = render_hit(&h, true);
+        let diag = render_hit(&h, true, h.score);
         assert!(
-            diag.contains("[exact-match, rrf=0.05]"),
+            diag.contains("[exact-match, rrf=0.05 (norm:1.00)]"),
             "injected exact-match tag in diagnostics: {diag}"
         );
     }
@@ -2594,9 +2906,9 @@ mod tests {
     #[test]
     fn render_hit_omits_path_gracefully_when_absent() {
         let h = hit("noPath", None, 0.5);
-        let compact = render_hit(&h, false);
-        // No ", path" segment — just "name — repo [rrf=…]" (no source_score).
-        assert_eq!(compact, "noPath — zbot [rrf=0.50]");
+        let compact = render_hit(&h, false, h.score);
+        // No ", path" segment — just "name — repo [rrf=… (norm:…)]" (no source_score).
+        assert_eq!(compact, "noPath — zbot [rrf=0.50 (norm:1.00)]");
     }
 
     #[test]
@@ -2833,8 +3145,8 @@ mod tests {
             Some("src/auth.ts"),
             0.04,
         );
-        let compact = render_hit(&h, false);
-        // Header line: label — repo, path [vector:raw, rrf=Y.YY]
+        let compact = render_hit(&h, false, h.score);
+        // Header line: label — repo, path [vector:raw, rrf=Y.YY (norm:Z.ZZ)]
         let header_line = compact.lines().next().unwrap();
         assert!(
             header_line.contains("const TOKEN = 'sk-ant-oat-xxxxx';"),
@@ -2845,8 +3157,8 @@ mod tests {
             "header shows repo + path: {header_line}"
         );
         assert!(
-            header_line.contains("[vector:0.88, rrf=0.04]"),
-            "header shows raw + rrf: {header_line}"
+            header_line.contains("[vector:0.88, rrf=0.04 (norm:1.00)]"),
+            "header shows raw + rrf + norm: {header_line}"
         );
         // Excerpt (after the header) surfaces the decisive code VALUES.
         // The excerpt may span multiple lines, so check the full output.
@@ -2872,7 +3184,7 @@ mod tests {
             Some("packages/ai/src/auth/oauth/anthropic.ts"),
             0.04,
         );
-        let diag = render_hit(&h, true);
+        let diag = render_hit(&h, true, h.score);
         // Header includes (Chunk) kind label.
         let header_line = diag.lines().next().unwrap();
         assert!(
@@ -2880,7 +3192,7 @@ mod tests {
             "diagnostics header shows Chunk kind: {header_line}"
         );
         assert!(
-            header_line.contains("[vector, raw=0.88, rrf=0.04]"),
+            header_line.contains("[vector, raw=0.88, rrf=0.04 (norm:1.00)]"),
             "diagnostics bracket: {header_line}"
         );
     }
@@ -2888,7 +3200,7 @@ mod tests {
     #[test]
     fn render_hit_chunk_without_path_omits_path_segment() {
         let h = hit_chunk("const BEARER = 'Bearer xyz';", None, 0.03);
-        let compact = render_hit(&h, false);
+        let compact = render_hit(&h, false, h.score);
         let header_line = compact.lines().next().unwrap();
         // No path between repo and bracket: "label — repo [bracket]"
         // (not "label — repo, path [bracket]"). The bracket follows the repo
@@ -2942,6 +3254,281 @@ mod tests {
         assert!(
             !hits[0].is_exact,
             "chunk hits must not be marked is_exact even if label matches"
+        );
+    }
+
+    // --- Fix 1: parse_str_or_array (batch-call arg parser) -------------------
+
+    #[test]
+    fn parse_str_or_array_accepts_single_string() {
+        let args = json!({ "symbol": "loginAnthropic" });
+        let out = parse_str_or_array(&args, "symbol").unwrap();
+        assert_eq!(out, vec!["loginAnthropic".to_owned()]);
+    }
+
+    #[test]
+    fn parse_str_or_array_accepts_string_array() {
+        let args = json!({ "symbol": ["loginAnthropic", "resolveStoredOAuth", "createClient"] });
+        let out = parse_str_or_array(&args, "symbol").unwrap();
+        assert_eq!(
+            out,
+            vec![
+                "loginAnthropic".to_owned(),
+                "resolveStoredOAuth".to_owned(),
+                "createClient".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_str_or_array_rejects_missing_key() {
+        let args = json!({});
+        let err = parse_str_or_array(&args, "symbol").unwrap_err();
+        assert!(
+            err.message.contains("symbol is required"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn parse_str_or_array_rejects_empty_string_and_empty_array() {
+        let err = parse_str_or_array(&json!({ "symbol": "" }), "symbol").unwrap_err();
+        assert!(err.message.contains("symbol is required"));
+
+        let err = parse_str_or_array(&json!({ "symbol": [] }), "symbol").unwrap_err();
+        assert!(
+            err.message.contains("symbol is required"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn parse_str_or_array_rejects_array_with_empty_or_non_string_element() {
+        // Empty-string element.
+        let err = parse_str_or_array(&json!({ "symbol": ["a", ""] }), "symbol").unwrap_err();
+        assert!(
+            err.message.contains("must contain only non-empty strings"),
+            "{}",
+            err.message
+        );
+        // Non-string element (number).
+        let err = parse_str_or_array(&json!({ "symbol": ["a", 42] }), "symbol").unwrap_err();
+        assert!(
+            err.message.contains("must contain only non-empty strings"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn parse_str_or_array_rejects_non_string_non_array_value() {
+        let err = parse_str_or_array(&json!({ "symbol": 123 }), "symbol").unwrap_err();
+        assert!(
+            err.message.contains("symbol is required"),
+            "{}",
+            err.message
+        );
+        let err = parse_str_or_array(&json!({ "symbol": null }), "symbol").unwrap_err();
+        assert!(
+            err.message.contains("symbol is required"),
+            "{}",
+            err.message
+        );
+    }
+
+    // --- Fix 4: score normalization within a result set ----------------------
+
+    /// Fix 4: the within-query normalized score is `raw_rrf / max_rrf`, so the
+    /// top result renders as norm:1.00 and the rest scale proportionally. This
+    /// gives the agent meaningful separation (1.00 vs 0.80) without changing
+    /// the underlying fusion. Verified via the bracket format in `score_bracket`.
+    #[test]
+    fn score_bracket_normalizes_within_result_set() {
+        // Two hits: top at 0.05, second at 0.04. Max = 0.05.
+        // norm(top)    = 0.05 / 0.05 = 1.00
+        // norm(second) = 0.04 / 0.05 = 0.80
+        let top = hit_with_raw("alpha", Some("a.rs"), 0.05, 0.92);
+        let second = hit_with_raw("beta", Some("b.rs"), 0.04, 0.88);
+        let max = 0.05_f32;
+
+        let bracket_top = score_bracket(&top, false, max);
+        let bracket_second = score_bracket(&second, false, max);
+        assert!(
+            bracket_top.contains("rrf=0.05 (norm:1.00)"),
+            "top result normalizes to 1.00: {bracket_top}"
+        );
+        assert!(
+            bracket_second.contains("rrf=0.04 (norm:0.80)"),
+            "second result scales proportionally to 0.80: {bracket_second}"
+        );
+    }
+
+    /// Fix 4: a non-positive divisor (empty result set edge) yields norm:0.00
+    /// rather than NaN — `score_bracket` guards the division.
+    #[test]
+    fn score_bracket_guard_against_zero_divisor() {
+        let h = hit_with_raw("alpha", Some("a.rs"), 0.0, 0.92);
+        let bracket = score_bracket(&h, false, 0.0);
+        assert!(
+            bracket.contains("(norm:0.00)"),
+            "zero divisor → norm 0.00 (no NaN): {bracket}"
+        );
+    }
+
+    // --- Fix 3: build_assessment (escalation handoff) -------------------------
+
+    /// Build a `SymbolContext` for assessment tests. `with_edges` controls
+    /// whether the code neighborhood is populated (callers/callees non-empty).
+    fn make_symbol_context(with_edges: bool) -> engram_codegraph_queries::SymbolContext {
+        engram_codegraph_queries::SymbolContext {
+            callers: if with_edges {
+                vec!["callerA".to_owned()]
+            } else {
+                Vec::new()
+            },
+            callees: if with_edges {
+                vec!["calleeB".to_owned()]
+            } else {
+                Vec::new()
+            },
+            community: Some(0),
+        }
+    }
+
+    #[test]
+    fn build_assessment_reports_counts_and_populated_status() {
+        // Two entity recall items, one chunk, populated graph + code.
+        let items = vec![
+            recall_item(RetrievalTargetType::Entity, "e1"),
+            recall_item(RetrievalTargetType::Entity, "e2"),
+            recall_item(RetrievalTargetType::Chunk, "c1"),
+        ];
+        let links = vec!["loginAnthropic -[describes]-> OAuth".to_owned()];
+        let code_ctx = make_symbol_context(true);
+        let focus_list = vec!["loginAnthropic".to_owned()];
+
+        let assessment = build_assessment(
+            &items,
+            2, // entity
+            1, // chunk
+            0, // memory
+            &links,
+            &code_ctx,
+            "loginAnthropic",
+            "loginAnthropic",
+            &focus_list,
+            false, // graph available
+        );
+
+        assert!(
+            assessment.contains("Items returned: 3 (Entity: 2, Chunk: 1, Memory: 0"),
+            "counts line: {assessment}"
+        );
+        assert!(
+            assessment.contains("Graph neighborhood: populated"),
+            "populated graph: {assessment}"
+        );
+        assert!(
+            assessment.contains("Anchor symbol: loginAnthropic"),
+            "anchor line: {assessment}"
+        );
+        // Nothing missing → the "none" message.
+        assert!(
+            assessment.contains("Missing evidence: none"),
+            "no missing evidence: {assessment}"
+        );
+        // Suggested next steps reference the actual focus + anchor.
+        assert!(
+            assessment.contains("search \"loginAnthropic\""),
+            "search suggestion references focus: {assessment}"
+        );
+        assert!(
+            assessment.contains("symbol_context \"loginAnthropic\" depth=3"),
+            "symbol_context suggestion references anchor: {assessment}"
+        );
+        assert!(
+            assessment.contains("graph_neighbors \"loginAnthropic\""),
+            "graph_neighbors suggestion references anchor: {assessment}"
+        );
+    }
+
+    #[test]
+    fn build_assessment_notes_missing_evidence_when_graph_and_code_empty() {
+        // No recall items, no links, no code edges → all three missing-evidence
+        // notes fire.
+        let items: Vec<RetrievalResult> = Vec::new();
+        let links: Vec<String> = Vec::new();
+        let code_ctx = make_symbol_context(false);
+        let focus_list = vec!["someConcept".to_owned()];
+
+        let assessment = build_assessment(
+            &items,
+            0,
+            0,
+            0,
+            &links,
+            &code_ctx,
+            "someConcept",
+            "someConcept",
+            &focus_list,
+            false,
+        );
+
+        assert!(
+            assessment.contains("Graph neighborhood: empty"),
+            "empty graph: {assessment}"
+        );
+        assert!(
+            assessment.contains("Anchor symbol: none"),
+            "anchor did not resolve: {assessment}"
+        );
+        // All three missing-evidence notes fire.
+        assert!(
+            assessment.contains("No graph relationships found"),
+            "graph-missing note: {assessment}"
+        );
+        assert!(
+            assessment.contains("No code neighborhood found"),
+            "code-missing note: {assessment}"
+        );
+        assert!(
+            assessment.contains("Recall found no code entities"),
+            "recall-empty note: {assessment}"
+        );
+    }
+
+    #[test]
+    fn build_assessment_multi_anchor_suggests_batch_symbol_context() {
+        // When the focus list has >1 anchor, the suggested next step promotes
+        // the batch symbol_context shape instead of the single-symbol depth=3
+        // suggestion.
+        let items = vec![recall_item(RetrievalTargetType::Entity, "e1")];
+        let links = vec!["a -[calls]-> b".to_owned()];
+        let code_ctx = make_symbol_context(true);
+        let focus_list = vec!["loginAnthropic".to_owned(), "resolveStoredOAuth".to_owned()];
+
+        let assessment = build_assessment(
+            &items,
+            1,
+            0,
+            0,
+            &links,
+            &code_ctx,
+            "loginAnthropic",
+            "loginAnthropic",
+            &focus_list,
+            false,
+        );
+
+        assert!(
+            assessment.contains("symbol_context [\"loginAnthropic\", \"resolveStoredOAuth\"]"),
+            "multi-anchor suggestion promotes batch symbol_context: {assessment}"
+        );
+        assert!(
+            assessment.contains("(batch: all anchors in one call)"),
+            "batch hint present: {assessment}"
         );
     }
 }

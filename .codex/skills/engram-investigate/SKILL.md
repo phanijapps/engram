@@ -72,6 +72,23 @@ neighborhood (callers + callees + community):
 {"symbol": "loginAnthropic", "depth": 2}
 ```
 
+You can also pass multiple symbols in one call (batch) — resolve all your
+anchors from Step 2 together instead of one call per symbol:
+
+```json
+{"symbol": ["loginAnthropic", "resolveStoredOAuth", "createClient"], "depth": 2}
+```
+
+Then, for each anchor, call `graph_neighbors` to find ALL relationship types
+(calls, describes, mentions, belongs_to) — not just the call graph. The
+`symbol_context` call graph shows `calls` edges only; `graph_neighbors` surfaces
+doc↔code `describes`/`mentions` edges and `belongs_to` membership that
+`symbol_context` misses:
+
+```json
+{"name": "loginAnthropic"}
+```
+
 If you need blast radius (who is affected by changing this symbol):
 
 ```json
@@ -85,11 +102,13 @@ calls, the chain from entry point to implementation.
 
 For the key anchors discovered in steps 2–3, call `get_context` in
 **evidence mode** to get smart excerpts (bounded content, not whole
-files):
+files). You can pass multiple anchors as an array — the first is the
+primary anchor for the [Code]/[Graph] sections, and recall searches for
+all terms in one fused pass:
 
 ```json
 {
-  "focus": "loginAnthropic resolveStoredOAuth",
+  "focus": ["loginAnthropic", "resolveStoredOAuth"],
   "repository": "org/repo",
   "mode": "evidence",
   "limit": 10
@@ -97,11 +116,19 @@ files):
 ```
 
 This returns the specific code lines you need — function signatures,
-key statements, relevant excerpts — capped at ~2000 chars per item.
+key statements, relevant excerpts — capped at ~2000 chars per item. The
+header shows `(anchors: [loginAnthropic, resolveStoredOAuth])` when an
+array is passed.
 
 ### Step 5 — Assess sufficiency
 
-Ask yourself:
+**Read the `=== Assessment ===` section** at the end of every
+`get_context` response. It reports item counts by type, whether the
+graph/code neighborhood is populated, the resolved anchor symbol, any
+missing evidence, and concrete suggested next-step calls. Use it to
+decide whether another round is needed before re-running.
+
+Then ask yourself:
 
 - Did I find the **decisive identifiers**? (function names, constants,
   values like `sk-ant-oat`, `Authorization: Bearer`, `oauth-token`)
@@ -115,9 +142,13 @@ If any answer is **no**, do a targeted follow-up:
 {"query": "the missing identifier or concept", "repository": "org/repo"}
 ```
 
-Then repeat steps 3–4 for the new anchor. Limit yourself to 2–3
-follow-up rounds — if engram can't find it after that, the evidence
-may not be indexed.
+Then repeat steps 3–4 for the new anchor.
+
+**Call budget: use at most 12 total MCP calls.** If you have found the
+decisive evidence, stop early. If you haven't found it after 12 calls,
+report what's missing rather than searching further — the evidence may
+not be indexed (run `scan_repo` to index the repo first). The goal is
+fewer calls with better targeting, not more calls with broader searching.
 
 ### Step 6 — Synthesize
 
@@ -138,14 +169,28 @@ is more useful than a confident guess.
 | `search` | Find code symbols + chunks by keyword (with exact-match boost) | Low (~50 chars/result, chunks +500) |
 | `get_context` (`mode: "discovery"`) | Compact landscape: names + paths + scores | Very low (~80 chars/item) |
 | `get_context` (`mode: "evidence"`) | Targeted excerpts with content | Medium (~2000 chars/item) |
-| `symbol_context` | Call graph neighborhood (callers + callees) | Low |
-| `change_impact` | Blast radius (who is affected by a change) | Low |
+| `symbol_context` | Call graph neighborhood (callers + callees). Accepts a single symbol OR an array for batch resolution. | Low |
+| `change_impact` | Blast radius (who is affected by a change). Accepts a single target OR an array for batch. | Low |
+| `graph_neighbors` | ALL relationship types for a symbol (calls, describes, mentions, belongs_to) — broader than the call graph | Low |
 
 ## Key behaviors (built into the tools)
 
 - **Exact-match injection:** Searching for `anthropicOAuth` finds it even
-  if vector similarity is low. Exact identifier matches are boosted to
-  score 1.0.
+  if vector similarity is low. Exact identifier matches are marked and
+  injected at the top.
+- **Batch calls:** `symbol_context`, `change_impact`, and `get_context`
+  all accept EITHER a single string OR a JSON array. Pass
+  `symbol: ["a", "b", "c"]` or `focus: ["a", "b"]` to resolve multiple
+  anchors in ONE call instead of N. This is the primary lever for staying
+  within the 12-call budget.
+- **Score normalization:** `search` results show both the raw RRF score
+  AND a within-query normalized score `(norm:X.XX)` where the top result
+  is 1.00 and the rest scale proportionally — use the norm to judge
+  relevance separation, not the raw RRF.
+- **Assessment section:** Every `get_context` response ends with an
+  `=== Assessment ===` section: item counts, graph/code status, the
+  resolved anchor, missing-evidence notes, and suggested next steps. Read
+  it before deciding whether to do another round.
 - **Repository filtering:** Pass `repository: "org/repo"` to eliminate
   cross-repo contamination. Results only from the target repo.
 - **File paths:** Every result includes the source file path — you know
@@ -167,9 +212,11 @@ is more useful than a confident guess.
   mode first.
 - **Don't** skip the `repository` filter — without it, unrelated repos
   contaminate results.
-- **Don't** do more than 3 follow-up rounds without finding the evidence —
-  if engram can't find it, it may not be indexed. Use `scan_repo` to
-  index the repo first.
+- **Don't** exceed 12 total MCP calls without finding the evidence — if
+  engram can't find it within the budget, it may not be indexed. Use
+  `scan_repo` to index the repo first, or report what's missing.
 - **Don't** read source files directly unless engram's results are
   insufficient after the full workflow. The tools are designed to replace
   filesystem search.
+- **Don't** ignore the `=== Assessment ===` section — it tells you what's
+  missing and what to call next.

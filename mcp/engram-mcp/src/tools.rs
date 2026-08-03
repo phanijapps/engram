@@ -71,7 +71,7 @@ pub(crate) fn internal(msg: impl std::fmt::Display) -> ToolError {
     ToolError::new(-32603, msg.to_string())
 }
 
-fn invalid(msg: impl std::fmt::Display) -> ToolError {
+pub(crate) fn invalid(msg: impl std::fmt::Display) -> ToolError {
     ToolError::new(-32602, msg.to_string())
 }
 
@@ -1324,6 +1324,222 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .contains("Central")
+        );
+    }
+
+    /// Fix 1: `symbol_context` accepts a JSON array of symbols and returns one
+    /// section per symbol with a `=== symbol_context: <name> (depth=N) ===`
+    /// header. The relationship set is fetched once and reused (same cost as a
+    /// single call). Backward compat: a string still returns the single
+    /// `{ctx:?}` view with no header.
+    #[test]
+    fn symbol_context_batch_accepts_array_with_section_headers() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        put_entity(&app, &json!({ "name": "alpha", "kind": "function" })).unwrap();
+        put_entity(&app, &json!({ "name": "beta", "kind": "function" })).unwrap();
+        put_entity(&app, &json!({ "name": "gamma", "kind": "function" })).unwrap();
+        put_relationship(
+            &app,
+            &json!({ "subject": "alpha", "predicate": "calls", "object": "beta" }),
+        )
+        .unwrap();
+        put_relationship(
+            &app,
+            &json!({ "subject": "beta", "predicate": "calls", "object": "gamma" }),
+        )
+        .unwrap();
+
+        // Batch: array of two symbols → one section each, with headers.
+        let res = crate::codegraph::symbol_context(
+            &app,
+            &json!({ "symbol": ["alpha", "gamma"], "depth": 2 }),
+        )
+        .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("=== symbol_context: alpha (depth=2) ==="),
+            "batch header for alpha: {body}"
+        );
+        assert!(
+            body.contains("=== symbol_context: gamma (depth=2) ==="),
+            "batch header for gamma: {body}"
+        );
+        // Both sections present, in order.
+        let alpha_idx = body.find("=== symbol_context: alpha").unwrap();
+        let gamma_idx = body.find("=== symbol_context: gamma").unwrap();
+        assert!(alpha_idx < gamma_idx, "sections in array order: {body}");
+
+        // Backward compat: a single string still returns the bare `{ctx:?}`
+        // view with NO `=== symbol_context:` header.
+        let res_single =
+            crate::codegraph::symbol_context(&app, &json!({ "symbol": "alpha" })).unwrap();
+        let body_single = res_single["content"][0]["text"].as_str().unwrap();
+        assert!(
+            !body_single.contains("=== symbol_context:"),
+            "string input → no batch header (backward compat): {body_single}"
+        );
+    }
+
+    /// Fix 1: `change_impact` accepts a JSON array of targets with one section
+    /// per target. A single string preserves the legacy blast-radius +
+    /// dependency-path format.
+    #[test]
+    fn change_impact_batch_accepts_array_with_section_headers() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        put_entity(&app, &json!({ "name": "alpha", "kind": "function" })).unwrap();
+        put_entity(&app, &json!({ "name": "beta", "kind": "function" })).unwrap();
+        put_relationship(
+            &app,
+            &json!({ "subject": "alpha", "predicate": "calls", "object": "beta" }),
+        )
+        .unwrap();
+
+        let res = crate::codegraph::change_impact(
+            &app,
+            &json!({ "target": ["beta", "alpha"], "depth": 2 }),
+        )
+        .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("=== change_impact: beta (depth=2"),
+            "batch header for beta: {body}"
+        );
+        assert!(
+            body.contains("=== change_impact: alpha (depth=2"),
+            "batch header for alpha: {body}"
+        );
+
+        // Single string preserves the legacy format (Blast radius + Dependency
+        // path lines, no `=== change_impact:` header).
+        let res_single =
+            crate::codegraph::change_impact(&app, &json!({ "target": "beta" })).unwrap();
+        let body_single = res_single["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body_single.contains("Blast radius (2 hops"),
+            "single-string change_impact preserves legacy format: {body_single}"
+        );
+        assert!(
+            !body_single.contains("=== change_impact:"),
+            "single-string → no batch header: {body_single}"
+        );
+    }
+
+    /// Fix 2: `get_context` accepts `focus` as a JSON array. The first item is
+    /// the primary anchor; recall searches for all terms; the header carries
+    /// `(anchors: [...])`.
+    #[test]
+    fn get_context_multi_anchor_focus_array_shows_anchors_header() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        put_entity(
+            &app,
+            &json!({ "name": "loginAnthropic", "kind": "function" }),
+        )
+        .unwrap();
+        put_entity(
+            &app,
+            &json!({ "name": "resolveStoredOAuth", "kind": "function" }),
+        )
+        .unwrap();
+
+        let res = crate::codegraph::get_context(
+            &app,
+            &json!({ "focus": ["loginAnthropic", "resolveStoredOAuth"] }),
+        )
+        .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        // Multi-anchor header: the joined focus + the anchors bracket.
+        assert!(
+            body.contains("(anchors: [loginAnthropic, resolveStoredOAuth])"),
+            "multi-anchor header shows anchors bracket: {body}"
+        );
+        // The joined focus appears in the header line.
+        assert!(
+            body.contains("=== Context for 'loginAnthropic resolveStoredOAuth'"),
+            "header shows joined focus: {body}"
+        );
+
+        // Backward compat: a single string focus does NOT show the anchors
+        // bracket.
+        let res_single =
+            crate::codegraph::get_context(&app, &json!({ "focus": "loginAnthropic" })).unwrap();
+        let body_single = res_single["content"][0]["text"].as_str().unwrap();
+        assert!(
+            !body_single.contains("(anchors:"),
+            "single-string focus → no anchors bracket: {body_single}"
+        );
+    }
+
+    /// Fix 3: every `get_context` response ends with an `=== Assessment ===`
+    /// section reporting item counts, graph/code status, the anchor, missing
+    /// evidence, and concrete suggested next steps referencing the actual focus.
+    #[test]
+    fn get_context_appends_assessment_section() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        put_entity(
+            &app,
+            &json!({ "name": "loginAnthropic", "kind": "function" }),
+        )
+        .unwrap();
+
+        let res =
+            crate::codegraph::get_context(&app, &json!({ "focus": "loginAnthropic" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        // The assessment section header.
+        assert!(
+            body.contains("=== Assessment ==="),
+            "assessment section present: {body}"
+        );
+        // Item counts line.
+        assert!(
+            body.contains("Items returned:"),
+            "item counts line present: {body}"
+        );
+        // Graph neighborhood status.
+        assert!(
+            body.contains("Graph neighborhood:"),
+            "graph neighborhood status present: {body}"
+        );
+        // Anchor symbol line.
+        assert!(
+            body.contains("Anchor symbol:"),
+            "anchor symbol line present: {body}"
+        );
+        // Suggested next steps reference the ACTUAL focus term (not a
+        // placeholder).
+        assert!(
+            body.contains("search \"loginAnthropic\""),
+            "suggested next step references actual focus term: {body}"
+        );
+        // graph_neighbors suggestion for the anchor.
+        assert!(
+            body.contains("graph_neighbors \"loginAnthropic\""),
+            "graph_neighbors suggestion references the anchor: {body}"
+        );
+    }
+
+    /// Fix 3: the Assessment section's missing-evidence logic fires when the
+    /// graph/code neighborhood is empty. An entity with NO relationships has an
+    /// empty [Graph] + [Code] → the assessment notes what's missing.
+    #[test]
+    fn get_context_assessment_notes_missing_evidence_when_graph_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        // A lone entity with no relationships → empty graph + code.
+        put_entity(&app, &json!({ "name": "lonelyFunc", "kind": "function" })).unwrap();
+
+        let res = crate::codegraph::get_context(&app, &json!({ "focus": "lonelyFunc" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("Missing evidence:"),
+            "missing-evidence block present when graph is empty: {body}"
+        );
+        assert!(
+            body.contains("No graph relationships found"),
+            "graph-missing note fires: {body}"
         );
     }
 

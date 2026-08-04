@@ -167,6 +167,13 @@ export interface NativeObservabilityApiBinding {
   diagnosticsJson(): string;
 }
 
+/** Community-query handle proxy: Louvain overview + member index + community-of. */
+export interface NativeCommunityQueryApiBinding {
+  overviewJson(requestJson: string): string;
+  memberIndexJson(scopeJson: string): string;
+  communityOfJson(requestJson: string): string;
+}
+
 /**
  * Native class shape for the held `EngramProvider`
  * (`bindings/node/src/provider.rs`): one provider opened from a config, reaching
@@ -186,6 +193,7 @@ export interface NativeProviderBinding {
   requireBatchApi(): NativeBatchApiBinding;
   requireBeliefsApi(): NativeBeliefsApiBinding;
   requireObservabilityApi(): NativeObservabilityApiBinding;
+  requireCommunityQueryApi(): NativeCommunityQueryApiBinding;
 }
 
 /** Constructor shape for the held `EngramProvider`. */

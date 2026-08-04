@@ -55,6 +55,16 @@ export interface Diagnostics {
   [key: string]: unknown;
 }
 
+/** Community-overview payload from the Louvain aggregate (mirrors engram-domain CommunityOverview). */
+export interface CommunityOverviewData {
+  communities: Array<{ label: number; memberCount: number }>;
+  edges: Array<{ sourceLabel: number; targetLabel: number; weight: number }>;
+  totalCommunities: number;
+}
+
+/** Member index: community label → entity-id strings. */
+export type CommunityMemberIndex = Record<number, string[]>;
+
 export interface NativeProviderTransport {
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
@@ -87,6 +97,10 @@ export interface NativeProviderTransport {
   listMemoriesPaged(scope: unknown, after?: string | null, limit?: number): Promise<MemoryPage>;
   /** Point-in-time diagnostics snapshot (record counts, etc.) — Rust-backed. */
   diagnostics(): Promise<Diagnostics>;
+  /** Community overview: top-N Louvain communities + meta-edges (Rust-backed). */
+  communityOverview(scope: unknown, limit?: number): Promise<CommunityOverviewData>;
+  /** Member index: community label → entity-id strings (Rust-backed). */
+  communityMemberIndex(scope: unknown): Promise<CommunityMemberIndex>;
 }
 
 /** Creates a transport over the held `NativeProvider`. */
@@ -184,6 +198,20 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async diagnostics(): Promise<Diagnostics> {
     return decode<Diagnostics>(this.provider.requireObservabilityApi().diagnosticsJson());
+  }
+
+  async communityOverview(scope: unknown, limit?: number): Promise<CommunityOverviewData> {
+    return decode<CommunityOverviewData>(
+      this.provider.requireCommunityQueryApi().overviewJson(
+        encode({ scope, ...(limit ? { limit } : {}) })
+      )
+    );
+  }
+
+  async communityMemberIndex(scope: unknown): Promise<CommunityMemberIndex> {
+    return decode<CommunityMemberIndex>(
+      this.provider.requireCommunityQueryApi().memberIndexJson(encode(scope))
+    );
   }
 }
 

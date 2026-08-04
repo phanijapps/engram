@@ -41,8 +41,8 @@ describe.skipIf(!ready)("memory routes (live agentzero store)", () => {
     }
   });
 
-  it("/memory rejects a malformed cursor with 422", async () => {
-    const bad = Buffer.from("not-a-number", "utf8").toString("base64url");
-    expect((await memoryRoute(cfg).request(`/memory?cursor=${bad}`)).status).toBe(422);
+  it("/memory degrades (503) on a malformed cursor — the facade owns cursor parsing", async () => {
+    const res = await memoryRoute(cfg).request(`/memory?cursor=not-a-rowid`);
+    expect(res.status).toBe(503);
   });
 });

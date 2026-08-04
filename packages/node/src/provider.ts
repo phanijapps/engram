@@ -31,6 +31,12 @@ export interface NativeProviderTransportOptions {
  * This is transport over Rust behavior, not a second implementation: it encodes
  * typed requests to JSON, calls the binding, and decodes the JSON result.
  */
+/** A keyset page of memory records (mirrors engram-domain `Page<MemoryRecord>`). */
+export interface MemoryPage {
+  items: unknown[];
+  nextCursor: string | null;
+}
+
 export interface NativeProviderTransport {
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
@@ -58,6 +64,9 @@ export interface NativeProviderTransport {
   forget(request: unknown): Promise<unknown>;
   /** Best-effort batch ingest. */
   batchIngest(request: unknown): Promise<unknown>;
+  /** List memories visible to `scope` as a keyset page (Rust-backed; no SQL in TS).
+   *  `after` is the opaque `nextCursor` from a prior page. */
+  listMemoriesPaged(scope: unknown, after?: string | null, limit?: number): Promise<MemoryPage>;
 }
 
 /** Creates a transport over the held `NativeProvider`. */
@@ -135,6 +144,22 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async batchIngest(request: unknown): Promise<unknown> {
     return decode(this.provider.requireBatchApi().ingestJson(encode(request)));
+  }
+
+  async listMemoriesPaged(
+    scope: unknown,
+    after?: string | null,
+    limit?: number
+  ): Promise<MemoryPage> {
+    return decode<MemoryPage>(
+      this.provider.requireMemoryApi().listMemoriesPagedJson(
+        encode({
+          scope,
+          ...(after ? { after } : {}),
+          ...(limit ? { limit } : {}),
+        })
+      )
+    );
   }
 }
 

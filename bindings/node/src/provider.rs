@@ -23,7 +23,7 @@ use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
     Actor, ActorKind, AllowedUse, Belief, ConsolidationRequest, ContextPayload, DeleteMode,
     EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id, KnowledgeEntity,
-    KnowledgeRelationship, Policy, Procedure, Provenance, Retention, RetrievalRequest, Scope,
+    KnowledgeRelationship, MemoryRecord, Page, Policy, Procedure, Provenance, Retention, RetrievalRequest, Scope,
     Sensitivity, Visibility, WriteMemoryRequest, WriteMemoryResponse,
 };
 use engram_hierarchy::HierarchyRepository;
@@ -374,6 +374,29 @@ impl NativeMemoryApi {
         let request: ForgetRequest = decode(&request_json)?;
         let result: ForgetResult = block_on(self.handle.forget(request)).map_err(to_napi_error)?;
         encode(&result)
+    }
+
+    /// Lists memories visible to `scope` as a keyset page. Takes
+    /// `{ scope, after?: string, limit?: number }` JSON (`after` is the opaque
+    /// `nextCursor` from a prior page); returns a
+    /// `{ items: [MemoryRecord], nextCursor: string | null }` page JSON. The Rust
+    /// service drives the keyset read (scope in the SQL); TypeScript holds no SQL.
+    #[napi(js_name = "listMemoriesPagedJson")]
+    pub fn list_memories_paged_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let after = value
+            .get("after")
+            .and_then(|v| v.as_str())
+            .map(|s| engram_domain::Cursor::new(s.to_owned()));
+        let limit = value
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(100) as usize;
+        let page: Page<MemoryRecord> =
+            block_on(self.handle.list_memories_paged(&scope, after.as_ref(), limit))
+                .map_err(to_napi_error)?;
+        encode(&page)
     }
 }
 

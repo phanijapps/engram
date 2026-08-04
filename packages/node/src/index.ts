@@ -58,6 +58,7 @@ export {
 } from "./transport.js";
 export {
   createNativeProviderTransport,
+  type MemoryPage,
   type NativeProviderTransport,
   type NativeProviderTransportOptions
 } from "./provider.js";

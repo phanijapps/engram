@@ -131,6 +131,7 @@ export interface NativeMemoryApiBinding {
   searchJson(requestJson: string): string;
   writeJson(requestJson: string): string;
   forgetJson(requestJson: string): string;
+  listMemoriesPagedJson(requestJson: string): string;
 }
 
 /** Unified-recall API handle proxy: one query fused across lanes. */

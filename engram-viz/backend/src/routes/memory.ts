@@ -11,6 +11,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { dbPath, type VizConfig } from "../config.ts";
 import { resolveScope } from "../scope.ts";
+import { getProvider } from "../engram/provider.ts";
 import { CursorError, clampLimit, decodeCursor } from "../db/keyset.ts";
 import { paginate } from "../db/reader.ts";
 import { projectBelief, projectMemory, projectProcedure } from "../views/memory.ts";
@@ -60,7 +61,22 @@ export function memoryRoute(cfg: VizConfig): Hono {
     }
   };
 
-  app.get("/memory", (c) => list(c, "memories", projectMemory));
+  // /memory is served by the Rust facade (P1.6) — keyset + cursor live behind
+  // `list_memories_paged` in engram-integration; this route holds no SQL. (Beliefs,
+  // procedures, contradictions still use the read-only node:sqlite path until P2.)
+  app.get("/memory", async (c) => {
+    try {
+      const limit = queryLimit(c.req.query("limit"));
+      const cursor = c.req.query("cursor") ?? null;
+      const page = await getProvider(cfg).listMemoriesPaged(scope, cursor, limit);
+      return c.json({
+        items: page.items.map((m) => projectMemory(m)),
+        nextCursor: page.nextCursor,
+      });
+    } catch (err) {
+      return c.json({ error: msg(err), degraded: true }, 503);
+    }
+  });
   app.get("/beliefs", (c) => list(c, "beliefs", projectBelief));
   app.get("/procedures", (c) => list(c, "procedures", projectProcedure));
   // Contradictions have no table — they are synthesized from beliefs. 0 beliefs

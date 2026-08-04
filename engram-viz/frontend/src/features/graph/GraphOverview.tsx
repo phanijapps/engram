@@ -13,7 +13,7 @@ import {
   type Layer,
   type PickingInfo,
 } from "@deck.gl/core";
-import { ArcLayer, ScatterplotLayer } from "@deck.gl/layers";
+import { LineLayer, ScatterplotLayer } from "@deck.gl/layers";
 
 import {
   api,
@@ -26,7 +26,6 @@ import { makeDrillLayer } from "./DrillLayer.ts";
 import { EntityDetailPanel } from "./EntityDetail.tsx";
 
 const ACCENT: [number, number, number] = [125, 249, 255]; // #7df9ff (cyan)
-const VIOLET: [number, number, number] = [192, 139, 255]; // #c08bff
 
 export function GraphOverview() {
   const [data, setData] = useState<CommunitiesResponse | null>(null);
@@ -71,16 +70,19 @@ export function GraphOverview() {
   const layers = useMemo(() => {
     if (!data) return [];
     const list: Layer[] = [
-      new ArcLayer<CommunityMetaEdge>({
+      // LineLayer (not ArcLayer): ArcLayer is a geographic great-circle layer and
+      // renders nothing in COORDINATE_SYSTEM.CARTESIAN. Straight lines connect the
+      // community meta-nodes correctly.
+      new LineLayer<CommunityMetaEdge>({
         id: "community-edges",
         data: data.edges,
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getSourcePosition: (d) => nodePos.get(d.source) ?? [0, 0],
         getTargetPosition: (d) => nodePos.get(d.target) ?? [0, 0],
-        getSourceColor: [...ACCENT, 55],
-        getTargetColor: [...VIOLET, 55],
+        getColor: [...ACCENT, 85],
         getWidth: 1,
-        widthMinPixels: 0.5,
+        widthUnits: "pixels",
+        widthMinPixels: 0.8,
       }),
       new ScatterplotLayer<CommunityMetaNode>({
         id: "community-nodes",

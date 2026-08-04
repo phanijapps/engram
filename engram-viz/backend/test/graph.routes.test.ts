@@ -70,4 +70,43 @@ describe.skipIf(!ready)("graph routes (live agentzero store)", () => {
       expect(item.relationship).toHaveProperty("predicate");
     }
   });
+
+  it("/graph/community/:id/members returns a bounded member sample", async () => {
+    const app = graphRoute(cfg);
+    const ov = await (await app.request("/graph/communities?limit=5")).json();
+    const id = ov.communities[0].id; // `c<label>`
+    const res = await app.request(`/graph/community/${id}/members?limit=10`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.found).toBe(true);
+    expect(body.memberCount).toBeGreaterThanOrEqual(body.sampled);
+    expect(body.items.length).toBeLessThanOrEqual(10);
+    for (const it of body.items) expect(it).toHaveProperty("kind");
+    // 404 for a label outside the drillable top-N.
+    expect((await app.request("/graph/community/c9999999/members")).status).toBe(404);
+    // 422 for a malformed id.
+    expect((await app.request("/graph/community/notalabel/members")).status).toBe(422);
+  });
+
+  it("/graph/entity/:id returns detail (community, degree, provenance)", async () => {
+    const app = graphRoute(cfg);
+    // A member of a top community is guaranteed to have a community (it's in the
+    // index by construction) — unlike an arbitrary entity, which may sit in a
+    // small community outside the drillable top-N (community === null).
+    const ov = await (await app.request("/graph/communities?limit=5")).json();
+    const members = await (
+      await app.request(`/graph/community/${ov.communities[0].id}/members?limit=5`)
+    ).json();
+    const id = members.items[0]?.id;
+    if (!id) return; // store shape changed — nothing to assert
+    const res = await app.request(`/graph/entity/${encodeURIComponent(id)}`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty("kind");
+    expect(typeof body.degree).toBe("number");
+    expect(body.provenance).not.toBe(null);
+    expect(typeof body.community).toBe("number");
+    // 404 for an unknown entity.
+    expect((await app.request(`/graph/entity/${encodeURIComponent("nope-missing")}`)).status).toBe(404);
+  });
 });

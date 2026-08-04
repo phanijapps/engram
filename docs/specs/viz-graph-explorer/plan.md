@@ -1,7 +1,7 @@
 # Plan: viz-graph-explorer
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Draft
+- **Status:** Shipped
 
 > **Plan contract:** implementation strategy for the Graph-tab drill-down. Builds
 > on `viz-foundation` (T1–T9 there are prerequisites).
@@ -118,22 +118,37 @@ Node with >cap neighbors → capped + next-cursor ("expand more"). Degraded stor
 **Done when:** unit tests green; overview renders a clean ringed graph (manual
 QA — screenshot, not a spiral blob); backend test + frontend build clean.
 
-### T1: Neighborhood drill endpoints + contract delta
+### T1: Drill endpoints + contract delta (community members, entity detail)
 
-**Depends on:** viz-foundation T5
+**Depends on:** viz-foundation T5, S2 T0
+
+**Schema facts (verified against the live store):** `knowledge_entities` has `id`
+(PK, indexed) but **no `name` column** (name/kind/provenance are in `record_json`);
+`call_communities` keys by entity **name**, so a community's members cannot be
+queried by name. The relationship stream carries both `subject.name`+`subject.id`
++ `object.name`+`object.id`, so a **label→[entityId]** index built from it is the
+efficient membership path. `knowledge_relationships` has `subject_id` (indexed),
+no `object_id` → degree/neighbors are **outgoing-only**.
 
 **Tests:**
-- Integration: `/api/graph/community/{id}/members` + `/api/graph/node/{id}/neighbors`
-  conform to the extended OpenAPI; keyset window over `knowledge_relationships`;
-  page `limit` ≤ 500 + per-expand K-cap server-side; 503+Error+422. *(drill-endpoint
-  AC)*
+- Integration (store-guarded): `/api/graph/community/{id}/members` returns
+  keyset-paged `GraphEntityView`s + `memberCount` + `sampled` (≤ page cap, ≤
+  per-community index cap); `/api/graph/entity/{id}` returns kind/name/community/
+  degree/provenance; both 503+Error when degraded, 422 on bad cursor, 404 for an
+  unknown id/community. *(drill-endpoint AC)*
 
 **Approach:**
-- `src/routes/graph.ts` drill handlers; serve `neighbors` as a keyset window over
-  `knowledge_relationships` (read-only `node:sqlite`); hydrate neighbor entities
-  via the binding; hard node/edge caps; extend
-  `contracts/openapi/engram-viz-bff.yaml` (authored directly, no `api-contract`
-  skill) with `503`/`Error`/`422`.
+- `aggregation/communities.ts`: factor a cached `getLabelMap` (Louvain, shared with
+  `computeOverview`); add a cached `getMemberIndex` — streams relationships once
+  → `Map<label, entityId[]>` for the **top-200** communities (by membership),
+  capped at ~1000 ids each (bounded memory). `communityMembers(cfg, scope, label,
+  cursor, limit)` paginates the index + hydrates entities by `id`.
+- `routes/graph.ts`: `GET /graph/community/:id/members?cursor=&limit=` +
+  `GET /graph/entity/:id` (detail: kind, name, community via the label map, outgoing
+  degree via `COUNT(*) WHERE subject_id=?`, provenance). The foundation's
+  `/graph/node/:id/neighbors` is reused for the entity-neighborhood drill.
+- Extend `contracts/openapi/engram-viz-bff.yaml` (authored directly) with
+  `503`/`Error`/`422`/`404`.
 
 **Done when:** integration tests green; contract extended + linked.
 

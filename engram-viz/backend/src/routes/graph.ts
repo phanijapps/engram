@@ -15,6 +15,7 @@ import {
   DEFAULT_COMMUNITY_LIMIT,
   MAX_COMMUNITY_NODES,
 } from "../aggregation/communities.ts";
+import { communityMembers, entityCommunity } from "../aggregation/members.ts";
 import { projectEntity, projectOutgoingNeighbor } from "../views/graph.ts";
 
 function msg(err: unknown): string {
@@ -74,6 +75,57 @@ export function graphRoute(cfg: VizConfig): Hono {
         edges: overview.edges,
         built: overview.built,
         totalCommunities: overview.totalCommunities,
+      });
+    } catch (err) {
+      return c.json({ error: msg(err), degraded: true }, 503);
+    }
+  });
+
+  app.get("/graph/community/:id/members", (c) => {
+    // Drill-in: a bounded, offset-paged sample of a community's member entities.
+    const match = /^c(\d+)$/.exec(c.req.param("id"));
+    if (!match) return c.json({ error: "community id must be `c<label>`" }, 422);
+    const label = Number(match[1]);
+    try {
+      const limit = queryLimit(c.req.query("limit"));
+      const offset = decodeCursor(c.req.query("cursor"));
+      const page = communityMembers(cfg, scope, label, offset, limit);
+      if (!page.found) return c.json({ error: "community not drillable" }, 404);
+      return c.json(page);
+    } catch (err) {
+      if (err instanceof CursorError) {
+        return c.json({ error: "malformed cursor" }, 422);
+      }
+      return c.json({ error: msg(err), degraded: true }, 503);
+    }
+  });
+
+  app.get("/graph/entity/:id", (c) => {
+    // Entity detail: kind/name/community/outgoing-degree/provenance.
+    const id = c.req.param("id");
+    try {
+      return withReader((db) => {
+        const row = db
+          .prepare(
+            "SELECT record_json FROM knowledge_entities WHERE id = ? AND tenant = ? AND workspace = ?",
+          )
+          .get(id, ...scopeParams) as { record_json?: string } | undefined;
+        if (!row) return c.json({ error: "entity not found" }, 404);
+        const entity = JSON.parse(row.record_json as string) as {
+          provenance?: unknown;
+        };
+        const degree = countTable(db, "knowledge_relationships", "subject_id = ? AND tenant = ? AND workspace = ?", [
+          id,
+          ...scopeParams,
+        ]);
+        // community via the reliable id→label index (name lookup is keying-fragile).
+        const community = entityCommunity(cfg, scope, id);
+        return c.json({
+          ...projectEntity(entity),
+          community,
+          degree,
+          provenance: entity.provenance ?? null,
+        });
       });
     } catch (err) {
       return c.json({ error: msg(err), degraded: true }, 503);

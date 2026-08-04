@@ -22,9 +22,11 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   deck.gl bounded community-overview; self-contained Playwright E2E + FPS-gated
   on reference hardware). S2–S4 are separate specs.
 - [`viz-graph-explorer`](viz-graph-explorer/spec.md): S2 of the engram-viz
-  overhaul — the full Graph tab: bounded one-hop neighborhood drill-down
-  (`neighbors` over `knowledge_relationships`, keyset + K-cap), entity-detail
-  panel, deck.gl LOD at 170 k. Depends on viz-foundation. Draft.
+  overhaul — the full Graph tab: a legible concentric-ring overview (T0, replaces
+  the foundation spiral) + community drill (click a community → bounded sample of
+  its member entities via a cached label→entityId index) + entity-detail panel
+  (kind/community/degree/provenance). deck.gl LOD. **Shipped** (T0–T4; backend
+  38 tests, frontend build, self-contained Playwright E2E for overview + drill).
 - [`viz-memory`](viz-memory/spec.md): S3 — the Memory tab: facts/beliefs/
   contradictions/procedures over engram surfaces (memories/procedures via
   read-only `node:sqlite`), hybrid search, honest empty-states. Depends on

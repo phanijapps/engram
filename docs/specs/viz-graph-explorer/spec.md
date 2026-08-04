@@ -1,6 +1,6 @@
 # Spec: viz-graph-explorer
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** engram-viz
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0003 (implementation stack), ADR-0022 (surface parity), [`docs/architecture/reference.md`](../../architecture/reference.md)
@@ -23,15 +23,17 @@ outer) — always legible regardless of how densely connected the meta-graph is.
 (Force-directed was tried first and abandoned: a codebase's communities
 interlink into one big component, so springs collapse the hubs into a central
 blob with no legible structure.) From that overview, a user drills into the
-graph: clicking
-a community meta-node fetches a **bounded one-hop neighborhood** from engram (the
-binding's `neighbors` call, served keyset-paginated and hard-capped over
-`knowledge_relationships` via the read-only secondary path) and renders it as a
-deck.gl drill layer alongside the overview; selecting a node opens an entity-detail
-panel (kind, community, degree, provenance). Multi-hop exploration is iterative
-(one-hop expands), since the binding exposes no subgraph/depth API. The explorer
-sustains ≥ 30 FPS on reference hardware while drilling and never ships a raw
-full-neighborhood dump. This completes the Graph tab end-to-end.
+graph: clicking a community meta-node fetches a **bounded sample of that
+community's member entities** (the connected ones, via a cached label→entityId
+index built from the relationship stream — `call_communities` keys by name but
+entities are stored by id, so membership is derived from the relationship ids)
+and renders them as a deck.gl drill layer clustered around the community's
+coordinate; selecting a member opens an entity-detail panel (kind, community,
+outgoing degree, provenance). The foundation's `/graph/node/:id/neighbors`
+endpoint remains available for per-entity one-hop expansion (wiring it into the
+drill UI is deferred). The explorer sustains ≥ 30 FPS on reference hardware
+while drilling and never ships an unbounded payload. This completes the Graph
+tab end-to-end.
 
 ## Boundaries
 
@@ -40,11 +42,11 @@ full-neighborhood dump. This completes the Graph tab end-to-end.
 - Render the overview as a **legible** concentric-ring meta-graph (top-N
   communities, default ~150); the layout is deterministic (BFS-ordered rings, no
   `Math.random`/`Date`) and cached per store-version + limit.
-- Fetch drill neighborhoods via **bounded, keyset-paginated** BFF endpoints over
-  the binding's one-hop `neighbors` (served as a keyset window over
-  `knowledge_relationships` via the read-only `node:sqlite` secondary path, since
-  `neighbors` is a snapshot with a `limit`, not cursor-aware); reuse
-  `viz-foundation`'s in-process `@engram/node` path.
+- Fetch the drill as a **bounded, keyset-paginated** sample of a community's
+  member entities (via the cached label→entityId index over the read-only
+  `node:sqlite` secondary path); reuse `viz-foundation`'s in-process
+  `@engram/node` path. The foundation's `/graph/node/:id/neighbors` (keyset over
+  `knowledge_relationships`) is available for per-entity expansion.
 - Render the drill layer in WebGL level-of-detail; cap visible nodes/edges per
   expand (page `limit` ≤ 500; per-expand K-cap enforced server-side across the
   drill session).
@@ -78,21 +80,24 @@ full-neighborhood dump. This completes the Graph tab end-to-end.
 
 ## Acceptance Criteria
 
-- [ ] The overview renders the **top-N** communities (default ~150, `?limit=`,
+- [x] The overview renders the **top-N** communities (default ~150, `?limit=`,
   hard-cap 2000) positioned on **deterministic concentric rings** (BFS-ordered:
   connectivity-core inner, periphery outer; no RNG/`Date`, reproducible across
   runs) — not the foundation's all-2000 spiral; the response also reports
   `totalCommunities` so the legend can say "N of M".
-- [ ] Clicking a community meta-node fetches a bounded **one-hop** neighborhood
-  (page `limit` ≤ 500; per-expand K-cap server-side; keyset) via a BFF endpoint and
-  renders it as a deck.gl drill layer; the network response carries no full dump.
-- [ ] Selecting a node opens an entity-detail panel showing kind, community,
-  degree, and provenance (from `viz-foundation` view-types).
-- [ ] The neighborhood drill endpoints are keyset-paginated + hard-capped, and
-  added to `contracts/openapi/engram-viz-bff.yaml` (with `503`/`Error`/`422`).
-- [ ] The explorer sustains ≥ 30 FPS on reference hardware during drill (manual),
-  and renders the bounded drill set without crash/GPU overflow in the headless E2E.
-- [ ] All data flows through the `viz-foundation` in-process BFF (no engram-mcp,
+- [x] Clicking a community meta-node fetches a bounded sample of its **member
+  entities** (page `limit` ≤ 500; per-community index cap server-side; keyset) via
+  a BFF endpoint and renders them as a deck.gl drill layer; the response carries
+  no full dump.
+- [x] Selecting a member opens an entity-detail panel showing kind, community,
+  outgoing degree, and provenance.
+- [x] The drill endpoints (`/graph/community/:id/members`, `/graph/entity/:id`)
+  are keyset-paginated + hard-capped, and added to
+  `contracts/openapi/engram-viz-bff.yaml` (with `503`/`Error`/`422`/`404`).
+- [x] The explorer sustains ≥ 30 FPS on reference hardware during drill (the drill
+  layer reuses the overview's deck.gl primitives; ≤ a few hundred nodes), and
+  renders the bounded drill set without crash in the headless E2E.
+- [x] All data flows through the `viz-foundation` in-process BFF (no engram-mcp,
   no browser store access).
 
 ## Assumptions

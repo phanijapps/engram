@@ -1,14 +1,16 @@
-//! Graph tab — community-overview (T8). Renders the server-pre-aggregated
-//! community meta-graph (/api/graph/communities) in deck.gl: ScatterplotLayer
-//! meta-nodes + ArcLayer inter-community meta-edges, in a non-geospatial
-//! CARTESIAN OrthographicView. This is the LOD overview — never raw nodes.
-//! (Drill-down is S2.)
+//! Graph tab — community-overview (T8/T0) + drill (S2 T3). Renders the
+//! server-pre-aggregated community meta-graph (/api/graph/communities) in deck.gl
+//! (ScatterplotLayer meta-nodes + ArcLayer meta-edges, concentric-ring layout).
+//! Clicking a community meta-node drills into its member entities (a bounded
+//! sample, rendered as a violet cluster around the community's coordinate);
+//! selecting a member opens the entity-detail panel.
 
 import { useEffect, useMemo, useState } from "react";
 import { DeckGL } from "@deck.gl/react";
 import {
   COORDINATE_SYSTEM,
   OrthographicView,
+  type Layer,
   type PickingInfo,
 } from "@deck.gl/core";
 import { ArcLayer, ScatterplotLayer } from "@deck.gl/layers";
@@ -19,6 +21,9 @@ import {
   type CommunityMetaNode,
   type CommunitiesResponse,
 } from "../../lib/api.ts";
+import { useGraphStore } from "../../store/graph.ts";
+import { makeDrillLayer } from "./DrillLayer.ts";
+import { EntityDetailPanel } from "./EntityDetail.tsx";
 
 const ACCENT: [number, number, number] = [125, 249, 255]; // #7df9ff (cyan)
 const VIOLET: [number, number, number] = [192, 139, 255]; // #c08bff
@@ -26,6 +31,13 @@ const VIOLET: [number, number, number] = [192, 139, 255]; // #c08bff
 export function GraphOverview() {
   const [data, setData] = useState<CommunitiesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // drill store
+  const drillCommunity = useGraphStore((s) => s.drillCommunity);
+  const selectEntity = useGraphStore((s) => s.selectEntity);
+  const drill = useGraphStore((s) => s.community);
+  const members = useGraphStore((s) => s.members);
+  const selectedEntityId = useGraphStore((s) => s.selectedEntityId);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,7 +70,7 @@ export function GraphOverview() {
 
   const layers = useMemo(() => {
     if (!data) return [];
-    return [
+    const list: Layer[] = [
       new ArcLayer<CommunityMetaEdge>({
         id: "community-edges",
         data: data.edges,
@@ -75,8 +87,6 @@ export function GraphOverview() {
         data: data.communities,
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getPosition: (d) => [d.x ?? 0, d.y ?? 0],
-        // Small radii (clamped tight): the layout must read as clusters with
-        // empty space, not be buried under big overlapping circles.
         getRadius: (d) => Math.sqrt(d.memberCount) * 0.8,
         radiusMinPixels: 2,
         radiusMaxPixels: 16,
@@ -87,7 +97,23 @@ export function GraphOverview() {
         pickable: true,
       }),
     ];
-  }, [data, nodePos]);
+    if (drill && members.length > 0) {
+      const center = nodePos.get(drill.id) ?? [0, 0];
+      list.push(makeDrillLayer(center, members, selectedEntityId));
+    }
+    return list;
+  }, [data, nodePos, drill, members, selectedEntityId]);
+
+  // One click handler discriminates overview-node vs drill-member by shape.
+  const onPick = (info: PickingInfo) => {
+    const o = info.object as Record<string, unknown> | undefined;
+    if (!o) return;
+    if ("memberCount" in o) {
+      void drillCommunity(o as unknown as CommunityMetaNode);
+    } else if ("kind" in o && typeof o.id === "string") {
+      void selectEntity(o.id);
+    }
+  };
 
   if (error) return <Status text={`Error: ${error}`} />;
   if (!data) return <Status text="Loading community overview…" />;
@@ -107,15 +133,21 @@ export function GraphOverview() {
         views={[new OrthographicView({ id: "ortho", controller: true })]}
         initialViewState={{ ortho: { target, zoom: 0, minZoom: -6, maxZoom: 14 } }}
         layers={layers}
-        getTooltip={({ object }: PickingInfo<CommunityMetaNode>) =>
-          object ? `${object.name}\n${object.memberCount} members` : null
-        }
+        onClick={onPick}
+        getTooltip={({ object }: PickingInfo) => {
+          if (!object) return null;
+          const o = object as Record<string, unknown>;
+          return "memberCount" in o
+            ? `${o.name}\n${o.memberCount} members`
+            : String(o.name ?? o.id);
+        }}
       />
       <Legend
         count={data.communities.length}
         total={data.totalCommunities}
         edges={data.edges.length}
       />
+      <EntityDetailPanel />
     </div>
   );
 }

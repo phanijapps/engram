@@ -177,10 +177,10 @@ interface OverviewCache {
   totalCommunities: number;
 }
 
-/** Cache key: max of the main db + WAL mtimes, plus the requested limit. In WAL
- * mode, writes append to the `-wal` file and the main file only bumps at
- * checkpoint, so a main-only key would serve stale communities until checkpoint. */
-function cacheKeyMtime(cfg: VizConfig, limit: number): string {
+/** Max of the main db + WAL mtimes (numeric). In WAL mode, writes append to the
+ * `-wal` file and the main file only bumps at checkpoint, so a main-only key
+ * would serve stale data until checkpoint. */
+export function storeMtimeMs(cfg: VizConfig): number {
   const mainPath = dbPath(cfg);
   let key = statSync(mainPath).mtimeMs;
   try {
@@ -188,16 +188,50 @@ function cacheKeyMtime(cfg: VizConfig, limit: number): string {
   } catch {
     // no WAL file yet — main mtime alone is correct
   }
-  return `${key}:${limit}`;
+  return key;
+}
+
+/** Cached Louvain label-map (`name → label`), keyed by store mtime. Shared by
+ * the overview projection and the drill member-index. Returns `{}` when the
+ * graph is too small to cluster. */
+interface LabelMapCache {
+  mtimeMs: number;
+  map: Record<string, number>;
+}
+let labelMapCache: LabelMapCache | null = null;
+
+export function getLabelMap(cfg: VizConfig, scope: Scope): Record<string, number> {
+  const mtimeMs = storeMtimeMs(cfg);
+  if (labelMapCache && labelMapCache.mtimeMs === mtimeMs) return labelMapCache.map;
+  // call_communities lives on the standalone knowledge engine (not the typed
+  // transport) — reach it via the raw binding. `loadNativeBinding` is exported
+  // from @engram/node.
+  const binding = loadNativeBinding() as unknown as {
+    NativeKnowledgeEngine: new (path: string | null) => {
+      callCommunitiesJson: (req: string) => string;
+    };
+  };
+  const engine = new binding.NativeKnowledgeEngine(dbPath(cfg));
+  const raw = engine.callCommunitiesJson(JSON.stringify({ scope, maxPasses: 2 }));
+  const map = JSON.parse(raw) as Record<string, number>;
+  labelMapCache = { mtimeMs, map };
+  return map;
 }
 
 let cache: OverviewCache | null = null;
 
-/** A name-pair stream over the scope's relationships (record_json → names). */
-function* relationNamePairs(
+/** A stream over the scope's relationships: names (for community clustering) AND
+ * the subject/object entity ids (for the drill member-index). `call_communities`
+ * keys by entity_key() = name-then-id, so fall back to id when name is absent. */
+export function* relationEdges(
   cfg: VizConfig,
   scope: Scope,
-): Generator<{ subjectName: string; objectName: string }> {
+): Generator<{
+  subjectName: string;
+  objectName: string;
+  subjectId?: string;
+  objectId?: string;
+}> {
   const db = openReader(cfg);
   try {
     const where = "tenant = ? AND workspace = ?";
@@ -218,12 +252,16 @@ function* relationNamePairs(
           subject?: { name?: string; id?: string };
           object?: { name?: string; id?: string };
         };
-        // call_communities keys by entity_key() = name-then-id, so fall back to
-        // id when name is absent (else id-keyed endpoints would be clustered by
-        // Louvain but contribute zero weight to the meta-edge tally).
         const s = rel.subject?.name ?? rel.subject?.id;
         const o = rel.object?.name ?? rel.object?.id;
-        if (s && o) yield { subjectName: s, objectName: o };
+        if (s && o) {
+          yield {
+            subjectName: s,
+            objectName: o,
+            subjectId: rel.subject?.id,
+            objectId: rel.object?.id,
+          };
+        }
       }
       if (!page.nextCursor) break;
       cursorRowid = decodeCursor(page.nextCursor);
@@ -234,10 +272,11 @@ function* relationNamePairs(
 }
 
 /**
- * The cached overview. Louvain runs once per store-mtime version; relationship
- * streaming tallies inter-community edges. Returns `built:false` when the graph
- * is too small to cluster. `limit` bounds the visible community count (default
- * 150); `totalCommunities` is the pre-truncation count for the legend.
+ * The cached overview. Louvain (via `getLabelMap`) runs once per store-mtime
+ * version; relationship streaming tallies inter-community edges. Returns
+ * `built:false` when the graph is too small to cluster. `limit` bounds the
+ * visible community count (default 150); `totalCommunities` is the pre-truncation
+ * count for the legend.
  */
 export function computeOverview(
   cfg: VizConfig,
@@ -249,7 +288,7 @@ export function computeOverview(
   built: boolean;
   totalCommunities: number;
 } {
-  const key = cacheKeyMtime(cfg, limit);
+  const key = `${storeMtimeMs(cfg)}:${limit}`;
   if (cache && cache.key === key) {
     return {
       nodes: cache.nodes,
@@ -258,31 +297,20 @@ export function computeOverview(
       totalCommunities: cache.totalCommunities,
     };
   }
-  // call_communities lives on the standalone knowledge engine (not the typed
-  // transport) — reach it via the raw binding, same pattern the prior backend
-  // used. `loadNativeBinding` is exported from @engram/node.
-  const binding = loadNativeBinding() as unknown as {
-    NativeKnowledgeEngine: new (path: string | null) => {
-      callCommunitiesJson: (req: string) => string;
-    };
-  };
-  const engine = new binding.NativeKnowledgeEngine(dbPath(cfg));
-  const raw = engine.callCommunitiesJson(
-    JSON.stringify({ scope, maxPasses: 2 }),
-  );
-  const nameToLabel = JSON.parse(raw) as Record<string, number>;
+  const nameToLabel = getLabelMap(cfg, scope);
   if (Object.keys(nameToLabel).length === 0) {
     return { nodes: [], edges: [], built: false, totalCommunities: 0 };
   }
   const { nodes, topLabels, totalCommunities } = rankCommunities(nameToLabel, limit);
   const maxEdges = Math.min(MAX_COMMUNITY_EDGES, nodes.length * 3);
-  const edges = tallyMetaEdges(relationNamePairs(cfg, scope), nameToLabel, topLabels, maxEdges);
+  const edges = tallyMetaEdges(relationEdges(cfg, scope), nameToLabel, topLabels, maxEdges);
   layoutGraph(nodes, edges);
   cache = { key, nodes, edges, totalCommunities };
   return { nodes, edges, built: true, totalCommunities };
 }
 
-/** Test-only: clear the cache. */
+/** Test-only: clear the caches. */
 export function _resetCommunityCacheForTests(): void {
   cache = null;
+  labelMapCache = null;
 }

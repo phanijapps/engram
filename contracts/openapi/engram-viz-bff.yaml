@@ -136,6 +136,38 @@ components:
         target: { type: string }
         confidence: { type: number, nullable: true }
 
+    EntityDetail:
+      type: object
+      description: |
+        Entity detail (drill): a GraphEntityView with its community label, outgoing
+        degree (no `object_id` column → incoming not counted), and provenance.
+      allOf:
+        - $ref: '#/components/schemas/GraphEntityView'
+        - type: object
+          properties:
+            provenance:
+              type: object
+              additionalProperties: true
+              nullable: true
+
+    CommunityMembersPage:
+      type: object
+      required: [items, nextCursor, memberCount, sampled, found]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/GraphEntityView' }
+        nextCursor: { type: string, nullable: true }
+        memberCount:
+          type: integer
+          description: Full membership (all names with this community's label).
+        sampled:
+          type: integer
+          description: Indexable sample size (relationship-participating entities, ≤ the per-community cap).
+        found:
+          type: boolean
+          description: false when the community is outside the drillable top-N (→ 404).
+
     Page:
       type: object
       required: [items, nextCursor]
@@ -210,6 +242,55 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/GraphStats' }
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/graph/community/{id}/members:
+    get:
+      summary: Drill — a bounded, paged sample of a community's member entities
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+          description: Community id `c<label>`.
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: member sample page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommunityMembersPage' }
+        '404':
+          description: Community not drillable (outside the top-N).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          $ref: '#/components/responses/BadCursor'
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/graph/entity/{id}:
+    get:
+      summary: Drill — entity detail (kind, name, community, outgoing degree, provenance)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: entity detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntityDetail' }
+        '404':
+          description: Entity not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '503':
           $ref: '#/components/responses/Degraded'
 

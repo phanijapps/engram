@@ -80,4 +80,50 @@ test.describe("viz-foundation S1", () => {
     // 7. No uncaught crash / console error over the bounded render.
     expect(errors).toEqual([]);
   });
+
+  test("drill: click a community → bounded members + detail panel, no crash", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    const communities = page.waitForResponse(
+      (r) => r.url().includes("/api/graph/communities") && r.ok(),
+    );
+    await page.goto("/graph");
+    await expect(page.getByText(/communities · .* edges/i)).toBeVisible({ timeout: 20000 });
+
+    const commBody = (await (await communities).json()) as {
+      communities: { id: string; memberCount: number; x?: number; y?: number }[];
+    };
+    // Biggest community = largest on-screen footprint → a reliable click target.
+    const biggest = commBody.communities.reduce(
+      (a, b) => (b.memberCount > a.memberCount ? b : a),
+      commBody.communities[0],
+    );
+    const box = await page.locator("canvas").boundingBox();
+    expect(box).toBeTruthy();
+    // Zoom 0 → 1 world unit ≈ 1 px; the view is centered on the centroid (~0,0).
+    const x = box!.width / 2 + (biggest.x ?? 0);
+    const y = box!.height / 2 + (biggest.y ?? 0);
+
+    const members = page.waitForResponse(
+      (r) => r.url().includes("/api/graph/community/") && r.ok(),
+    );
+    await page.locator("canvas").click({ position: { x, y } });
+
+    const mBody = (await (await members).json()) as { items: unknown[] };
+    // Bounded member page (≤ the page cap).
+    expect(mBody.items.length).toBeLessThanOrEqual(100);
+
+    // The drill detail panel opened.
+    await expect(page.locator("aside")).toBeVisible({ timeout: 10000 });
+    await expect(page.locator("aside")).toContainText(/members/);
+
+    // No uncaught crash / console error through the drill.
+    expect(errors).toEqual([]);
+  });
 });

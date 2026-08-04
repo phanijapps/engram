@@ -1,13 +1,13 @@
-//! engram-viz app shell — zbot-style top-bar + 3-tab nav (Memory / Observatory
-//! / Graph) over the in-process BFF. T7 ships the styled shell; the Graph deck.gl
-//! overview lands in T8; Memory/Observatory in S3/S4.
+//! engram-viz app shell — zbot-style top-bar + 2-tab nav (Memory / Observatory).
+//! Observatory IS the knowledge-graph view (canvas + drill + health strip, the
+//! zbot model — there is no separate Graph tab); Memory is the facts/beliefs/
+//! procedures deck. The BFF reads engram in-process via @engram/node.
 
 import { useEffect, useState, type ComponentType } from "react";
 import { BrowserRouter, Routes, Route, Navigate, NavLink, Link } from "react-router-dom";
-import { Brain, Network, Layers, Activity } from "lucide-react";
+import { Brain, Network, Activity } from "lucide-react";
 
 import { api, type Health } from "./lib/api.ts";
-import { GraphOverview } from "./features/graph/GraphOverview.tsx";
 import { MemoryTab } from "./features/memory/MemoryTab.tsx";
 import { ObservatoryTab } from "./features/observatory/ObservatoryTab.tsx";
 
@@ -20,7 +20,6 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/memory", label: "Memory", icon: Brain },
   { to: "/observatory", label: "Observatory", icon: Network },
-  { to: "/graph", label: "Graph", icon: Layers },
 ];
 
 function WebAppShell() {
@@ -44,7 +43,7 @@ function WebAppShell() {
       <span className="app-shell__reticle app-shell__reticle--br" />
 
       <header className="topbar">
-        <Link to="/graph" className="topbar__brand">
+        <Link to="/observatory" className="topbar__brand">
           <span className="topbar__brand-mark">e</span>
           <span className="topbar__brand-name">engram<b>-viz</b></span>
         </Link>
@@ -75,28 +74,14 @@ function WebAppShell() {
 
       <main className="app-shell__main">
         <Routes>
-          <Route path="/" element={<Navigate to="/graph" replace />} />
+          <Route path="/" element={<Navigate to="/observatory" replace />} />
           <Route path="/memory" element={<MemoryTab />} />
           <Route path="/observatory" element={<ObservatoryTab />} />
-          <Route path="/graph" element={<GraphOverview />} />
-          <Route path="*" element={<Navigate to="/graph" replace />} />
+          {/* /graph merged into Observatory (zbot model: one graph view) */}
+          <Route path="/graph" element={<Navigate to="/observatory" replace />} />
+          <Route path="*" element={<Navigate to="/observatory" replace />} />
         </Routes>
       </main>
-    </div>
-  );
-}
-
-function Placeholder({ title, note }: { title: string; note: string }) {
-  return (
-    <div className="page">
-      <div className="page-container">
-        <h1 style={{ fontFamily: "var(--font-display)", color: "var(--foreground)", margin: 0 }}>
-          {title}
-        </h1>
-        <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted-foreground)", marginTop: "var(--spacing-2)" }}>
-          {note}
-        </p>
-      </div>
     </div>
   );
 }

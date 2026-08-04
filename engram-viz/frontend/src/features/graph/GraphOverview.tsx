@@ -27,7 +27,15 @@ import { EntityDetailPanel } from "./EntityDetail.tsx";
 
 const ACCENT: [number, number, number] = [125, 249, 255]; // #7df9ff (cyan)
 
-export function GraphOverview() {
+export function GraphOverview({
+  limit,
+  refreshSignal = 0,
+  highlight = "",
+}: {
+  limit?: number;
+  refreshSignal?: number;
+  highlight?: string;
+} = {}) {
   const [data, setData] = useState<CommunitiesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,14 +48,16 @@ export function GraphOverview() {
 
   useEffect(() => {
     let cancelled = false;
+    setData(null);
+    setError(null);
     api
-      .communities()
+      .communities(limit)
       .then((d) => !cancelled && setData(d))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)));
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [limit, refreshSignal]);
 
   // community id -> [x, y]; centroid for the initial view target.
   const { nodePos, target } = useMemo(() => {
@@ -92,7 +102,13 @@ export function GraphOverview() {
         getRadius: (d) => Math.sqrt(d.memberCount) * 0.8,
         radiusMinPixels: 2,
         radiusMaxPixels: 16,
-        getFillColor: [...ACCENT, 130],
+        getFillColor: (d) => {
+          if (!highlight) return [...ACCENT, 130];
+          const term = highlight.toLowerCase();
+          const hit =
+            d.id.toLowerCase().includes(term) || d.name.toLowerCase().includes(term);
+          return hit ? [...ACCENT, 210] : [...ACCENT, 18];
+        },
         stroked: true,
         getLineColor: [...ACCENT, 230],
         getLineWidth: 1,
@@ -104,7 +120,7 @@ export function GraphOverview() {
       list.push(makeDrillLayer(center, members, selectedEntityId));
     }
     return list;
-  }, [data, nodePos, drill, members, selectedEntityId]);
+  }, [data, nodePos, drill, members, selectedEntityId, highlight]);
 
   // One click handler discriminates overview-node vs drill-member by shape.
   const onPick = (info: PickingInfo) => {

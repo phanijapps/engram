@@ -34,9 +34,9 @@ test.describe("viz-foundation S1", () => {
       { timeout: 20_000 },
     );
 
-    await page.goto("/graph");
+    await page.goto("/observatory");
 
-    // 1. Styled shell: brand + the three nav tabs.
+    // 1. Styled shell: brand + the nav tabs (Memory / Observatory — Graph merged in).
     await expect(page.locator(".topbar__brand-name")).toContainText(/engram/i);
     await expect(
       page.getByRole("link", { name: /^memory$/i }),
@@ -44,7 +44,6 @@ test.describe("viz-foundation S1", () => {
     await expect(
       page.getByRole("link", { name: /^observatory$/i }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: /^graph$/i })).toBeVisible();
 
     // 2. Live scope pill — the BFF is reachable on the real agentzero store.
     await expect(page.locator(".status-pill")).toContainText(/agentzero/i, {
@@ -93,7 +92,7 @@ test.describe("viz-foundation S1", () => {
     const communities = page.waitForResponse(
       (r) => r.url().includes("/api/graph/communities") && r.ok(),
     );
-    await page.goto("/graph");
+    await page.goto("/observatory");
     await expect(page.getByText(/communities · .* edges/i)).toBeVisible({ timeout: 20000 });
 
     const commBody = (await (await communities).json()) as {

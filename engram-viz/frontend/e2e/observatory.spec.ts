@@ -1,11 +1,12 @@
-//! viz-observatory S4 E2E. The Observatory tab reuses the deck.gl overview canvas
-//! and overlays a LearningHealthBar; populated surfaces (graph/memory) show health,
-//! unpopulated ones (belief/hierarchy) show honest empty-states.
+//! viz-observatory E2E. Observatory is now the sole graph view (zbot model):
+//! toolbar + community canvas + a bottom LearningHealthBar. The health strip
+//! surfaces graph/memory/belief/hierarchy; unpopulated surfaces (belief/hierarchy)
+//! open a details slideover carrying the honest empty-state + populate pointer.
 
 import { test, expect } from "@playwright/test";
 
-test.describe("viz-observatory S4", () => {
-  test("health bar renders graph/memory health + belief/hierarchy empty-states", async ({
+test.describe("viz-observatory", () => {
+  test("health strip renders + belief/hierarchy detail slideovers show empty-states", async ({
     page,
   }) => {
     const errors: string[] = [];
@@ -21,10 +22,12 @@ test.describe("viz-observatory S4", () => {
     await stats;
 
     await expect(page.getByText("LEARNING HEALTH")).toBeVisible({ timeout: 15000 });
-    // populated surfaces present; unpopulated surfaces show the populate pointer.
-    await expect(page.getByText("Graph").first()).toBeVisible();
-    await expect(page.getByText(/Synthesize via reflection/i)).toBeVisible();
-    await expect(page.getByText(/Build via hierarchy_build/i)).toBeVisible();
+    await expect(page.getByText("Entities")).toBeVisible();
+    await expect(page.getByText("Beliefs")).toBeVisible();
+
+    // Belief detail slideover → honest empty-state + out-of-band populate pointer.
+    await page.getByRole("button", { name: "Beliefs details" }).click();
+    await expect(page.getByText(/Run reflection via engram-mcp/i)).toBeVisible();
 
     expect(errors).toEqual([]);
   });

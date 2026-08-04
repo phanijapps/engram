@@ -362,3 +362,117 @@ pgvector backend's `PgUnifiedRecall` (`backends/pgvector/src/recall.rs:59`) also
 hard-codes `ReciprocalRankFusion::default()` + `reranker=None`; threading the
 same config through it is deferred until pgvector is the active backend. Unblocks
 when pgvector moves out of recipe/preview into a deployed backend.
+
+---
+
+## retrieval-quality-near-term (from Codex assessment + investigation)
+
+Shipped (PRs #95-#105): bounded traversal, hybrid recall fusion, `[recall_fusion]`
+config, MMR, fastembed default-on, incremental+batched embedding, honest
+`fetch_rels`, slowness fix (65s→3.6s), repository filtering, lexical persistence,
+NL→symbol anchor, graph cache (trait-based), size cap, capability_report vector,
+search path in results, chunker split, source dedup, lane budgets, query-shape
+classification, provenance + diagnostics, community label cache, exact-match
+injection, discovery/evidence mode, score threshold, raw per-lane scores,
+search returns chunks, `--tools` profiles, batch symbol_context/change_impact,
+multi-anchor get_context, escalation handoff, score calibration, skill update.
+
+Remaining near-term:
+
+- **Re-scan Pi with the new chunker** — Pi was scanned before the container-anchor-only
+  fix (PR #101). Re-scanning will split oversized class chunks. Trivial (just re-scan).
+- **Batch `resolve_entity`** — currently one call per entity; accept `["id1","id2"]`
+  to halve call count during anchor resolution.
+- **`recall` discovery mode** — `recall` (the primary discovery tool) doesn't have
+  `mode="discovery"` (compact names+paths only, no content). Currently capped at
+  20k chars via the output bounding fix, but a true discovery mode (~80 chars/item)
+  would be even cheaper.
+
+## retrieval-quality-architectural (RFC-scale)
+
+- **Domain-level repository filter** (deferred: domain-repo-filter): The MVP
+  tool-level post-filter shipped (#100, #104). A domain-level pre-filter
+  (`QueryFilter.repository` + SQL `WHERE` column before vector top-K) needs a
+  schema migration + contract change. Prevents candidate starvation when an
+  unrelated large repo dominates the vector top-K. Blocked on: an RFC + schema
+  migration. Unblocked by: a slice adding the column + filter.
+
+- **Qualified/per-definition identity** (deferred: qualified-identity): The graph
+  collapses symbols by bare name (`entity_key` returns name, not id). Every `new`,
+  `get`, `open` across the repo merges into one node. The bounded-traversal cap
+  (PR #95) is a bandage; the true fix is per-definition-site identity with a
+  name→entity-id disambiguation step. Breaks the name-query contract; needs a
+  disambiguation design. Blocked on: an RFC.
+
+- **Edge provenance** (deferred: edge-provenance): Every graph edge should carry
+  source file, source line, target line, edge type, extractor, confidence. The
+  tree-sitter extractor computes the call-site line but discards it. Additive but
+  touches extraction (`adapters/ingest`) + storage schema (`knowledge_relationships`
+  needs provenance columns). Blocked on: a schema migration.
+
+- **Field-level dataflow** (deferred: field-level-dataflow): Field reads/writes,
+  value-flow paths, credential/token transformations. TS/JS: incremental (weeks);
+  C/C++: needs compiler backend (LLVM/SVF) — research-grade. Blocked on: for
+  managed languages, an extraction spec; for C/C++, a compiler-backend adapter.
+
+- **Indexed graph backend** (deferred: indexed-graph-backend): Replace the
+  full-load model (`fetch_rels` loads ALL relationships per call) with an indexed
+  structure (CSR adjacency matrix or embedded graph DB). The graph cache (#100)
+  is the current bandage. The ultimate scalability fix for kernel-sized repos.
+  Blocked on: a backend design + migration.
+
+- **Enterprise metadata contract** (deferred: enterprise-metadata): Every item
+  should carry authority status (authoritative/approved/draft/proposed/historical/
+  commentary/inferred), valid time, publication time, source authority, ownership,
+  retention classification. This is the enterprise equivalent of qualified symbol
+  identity — "Refund Policy" can exist in multiple business units/versions.
+  Blocked on: an ADR + domain-type additions.
+
+- **Enterprise chunking** (deferred: enterprise-chunking): Code chunking is fixed
+  (container → anchor-only). Documents (handbooks, transcripts, contracts, incident
+  reports) need the same treatment: document → section → paragraph, preserving
+  hierarchy + parent links. Blocked on: a chunker spec for document types.
+
+- **Question decomposition** (deferred: question-decomposition): Complex questions
+  should decompose into subqueries (the Codex "evidence-planning" workflow).
+  May belong in the `engram-investigate` skill (agent-side) rather than inside
+  `get_context` (tool-side). Blocked on: deciding the layer (skill vs tool).
+
+## gpu-embedding-acceleration
+
+GPU execution providers for fastembed: NVIDIA→CUDA (Linux), CoreML/Metal (Mac).
+The runtime change is small (`InitOptions::with_execution_providers([CUDA, CPU])`
+— ort auto-selects GPU when present). The build change is larger: the bge-small
+model runs on **ort (ONNX)**, and fastembed's `cuda` cargo feature is
+**candle-only** (for qwen3/nomic) — so ort-CUDA for bge needs `ort` built with
+the CUDA execution provider + the CUDA toolkit on the host. Windows has a cleaner
+`directml` path. Blocked on: confirming the ort-CUDA toolchain on the target
+machine. Unblocked by: an ort execution-provider build spike.
+
+## cross-encoder-rerank-model
+
+The dispatch + warning landed (RFC-0019 T4). Selecting `rerank.strategy =
+"cross_encoder"` currently warns + falls back to `None`. A real
+`RerankScorer` model is needed to actually re-score. Blocked on: choosing +
+integrating a cross-encoder model (ONNX or API-based). Unblocked by: a model
+integration slice.
+
+## describes-doc-code-enrichment
+
+The `describes` doc↔code bridge is sparse (~241 links in the 3-repo test DB vs
+11,450 `mentions` and 42,071 `calls`). The scan-filter concept-link filter
+(`should_link_concept`) is deliberately conservative. Enriching the bridge (more
+doc→code links) is a scan-filter tunable. Blocked on: calibration against
+evaluation fixtures.
+
+## eval-harness-runs
+
+The `engram-perf-eval-harness` project (`~/projects/engram-perf-eval-harness`)
+is initialized with 4 fixtures but has not been run against a freshly-scanned DB
+with the latest binary. Needs: (1) re-scan Pi with the new chunker, (2) run the
+harness, (3) record baseline metrics, (4) iterate. Blocked on: nothing (just run it).
+
+## release-version-bump
+
+The `release/v0.2.0` branch is stale (created before PRs #100-#105 merged).
+Needs to be recreated or the workspace version bumped on main. Blocked on: nothing.

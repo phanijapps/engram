@@ -37,6 +37,12 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   (graph/memory/belief/hierarchy), with honest empty-states for the unpopulated
   belief/hierarchy surfaces. **Shipped** (belief/hierarchy empty today;
   slideovers deferred until those surfaces have data). Depends on viz-foundation.
+- [`ts-integration-read-facade`](ts-integration-read-facade/spec.md): move engram's
+  read/query surface — paged list + counts — out of TypeScript (`node:sqlite` in the viz
+  BFF) into `engram-integration` (ports) + the SQLite adapters, exposed via `bindings/node`
+  + `@engram/node`. Retires `node:sqlite` from the TS layer; MCP read tools go on the
+  facade. Constrained by ADR-0003, ADR-0022, RFC-0017. Phase 1 = memories paged vertical
+  spike. Draft.
 - [`knowledge-graph-identity`](knowledge-graph-identity/spec.md): storage-neutral,
   caller-policy-driven identity operations for KG entities and exact relationships,
   plus transactional duplicate consolidation. All six RFC-0014 decisions (D1–D6);

@@ -43,6 +43,7 @@ pub mod config;
 pub mod dto;
 pub mod embedding;
 pub mod export_import;
+pub mod community_query;
 pub mod knowledge_query;
 pub mod lexical_feed;
 pub mod migration;

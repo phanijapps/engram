@@ -1,0 +1,260 @@
+openapi: 3.1.0
+info:
+  title: engram-viz BFF
+  version: 0.1.0
+  description: |
+    Backend-for-Frontend for engram-viz. Reads engram **in-process via
+    `@engram/node`** (never engram-mcp for browser data); read-only `node:sqlite`
+    is a secondary path solely for aggregation counts and keyset windowing the
+    binding does not expose.
+
+    Transport-contract YAMLs live under `contracts/openapi/` (CONVENTIONS §4
+    `contracts/<type>/`), distinct from the portable generated artifacts under
+    `contracts/v1/`. Authored directly without the `api-contract` skill (not
+    installed) — kept in sync with `docs/specs/viz-foundation/spec.md`. Extended
+    per slice: S2 graph drill-down, S3 memory, S4 observatory.
+  x-spec: docs/specs/viz-foundation/spec.md
+servers:
+  - url: http://localhost:3001
+    description: local dev backend (CORS to the Vite origin :5173)
+
+# Cross-cutting conventions
+# - Every list endpoint is keyset-paginated: ?cursor=<opaque>&limit=<int>.
+# - Responses use a Page<T> envelope: { items: [T], nextCursor: string|null }.
+# - limit is capped server-side; requests above the cap are clamped, not errored.
+# - Reads are fail-closed: every read endpoint returns 503 + Error when degraded.
+
+components:
+  parameters:
+    cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque keyset cursor returned in a prior page's nextCursor.
+      schema: { type: string }
+    limit:
+      name: limit
+      in: query
+      required: false
+      description: Max items to return; clamped to the server cap.
+      schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+
+  responses:
+    Degraded:
+      description: Store degraded / unreachable (fail-closed).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    BadCursor:
+      description: Malformed keyset cursor.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Health:
+      type: object
+      required: [status, scope]
+      properties:
+        status: { type: string, enum: [ok] }
+        scope:
+          type: object
+          description: Resolved from env/config by the scope seam, independent of store reachability.
+          properties:
+            tenant: { type: string }
+            workspace: { type: string }
+        capabilities:
+          type: object
+          additionalProperties: true
+          description: The in-process provider CapabilityReport (an object, not a list).
+
+    CommunityMetaNode:
+      type: object
+      required: [id, name, memberCount]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        memberCount: { type: integer, minimum: 0 }
+        x: { type: number, description: precomputed layout coordinate }
+        y: { type: number }
+
+    CommunityMetaEdge:
+      type: object
+      required: [source, target, weight]
+      properties:
+        source: { type: string }
+        target: { type: string }
+        weight: { type: integer, minimum: 0 }
+
+    CommunitiesResponse:
+      type: object
+      required: [communities, edges, built]
+      properties:
+        communities:
+          type: array
+          maxItems: 2000
+          items: { $ref: '#/components/schemas/CommunityMetaNode' }
+        edges:
+          type: array
+          maxItems: 4000
+          items: { $ref: '#/components/schemas/CommunityMetaEdge' }
+        built:
+          type: boolean
+          description: false when there are too few relationships to cluster → UI shows empty-state.
+
+    GraphStats:
+      type: object
+      required: [entities, relationships, communities]
+      properties:
+        entities: { type: integer }
+        relationships: { type: integer }
+        communities: { type: integer }
+        memories: { type: integer }
+        beliefs: { type: integer }
+
+    GraphEntityView:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string }
+        graphId: { type: string }
+        community: { type: integer, nullable: true }
+        degree: { type: integer, nullable: true }
+
+    GraphRelationshipView:
+      type: object
+      required: [source, predicate, target]
+      properties:
+        source: { type: string }
+        predicate: { type: string }
+        target: { type: string }
+        confidence: { type: number, nullable: true }
+
+    Page:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: {} }
+        nextCursor: { type: string, nullable: true }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        degraded: { type: boolean }
+
+paths:
+  /api/health:
+    get:
+      summary: BFF + store health
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/capabilities:
+    get:
+      summary: engram capability report (in-process provider)
+      responses:
+        '200':
+          description: capability report
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/graph/communities:
+    get:
+      summary: Community-overview meta-graph (aggregated, ≤ 2000 nodes / 4000 edges)
+      description: |
+        Server-projected community meta-nodes + inter-community meta-edges,
+        derived from the flat Louvain label-map and bounded to 2000 nodes / 4000 edges. This is the
+        Graph tab's overview payload — meta-nodes/meta-edges only, never entity or
+        relationship rows.
+      responses:
+        '200':
+          description: community meta-graph
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommunitiesResponse' }
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/graph/stats:
+    get:
+      summary: Aggregate graph counts
+      responses:
+        '200':
+          description: counts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GraphStats' }
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/entities:
+    get:
+      summary: Keyset-paged entities
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: a page of entities
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/GraphEntityView' }
+        '422':
+          $ref: '#/components/responses/BadCursor'
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/graph/node/{id}/neighbors:
+    get:
+      summary: Keyset-paged one-hop neighborhood (drill-down, used fully in S2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: a page of neighbor edges
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            entity: { $ref: '#/components/schemas/GraphEntityView' }
+                            relationship: { $ref: '#/components/schemas/GraphRelationshipView' }
+                            direction: { type: string, enum: [incoming, outgoing] }
+        '422':
+          $ref: '#/components/responses/BadCursor'
+        '503':
+          $ref: '#/components/responses/Degraded'

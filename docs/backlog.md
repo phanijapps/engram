@@ -30,6 +30,14 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ---
 
+## viz-non-graph-view-types
+
+- **Non-graph view-types (deferred: viz-non-graph-view-types):** `BeliefView`,
+  `HierarchyNodeView`, `OntologyView`, `TaxonomyConceptView` are type-only stubs
+  in `viz-foundation`; their projections + fixture parity tests land in S3
+  (beliefs) / S4 (hierarchy/ontology/taxonomy) where those surfaces render.
+  Blocked on nothing. [spec viz-foundation AC5]
+
 ## backend-agnostic-retrieval
 
 - **Durable dedup (deferred: durable-dedup):** `content_hash`-keyed vector reuse

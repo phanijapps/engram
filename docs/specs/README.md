@@ -12,6 +12,24 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
 
 ## Active
 
+- [`viz-foundation`](viz-foundation/spec.md): the foundation slice of the
+  engram-viz overhaul — a greenfield 3-tab shell (Memory/Observatory/Graph) with
+  ported zbot styling (React 19 + Tailwind v4), a Hono Backend-for-Frontend that
+  reads engram in-process via `@engram/node` (never engram-mcp), TS view-types,
+  and a deck.gl community-overview Graph view with keyset pagination +
+  aggregation. Constrained by ADR-0003, ADR-0008, ADR-0022. Implementing.
+- [`viz-graph-explorer`](viz-graph-explorer/spec.md): S2 of the engram-viz
+  overhaul — the full Graph tab: bounded one-hop neighborhood drill-down
+  (`neighbors` over `knowledge_relationships`, keyset + K-cap), entity-detail
+  panel, deck.gl LOD at 170 k. Depends on viz-foundation. Draft.
+- [`viz-memory`](viz-memory/spec.md): S3 — the Memory tab: facts/beliefs/
+  contradictions/procedures over engram surfaces (memories/procedures via
+  read-only `node:sqlite`), hybrid search, honest empty-states. Depends on
+  viz-foundation. Draft.
+- [`viz-observatory`](viz-observatory/spec.md): S4 — the Observatory tab:
+  graph/belief/hierarchy stats + LearningHealthBar + slideovers (reuses the
+  deck.gl overview; no D3); empty-states for unpopulated synthesis surfaces.
+  Depends on viz-foundation. Draft.
 - [`knowledge-graph-identity`](knowledge-graph-identity/spec.md): storage-neutral,
   caller-policy-driven identity operations for KG entities and exact relationships,
   plus transactional duplicate consolidation. All six RFC-0014 decisions (D1–D6);

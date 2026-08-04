@@ -48,6 +48,22 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   are reindexed). The browse lists (Facts/Beliefs/Procedures) + empty-states are
   shipped without it. Blocked on retrieval support. [spec viz-memory AC3]
 
+## viz-community-friendly-names
+
+- **Community friendly names + dominant kind (deferred: viz-community-friendly-names):**
+  communities are labeled with raw Louvain integer IDs ("Community 65"), which carry
+  no meaning. Derive a human `label` + dominant `kind` per community **at compute
+  time** in `computeOverview` — no extra DB queries: tally `subject.kind`/`object.kind`
+  per label during the existing relationship stream (the records already carry kind),
+  and extract a namespace via longest-common-prefix over a name sample from the
+  already-computed `getLabelMap`. Scheme = "dominant kind, plus namespace when the
+  sample shares one" (e.g. a repo cluster → `repository · zbot`, an API cluster →
+  `api · /api/curator/*`); bare generic names (`validate`, `write`) have no shared
+  prefix, so those fall back to the dominant kind alone (`functions`) — never a
+  fabricated name. Surface `kind`/`label` on the globe, the 2D overview, and the
+  drill panel, and color the globe by kind. Folded into the cached overview, so zero
+  added latency. Blocked on nothing. [specs viz-graph-explorer, viz-observatory]
+
 ## backend-agnostic-retrieval
 
 - **Durable dedup (deferred: durable-dedup):** `content_hash`-keyed vector reuse

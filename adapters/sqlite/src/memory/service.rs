@@ -203,6 +203,42 @@ impl SqlMemoryStore {
         Ok(records)
     }
 
+    /// Keyset-paged, scope-filtered memory read: `tenant`/`workspace` narrow in SQL
+    /// (so the page boundary is scope-correct), `after_rowid` is the prior page's
+    /// last `rowid` (0 starts), `limit` is the page size. Returns `(rowid, record)`
+    /// pairs so the caller can encode the next cursor. This is the Rust home of the
+    /// keyset logic that previously lived as `node:sqlite` in the viz BFF.
+    pub(crate) fn list_memories_paged(
+        &self,
+        tenant: &str,
+        workspace: &str,
+        after_rowid: i64,
+        limit: i64,
+    ) -> CoreResult<Vec<(i64, MemoryRecord)>> {
+        let connection = self.lock_connection()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT rowid, record_json FROM memories \
+                 WHERE tenant = ?1 AND workspace = ?2 AND rowid > ?3 \
+                 ORDER BY rowid LIMIT ?4",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map(params![tenant, workspace, after_rowid, limit], |row| {
+                let rowid: i64 = row.get(0)?;
+                let json: String = row.get(1)?;
+                Ok((rowid, json))
+            })
+            .map_err(sql_error)?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (rowid, json) = row.map_err(sql_error)?;
+            let record = serde_json::from_str::<MemoryRecord>(&json).map_err(json_error)?;
+            out.push((rowid, record));
+        }
+        Ok(out)
+    }
+
     /// Returns the highest numeric suffix among existing memory and event IDs.
     ///
     /// Generated IDs have the form `<entity>-<n>`; reopening a file-backed

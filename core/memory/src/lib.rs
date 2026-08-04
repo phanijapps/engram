@@ -37,6 +37,23 @@ pub trait MemoryRepository: Send + Sync {
         scope: &Scope,
         status: MemoryStatus,
     ) -> CoreResult<MemoryRecord>;
+
+    /// Lists memory records visible to `scope` as a keyset page: `after` is the
+    /// `next_cursor` returned by a prior page, `limit` bounds the page size. Returns
+    /// the items + the next cursor (`None` when exhausted). Engine-neutral — the
+    /// adapter interprets the opaque `Cursor` (the SQLite adapter encodes a `rowid`).
+    /// Default: `CapabilityUnsupported` so adapters opt in; the SQLite adapter overrides.
+    async fn list_memories_paged(
+        &self,
+        _scope: &Scope,
+        _after: Option<&Cursor>,
+        _limit: usize,
+    ) -> CoreResult<Page<MemoryRecord>> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "list_memories_paged".to_string(),
+            reason: "this memory adapter does not implement paged reads".to_string(),
+        })
+    }
 }
 
 /// Read port for append-only memory lifecycle events.

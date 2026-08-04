@@ -9,8 +9,8 @@ use std::{path::Path, sync::Arc};
 use async_trait::async_trait;
 use engram_domain::*;
 use engram_memory::{
-    Clock, CoreResult, IdGenerator, MemoryEventRepository, MemoryRepository, MemoryService,
-    PolicyAuthorizer,
+    Clock, CoreError, CoreResult, IdGenerator, MemoryEventRepository, MemoryRepository,
+    MemoryService, PolicyAuthorizer,
 };
 
 use crate::memory::{
@@ -134,6 +134,40 @@ impl MemoryRepository for SqlMemoryService {
         status: MemoryStatus,
     ) -> CoreResult<MemoryRecord> {
         self.store.update_memory_status(id, scope, status).await
+    }
+
+    /// Keyset-paged, scope-filtered memory read. The store runs the keyset SQL
+    /// (scope in the WHERE); the service decodes the opaque `Cursor` (a rowid),
+    /// caps the page size, and emits the next cursor when the page is full.
+    async fn list_memories_paged(
+        &self,
+        scope: &Scope,
+        after: Option<&Cursor>,
+        limit: usize,
+    ) -> CoreResult<Page<MemoryRecord>> {
+        let after_rowid = match after {
+            Some(cursor) => cursor
+                .as_str()
+                .parse::<i64>()
+                .map_err(|_| CoreError::InvalidRequest {
+                    reason: format!("invalid memory cursor: {}", cursor.as_str()),
+                })?,
+            None => 0,
+        };
+        let page_limit = limit.clamp(1, 500) as i64;
+        let workspace = scope.workspace.as_deref().unwrap_or("");
+        let rows = self.store.list_memories_paged(
+            &scope.tenant,
+            workspace,
+            after_rowid,
+            page_limit,
+        )?;
+        // A full page may have more following → emit a cursor at the last rowid.
+        let next_cursor = (page_limit > 0 && rows.len() as i64 >= page_limit)
+            .then(|| rows.last().map(|(rowid, _)| Cursor::new(rowid.to_string())))
+            .flatten();
+        let items = rows.into_iter().map(|(_, record)| record).collect();
+        Ok(Page::new(items, next_cursor))
     }
 }
 

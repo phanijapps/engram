@@ -468,3 +468,44 @@ fn temp_database_path(name: &str) -> PathBuf {
     let _ = std::fs::remove_file(&path);
     path
 }
+
+#[test]
+fn list_memories_paged_returns_disjoint_keyset_pages() {
+    // Keyset-paged read (P1.3): write 3 memories in a scope, page with limit 2 →
+    // page 1 is full with a next cursor, page 2 is the terminal single, disjoint by id.
+    let svc = SqlMemoryService::open_in_memory().expect("open in-memory service");
+    let scope = Scope {
+        tenant: "tenant-roles".to_owned(),
+        workspace: Some("workspace-roles".to_owned()),
+        subject: None,
+        session: None,
+        environment: None,
+    };
+    for i in 0..3 {
+        let req = role_request(
+            MemoryKind::Observation,
+            Retention::Durable,
+            None,
+            &format!("paged memory {i}"),
+            &format!("paged-key-{i}"),
+        );
+        block_on(svc.write_memory(req)).expect("write memory");
+    }
+
+    let page1 = block_on(svc.list_memories_paged(&scope, None, 2)).expect("page 1");
+    assert_eq!(page1.items.len(), 2, "page 1 has the limit");
+    let cursor1 = page1
+        .next_cursor
+        .expect("a full page carries a next cursor");
+
+    let page2 =
+        block_on(svc.list_memories_paged(&scope, Some(&cursor1), 2)).expect("page 2");
+    assert_eq!(page2.items.len(), 1, "page 2 has the remainder");
+    assert!(page2.next_cursor.is_none(), "page 2 is terminal");
+
+    let ids1: Vec<_> = page1.items.iter().map(|m| m.id.clone()).collect();
+    assert!(
+        page2.items.iter().all(|m| !ids1.contains(&m.id)),
+        "pages are disjoint by memory id"
+    );
+}

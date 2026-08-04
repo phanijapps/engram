@@ -1,0 +1,308 @@
+/* ============================================================================
+   GRAPH TAB — Apple-Vision glass aesthetic (ported from zbot's observatory-v2)
+   ============================================================================
+   Deep dark radial background so the 3D fog blends; frosted-glass HUD cards in
+   the corners; cream-white primary (#f5ecd9), mono type. The WebGL globe itself
+   is rendered by react-three-fiber (GlobeGraph.tsx). */
+
+.graph-globe {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+  overflow: hidden;
+  background: radial-gradient(ellipse at center, #131722 0%, #0a0e15 60%, #06080d 100%);
+  color: #f5ecd9;
+  --glass: rgba(20, 26, 36, 0.55);
+  --border: rgba(245, 236, 217, 0.10);
+  --border-hover: rgba(245, 236, 217, 0.22);
+  --cream: #f5ecd9;
+  --cream-dim: rgba(245, 236, 217, 0.55);
+  --warning: #f0c46b;
+  --mono: var(--font-mono, "JetBrains Mono", ui-monospace, monospace);
+}
+
+.graph-globe__canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* ----- HUD shared base --------------------------------------------------- */
+.gg-hud {
+  position: absolute;
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 0 rgba(245, 236, 217, 0.05) inset, 0 14px 32px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
+  transition: border-color 240ms ease;
+}
+.gg-hud:hover {
+  border-color: var(--border-hover);
+}
+.gg-hud--tl {
+  top: 18px;
+  left: 18px;
+  min-width: 300px;
+}
+.gg-hud--tr {
+  top: 18px;
+  right: 18px;
+  min-width: 168px;
+}
+.gg-hud--bottom {
+  bottom: 50px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.gg-eyebrow {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cream-dim);
+}
+
+.gg-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 8px;
+}
+.gg-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.gg-stat-value {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--cream);
+  letter-spacing: -0.01em;
+}
+.gg-stat-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cream-dim);
+}
+
+/* ----- bottom detail pills ---------------------------------------------- */
+.gg-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--glass);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  min-width: 210px;
+  transition: border-color 240ms ease, transform 240ms ease;
+  box-shadow: 0 1px 0 rgba(245, 236, 217, 0.04) inset, 0 10px 24px rgba(0, 0, 0, 0.36);
+}
+.gg-pill:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+.gg-pill-icon {
+  display: inline-flex;
+  color: var(--cream-dim);
+}
+.gg-pill-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.gg-pill-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--cream);
+  letter-spacing: 0.02em;
+}
+.gg-pill-sub {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--cream-dim);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ----- picked-community floating card ----------------------------------- */
+.gg-pick {
+  position: absolute;
+  bottom: 70px;
+  right: 18px;
+  width: 300px;
+  background: var(--glass);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid var(--border-hover);
+  border-radius: 14px;
+  padding: 16px 18px 18px;
+  box-shadow: 0 1px 0 rgba(245, 236, 217, 0.05) inset, 0 20px 48px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  animation: gg-pick-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@keyframes gg-pick-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.gg-pick-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cream-dim);
+  cursor: pointer;
+}
+.gg-pick-close:hover {
+  background: rgba(245, 236, 217, 0.06);
+  color: var(--cream);
+}
+.gg-pick-eyebrow {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cream-dim);
+}
+.gg-pick-name {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--cream);
+  margin-top: 4px;
+  word-break: break-word;
+}
+.gg-pick-meta {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.gg-pick-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(245, 236, 217, 0.06);
+  border: 1px solid var(--border);
+  color: var(--cream);
+}
+
+/* ----- dense footer strip ----------------------------------------------- */
+.gg-footer {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 18px;
+  background: rgba(10, 14, 21, 0.7);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border-top: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.gg-footer::-webkit-scrollbar {
+  display: none;
+}
+.gg-footer-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-family: var(--mono);
+}
+.gg-footer-stat-label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cream-dim);
+}
+.gg-footer-stat-value {
+  font-size: 12px;
+  color: var(--cream);
+}
+
+/* ----- hover billboard label (3D, drei Html) ---------------------------- */
+.gg-node-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+  font-family: var(--mono);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.92), 0 0 6px rgba(10, 14, 21, 0.85);
+}
+.gg-node-label-name {
+  font-size: 11px;
+  color: #f5ecd9;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gg-node-label-meta {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: rgba(245, 236, 217, 0.7);
+}
+
+/* ----- empty / loading -------------------------------------------------- */
+.gg-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cream-dim);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .gg-hud--tl,
+  .gg-hud--tr {
+    position: static;
+    margin: 12px;
+    min-width: 0;
+  }
+  .gg-hud--bottom {
+    position: static;
+    margin: 12px;
+    flex-direction: column;
+  }
+}

@@ -14,9 +14,9 @@ test.describe("viz-graph globe", () => {
     });
 
     await page.goto("/graph");
-    await expect(
-      page.getByText(/communities · .* edges · drag to orbit/i),
-    ).toBeVisible({ timeout: 20000 });
+    // frosted HUD eyebrow + the orbit hint + a WebGL canvas mount
+    await expect(page.getByText(/engram · graph/i)).toBeVisible({ timeout: 20000 });
+    await expect(page.getByText(/drag to orbit/i)).toBeVisible();
     await expect(page.locator("canvas")).toBeVisible();
 
     expect(errors).toEqual([]);

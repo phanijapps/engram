@@ -1,0 +1,209 @@
+/* ============================================================================
+   SHELL — app grid + top-bar + nav-link (ported from zbot components.css).
+   Per-tab component classes land with each tab (S2–S4); this owns the chrome.
+   ============================================================================ */
+
+.app-shell {
+  display: grid;
+  grid-template-rows: var(--topbar-height) 1fr;
+  height: 100vh;
+  height: 100dvh;
+  background-color: transparent;
+}
+
+.app-shell__main {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.page {
+  height: 100%;
+  overflow: auto;
+  background-color: var(--background);
+}
+
+.page-container {
+  padding: var(--spacing-8);
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+}
+
+/* ---- top-bar shell --------------------------------------------------------- */
+.topbar {
+  display: flex;
+  align-items: stretch;
+  height: var(--topbar-height);
+  background: var(--sidebar);
+  border-bottom: 1px solid color-mix(in srgb, var(--fx-accent) 20%, transparent);
+  backdrop-filter: blur(10px);
+  font-family: var(--font-mono);
+  position: relative;
+  z-index: 10;
+}
+
+.topbar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0,
+    var(--fx-accent) 12%,
+    var(--fx-accent) 22%,
+    transparent 30%,
+    transparent 70%,
+    var(--fx-accent) 78%,
+    var(--fx-accent) 88%,
+    transparent 100%);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.topbar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: 0 var(--spacing-4);
+  border-right: 1px solid color-mix(in srgb, var(--fx-accent) 18%, transparent);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: max-content;
+  text-decoration: none;
+  color: var(--foreground);
+}
+
+.topbar__brand::before {
+  content: "$";
+  font-family: var(--font-mono);
+  color: var(--fx-accent);
+  font-weight: 600;
+  font-size: 12px;
+  margin-right: var(--spacing-0-5);
+  opacity: 0.7;
+}
+
+.topbar__brand-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--fx-accent), #c08bff);
+  color: #02030a;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 13px;
+  flex-shrink: 0;
+  box-shadow: 0 0 calc(20px * var(--fx-glow)) color-mix(in srgb, var(--fx-accent) 60%, transparent);
+}
+
+.topbar__brand-name {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--foreground);
+}
+
+.topbar__brand-name b {
+  color: var(--fx-accent);
+  font-weight: 700;
+}
+
+.topbar__nav {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.topbar__nav::-webkit-scrollbar {
+  display: none;
+}
+
+.topbar__right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-3);
+  padding: 0 var(--spacing-3);
+  border-left: 1px solid color-mix(in srgb, var(--fx-accent) 18%, transparent);
+  flex-shrink: 0;
+}
+
+/* ---- nav link (top-bar tab) ------------------------------------------------ */
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1-5);
+  padding: 0 var(--spacing-3);
+  height: 100%;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+
+.nav-link:hover {
+  background: rgba(125, 249, 255, 0.06);
+  color: var(--foreground);
+}
+
+.nav-link--active {
+  color: var(--fx-accent);
+  border-bottom-color: var(--fx-accent);
+  text-shadow: 0 0 calc(10px * var(--fx-glow)) color-mix(in srgb, var(--fx-accent) 80%, transparent);
+  box-shadow: inset 0 -8px 16px -8px color-mix(in srgb, var(--fx-accent) 30%, transparent);
+}
+
+.nav-link__icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.nav-link__label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+/* ---- status pill (right side — workspace + ok/degraded dot) --------------- */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-1-5);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+}
+
+.status-pill__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--success);
+  box-shadow: 0 0 calc(8px * var(--fx-glow)) var(--success);
+}
+
+.status-pill[data-ok="false"] .status-pill__dot {
+  background: var(--destructive);
+  box-shadow: 0 0 calc(8px * var(--fx-glow)) var(--destructive);
+}

@@ -1,113 +1,107 @@
-//! engram-viz — single-page code-graph workspace.
-//!
-//! The graph is the hero (full-viewport, always visible). Overlay panels slide
-//! in: a left sidebar (repo + insights/taxonomy/ontology), a top search bar,
-//! a right node-detail panel, and a bottom timeline drawer.
+//! engram-viz app shell — zbot-style top-bar + 3-tab nav (Memory / Observatory
+//! / Graph) over the in-process BFF. T7 ships the styled shell; the Graph deck.gl
+//! overview lands in T8; Memory/Observatory in S3/S4.
 
-import {
-  Activity,
-  AlertCircle,
-  Loader2,
-  PanelLeftOpen,
-  Workflow as GraphIcon,
-} from "lucide-react";
-import { GraphCanvas } from "./components/graph/GraphCanvas";
-import { LeftSidebar } from "./components/sidebar/LeftSidebar";
-import { NodePanel } from "./components/panel/NodePanel";
-import { SearchBar } from "./components/search/SearchBar";
-import { TimelineDrawer } from "./components/timeline/TimelineDrawer";
-import { useGraphData } from "./hooks/useGraphData";
-import { useGraphStore } from "./store/graphStore";
+import { useEffect, useState, type ComponentType } from "react";
+import { BrowserRouter, Routes, Route, Navigate, NavLink, Link } from "react-router-dom";
+import { Brain, Network, Layers, Activity } from "lucide-react";
 
-export default function App() {
-  useGraphData();
-  const loading = useGraphStore((s) => s.loading);
-  const error = useGraphStore((s) => s.error);
-  const nodeCount = useGraphStore((s) => s.nodes.length);
-  const capped = useGraphStore((s) => s.capped);
-  const originalNodeCount = useGraphStore((s) => s.originalNodeCount);
-  const toggleTimeline = useGraphStore((s) => s.toggleTimeline);
-  const sidebarCollapsed = useGraphStore((s) => s.sidebarCollapsed);
-  const toggleSidebar = useGraphStore((s) => s.toggleSidebar);
+import { api, type Health } from "./lib/api.ts";
+
+interface NavItem {
+  to: string;
+  label: string;
+  icon: ComponentType<{ className?: string }>;
+}
+
+const NAV: NavItem[] = [
+  { to: "/memory", label: "Memory", icon: Brain },
+  { to: "/observatory", label: "Observatory", icon: Network },
+  { to: "/graph", label: "Graph", icon: Layers },
+];
+
+function WebAppShell() {
+  const [health, setHealth] = useState<Health | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.health().then((h) => !cancelled && setHealth(h)).catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ok = health?.status === "ok";
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-base-950">
-      {/* Hero graph (full viewport) */}
-      <GraphCanvas />
+    <div className="app-shell">
+      <span className="app-shell__reticle app-shell__reticle--tl" />
+      <span className="app-shell__reticle app-shell__reticle--tr" />
+      <span className="app-shell__reticle app-shell__reticle--bl" />
+      <span className="app-shell__reticle app-shell__reticle--br" />
 
-      {/* Top bar */}
-      <header className="absolute left-0 right-0 top-0 z-30 flex h-12 items-center gap-3 border-b border-base-700 bg-base-900/90 px-4 backdrop-blur">
-        {/* Expand sidebar button (visible when collapsed) */}
-        {sidebarCollapsed && (
-          <button
-            onClick={toggleSidebar}
-            className="flex items-center gap-1 rounded-md border border-base-700 bg-base-850 px-2 py-1.5 text-[11px] text-ink-muted hover:border-accent hover:text-accent"
-            title="Show sidebar"
-          >
-            <PanelLeftOpen size={14} />
-          </button>
-        )}
-        <div className="flex items-center gap-2">
-          <GraphIcon size={16} className="text-accent" />
-          <span className="font-mono text-sm font-semibold text-ink">
-            engram<span className="text-accent">-viz</span>
+      <header className="topbar">
+        <Link to="/graph" className="topbar__brand">
+          <span className="topbar__brand-mark">e</span>
+          <span className="topbar__brand-name">engram<b>-viz</b></span>
+        </Link>
+
+        <nav className="topbar__nav">
+          {NAV.map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              className={({ isActive }) =>
+                "nav-link" + (isActive ? " nav-link--active" : "")
+              }
+            >
+              <Icon className="nav-link__icon" />
+              <span className="nav-link__label">{label}</span>
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="topbar__right">
+          <span className="status-pill" data-ok={ok ? "true" : "false"} title="BFF health">
+            <Activity className="nav-link__icon" />
+            <span className="status-pill__dot" />
+            {health ? health.scope.workspace : "—"}
           </span>
         </div>
-        <div className="ml-2 hidden items-center gap-1.5 text-[11px] text-ink-faint sm:flex">
-          {loading ? (
-            <>
-              <Loader2 size={11} className="animate-spin" />
-              loading graph…
-            </>
-          ) : (
-            !error && (
-              <span>
-                {nodeCount.toLocaleString()} nodes
-                {capped && originalNodeCount != null && (
-                  <span
-                    className="ml-1 text-accent-amber"
-                    title="The server pruned low-degree leaves to keep the graph snappy."
-                  >
-                    of {originalNodeCount.toLocaleString()} (capped)
-                  </span>
-                )}
-              </span>
-            )
-          )}
-        </div>
-        <div className="mx-auto">
-          <SearchBar />
-        </div>
-        <button
-          onClick={toggleTimeline}
-          className="flex items-center gap-1.5 rounded-md border border-base-700 bg-base-850 px-2.5 py-1.5 text-[11px] text-ink-muted hover:border-accent hover:text-accent"
-        >
-          <Activity size={13} />
-          Timeline
-        </button>
       </header>
 
-      {/* Error banner */}
-      {error && (
-        <div className="absolute left-1/2 top-14 z-40 flex -translate-x-1/2 items-center gap-2 rounded-md border border-accent-red/40 bg-accent-red/10 px-4 py-2 text-xs text-accent-red">
-          <AlertCircle size={14} />
-          {error}
-          <span className="text-ink-faint">— is the backend running on :3001?</span>
-        </div>
-      )}
-
-      {/* Left sidebar (below top bar) — hidden when collapsed */}
-      {!sidebarCollapsed && (
-        <div className="absolute bottom-9 left-0 top-12 z-10">
-          <LeftSidebar />
-        </div>
-      )}
-
-      {/* Right node-detail panel */}
-      <NodePanel />
-
-      {/* Bottom timeline drawer */}
-      <TimelineDrawer />
+      <main className="app-shell__main">
+        <Routes>
+          <Route path="/" element={<Navigate to="/graph" replace />} />
+          <Route path="/memory" element={<Placeholder title="Memory" note="Facts / beliefs / contradictions — S3." />} />
+          <Route path="/observatory" element={<Placeholder title="Observatory" note="Graph / belief / hierarchy health — S4." />} />
+          <Route path="/graph" element={<Placeholder title="Graph" note="deck.gl community overview — T8." />} />
+          <Route path="*" element={<Navigate to="/graph" replace />} />
+        </Routes>
+      </main>
     </div>
+  );
+}
+
+function Placeholder({ title, note }: { title: string; note: string }) {
+  return (
+    <div className="page">
+      <div className="page-container">
+        <h1 style={{ fontFamily: "var(--font-display)", color: "var(--foreground)", margin: 0 }}>
+          {title}
+        </h1>
+        <p style={{ fontFamily: "var(--font-mono)", color: "var(--muted-foreground)", marginTop: "var(--spacing-2)" }}>
+          {note}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <WebAppShell />
+    </BrowserRouter>
   );
 }

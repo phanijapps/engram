@@ -1,33 +1,8 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-html,
-body,
-#root {
-  height: 100%;
-  margin: 0;
-}
-
-body {
-  background-color: #0a0e14;
-  color: #c9d1d9;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  overflow: hidden;
-}
-
-/* Thin scrollbars to match the dark IDE aesthetic. */
-*::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-*::-webkit-scrollbar-thumb {
-  background: #30363d;
-  border-radius: 4px;
-}
-*::-webkit-scrollbar-thumb:hover {
-  background: #484f58;
-}
+/* Main stylesheet entry — import order matters (mirrors zbot):
+   fonts → tailwind → theme tokens → shell chrome → effects. Per-tab component
+   CSS is layered in with each tab (S2–S4). */
+@import './styles/fonts.css';
+@import 'tailwindcss';
+@import './styles/theme.css';
+@import './styles/shell.css';
+@import './styles/effects.css';

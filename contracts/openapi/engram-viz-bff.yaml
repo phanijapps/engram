@@ -112,9 +112,11 @@ components:
       properties:
         entities: { type: integer }
         relationships: { type: integer }
-        communities: { type: integer }
+        communities: { type: integer, description: '0 here — the cheap stats endpoint does not run Louvain; the overview totalCommunities is the real count.' }
         memories: { type: integer }
         beliefs: { type: integer }
+        hierarchyNodes: { type: integer }
+        hierarchyRelations: { type: integer }
 
     GraphEntityView:
       type: object

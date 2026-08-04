@@ -56,9 +56,14 @@ export function graphRoute(cfg: VizConfig): Hono {
           relationships: countTable(db, "knowledge_relationships", scopeWhere, [
             ...scopeParams,
           ]),
-          communities: 0, // filled by the community projection (T6)
+          communities: 0, // the cheap stats endpoint does not run Louvain; the
+          // overview's `totalCommunities` is the real count.
           memories: countTable(db, "memories", scopeWhere, [...scopeParams]),
           beliefs: countTable(db, "beliefs", scopeWhere, [...scopeParams]),
+          hierarchyNodes: countTable(db, "hierarchy_nodes", scopeWhere, [...scopeParams]),
+          hierarchyRelations: countTable(db, "hierarchy_relations", scopeWhere, [
+            ...scopeParams,
+          ]),
         })),
       );
     } catch (err) {

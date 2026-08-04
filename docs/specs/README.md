@@ -33,9 +33,10 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   (hybrid search deferred — the store's retrieval is Unsupported; browse +
   empty-states shipped). Depends on viz-foundation.
 - [`viz-observatory`](viz-observatory/spec.md): S4 — the Observatory tab:
-  graph/belief/hierarchy stats + LearningHealthBar + slideovers (reuses the
-  deck.gl overview; no D3); empty-states for unpopulated synthesis surfaces.
-  Depends on viz-foundation. Draft.
+  reuses the deck.gl overview canvas + a LearningHealthBar over `/graph/stats`
+  (graph/memory/belief/hierarchy), with honest empty-states for the unpopulated
+  belief/hierarchy surfaces. **Shipped** (belief/hierarchy empty today;
+  slideovers deferred until those surfaces have data). Depends on viz-foundation.
 - [`knowledge-graph-identity`](knowledge-graph-identity/spec.md): storage-neutral,
   caller-policy-driven identity operations for KG entities and exact relationships,
   plus transactional duplicate consolidation. All six RFC-0014 decisions (D1–D6);

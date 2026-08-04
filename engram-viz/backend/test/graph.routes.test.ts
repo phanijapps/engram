@@ -18,7 +18,10 @@ describe.skipIf(!ready)("graph routes (live agentzero store)", () => {
     const body = await res.json();
     expect(body.entities).toBeGreaterThan(100000);
     expect(body.relationships).toBeGreaterThan(200000);
-    expect(body.communities).toBe(0); // T6 fills
+    expect(body.communities).toBe(0); // cheap stats endpoint does not run Louvain
+    expect(body.hierarchyNodes).toBe(0); // empty today (S4 observatory stat)
+    expect(body.hierarchyRelations).toBe(0);
+    expect(typeof body.memories).toBe("number");
   });
 
   it("/graph/communities returns the top-N overview, bounded + with totalCommunities", async () => {

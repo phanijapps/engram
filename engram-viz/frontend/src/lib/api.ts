@@ -16,6 +16,8 @@ export interface GraphStats {
   communities: number;
   memories: number;
   beliefs: number;
+  hierarchyNodes: number;
+  hierarchyRelations: number;
 }
 
 export interface CommunityMetaNode {

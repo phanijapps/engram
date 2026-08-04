@@ -1,7 +1,7 @@
 # Plan: viz-observatory
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Draft
+- **Status:** Shipped
 
 > **Plan contract:** implementation strategy for the Observatory tab. Builds on
 > `viz-foundation` (prerequisite).

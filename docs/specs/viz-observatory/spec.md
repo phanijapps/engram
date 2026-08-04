@@ -1,6 +1,6 @@
 # Spec: viz-observatory
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** engram-viz
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0003 (implementation stack), ADR-0008 (durable ontology/taxonomy), ADR-0022 (surface parity), [`docs/architecture/reference.md`](../../architecture/reference.md)
@@ -61,15 +61,16 @@ synthesis surfaces are unpopulated.
 
 ## Acceptance Criteria
 
-- [ ] The Observatory tab renders the zbot observatory layout (reusing the
-  `viz-foundation` deck.gl overview canvas — no D3/new dep — +
-  LearningHealthBar + belief-network/hierarchy slideovers), styled consistently
-  with zbot.
-- [ ] Graph, belief-network, and hierarchy stats are served via extended BFF
-  endpoints in `contracts/openapi/engram-viz-bff.yaml` (with `503`/`Error`).
-- [ ] Unpopulated synthesis surfaces (belief/hierarchy today) render an honest
+- [x] The Observatory tab renders the observatory layout (reusing the
+  `viz-foundation` deck.gl overview canvas — no D3/new dep — + a
+  LearningHealthBar; belief/hierarchy shown as inline empty-states today since
+  those surfaces are unpopulated), styled consistently with zbot.
+- [x] Graph, belief-network, and hierarchy stats are served via the extended
+  `/api/graph/stats` (added `hierarchyNodes`/`hierarchyRelations`) in
+  `contracts/openapi/engram-viz-bff.yaml` (with `503`/`Error`).
+- [x] Unpopulated synthesis surfaces (belief/hierarchy today) render an honest
   empty-state with the out-of-band populate pointer — no fabricated activity.
-- [ ] All data flows through the `viz-foundation` in-process BFF (no engram-mcp,
+- [x] All data flows through the `viz-foundation` in-process BFF (no engram-mcp,
   no browser store access, no viz write path).
 
 ## Assumptions

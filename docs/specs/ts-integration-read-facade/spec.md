@@ -78,8 +78,12 @@ entirely by Rust, with the viz's `/memory` route no longer touching `node:sqlite
 - [ ] The viz `/api/memory` route is rewired to `@engram/node` and no longer uses `node:sqlite`
   for memories; the paged shape is unchanged (regression-green). *(Phase 1 done.)*
 - [ ] (Phase 2) paged reads + counts for entities/relationships/beliefs/hierarchy/chunks reach the facade + TS.
-- [ ] (Phase 3) `node:sqlite` is removed from the viz backend; the friendly MCP read tools
-  consume the facade.
+- [ ] (Phase 3) a new engine-neutral `CommunityOverview` port (`overview` / `members` /
+  `community_of`) computes the Louvain communities + inter-community meta-edges + member
+  index in Rust (Louvain promoted behind a trait the adapter calls), exposed via the facade
+  → binding → `@engram/node`; the viz's `computeOverview`/`communityMembers`/`entityCommunity`
+  consume it (layout stays TS). `node:sqlite` is removed from the viz backend (scope-counts +
+  paged-neighbors ports retire the rest); the friendly MCP read tools consume the facade.
 - [ ] `cargo check --workspace` + the neutrality/parity lints + `pnpm typecheck` are green.
 
 ## Assumptions

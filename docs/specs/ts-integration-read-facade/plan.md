@@ -77,11 +77,38 @@ viz memory test; commit. Depends on: P1.6.
 Paged ports + adapter impls + binding + TS for: entities, relationships, chunks, beliefs,
 procedures, hierarchy; + counts via `Observability.record_counts` (→ `countsJson` / TS `counts()`).
 
-### Phase 3 — retire `node:sqlite` + MCP reads
+### Phase 3 — community-aggregate port (retire the viz's USED node:sqlite) + MCP reads
 
-Remove `node:sqlite` from the viz backend (paginate/countTable/aggregation → facade +
-`call_communities` already exposed); add the friendly read tools to the existing
-`engram-mcp-http` on the facade.
+The viz's runtime `node:sqlite` is the **community aggregation** (`relationEdges` meta-edge
+stream + `getMemberIndex` member index + member hydration) + `countTable` stats + `entityDetail`
+degree + `/neighbors`. P3 ports the centerpiece — the community aggregate — into Rust.
+
+**New engine-neutral port** `CommunityOverview` (engram-integration; types in engram-domain):
+- `overview(scope, limit) -> CommunityOverview { communities: Vec<CommunityMetaNode>, edges: Vec<CommunityMetaEdge>, total: usize }` — top-N Louvain communities + inter-community meta-edges (the meta-edge tally moves from the viz's `relationEdges` stream into Rust).
+- `members(scope, label, after, limit) -> Page<KnowledgeEntity>` — a community's member entities, paged (replaces `communityMembers`).
+- `community_of(scope, entity_id) -> Option<u32>` — the label for an entity (replaces `entityCommunity`).
+- **Layout stays in TS** (`layoutGraph` — a view concern); the port returns data only.
+
+**Domain types:** `CommunityMetaNode { label, member_count }`, `CommunityMetaEdge { source_label, target_label, weight }`.
+
+**SQLite impl** (engram-store-sqlite / knowledge adapter): reuses Louvain (`call_communities`) +
+tallies meta-edges from `knowledge_relationships` (streamed, capped) + builds the member index
+(label → entity ids, capped). The logic moved verbatim from the viz's `aggregation/{communities,members}.ts`.
+
+**Open design question (resolve at P3.0):** Louvain (`call_communities`) today lives on the
+*flat* `NativeKnowledgeEngine` (N-API), not on a Rust trait the facade/adapter can call. The
+port impl needs Louvain reachable from the adapter layer — so P3.0 promotes `call_communities`
+to a `KnowledgeGraphRepository` (or community) trait method backed by the SQLite adapter, then
+the aggregate impl uses it. (If Louvain is already reachable Rust-side, P3.0 is a no-op spike-verify.)
+
+**Tasks:**
+- P3.0 — Louvain reachability: promote/verify `call_communities` behind a Rust trait the adapter calls.
+- P3.1 — domain types `CommunityMetaNode`/`CommunityMetaEdge` + the `CommunityOverview` port (default `Unsupported`).
+- P3.2 — SQLite impl (Louvain + meta-edge tally + member index) + tests.
+- P3.3 — facade → `bindings/node` (`overviewJson`, `communityMembersJson`, `communityOfJson`) → `@engram/node`.
+- P3.4 — rewire the viz (`computeOverview`, `communityMembers`, `entityCommunity`, the `/neighbors` + degree + stats reads follow under P3.5 scope-counts/neighbors ports).
+- P3.5 — scope-counts port (retires `countTable`) + paged-neighbors-by-id port (retires `/neighbors`); remove `node:sqlite` from the viz backend.
+- P3.6 — friendly MCP read tools on the existing `engram-mcp-http`, consuming the facade.
 
 ## Rollout
 

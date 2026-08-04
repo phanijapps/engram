@@ -85,6 +85,15 @@ describe.skipIf(!ready)("graph routes (live agentzero store)", () => {
     expect(body.memberCount).toBeGreaterThanOrEqual(body.sampled);
     expect(body.items.length).toBeLessThanOrEqual(10);
     for (const it of body.items) expect(it).toHaveProperty("kind");
+    // intra-community subgraph edges (bounded; endpoints are members)
+    expect(Array.isArray(body.edges)).toBe(true);
+    expect(body.edges.length).toBeLessThanOrEqual(300);
+    const ids = new Set(body.items.map((x: { id: string }) => x.id));
+    for (const e of body.edges) {
+      expect(e).toHaveProperty("predicate");
+      expect(ids.has(e.source)).toBe(true);
+      expect(ids.has(e.target)).toBe(true);
+    }
     // 404 for a label outside the drillable top-N.
     expect((await app.request("/graph/community/c9999999/members")).status).toBe(404);
     // 422 for a malformed id.

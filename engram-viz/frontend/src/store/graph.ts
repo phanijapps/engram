@@ -11,6 +11,7 @@ import {
   type CommunityMetaNode,
   type EntityDetail,
   type GraphEntityView,
+  type GraphRelationshipView,
 } from "../lib/api.ts";
 
 const MEMBERS_PAGE = 100;
@@ -18,6 +19,7 @@ const MEMBERS_PAGE = 100;
 interface DrillState {
   community: { id: string; name: string; memberCount: number } | null;
   members: GraphEntityView[];
+  memberEdges: GraphRelationshipView[];
   membersCursor: string | null;
   membersExhausted: boolean;
   membersLoading: boolean;
@@ -35,6 +37,7 @@ interface DrillState {
 export const useGraphStore = create<DrillState>((set, get) => ({
   community: null,
   members: [],
+  memberEdges: [],
   membersCursor: null,
   membersExhausted: false,
   membersLoading: false,
@@ -47,6 +50,7 @@ export const useGraphStore = create<DrillState>((set, get) => ({
     set({
       community: { id: node.id, name: node.name, memberCount: node.memberCount },
       members: [],
+      memberEdges: [],
       membersCursor: null,
       membersExhausted: false,
       membersLoading: true,
@@ -58,6 +62,7 @@ export const useGraphStore = create<DrillState>((set, get) => ({
       const page = await api.communityMembers(node.id, null, MEMBERS_PAGE);
       set({
         members: page.items,
+        memberEdges: page.edges,
         membersCursor: page.nextCursor,
         membersExhausted: !page.nextCursor,
         membersLoading: false,
@@ -75,6 +80,7 @@ export const useGraphStore = create<DrillState>((set, get) => ({
       const page = await api.communityMembers(community.id, membersCursor, MEMBERS_PAGE);
       set((s) => ({
         members: [...s.members, ...page.items],
+        memberEdges: [...s.memberEdges, ...page.edges],
         membersCursor: page.nextCursor,
         membersExhausted: !page.nextCursor,
         membersLoading: false,
@@ -98,6 +104,7 @@ export const useGraphStore = create<DrillState>((set, get) => ({
     set({
       community: null,
       members: [],
+      memberEdges: [],
       membersCursor: null,
       membersExhausted: false,
       membersLoading: false,

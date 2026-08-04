@@ -48,6 +48,12 @@ export interface GraphEntityView {
   graphId?: string;
 }
 
+export interface GraphRelationshipView {
+  source: string;
+  predicate: string;
+  target: string;
+}
+
 export interface EntityDetail extends GraphEntityView {
   community: number | null;
   degree: number;
@@ -61,6 +67,7 @@ export interface Page<T> {
 
 export interface CommunityMembersPage {
   items: GraphEntityView[];
+  edges: GraphRelationshipView[];
   nextCursor: string | null;
   memberCount: number;
   sampled: number;

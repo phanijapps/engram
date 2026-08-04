@@ -154,11 +154,15 @@ components:
 
     CommunityMembersPage:
       type: object
-      required: [items, nextCursor, memberCount, sampled, found]
+      required: [items, edges, nextCursor, memberCount, sampled, found]
       properties:
         items:
           type: array
           items: { $ref: '#/components/schemas/GraphEntityView' }
+        edges:
+          type: array
+          description: Intra-community relationships among this page's members (bounded subgraph).
+          items: { $ref: '#/components/schemas/GraphRelationshipView' }
         nextCursor: { type: string, nullable: true }
         memberCount:
           type: integer

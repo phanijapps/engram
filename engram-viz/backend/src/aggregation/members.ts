@@ -14,7 +14,7 @@ import { type VizConfig } from "../config.ts";
 import { encodeCursor } from "../db/keyset.ts";
 import { openReader } from "../db/reader.ts";
 import { projectEntity } from "../views/graph.ts";
-import type { GraphEntityView } from "../views/types.ts";
+import type { GraphEntityView, GraphRelationshipView } from "../views/types.ts";
 import {
   getLabelMap,
   rankCommunities,
@@ -27,6 +27,8 @@ import {
 export const DRILL_TOP_LABELS = 200;
 /** Max entity ids retained per community (the drill shows a bounded sample). */
 export const MEMBER_INDEX_CAP = 1000;
+/** Max intra-community relationships returned per drill page (bounded subgraph). */
+export const MAX_DRILL_EDGES = 300;
 
 interface MemberIndex {
   mtimeMs: number;
@@ -92,6 +94,8 @@ export function entityCommunity(cfg: VizConfig, scope: Scope, id: string): numbe
 
 export interface CommunityMembersPage {
   items: GraphEntityView[];
+  /** intra-community relationships among this page's members (bounded subgraph). */
+  edges: GraphRelationshipView[];
   nextCursor: string | null;
   memberCount: number;
   /** how many ids are indexable for this community (≤ MEMBER_INDEX_CAP). */
@@ -114,20 +118,46 @@ export function communityMembers(
 ): CommunityMembersPage {
   const { ids, counts } = getMemberIndex(cfg, scope);
   if (!counts.has(label)) {
-    return { items: [], nextCursor: null, memberCount: 0, sampled: 0, found: false };
+    return { items: [], edges: [], nextCursor: null, memberCount: 0, sampled: 0, found: false };
   }
   const all = ids.get(label) ?? [];
   const pageIds = all.slice(offset, offset + limit);
+  const idSet = new Set(pageIds);
   const ws = scope.workspace ?? "";
   const db = openReader(cfg);
   const items: GraphEntityView[] = [];
+  const edges: GraphRelationshipView[] = [];
   try {
-    const stmt = db.prepare(
+    const entStmt = db.prepare(
       "SELECT record_json FROM knowledge_entities WHERE id = ? AND tenant = ? AND workspace = ?",
     );
     for (const id of pageIds) {
-      const row = stmt.get(id, scope.tenant, ws) as { record_json?: string } | undefined;
+      const row = entStmt.get(id, scope.tenant, ws) as { record_json?: string } | undefined;
       if (row?.record_json) items.push(projectEntity(JSON.parse(row.record_json)));
+    }
+    // Intra-community relationships among this page's members: relationships whose
+    // subject is in the page, kept when the object is also in the page (a bounded
+    // subgraph so the drill shows how the members connect). `subject_id` is indexed.
+    if (pageIds.length > 0) {
+      const placeholders = pageIds.map(() => "?").join(",");
+      const relStmt = db.prepare(
+        `SELECT record_json FROM knowledge_relationships WHERE subject_id IN (${placeholders}) AND tenant = ? AND workspace = ?`,
+      );
+      const rows = relStmt.all(...pageIds, scope.tenant, ws) as { record_json?: string }[];
+      for (const row of rows) {
+        if (edges.length >= MAX_DRILL_EDGES) break;
+        const rel = JSON.parse(row.record_json as string) as {
+          subject?: { id?: string };
+          predicate?: string;
+          object?: { id?: string };
+        };
+        const s = rel.subject?.id;
+        const o = rel.object?.id;
+        const p = rel.predicate;
+        if (s && o && p && idSet.has(s) && idSet.has(o)) {
+          edges.push({ source: s, predicate: p, target: o });
+        }
+      }
     }
   } finally {
     db.close();
@@ -135,6 +165,7 @@ export function communityMembers(
   const nextOffset = offset + limit;
   return {
     items,
+    edges,
     nextCursor: nextOffset < all.length ? encodeCursor(nextOffset) : null,
     memberCount: counts.get(label) ?? all.length,
     sampled: all.length,

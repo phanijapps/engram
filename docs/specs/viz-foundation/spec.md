@@ -1,6 +1,6 @@
 # Spec: viz-foundation
 
-- **Status:** Implementing
+- **Status:** Shipped
 - **Owner:** engram-viz
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0003 (implementation stack), ADR-0008 (durable ontology/taxonomy repositories), ADR-0022 (surface parity / engine neutrality), [`docs/architecture/reference.md`](../../architecture/reference.md) (golden-path stack)

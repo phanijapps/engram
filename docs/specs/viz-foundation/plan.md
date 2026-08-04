@@ -1,7 +1,7 @@
 # Plan: viz-foundation
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Draft
+- **Status:** Shipped
 
 > **Plan contract:** this is the implementation strategy. It may change as we
 > learn; substantial changes are recorded in the changelog at the bottom.
@@ -351,3 +351,11 @@ scope + capabilities (and 503 when degraded).
   assertion; deferred the four non-graph view-types (AC5 → backlog
   `viz-non-graph-view-types`); recorded the event-loop-stall risk; tightened
   AC4 (knowledge engine + node:sqlite, not the firehose list transports).
+- 2026-08-04: **shipped T1–T9.** T9 closeout — manual FPS gate measured on
+  reference hardware (≈85 FPS idle + ≈85 FPS during wheel-zoom interaction, well
+  above the ≥30 FPS bar with the bounded 2000-node / 4000-edge set); self-contained
+  Playwright E2E added (`engram-viz/frontend/{playwright.config.ts,e2e/graph.spec.ts}`,
+  `@playwright/test`) — headless chromium gates render-without-crash + bounded
+  network shape (communities ≤ 2000/4000, no entity/neighborhood dump, no console
+  error); `preview.proxy` mirrored from `server.proxy` so the suite runs against a
+  production preview build. S1 foundation complete; S2–S4 are separate specs.

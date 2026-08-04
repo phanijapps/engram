@@ -17,7 +17,10 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   ported zbot styling (React 19 + Tailwind v4), a Hono Backend-for-Frontend that
   reads engram in-process via `@engram/node` (never engram-mcp), TS view-types,
   and a deck.gl community-overview Graph view with keyset pagination +
-  aggregation. Constrained by ADR-0003, ADR-0008, ADR-0022. Implementing.
+  aggregation. Constrained by ADR-0003, ADR-0008, ADR-0022.
+  **Shipped** (T1–T9: in-process `@engram/node` BFF, zbot-styled 3-tab shell,
+  deck.gl bounded community-overview; self-contained Playwright E2E + FPS-gated
+  on reference hardware). S2–S4 are separate specs.
 - [`viz-graph-explorer`](viz-graph-explorer/spec.md): S2 of the engram-viz
   overhaul — the full Graph tab: bounded one-hop neighborhood drill-down
   (`neighbors` over `knowledge_relationships`, keyset + K-cap), entity-detail

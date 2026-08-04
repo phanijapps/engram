@@ -42,10 +42,26 @@ export interface CommunityMetaEdge {
 
 // ---- Minimal stubs (deepened in S3 / S4) -------------------------------
 
+export interface MemoryView {
+  id: string;
+  kind: string;
+  text: string;
+  status?: string;
+  createdAt?: string;
+  source?: string;
+  confidence?: number;
+}
+
 export interface BeliefView {
   id: string;
+  text?: string;
   subject?: string;
   status?: string;
+}
+
+export interface ProcedureView {
+  id: string;
+  text: string;
 }
 
 export interface HierarchyNodeView {

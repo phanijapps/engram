@@ -28,9 +28,10 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   (kind/community/degree/provenance). deck.gl LOD. **Shipped** (T0–T4; backend
   38 tests, frontend build, self-contained Playwright E2E for overview + drill).
 - [`viz-memory`](viz-memory/spec.md): S3 — the Memory tab: facts/beliefs/
-  contradictions/procedures over engram surfaces (memories/procedures via
-  read-only `node:sqlite`), hybrid search, honest empty-states. Depends on
-  viz-foundation. Draft.
+  contradictions/procedures over engram surfaces (keyset lists via read-only
+  `node:sqlite`), honest empty-states for unpopulated surfaces. **Shipped**
+  (hybrid search deferred — the store's retrieval is Unsupported; browse +
+  empty-states shipped). Depends on viz-foundation.
 - [`viz-observatory`](viz-observatory/spec.md): S4 — the Observatory tab:
   graph/belief/hierarchy stats + LearningHealthBar + slideovers (reuses the
   deck.gl overview; no D3); empty-states for unpopulated synthesis surfaces.

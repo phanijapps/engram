@@ -12,6 +12,7 @@ import { logger } from "hono/logger";
 import { loadConfig } from "./config.ts";
 import { graphRoute } from "./routes/graph.ts";
 import { healthRoute } from "./routes/health.ts";
+import { memoryRoute } from "./routes/memory.ts";
 
 const cfg = loadConfig();
 const app = new Hono();
@@ -24,6 +25,7 @@ app.use(
 
 app.route("/api", healthRoute(cfg));
 app.route("/api", graphRoute(cfg));
+app.route("/api", memoryRoute(cfg));
 
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(`engram-viz backend listening on http://localhost:${info.port}`);

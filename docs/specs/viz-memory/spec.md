@@ -1,6 +1,6 @@
 # Spec: viz-memory
 
-- **Status:** Draft
+- **Status:** Shipped
 - **Owner:** engram-viz
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0003 (implementation stack), ADR-0008 (durable ontology/taxonomy), ADR-0022 (surface parity), [`docs/architecture/reference.md`](../../architecture/reference.md)
@@ -59,16 +59,16 @@ and sees clearly when a surface is unpopulated.
 
 ## Acceptance Criteria
 
-- [ ] The Memory tab renders the zbot command-deck layout with Facts / Beliefs /
+- [x] The Memory tab renders the zbot command-deck layout with Facts / Beliefs /
   Contradictions / Procedures sub-tabs, styled consistently with zbot.
-- [ ] Memory/belief/contradiction/procedure lists are keyset-paginated + capped via
+- [x] Memory/belief/contradiction/procedure lists are keyset-paginated + capped via
   BFF endpoints, added to `contracts/openapi/engram-viz-bff.yaml` (with
   `503`/`Error` and `422 BadCursor`).
 - [ ] Hybrid recall search filters memory results (debounced; returns the recall
-  `ContextPayload`, not a keyset page).
-- [ ] Empty engram tables (belief/contradiction/procedure today) render an honest
+  `ContextPayload`, not a keyset page). *(deferred: viz-memory-search)*
+- [x] Empty engram tables (belief/contradiction/procedure today) render an honest
   empty-state with the populate action — no fabricated records.
-- [ ] All data flows through the `viz-foundation` in-process BFF (no engram-mcp,
+- [x] All data flows through the `viz-foundation` in-process BFF (no engram-mcp,
   no browser store access).
 
 ## Assumptions

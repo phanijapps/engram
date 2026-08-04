@@ -71,6 +71,28 @@ export interface NeighborEntry {
   direction: "outgoing" | "incoming";
 }
 
+export interface MemoryView {
+  id: string;
+  kind: string;
+  text: string;
+  status?: string;
+  createdAt?: string;
+  source?: string;
+  confidence?: number;
+}
+
+export interface BeliefView {
+  id: string;
+  text?: string;
+  subject?: string;
+  status?: string;
+}
+
+export interface ProcedureView {
+  id: string;
+  text: string;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
@@ -105,4 +127,13 @@ export const api = {
     getJson<Page<NeighborEntry>>(
       `/graph/node/${encodeURIComponent(id)}/neighbors${pageQs(cursor, limit)}`,
     ),
+
+  // Memory tab — keyset lists over the read-only secondary path.
+  memory: (cursor?: string | null, limit?: number) =>
+    getJson<Page<MemoryView>>(`/memory${pageQs(cursor, limit)}`),
+  beliefs: (cursor?: string | null, limit?: number) =>
+    getJson<Page<BeliefView>>(`/beliefs${pageQs(cursor, limit)}`),
+  procedures: (cursor?: string | null, limit?: number) =>
+    getJson<Page<ProcedureView>>(`/procedures${pageQs(cursor, limit)}`),
+  contradictions: () => getJson<Page<unknown>>("/contradictions"),
 };

@@ -8,6 +8,7 @@ import { Brain, Network, Layers, Activity } from "lucide-react";
 
 import { api, type Health } from "./lib/api.ts";
 import { GraphOverview } from "./features/graph/GraphOverview.tsx";
+import { MemoryTab } from "./features/memory/MemoryTab.tsx";
 
 interface NavItem {
   to: string;
@@ -74,7 +75,7 @@ function WebAppShell() {
       <main className="app-shell__main">
         <Routes>
           <Route path="/" element={<Navigate to="/graph" replace />} />
-          <Route path="/memory" element={<Placeholder title="Memory" note="Facts / beliefs / contradictions — S3." />} />
+          <Route path="/memory" element={<MemoryTab />} />
           <Route path="/observatory" element={<Placeholder title="Observatory" note="Graph / belief / hierarchy health — S4." />} />
           <Route path="/graph" element={<GraphOverview />} />
           <Route path="*" element={<Navigate to="/graph" replace />} />

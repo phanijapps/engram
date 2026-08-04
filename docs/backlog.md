@@ -38,6 +38,16 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
   (beliefs) / S4 (hierarchy/ontology/taxonomy) where those surfaces render.
   Blocked on nothing. [spec viz-foundation AC5]
 
+## viz-memory-search
+
+- **Memory hybrid search (deferred: viz-memory-search):** the Memory tab's hybrid
+  recall search (debounced; returns the recall `ContextPayload`, not a keyset page)
+  is deferred — the `agentzero` store's retrieval is `Unsupported` (`UnsupportedStoreFamily`)
+  and vectors are `RequiresReindex` (`EmbeddingSpaceMismatch`), so recall returns no
+  usable results today. Ships when retrieval is supported on this store (or vectors
+  are reindexed). The browse lists (Facts/Beliefs/Procedures) + empty-states are
+  shipped without it. Blocked on retrieval support. [spec viz-memory AC3]
+
 ## backend-agnostic-retrieval
 
 - **Durable dedup (deferred: durable-dedup):** `content_hash`-keyed vector reuse

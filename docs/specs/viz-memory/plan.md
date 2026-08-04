@@ -1,7 +1,7 @@
 # Plan: viz-memory
 
 - **Spec:** [`spec.md`](spec.md)
-- **Status:** Draft
+- **Status:** Shipped
 
 > **Plan contract:** implementation strategy for the Memory tab. Builds on
 > `viz-foundation` (prerequisite).

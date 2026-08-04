@@ -1,13 +1,14 @@
-//! engram-viz app shell — zbot-style top-bar + 2-tab nav (Memory / Observatory).
-//! Observatory IS the knowledge-graph view (canvas + drill + health strip, the
-//! zbot model — there is no separate Graph tab); Memory is the facts/beliefs/
-//! procedures deck. The BFF reads engram in-process via @engram/node.
+//! engram-viz app shell — zbot-style top-bar + 3-tab nav (Memory / Observatory
+//! / Graph). Observatory is the interactive 2D graph explorer (canvas + drill +
+//! health strip); Graph is the animated 3D globe overview; Memory is the facts/
+//! beliefs/procedures deck. The BFF reads engram in-process via @engram/node.
 
 import { useEffect, useState, type ComponentType } from "react";
 import { BrowserRouter, Routes, Route, Navigate, NavLink, Link } from "react-router-dom";
-import { Brain, Network, Activity } from "lucide-react";
+import { Brain, Network, Layers, Activity } from "lucide-react";
 
 import { api, type Health } from "./lib/api.ts";
+import { GlobeGraph } from "./features/graph/GlobeGraph.tsx";
 import { MemoryTab } from "./features/memory/MemoryTab.tsx";
 import { ObservatoryTab } from "./features/observatory/ObservatoryTab.tsx";
 
@@ -20,6 +21,7 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/memory", label: "Memory", icon: Brain },
   { to: "/observatory", label: "Observatory", icon: Network },
+  { to: "/graph", label: "Graph", icon: Layers },
 ];
 
 function WebAppShell() {
@@ -77,8 +79,7 @@ function WebAppShell() {
           <Route path="/" element={<Navigate to="/observatory" replace />} />
           <Route path="/memory" element={<MemoryTab />} />
           <Route path="/observatory" element={<ObservatoryTab />} />
-          {/* /graph merged into Observatory (zbot model: one graph view) */}
-          <Route path="/graph" element={<Navigate to="/observatory" replace />} />
+          <Route path="/graph" element={<GlobeGraph />} />
           <Route path="*" element={<Navigate to="/observatory" replace />} />
         </Routes>
       </main>

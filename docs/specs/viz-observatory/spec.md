@@ -61,11 +61,12 @@ synthesis surfaces are unpopulated.
 
 ## Acceptance Criteria
 
-- [x] The Observatory tab is the zbot-style graph command center — the SOLE graph
-  view (the separate Graph tab was merged in): a toolbar (highlight search + top-N
-  density + refresh) + the `viz-foundation` deck.gl overview canvas (no D3/new dep)
-  with drill + a bottom LearningHealthBar whose belief/hierarchy items open detail
-  slideovers (honest empty-states today, since those surfaces are unpopulated).
+- [x] The Observatory tab is the interactive 2D graph explorer — a toolbar
+  (highlight search + top-N density + refresh) + the `viz-foundation` deck.gl
+  overview canvas (no D3) with drill + a bottom LearningHealthBar whose
+  belief/hierarchy items open detail slideovers (honest empty-states today). The
+  Graph tab is a separate animated 3D globe overview (a distinct view, not a
+  duplicate).
 - [x] Graph, belief-network, and hierarchy stats are served via the extended
   `/api/graph/stats` (added `hierarchyNodes`/`hierarchyRelations`) in
   `contracts/openapi/engram-viz-bff.yaml` (with `503`/`Error`).

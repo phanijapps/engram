@@ -21,6 +21,27 @@ describe.skipIf(!ready)("graph routes (live agentzero store)", () => {
     expect(body.communities).toBe(0); // T6 fills
   });
 
+  it("/graph/communities returns the top-N overview, bounded + with totalCommunities", async () => {
+    const app = graphRoute(cfg);
+    const res = await app.request("/graph/communities");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.built).toBe(true);
+    expect(body.communities.length).toBeLessThanOrEqual(2000);
+    expect(body.edges.length).toBeLessThanOrEqual(4000);
+    expect(body.totalCommunities).toBeGreaterThanOrEqual(body.communities.length);
+    // every community carries a concentric-ring position.
+    for (const c of body.communities) {
+      expect(Number.isFinite(c.x)).toBe(true);
+      expect(Number.isFinite(c.y)).toBe(true);
+    }
+    // ?limit bounds the visible count.
+    const small = await app.request("/graph/communities?limit=8");
+    const smallBody = await small.json();
+    expect(smallBody.communities.length).toBeLessThanOrEqual(8);
+    expect(smallBody.totalCommunities).toBe(body.totalCommunities);
+  });
+
   it("/entities returns a keyset page + nextCursor", async () => {
     const res = await graphRoute(cfg).request("/entities?limit=5");
     expect(res.status).toBe(200);

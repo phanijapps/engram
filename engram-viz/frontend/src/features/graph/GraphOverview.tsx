@@ -65,22 +65,24 @@ export function GraphOverview() {
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getSourcePosition: (d) => nodePos.get(d.source) ?? [0, 0],
         getTargetPosition: (d) => nodePos.get(d.target) ?? [0, 0],
-        getSourceColor: [...ACCENT, 36],
-        getTargetColor: [...VIOLET, 36],
+        getSourceColor: [...ACCENT, 55],
+        getTargetColor: [...VIOLET, 55],
         getWidth: 1,
-        widthMinPixels: 0.4,
+        widthMinPixels: 0.5,
       }),
       new ScatterplotLayer<CommunityMetaNode>({
         id: "community-nodes",
         data: data.communities,
         coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
         getPosition: (d) => [d.x ?? 0, d.y ?? 0],
-        getRadius: (d) => Math.sqrt(d.memberCount) * 1.6,
-        radiusMinPixels: 3,
-        radiusMaxPixels: 40,
-        getFillColor: [...ACCENT, 160],
+        // Small radii (clamped tight): the layout must read as clusters with
+        // empty space, not be buried under big overlapping circles.
+        getRadius: (d) => Math.sqrt(d.memberCount) * 0.8,
+        radiusMinPixels: 2,
+        radiusMaxPixels: 16,
+        getFillColor: [...ACCENT, 130],
         stroked: true,
-        getLineColor: [...ACCENT, 255],
+        getLineColor: [...ACCENT, 230],
         getLineWidth: 1,
         pickable: true,
       }),
@@ -109,12 +111,26 @@ export function GraphOverview() {
           object ? `${object.name}\n${object.memberCount} members` : null
         }
       />
-      <Legend count={data.communities.length} edges={data.edges.length} />
+      <Legend
+        count={data.communities.length}
+        total={data.totalCommunities}
+        edges={data.edges.length}
+      />
     </div>
   );
 }
 
-function Legend({ count, edges }: { count: number; edges: number }) {
+function Legend({
+  count,
+  total,
+  edges,
+}: {
+  count: number;
+  total?: number;
+  edges: number;
+}) {
+  const label =
+    total && total > count ? `${count} of ${total} communities` : `${count} communities`;
   return (
     <div
       style={{
@@ -132,7 +148,7 @@ function Legend({ count, edges }: { count: number; edges: number }) {
         pointerEvents: "none",
       }}
     >
-      {count} communities · {edges} edges
+      {label} · {edges} edges
     </div>
   );
 }

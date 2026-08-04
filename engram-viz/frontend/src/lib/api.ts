@@ -36,6 +36,7 @@ export interface CommunitiesResponse {
   communities: CommunityMetaNode[];
   edges: CommunityMetaEdge[];
   built: boolean;
+  totalCommunities?: number;
 }
 
 async function getJson<T>(path: string): Promise<T> {
@@ -48,5 +49,6 @@ export const api = {
   health: () => getJson<Health>("/health"),
   capabilities: () => getJson<unknown>("/capabilities"),
   stats: () => getJson<GraphStats>("/graph/stats"),
-  communities: () => getJson<CommunitiesResponse>("/graph/communities"),
+  communities: (limit?: number) =>
+    getJson<CommunitiesResponse>(`/graph/communities${limit ? `?limit=${limit}` : ""}`),
 };

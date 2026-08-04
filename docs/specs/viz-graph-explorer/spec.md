@@ -14,7 +14,16 @@
 
 ## Objective
 
-From `viz-foundation`'s community overview, a user drills into the graph: clicking
+The Graph tab's overview becomes **legible**: instead of `viz-foundation`'s
+all-2000-node spiral (a dense, unreadable blob), the overview shows the **top-N
+significant communities** (default ~150, `?limit=`-controllable, hard-capped at
+the foundation's 2000) laid out on **deterministic concentric rings** ordered by
+a breadth-first traversal of the meta-edges (connectivity-core inner, periphery
+outer) — always legible regardless of how densely connected the meta-graph is.
+(Force-directed was tried first and abandoned: a codebase's communities
+interlink into one big component, so springs collapse the hubs into a central
+blob with no legible structure.) From that overview, a user drills into the
+graph: clicking
 a community meta-node fetches a **bounded one-hop neighborhood** from engram (the
 binding's `neighbors` call, served keyset-paginated and hard-capped over
 `knowledge_relationships` via the read-only secondary path) and renders it as a
@@ -28,6 +37,9 @@ full-neighborhood dump. This completes the Graph tab end-to-end.
 
 ### Always do
 
+- Render the overview as a **legible** concentric-ring meta-graph (top-N
+  communities, default ~150); the layout is deterministic (BFS-ordered rings, no
+  `Math.random`/`Date`) and cached per store-version + limit.
 - Fetch drill neighborhoods via **bounded, keyset-paginated** BFF endpoints over
   the binding's one-hop `neighbors` (served as a keyset window over
   `knowledge_relationships` via the read-only `node:sqlite` secondary path, since
@@ -66,6 +78,11 @@ full-neighborhood dump. This completes the Graph tab end-to-end.
 
 ## Acceptance Criteria
 
+- [ ] The overview renders the **top-N** communities (default ~150, `?limit=`,
+  hard-cap 2000) positioned on **deterministic concentric rings** (BFS-ordered:
+  connectivity-core inner, periphery outer; no RNG/`Date`, reproducible across
+  runs) — not the foundation's all-2000 spiral; the response also reports
+  `totalCommunities` so the legend can say "N of M".
 - [ ] Clicking a community meta-node fetches a bounded **one-hop** neighborhood
   (page `limit` ≤ 500; per-expand K-cap server-side; keyset) via a BFF endpoint and
   renders it as a deck.gl drill layer; the network response carries no full dump.

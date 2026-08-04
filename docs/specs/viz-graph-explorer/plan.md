@@ -8,7 +8,9 @@
 
 ## Approach
 
-Extend the `viz-foundation` BFF with bounded **one-hop** neighborhood endpoints,
+First make the overview **legible** (top-N communities, default ~150, on
+deterministic concentric rings — replacing the foundation's all-2000 spiral),
+then extend the BFF with bounded **one-hop** neighborhood endpoints,
 then add a drill layer + entity-detail panel to the deck.gl Graph view. The
 binding's `neighbors` is a one-hop snapshot with a `limit` (not cursor-aware; no
 subgraph API), so the BFF serves the drill as a keyset window over
@@ -88,6 +90,33 @@ Node with >cap neighbors → capped + next-cursor ("expand more"). Degraded stor
 - Operability: degraded-mode surfaced via 503.
 
 ## Tasks
+
+### T0: Legible concentric-ring overview (replaces foundation spiral)
+
+**Depends on:** viz-foundation T6
+
+**Tests:**
+- Unit (TDD): `rankCommunities` returns top-N nodes **without** positions +
+  `totalCommunities` (truncates to `limit`); `layoutGraph` assigns finite,
+  **deterministic** positions (BFS-ordered rings, no `Math.random`/`Date`;
+  identical input → identical output), distinct per node, the connectivity-core
+  (highest-degree) node innermost, and is a no-op on empty/single. *(overview-layout AC)*
+
+**Approach:**
+- `src/aggregation/communities.ts`: `rankCommunities(nameToLabel, limit=150)` →
+  nodes (no x/y) + `topLabels` + `totalCommunities`; `layoutGraph(nodes, edges)`
+  — a **deterministic concentric-ring** layout: BFS from the highest-degree node
+  (connectivity-core inner, periphery outer, connected communities adjacent →
+  edges are short chords), golden-angle twist per ring, no RNG. (Force-directed
+  was tried first but the densely-connected meta-graph collapses into a central
+  blob — see Changelog.) `computeOverview(cfg, scope, limit)` caches per
+  `(mtime, limit)`; edges capped to `min(MAX_EDGES, nodes*3)`. **No new dependency.**
+- Route `?limit=` (default 150, max 2000) + `totalCommunities` in the response;
+  OpenAPI delta. Frontend requests the default + legend "N of M" + small node
+  radii so the rings read.
+
+**Done when:** unit tests green; overview renders a clean ringed graph (manual
+QA — screenshot, not a spiral blob); backend test + frontend build clean.
 
 ### T1: Neighborhood drill endpoints + contract delta
 
@@ -170,3 +199,14 @@ Node with >cap neighbors → capped + next-cursor ("expand more"). Degraded stor
   do not exist; drill is bounded one-hop `neighbors` served as a keyset window over
   `knowledge_relationships`; reconciled page `limit` (≤500) vs per-expand K-cap;
   noted S1 legend/zoom covers the brief's legend/controls item.
+- 2026-08-04: added T0 — the overview was unreadable (foundation's all-2000
+  spiral = dense blob). T0 makes it legible: top-N (default 150) + a
+  deterministic concentric-ring layout (BFS-ordered: connectivity-core inner,
+  periphery outer). Force-directed was tried first but **abandoned** — a
+  codebase's communities interlink into one big component, so springs collapse
+  the hubs into a central blob with no legible structure; rings are always
+  legible regardless of density. No new dependency. Supersedes the foundation
+  spiral; the foundation's 2000-cap stays the safety bound. Driven by direct
+  user feedback ("spiral community graph looks horrible"). Verified: 36/36
+  backend tests, frontend build green, self-contained Playwright E2E green,
+  screenshot reads as clean concentric rings (not a blob).

@@ -93,6 +93,7 @@ components:
         communities:
           type: array
           maxItems: 2000
+          description: The top-N communities by membership (default 150), on deterministic concentric rings.
           items: { $ref: '#/components/schemas/CommunityMetaNode' }
         edges:
           type: array
@@ -101,6 +102,9 @@ components:
         built:
           type: boolean
           description: false when there are too few relationships to cluster → UI shows empty-state.
+        totalCommunities:
+          type: integer
+          description: Pre-truncation community count, so the legend can say "N of M".
 
     GraphStats:
       type: object
@@ -175,12 +179,19 @@ paths:
 
   /api/graph/communities:
     get:
-      summary: Community-overview meta-graph (aggregated, ≤ 2000 nodes / 4000 edges)
+      summary: Community-overview meta-graph (top-N communities, concentric rings)
       description: |
         Server-projected community meta-nodes + inter-community meta-edges,
-        derived from the flat Louvain label-map and bounded to 2000 nodes / 4000 edges. This is the
-        Graph tab's overview payload — meta-nodes/meta-edges only, never entity or
-        relationship rows.
+        derived from the flat Louvain label-map. The overview renders the top-N
+        communities by membership (default 150, via `limit`, hard-capped at 2000)
+        on deterministic concentric rings (BFS-ordered: connectivity-core inner,
+        periphery outer) — meta-nodes/meta-edges only, never entity or
+        relationship rows. `totalCommunities` is the pre-truncation count.
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 2000, default: 150 }
+          description: How many of the largest communities to include (default 150).
       responses:
         '200':
           description: community meta-graph

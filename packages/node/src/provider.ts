@@ -37,6 +37,24 @@ export interface MemoryPage {
   nextCursor: string | null;
 }
 
+/** Record counts by semantic type (mirrors engram-integration `RecordCounts`). */
+export interface RecordCounts {
+  memories: number;
+  entities: number;
+  relationships: number;
+  sources: number;
+  documents: number;
+  chunks: number;
+  beliefs: number;
+}
+
+/** Diagnostics snapshot (mirrors engram-integration `DiagnosticsSnapshot`); the
+ *  viz reads `record_counts` for graph/memory/belief stats. */
+export interface Diagnostics {
+  record_counts: RecordCounts;
+  [key: string]: unknown;
+}
+
 export interface NativeProviderTransport {
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
@@ -67,6 +85,8 @@ export interface NativeProviderTransport {
   /** List memories visible to `scope` as a keyset page (Rust-backed; no SQL in TS).
    *  `after` is the opaque `nextCursor` from a prior page. */
   listMemoriesPaged(scope: unknown, after?: string | null, limit?: number): Promise<MemoryPage>;
+  /** Point-in-time diagnostics snapshot (record counts, etc.) — Rust-backed. */
+  diagnostics(): Promise<Diagnostics>;
 }
 
 /** Creates a transport over the held `NativeProvider`. */
@@ -160,6 +180,10 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
         })
       )
     );
+  }
+
+  async diagnostics(): Promise<Diagnostics> {
+    return decode<Diagnostics>(this.provider.requireObservabilityApi().diagnosticsJson());
   }
 }
 

@@ -58,7 +58,9 @@ export {
 } from "./transport.js";
 export {
   createNativeProviderTransport,
+  type Diagnostics,
   type MemoryPage,
   type NativeProviderTransport,
-  type NativeProviderTransportOptions
+  type NativeProviderTransportOptions,
+  type RecordCounts
 } from "./provider.js";

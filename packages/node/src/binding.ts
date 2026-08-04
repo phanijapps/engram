@@ -161,6 +161,12 @@ export interface NativeBeliefsApiBinding {
   listStaleBeliefsJson(scopeJson: string): string;
 }
 
+/** Observability / diagnostics handle proxy: point-in-time snapshot
+ *  (capability report, record counts, embedding config, versions). */
+export interface NativeObservabilityApiBinding {
+  diagnosticsJson(): string;
+}
+
 /**
  * Native class shape for the held `EngramProvider`
  * (`bindings/node/src/provider.rs`): one provider opened from a config, reaching
@@ -179,6 +185,7 @@ export interface NativeProviderBinding {
   requireGraphApi(): NativeGraphApiBinding;
   requireBatchApi(): NativeBatchApiBinding;
   requireBeliefsApi(): NativeBeliefsApiBinding;
+  requireObservabilityApi(): NativeObservabilityApiBinding;
 }
 
 /** Constructor shape for the held `EngramProvider`. */

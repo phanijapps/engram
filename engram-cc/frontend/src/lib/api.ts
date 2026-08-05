@@ -102,8 +102,48 @@ export interface ProcedureView {
   text: string;
 }
 
+export interface ScanSummary {
+  scanned?: number;
+  ingested?: number;
+  unchanged?: number;
+  skipped?: number;
+  entities?: number;
+  relationships?: number;
+  errors?: number;
+  git_remote?: string | null;
+  git_branch?: string | null;
+  git_sha?: string | null;
+}
+
+export interface IngestJob {
+  jobId: string;
+  status: "running" | "done" | "error";
+  startedAt?: number;
+  summary?: ScanSummary | null;
+  error?: string | null;
+}
+
+export interface IngestCounts {
+  entities: number;
+  relationships: number;
+  memories: number;
+  beliefs: number;
+  hierarchyNodes: number;
+  hierarchyRelations: number;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
+  if (!res.ok) throw new Error(`${path} → ${res.status}`);
+  return (await res.json()) as T;
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
   return (await res.json()) as T;
 }
@@ -145,4 +185,11 @@ export const api = {
   procedures: (cursor?: string | null, limit?: number) =>
     getJson<Page<ProcedureView>>(`/procedures${pageQs(cursor, limit)}`),
   contradictions: () => getJson<Page<unknown>>("/contradictions"),
+
+  // Ingest tab — scan runs in a child process (the `engram-ingest` CLI) via the BFF.
+  startScan: (root: string, kind: "code" | "doc" | "auto") =>
+    postJson<{ jobId: string }>("/ingest/scan", { root, kind }),
+  scanJob: (jobId: string) =>
+    getJson<IngestJob>(`/ingest/jobs/${encodeURIComponent(jobId)}`),
+  ingestCounts: () => getJson<IngestCounts>("/ingest/counts"),
 };

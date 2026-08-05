@@ -121,6 +121,11 @@ html[data-scan="on"] body::after {
   50% { opacity: 0; }
 }
 
+/* Generic spinner (e.g. the Ingest running indicator). */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ---- respect prefers-reduced-motion -------------------------------------- */
 @media (prefers-reduced-motion: reduce) {
   .app-shell::before { animation: none; opacity: 0; }

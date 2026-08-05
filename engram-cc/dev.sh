@@ -13,6 +13,10 @@ cd "$(dirname "$0")/.." # repo root — pnpm-workspace.yaml lives here
 # child the BFF spawns for maintenance) all inherit them.
 if [ -f .env ]; then set -a; . ./.env; set +a; fi
 
+# Ensure the store directory exists — the provider validates trusted_root at
+# open; a missing dir = "trusted_root does not exist" error on fresh machines.
+mkdir -p "${ENGRAM_STORAGE:-~/.engram/agentzero}"
+
 # Portable detach: setsid (Linux) creates a new session for clean group kill;
 # macOS doesn't have setsid — plain background + disown works (port-freeing in
 # stop() handles children reliably on both platforms).

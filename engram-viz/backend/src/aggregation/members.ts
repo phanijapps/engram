@@ -16,9 +16,7 @@ import { openReader } from "../db/reader.ts";
 import { projectEntity } from "../views/graph.ts";
 import type { GraphEntityView, GraphRelationshipView } from "../views/types.ts";
 import {
-  getLabelMap,
-  rankCommunities,
-  relationEdges,
+  getCommunityData,
   storeMtimeMs,
 } from "./communities.ts";
 
@@ -50,46 +48,30 @@ let memberCache: MemberIndex | null = null;
  * Louvain label-map) so the UI can say "sample of N"; `idToLabel` is the reliable
  * reverse lookup (entity id → community) used by the entity-detail route.
  */
-export function getMemberIndex(cfg: VizConfig, scope: Scope): MemberIndex {
+export async function getMemberIndex(cfg: VizConfig, scope: Scope): Promise<MemberIndex> {
   const mtimeMs = storeMtimeMs(cfg);
   if (memberCache && memberCache.mtimeMs === mtimeMs) return memberCache;
 
-  const map = getLabelMap(cfg, scope);
-  const ranked = rankCommunities(map, DRILL_TOP_LABELS);
-  const counts = new Map<number, number>(
-    ranked.nodes.map((n) => [Number(n.id.slice(1)), n.memberCount]),
-  );
-  const topLabels = ranked.topLabels;
-
-  const sets = new Map<number, Set<string>>();
-  const idToLabel = new Map<string, number>();
-  const push = (label: number, id: string | undefined) => {
-    if (id === undefined) return;
-    let s = sets.get(label);
-    if (!s) {
-      s = new Set();
-      sets.set(label, s);
-    }
-    if (s.size < MEMBER_INDEX_CAP) s.add(id);
-    if (!idToLabel.has(id)) idToLabel.set(id, label);
-  };
-  for (const e of relationEdges(cfg, scope)) {
-    const ls = map[e.subjectName];
-    const lo = map[e.objectName];
-    if (ls !== undefined && topLabels.has(ls)) push(ls, e.subjectId);
-    if (lo !== undefined && topLabels.has(lo)) push(lo, e.objectId);
-  }
+  // The Rust facade computes the member index (Louvain + relationship stream).
+  const data = await getCommunityData(cfg, scope);
   const ids = new Map<number, string[]>();
-  for (const [label, s] of sets) ids.set(label, [...s]);
+  const idToLabel = new Map<string, number>();
+  for (const [labelStr, entityIds] of Object.entries(data.memberIndex)) {
+    const label = Number(labelStr);
+    ids.set(label, entityIds);
+    for (const id of entityIds) idToLabel.set(id, label);
+  }
+  const counts = new Map<number, number>(
+    data.overview.communities.map((c) => [c.label, c.memberCount]),
+  );
 
   memberCache = { mtimeMs, ids, counts, idToLabel };
   return memberCache;
 }
 
-/** Reliable entity-id → community-label lookup (null if the entity is not in a
- * drillable top-N community). Built from relationship ids, not name keying. */
-export function entityCommunity(cfg: VizConfig, scope: Scope, id: string): number | null {
-  return getMemberIndex(cfg, scope).idToLabel.get(id) ?? null;
+/** Reliable entity-id → community-label lookup. */
+export async function entityCommunity(cfg: VizConfig, scope: Scope, id: string): Promise<number | null> {
+  return (await getMemberIndex(cfg, scope)).idToLabel.get(id) ?? null;
 }
 
 export interface CommunityMembersPage {
@@ -109,14 +91,14 @@ export interface CommunityMembersPage {
  * a `GraphEntityView` via the read-only reader. `found:false` for a community
  * outside the drillable top-N (→ route 404).
  */
-export function communityMembers(
+export async function communityMembers(
   cfg: VizConfig,
   scope: Scope,
   label: number,
   offset: number,
   limit: number,
-): CommunityMembersPage {
-  const { ids, counts } = getMemberIndex(cfg, scope);
+): Promise<CommunityMembersPage> {
+  const { ids, counts } = await getMemberIndex(cfg, scope);
   if (!counts.has(label)) {
     return { items: [], edges: [], nextCursor: null, memberCount: 0, sampled: 0, found: false };
   }

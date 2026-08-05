@@ -12,10 +12,11 @@
 //! result is cached per (mtime, limit).
 
 import { statSync } from "node:fs";
-import { loadNativeBinding } from "@engram/node";
+import { loadNativeBinding, type CommunityMemberIndex, type CommunityOverviewData } from "@engram/node";
 import type { Scope } from "@engram/contracts";
 
 import { dbPath, type VizConfig } from "../config.ts";
+import { getProvider } from "../engram/provider.ts";
 import { decodeCursor } from "../db/keyset.ts";
 import { openReader, paginate } from "../db/reader.ts";
 import type { CommunityMetaEdge, CommunityMetaNode } from "../views/types.ts";
@@ -271,46 +272,79 @@ export function* relationEdges(
   }
 }
 
+// ---- Community data via the Rust facade (P3.4) ----------------------------
+
+/** Shared community data (cached per store-mtime). The Rust facade computes
+ *  Louvain + meta-edges + the member index; both run once per store version. */
+interface CommunityData {
+  mtimeMs: number;
+  overview: CommunityOverviewData;
+  memberIndex: CommunityMemberIndex;
+}
+
+let communityDataCache: CommunityData | null = null;
+
+/** Fetches (and caches per mtime) the community overview + member index from
+ *  the Rust facade. Shared by computeOverview + getMemberIndex so Louvain runs
+ *  at most twice per store version (once per facade method). */
+export async function getCommunityData(
+  cfg: VizConfig,
+  scope: Scope,
+): Promise<CommunityData> {
+  const mtimeMs = storeMtimeMs(cfg);
+  if (communityDataCache && communityDataCache.mtimeMs === mtimeMs) {
+    return communityDataCache;
+  }
+  const [overview, memberIndex] = await Promise.all([
+    getProvider(cfg).communityOverview(scope, 200),
+    getProvider(cfg).communityMemberIndex(scope),
+  ]);
+  communityDataCache = { mtimeMs, overview, memberIndex };
+  return communityDataCache;
+}
+
 /**
- * The cached overview. Louvain (via `getLabelMap`) runs once per store-mtime
- * version; relationship streaming tallies inter-community edges. Returns
- * `built:false` when the graph is too small to cluster. `limit` bounds the
- * visible community count (default 150); `totalCommunities` is the pre-truncation
- * count for the legend.
+ * The cached overview. The Rust facade (CommunityQuery) computes Louvain +
+ * meta-edges; this maps the neutral result to the viz display shape + applies
+ * the concentric-ring layout. Returns `built:false` when too small to cluster.
  */
-export function computeOverview(
+export async function computeOverview(
   cfg: VizConfig,
   scope: Scope,
   limit: number = DEFAULT_COMMUNITY_LIMIT,
-): {
+): Promise<{
   nodes: CommunityMetaNode[];
   edges: CommunityMetaEdge[];
   built: boolean;
   totalCommunities: number;
-} {
-  const key = `${storeMtimeMs(cfg)}:${limit}`;
-  if (cache && cache.key === key) {
-    return {
-      nodes: cache.nodes,
-      edges: cache.edges,
-      built: true,
-      totalCommunities: cache.totalCommunities,
-    };
-  }
-  const nameToLabel = getLabelMap(cfg, scope);
-  if (Object.keys(nameToLabel).length === 0) {
+}> {
+  const data = await getCommunityData(cfg, scope);
+  const ov = data.overview;
+  if (ov.totalCommunities === 0) {
     return { nodes: [], edges: [], built: false, totalCommunities: 0 };
   }
-  const { nodes, topLabels, totalCommunities } = rankCommunities(nameToLabel, limit);
-  const maxEdges = Math.min(MAX_COMMUNITY_EDGES, nodes.length * 3);
-  const edges = tallyMetaEdges(relationEdges(cfg, scope), nameToLabel, topLabels, maxEdges);
+  // Truncate the top-200 overview to the requested display limit + map to viz shape.
+  const communities = ov.communities.slice(0, limit);
+  const topLabels = new Set(communities.map((c) => c.label));
+  const nodes: CommunityMetaNode[] = communities.map((c) => ({
+    id: `c${c.label}`,
+    name: `Community ${c.label}`,
+    memberCount: c.memberCount,
+  }));
+  const edges: CommunityMetaEdge[] = ov.edges
+    .filter((e) => topLabels.has(e.sourceLabel) && topLabels.has(e.targetLabel))
+    .map((e) => ({
+      source: `c${e.sourceLabel}`,
+      target: `c${e.targetLabel}`,
+      weight: e.weight,
+    }));
   layoutGraph(nodes, edges);
-  cache = { key, nodes, edges, totalCommunities };
-  return { nodes, edges, built: true, totalCommunities };
+  return { nodes, edges, built: true, totalCommunities: ov.totalCommunities };
 }
 
 /** Test-only: clear the caches. */
 export function _resetCommunityCacheForTests(): void {
+  communityDataCache = null;
   cache = null;
   labelMapCache = null;
 }

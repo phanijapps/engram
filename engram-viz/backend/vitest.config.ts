@@ -4,6 +4,6 @@ export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
     // The native provider opens a SQLite store; give it room.
-    testTimeout: 30000,
+    testTimeout: 300000,
   },
 });

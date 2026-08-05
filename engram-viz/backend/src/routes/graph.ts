@@ -50,6 +50,9 @@ export function graphRoute(cfg: VizConfig): Hono {
 
   app.get("/graph/stats", (c) => {
     try {
+      // Counts stay on node:sqlite for now: the facade's Observability.record_counts
+      // is whole-store (not scope-filtered) + returns 0/degraded for this store.
+      // A scope-counts port (Rust) retires this — tracked as P3.
       return c.json(
         withReader((db) => ({
           entities: countTable(db, "knowledge_entities", scopeWhere, [...scopeParams]),
@@ -71,10 +74,10 @@ export function graphRoute(cfg: VizConfig): Hono {
     }
   });
 
-  app.get("/graph/communities", (c) => {
+  app.get("/graph/communities", async (c) => {
     try {
       const limit = queryCommunityLimit(c.req.query("limit"));
-      const overview = computeOverview(cfg, scope, limit);
+      const overview = await computeOverview(cfg, scope, limit);
       return c.json({
         communities: overview.nodes,
         edges: overview.edges,
@@ -86,7 +89,7 @@ export function graphRoute(cfg: VizConfig): Hono {
     }
   });
 
-  app.get("/graph/community/:id/members", (c) => {
+  app.get("/graph/community/:id/members", async (c) => {
     // Drill-in: a bounded, offset-paged sample of a community's member entities.
     const match = /^c(\d+)$/.exec(c.req.param("id"));
     if (!match) return c.json({ error: "community id must be `c<label>`" }, 422);
@@ -94,7 +97,7 @@ export function graphRoute(cfg: VizConfig): Hono {
     try {
       const limit = queryLimit(c.req.query("limit"));
       const offset = decodeCursor(c.req.query("cursor"));
-      const page = communityMembers(cfg, scope, label, offset, limit);
+      const page = await communityMembers(cfg, scope, label, offset, limit);
       if (!page.found) return c.json({ error: "community not drillable" }, 404);
       return c.json(page);
     } catch (err) {
@@ -105,10 +108,11 @@ export function graphRoute(cfg: VizConfig): Hono {
     }
   });
 
-  app.get("/graph/entity/:id", (c) => {
-    // Entity detail: kind/name/community/outgoing-degree/provenance.
+  app.get("/graph/entity/:id", async (c) => {
     const id = c.req.param("id");
     try {
+      // community is async (facade) — fetch before the sync reader block.
+      const community = await entityCommunity(cfg, scope, id);
       return withReader((db) => {
         const row = db
           .prepare(
@@ -123,8 +127,6 @@ export function graphRoute(cfg: VizConfig): Hono {
           id,
           ...scopeParams,
         ]);
-        // community via the reliable id→label index (name lookup is keying-fragile).
-        const community = entityCommunity(cfg, scope, id);
         return c.json({
           ...projectEntity(entity),
           community,

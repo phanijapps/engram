@@ -32,11 +32,14 @@ describe.skipIf(!ready)("memory routes (live agentzero store)", () => {
     expect(p2.items.every((x: { id: string }) => !ids1.has(x.id))).toBe(true);
   });
 
-  it("/beliefs + /procedures + /contradictions return honest empty pages", async () => {
+  it("/beliefs + /procedures + /contradictions return valid keyset page shapes", async () => {
     const app = memoryRoute(cfg);
     for (const path of ["/beliefs", "/procedures", "/contradictions"]) {
       const body = await (await app.request(path)).json();
-      expect(body.items).toEqual([]);
+      // Shape, not emptiness — beliefs may be populated (M2 writes reflection-llm
+      // beliefs); procedures + contradictions stay empty today. The contract is a
+      // valid keyset page (items array + null cursor), not an empty store.
+      expect(Array.isArray(body.items)).toBe(true);
       expect(body.nextCursor).toBeNull();
     }
   });

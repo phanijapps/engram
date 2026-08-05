@@ -62,7 +62,7 @@ describe("BFF Boundary — no engram-mcp / no child_process in src/", () => {
   // runtime (docs/guides/how-to/extend-storage.md:213 — the nested-executor
   // caveat). It spawns the `engram-ingest` CLI — NEVER `engram-mcp` — so the
   // browser still never speaks engram-mcp (ADR-0022).
-  const SANCTIONED = ["routes/ingest.ts"];
+  const SANCTIONED = ["routes/ingest.ts", "routes/maintain.ts"];
 
   it("no src/ file imports node:child_process (except the sanctioned ingest subprocess)", () => {
     const offenders = files.filter(

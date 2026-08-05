@@ -178,18 +178,13 @@ interface OverviewCache {
   totalCommunities: number;
 }
 
-/** Max of the main db + WAL mtimes (numeric). In WAL mode, writes append to the
- * `-wal` file and the main file only bumps at checkpoint, so a main-only key
- * would serve stale data until checkpoint. */
+/** The main db file mtime (numeric). The viz is read-only (DryRun, no writes),
+ * so the WAL doesn't change from its perspective — the main mtime is the right
+ * cache key (it bumps only when the store is re-indexed out of band). Checking
+ * the WAL mtime would invalidate the cache every time the provider opens the
+ * store (SQLite touches the WAL on open), defeating the cache. */
 export function storeMtimeMs(cfg: VizConfig): number {
-  const mainPath = dbPath(cfg);
-  let key = statSync(mainPath).mtimeMs;
-  try {
-    key = Math.max(key, statSync(`${mainPath}-wal`).mtimeMs);
-  } catch {
-    // no WAL file yet — main mtime alone is correct
-  }
-  return key;
+  return statSync(dbPath(cfg)).mtimeMs;
 }
 
 /** Cached Louvain label-map (`name → label`), keyed by store mtime. Shared by

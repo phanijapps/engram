@@ -50,17 +50,15 @@ export function graphRoute(cfg: VizConfig): Hono {
 
   app.get("/graph/stats", (c) => {
     try {
-      // Counts stay on node:sqlite for now: the facade's Observability.record_counts
-      // is whole-store (not scope-filtered) + returns 0/degraded for this store.
-      // A scope-counts port (Rust) retires this — tracked as P3.
+      // Counts stay on node:sqlite (fast SQL COUNT, indexed) — the scope-counts
+      // port (P3.5) is blocked by the Observability conformance check; deferred.
       return c.json(
         withReader((db) => ({
           entities: countTable(db, "knowledge_entities", scopeWhere, [...scopeParams]),
           relationships: countTable(db, "knowledge_relationships", scopeWhere, [
             ...scopeParams,
           ]),
-          communities: 0, // the cheap stats endpoint does not run Louvain; the
-          // overview's `totalCommunities` is the real count.
+          communities: 0, // the cheap stats endpoint does not run Louvain
           memories: countTable(db, "memories", scopeWhere, [...scopeParams]),
           beliefs: countTable(db, "beliefs", scopeWhere, [...scopeParams]),
           hierarchyNodes: countTable(db, "hierarchy_nodes", scopeWhere, [...scopeParams]),

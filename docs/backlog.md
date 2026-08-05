@@ -510,3 +510,26 @@ harness, (3) record baseline metrics, (4) iterate. Blocked on: nothing (just run
 
 The `release/v0.2.0` branch is stale (created before PRs #100-#105 merged).
 Needs to be recreated or the workspace version bumped on main. Blocked on: nothing.
+## cc-pi-mono-maintenance review follow-ups
+
+Deferred items from the M2 adversarial review (tracked, not blocking the slice):
+- **Contradiction rule-based pre-filter**: `contradictLlm` is LLM-only in this
+  slice; the rule-based same-subject pre-filter (`ContradictionDetector`) is NOT
+  invoked (not exposed on the provider surface). Wire it as a pre-filter once
+  `detectContradictions` is on the provider.
+- **Provider belief/contradiction surface (3 of 6)**: T2 shipped the minimal set
+  (`listBeliefs`, `listContradictions`, `putContradiction`). Still only on the
+  standalone `NativeBeliefEngine`: `getContradiction`, `resolveContradiction`,
+  `detectContradictions` — thread them facade→N-API→TS to close the gap.
+- **listBeliefs paging**: not paged (reads all, truncated to `beliefLimit` in the
+  LLM op). Add keyset paging (mirror `list_memories_paged`).
+- **pgvector/surreal `list_beliefs`**: those backends don't override the new
+  `list_beliefs` default → `contradictLlm` throws `CapabilityUnsupported` there
+  despite the report claiming `contradiction: Supported`. Override `list_beliefs`
+  (or report contradiction Unsupported) on pgvector/surreal.
+- **maintenance opt-in flag**: `maintenance_run`/`contradiction_detect` default to
+  routing scope memories/beliefs to a cloud LLM (Anthropic). Add an operator
+  `maintenance.llm_enabled` gate (default false) or require `PI_PROVIDER=ollama`
+  for MCP-driven runs. Tool descriptions now disclose the third-party path.
+- **`--dry-run` for LLM ops**: CLI `--dry-run` is consolidate-only; LLM ops use
+  `PI_DRY_RUN`. Wire `--dry-run` into the LLM ops or print a warning.

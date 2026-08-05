@@ -891,6 +891,27 @@ impl NativeBeliefsApi {
         encode(&result)
     }
 
+    /// Lists live beliefs in a scope, keyset-paged. Takes
+    /// `{ scope, after?, limit? }` JSON (`after` is the prior page's `nextCursor`;
+    /// default limit 100), returns a `Page<Belief>` JSON `{ items, nextCursor }`.
+    #[napi(js_name = "listBeliefsPagedJson")]
+    pub fn list_beliefs_paged_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let after = value
+            .get("after")
+            .and_then(|v| v.as_str())
+            .map(|s| engram_domain::Cursor::new(s.to_owned()));
+        let limit = value
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(100) as usize;
+        let page: Page<Belief> =
+            block_on(self.handle.list_beliefs_paged(&scope, after.as_ref(), limit))
+                .map_err(to_napi_error)?;
+        encode(&page)
+    }
+
     /// Lists open contradiction records in a scope. Takes a `Scope` JSON, returns
     /// `[Contradiction, …]` JSON.
     #[napi(js_name = "listContradictionsJson")]

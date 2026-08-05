@@ -160,6 +160,7 @@ export interface NativeBeliefsApiBinding {
   retractBeliefJson(requestJson: string): string;
   listStaleBeliefsJson(scopeJson: string): string;
   listBeliefsJson(scopeJson: string): string;
+  listBeliefsPagedJson(requestJson: string): string;
   listContradictionsJson(scopeJson: string): string;
   putContradictionJson(contradictionJson: string): string;
 }

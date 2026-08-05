@@ -121,6 +121,9 @@ class StubNativeProvider {
       listBeliefsJson(): string {
         return "[]";
       },
+      listBeliefsPagedJson(): string {
+        return '{"items":[],"nextCursor":null}';
+      },
       listContradictionsJson(): string {
         return "[]";
       },

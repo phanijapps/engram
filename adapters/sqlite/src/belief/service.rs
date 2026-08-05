@@ -325,6 +325,31 @@ impl BeliefRepository for SqlBeliefStore {
         SqlBeliefStore::list_beliefs(self, scope).await
     }
 
+    async fn list_beliefs_paged(
+        &self,
+        scope: &Scope,
+        after: Option<&Cursor>,
+        limit: usize,
+    ) -> CoreResult<Page<Belief>> {
+        // Mirror SqlMemoryService::list_memories_paged: decode the opaque cursor
+        // to a rowid, run a scope-filtered keyset query, emit a next cursor when the
+        // page is full.
+        let after_rowid = match after {
+            Some(cursor) => cursor.as_str().parse::<i64>().map_err(|_| CoreError::InvalidRequest {
+                reason: format!("invalid belief cursor: {}", cursor.as_str()),
+            })?,
+            None => 0,
+        };
+        let page_limit = limit.clamp(1, 500) as i64;
+        let workspace = scope.workspace.as_deref().unwrap_or("");
+        let rows = self.list_beliefs_paged(&scope.tenant, workspace, after_rowid, page_limit)?;
+        let next_cursor = (page_limit > 0 && rows.len() as i64 >= page_limit)
+            .then(|| rows.last().map(|(rowid, _)| Cursor::new(rowid.to_string())))
+            .flatten();
+        let items = rows.into_iter().map(|(_, belief)| belief).collect();
+        Ok(Page::new(items, next_cursor))
+    }
+
     async fn beliefs_referencing_source(
         &self,
         query: BeliefReferenceQuery,

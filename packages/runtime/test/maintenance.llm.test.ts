@@ -28,6 +28,7 @@ function mockTransport(overrides: Partial<NativeProviderTransport> = {}): Native
     communityMemberIndex: vi.fn(async () => ({})),
     scopeCounts: vi.fn(async () => ({})),
     listBeliefs: vi.fn(async () => []),
+    listBeliefsPaged: vi.fn(async () => ({ items: [], nextCursor: null })),
     listContradictions: vi.fn(async () => []),
     putContradiction: vi.fn(async () => ({})),
     ...overrides,
@@ -112,10 +113,13 @@ describe("contradictLlm", () => {
   it("reads beliefs, drives the LLM, writes a contradiction-llm record over the two targets", async () => {
     const putContradiction = vi.fn(async (c: unknown) => c);
     const t = mockTransport({
-      listBeliefs: vi.fn(async () => [
-        { id: "b1", content: "X is fast", subject: { key: "x" }, confidence: 0.9 },
-        { id: "b2", content: "X is slow", subject: { key: "y" }, confidence: 0.9 },
-      ]),
+      listBeliefsPaged: vi.fn(async () => ({
+        items: [
+          { id: "b1", content: "X is fast", subject: { key: "x" }, confidence: 0.9 },
+          { id: "b2", content: "X is slow", subject: { key: "y" }, confidence: 0.9 },
+        ],
+        nextCursor: null,
+      })),
       putContradiction,
     });
 
@@ -150,7 +154,7 @@ describe("contradictLlm", () => {
   it("writes nothing with fewer than 2 beliefs", async () => {
     const putContradiction = vi.fn(async () => ({}));
     const t = mockTransport({
-      listBeliefs: vi.fn(async () => [{ id: "b1", content: "only one" }]),
+      listBeliefsPaged: vi.fn(async () => ({ items: [{ id: "b1", content: "only one" }], nextCursor: null })),
       putContradiction,
     });
     const res = await contradictLlm({ transport: t, scope: { tenant: "t" }, llm: stubLlm([]) });
@@ -161,10 +165,13 @@ describe("contradictLlm", () => {
   it("skips contradictions that don't supply two ids + reasoning", async () => {
     const putContradiction = vi.fn(async () => ({}));
     const t = mockTransport({
-      listBeliefs: vi.fn(async () => [
-        { id: "b1", content: "a" },
-        { id: "b2", content: "b" },
-      ]),
+      listBeliefsPaged: vi.fn(async () => ({
+        items: [
+          { id: "b1", content: "a" },
+          { id: "b2", content: "b" },
+        ],
+        nextCursor: null,
+      })),
       putContradiction,
     });
     const res = await contradictLlm({

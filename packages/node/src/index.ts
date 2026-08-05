@@ -61,6 +61,7 @@ export {
   type CommunityMemberIndex,
   type CommunityOverviewData,
   type Diagnostics,
+  type BeliefPage,
   type MemoryPage,
   type NativeProviderTransport,
   type NativeProviderTransportOptions,

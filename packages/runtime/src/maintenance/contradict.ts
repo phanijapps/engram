@@ -43,9 +43,9 @@ export interface ContradictOptions {
   transport: NativeProviderTransport;
   scope: Scope;
   llm?: LlmProvider;
-  /** Max beliefs fed to the model in one prompt (default 200). `listBeliefs` is not
-   *  paged, so the full set is read then truncated to this cap — prevents unbounded
-   *  prompt token-blowup on large scopes. Full paging is a follow-up. */
+  /** Max beliefs fed to the model in one prompt (default 200). Beliefs are read via
+   *  keyset-paged `listBeliefsPaged` (100/page) up to this cap — a bounded read, no
+   *  unbounded load-all. */
   beliefLimit?: number;
 }
 
@@ -54,17 +54,31 @@ export async function contradictLlm(opts: ContradictOptions): Promise<Contradict
   const llm = opts.llm ?? createLlmProvider();
   const limit = opts.beliefLimit ?? 200;
 
-  const all = (await opts.transport.listBeliefs(opts.scope)) as Array<{
+  // Page through listBeliefsPaged (bounded read — no unbounded load-all) up to the cap.
+  const beliefs: Array<{
     id?: string;
     content?: string;
     subject?: { key?: string };
     confidence?: number;
-  }>;
-  if (all.length < 2) {
-    return { beliefsRead: all.length, contradictionsWritten: 0, skipped: 0 };
+  }> = [];
+  let cursor: string | null = null;
+  while (beliefs.length < limit) {
+    const page = await opts.transport.listBeliefsPaged(opts.scope, cursor ?? undefined, 100);
+    for (const b of page.items as Array<{
+      id?: string;
+      content?: string;
+      subject?: { key?: string };
+      confidence?: number;
+    }>) {
+      beliefs.push(b);
+      if (beliefs.length >= limit) break;
+    }
+    cursor = page.nextCursor;
+    if (!cursor) break;
   }
-  // Truncate to the cap (listBeliefs is not paged — full paging is a follow-up).
-  const beliefs = all.slice(0, limit);
+  if (beliefs.length < 2) {
+    return { beliefsRead: beliefs.length, contradictionsWritten: 0, skipped: 0 };
+  }
 
   const userText = beliefs
     .map(

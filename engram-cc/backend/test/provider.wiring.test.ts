@@ -17,7 +17,7 @@ import {
 import type { VizConfig } from "../src/config.ts";
 
 function fixtureConfig(): VizConfig {
-  const store = mkdtempSync(join(tmpdir(), "engram-viz-t1-"));
+  const store = mkdtempSync(join(tmpdir(), "engram-cc-t1-"));
   return {
     storageDir: store,
     dbFile: "test.db",

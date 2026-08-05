@@ -45,7 +45,7 @@ describe("keyset cursor logic", () => {
 });
 
 function fixtureDb(): DatabaseSync {
-  const dir = mkdtempSync(join(tmpdir(), "engram-viz-t3-"));
+  const dir = mkdtempSync(join(tmpdir(), "engram-cc-t3-"));
   const db = new DatabaseSync(join(dir, "t.db"));
   db.exec("CREATE TABLE demo (id TEXT, kind TEXT)");
   const ins = db.prepare("INSERT INTO demo (id, kind) VALUES (?, ?)");

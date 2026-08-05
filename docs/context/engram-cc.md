@@ -1,23 +1,23 @@
-# engram-viz — session context (2026-07-13)
+# engram-cc — session context (2026-07-13)
 
-> Working context for the engram-viz web workspace and the codegraph layer it
+> Working context for the engram-cc web workspace and the codegraph layer it
 > sits on. Captures the work done in the 2026-07-13 session so a fresh reader
 > (or a future session) can pick up without re-deriving it.
 
-## What engram-viz is
+## What engram-cc is
 
 A single-page, graph-centric code visualization workspace:
-- **Backend** (`engram-viz/backend`) — Hono REST server on `:3001`, a thin
+- **Backend** (`engram-cc/backend`) — Hono REST server on `:3001`, a thin
   transport over the `@engram/node` native codegraph engine
   (`NativeKnowledgeEngine`), which wraps the Rust `SqlKnowledgeStore` +
   `LexicalIndex`. Data lives in `~/.engram/codegraph-mem-alpha.db`.
-- **Frontend** (`engram-viz/frontend`) — React + Vite on `:5173`,
+- **Frontend** (`engram-cc/frontend`) — React + Vite on `:5173`,
   `react-force-graph-2d`, Tailwind dark theme, zustand store.
 - The hero view is the **call graph**: nodes = entities on `calls` edges,
   Louvain-community-colored, degree-sized. Overlay panels: left sidebar
   (repo selector + insights/taxonomy/ontology), node detail, timeline, search.
 
-Run: `cd engram-viz/backend && npm run dev` and `cd engram-viz/frontend && npm run dev`.
+Run: `cd engram-cc/backend && npm run dev` and `cd engram-cc/frontend && npm run dev`.
 
 ## Key data model fact (load-bearing)
 
@@ -39,7 +39,7 @@ filter. Getting this wrong produces a repo dropdown that shows 0 entities.
   `stable_source_key` with entity/relationship counts); `/api/sources` returns
   it; frontend `<select>` with "All repositories" + per-repo options; store
   `sourceFilter` + refetch graph on change (`useGraphData`).
-- **Files:** `engram-viz/backend/src/lib/engine.ts` (`repos()`,
+- **Files:** `engram-cc/backend/src/lib/engine.ts` (`repos()`,
   `repoDisplayName`), `backend/src/index.ts` (`/api/sources`),
   `frontend/src/components/sidebar/LeftSidebar.tsx`, `frontend/src/store/graphStore.ts`,
   `frontend/src/hooks/useGraphData.ts`, `frontend/src/lib/{api,types}.ts`.
@@ -100,7 +100,7 @@ blocked on parse. Capability: `docs/product/engram.md`.
   and added **concurrent-request dedupe** at the API layer (`getJson` in
   `frontend/src/lib/api.ts`) — identical concurrent GETs share one in-flight
   promise, cleared on settle. Verified in Chrome DevTools: 9 → 5 requests.
-- **Files:** `engram-viz/frontend/src/lib/api.ts`.
+- **Files:** `engram-cc/frontend/src/lib/api.ts`.
 
 ## Verification gates used
 - Rust: `cargo test -p engram-store-lexical` (12 pass), `cargo check --release`.
@@ -109,7 +109,7 @@ blocked on parse. Capability: `docs/product/engram.md`.
   `/api/sources`; Chrome DevTools network for the double-call fix.
 - Native binding rebuilt and copied after the lexical change.
 
-## Deferred (see `docs/backlog.md` → `engram-viz-graph-perf`)
+## Deferred (see `docs/backlog.md` → `engram-cc-graph-perf`)
 - **C7 — focus-node-pruned-by-cap:** clicking an insight whose node was pruned
   by the degree cap silently no-ops recenter. Fix is a design call (refetch the
   node's neighborhood with `?maxNodes` disabled, or an expand affordance).
@@ -121,10 +121,10 @@ blocked on parse. Capability: `docs/product/engram.md`.
 
 ## REPL tips
 - DB: `sqlite3 ~/.engram/codegraph-mem-alpha.db`. Entity file lives in
-  `sourceRefs[].location.path` (not a top-level `file`) for engram-viz-scanned
+  `sourceRefs[].location.path` (not a top-level `file`) for engram-cc-scanned
   repos; the MCP-scanned engram repo has a top-level `file`.
 - Relationships: `predicate` and `subject/object` are nested in
   `knowledge_relationships.record_json` (no `predicate` / `object_id` columns).
 - Backend dev = `tsx watch` (auto-reloads); restart cleanly by killing all
-  `engram-viz/backend` tsx procs + freeing `:3001` (stale node workers can
+  `engram-cc/backend` tsx procs + freeing `:3001` (stale node workers can
   linger and contended-bind, masquerading as a crash).

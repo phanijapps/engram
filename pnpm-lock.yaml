@@ -24,7 +24,7 @@ importers:
         specifier: ^3.0.5
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.20.0)(lightningcss@1.32.0)
 
-  engram-viz/backend:
+  engram-cc/backend:
     dependencies:
       '@engram/contracts':
         specifier: workspace:*
@@ -52,7 +52,7 @@ importers:
         specifier: ^3.0.5
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.20.0)(lightningcss@1.32.0)
 
-  engram-viz/frontend:
+  engram-cc/frontend:
     dependencies:
       '@deck.gl/core':
         specifier: ^9.0.0

@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: engram-viz BFF
+  title: engram-cc BFF
   version: 0.1.0
   description: |
-    Backend-for-Frontend for engram-viz. Reads engram **in-process via
+    Backend-for-Frontend for engram-cc. Reads engram **in-process via
     `@engram/node`** (never engram-mcp for browser data); read-only `node:sqlite`
     is a secondary path solely for aggregation counts and keyset windowing the
     binding does not expose.

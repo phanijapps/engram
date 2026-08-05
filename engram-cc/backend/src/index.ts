@@ -1,4 +1,4 @@
-//! engram-viz backend — Hono Backend-for-Frontend reading engram IN-PROCESS via
+//! engram-cc backend — Hono Backend-for-Frontend reading engram IN-PROCESS via
 //! `@engram/node`. The browser never speaks engram-mcp; this BFF is the wire.
 //!
 //! S1 foundation: health + capabilities. Graph / memory / observatory routes
@@ -28,7 +28,7 @@ app.route("/api", graphRoute(cfg));
 app.route("/api", memoryRoute(cfg));
 
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
-  console.log(`engram-viz backend listening on http://localhost:${info.port}`);
+  console.log(`engram-cc backend listening on http://localhost:${info.port}`);
   console.log(
     `  storage: ${cfg.storageDir}/${cfg.dbFile}  scope: ${cfg.tenant}/${cfg.workspace}  vectors: ${cfg.enableVector}`,
   );

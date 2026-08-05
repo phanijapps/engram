@@ -9,7 +9,7 @@
   "scripts": {
     "backend": "pnpm --filter prototype-backend dev",
     "backend:start": "pnpm --filter prototype-backend start",
-    "viz": "bash engram-viz/dev.sh",
+    "cc": "bash engram-cc/dev.sh",
     "build": "pnpm run build:native && pnpm -r --if-present build",
     "build:native": "pnpm --filter @engram/node build:native",
     "check": "pnpm run contracts:generate && pnpm run typecheck && pnpm run test",

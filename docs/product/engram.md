@@ -168,7 +168,7 @@ A web code-graph visualization workspace plus a demo app (Hono backend +
 React/shadcn-ui frontend) exercising the full memory / knowledge / belief /
 retrieval surface end-to-end on a durable shared SQLite. 3D graph, whole-graph
 explorer, community clustering. Several UI-polish items remain draft
-(kg-redesign, dashboard-tenant-view). *Specs: engram-viz, demo-reimagine,
+(kg-redesign, dashboard-tenant-view). *Specs: engram-cc, demo-reimagine,
 engram-demo-app, enterprise-3d-graph, graph-explorer, demo-ui-shell.*
 
 ## Maturity at a glance

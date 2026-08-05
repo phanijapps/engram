@@ -1,4 +1,4 @@
-//! engram-viz app shell — zbot-style top-bar + 3-tab nav (Memory / Observatory
+//! engram-cc (Control Center) app shell — zbot-style top-bar + 3-tab nav (Memory / Observatory
 //! / Graph). Observatory is the interactive 2D graph explorer (canvas + drill +
 //! health strip); Graph is the animated 3D globe overview; Memory is the facts/
 //! beliefs/procedures deck. The BFF reads engram in-process via @engram/node.

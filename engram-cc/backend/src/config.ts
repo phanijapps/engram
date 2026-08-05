@@ -1,4 +1,4 @@
-//! App config for the engram-viz BFF, resolved from the environment.
+//! App config for the engram-cc BFF, resolved from the environment.
 //!
 //! The viz reads engram's `agentzero` store in-process via `@engram/node`
 //! (never engram-mcp for the browser). All store/scope knobs are env-driven so

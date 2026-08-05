@@ -1,6 +1,6 @@
 //! BFF client — the browser's only data path to engram. All calls go to the
 //! in-process Hono backend (Vite proxies /api → :3001); the browser never
-//! speaks engram-mcp. Types mirror `contracts/openapi/engram-viz-bff.yaml`.
+//! speaks engram-mcp. Types mirror `contracts/openapi/engram-cc-bff.yaml`.
 
 const BASE = "/api";
 

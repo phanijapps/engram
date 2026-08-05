@@ -4,7 +4,7 @@
 - **Owner:** core
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0003 (implementation stack), ADR-0022 (engine neutrality + surface parity), RFC-0017 (TS runtime facade), [`docs/architecture/reference.md`](../../architecture/reference.md)
-- **Brief:** [`docs/product/briefs/engram-viz-overhaul.md`](../../product/briefs/engram-viz-overhaul.md) (read-path debt), [`docs/specs/viz-foundation/spec.md`](../viz-foundation/spec.md) (node:sqlite Boundary)
+- **Brief:** [`docs/product/briefs/engram-cc-overhaul.md`](../../product/briefs/engram-cc-overhaul.md) (read-path debt), [`docs/specs/viz-foundation/spec.md`](../viz-foundation/spec.md) (node:sqlite Boundary)
 - **Shape:** mixed (rust-core-led)
 
 > **Spec contract:** move engram's read/query surface — paged list + counts — out of

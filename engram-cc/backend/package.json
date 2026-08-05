@@ -1,9 +1,9 @@
 {
-  "name": "engram-viz-backend",
+  "name": "engram-cc-backend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "engram-viz Backend-for-Frontend: reads engram in-process via @engram/node (never engram-mcp for the browser) and exposes a keyset/aggregated REST surface.",
+  "description": "engram-cc Backend-for-Frontend: reads engram in-process via @engram/node (never engram-mcp for the browser) and exposes a keyset/aggregated REST surface.",
   "engines": {
     "node": ">=22"
   },

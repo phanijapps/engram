@@ -13,7 +13,7 @@ import { _resetProviderForTests } from "../src/engram/provider.ts";
 import { healthRoute } from "../src/routes/health.ts";
 
 function fixtureCfg(): VizConfig {
-  const store = mkdtempSync(join(tmpdir(), "engram-viz-health-"));
+  const store = mkdtempSync(join(tmpdir(), "engram-cc-health-"));
   return {
     storageDir: store,
     dbFile: "test.db",
@@ -41,7 +41,7 @@ describe("/api/health (fixture store)", () => {
 
   it("returns 503 degraded when the store cannot open", async () => {
     const cfg = fixtureCfg();
-    cfg.storageDir = "/nonexistent/engram-viz-path"; // trusted_root must exist
+    cfg.storageDir = "/nonexistent/engram-cc-path"; // trusted_root must exist
     const res = await healthRoute(cfg).request("/health");
     expect(res.status).toBe(503);
     const body = await res.json();

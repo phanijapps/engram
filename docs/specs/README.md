@@ -13,7 +13,7 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
 ## Active
 
 - [`viz-foundation`](viz-foundation/spec.md): the foundation slice of the
-  engram-viz overhaul — a greenfield 3-tab shell (Memory/Observatory/Graph) with
+  engram-cc overhaul — a greenfield 3-tab shell (Memory/Observatory/Graph) with
   ported zbot styling (React 19 + Tailwind v4), a Hono Backend-for-Frontend that
   reads engram in-process via `@engram/node` (never engram-mcp), TS view-types,
   and a deck.gl community-overview Graph view with keyset pagination +
@@ -21,7 +21,7 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   **Shipped** (T1–T9: in-process `@engram/node` BFF, zbot-styled 3-tab shell,
   deck.gl bounded community-overview; self-contained Playwright E2E + FPS-gated
   on reference hardware). S2–S4 are separate specs.
-- [`viz-graph-explorer`](viz-graph-explorer/spec.md): S2 of the engram-viz
+- [`viz-graph-explorer`](viz-graph-explorer/spec.md): S2 of the engram-cc
   overhaul — the full Graph tab: a legible concentric-ring overview (T0, replaces
   the foundation spiral) + community drill (click a community → bounded sample of
   its member entities via a cached label→entityId index) + entity-detail panel

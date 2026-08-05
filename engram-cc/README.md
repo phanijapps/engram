@@ -1,4 +1,4 @@
-# engram-viz
+# engram-cc
 
 A web-based, single-page **code-graph visualization workspace** that turns an indexed repository into an interactive knowledge graph. The graph is the hero — always visible, full-viewport — with community-colored nodes sized by centrality, calls-edges, and overlay panels for insights, taxonomy, ontology, node detail, search, and timeline.
 
@@ -32,12 +32,12 @@ Two terminals:
 
 ```bash
 # Terminal 1 — backend (Hono on :3001)
-cd engram-viz/backend
+cd engram-cc/backend
 pnpm install
 pnpm dev
 
 # Terminal 2 — frontend (Vite on :5173, proxies /api to :3001)
-cd engram-viz/frontend
+cd engram-cc/frontend
 pnpm install
 pnpm dev
 ```
@@ -84,7 +84,7 @@ Open `http://localhost:5173`. If the database is empty, type a repository path a
 ## Project structure
 
 ```
-engram-viz/
+engram-cc/
   backend/
     src/
       index.ts              Hono app, route registration, search warmup on boot

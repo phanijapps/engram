@@ -1,9 +1,9 @@
 {
-  "name": "engram-viz-frontend",
+  "name": "engram-cc-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "engram-viz — zbot-style 3-tab browser app over engram (Memory/Observatory/Graph).",
+  "description": "engram-cc — zbot-style 3-tab browser app over engram (Memory/Observatory/Graph).",
   "engines": {
     "node": ">=22"
   },

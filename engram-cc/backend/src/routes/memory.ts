@@ -34,17 +34,22 @@ export function memoryRoute(cfg: VizConfig): Hono {
     c: Context,
     table: string,
     proj: (record: unknown) => unknown,
+    kindFilter?: string,
   ): Response => {
     try {
       const limit = queryLimit(c.req.query("limit"));
       const cursorRowid = decodeCursor(c.req.query("cursor"));
       const db = new DatabaseSync(dbPath(cfg), { readOnly: true });
       try {
+        const where = kindFilter
+          ? scopeWhere + " AND json_extract(record_json, '$.kind') = ?"
+          : scopeWhere;
+        const params = kindFilter ? [...scopeParams, kindFilter] : [...scopeParams];
         const page = paginate(db, {
           table,
           columns: "record_json",
-          where: scopeWhere,
-          params: [...scopeParams],
+          where,
+          params,
           cursorRowid,
           limit,
           proj: (row) => proj(JSON.parse(row.record_json as string)),
@@ -78,7 +83,8 @@ export function memoryRoute(cfg: VizConfig): Hono {
     }
   });
   app.get("/beliefs", (c) => list(c, "beliefs", projectBelief));
-  app.get("/procedures", (c) => list(c, "procedures", projectProcedure));
+  // Procedures are memories with kind=procedure (same table, filtered by kind).
+  app.get("/procedures", (c) => list(c, "memories", projectMemory, "procedure"));
   // Contradictions have no table — they are synthesized from beliefs. 0 beliefs
   // today → an honest empty page (no fabricated records).
   app.get("/contradictions", (c) => c.json({ items: [], nextCursor: null }));

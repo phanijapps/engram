@@ -57,9 +57,18 @@ describe("BFF Boundary — no engram-mcp / no child_process in src/", () => {
     .filter((f) => String(f).endsWith(".ts"))
     .map((f) => join(srcDir, String(f)));
 
-  it("no src/ file imports node:child_process", () => {
-    const offenders = files.filter((f) =>
-      /child_process/.test(readFileSync(f, "utf8")),
+  // `routes/ingest.ts` is the ONE sanctioned exception: scan must run in a
+  // separate process because the sync facade's `block_on` panics under a nested
+  // runtime (docs/guides/how-to/extend-storage.md:213 — the nested-executor
+  // caveat). It spawns the `engram-ingest` CLI — NEVER `engram-mcp` — so the
+  // browser still never speaks engram-mcp (ADR-0022).
+  const SANCTIONED = ["routes/ingest.ts"];
+
+  it("no src/ file imports node:child_process (except the sanctioned ingest subprocess)", () => {
+    const offenders = files.filter(
+      (f) =>
+        /child_process/.test(readFileSync(f, "utf8")) &&
+        !SANCTIONED.includes(f.slice(srcDir.length + 1)),
     );
     expect(offenders, offenders.map((f) => f.slice(srcDir.length)).join(", ")).toEqual([]);
   });

@@ -98,6 +98,12 @@ export interface NativeProviderTransport {
   putRelationship(relationship: unknown): Promise<unknown>;
   /** Upsert a belief. */
   beliefPut(belief: unknown): Promise<unknown>;
+  /** List live beliefs visible to `scope` (Rust-backed; maintenance reads the active set). */
+  listBeliefs(scope: unknown): Promise<unknown[]>;
+  /** List open contradiction records visible to `scope` (Rust-backed). */
+  listContradictions(scope: unknown): Promise<unknown[]>;
+  /** Upsert a contradiction record (Rust-backed). */
+  putContradiction(contradiction: unknown): Promise<unknown>;
   /** Forget (delete/redact/tombstone/archive) a memory. */
   forget(request: unknown): Promise<unknown>;
   /** Best-effort batch ingest. */
@@ -182,6 +188,22 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async beliefPut(belief: unknown): Promise<unknown> {
     return decode(this.provider.requireBeliefsApi().upsertBeliefJson(encode(belief)));
+  }
+
+  async listBeliefs(scope: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(this.provider.requireBeliefsApi().listBeliefsJson(encode(scope)));
+  }
+
+  async listContradictions(scope: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(
+      this.provider.requireBeliefsApi().listContradictionsJson(encode(scope)),
+    );
+  }
+
+  async putContradiction(contradiction: unknown): Promise<unknown> {
+    return decode(
+      this.provider.requireBeliefsApi().putContradictionJson(encode(contradiction)),
+    );
   }
 
   async forget(request: unknown): Promise<unknown> {

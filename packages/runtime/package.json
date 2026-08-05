@@ -29,6 +29,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "^0.83.0",
     "@engram/contracts": "workspace:*",
     "@engram/node": "workspace:*",
     "@modelcontextprotocol/node": "^2.0.0",

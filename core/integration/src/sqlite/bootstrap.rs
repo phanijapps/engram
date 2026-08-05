@@ -588,6 +588,15 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         failed()
     };
 
+    // Contradiction CRUD (list/put) rides the wired belief repository. Rule-based
+    // detect is NOT exposed on the provider (it stays on the standalone belief
+    // engine); the LLM reflect/contradict ops + LLM detect are TS-only, env-gated
+    // (PI_PROVIDER / provider key). Maintenance = consolidate (here) + the TS LLM
+    // layer. Both track their store wiring; the LLM half's runtime availability
+    // additionally depends on env config (a missing key fails at call time, not here).
+    let contradiction_state = beliefs_state.clone();
+    let maintenance_state = consolidation_state.clone();
+
     let report = CapabilityReport::builder()
         .memory(memory_state)
         .knowledge(knowledge_state)
@@ -605,6 +614,8 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         .export_import(export_import_state)
         .observability(observability_state)
         .consolidation(consolidation_state)
+        .contradiction(contradiction_state)
+        .maintenance(maintenance_state)
         .identity(identity_state)
         .procedures(procedures_state)
         .build();
@@ -894,6 +905,26 @@ mod tests {
         assert!(
             provider.capabilities().vectors_supported(),
             "enable_vector=true must mark the vectors capability supported"
+        );
+    }
+
+    /// cc-pi-mono-maintenance T6: the SQLite bootstrap flips `contradiction` +
+    /// `maintenance` to Supported (they ride the wired belief repository +
+    /// consolidation path). Pins the flip so a future refactor that re-disables
+    /// them ships red. Uses enable_vector=false to skip the model load.
+    #[test]
+    fn sqlite_bootstrap_flips_contradiction_and_maintenance_supported() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config = vector_config(dir.path(), false);
+        let provider = bootstrap_sqlite(&config).expect("bootstrap opens");
+        let report = provider.capabilities();
+        assert!(
+            report.contradiction_supported(),
+            "SQLite bootstrap must mark contradiction Supported (belief repository wired)"
+        );
+        assert!(
+            report.maintenance_supported(),
+            "SQLite bootstrap must mark maintenance Supported (consolidation wired)"
         );
     }
 }

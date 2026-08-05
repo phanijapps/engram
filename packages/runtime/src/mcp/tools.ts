@@ -155,4 +155,83 @@ export function registerTools(
       return textResult(result);
     },
   );
+
+  // ---- Maintenance tools (pi-mono LLM) — the agent surface for belief synthesis
+  // + contradiction detection, plus the belief/contradiction read tools. The LLM
+  // modules are imported LAZILY inside the handlers so listTools / recall never
+  // load pi-mono (the server stays light; the LLM only loads on a maintenance
+  // call). The LLM runs TS-side (Rust stays LLM-free).
+
+  server.registerTool(
+    "belief_list",
+    {
+      description:
+        "List beliefs in scope (Rust-backed; all statuses). Returns [Belief, …].",
+      inputSchema: z.object({ scope: scopeSchema }),
+    },
+    async ({ scope }) => {
+      const result = await transport.listBeliefs(buildScope(scope));
+      return textResult(result);
+    },
+  );
+
+  server.registerTool(
+    "contradiction_list",
+    {
+      description:
+        "List contradiction review records in scope (Rust-backed; all statuses). Returns [Contradiction, …].",
+      inputSchema: z.object({ scope: scopeSchema }),
+    },
+    async ({ scope }) => {
+      const result = await transport.listContradictions(buildScope(scope));
+      return textResult(result);
+    },
+  );
+
+  server.registerTool(
+    "maintenance_run",
+    {
+      description:
+        "Run a maintenance op over scope. PRIVACY: reflect-llm / contradict-llm route the scope's memories/beliefs to a third-party LLM (Anthropic by default; set PI_PROVIDER=ollama for local) and incur token cost — only call with consent. Ops: reflect-llm (synthesize beliefs), contradict-llm (detect contradictions), consolidate (deterministic, no LLM). Default reflect-llm.",
+      inputSchema: z.object({
+        scope: scopeSchema,
+        op: z.enum(["reflect-llm", "contradict-llm", "consolidate"]).optional(),
+      }),
+    },
+    async ({ scope, op }) => {
+      const theScope = buildScope(scope);
+      const theOp = op ?? "reflect-llm";
+      if (theOp === "consolidate") {
+        return textResult(await transport.consolidate({ scope: theScope }));
+      }
+      const { createLlmProvider } = await import("../maintenance/llm.js");
+      const llm = createLlmProvider();
+      if (theOp === "contradict-llm") {
+        const { contradictLlm } = await import("../maintenance/contradict.js");
+        return textResult(await contradictLlm({ transport, scope: theScope, llm }));
+      }
+      const { reflectLlm } = await import("../maintenance/reflect.js");
+      return textResult(await reflectLlm({ transport, scope: theScope, llm }));
+    },
+  );
+
+  server.registerTool(
+    "contradiction_detect",
+    {
+      description:
+        "Detect semantic contradictions across a scope's beliefs via pi-mono. LLM-only in this slice (the rule-based same-subject pre-filter is deferred — see backlog). Routes belief text to a third-party LLM (Anthropic default; PI_PROVIDER=ollama for local). Returns { beliefsRead, contradictionsWritten, skipped } (emitted records; the store dedupes by canonical pair key).",
+      inputSchema: z.object({ scope: scopeSchema }),
+    },
+    async ({ scope }) => {
+      const { createLlmProvider } = await import("../maintenance/llm.js");
+      const { contradictLlm } = await import("../maintenance/contradict.js");
+      return textResult(
+        await contradictLlm({
+          transport,
+          scope: buildScope(scope),
+          llm: createLlmProvider(),
+        }),
+      );
+    },
+  );
 }

@@ -21,8 +21,8 @@
 
 use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
-    Actor, ActorKind, AllowedUse, Belief, ConsolidationRequest, ContextPayload, DeleteMode,
-    EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id, KnowledgeEntity,
+    Actor, ActorKind, AllowedUse, Belief, ConsolidationRequest, Contradiction, ContextPayload,
+    DeleteMode, EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id, KnowledgeEntity,
     KnowledgeRelationship, MemoryRecord, Page, Policy, Procedure, Provenance, Retention, RetrievalRequest, Scope,
     Sensitivity, Visibility, WriteMemoryRequest, WriteMemoryResponse,
 };
@@ -878,6 +878,36 @@ impl NativeBeliefsApi {
     pub fn list_stale_beliefs_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
         let result = block_on(self.handle.list_stale(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Lists live beliefs in a scope. Takes a `Scope` JSON, returns
+    /// `[Belief, …]` JSON. (Maintenance reads the active belief set over the
+    /// provider surface — surface parity with the standalone belief engine.)
+    #[napi(js_name = "listBeliefsJson")]
+    pub fn list_beliefs_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result = block_on(self.handle.list_beliefs(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Lists open contradiction records in a scope. Takes a `Scope` JSON, returns
+    /// `[Contradiction, …]` JSON.
+    #[napi(js_name = "listContradictionsJson")]
+    pub fn list_contradictions_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result =
+            block_on(self.handle.list_contradictions(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Stores or updates a contradiction record. Takes a `Contradiction` JSON,
+    /// returns the persisted `Contradiction` JSON.
+    #[napi(js_name = "putContradictionJson")]
+    pub fn put_contradiction_json(&self, contradiction_json: String) -> Result<String> {
+        let contradiction: Contradiction = decode(&contradiction_json)?;
+        let result =
+            block_on(self.handle.put_contradiction(contradiction)).map_err(to_napi_error)?;
         encode(&result)
     }
 }

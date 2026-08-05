@@ -320,6 +320,11 @@ impl BeliefRepository for SqlBeliefStore {
         SqlBeliefStore::list_contradictions(self, scope).await
     }
 
+    async fn list_beliefs(&self, scope: &Scope) -> CoreResult<Vec<Belief>> {
+        // Delegate to the existing public method (same scope-filtering logic).
+        SqlBeliefStore::list_beliefs(self, scope).await
+    }
+
     async fn beliefs_referencing_source(
         &self,
         query: BeliefReferenceQuery,

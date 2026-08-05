@@ -45,12 +45,18 @@ describe.skipIf(!ready)("engram-mcp-http (real addon)", () => {
       );
       const { tools } = await client.listTools();
       expect(tools.map((t) => t.name).sort()).toEqual([
+        "belief_list",
         "belief_put",
+        "contradiction_detect",
+        "contradiction_list",
         "forget",
+        "graph_overview",
+        "list_memories",
+        "maintenance_run",
         "put_entity",
         "put_relationship",
         "recall",
-        "write_memory"
+        "write_memory",
       ]);
 
       // tools/call against the REAL provider (recall → facade → binding → sqlite).

@@ -159,6 +159,9 @@ export interface NativeBeliefsApiBinding {
   upsertBeliefJson(beliefJson: string): string;
   retractBeliefJson(requestJson: string): string;
   listStaleBeliefsJson(scopeJson: string): string;
+  listBeliefsJson(scopeJson: string): string;
+  listContradictionsJson(scopeJson: string): string;
+  putContradictionJson(contradictionJson: string): string;
 }
 
 /** Observability / diagnostics handle proxy: point-in-time snapshot

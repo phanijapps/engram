@@ -64,5 +64,6 @@ export {
   type MemoryPage,
   type NativeProviderTransport,
   type NativeProviderTransportOptions,
-  type RecordCounts
+  type RecordCounts,
+  type ScopeCounts
 } from "./provider.js";

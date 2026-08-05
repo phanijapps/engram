@@ -44,6 +44,7 @@ export function GraphOverview({
   const selectEntity = useGraphStore((s) => s.selectEntity);
   const drill = useGraphStore((s) => s.community);
   const members = useGraphStore((s) => s.members);
+  const memberEdges = useGraphStore((s) => s.memberEdges);
   const selectedEntityId = useGraphStore((s) => s.selectedEntityId);
 
   useEffect(() => {
@@ -117,10 +118,10 @@ export function GraphOverview({
     ];
     if (drill && members.length > 0) {
       const center = nodePos.get(drill.id) ?? [0, 0];
-      list.push(makeDrillLayer(center, members, selectedEntityId));
+      list.push(...makeDrillLayer(center, members, memberEdges, selectedEntityId));
     }
     return list;
-  }, [data, nodePos, drill, members, selectedEntityId, highlight]);
+  }, [data, nodePos, drill, members, memberEdges, selectedEntityId, highlight]);
 
   // One click handler discriminates overview-node vs drill-member by shape.
   const onPick = (info: PickingInfo) => {

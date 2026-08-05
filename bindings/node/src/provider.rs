@@ -798,6 +798,14 @@ impl NativeCommunityQueryApi {
             block_on(self.handle.community_of(&scope, entity_id)).map_err(to_napi_error)?;
         encode(&result)
     }
+
+    /// Scope-filtered record counts (entities/relationships/memories/beliefs/hierarchy).
+    #[napi(js_name = "scopeCountsJson")]
+    pub fn scope_counts_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result = block_on(self.handle.scope_counts(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
 }
 
 // ---------------------------------------------------------------------------

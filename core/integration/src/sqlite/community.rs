@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use engram_domain::{CommunityMetaEdge, CommunityMetaNode, CommunityOverview, Scope};
+use engram_domain::{CommunityMetaEdge, CommunityMetaNode, CommunityOverview, Scope, ScopeCounts};
 use engram_graph_analytics::communities;
 use engram_runtime::CoreResult;
 use engram_store_sqlite::SqlKnowledgeStore;
@@ -130,5 +130,9 @@ impl CommunityQuery for SqlKnowledgeStore {
             }
         }
         Ok(None)
+    }
+
+    async fn scope_counts(&self, scope: &Scope) -> CoreResult<ScopeCounts> {
+        SqlKnowledgeStore::scope_counts(self, scope).await
     }
 }

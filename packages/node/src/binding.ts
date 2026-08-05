@@ -172,6 +172,7 @@ export interface NativeCommunityQueryApiBinding {
   overviewJson(requestJson: string): string;
   memberIndexJson(scopeJson: string): string;
   communityOfJson(requestJson: string): string;
+  scopeCountsJson(scopeJson: string): string;
 }
 
 /**

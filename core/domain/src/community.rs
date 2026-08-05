@@ -36,3 +36,15 @@ pub struct CommunityOverview {
     pub edges: Vec<CommunityMetaEdge>,
     pub total_communities: usize,
 }
+
+/// Scope-filtered record counts for the stats endpoint.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopeCounts {
+    pub entities: usize,
+    pub relationships: usize,
+    pub memories: usize,
+    pub beliefs: usize,
+    pub hierarchy_nodes: usize,
+    pub hierarchy_relations: usize,
+}

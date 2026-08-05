@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use engram_domain::{CommunityOverview, Scope};
+use engram_domain::{CommunityOverview, Scope, ScopeCounts};
 use engram_runtime::{CoreError, CoreResult};
 
 /// Read port for the community aggregate (Louvain + meta-edges + member index).
@@ -37,6 +37,14 @@ pub trait CommunityQuery: Send + Sync {
         Err(CoreError::CapabilityUnsupported {
             capability: "community_query".to_string(),
             reason: "this adapter does not implement community aggregation".to_string(),
+        })
+    }
+
+    /// Scope-filtered record counts (entities/relationships/memories/beliefs/hierarchy).
+    async fn scope_counts(&self, _scope: &Scope) -> CoreResult<ScopeCounts> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "community_query.scope_counts".to_string(),
+            reason: "this adapter does not implement scope counts".to_string(),
         })
     }
 }

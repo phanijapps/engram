@@ -65,6 +65,16 @@ export interface CommunityOverviewData {
 /** Member index: community label → entity-id strings. */
 export type CommunityMemberIndex = Record<number, string[]>;
 
+/** Scope-filtered record counts (mirrors engram-domain ScopeCounts). */
+export interface ScopeCounts {
+  entities: number;
+  relationships: number;
+  memories: number;
+  beliefs: number;
+  hierarchyNodes: number;
+  hierarchyRelations: number;
+}
+
 export interface NativeProviderTransport {
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
@@ -101,6 +111,8 @@ export interface NativeProviderTransport {
   communityOverview(scope: unknown, limit?: number): Promise<CommunityOverviewData>;
   /** Member index: community label → entity-id strings (Rust-backed). */
   communityMemberIndex(scope: unknown): Promise<CommunityMemberIndex>;
+  /** Scope-filtered record counts (Rust-backed fast SQL COUNT). */
+  scopeCounts(scope: unknown): Promise<ScopeCounts>;
 }
 
 /** Creates a transport over the held `NativeProvider`. */
@@ -211,6 +223,12 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
   async communityMemberIndex(scope: unknown): Promise<CommunityMemberIndex> {
     return decode<CommunityMemberIndex>(
       this.provider.requireCommunityQueryApi().memberIndexJson(encode(scope))
+    );
+  }
+
+  async scopeCounts(scope: unknown): Promise<ScopeCounts> {
+    return decode<ScopeCounts>(
+      this.provider.requireCommunityQueryApi().scopeCountsJson(encode(scope))
     );
   }
 }

@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { dbPath, type VizConfig } from "../config.ts";
 import { resolveScope } from "../scope.ts";
+import { getProvider } from "../engram/provider.ts";
 import { CursorError, clampLimit, decodeCursor } from "../db/keyset.ts";
 import { countTable, paginate } from "../db/reader.ts";
 import {
@@ -48,25 +49,20 @@ export function graphRoute(cfg: VizConfig): Hono {
     }
   };
 
-  app.get("/graph/stats", (c) => {
+  app.get("/graph/stats", async (c) => {
     try {
-      // Counts stay on node:sqlite (fast SQL COUNT, indexed) — the scope-counts
-      // port (P3.5) is blocked by the Observability conformance check; deferred.
-      return c.json(
-        withReader((db) => ({
-          entities: countTable(db, "knowledge_entities", scopeWhere, [...scopeParams]),
-          relationships: countTable(db, "knowledge_relationships", scopeWhere, [
-            ...scopeParams,
-          ]),
-          communities: 0, // the cheap stats endpoint does not run Louvain
-          memories: countTable(db, "memories", scopeWhere, [...scopeParams]),
-          beliefs: countTable(db, "beliefs", scopeWhere, [...scopeParams]),
-          hierarchyNodes: countTable(db, "hierarchy_nodes", scopeWhere, [...scopeParams]),
-          hierarchyRelations: countTable(db, "hierarchy_relations", scopeWhere, [
-            ...scopeParams,
-          ]),
-        })),
-      );
+      // All six counts from the Rust facade (CommunityQuery::scope_counts) — no
+      // node:sqlite, no countTable. Fast SQL COUNT per table on the store connection.
+      const counts = await getProvider(cfg).scopeCounts(scope);
+      return c.json({
+        entities: counts.entities,
+        relationships: counts.relationships,
+        communities: 0,
+        memories: counts.memories,
+        beliefs: counts.beliefs,
+        hierarchyNodes: counts.hierarchyNodes,
+        hierarchyRelations: counts.hierarchyRelations,
+      });
     } catch (err) {
       return c.json({ error: msg(err), degraded: true }, 503);
     }

@@ -116,4 +116,43 @@ export function registerTools(
       return textResult(result);
     }
   );
+
+  // ---- Friendly READ tools (P3.6) — the consumer surface for extracting info.
+
+  server.registerTool(
+    "graph_overview",
+    {
+      description:
+        "Community-level graph overview: the top-N Louvain communities + inter-community meta-edges. Good first look at the graph shape. Returns { communities: [{label, memberCount}], edges: [{sourceLabel, targetLabel, weight}], totalCommunities }.",
+      inputSchema: z.object({
+        scope: scopeSchema,
+        limit: z.number().int().min(1).max(2000).optional(),
+      }),
+    },
+    async ({ scope, limit }) => {
+      const result = await transport.communityOverview(buildScope(scope), limit);
+      return textResult(result);
+    },
+  );
+
+  server.registerTool(
+    "list_memories",
+    {
+      description:
+        "List memory facts (observations) in scope, keyset-paged. `after` is the opaque nextCursor from a prior page. Returns { items: [MemoryRecord], nextCursor }.",
+      inputSchema: z.object({
+        scope: scopeSchema,
+        after: z.string().nullable().optional(),
+        limit: z.number().int().min(1).max(500).optional(),
+      }),
+    },
+    async ({ scope, after, limit }) => {
+      const result = await transport.listMemoriesPaged(
+        buildScope(scope),
+        after ?? null,
+        limit ?? 50,
+      );
+      return textResult(result);
+    },
+  );
 }

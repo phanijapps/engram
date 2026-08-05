@@ -25,6 +25,17 @@ detection**, expose via facade + MCP, and keep Rust LLM-free. Milestone 2 of the
 - **Surface gap**: **extend the provider surface** (facade → N-API → TS) so maintenance
   runs over the agentzero store via the facade — NOT the standalone `NativeBeliefEngine`.
 
+## Amendments (post-review 2026-08-05)
+
+Two carve-outs from the minimal-scope ship (tracked in `docs/backlog.md` →
+"cc-pi-mono-maintenance review follow-ups"):
+- **Rule-based contradiction pre-filter deferred** — `contradictLlm` is LLM-only this
+  slice. The rule-based `ContradictionDetector` is NOT invoked (it's not on the provider
+  surface yet). The `contradiction_detect` tool description states this.
+- **Minimal surface set** — T2 shipped `listBeliefs` + `listContradictions` +
+  `putContradiction` (3 of 6). `getContradiction` / `resolveContradiction` /
+  `detectContradictions` remain on the standalone engine until a follow-up.
+
 ## Current state (grounded)
 
 - **`BeliefSynthesizer`** (`core/belief/src/lib.rs:74`) is the LLM seam; in-tree

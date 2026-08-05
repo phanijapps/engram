@@ -132,6 +132,27 @@ export interface IngestCounts {
   hierarchyRelations: number;
 }
 
+export type MaintainOp = "reflect-llm" | "contradict-llm" | "consolidate";
+
+export interface MaintainResult {
+  memoriesRead?: number;
+  beliefsRead?: number;
+  beliefsWritten?: number;
+  contradictionsWritten?: number;
+  skipped?: number;
+  status?: string;
+  [key: string]: unknown;
+}
+
+export interface MaintainJob {
+  jobId: string;
+  op: MaintainOp;
+  status: "running" | "done" | "error";
+  startedAt?: number;
+  result?: MaintainResult | null;
+  error?: string | null;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`);
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
@@ -192,4 +213,13 @@ export const api = {
   scanJob: (jobId: string) =>
     getJson<IngestJob>(`/ingest/jobs/${encodeURIComponent(jobId)}`),
   ingestCounts: () => getJson<IngestCounts>("/ingest/counts"),
+
+  // Maintain tab — LLM maintenance runs in a child process via the BFF; beliefs +
+  // contradictions read over the facade. reflect-llm/contradict-llm route scope
+  // data to a cloud LLM (Anthropic default; PI_PROVIDER=ollama for local).
+  runMaintain: (op: MaintainOp) => postJson<{ jobId: string }>("/maintain/run", { op }),
+  maintainJob: (jobId: string) =>
+    getJson<MaintainJob>(`/maintain/jobs/${encodeURIComponent(jobId)}`),
+  maintainBeliefs: () => getJson<unknown[]>("/maintain/beliefs"),
+  maintainContradictions: () => getJson<unknown[]>("/maintain/contradictions"),
 };

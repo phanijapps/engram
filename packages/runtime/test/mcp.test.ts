@@ -21,6 +21,7 @@ function mockTransport(): NativeProviderTransport {
     batchIngest: vi.fn(async () => ({})),
     listMemoriesPaged: vi.fn(async () => ({ items: [], nextCursor: null })),
     listBeliefs: vi.fn(async () => []),
+    listBeliefsPaged: vi.fn(async () => ({ items: [], nextCursor: null })),
     listContradictions: vi.fn(async () => []),
     putContradiction: vi.fn(async () => ({})),
     diagnostics: vi.fn(async () => ({ record_counts: {} })),

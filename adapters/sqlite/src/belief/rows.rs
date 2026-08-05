@@ -92,6 +92,40 @@ impl SqlBeliefStore {
         Ok(beliefs)
     }
 
+    /// Keyset-paged, scope-filtered belief read (mirrors `SqlMemoryStore::list_memories_paged`).
+    /// `after_rowid` is the prior page's last `rowid` (0 starts at the first page);
+    /// `workspace` is the already-COALESCE'd scope workspace. Returns `(rowid, belief)`.
+    pub(crate) fn list_beliefs_paged(
+        &self,
+        tenant: &str,
+        workspace: &str,
+        after_rowid: i64,
+        limit: i64,
+    ) -> CoreResult<Vec<(i64, Belief)>> {
+        let connection = self.lock()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT rowid, record_json FROM beliefs \
+                 WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2 AND rowid > ?3 \
+                 ORDER BY rowid LIMIT ?4",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map(params![tenant, workspace, after_rowid, limit], |row| {
+                let rowid: i64 = row.get(0)?;
+                let json: String = row.get(1)?;
+                Ok((rowid, json))
+            })
+            .map_err(sql_error)?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (rowid, json) = row.map_err(sql_error)?;
+            let belief = serde_json::from_str::<Belief>(&json).map_err(json_error)?;
+            out.push((rowid, belief));
+        }
+        Ok(out)
+    }
+
     pub(crate) fn load_belief_by_id(&self, id: &BeliefId) -> CoreResult<Option<Belief>> {
         let connection = self.lock()?;
         connection

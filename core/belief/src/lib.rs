@@ -98,6 +98,23 @@ pub trait BeliefRepository: Send + Sync {
         })
     }
 
+    /// Lists live beliefs visible to `scope`, keyset-paged (mirrors
+    /// `MemoryRepository::list_memories_paged`). `after` is the opaque cursor
+    /// from a prior page's `nextCursor`. Use this over [`list_beliefs`](Self::list_beliefs)
+    /// for bounded reads on large scopes (e.g. the LLM contradiction op). Adapters
+    /// that cannot page leave the default (`CapabilityUnsupported`).
+    async fn list_beliefs_paged(
+        &self,
+        _scope: &Scope,
+        _after: Option<&Cursor>,
+        _limit: usize,
+    ) -> CoreResult<Page<Belief>> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "belief_repository::list_beliefs_paged".to_string(),
+            reason: "this adapter does not page beliefs".to_string(),
+        })
+    }
+
     /// Lists open contradiction review records visible to the supplied scope.
     async fn list_contradictions(&self, scope: &Scope) -> CoreResult<Vec<Contradiction>>;
 

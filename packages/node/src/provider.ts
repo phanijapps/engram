@@ -37,6 +37,12 @@ export interface MemoryPage {
   nextCursor: string | null;
 }
 
+/** A keyset page of beliefs (mirrors engram-domain `Page<Belief>`). */
+export interface BeliefPage {
+  items: unknown[];
+  nextCursor: string | null;
+}
+
 /** Record counts by semantic type (mirrors engram-integration `RecordCounts`). */
 export interface RecordCounts {
   memories: number;
@@ -100,6 +106,12 @@ export interface NativeProviderTransport {
   beliefPut(belief: unknown): Promise<unknown>;
   /** List live beliefs visible to `scope` (Rust-backed; maintenance reads the active set). */
   listBeliefs(scope: unknown): Promise<unknown[]>;
+  /** List live beliefs visible to `scope`, keyset-paged (bounded reads on large scopes). */
+  listBeliefsPaged(
+    scope: unknown,
+    after?: string | null,
+    limit?: number,
+  ): Promise<BeliefPage>;
   /** List open contradiction records visible to `scope` (Rust-backed). */
   listContradictions(scope: unknown): Promise<unknown[]>;
   /** Upsert a contradiction record (Rust-backed). */
@@ -192,6 +204,22 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async listBeliefs(scope: unknown): Promise<unknown[]> {
     return decode<unknown[]>(this.provider.requireBeliefsApi().listBeliefsJson(encode(scope)));
+  }
+
+  async listBeliefsPaged(
+    scope: unknown,
+    after?: string | null,
+    limit?: number,
+  ): Promise<BeliefPage> {
+    return decode<BeliefPage>(
+      this.provider.requireBeliefsApi().listBeliefsPagedJson(
+        encode({
+          scope,
+          ...(after ? { after } : {}),
+          ...(limit ? { limit } : {}),
+        }),
+      ),
+    );
   }
 
   async listContradictions(scope: unknown): Promise<unknown[]> {

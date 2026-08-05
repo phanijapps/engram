@@ -18,6 +18,9 @@ BIN="$REPO/packages/runtime/dist/mcp/bin.js"
 # it spawns for maintenance) inherit them.
 if [ -f "$REPO/.env" ]; then set -a; . "$REPO/.env"; set +a; fi
 
+# Ensure the store directory exists — the provider validates trusted_root at open.
+mkdir -p "${ENGRAM_STORAGE:-~/.engram/agentzero}"
+
 # Portable detach: setsid (Linux) creates a new session; macOS uses plain background.
 DETACH=""
 command -v setsid >/dev/null 2>&1 && DETACH="setsid"

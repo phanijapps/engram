@@ -5,10 +5,11 @@
 
 import { useEffect, useState, type ComponentType } from "react";
 import { BrowserRouter, Routes, Route, Navigate, NavLink, Link } from "react-router-dom";
-import { Brain, Network, Layers, Activity } from "lucide-react";
+import { Brain, Network, Layers, Activity, Upload } from "lucide-react";
 
 import { api, type Health } from "./lib/api.ts";
 import { GlobeGraph } from "./features/graph/GlobeGraph.tsx";
+import { IngestTab } from "./features/ingest/IngestTab.tsx";
 import { MemoryTab } from "./features/memory/MemoryTab.tsx";
 import { ObservatoryTab } from "./features/observatory/ObservatoryTab.tsx";
 
@@ -22,6 +23,7 @@ const NAV: NavItem[] = [
   { to: "/memory", label: "Memory", icon: Brain },
   { to: "/observatory", label: "Observatory", icon: Network },
   { to: "/graph", label: "Graph", icon: Layers },
+  { to: "/ingest", label: "Ingest", icon: Upload },
 ];
 
 function WebAppShell() {
@@ -47,7 +49,7 @@ function WebAppShell() {
       <header className="topbar">
         <Link to="/observatory" className="topbar__brand">
           <span className="topbar__brand-mark">e</span>
-          <span className="topbar__brand-name">engram<b>-viz</b></span>
+          <span className="topbar__brand-name">engram<b>-cc</b></span>
         </Link>
 
         <nav className="topbar__nav">
@@ -80,6 +82,7 @@ function WebAppShell() {
           <Route path="/memory" element={<MemoryTab />} />
           <Route path="/observatory" element={<ObservatoryTab />} />
           <Route path="/graph" element={<GlobeGraph />} />
+          <Route path="/ingest" element={<IngestTab />} />
           <Route path="*" element={<Navigate to="/observatory" replace />} />
         </Routes>
       </main>

@@ -130,3 +130,17 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   `[recall_fusion]` contract (per-lane weights + reranker strategy), vector
   opt-in, MMR + cross-encoder rerankers, and `search` via hybrid recall.
   Supersedes RFC-0018 §6.2 + D2. Constrained by RFC-0019, ADR-0022. Draft.
+- [`cc-ingest-control`](cc-ingest-control/spec.md): a 4th "Ingest" tab in engram-cc to
+  drive **code (treesitter) + document** scans from the UI — a BFF job wrapper over the
+  provider-facade `scan()` (terminal-only progress with a "this will take a while" state),
+  a job monitor, and a sources/counts view. No new `node:sqlite`; uses the facade. Extends
+  `ts-runtime-ingest`. Constrained by ADR-0022. **Ready to plan** (milestone 1).
+- [`cc-pi-mono-maintenance`](cc-pi-mono-maintenance/spec.md): wire the pi-mono SDK
+  (`@earendil-works/pi-ai`, the multi-provider LLM client at pi.dev) into the shipped
+  `engram-maintain` module to drive real **belief synthesis + LLM-augmented contradiction
+  detection** (today: deterministic baselines — no LLM provider in-tree). Default LLM =
+  Anthropic **Claude**; switchable to **Ollama** via env. Closes the belief/contradiction
+  surface gap on the provider (facade → N-API → TS), adds MCP maintenance tools, flips
+  `contradiction` + `maintenance` to `Supported`. **Rust stays LLM-free** (LLM config is
+  TS/env-only). Extends `ts-runtime-maintenance`. Constrained by RFC-0017, ADR-0022.
+  **Ready to plan** (milestone 2).

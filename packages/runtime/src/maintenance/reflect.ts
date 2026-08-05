@@ -55,7 +55,7 @@ export async function reflectLlm(opts: ReflectOptions): Promise<ReflectionResult
   }
 
   const userText = memories
-    .map((m, i) => `[${i}] (${m.id ?? "?"}) ${m.text ?? ""}`)
+    .map((m, i) => `[${i}] (${m.id ?? "?"}) ${m.content?.text ?? ""}`)
     .join("\n");
 
   const resp = await llm.complete({
@@ -100,7 +100,7 @@ export async function reflectLlm(opts: ReflectOptions): Promise<ReflectionResult
 
 interface MemoryLike {
   id?: string;
-  text?: string;
+  content?: { text?: string };
 }
 
 async function readMemories(

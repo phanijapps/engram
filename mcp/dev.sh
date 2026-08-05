@@ -13,6 +13,11 @@ set -uo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"   # repo root — pnpm-workspace.yaml lives here
 BIN="$REPO/packages/runtime/dist/mcp/bin.js"
 
+# Source the local env file if present (LLM / store / MCP config). `set -a`
+# exports the vars so the spawned engram-mcp-http (and the engram-maintain child
+# it spawns for maintenance) inherit them.
+if [ -f "$REPO/.env" ]; then set -a; . "$REPO/.env"; set +a; fi
+
 MCP_PORT="${MCP_PORT:-8788}"
 MCP_HOST="${MCP_HOST:-127.0.0.1}"
 ENGRAM_STORAGE="${ENGRAM_STORAGE:-$HOME/.engram/agentzero}"

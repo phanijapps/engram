@@ -286,15 +286,18 @@ export async function getCommunityData(
   cfg: VizConfig,
   scope: Scope,
 ): Promise<CommunityData> {
-  const mtimeMs = storeMtimeMs(cfg);
-  if (communityDataCache && communityDataCache.mtimeMs === mtimeMs) {
+  // The viz is read-only (DryRun, no writes) → the community data doesn't change
+  // during a session. Cache once; the user restarts to pick up store changes.
+  // (A mtime-based key invalidated on every read-only `node:sqlite` open, which
+  // touches the WAL file + bumps the main db's read counter.)
+  if (communityDataCache) {
     return communityDataCache;
   }
   const [overview, memberIndex] = await Promise.all([
     getProvider(cfg).communityOverview(scope, 200),
     getProvider(cfg).communityMemberIndex(scope),
   ]);
-  communityDataCache = { mtimeMs, overview, memberIndex };
+  communityDataCache = { mtimeMs: 0, overview, memberIndex };
   return communityDataCache;
 }
 

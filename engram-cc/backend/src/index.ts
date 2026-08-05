@@ -13,6 +13,7 @@ import { loadConfig } from "./config.ts";
 import { graphRoute } from "./routes/graph.ts";
 import { healthRoute } from "./routes/health.ts";
 import { ingestRoute } from "./routes/ingest.ts";
+import { maintainRoute } from "./routes/maintain.ts";
 import { memoryRoute } from "./routes/memory.ts";
 
 const cfg = loadConfig();
@@ -28,6 +29,7 @@ app.route("/api", healthRoute(cfg));
 app.route("/api", graphRoute(cfg));
 app.route("/api", memoryRoute(cfg));
 app.route("/api", ingestRoute(cfg));
+app.route("/api", maintainRoute(cfg));
 
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(`engram-cc backend listening on http://localhost:${info.port}`);

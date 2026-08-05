@@ -65,6 +65,9 @@ class StubNativeProvider {
       },
       forgetJson(): string {
         return "";
+      },
+      listMemoriesPagedJson(): string {
+        return '{"items":[],"nextCursor":null}';
       }
     };
   }
@@ -114,6 +117,38 @@ class StubNativeProvider {
       },
       listStaleBeliefsJson(): string {
         return "[]";
+      },
+      listBeliefsJson(): string {
+        return "[]";
+      },
+      listContradictionsJson(): string {
+        return "[]";
+      },
+      putContradictionJson(): string {
+        return "null";
+      }
+    };
+  }
+  requireObservabilityApi() {
+    return {
+      diagnosticsJson(): string {
+        return '{"record_counts":{}}';
+      }
+    };
+  }
+  requireCommunityQueryApi() {
+    return {
+      overviewJson(): string {
+        return '{"communities":[],"edges":[],"totalCommunities":0}';
+      },
+      memberIndexJson(): string {
+        return "{}";
+      },
+      communityOfJson(): string {
+        return "null";
+      },
+      scopeCountsJson(): string {
+        return '{"entities":0,"relationships":0,"memories":0,"beliefs":0,"hierarchyNodes":0,"hierarchyRelations":0}';
       }
     };
   }

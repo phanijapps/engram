@@ -4,12 +4,20 @@ import type { Scope } from "@engram/contracts";
 import { createNativeProviderTransport, type NativeProviderTransport } from "@engram/node";
 
 import { buildEngramConfig, buildScope } from "../shared/config.js";
+import { createLlmProvider, type LlmProvider } from "./llm.js";
+import { reflectLlm } from "./reflect.js";
+import { contradictLlm } from "./contradict.js";
+
+/** The maintenance operation to run. `consolidate` is the deterministic default. */
+export type MaintainOp = "consolidate" | "reflect-llm" | "contradict-llm";
+const OPS: readonly MaintainOp[] = ["consolidate", "reflect-llm", "contradict-llm"];
 
 /** Parsed `engram-maintain` flags. */
 export interface MaintainArgs {
   config: string;
   tenant: string;
   workspace?: string;
+  op?: MaintainOp;
   dryRun?: boolean;
   since?: string;
   until?: string;
@@ -21,6 +29,9 @@ export interface MaintainArgs {
 export interface MaintainOptions {
   transport: NativeProviderTransport;
   scope: Scope;
+  op?: MaintainOp;
+  /** Injected LLM provider (reflect-llm / contradict-llm). Defaults to env config. */
+  llm?: LlmProvider;
   dryRun?: boolean;
   since?: string;
   until?: string;
@@ -49,6 +60,7 @@ export function parseMaintainArgs(argv: string[]): MaintainArgs {
       config: { type: "string" },
       tenant: { type: "string" },
       workspace: { type: "string" },
+      op: { type: "string" },
       "dry-run": { type: "boolean" },
       since: { type: "string" },
       until: { type: "string" },
@@ -72,10 +84,16 @@ export function parseMaintainArgs(argv: string[]): MaintainArgs {
     );
   }
 
+  const op = values.op as MaintainOp | undefined;
+  if (op !== undefined && !OPS.includes(op)) {
+    throw new Error(`engram-maintain: --op must be one of ${OPS.join("|")}, got: ${op}`);
+  }
+
   return {
     config: values.config!,
     tenant: values.tenant!,
     ...(values.workspace !== undefined ? { workspace: values.workspace } : {}),
+    ...(op !== undefined ? { op } : {}),
     ...(values["dry-run"] ? { dryRun: true } : {}),
     ...(values.since !== undefined ? { since: values.since } : {}),
     ...(values.until !== undefined ? { until: values.until } : {}),
@@ -95,21 +113,37 @@ export function parseMaintainArgs(argv: string[]): MaintainArgs {
 export async function runMaintain(
   opts: MaintainOptions
 ): Promise<MaintainHandle | void> {
+  const op = opts.op ?? "consolidate";
   const run = async (): Promise<void> => {
     try {
-      const result = (await opts.transport.consolidate({
-        scope: opts.scope,
-        ...(opts.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
-        ...(opts.since !== undefined ? { since: opts.since } : {}),
-        ...(opts.until !== undefined ? { until: opts.until } : {})
-      })) as ConsolidationRun;
+      let result: unknown;
+      if (op === "reflect-llm") {
+        result = await reflectLlm({
+          transport: opts.transport,
+          scope: opts.scope,
+          ...(opts.llm ? { llm: opts.llm } : {}),
+        });
+      } else if (op === "contradict-llm") {
+        result = await contradictLlm({
+          transport: opts.transport,
+          scope: opts.scope,
+          ...(opts.llm ? { llm: opts.llm } : {}),
+        });
+      } else {
+        result = (await opts.transport.consolidate({
+          scope: opts.scope,
+          ...(opts.dryRun !== undefined ? { dryRun: opts.dryRun } : {}),
+          ...(opts.since !== undefined ? { since: opts.since } : {}),
+          ...(opts.until !== undefined ? { until: opts.until } : {})
+        })) as ConsolidationRun;
+      }
       process.stdout.write(`${JSON.stringify(result)}\n`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!opts.every || opts.every <= 0) {
         throw error; // one-shot: propagate (bin exits non-zero)
       }
-      process.stderr.write(`engram-maintain: consolidate failed: ${message}\n`);
+      process.stderr.write(`engram-maintain: ${op} failed: ${message}\n`);
     }
   };
 
@@ -139,6 +173,10 @@ export async function runMaintainFromArgs(
   return runMaintain({
     transport,
     scope,
+    ...(args.op !== undefined ? { op: args.op } : {}),
+    ...(args.op === "reflect-llm" || args.op === "contradict-llm"
+      ? { llm: createLlmProvider() }
+      : {}),
     ...(args.dryRun !== undefined ? { dryRun: args.dryRun } : {}),
     ...(args.since !== undefined ? { since: args.since } : {}),
     ...(args.until !== undefined ? { until: args.until } : {}),

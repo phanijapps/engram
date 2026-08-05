@@ -8,7 +8,7 @@
 
 use async_trait::async_trait;
 use engram_domain::*;
-use engram_runtime::CoreResult;
+use engram_runtime::{CoreError, CoreResult};
 
 pub mod contradiction;
 pub mod embedding;
@@ -84,6 +84,19 @@ pub trait BeliefRepository: Send + Sync {
 
     /// Lists currently stale beliefs visible to the supplied scope.
     async fn list_stale(&self, scope: &Scope) -> CoreResult<Vec<Belief>>;
+
+    /// Lists live beliefs visible to the supplied scope.
+    ///
+    /// Adapters that cannot enumerate beliefs leave the default
+    /// (`CapabilityUnsupported`) so callers degrade rather than see a silent
+    /// empty page. Maintenance (LLM reflection/contradiction) needs this to read
+    /// the active belief set over the provider surface.
+    async fn list_beliefs(&self, _scope: &Scope) -> CoreResult<Vec<Belief>> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "belief_repository::list_beliefs".to_string(),
+            reason: "this adapter does not enumerate beliefs".to_string(),
+        })
+    }
 
     /// Lists open contradiction review records visible to the supplied scope.
     async fn list_contradictions(&self, scope: &Scope) -> CoreResult<Vec<Contradiction>>;

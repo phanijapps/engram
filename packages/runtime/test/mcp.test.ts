@@ -13,12 +13,20 @@ function mockTransport(): NativeProviderTransport {
     recall: vi.fn(async () => ({ items: [], createdAt: "now" })),
     write: vi.fn(async () => ({ record: { id: "m1" } })),
     scan: vi.fn(async () => ({})),
-    consolidate: vi.fn(async () => ({})),
+    consolidate: vi.fn(async () => ({ status: "completed", tasks: [] })),
     putEntity: vi.fn(async () => ({})),
     putRelationship: vi.fn(async () => ({})),
     beliefPut: vi.fn(async () => ({})),
     forget: vi.fn(async () => ({})),
-    batchIngest: vi.fn(async () => ({}))
+    batchIngest: vi.fn(async () => ({})),
+    listMemoriesPaged: vi.fn(async () => ({ items: [], nextCursor: null })),
+    listBeliefs: vi.fn(async () => []),
+    listContradictions: vi.fn(async () => []),
+    putContradiction: vi.fn(async () => ({})),
+    diagnostics: vi.fn(async () => ({ record_counts: {} })),
+    communityOverview: vi.fn(async () => ({})),
+    communityMemberIndex: vi.fn(async () => ({})),
+    scopeCounts: vi.fn(async () => ({})),
   } as unknown as NativeProviderTransport;
 }
 
@@ -86,7 +94,7 @@ describe("engram-mcp-http guard", () => {
 });
 
 describe("engram-mcp-http client (MCP protocol)", () => {
-  it("lists the 6 tools and recall dispatches to the facade", async () => {
+  it("lists the 12 tools and recall dispatches to the facade", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -100,12 +108,18 @@ describe("engram-mcp-http client (MCP protocol)", () => {
 
     const { tools } = await client.listTools();
     expect(tools.map((x) => x.name).sort()).toEqual([
+      "belief_list",
       "belief_put",
+      "contradiction_detect",
+      "contradiction_list",
       "forget",
+      "graph_overview",
+      "list_memories",
+      "maintenance_run",
       "put_entity",
       "put_relationship",
       "recall",
-      "write_memory"
+      "write_memory",
     ]);
 
     await client.callTool({
@@ -113,6 +127,13 @@ describe("engram-mcp-http client (MCP protocol)", () => {
       arguments: { query: "auth", scope: { tenant: "t" } }
     });
     expect(t.recall).toHaveBeenCalledTimes(1);
+
+    // maintenance_run op=consolidate dispatches to the facade (deterministic, no LLM).
+    await client.callTool({
+      name: "maintenance_run",
+      arguments: { scope: { tenant: "t" }, op: "consolidate" }
+    });
+    expect(t.consolidate).toHaveBeenCalledTimes(1);
 
     await client.close();
   }, 15000);

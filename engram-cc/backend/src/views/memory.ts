@@ -28,12 +28,25 @@ export function projectMemory(record: unknown): MemoryView {
 }
 
 export function projectBelief(record: unknown): BeliefView {
-  const r = record as { id: string; claim?: string; statement?: string; subject?: string; status?: string };
+  const r = record as {
+    id: string;
+    content?: string;
+    claim?: string;
+    statement?: string;
+    subject?: { key?: string } | string;
+    status?: string;
+    confidence?: number;
+  };
+  // `subject` is a BeliefSubject object ({key, entityRef, ...}) — extract the
+  // key string so the frontend can render it (rendering an object crashes React).
+  const subjectStr =
+    typeof r.subject === "string" ? r.subject : r.subject?.key;
   return {
     id: r.id,
-    text: r.claim ?? r.statement,
-    subject: r.subject,
+    text: r.content ?? r.claim ?? r.statement,
+    subject: subjectStr,
     status: r.status,
+    confidence: r.confidence,
   };
 }
 

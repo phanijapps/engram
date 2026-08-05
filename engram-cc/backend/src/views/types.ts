@@ -57,6 +57,7 @@ export interface BeliefView {
   text?: string;
   subject?: string;
   status?: string;
+  confidence?: number;
 }
 
 export interface ProcedureView {

@@ -18,6 +18,10 @@ BIN="$REPO/packages/runtime/dist/mcp/bin.js"
 # it spawns for maintenance) inherit them.
 if [ -f "$REPO/.env" ]; then set -a; . "$REPO/.env"; set +a; fi
 
+# Portable detach: setsid (Linux) creates a new session; macOS uses plain background.
+DETACH=""
+command -v setsid >/dev/null 2>&1 && DETACH="setsid"
+
 MCP_PORT="${MCP_PORT:-8788}"
 MCP_HOST="${MCP_HOST:-127.0.0.1}"
 ENGRAM_STORAGE="${ENGRAM_STORAGE:-$HOME/.engram/agentzero}"
@@ -74,7 +78,7 @@ start() {
   echo "▸ starting engram-mcp-http on http://$MCP_HOST:$MCP_PORT/mcp (storage $ENGRAM_STORAGE)…"
   # setsid detaches into its own session so it survives this script exiting;
   # the stored PID is the session leader (== process-group id) for clean shutdown.
-  setsid node "$BIN" --config "$CFGFILE" --port "$MCP_PORT" --host "$MCP_HOST" $(extra_args) >"$LOG" 2>&1 </dev/null &
+  $DETACH node "$BIN" --config "$CFGFILE" --port "$MCP_PORT" --host "$MCP_HOST" $(extra_args) >"$LOG" 2>&1 </dev/null &
   MCP_PID=$!
   printf 'MCP_PID=%s\n' "$MCP_PID" >"$PIDFILE"
   for _ in $(seq 1 30); do port_taken "$MCP_PORT" && break; sleep 1; done
@@ -89,7 +93,7 @@ stop() {
   if [ -f "$PIDFILE" ]; then
     # shellcheck disable=SC1090
     . "$PIDFILE" 2>/dev/null
-    alive "${MCP_PID:-}" && kill -- -"${MCP_PID}" 2>/dev/null   # kill the process group
+    alive "${MCP_PID:-}" && kill "${MCP_PID}" 2>/dev/null
     rm -f "$PIDFILE"
   fi
   # belt-and-suspenders: free the port regardless

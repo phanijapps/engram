@@ -13,6 +13,12 @@ cd "$(dirname "$0")/.." # repo root — pnpm-workspace.yaml lives here
 # child the BFF spawns for maintenance) all inherit them.
 if [ -f .env ]; then set -a; . ./.env; set +a; fi
 
+# Portable detach: setsid (Linux) creates a new session for clean group kill;
+# macOS doesn't have setsid — plain background + disown works (port-freeing in
+# stop() handles children reliably on both platforms).
+DETACH=""
+command -v setsid >/dev/null 2>&1 && DETACH="setsid"
+
 BE_PORT=3001
 FE_PORT=5173
 PIDFILE="/tmp/engram-cc.pids"
@@ -34,9 +40,9 @@ start() {
   echo "▸ starting backend (:$BE_PORT, tsx watch) + frontend (:$FE_PORT, vite)…"
   # setsid detaches each into its own session so they survive this script exiting;
   # the stored PID is the session leader (== process-group id) for clean shutdown.
-  setsid pnpm --filter engram-cc-backend run dev >"$BE_LOG" 2>&1 </dev/null &
+  $DETACH pnpm --filter engram-cc-backend run dev >"$BE_LOG" 2>&1 </dev/null &
   BE_PID=$!
-  setsid pnpm --filter engram-cc-frontend run dev >"$FE_LOG" 2>&1 </dev/null &
+  $DETACH pnpm --filter engram-cc-frontend run dev >"$FE_LOG" 2>&1 </dev/null &
   FE_PID=$!
   printf 'BE_PID=%s\nFE_PID=%s\n' "$BE_PID" "$FE_PID" >"$PIDFILE"
   # wait for both ports to bind (≤ ~30s)
@@ -56,7 +62,7 @@ stop() {
     # shellcheck disable=SC1090
     . "$PIDFILE" 2>/dev/null
     for pid in "${BE_PID:-}" "${FE_PID:-}"; do
-      alive "$pid" && kill -- -"$pid" 2>/dev/null # kill the process group
+      alive "$pid" && kill "$pid" 2>/dev/null
     done
     rm -f "$PIDFILE"
   fi

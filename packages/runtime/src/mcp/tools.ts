@@ -15,12 +15,35 @@ const textResult = (payload: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(payload) }]
 });
 
+/** Built-in defaults matching the Rust engram-mcp OntologyConfig::default() /
+ *  TaxonomyConfig::default() — a generic 3-layer technology ontology + SKOS
+ *  tree. Overridden by the `--ontology` / `--taxonomy` launch flags. */
+const DEFAULT_ONTOLOGY = {
+  layers: [
+    { name: "technical", classes: ["Module", "Function", "Struct", "Trait", "Store", "Adapter", "Gateway", "Repository"] },
+    { name: "domain", classes: ["Agent", "MemoryFact", "KnowledgeEntity", "Belief", "Procedure", "Goal", "Episode"] },
+    { name: "business", classes: ["Workflow", "Task", "Stakeholder", "Capability", "Service", "Integration"] },
+  ],
+  predicates: { within: ["depends_on", "implements", "contains", "part_of", "uses"], across: ["realized_by", "describes", "governs", "distilled_from"] },
+};
+const DEFAULT_TAXONOMY = {
+  name: "default",
+  concepts: [
+    { label: "System" },
+    { label: "Code", broader: "System" },
+    { label: "Knowledge", broader: "System" },
+    { label: "Memory", broader: "Knowledge" },
+    { label: "Beliefs", broader: "Knowledge" },
+  ],
+};
+
 /** Registers the Module-2 tools (query + light mutation) on the MCP server,
  *  each backed by the held-provider facade. Handlers are thin translators:
  *  simple MCP input → full domain request (default requester/policy) → facade. */
 export function registerTools(
   server: McpServer,
-  transport: NativeProviderTransport
+  transport: NativeProviderTransport,
+  opts?: { ontology?: unknown; taxonomy?: unknown },
 ): void {
   server.registerTool(
     "recall",
@@ -233,5 +256,32 @@ export function registerTools(
         }),
       );
     },
+  );
+
+  // ---- Ontology + taxonomy config (read-only) — the agent surface for
+  // classification. Loaded from JSON at launch (--ontology/--taxonomy) or the
+  // built-in defaults. Mirrors the Rust engram-mcp's ontology_read/taxonomy_read.
+
+  const ontology = opts?.ontology ?? DEFAULT_ONTOLOGY;
+  const taxonomy = opts?.taxonomy ?? DEFAULT_TAXONOMY;
+
+  server.registerTool(
+    "ontology_read",
+    {
+      description:
+        "The active multi-layer ontology config: layers (name + classes) + predicates (within/across). Used by the distill skill for entity classification.",
+      inputSchema: z.object({}),
+    },
+    async () => textResult(ontology),
+  );
+
+  server.registerTool(
+    "taxonomy_read",
+    {
+      description:
+        "The active taxonomy config: a SKOS-style concept tree (name + concepts with broader links). Used by the distill skill for concept classification.",
+      inputSchema: z.object({}),
+    },
+    async () => textResult(taxonomy),
   );
 }

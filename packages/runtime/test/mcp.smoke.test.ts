@@ -53,9 +53,11 @@ describe.skipIf(!ready)("engram-mcp-http (real addon)", () => {
         "graph_overview",
         "list_memories",
         "maintenance_run",
+        "ontology_read",
         "put_entity",
         "put_relationship",
         "recall",
+        "taxonomy_read",
         "write_memory",
       ]);
 

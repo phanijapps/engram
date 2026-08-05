@@ -95,7 +95,7 @@ describe("engram-mcp-http guard", () => {
 });
 
 describe("engram-mcp-http client (MCP protocol)", () => {
-  it("lists the 12 tools and recall dispatches to the facade", async () => {
+  it("lists the 14 tools and recall dispatches to the facade", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -117,9 +117,11 @@ describe("engram-mcp-http client (MCP protocol)", () => {
       "graph_overview",
       "list_memories",
       "maintenance_run",
+      "ontology_read",
       "put_entity",
       "put_relationship",
       "recall",
+      "taxonomy_read",
       "write_memory",
     ]);
 
@@ -135,6 +137,13 @@ describe("engram-mcp-http client (MCP protocol)", () => {
       arguments: { scope: { tenant: "t" }, op: "consolidate" }
     });
     expect(t.consolidate).toHaveBeenCalledTimes(1);
+
+    // ontology_read returns the active config (default when no --ontology flag).
+    const ontResult = await client.callTool({ name: "ontology_read", arguments: {} });
+    const ontText = (ontResult.content as Array<{ text?: string }>)[0]?.text ?? "{}";
+    const ont = JSON.parse(ontText);
+    expect(ont.layers).toBeInstanceOf(Array);
+    expect(ont.layers.length).toBeGreaterThan(0);
 
     await client.close();
   }, 15000);

@@ -75,6 +75,12 @@ function WebAppShell() {
             <span className="status-pill__dot" />
             {health ? health.scope.workspace : "—"}
           </span>
+          {health?.mcp && (
+            <span className="status-pill" data-ok={health.mcp === "up" ? "true" : "false"} title="MCP server (:8788)">
+              <span className="status-pill__dot" />
+              MCP
+            </span>
+          )}
         </div>
       </header>
 

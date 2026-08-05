@@ -1,23 +1,25 @@
 #!/usr/bin/env bash
-# engram-cc dev-server control.
-#   pnpm cc start   – launch backend (:3001) + frontend (:5173) detached, then return
-#   pnpm cc stop    – stop both
-#   pnpm cc dev     – foreground, streamed logs (Ctrl-C stops both)
-#   pnpm cc logs    – tail both server logs
+# engram-cc dev-server control — starts ALL THREE: backend + MCP + frontend.
+#   pnpm cc start   – launch backend (:3001) + MCP (:8788) + frontend (:5173)
+#   pnpm cc stop    – stop all three
+#   pnpm cc dev     – foreground, streamed logs (Ctrl-C stops all)
+#   pnpm cc logs    – tail all three server logs
 #   pnpm cc         – same as `start`
 set -uo pipefail
 cd "$(dirname "$0")/.." # repo root — pnpm-workspace.yaml lives here
 
-# Source the local env file if present (LLM / store / BFF config). `set -a`
+# Source the local env file if present (LLM / store / BFF / MCP config). `set -a`
 # exports the vars so the spawned backend + frontend (and the engram-maintain
 # child the BFF spawns for maintenance) all inherit them.
 if [ -f .env ]; then set -a; . ./.env; set +a; fi
 
 BE_PORT=3001
 FE_PORT=5173
+MCP_DEV="$PWD/mcp/dev.sh"
 PIDFILE="/tmp/engram-cc.pids"
 BE_LOG="/tmp/engram-cc-backend.log"
 FE_LOG="/tmp/engram-cc-frontend.log"
+MCP_LOG="/tmp/engram-mcp.log"
 
 alive() { [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null; }
 port_taken() { lsof -ti :"$1" >/dev/null 2>&1; }
@@ -31,7 +33,7 @@ start() {
       echo "engram-cc already running — use 'pnpm cc stop' first."; return 0
     fi
   fi
-  echo "▸ starting backend (:$BE_PORT, tsx watch) + frontend (:$FE_PORT, vite)…"
+  echo "▸ starting backend (:$BE_PORT) + MCP (:8788) + frontend (:$FE_PORT)…"
   # setsid detaches each into its own session so they survive this script exiting;
   # the stored PID is the session leader (== process-group id) for clean shutdown.
   setsid pnpm --filter engram-cc-backend run dev >"$BE_LOG" 2>&1 </dev/null &
@@ -45,10 +47,12 @@ start() {
     sleep 1
   done
   if port_taken "$BE_PORT" && port_taken "$FE_PORT"; then
-    echo "✓ engram-cc up — http://localhost:$FE_PORT  (logs: $BE_LOG, $FE_LOG)"
+    echo "✓ backend + frontend up — http://localhost:$FE_PORT"
   else
     echo "⚠ a server did not bind in time — check $BE_LOG / $FE_LOG"
   fi
+  # Start the MCP server (:8788) — reuses mcp/dev.sh (own PID file + config).
+  bash "$MCP_DEV" start
 }
 
 stop() {
@@ -64,18 +68,21 @@ stop() {
   for p in "$BE_PORT" "$FE_PORT"; do
     ids=$(lsof -ti :"$p" 2>/dev/null); [ -n "$ids" ] && kill $ids 2>/dev/null
   done
-  echo "✓ engram-cc stopped"
+  # Stop the MCP server.
+  bash "$MCP_DEV" stop
+  echo "✓ engram-cc stopped (backend + MCP + frontend)"
 }
 
 dev() {
-  echo "▸ engram-cc foreground — backend (:$BE_PORT) + frontend (:$FE_PORT); Ctrl-C stops both"
+  echo "▸ engram-cc foreground — backend (:$BE_PORT) + MCP (:8788) + frontend (:$FE_PORT); Ctrl-C stops all"
   pnpm --filter engram-cc-backend run dev &
   pnpm --filter engram-cc-frontend run dev &
+  bash "$MCP_DEV" dev &
   trap 'kill 0' INT TERM EXIT
   wait
 }
 
-logs() { tail -f "$BE_LOG" "$FE_LOG"; }
+logs() { tail -f "$BE_LOG" "$FE_LOG" "$MCP_LOG"; }
 
 case "${1:-start}" in
   start) start ;;

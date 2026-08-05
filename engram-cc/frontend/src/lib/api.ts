@@ -8,6 +8,7 @@ export interface Health {
   status: "ok" | "degraded";
   scope: { tenant: string; workspace: string };
   capabilities?: unknown;
+  mcp?: "up" | "down";
 }
 
 export interface GraphStats {
@@ -95,6 +96,7 @@ export interface BeliefView {
   text?: string;
   subject?: string;
   status?: string;
+  confidence?: number;
 }
 
 export interface ProcedureView {

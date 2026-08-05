@@ -148,7 +148,7 @@ surface and leaving the other unwired is not allowed.
 ├── memory/mcp-server/    # memory MCP server: write_memory/recall/forget/put_entity/put_relationship
 ├── packages/             # TypeScript workspace (contracts / client / node / adapters / eval)
 ├── prototype/            # enterprise knowledge-platform demo (RFC-0004): Hono backend + React frontend + MCP
-├── engram-viz/           # web-based code-graph visualization workspace (engram-viz spec)
+├── engram-cc/           # web-based code-graph visualization workspace (engram-cc spec)
 ├── docs/                 # CHARTER · CONVENTIONS · adr · rfcs · specs · architecture · product · guides · perf · research
 └── .codex/  .claude/     # validation hooks + skills/agents for AI contributors
 ```
@@ -175,7 +175,7 @@ surface and leaving the other unwired is not allowed.
   do not own storage.
 - **Demo** — `prototype/backend` (Hono: ingest, graph, RRF-hybrid Q&A,
   benchmark), `prototype/frontend` (React + shadcn/ui: dashboard, WebGL graph,
-  chat), `prototype/mcp` (the demo MCP server). `engram-viz/` is a separate
+  chat), `prototype/mcp` (the demo MCP server). `engram-cc/` is a separate
   web-based code-graph visualization workspace.
 
 ## Conventions you'll see across crates/packages

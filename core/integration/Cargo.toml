@@ -7,6 +7,7 @@ rust-version.workspace = true
 [dependencies]
 engram-domain = { path = "../domain" }
 engram-runtime = { path = "../runtime" }
+engram-graph-analytics = { path = "../graph-analytics" }
 engram-memory = { path = "../memory" }
 engram-knowledge = { path = "../knowledge" }
 engram-hierarchy = { path = "../hierarchy" }

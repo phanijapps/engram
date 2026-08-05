@@ -23,7 +23,7 @@ use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
     Actor, ActorKind, AllowedUse, Belief, ConsolidationRequest, ContextPayload, DeleteMode,
     EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id, KnowledgeEntity,
-    KnowledgeRelationship, Policy, Procedure, Provenance, Retention, RetrievalRequest, Scope,
+    KnowledgeRelationship, MemoryRecord, Page, Policy, Procedure, Provenance, Retention, RetrievalRequest, Scope,
     Sensitivity, Visibility, WriteMemoryRequest, WriteMemoryResponse,
 };
 use engram_hierarchy::HierarchyRepository;
@@ -31,9 +31,9 @@ use engram_ingest::{
     KnowledgeRepoGraph, ScanFilter, ScanFilterConfig, ScanOptions, ScanSummary, scan_repository,
 };
 use engram_integration::{
-    BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, EmbeddingProvider,
-    EngramConfig, EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed, MigrationService,
-    Observability, ProvenanceQuery, StepStatus, TransactionGuarantee, UnifiedRecall,
+    BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, CommunityQuery,
+    EmbeddingProvider, EngramConfig, EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed,
+    MigrationService, Observability, ProvenanceQuery, StepStatus, TransactionGuarantee, UnifiedRecall,
 };
 use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
@@ -231,6 +231,23 @@ impl NativeProvider {
         Ok(NativeKnowledgeQueryApi { handle })
     }
 
+    /// Returns a community-query handle (Louvain + meta-edges + member index),
+    /// or throws if not wired.
+    #[napi(js_name = "requireCommunityQueryApi")]
+    pub fn require_community_query_api(&self) -> Result<NativeCommunityQueryApi> {
+        let handle = self
+            .inner
+            .community_query()
+            .ok_or_else(|| {
+                to_napi_error(engram_runtime::CoreError::CapabilityUnsupported {
+                    capability: "community_query".to_string(),
+                    reason: "community aggregation not wired for this provider".to_string(),
+                })
+            })?
+            .clone();
+        Ok(NativeCommunityQueryApi { handle })
+    }
+
     /// Returns a belief handle, or throws if not wired.
     #[napi(js_name = "requireBeliefsApi")]
     pub fn require_beliefs_api(&self) -> Result<NativeBeliefsApi> {
@@ -374,6 +391,29 @@ impl NativeMemoryApi {
         let request: ForgetRequest = decode(&request_json)?;
         let result: ForgetResult = block_on(self.handle.forget(request)).map_err(to_napi_error)?;
         encode(&result)
+    }
+
+    /// Lists memories visible to `scope` as a keyset page. Takes
+    /// `{ scope, after?: string, limit?: number }` JSON (`after` is the opaque
+    /// `nextCursor` from a prior page); returns a
+    /// `{ items: [MemoryRecord], nextCursor: string | null }` page JSON. The Rust
+    /// service drives the keyset read (scope in the SQL); TypeScript holds no SQL.
+    #[napi(js_name = "listMemoriesPagedJson")]
+    pub fn list_memories_paged_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let after = value
+            .get("after")
+            .and_then(|v| v.as_str())
+            .map(|s| engram_domain::Cursor::new(s.to_owned()));
+        let limit = value
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(100) as usize;
+        let page: Page<MemoryRecord> =
+            block_on(self.handle.list_memories_paged(&scope, after.as_ref(), limit))
+                .map_err(to_napi_error)?;
+        encode(&page)
     }
 }
 
@@ -707,6 +747,63 @@ impl NativeKnowledgeQueryApi {
     pub fn list_relationships_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
         let result = block_on(self.handle.list_relationships(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NativeCommunityQueryApi — Louvain community aggregate
+// ---------------------------------------------------------------------------
+
+/// Community-query handle proxy (Louvain overview + member index + community-of).
+#[napi]
+pub struct NativeCommunityQueryApi {
+    handle: Arc<dyn CommunityQuery>,
+}
+
+#[napi]
+impl NativeCommunityQueryApi {
+    /// Community overview: top-N communities + inter-community meta-edges.
+    #[napi(js_name = "overviewJson")]
+    pub fn overview_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let limit = value
+            .get("limit")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(150) as usize;
+        let result =
+            block_on(self.handle.overview(&scope, limit)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Member index: label → entity-id strings. Takes a `Scope` JSON.
+    #[napi(js_name = "memberIndexJson")]
+    pub fn member_index_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result = block_on(self.handle.member_index(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Community-of: which community an entity belongs to. `{ scope, entityId }`.
+    #[napi(js_name = "communityOfJson")]
+    pub fn community_of_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let entity_id = value
+            .get("entityId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let result =
+            block_on(self.handle.community_of(&scope, entity_id)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Scope-filtered record counts (entities/relationships/memories/beliefs/hierarchy).
+    #[napi(js_name = "scopeCountsJson")]
+    pub fn scope_counts_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result = block_on(self.handle.scope_counts(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 }

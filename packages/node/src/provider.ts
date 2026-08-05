@@ -31,6 +31,50 @@ export interface NativeProviderTransportOptions {
  * This is transport over Rust behavior, not a second implementation: it encodes
  * typed requests to JSON, calls the binding, and decodes the JSON result.
  */
+/** A keyset page of memory records (mirrors engram-domain `Page<MemoryRecord>`). */
+export interface MemoryPage {
+  items: unknown[];
+  nextCursor: string | null;
+}
+
+/** Record counts by semantic type (mirrors engram-integration `RecordCounts`). */
+export interface RecordCounts {
+  memories: number;
+  entities: number;
+  relationships: number;
+  sources: number;
+  documents: number;
+  chunks: number;
+  beliefs: number;
+}
+
+/** Diagnostics snapshot (mirrors engram-integration `DiagnosticsSnapshot`); the
+ *  viz reads `record_counts` for graph/memory/belief stats. */
+export interface Diagnostics {
+  record_counts: RecordCounts;
+  [key: string]: unknown;
+}
+
+/** Community-overview payload from the Louvain aggregate (mirrors engram-domain CommunityOverview). */
+export interface CommunityOverviewData {
+  communities: Array<{ label: number; memberCount: number }>;
+  edges: Array<{ sourceLabel: number; targetLabel: number; weight: number }>;
+  totalCommunities: number;
+}
+
+/** Member index: community label → entity-id strings. */
+export type CommunityMemberIndex = Record<number, string[]>;
+
+/** Scope-filtered record counts (mirrors engram-domain ScopeCounts). */
+export interface ScopeCounts {
+  entities: number;
+  relationships: number;
+  memories: number;
+  beliefs: number;
+  hierarchyNodes: number;
+  hierarchyRelations: number;
+}
+
 export interface NativeProviderTransport {
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
@@ -58,6 +102,17 @@ export interface NativeProviderTransport {
   forget(request: unknown): Promise<unknown>;
   /** Best-effort batch ingest. */
   batchIngest(request: unknown): Promise<unknown>;
+  /** List memories visible to `scope` as a keyset page (Rust-backed; no SQL in TS).
+   *  `after` is the opaque `nextCursor` from a prior page. */
+  listMemoriesPaged(scope: unknown, after?: string | null, limit?: number): Promise<MemoryPage>;
+  /** Point-in-time diagnostics snapshot (record counts, etc.) — Rust-backed. */
+  diagnostics(): Promise<Diagnostics>;
+  /** Community overview: top-N Louvain communities + meta-edges (Rust-backed). */
+  communityOverview(scope: unknown, limit?: number): Promise<CommunityOverviewData>;
+  /** Member index: community label → entity-id strings (Rust-backed). */
+  communityMemberIndex(scope: unknown): Promise<CommunityMemberIndex>;
+  /** Scope-filtered record counts (Rust-backed fast SQL COUNT). */
+  scopeCounts(scope: unknown): Promise<ScopeCounts>;
 }
 
 /** Creates a transport over the held `NativeProvider`. */
@@ -135,6 +190,46 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async batchIngest(request: unknown): Promise<unknown> {
     return decode(this.provider.requireBatchApi().ingestJson(encode(request)));
+  }
+
+  async listMemoriesPaged(
+    scope: unknown,
+    after?: string | null,
+    limit?: number
+  ): Promise<MemoryPage> {
+    return decode<MemoryPage>(
+      this.provider.requireMemoryApi().listMemoriesPagedJson(
+        encode({
+          scope,
+          ...(after ? { after } : {}),
+          ...(limit ? { limit } : {}),
+        })
+      )
+    );
+  }
+
+  async diagnostics(): Promise<Diagnostics> {
+    return decode<Diagnostics>(this.provider.requireObservabilityApi().diagnosticsJson());
+  }
+
+  async communityOverview(scope: unknown, limit?: number): Promise<CommunityOverviewData> {
+    return decode<CommunityOverviewData>(
+      this.provider.requireCommunityQueryApi().overviewJson(
+        encode({ scope, ...(limit ? { limit } : {}) })
+      )
+    );
+  }
+
+  async communityMemberIndex(scope: unknown): Promise<CommunityMemberIndex> {
+    return decode<CommunityMemberIndex>(
+      this.provider.requireCommunityQueryApi().memberIndexJson(encode(scope))
+    );
+  }
+
+  async scopeCounts(scope: unknown): Promise<ScopeCounts> {
+    return decode<ScopeCounts>(
+      this.provider.requireCommunityQueryApi().scopeCountsJson(encode(scope))
+    );
   }
 }
 

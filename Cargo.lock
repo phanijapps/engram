@@ -1691,6 +1691,7 @@ dependencies = [
  "engram-decay",
  "engram-domain",
  "engram-eval",
+ "engram-graph-analytics",
  "engram-hierarchy",
  "engram-ingest",
  "engram-knowledge",

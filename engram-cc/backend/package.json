@@ -1,0 +1,29 @@
+{
+  "name": "engram-cc-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "engram-cc Backend-for-Frontend: reads engram in-process via @engram/node (never engram-mcp for the browser) and exposes a keyset/aggregated REST surface.",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@engram/contracts": "workspace:*",
+    "@engram/node": "workspace:*",
+    "@hono/node-server": "^1.13.0",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.5"
+  }
+}

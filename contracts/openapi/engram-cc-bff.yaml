@@ -1,0 +1,469 @@
+openapi: 3.1.0
+info:
+  title: engram-cc BFF
+  version: 0.1.0
+  description: |
+    Backend-for-Frontend for engram-cc. Reads engram **in-process via
+    `@engram/node`** (never engram-mcp for browser data); read-only `node:sqlite`
+    is a secondary path solely for aggregation counts and keyset windowing the
+    binding does not expose.
+
+    Transport-contract YAMLs live under `contracts/openapi/` (CONVENTIONS §4
+    `contracts/<type>/`), distinct from the portable generated artifacts under
+    `contracts/v1/`. Authored directly without the `api-contract` skill (not
+    installed) — kept in sync with `docs/specs/viz-foundation/spec.md`. Extended
+    per slice: S2 graph drill-down, S3 memory, S4 observatory.
+  x-spec: docs/specs/viz-foundation/spec.md
+servers:
+  - url: http://localhost:3001
+    description: local dev backend (CORS to the Vite origin :5173)
+
+# Cross-cutting conventions
+# - Every list endpoint is keyset-paginated: ?cursor=<opaque>&limit=<int>.
+# - Responses use a Page<T> envelope: { items: [T], nextCursor: string|null }.
+# - limit is capped server-side; requests above the cap are clamped, not errored.
+# - Reads are fail-closed: every read endpoint returns 503 + Error when degraded.
+
+components:
+  parameters:
+    cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque keyset cursor returned in a prior page's nextCursor.
+      schema: { type: string }
+    limit:
+      name: limit
+      in: query
+      required: false
+      description: Max items to return; clamped to the server cap.
+      schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+
+  responses:
+    Degraded:
+      description: Store degraded / unreachable (fail-closed).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    BadCursor:
+      description: Malformed keyset cursor.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Health:
+      type: object
+      required: [status, scope]
+      properties:
+        status: { type: string, enum: [ok] }
+        scope:
+          type: object
+          description: Resolved from env/config by the scope seam, independent of store reachability.
+          properties:
+            tenant: { type: string }
+            workspace: { type: string }
+        capabilities:
+          type: object
+          additionalProperties: true
+          description: The in-process provider CapabilityReport (an object, not a list).
+
+    CommunityMetaNode:
+      type: object
+      required: [id, name, memberCount]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        memberCount: { type: integer, minimum: 0 }
+        x: { type: number, description: precomputed layout coordinate }
+        y: { type: number }
+
+    CommunityMetaEdge:
+      type: object
+      required: [source, target, weight]
+      properties:
+        source: { type: string }
+        target: { type: string }
+        weight: { type: integer, minimum: 0 }
+
+    CommunitiesResponse:
+      type: object
+      required: [communities, edges, built]
+      properties:
+        communities:
+          type: array
+          maxItems: 2000
+          description: The top-N communities by membership (default 150), on deterministic concentric rings.
+          items: { $ref: '#/components/schemas/CommunityMetaNode' }
+        edges:
+          type: array
+          maxItems: 4000
+          items: { $ref: '#/components/schemas/CommunityMetaEdge' }
+        built:
+          type: boolean
+          description: false when there are too few relationships to cluster → UI shows empty-state.
+        totalCommunities:
+          type: integer
+          description: Pre-truncation community count, so the legend can say "N of M".
+
+    GraphStats:
+      type: object
+      required: [entities, relationships, communities]
+      properties:
+        entities: { type: integer }
+        relationships: { type: integer }
+        communities: { type: integer, description: '0 here — the cheap stats endpoint does not run Louvain; the overview totalCommunities is the real count.' }
+        memories: { type: integer }
+        beliefs: { type: integer }
+        hierarchyNodes: { type: integer }
+        hierarchyRelations: { type: integer }
+
+    GraphEntityView:
+      type: object
+      required: [id, name, kind]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        kind: { type: string }
+        graphId: { type: string }
+        community: { type: integer, nullable: true }
+        degree: { type: integer, nullable: true }
+
+    GraphRelationshipView:
+      type: object
+      required: [source, predicate, target]
+      properties:
+        source: { type: string }
+        predicate: { type: string }
+        target: { type: string }
+        confidence: { type: number, nullable: true }
+
+    EntityDetail:
+      type: object
+      description: |
+        Entity detail (drill): a GraphEntityView with its community label, outgoing
+        degree (no `object_id` column → incoming not counted), and provenance.
+      allOf:
+        - $ref: '#/components/schemas/GraphEntityView'
+        - type: object
+          properties:
+            provenance:
+              type: object
+              additionalProperties: true
+              nullable: true
+
+    CommunityMembersPage:
+      type: object
+      required: [items, edges, nextCursor, memberCount, sampled, found]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/GraphEntityView' }
+        edges:
+          type: array
+          description: Intra-community relationships among this page's members (bounded subgraph).
+          items: { $ref: '#/components/schemas/GraphRelationshipView' }
+        nextCursor: { type: string, nullable: true }
+        memberCount:
+          type: integer
+          description: Full membership (all names with this community's label).
+        sampled:
+          type: integer
+          description: Indexable sample size (relationship-participating entities, ≤ the per-community cap).
+        found:
+          type: boolean
+          description: false when the community is outside the drillable top-N (→ 404).
+
+    MemoryView:
+      type: object
+      required: [id, kind, text]
+      properties:
+        id: { type: string }
+        kind: { type: string }
+        text: { type: string }
+        status: { type: string, nullable: true }
+        createdAt: { type: string, nullable: true }
+        source: { type: string, nullable: true }
+        confidence: { type: number, nullable: true }
+
+    BeliefView:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
+        text: { type: string, nullable: true }
+        subject: { type: string, nullable: true }
+        status: { type: string, nullable: true }
+
+    ProcedureView:
+      type: object
+      required: [id, text]
+      properties:
+        id: { type: string }
+        text: { type: string }
+
+    Page:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items: { type: array, items: {} }
+        nextCursor: { type: string, nullable: true }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        degraded: { type: boolean }
+
+paths:
+  /api/health:
+    get:
+      summary: BFF + store health
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/capabilities:
+    get:
+      summary: engram capability report (in-process provider)
+      responses:
+        '200':
+          description: capability report
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/graph/communities:
+    get:
+      summary: Community-overview meta-graph (top-N communities, concentric rings)
+      description: |
+        Server-projected community meta-nodes + inter-community meta-edges,
+        derived from the flat Louvain label-map. The overview renders the top-N
+        communities by membership (default 150, via `limit`, hard-capped at 2000)
+        on deterministic concentric rings (BFS-ordered: connectivity-core inner,
+        periphery outer) — meta-nodes/meta-edges only, never entity or
+        relationship rows. `totalCommunities` is the pre-truncation count.
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 2000, default: 150 }
+          description: How many of the largest communities to include (default 150).
+      responses:
+        '200':
+          description: community meta-graph
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommunitiesResponse' }
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/graph/stats:
+    get:
+      summary: Aggregate graph counts
+      responses:
+        '200':
+          description: counts
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GraphStats' }
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/graph/community/{id}/members:
+    get:
+      summary: Drill — a bounded, paged sample of a community's member entities
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+          description: Community id `c<label>`.
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: member sample page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CommunityMembersPage' }
+        '404':
+          description: Community not drillable (outside the top-N).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '422':
+          $ref: '#/components/responses/BadCursor'
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/graph/entity/{id}:
+    get:
+      summary: Drill — entity detail (kind, name, community, outgoing degree, provenance)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: entity detail
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EntityDetail' }
+        '404':
+          description: Entity not found.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/memory:
+    get:
+      summary: Keyset-paged memories (Facts)
+      description: Read-only `node:sqlite` list over the `memories` table (the binding has no memory list).
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: a page of memories
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/MemoryView' } }
+                  nextCursor: { type: string, nullable: true }
+        '422':
+          $ref: '#/components/responses/BadCursor'
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/beliefs:
+    get:
+      summary: Keyset-paged beliefs (empty today — honest empty-state)
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: a page of beliefs (empty until the belief surface is populated out of band)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/BeliefView' } }
+                  nextCursor: { type: string, nullable: true }
+        '422':
+          $ref: '#/components/responses/BadCursor'
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/procedures:
+    get:
+      summary: Keyset-paged procedures (empty today — honest empty-state)
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: a page of procedures
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ProcedureView' } }
+                  nextCursor: { type: string, nullable: true }
+        '422':
+          $ref: '#/components/responses/BadCursor'
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/contradictions:
+    get:
+      summary: Contradictions (synthesized from beliefs; empty today)
+      description: Contradictions have no table — they are derived from beliefs by the belief engine. 0 beliefs → an honest empty page.
+      responses:
+        '200':
+          description: always an empty page today
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { type: object } }
+                  nextCursor: { type: string, nullable: true }
+
+  /api/entities:
+    get:
+      summary: Keyset-paged entities
+      parameters:
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: a page of entities
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: '#/components/schemas/GraphEntityView' }
+        '422':
+          $ref: '#/components/responses/BadCursor'
+        '503':
+          $ref: '#/components/responses/Degraded'
+
+  /api/graph/node/{id}/neighbors:
+    get:
+      summary: Keyset-paged one-hop neighborhood (drill-down, used fully in S2)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/cursor'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: a page of neighbor edges
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Page'
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            entity: { $ref: '#/components/schemas/GraphEntityView' }
+                            relationship: { $ref: '#/components/schemas/GraphRelationshipView' }
+                            direction: { type: string, enum: [incoming, outgoing] }
+        '422':
+          $ref: '#/components/responses/BadCursor'
+        '503':
+          $ref: '#/components/responses/Degraded'

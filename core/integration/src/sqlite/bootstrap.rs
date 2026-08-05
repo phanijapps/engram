@@ -167,6 +167,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut memory: Option<Arc<dyn MemoryService>> = None;
     let mut knowledge: Option<Arc<dyn KnowledgeRepository>> = None;
     let mut knowledge_query: Option<Arc<dyn crate::KnowledgeQuery>> = None;
+    let mut community_query: Option<Arc<dyn crate::CommunityQuery>> = None;
     let mut lexical_feed: Option<Arc<dyn crate::LexicalFeed>> = None;
     #[allow(unused_mut)]
     let mut embedding_provider: Option<Arc<dyn crate::EmbeddingProvider>> = None;
@@ -232,6 +233,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             let store: Arc<SqlKnowledgeStore> = Arc::new(store);
             knowledge_store = Some(store.clone());
             knowledge_query = Some(store.clone());
+            community_query = Some(store.clone());
             if knowledge_ok {
                 knowledge = Some(store.clone());
                 knowledge_state = CapabilityState::Supported;
@@ -634,6 +636,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
     if let Some(h) = knowledge_query {
         builder = builder.knowledge_query(h);
+    }
+    if let Some(h) = community_query {
+        builder = builder.community_query(h);
     }
     if let Some(h) = lexical_feed {
         builder = builder.lexical_feed(h);

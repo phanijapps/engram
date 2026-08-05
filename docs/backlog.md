@@ -30,6 +30,40 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ---
 
+## viz-non-graph-view-types
+
+- **Non-graph view-types (deferred: viz-non-graph-view-types):** `BeliefView`,
+  `HierarchyNodeView`, `OntologyView`, `TaxonomyConceptView` are type-only stubs
+  in `viz-foundation`; their projections + fixture parity tests land in S3
+  (beliefs) / S4 (hierarchy/ontology/taxonomy) where those surfaces render.
+  Blocked on nothing. [spec viz-foundation AC5]
+
+## viz-memory-search
+
+- **Memory hybrid search (deferred: viz-memory-search):** the Memory tab's hybrid
+  recall search (debounced; returns the recall `ContextPayload`, not a keyset page)
+  is deferred — the `agentzero` store's retrieval is `Unsupported` (`UnsupportedStoreFamily`)
+  and vectors are `RequiresReindex` (`EmbeddingSpaceMismatch`), so recall returns no
+  usable results today. Ships when retrieval is supported on this store (or vectors
+  are reindexed). The browse lists (Facts/Beliefs/Procedures) + empty-states are
+  shipped without it. Blocked on retrieval support. [spec viz-memory AC3]
+
+## viz-community-friendly-names
+
+- **Community friendly names + dominant kind (deferred: viz-community-friendly-names):**
+  communities are labeled with raw Louvain integer IDs ("Community 65"), which carry
+  no meaning. Derive a human `label` + dominant `kind` per community **at compute
+  time** in `computeOverview` — no extra DB queries: tally `subject.kind`/`object.kind`
+  per label during the existing relationship stream (the records already carry kind),
+  and extract a namespace via longest-common-prefix over a name sample from the
+  already-computed `getLabelMap`. Scheme = "dominant kind, plus namespace when the
+  sample shares one" (e.g. a repo cluster → `repository · zbot`, an API cluster →
+  `api · /api/curator/*`); bare generic names (`validate`, `write`) have no shared
+  prefix, so those fall back to the dominant kind alone (`functions`) — never a
+  fabricated name. Surface `kind`/`label` on the globe, the 2D overview, and the
+  drill panel, and color the globe by kind. Folded into the cached overview, so zero
+  added latency. Blocked on nothing. [specs viz-graph-explorer, viz-observatory]
+
 ## backend-agnostic-retrieval
 
 - **Durable dedup (deferred: durable-dedup):** `content_hash`-keyed vector reuse
@@ -159,7 +193,7 @@ Most items shipped (A1-A2, B1-B8, C1-C9, D3-D4, D6-D8). What remains:
 - **Documents carry no inline content (note):** `SourceDocument` stores no inline text in this model — document text is chunked and lives in `KnowledgeChunk` records (exported separately); the exported `KnowledgeDocumentImportRecord.content` is therefore empty, with the document's identity/title/metadata preserved. Not a deferral — recorded for round-trip clarity.
 
 
-## engram-viz-graph-perf
+## engram-cc-graph-perf
 
 - **C7 (deferred: focus-node-pruned-by-cap):** When a user clicks an insight/search result whose node was pruned by the server-side `maxNodes` degree cap, `GraphCanvas`'s recenter effect no-ops silently (`graphData.nodes.find(...)` misses). Pre-cap this almost always found the node; post-cap, low-degree symbols (e.g. some dead-code entries) can be absent. The honest fix is a design call: either refetch that node's neighborhood with `?maxNodes` disabled for the focus target, or surface a "node hidden by cap — click to expand" affordance. Blocked on: deciding the affordance (refetch vs. inline expand) and whether it composes with the Strategy 2 overview/detailed modes. Unblocked by: a small slice implementing focus-target neighborhood refetch. See `docs/product/engram.md`.
 - **Lexical index blocks the event loop (RESOLVED 2026-07-12):** The >90s freeze was a root-cause bug, not scale: `LexicalIndex::upsert` committed once per document, and `index_for_search_json` called it per entity (~18k commits → ~218s host freeze). Fixed by adding `LexicalIndex::upsert_batch` (one commit for the whole corpus) and switching the binding to it — full-corpus build dropped from ~218s to ~810ms, well under any perceptible freeze, so no `worker_threads` offload is needed. The `ensureLexical` `building` flag remains for readiness reporting. Forward-looking note: if the indexed corpus grows ~100×, revisit a worker-thread offload; the build is synchronous N-API (in-RAM `LexicalIndex`, not DB-persisted, so not cross-thread shareable today). See `adapters/retrieval/tantivy-lexical/src/index.rs`, `bindings/node/src/knowledge.rs`, `docs/product/engram.md`.
@@ -263,7 +297,7 @@ Most items shipped (A1-A2, B1-B8, C1-C9, D3-D4, D6-D8). What remains:
   work); server-side clustering / pagination; community detection; saving
   explorer layouts.
 
-## engram-viz (Phases 2–5)
+## engram-cc (Phases 2–5)
 
 - **Phase 2 — polish:** README; graph controls (zoom-to-fit, top-N node limiter,
   community filter); hover tooltips; collapsible sidebar; search warmup fix
@@ -362,3 +396,117 @@ pgvector backend's `PgUnifiedRecall` (`backends/pgvector/src/recall.rs:59`) also
 hard-codes `ReciprocalRankFusion::default()` + `reranker=None`; threading the
 same config through it is deferred until pgvector is the active backend. Unblocks
 when pgvector moves out of recipe/preview into a deployed backend.
+
+---
+
+## retrieval-quality-near-term (from Codex assessment + investigation)
+
+Shipped (PRs #95-#105): bounded traversal, hybrid recall fusion, `[recall_fusion]`
+config, MMR, fastembed default-on, incremental+batched embedding, honest
+`fetch_rels`, slowness fix (65s→3.6s), repository filtering, lexical persistence,
+NL→symbol anchor, graph cache (trait-based), size cap, capability_report vector,
+search path in results, chunker split, source dedup, lane budgets, query-shape
+classification, provenance + diagnostics, community label cache, exact-match
+injection, discovery/evidence mode, score threshold, raw per-lane scores,
+search returns chunks, `--tools` profiles, batch symbol_context/change_impact,
+multi-anchor get_context, escalation handoff, score calibration, skill update.
+
+Remaining near-term:
+
+- **Re-scan Pi with the new chunker** — Pi was scanned before the container-anchor-only
+  fix (PR #101). Re-scanning will split oversized class chunks. Trivial (just re-scan).
+- **Batch `resolve_entity`** — currently one call per entity; accept `["id1","id2"]`
+  to halve call count during anchor resolution.
+- **`recall` discovery mode** — `recall` (the primary discovery tool) doesn't have
+  `mode="discovery"` (compact names+paths only, no content). Currently capped at
+  20k chars via the output bounding fix, but a true discovery mode (~80 chars/item)
+  would be even cheaper.
+
+## retrieval-quality-architectural (RFC-scale)
+
+- **Domain-level repository filter** (deferred: domain-repo-filter): The MVP
+  tool-level post-filter shipped (#100, #104). A domain-level pre-filter
+  (`QueryFilter.repository` + SQL `WHERE` column before vector top-K) needs a
+  schema migration + contract change. Prevents candidate starvation when an
+  unrelated large repo dominates the vector top-K. Blocked on: an RFC + schema
+  migration. Unblocked by: a slice adding the column + filter.
+
+- **Qualified/per-definition identity** (deferred: qualified-identity): The graph
+  collapses symbols by bare name (`entity_key` returns name, not id). Every `new`,
+  `get`, `open` across the repo merges into one node. The bounded-traversal cap
+  (PR #95) is a bandage; the true fix is per-definition-site identity with a
+  name→entity-id disambiguation step. Breaks the name-query contract; needs a
+  disambiguation design. Blocked on: an RFC.
+
+- **Edge provenance** (deferred: edge-provenance): Every graph edge should carry
+  source file, source line, target line, edge type, extractor, confidence. The
+  tree-sitter extractor computes the call-site line but discards it. Additive but
+  touches extraction (`adapters/ingest`) + storage schema (`knowledge_relationships`
+  needs provenance columns). Blocked on: a schema migration.
+
+- **Field-level dataflow** (deferred: field-level-dataflow): Field reads/writes,
+  value-flow paths, credential/token transformations. TS/JS: incremental (weeks);
+  C/C++: needs compiler backend (LLVM/SVF) — research-grade. Blocked on: for
+  managed languages, an extraction spec; for C/C++, a compiler-backend adapter.
+
+- **Indexed graph backend** (deferred: indexed-graph-backend): Replace the
+  full-load model (`fetch_rels` loads ALL relationships per call) with an indexed
+  structure (CSR adjacency matrix or embedded graph DB). The graph cache (#100)
+  is the current bandage. The ultimate scalability fix for kernel-sized repos.
+  Blocked on: a backend design + migration.
+
+- **Enterprise metadata contract** (deferred: enterprise-metadata): Every item
+  should carry authority status (authoritative/approved/draft/proposed/historical/
+  commentary/inferred), valid time, publication time, source authority, ownership,
+  retention classification. This is the enterprise equivalent of qualified symbol
+  identity — "Refund Policy" can exist in multiple business units/versions.
+  Blocked on: an ADR + domain-type additions.
+
+- **Enterprise chunking** (deferred: enterprise-chunking): Code chunking is fixed
+  (container → anchor-only). Documents (handbooks, transcripts, contracts, incident
+  reports) need the same treatment: document → section → paragraph, preserving
+  hierarchy + parent links. Blocked on: a chunker spec for document types.
+
+- **Question decomposition** (deferred: question-decomposition): Complex questions
+  should decompose into subqueries (the Codex "evidence-planning" workflow).
+  May belong in the `engram-investigate` skill (agent-side) rather than inside
+  `get_context` (tool-side). Blocked on: deciding the layer (skill vs tool).
+
+## gpu-embedding-acceleration
+
+GPU execution providers for fastembed: NVIDIA→CUDA (Linux), CoreML/Metal (Mac).
+The runtime change is small (`InitOptions::with_execution_providers([CUDA, CPU])`
+— ort auto-selects GPU when present). The build change is larger: the bge-small
+model runs on **ort (ONNX)**, and fastembed's `cuda` cargo feature is
+**candle-only** (for qwen3/nomic) — so ort-CUDA for bge needs `ort` built with
+the CUDA execution provider + the CUDA toolkit on the host. Windows has a cleaner
+`directml` path. Blocked on: confirming the ort-CUDA toolchain on the target
+machine. Unblocked by: an ort execution-provider build spike.
+
+## cross-encoder-rerank-model
+
+The dispatch + warning landed (RFC-0019 T4). Selecting `rerank.strategy =
+"cross_encoder"` currently warns + falls back to `None`. A real
+`RerankScorer` model is needed to actually re-score. Blocked on: choosing +
+integrating a cross-encoder model (ONNX or API-based). Unblocked by: a model
+integration slice.
+
+## describes-doc-code-enrichment
+
+The `describes` doc↔code bridge is sparse (~241 links in the 3-repo test DB vs
+11,450 `mentions` and 42,071 `calls`). The scan-filter concept-link filter
+(`should_link_concept`) is deliberately conservative. Enriching the bridge (more
+doc→code links) is a scan-filter tunable. Blocked on: calibration against
+evaluation fixtures.
+
+## eval-harness-runs
+
+The `engram-perf-eval-harness` project (`~/projects/engram-perf-eval-harness`)
+is initialized with 4 fixtures but has not been run against a freshly-scanned DB
+with the latest binary. Needs: (1) re-scan Pi with the new chunker, (2) run the
+harness, (3) record baseline metrics, (4) iterate. Blocked on: nothing (just run it).
+
+## release-version-bump
+
+The `release/v0.2.0` branch is stale (created before PRs #100-#105 merged).
+Needs to be recreated or the workspace version bumped on main. Blocked on: nothing.

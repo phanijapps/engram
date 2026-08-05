@@ -58,6 +58,12 @@ export {
 } from "./transport.js";
 export {
   createNativeProviderTransport,
+  type CommunityMemberIndex,
+  type CommunityOverviewData,
+  type Diagnostics,
+  type MemoryPage,
   type NativeProviderTransport,
-  type NativeProviderTransportOptions
+  type NativeProviderTransportOptions,
+  type RecordCounts,
+  type ScopeCounts
 } from "./provider.js";

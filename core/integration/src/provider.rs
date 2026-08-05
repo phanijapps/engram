@@ -76,6 +76,7 @@ pub struct EngramProvider {
     consolidation: Option<Arc<dyn ConsolidationService>>,
     identity: Option<Arc<dyn EntityIdentityRepository>>,
     knowledge_query: Option<Arc<dyn KnowledgeQuery>>,
+    community_query: Option<Arc<dyn crate::CommunityQuery>>,
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     schema_version: String,
@@ -339,6 +340,11 @@ impl EngramProvider {
             })
     }
 
+    /// Returns the community-query handle (Louvain + meta-edges + member index).
+    pub fn community_query(&self) -> Option<&Arc<dyn crate::CommunityQuery>> {
+        self.community_query.as_ref()
+    }
+
     /// Returns the lexical-feed handle (BM25 upsert) if supported.
     pub fn lexical_feed(&self) -> Option<&Arc<dyn LexicalFeed>> {
         self.lexical_feed.as_ref()
@@ -596,6 +602,7 @@ impl EngramProvider {
             consolidation: None,
             identity: None,
             knowledge_query: None,
+            community_query: None,
             lexical_feed: None,
             graph_cache: None,
             schema_version: "unwired".to_string(),
@@ -633,6 +640,7 @@ pub struct EngramProviderBuilder {
     consolidation: Option<Arc<dyn ConsolidationService>>,
     identity: Option<Arc<dyn EntityIdentityRepository>>,
     knowledge_query: Option<Arc<dyn KnowledgeQuery>>,
+    community_query: Option<Arc<dyn crate::CommunityQuery>>,
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     schema_version: String,
@@ -664,6 +672,7 @@ impl EngramProviderBuilder {
             consolidation: None,
             identity: None,
             knowledge_query: None,
+            community_query: None,
             lexical_feed: None,
             graph_cache: None,
             schema_version: "unknown".to_string(),
@@ -791,6 +800,12 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the community-query handle (Louvain + meta-edges + member index).
+    pub fn community_query(mut self, handle: Arc<dyn crate::CommunityQuery>) -> Self {
+        self.community_query = Some(handle);
+        self
+    }
+
     /// Attaches the lexical-feed handle (BM25 upsert).
     pub fn lexical_feed(mut self, handle: Arc<dyn LexicalFeed>) -> Self {
         self.lexical_feed = Some(handle);
@@ -842,6 +857,7 @@ impl EngramProviderBuilder {
             consolidation: self.consolidation,
             identity: self.identity,
             knowledge_query: self.knowledge_query,
+            community_query: self.community_query,
             lexical_feed: self.lexical_feed,
             graph_cache: self.graph_cache,
             schema_version: self.schema_version,

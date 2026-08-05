@@ -1,0 +1,8 @@
+/* Main stylesheet entry — import order matters (mirrors zbot):
+   fonts → tailwind → theme tokens → shell chrome → effects. Per-tab component
+   CSS is layered in with each tab (S2–S4). */
+@import './styles/fonts.css';
+@import 'tailwindcss';
+@import './styles/theme.css';
+@import './styles/shell.css';
+@import './styles/effects.css';

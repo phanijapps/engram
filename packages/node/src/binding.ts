@@ -131,6 +131,7 @@ export interface NativeMemoryApiBinding {
   searchJson(requestJson: string): string;
   writeJson(requestJson: string): string;
   forgetJson(requestJson: string): string;
+  listMemoriesPagedJson(requestJson: string): string;
 }
 
 /** Unified-recall API handle proxy: one query fused across lanes. */
@@ -160,6 +161,20 @@ export interface NativeBeliefsApiBinding {
   listStaleBeliefsJson(scopeJson: string): string;
 }
 
+/** Observability / diagnostics handle proxy: point-in-time snapshot
+ *  (capability report, record counts, embedding config, versions). */
+export interface NativeObservabilityApiBinding {
+  diagnosticsJson(): string;
+}
+
+/** Community-query handle proxy: Louvain overview + member index + community-of. */
+export interface NativeCommunityQueryApiBinding {
+  overviewJson(requestJson: string): string;
+  memberIndexJson(scopeJson: string): string;
+  communityOfJson(requestJson: string): string;
+  scopeCountsJson(scopeJson: string): string;
+}
+
 /**
  * Native class shape for the held `EngramProvider`
  * (`bindings/node/src/provider.rs`): one provider opened from a config, reaching
@@ -178,6 +193,8 @@ export interface NativeProviderBinding {
   requireGraphApi(): NativeGraphApiBinding;
   requireBatchApi(): NativeBatchApiBinding;
   requireBeliefsApi(): NativeBeliefsApiBinding;
+  requireObservabilityApi(): NativeObservabilityApiBinding;
+  requireCommunityQueryApi(): NativeCommunityQueryApiBinding;
 }
 
 /** Constructor shape for the held `EngramProvider`. */

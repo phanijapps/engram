@@ -56,6 +56,8 @@ extra_args() {
   local out=""
   [ -n "${MCP_AUTH_TOKEN:-}" ] && out="$out --auth-token $MCP_AUTH_TOKEN"
   [ -n "${MCP_TLS_CERT:-}" ] && [ -n "${MCP_TLS_KEY:-}" ] && out="$out --tls-cert $MCP_TLS_CERT --tls-key $MCP_TLS_KEY"
+  [ -n "${MCP_ONTOLOGY:-}" ] && out="$out --ontology $MCP_ONTOLOGY"
+  [ -n "${MCP_TAXONOMY:-}" ] && out="$out --taxonomy $MCP_TAXONOMY"
   printf '%s' "$out"
 }
 

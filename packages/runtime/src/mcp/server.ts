@@ -31,12 +31,19 @@ export interface McpHttpOptions {
   tlsCert?: string;
   /** Path to a TLS private key file (enables HTTPS). */
   tlsKey?: string;
+  /** Ontology config JSON (loaded from --ontology). Served via ontology_read. */
+  ontologyConfig?: unknown;
+  /** Taxonomy config JSON (loaded from --taxonomy). Served via taxonomy_read. */
+  taxonomyConfig?: unknown;
 }
 
 /** Builds the McpServer with the Module-2 tools registered against the facade. */
-export function createMcpServer(transport: NativeProviderTransport): McpServer {
+export function createMcpServer(
+  transport: NativeProviderTransport,
+  opts?: { ontology?: unknown; taxonomy?: unknown },
+): McpServer {
   const server = new McpServer({ name: "engram", version: "0.1.0" });
-  registerTools(server, transport);
+  registerTools(server, transport, opts);
   return server;
 }
 
@@ -95,7 +102,10 @@ export async function startMcpHttpServer(opts: McpHttpOptions): Promise<Server> 
     // Stateless: a fresh McpServer + transport per request.
     const t = new NodeStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     try {
-      await createMcpServer(transport).connect(t);
+      await createMcpServer(transport, {
+        ontology: opts.ontologyConfig,
+        taxonomy: opts.taxonomyConfig,
+      }).connect(t);
       await t.handleRequest(req, res);
     } catch (err) {
       if (!res.headersSent) {

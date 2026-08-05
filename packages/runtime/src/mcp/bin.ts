@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { buildEngramConfig } from "../shared/config.js";
@@ -11,7 +12,9 @@ const { values } = parseArgs({
     host: { type: "string" },
     "auth-token": { type: "string" },
     "tls-cert": { type: "string" },
-    "tls-key": { type: "string" }
+    "tls-key": { type: "string" },
+    ontology: { type: "string" },
+    taxonomy: { type: "string" }
   },
   args: process.argv.slice(2),
   strict: true
@@ -42,6 +45,15 @@ if (!loopback && !values["auth-token"]) {
 
 const scheme = values["tls-cert"] && values["tls-key"] ? "https" : "http";
 
+// Read ontology/taxonomy config JSON (optional — served via ontology_read /
+// taxonomy_read MCP tools, mirroring the Rust engram-mcp --ontology/--taxonomy).
+const ontologyConfig = values.ontology
+  ? JSON.parse(readFileSync(values.ontology, "utf8"))
+  : undefined;
+const taxonomyConfig = values.taxonomy
+  ? JSON.parse(readFileSync(values.taxonomy, "utf8"))
+  : undefined;
+
 const server = await startMcpHttpServer({
   configJson,
   port,
@@ -50,7 +62,9 @@ const server = await startMcpHttpServer({
     ? { authToken: values["auth-token"] }
     : {}),
   ...(values["tls-cert"] !== undefined ? { tlsCert: values["tls-cert"] } : {}),
-  ...(values["tls-key"] !== undefined ? { tlsKey: values["tls-key"] } : {})
+  ...(values["tls-key"] !== undefined ? { tlsKey: values["tls-key"] } : {}),
+  ...(ontologyConfig !== undefined ? { ontologyConfig } : {}),
+  ...(taxonomyConfig !== undefined ? { taxonomyConfig } : {})
 });
 console.error(
   `engram-mcp-http listening on ${scheme}://${host}:${port}/mcp` +

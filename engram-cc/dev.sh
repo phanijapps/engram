@@ -8,6 +8,11 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." # repo root — pnpm-workspace.yaml lives here
 
+# Source the local env file if present (LLM / store / BFF config). `set -a`
+# exports the vars so the spawned backend + frontend (and the engram-maintain
+# child the BFF spawns for maintenance) all inherit them.
+if [ -f .env ]; then set -a; . ./.env; set +a; fi
+
 BE_PORT=3001
 FE_PORT=5173
 PIDFILE="/tmp/engram-cc.pids"

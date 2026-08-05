@@ -8,7 +8,7 @@
 //! network). `PI_DRY_RUN=1` is the manual/E2E fallback (one toolCall per tool).
 
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { Type, type Context, type Tool } from "@earendil-works/pi-ai";
+import { Type, type Context, type Model, type Tool } from "@earendil-works/pi-ai";
 
 export { Type };
 export type { Tool };
@@ -39,6 +39,8 @@ export interface LlmProviderConfig {
   provider: string;
   model: string;
   apiKey?: string;
+  /** Ollama base URL (default http://localhost:11434). Only used when provider=ollama. */
+  ollamaBaseUrl?: string;
   /** Test/manual override — bypasses pi-mono entirely. */
   completeOverride?: (opts: LlmCompleteOptions) => Promise<LlmCompleteResult>;
 }
@@ -49,6 +51,7 @@ export function llmConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LlmProvi
     provider: env.PI_PROVIDER ?? "anthropic",
     model: env.PI_MODEL ?? "claude-haiku-4-5",
     ...(apiKey !== undefined ? { apiKey } : {}),
+    ...(env.OLLAMA_BASE_URL !== undefined ? { ollamaBaseUrl: env.OLLAMA_BASE_URL } : {}),
   };
 }
 
@@ -70,13 +73,24 @@ export function createLlmProvider(
 
 function piMonoProvider(config: LlmProviderConfig): LlmProvider {
   const models = builtinModels();
-  const model = models.getModel(config.provider, config.model);
+  const isOllama = config.provider === "ollama";
+  // pi-mono's builtin list has no Ollama models, so for Ollama construct an
+  // OpenAI-compatible Model pointing at the local Ollama /v1 endpoint. Other
+  // providers resolve via the builtin list.
+  const model = isOllama
+    ? ollamaModel(config.model, config.ollamaBaseUrl)
+    : models.getModel(config.provider, config.model);
   if (!model) {
     throw new Error(
       `pi-mono: model not found: ${config.provider}/${config.model} — set PI_PROVIDER/PI_MODEL to a built-in model (PI_DRY_RUN=1 to skip)`,
     );
   }
-  const auth = config.apiKey !== undefined ? { apiKey: config.apiKey } : undefined;
+  // Ollama needs no key; the OpenAI client requires one → pass a dummy.
+  const auth = isOllama
+    ? { apiKey: "ollama" }
+    : config.apiKey !== undefined
+      ? { apiKey: config.apiKey }
+      : undefined;
   return {
     provider: config.provider,
     model: config.model,
@@ -87,6 +101,14 @@ function piMonoProvider(config: LlmProviderConfig): LlmProvider {
         ...(tools && tools.length > 0 ? { tools } : {}),
       };
       const resp = await models.complete(model, context, auth);
+      // pi-mono returns errors in `errorMessage` (not as a throw) — surface them
+      // instead of silently returning an empty result.
+      const errMsg = (resp as { errorMessage?: unknown }).errorMessage;
+      if (typeof errMsg === "string" && errMsg.length > 0) {
+        throw new Error(
+          `LLM call failed (${config.provider}/${config.model}): ${errMsg}`,
+        );
+      }
       const blocks = (resp.content ?? []) as Array<{
         type: string;
         text?: string;
@@ -106,6 +128,28 @@ function piMonoProvider(config: LlmProviderConfig): LlmProvider {
       return { toolCalls, text };
     },
   };
+}
+
+/** Builds an OpenAI-compatible Model for a local Ollama instance. Ollama exposes
+ *  an OpenAI-compatible `/v1/chat/completions`. pi-mono rejects `provider:"ollama"`
+ *  ("Unknown provider") and its openai client appends `/chat/completions` (not
+ *  `/v1/...`), so we use `provider:"openai"` + append `/v1` to the base URL. */
+function ollamaModel(id: string, baseUrl?: string | undefined): Model<"openai-completions"> {
+  const root = baseUrl ?? "http://localhost:11434";
+  const openaiBaseUrl = root.endsWith("/v1") ? root : `${root}/v1`;
+  return {
+    id,
+    name: id,
+    api: "openai-completions",
+    provider: "openai",
+    baseUrl: openaiBaseUrl,
+    reasoning: false,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 8192,
+    maxTokens: 4096,
+    compat: { supportsStrictTools: false },
+  } as unknown as Model<"openai-completions">;
 }
 
 function dryRunProvider(config: LlmProviderConfig): LlmProvider {

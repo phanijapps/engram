@@ -22,8 +22,19 @@ import type { VizConfig } from "../config.ts";
 import { resolveScope } from "../scope.ts";
 import { buildConfigJson, getProvider } from "../engram/provider.ts";
 
-export type MaintainOp = "reflect-llm" | "contradict-llm" | "consolidate";
-const OPS: readonly MaintainOp[] = ["reflect-llm", "contradict-llm", "consolidate"];
+export type MaintainOp =
+  | "reflect-llm"
+  | "contradict-llm"
+  | "consolidate"
+  | "extract-knowledge"
+  | "hierarchy-build";
+const OPS: readonly MaintainOp[] = [
+  "reflect-llm",
+  "contradict-llm",
+  "consolidate",
+  "extract-knowledge",
+  "hierarchy-build",
+];
 
 /** Mirrors the `engram-maintain` result shapes (reflection / contradiction / consolidate). */
 export interface MaintainResult {

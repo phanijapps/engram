@@ -162,6 +162,12 @@ class StubNativeProvider {
       },
       listRelationshipsJson(): string {
         return "[]";
+      },
+      listGraphsJson(): string {
+        return "[]";
+      },
+      listChunksByDocumentJson(): string {
+        return "[]";
       }
     };
   }
@@ -229,6 +235,7 @@ describe("@engram/node", () => {
         listEntitiesBySourceJson(): string { return "[]"; }
         listRelationshipsBySourceJson(): string { return "[]"; }
         listChunksJson(): string { return "[]"; }
+        listChunksByDocumentJson(): string { return "[]"; }
         listSourcesJson(): string { return "[]"; }
         graphCandidatesJson(): string { return "[]"; }
         associativeGraphCandidatesJson(): string { return "[]"; }
@@ -316,6 +323,7 @@ describe("@engram/node", () => {
         listEntitiesBySourceJson(): string { return "[]"; }
         listRelationshipsBySourceJson(): string { return "[]"; }
         listChunksJson(): string { return "[]"; }
+        listChunksByDocumentJson(): string { return "[]"; }
         listSourcesJson(): string { return "[]"; }
         graphCandidatesJson(): string { return "[]"; }
         associativeGraphCandidatesJson(): string { return "[]"; }

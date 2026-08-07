@@ -18,7 +18,9 @@ use crate::codegraph::{
     cyclomatic_complexity_json, dead_code_json, dependency_path_json, find_api_calls_json,
     find_endpoints_json, find_entry_points_json, match_api_topology_json, process_flow_json,
 };
-use crate::knowledge_chunks::{get_chunk_json, list_chunks_json, put_chunk_json};
+use crate::knowledge_chunks::{
+    get_chunk_json, list_chunks_by_document_json, list_chunks_json, put_chunk_json,
+};
 use crate::knowledge_concepts::{
     get_concept_scheme_json, list_concepts_json, put_concept_json, put_concept_relation_json,
     put_concept_scheme_json, validate_taxonomy_proposal_json,
@@ -276,6 +278,11 @@ impl NativeKnowledgeEngine {
     #[napi(js_name = "listChunksJson")]
     pub fn list_chunks_json(&self, request_json: String) -> Result<String> {
         list_chunks_json(&self.store, request_json)
+    }
+
+    #[napi(js_name = "listChunksByDocumentJson")]
+    pub fn list_chunks_by_document_json(&self, request_json: String) -> Result<String> {
+        list_chunks_by_document_json(&self.store, request_json)
     }
 
     // --- Entity operations ---

@@ -21,10 +21,10 @@
 
 use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
-    Actor, ActorKind, AllowedUse, Belief, ConsolidationRequest, Contradiction, ContextPayload,
+    Actor, ActorKind, AllowedUse, Belief, ConsolidationRequest, ContextPayload, Contradiction,
     DeleteMode, EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id, KnowledgeEntity,
-    KnowledgeRelationship, MemoryRecord, Page, Policy, Procedure, Provenance, Retention, RetrievalRequest, Scope,
-    Sensitivity, Visibility, WriteMemoryRequest, WriteMemoryResponse,
+    KnowledgeRelationship, MemoryRecord, Page, Policy, Procedure, Provenance, Retention,
+    RetrievalRequest, Scope, Sensitivity, Visibility, WriteMemoryRequest, WriteMemoryResponse,
 };
 use engram_hierarchy::HierarchyRepository;
 use engram_ingest::{
@@ -33,7 +33,8 @@ use engram_ingest::{
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, CommunityQuery,
     EmbeddingProvider, EngramConfig, EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed,
-    MigrationService, Observability, ProvenanceQuery, StepStatus, TransactionGuarantee, UnifiedRecall,
+    MigrationService, Observability, ProvenanceQuery, StepStatus, TransactionGuarantee,
+    UnifiedRecall,
 };
 use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
@@ -406,13 +407,13 @@ impl NativeMemoryApi {
             .get("after")
             .and_then(|v| v.as_str())
             .map(|s| engram_domain::Cursor::new(s.to_owned()));
-        let limit = value
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(100) as usize;
-        let page: Page<MemoryRecord> =
-            block_on(self.handle.list_memories_paged(&scope, after.as_ref(), limit))
-                .map_err(to_napi_error)?;
+        let limit = value.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
+        let page: Page<MemoryRecord> = block_on(self.handle.list_memories_paged(
+            &scope,
+            after.as_ref(),
+            limit,
+        ))
+        .map_err(to_napi_error)?;
         encode(&page)
     }
 }
@@ -749,6 +750,26 @@ impl NativeKnowledgeQueryApi {
         let result = block_on(self.handle.list_relationships(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
+
+    /// Lists graphs in a scope. Takes a `Scope` JSON, returns `[KnowledgeGraph, …]`.
+    #[napi(js_name = "listGraphsJson")]
+    pub fn list_graphs_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result = block_on(self.handle.list_graphs(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Lists one document's chunks in scope. Takes `{ documentId, scope }` JSON,
+    /// returns `[KnowledgeChunk, …]` (RFC-0020 T4).
+    #[napi(js_name = "listChunksByDocumentJson")]
+    pub fn list_chunks_by_document_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let document_id = id_field(&value, "documentId")?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.handle.list_chunks_by_document(&document_id, &scope))
+            .map_err(to_napi_error)?;
+        encode(&result)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -768,12 +789,8 @@ impl NativeCommunityQueryApi {
     pub fn overview_json(&self, request_json: String) -> Result<String> {
         let value = decode::<serde_json::Value>(&request_json)?;
         let scope = scope_field(&value)?;
-        let limit = value
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(150) as usize;
-        let result =
-            block_on(self.handle.overview(&scope, limit)).map_err(to_napi_error)?;
+        let limit = value.get("limit").and_then(|v| v.as_u64()).unwrap_or(150) as usize;
+        let result = block_on(self.handle.overview(&scope, limit)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -790,10 +807,7 @@ impl NativeCommunityQueryApi {
     pub fn community_of_json(&self, request_json: String) -> Result<String> {
         let value = decode::<serde_json::Value>(&request_json)?;
         let scope = scope_field(&value)?;
-        let entity_id = value
-            .get("entityId")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let entity_id = value.get("entityId").and_then(|v| v.as_str()).unwrap_or("");
         let result =
             block_on(self.handle.community_of(&scope, entity_id)).map_err(to_napi_error)?;
         encode(&result)
@@ -902,13 +916,13 @@ impl NativeBeliefsApi {
             .get("after")
             .and_then(|v| v.as_str())
             .map(|s| engram_domain::Cursor::new(s.to_owned()));
-        let limit = value
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(100) as usize;
-        let page: Page<Belief> =
-            block_on(self.handle.list_beliefs_paged(&scope, after.as_ref(), limit))
-                .map_err(to_napi_error)?;
+        let limit = value.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
+        let page: Page<Belief> = block_on(self.handle.list_beliefs_paged(
+            &scope,
+            after.as_ref(),
+            limit,
+        ))
+        .map_err(to_napi_error)?;
         encode(&page)
     }
 
@@ -917,8 +931,7 @@ impl NativeBeliefsApi {
     #[napi(js_name = "listContradictionsJson")]
     pub fn list_contradictions_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result =
-            block_on(self.handle.list_contradictions(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle.list_contradictions(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 

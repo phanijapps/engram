@@ -34,3 +34,18 @@ pub fn list_chunks_json(store: &Arc<SqlKnowledgeStore>, request_json: String) ->
     let result = block_on(store.list_chunks(&scope)).map_err(to_napi_error)?;
     encode(&result)
 }
+
+/// Lists the chunks of one document within the given scope (RFC-0020 T4). Used
+/// by the extract-knowledge op to read a document's chunks per-document (bounded
+/// per-document, unlike the scope-wide `list_chunks`).
+pub fn list_chunks_by_document_json(
+    store: &Arc<SqlKnowledgeStore>,
+    request_json: String,
+) -> Result<String> {
+    let value = decode::<serde_json::Value>(&request_json)?;
+    let document_id = id_field(&value, "documentId")?;
+    let scope = scope_field(&value)?;
+    let result =
+        block_on(store.list_chunks_by_document(&document_id, &scope)).map_err(to_napi_error)?;
+    encode(&result)
+}

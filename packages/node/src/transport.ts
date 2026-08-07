@@ -213,6 +213,10 @@ class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
     return decode(this.engine.listChunksJson(encode({ scope })));
   }
 
+  async listChunksByDocument(documentId: string, scope: unknown): Promise<unknown> {
+    return decode(this.engine.listChunksByDocumentJson(encode({ documentId, scope })));
+  }
+
   async listSources(scope: unknown): Promise<unknown> {
     return decode(this.engine.listSourcesJson(encode({ scope })));
   }

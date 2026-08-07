@@ -143,6 +143,12 @@ export interface NativeProviderTransport {
   /** List all relationships in scope (engine-neutral KnowledgeQuery port). Each
    *  relationship's `subject` / `object` are `EntityRef` (`{id, kind, name, aliases}`). */
   listRelationships(scope: unknown): Promise<unknown[]>;
+  /** List all graphs in scope (engine-neutral KnowledgeQuery port). Returns
+   *  `[KnowledgeGraph, …]`; each graph's `metadata` carries its `document_id`. */
+  listGraphs(scope: unknown): Promise<unknown[]>;
+  /** List one document's chunks in scope (bounded per-document; RFC-0020 T4).
+   *  Returns `[KnowledgeChunk, …]`. */
+  listChunksByDocument(documentId: string, scope: unknown): Promise<unknown[]>;
   /** Hierarchy navigation path for seed entity ids (Rust-backed). */
   hierarchyPath(request: unknown): Promise<unknown>;
   /** Get an entity by id inside a scope (graph API; returns entity JSON or null). */
@@ -331,6 +337,20 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
   async listRelationships(scope: unknown): Promise<unknown[]> {
     return decode<unknown[]>(
       this.provider.requireKnowledgeQueryApi().listRelationshipsJson(encode(scope)),
+    );
+  }
+
+  async listGraphs(scope: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(
+      this.provider.requireKnowledgeQueryApi().listGraphsJson(encode(scope)),
+    );
+  }
+
+  async listChunksByDocument(documentId: string, scope: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(
+      this.provider.requireKnowledgeQueryApi().listChunksByDocumentJson(
+        encode({ documentId, scope }),
+      ),
     );
   }
 

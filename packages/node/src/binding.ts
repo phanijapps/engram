@@ -31,6 +31,7 @@ export interface NativeKnowledgeEngineBinding {
   listRelationshipsJson(requestJson: string): string;
   listRelationshipsBySourceJson(requestJson: string): string;
   listChunksJson(requestJson: string): string;
+  listChunksByDocumentJson(requestJson: string): string;
   listSourcesJson(requestJson: string): string;
   putOntologyJson(ontologyJson: string): string;
   getOntologyJson(requestJson: string): string;
@@ -184,6 +185,8 @@ export interface NativeCommunityQueryApiBinding {
 export interface NativeKnowledgeQueryApiBinding {
   listEntitiesJson(scopeJson: string): string;
   listRelationshipsJson(scopeJson: string): string;
+  listGraphsJson(scopeJson: string): string;
+  listChunksByDocumentJson(requestJson: string): string;
 }
 
 /** Hierarchy handle proxy: navigation path for seed entity ids. */

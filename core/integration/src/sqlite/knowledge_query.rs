@@ -6,7 +6,7 @@
 //! [`knowledge_query`](crate::knowledge_query) module) stays engine-neutral.
 
 use async_trait::async_trait;
-use engram_domain::{KnowledgeChunk, Scope};
+use engram_domain::{DocumentId, KnowledgeChunk, Scope};
 use engram_runtime::CoreResult;
 use engram_store_sqlite::SqlKnowledgeStore;
 
@@ -30,5 +30,17 @@ impl KnowledgeQuery for SqlKnowledgeStore {
 
     async fn list_chunks(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeChunk>> {
         SqlKnowledgeStore::list_chunks(self, scope).await
+    }
+
+    async fn list_graphs(&self, scope: &Scope) -> CoreResult<Vec<engram_domain::KnowledgeGraph>> {
+        SqlKnowledgeStore::list_graphs(self, scope).await
+    }
+
+    async fn list_chunks_by_document(
+        &self,
+        document_id: &DocumentId,
+        scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeChunk>> {
+        SqlKnowledgeStore::list_chunks_by_document(self, document_id, scope).await
     }
 }

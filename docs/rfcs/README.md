@@ -25,6 +25,7 @@ specs under `docs/specs/`. See `docs/CONVENTIONS.md` for the RFC lifecycle.
 | [0017](0017-three-module-architecture-pgvector.md) | Three-module target architecture (Ingestion / Retrieval+Mutation / Maintenance) + pgvector backend | Draft | 2026-07-30 |
 | [0018](0018-codegraph-retrieval-quality-fixes.md) | Code-intelligence retrieval quality — easy high-impact fixes | Accepted | 2026-08-01 |
 | [0019](0019-hybrid-recall-fusion.md) | Hybrid recall fusion + externally configurable ranking | Draft | 2026-08-01 |
+| [0020](0020-unified-knowledge-indexing.md) | Unified knowledge indexing — code graph + unstructured concepts | Accepted | 2026-08-07 |
 
 > **Note:** RFCs may reference feature specs that were consolidated into
 > [`docs/product/engram.md`](../product/engram.md). Those references are

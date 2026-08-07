@@ -144,3 +144,13 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   `contradiction` + `maintenance` to `Supported`. **Rust stays LLM-free** (LLM config is
   TS/env-only). Extends `ts-runtime-maintenance`. Constrained by RFC-0017, ADR-0022.
   **Ready to plan** (milestone 2).
+- [`extraction-quality`](extraction-quality/spec.md): RFC-0020 Phase 1 — qualified code
+  identities (`{repo}/{path}::{bare_name}`) + a code-symbol noise filter (shipped) +
+  suffix/alias resolution so `symbol_context`/`change_impact`/`search` match bare symbols
+  on **both** the TS HTTP MCP and the Rust stdio MCP (ADR-0022); removes the naive
+  document heading→Concept emission; adds an LLM `extract-knowledge` `engram-maintain` op
+  (mirrors `reflect`/`contradict`) that reads each document's chunks and writes valid
+  `Concept` entities + typed relationships, consolidated across documents by canonical
+  identity (RFC-0014). Per-document chunk reads via the existing `list_chunks_by_document`.
+  Constrained by RFC-0020 (Accepted), RFC-0014, RFC-0018, ADR-0022. Draft (spec
+  review-clean; ready for the work-loop).

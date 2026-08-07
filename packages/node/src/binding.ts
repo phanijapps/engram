@@ -179,6 +179,26 @@ export interface NativeCommunityQueryApiBinding {
   scopeCountsJson(scopeJson: string): string;
 }
 
+/** Knowledge-query handle proxy: scope-wide entity + relationship listing
+ *  (the engine-neutral port backing graph traversal / codegraph tools). */
+export interface NativeKnowledgeQueryApiBinding {
+  listEntitiesJson(scopeJson: string): string;
+  listRelationshipsJson(scopeJson: string): string;
+}
+
+/** Hierarchy handle proxy: navigation path for seed entity ids. */
+export interface NativeHierarchyApiBinding {
+  pathForJson(requestJson: string): string;
+}
+
+/** Procedures handle proxy: replayable runbook lifecycle (Layer 6). */
+export interface NativeProceduresApiBinding {
+  upsertJson(procedureJson: string): string;
+  listJson(scopeJson: string): string;
+  incrementSuccessJson(requestJson: string): string;
+  incrementFailureJson(requestJson: string): string;
+}
+
 /**
  * Native class shape for the held `EngramProvider`
  * (`bindings/node/src/provider.rs`): one provider opened from a config, reaching
@@ -199,6 +219,9 @@ export interface NativeProviderBinding {
   requireBeliefsApi(): NativeBeliefsApiBinding;
   requireObservabilityApi(): NativeObservabilityApiBinding;
   requireCommunityQueryApi(): NativeCommunityQueryApiBinding;
+  requireKnowledgeQueryApi(): NativeKnowledgeQueryApiBinding;
+  requireHierarchyApi(): NativeHierarchyApiBinding;
+  requireProceduresApi(): NativeProceduresApiBinding;
 }
 
 /** Constructor shape for the held `EngramProvider`. */

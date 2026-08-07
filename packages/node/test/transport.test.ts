@@ -155,6 +155,39 @@ class StubNativeProvider {
       }
     };
   }
+  requireKnowledgeQueryApi() {
+    return {
+      listEntitiesJson(): string {
+        return "[]";
+      },
+      listRelationshipsJson(): string {
+        return "[]";
+      }
+    };
+  }
+  requireHierarchyApi() {
+    return {
+      pathForJson(): string {
+        return "null";
+      }
+    };
+  }
+  requireProceduresApi() {
+    return {
+      upsertJson(): string {
+        return "null";
+      },
+      listJson(): string {
+        return "[]";
+      },
+      incrementSuccessJson(): string {
+        return "null";
+      },
+      incrementFailureJson(): string {
+        return "null";
+      }
+    };
+  }
   static fromProfileFile(_path: string): StubNativeProvider {
     return new StubNativeProvider();
   }

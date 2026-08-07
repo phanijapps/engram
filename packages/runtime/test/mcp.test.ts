@@ -28,6 +28,18 @@ function mockTransport(): NativeProviderTransport {
     communityOverview: vi.fn(async () => ({})),
     communityMemberIndex: vi.fn(async () => ({})),
     scopeCounts: vi.fn(async () => ({})),
+    beliefGet: vi.fn(async () => null),
+    beliefRetract: vi.fn(async () => ({})),
+    beliefStaleList: vi.fn(async () => []),
+    listEntities: vi.fn(async () => []),
+    listRelationships: vi.fn(async () => []),
+    hierarchyPath: vi.fn(async () => ({})),
+    getEntity: vi.fn(async () => null),
+    graphNeighbors: vi.fn(async () => []),
+    procedureUpsert: vi.fn(async () => ({})),
+    procedureList: vi.fn(async () => []),
+    procedureIncrementSuccess: vi.fn(async () => ({})),
+    procedureIncrementFailure: vi.fn(async () => ({})),
   } as unknown as NativeProviderTransport;
 }
 
@@ -95,7 +107,7 @@ describe("engram-mcp-http guard", () => {
 });
 
 describe("engram-mcp-http client (MCP protocol)", () => {
-  it("lists the 14 tools and recall dispatches to the facade", async () => {
+  it("lists the 36 tools and recall dispatches to the facade", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -109,19 +121,41 @@ describe("engram-mcp-http client (MCP protocol)", () => {
 
     const { tools } = await client.listTools();
     expect(tools.map((x) => x.name).sort()).toEqual([
+      "architecture",
+      "belief_get",
       "belief_list",
       "belief_put",
+      "belief_retract",
+      "belief_stale_list",
+      "capability_report",
+      "change_impact",
+      "code_health",
+      "consolidate",
       "contradiction_detect",
       "contradiction_list",
       "forget",
+      "get_context",
+      "graph_neighbors",
       "graph_overview",
+      "graph_subgraph",
+      "hierarchy_path",
       "list_memories",
       "maintenance_run",
       "ontology_read",
+      "ping",
+      "procedure_increment",
+      "procedure_list",
+      "procedure_put",
       "put_entity",
       "put_relationship",
       "recall",
+      "resolve_entity",
+      "scan_repo",
+      "search",
+      "store_knowledge",
+      "symbol_context",
       "taxonomy_read",
+      "whats_changed",
       "write_memory",
     ]);
 

@@ -41,6 +41,38 @@ export interface SymbolContext {
 }
 
 /**
+ * Resolve a user-supplied (possibly bare) symbol query to the qualified NAME(s)
+ * of matching entities (RFC-0020 T7). After T1, code entity names are qualified
+ * (`{repo}/{path}::{bare}`), but users type bare names. This bridges that gap: a
+ * query matches an entity name when
+ *   - the query equals the name verbatim (user typed the qualified form), or
+ *   - the name ends with `"::" + query` (a bare symbol within a path-qualified
+ *     name, e.g. query `parse_symbol` → `my-repo/src/lib.rs::parse_symbol`), or
+ *   - the name ends with `"/" + query` (the last path segment matches, e.g.
+ *     query `lib` → `my-repo/lib`).
+ *
+ * Returns the matching entity NAMES (not ids) so the result can seed the
+ * name-keyed adjacency maps in `symbolContextBFS` / `changeImpactBFS`. A bare
+ * suffix WITHOUT a leading `::` / `/` delimiter never matches (`foobar` is NOT
+ * a suffix match for query `bar`), so the resolver does not flood on short
+ * substrings.
+ */
+export function resolveSymbolNames(
+  names: Iterable<string>,
+  query: string,
+): string[] {
+  const out: string[] = [];
+  const dcSuffix = "::" + query;
+  const slashSuffix = "/" + query;
+  for (const name of names) {
+    if (name === query || name.endsWith(dcSuffix) || name.endsWith(slashSuffix)) {
+      out.push(name);
+    }
+  }
+  return out;
+}
+
+/**
  * BFS from `symbol` in both directions, up to `depth` hops, capped at `cap`
  * discovered symbols per direction.
  *
@@ -84,6 +116,80 @@ export function changeImpactBFS(
   const reverse = buildAdjacency(edges, (e) => e.object, (e) => e.subject);
   const { hops } = bfs(reverse, target, depth, cap);
   return hops.map((h) => ({ depth: h.depth, caller: h.symbol, via: h.via }));
+}
+
+/**
+ * Multi-seed symbol context (RFC-0020 T7): runs `symbolContextBFS` from each of
+ * `symbols` and unions callers/callees/context, de-duped. Used by the
+ * `symbol_context` MCP tool when a bare query resolves to multiple qualified
+ * names. Callers and callees are de-duped by name (first-seen order); context
+ * hops are de-duped by `${direction}:${symbol}:${via}` (the same caller reached
+ * via the same predicate from two seeds is one hop), then re-sorted by depth.
+ * With a single seed this is identical to `symbolContextBFS`.
+ */
+export function symbolContextBFSMulti(
+  edges: CodeEdge[],
+  symbols: string[],
+  depth: number,
+  cap: number,
+): SymbolContext {
+  const callers: string[] = [];
+  const callees: string[] = [];
+  const context: ContextHop[] = [];
+  const seenCallers = new Set<string>();
+  const seenCallees = new Set<string>();
+  const seenHops = new Set<string>();
+  for (const symbol of symbols) {
+    const result = symbolContextBFS(edges, symbol, depth, cap);
+    for (const c of result.callers) {
+      if (!seenCallers.has(c)) {
+        seenCallers.add(c);
+        callers.push(c);
+      }
+    }
+    for (const c of result.callees) {
+      if (!seenCallees.has(c)) {
+        seenCallees.add(c);
+        callees.push(c);
+      }
+    }
+    for (const hop of result.context) {
+      const key = `${hop.direction}:${hop.symbol}:${hop.via}`;
+      if (!seenHops.has(key)) {
+        seenHops.add(key);
+        context.push(hop);
+      }
+    }
+  }
+  context.sort((a, b) => a.depth - b.depth);
+  return { callers, callees, context };
+}
+
+/**
+ * Multi-seed change impact (RFC-0020 T7): runs `changeImpactBFS` from each of
+ * `targets` and unions the blast radius, de-duped by `${caller}:${via}`. The
+ * union is re-sorted by depth (then caller) for deterministic output. With a
+ * single target this is identical to `changeImpactBFS`.
+ */
+export function changeImpactBFSMulti(
+  edges: CodeEdge[],
+  targets: string[],
+  depth: number,
+  cap: number,
+): Array<{ depth: number; caller: string; via: string }> {
+  const out: Array<{ depth: number; caller: string; via: string }> = [];
+  const seen = new Set<string>();
+  for (const target of targets) {
+    for (const row of changeImpactBFS(edges, target, depth, cap)) {
+      const key = `${row.caller}:${row.via}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push(row);
+      }
+    }
+  }
+  out.sort((a, b) => a.depth - b.depth || a.caller.localeCompare(b.caller));
+  return out;
 }
 
 /**

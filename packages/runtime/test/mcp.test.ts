@@ -221,6 +221,76 @@ describe("engram-mcp-http client (MCP protocol)", () => {
   }, 15000);
 });
 
+describe("engram-mcp-http codegraph suffix resolver (RFC-0020 T7)", () => {
+  it("symbol_context with a bare symbol returns the qualified neighbors", async () => {
+    const t = mockTransport();
+    // After T1, entities carry qualified names; relationships carry qualified
+    // endpoints. A user types the BARE symbol `parse_symbol`.
+    (t.listEntities as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "e1", name: "my-repo/src/lib.rs::parse_symbol", kind: "Function" },
+      { id: "e2", name: "my-repo/src/parser.rs::tokenize", kind: "Function" },
+    ]);
+    (t.listRelationships as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        subject: { id: "e1", name: "my-repo/src/lib.rs::parse_symbol" },
+        predicate: "calls",
+        object: { id: "e2", name: "my-repo/src/parser.rs::tokenize" },
+      },
+    ]);
+    const port = await start(t);
+
+    const client = new Client(
+      { name: "test-harness", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } },
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)),
+    );
+
+    const result = await client.callTool({
+      name: "symbol_context",
+      arguments: { scope: { tenant: "t" }, symbol: "parse_symbol" },
+    });
+    const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "{}";
+    const payload = JSON.parse(text);
+    // The bare query resolved to the qualified name and its callee surfaced.
+    expect(payload.callees).toContain("my-repo/src/parser.rs::tokenize");
+
+    await client.close();
+  }, 15000);
+
+  it("search with a bare symbol returns the qualified entity match", async () => {
+    const t = mockTransport();
+    (t.listEntities as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "e1", name: "my-repo/src/lib.rs::parse_symbol", kind: "Function" },
+      { id: "e2", name: "my-repo/src/parser.rs::tokenize", kind: "Function" },
+    ]);
+    const port = await start(t);
+
+    const client = new Client(
+      { name: "test-harness", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } },
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)),
+    );
+
+    const result = await client.callTool({
+      name: "search",
+      arguments: { query: "parse_symbol", scope: { tenant: "t" } },
+    });
+    const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "{}";
+    const payload = JSON.parse(text);
+    // The bare query resolved to the qualified-name entity.
+    expect(payload.exactEntityMatches.length).toBe(1);
+    expect(payload.exactEntityMatches[0].name).toBe(
+      "my-repo/src/lib.rs::parse_symbol",
+    );
+
+    await client.close();
+  }, 15000);
+});
+
 describe("engram-mcp-http auth (non-loopback)", () => {
   it("rejects a request without a Bearer token (401)", async () => {
     const port = 6000 + Math.floor(Math.random() * 1000);

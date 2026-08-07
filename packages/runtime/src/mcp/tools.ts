@@ -640,7 +640,12 @@ export function registerTools(
         transport.recall(buildRetrievalRequest(query, theScope, limit ?? 10)),
         transport.listEntities(theScope),
       ]);
-      const exactEntityMatches = entities.filter((e) => entityName(e) === query);
+      // RFC-0020 T7: a user-supplied bare symbol resolves to qualified entity
+      // name(s) (`{repo}/{path}::{bare}`) via suffix matching, so a bare query
+      // is not empty after T1 qualified identities. Returns ALL matches.
+      const { resolveSymbolNames } = await import("./codegraph.js");
+      const resolved = new Set(resolveSymbolNames(entities.map(entityName), query));
+      const exactEntityMatches = entities.filter((e) => resolved.has(entityName(e)));
       return textResult({ recall, exactEntityMatches });
     },
   );
@@ -658,10 +663,20 @@ export function registerTools(
       }),
     },
     async ({ scope, symbol, depth, cap }) => {
-      const relationships = await transport.listRelationships(buildScope(scope));
+      const theScope = buildScope(scope);
+      const [relationships, entities] = await Promise.all([
+        transport.listRelationships(theScope),
+        transport.listEntities(theScope),
+      ]);
       const edges = flattenEdges(relationships);
-      const { symbolContextBFS } = await import("./codegraph.js");
-      const result = symbolContextBFS(edges, symbol, depth ?? 2, cap ?? 50);
+      const { resolveSymbolNames, symbolContextBFSMulti } = await import("./codegraph.js");
+      // RFC-0020 T7: resolve the bare symbol to qualified NAME(s) (the adjacency
+      // maps are name-keyed), seed BFS from EACH resolved name, and union the
+      // neighborhood (callers/callees/context), de-duped. Falls back to the bare
+      // symbol when no entity matches (empty store or un-qualified data).
+      const seeds = resolveSymbolNames(entities.map(entityName), symbol);
+      const symbolsToWalk = seeds.length > 0 ? seeds : [symbol];
+      const result = symbolContextBFSMulti(edges, symbolsToWalk, depth ?? 2, cap ?? 50);
       return textResult(result);
     },
   );
@@ -679,10 +694,19 @@ export function registerTools(
       }),
     },
     async ({ scope, target, depth, cap }) => {
-      const relationships = await transport.listRelationships(buildScope(scope));
+      const theScope = buildScope(scope);
+      const [relationships, entities] = await Promise.all([
+        transport.listRelationships(theScope),
+        transport.listEntities(theScope),
+      ]);
       const edges = flattenEdges(relationships);
-      const { changeImpactBFS } = await import("./codegraph.js");
-      const result = changeImpactBFS(edges, target, depth ?? 3, cap ?? 100);
+      const { resolveSymbolNames, changeImpactBFSMulti } = await import("./codegraph.js");
+      // RFC-0020 T7: resolve the bare target to qualified NAME(s), seed the
+      // reverse BFS from each, and union the blast radius (de-duped). Falls back
+      // to the bare target when no entity matches.
+      const seeds = resolveSymbolNames(entities.map(entityName), target);
+      const targetsToWalk = seeds.length > 0 ? seeds : [target];
+      const result = changeImpactBFSMulti(edges, targetsToWalk, depth ?? 3, cap ?? 100);
       return textResult(result);
     },
   );

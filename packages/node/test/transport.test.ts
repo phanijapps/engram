@@ -176,6 +176,15 @@ class StubNativeProvider {
     return {
       pathForJson(): string {
         return "null";
+      },
+      buildHierarchyJson(): string {
+        return JSON.stringify({
+          clusterCount: 0,
+          entitiesClustered: 0,
+          totalEntities: 0,
+          totalRelationships: 0,
+          interClusterRelationCount: 0,
+        });
       }
     };
   }
@@ -445,5 +454,49 @@ describe("NativeProviderTransport list_graphs + list_chunks_by_document (RFC-002
       { id: "chunk-1", text: "alpha" },
       { id: "chunk-2", text: "beta" },
     ]);
+  });
+});
+
+describe("NativeProviderTransport buildHierarchy (hierarchy-build wiring)", () => {
+  // The auto-build-after-ingest + maintenance_run op=hierarchy-build paths reach
+  // transport.buildHierarchy → requireHierarchyApi().buildHierarchyJson. This
+  // pins the request-shape encode ({ scope, maxPasses? }) and the stats decode
+  // so an N-API js_name / shape regression is caught without a real addon — the
+  // runtime op test mocks the whole transport, which would hide it.
+  function fakeProvider(capture: { built?: string }) {
+    return {
+      requireHierarchyApi: () => ({
+        pathForJson: () => "null",
+        buildHierarchyJson: (requestJson: string) => {
+          capture.built = requestJson;
+          return JSON.stringify({
+            clusterCount: 3,
+            entitiesClustered: 12,
+            totalEntities: 15,
+            totalRelationships: 40,
+            interClusterRelationCount: 2,
+          });
+        },
+      }),
+    } as never;
+  }
+
+  it("buildHierarchy encodes {scope} by default and decodes the stats", async () => {
+    const capture: { built?: string } = {};
+    const transport = createNativeProviderTransport({ provider: fakeProvider(capture) });
+    const stats = (await transport.buildHierarchy({ tenant: "t", workspace: "w" })) as {
+      clusterCount: number;
+      totalRelationships: number;
+    };
+    expect(JSON.parse(capture.built!)).toEqual({ scope: { tenant: "t", workspace: "w" } });
+    expect(stats.clusterCount).toBe(3);
+    expect(stats.totalRelationships).toBe(40);
+  });
+
+  it("buildHierarchy forwards maxPasses when provided", async () => {
+    const capture: { built?: string } = {};
+    const transport = createNativeProviderTransport({ provider: fakeProvider(capture) });
+    await transport.buildHierarchy({ tenant: "t" }, 8);
+    expect(JSON.parse(capture.built!)).toEqual({ scope: { tenant: "t" }, maxPasses: 8 });
   });
 });

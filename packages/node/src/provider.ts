@@ -151,6 +151,10 @@ export interface NativeProviderTransport {
   listChunksByDocument(documentId: string, scope: unknown): Promise<unknown[]>;
   /** Hierarchy navigation path for seed entity ids (Rust-backed). */
   hierarchyPath(request: unknown): Promise<unknown>;
+  /** Build the hierarchy for a scope: cluster the KG's call edges via Louvain
+   *  and persist layer-0 cluster nodes + inter-cluster relations (Rust-backed,
+   *  deterministic — no LLM). Returns `HierarchyBuildStats`. */
+  buildHierarchy(scope: unknown, maxPasses?: number): Promise<unknown>;
   /** Get an entity by id inside a scope (graph API; returns entity JSON or null). */
   getEntity(id: string, scope: unknown): Promise<unknown>;
   /** Graph neighbors of a node `{ graphId, nodeId, scope, limit? }` (graph API). */
@@ -356,6 +360,14 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async hierarchyPath(request: unknown): Promise<unknown> {
     return decode(this.provider.requireHierarchyApi().pathForJson(encode(request)));
+  }
+
+  async buildHierarchy(scope: unknown, maxPasses?: number): Promise<unknown> {
+    return decode(
+      this.provider
+        .requireHierarchyApi()
+        .buildHierarchyJson(encode({ scope, ...(maxPasses ? { maxPasses } : {}) })),
+    );
   }
 
   async getEntity(id: string, scope: unknown): Promise<unknown> {

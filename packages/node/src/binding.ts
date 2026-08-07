@@ -189,9 +189,11 @@ export interface NativeKnowledgeQueryApiBinding {
   listChunksByDocumentJson(requestJson: string): string;
 }
 
-/** Hierarchy handle proxy: navigation path for seed entity ids. */
+/** Hierarchy handle proxy: navigation path for seed entity ids + build (cluster
+ *  the KG via Louvain and persist layer-0 cluster nodes). */
 export interface NativeHierarchyApiBinding {
   pathForJson(requestJson: string): string;
+  buildHierarchyJson(requestJson: string): string;
 }
 
 /** Procedures handle proxy: replayable runbook lifecycle (Layer 6). */

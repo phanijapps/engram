@@ -28,6 +28,26 @@ export interface IngestHandle {
   stop: () => void;
 }
 
+/**
+ * Best-effort hierarchy build after a scan: clusters the just-scanned call edges
+ * via Louvain and persists layer-0 cluster nodes so the Observatory populates
+ * without a manual `maintenance_run op=hierarchy-build` step. Failures are
+ * logged to stderr and swallowed — a hierarchy-build error must never fail the
+ * scan (the scan itself already succeeded). Exposed for tests that assert the
+ * call is made.
+ */
+export async function buildHierarchyBestEffort(
+  transport: NativeProviderTransport,
+  scope: Scope,
+): Promise<void> {
+  try {
+    await transport.buildHierarchy(scope);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`engram-ingest: hierarchy build skipped: ${message}\n`);
+  }
+}
+
 /** Parses `engram-ingest` argv via `node:util/parseArgs` (Node 22 stdlib). */
 export function parseIngestArgs(argv: string[]): IngestArgs {
   const { values } = parseArgs({
@@ -86,6 +106,11 @@ export async function runIngest(
         scope: opts.scope
       })) as ScanSummary;
       process.stdout.write(`${JSON.stringify(summary)}\n`);
+      // Auto-build the hierarchy so the Observatory (which reads hierarchy_path)
+      // populates without a manual step. Best-effort: a build failure is logged
+      // and swallowed — it must NOT fail the scan. "ingest takes care of
+      // maintain initially" (RFC-0017). Deterministic Louvain + persist, no LLM.
+      await buildHierarchyBestEffort(opts.transport, opts.scope);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!opts.every || opts.every <= 0) {

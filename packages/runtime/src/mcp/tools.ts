@@ -291,11 +291,17 @@ export function registerTools(
     "maintenance_run",
     {
       description:
-        "Run a maintenance op over scope. PRIVACY: reflect-llm / contradict-llm / extract-knowledge route the scope's memories/beliefs/documents to a third-party LLM (Anthropic by default; set PI_PROVIDER=ollama for local) and incur token cost — only call with consent. Ops: reflect-llm (synthesize beliefs), contradict-llm (detect contradictions), extract-knowledge (derive Concept entities + typed edges from documents), consolidate (deterministic, no LLM). Default reflect-llm.",
+        "Run a maintenance op over scope. PRIVACY: reflect-llm / contradict-llm / extract-knowledge route the scope's memories/beliefs/documents to a third-party LLM (Anthropic by default; set PI_PROVIDER=ollama for local) and incur token cost — only call with consent. Ops: reflect-llm (synthesize beliefs), contradict-llm (detect contradictions), extract-knowledge (derive Concept entities + typed edges from documents), consolidate (deterministic consolidation, no LLM), hierarchy-build (cluster the KG via Louvain + persist hierarchy nodes, no LLM). Default reflect-llm.",
       inputSchema: z.object({
         scope: scopeSchema,
         op: z
-          .enum(["reflect-llm", "contradict-llm", "extract-knowledge", "consolidate"])
+          .enum([
+            "reflect-llm",
+            "contradict-llm",
+            "extract-knowledge",
+            "consolidate",
+            "hierarchy-build",
+          ])
           .optional(),
       }),
     },
@@ -304,6 +310,9 @@ export function registerTools(
       const theOp = op ?? "reflect-llm";
       if (theOp === "consolidate") {
         return textResult(await transport.consolidate({ scope: theScope }));
+      }
+      if (theOp === "hierarchy-build") {
+        return textResult(await transport.buildHierarchy(theScope));
       }
       const { createLlmProvider } = await import("../maintenance/llm.js");
       const llm = createLlmProvider();

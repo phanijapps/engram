@@ -34,6 +34,13 @@ function mockTransport(): NativeProviderTransport {
     listEntities: vi.fn(async () => []),
     listRelationships: vi.fn(async () => []),
     hierarchyPath: vi.fn(async () => ({})),
+    buildHierarchy: vi.fn(async () => ({
+      clusterCount: 0,
+      entitiesClustered: 0,
+      totalEntities: 0,
+      totalRelationships: 0,
+      interClusterRelationCount: 0,
+    })),
     getEntity: vi.fn(async () => null),
     graphNeighbors: vi.fn(async () => []),
     // extract-knowledge iterates per-document graphs + reads chunks per doc.
@@ -216,6 +223,38 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     const payload = JSON.parse(text);
     expect(payload.documentsRead).toBe(0);
     expect(payload.entitiesWritten).toBe(0);
+
+    await client.close();
+  }, 15000);
+
+  it("maintenance_run op=hierarchy-build dispatches to buildHierarchy (36-tool list unchanged)", async () => {
+    const t = mockTransport();
+    const port = await start(t);
+
+    const client = new Client(
+      { name: "test-harness", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } }
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+    );
+
+    // Still exactly 36 tools — hierarchy-build is a new op value on
+    // maintenance_run, NOT a new tool.
+    const { tools } = await client.listTools();
+    expect(tools.length).toBe(36);
+
+    // maintenance_run op=hierarchy-build dispatches to transport.buildHierarchy
+    // (deterministic Louvain cluster→persist, no LLM — so no provider/key needed).
+    const result = await client.callTool({
+      name: "maintenance_run",
+      arguments: { scope: { tenant: "t" }, op: "hierarchy-build" }
+    });
+    expect(t.buildHierarchy).toHaveBeenCalledTimes(1);
+    expect(t.buildHierarchy).toHaveBeenCalledWith({ tenant: "t" });
+    const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "{}";
+    const payload = JSON.parse(text);
+    expect(payload.clusterCount).toBe(0);
 
     await client.close();
   }, 15000);

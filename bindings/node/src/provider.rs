@@ -256,7 +256,10 @@ impl NativeProvider {
         Ok(NativeBeliefsApi { handle })
     }
 
-    /// Returns a hierarchy handle, or throws if not wired.
+    /// Returns a hierarchy handle, or throws if not wired. When the provider
+    /// also wires knowledge-query, the handle is attached so `buildHierarchyJson`
+    /// can read the call edges it clusters (best-effort: build throws a typed
+    /// `CapabilityUnsupported` error when knowledge-query is absent).
     #[napi(js_name = "requireHierarchyApi")]
     pub fn require_hierarchy_api(&self) -> Result<NativeHierarchyApi> {
         let handle = self
@@ -264,7 +267,11 @@ impl NativeProvider {
             .require_hierarchy()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeHierarchyApi { handle })
+        let knowledge_query = self.inner.knowledge_query().cloned();
+        Ok(NativeHierarchyApi {
+            handle,
+            knowledge_query,
+        })
     }
 
     /// Returns a lexical-feed handle (BM25 lane upserts), or throws if not wired.
@@ -951,11 +958,15 @@ impl NativeBeliefsApi {
 // ---------------------------------------------------------------------------
 
 /// Hierarchy handle proxy. Holds an `Arc<dyn HierarchyRepository>` and exposes
-/// hierarchy navigation as JSON-in / JSON-out methods (mirrors the MCP
-/// `hierarchy_path` tool).
+/// hierarchy navigation + build as JSON-in / JSON-out methods (mirrors the MCP
+/// `hierarchy_path` / `hierarchy_build` tools). The optional `KnowledgeQuery`
+/// handle is populated by [`NativeProvider::require_hierarchy_api`] when the
+/// provider also wires knowledge-query — `buildHierarchyJson` needs it to read
+/// the call edges it clusters; `pathForJson` does not.
 #[napi]
 pub struct NativeHierarchyApi {
     handle: Arc<dyn HierarchyRepository>,
+    knowledge_query: Option<Arc<dyn KnowledgeQuery>>,
 }
 
 #[napi]
@@ -982,6 +993,38 @@ impl NativeHierarchyApi {
         let result =
             block_on(self.handle.path_for(&seeds, &scope, max_layer)).map_err(to_napi_error)?;
         encode(&result)
+    }
+
+    /// Builds the hierarchy for a scope: clusters the knowledge graph's call
+    /// edges via Louvain communities and persists one layer-0 cluster node per
+    /// community plus inter-cluster relations (the write counterpart to
+    /// `pathForJson`). Deterministic — no LLM. After this, `pathForJson` returns
+    /// navigation results for the scope.
+    ///
+    /// Takes `{ scope, maxPasses? }` JSON (default `maxPasses` = 3), returns a
+    /// `HierarchyBuildStats` JSON (`clusterCount`, `entitiesClustered`,
+    /// `totalEntities`, `totalRelationships`, `interClusterRelationCount`).
+    /// Throws `CapabilityUnsupported` when knowledge-query is not wired.
+    #[napi(js_name = "buildHierarchyJson")]
+    pub fn build_hierarchy_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let max_passes = value.get("maxPasses").and_then(|v| v.as_u64()).unwrap_or(3) as usize;
+        let knowledge_query = self.knowledge_query.clone().ok_or_else(|| {
+            to_napi_error(engram_runtime::CoreError::CapabilityUnsupported {
+                capability: "knowledge_query".to_string(),
+                reason: "hierarchy build needs knowledge-query to read call edges".to_string(),
+            })
+        })?;
+        let stats = block_on(engram_integration::build_hierarchy_from_communities(
+            &knowledge_query,
+            &self.handle,
+            &scope,
+            max_passes,
+            "engram-node",
+        ))
+        .map_err(to_napi_error)?;
+        encode(&stats)
     }
 }
 

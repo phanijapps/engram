@@ -14,12 +14,14 @@ export type MaintainOp =
   | "consolidate"
   | "reflect-llm"
   | "contradict-llm"
-  | "extract-knowledge";
+  | "extract-knowledge"
+  | "hierarchy-build";
 const OPS: readonly MaintainOp[] = [
   "consolidate",
   "reflect-llm",
   "contradict-llm",
   "extract-knowledge",
+  "hierarchy-build",
 ];
 
 /** Parsed `engram-maintain` flags. */
@@ -145,6 +147,11 @@ export async function runMaintain(
           scope: opts.scope,
           ...(opts.llm ? { llm: opts.llm } : {}),
         });
+      } else if (op === "hierarchy-build") {
+        // Deterministic Louvain cluster→persist (no LLM): mirrors the
+        // maintenance_run op=hierarchy-build dispatch. Best-effort surfaces as a
+        // thrown error here only in one-shot mode (periodic swallows below).
+        result = await opts.transport.buildHierarchy(opts.scope);
       } else {
         result = (await opts.transport.consolidate({
           scope: opts.scope,

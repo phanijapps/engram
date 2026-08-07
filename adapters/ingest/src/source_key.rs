@@ -21,6 +21,19 @@ pub const SOURCE_PATH_KEY: &str = "path";
 /// non-reversible hash of `document_id`.
 pub const DOCUMENT_ID_KEY: &str = "documentId";
 
+/// Metadata key for the git remote URL the source was indexed from (RFC-0020
+/// §"Repository provenance"). Provenance only — never part of entity identity.
+pub const REPOSITORY_KEY: &str = "repository";
+
+/// Metadata key for the git branch the source was indexed from. Provenance
+/// only — re-indexing from a different branch updates it; one logical entity
+/// per function regardless of branch (RFC-0020 rev).
+pub const BRANCH_KEY: &str = "branch";
+
+/// Metadata key for the git commit SHA the source was indexed from
+/// (RFC-0020 §"Repository provenance"). Provenance only — never identity.
+pub const REVISION_KEY: &str = "revision";
+
 /// Derives the stable-source-key from an optional git remote, falling back to
 /// `fallback` (the un-enriched source name / repo root) for non-git sources or
 /// remotes that cannot be normalized.

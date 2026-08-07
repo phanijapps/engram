@@ -69,6 +69,7 @@ fn git_request(repo_key: &str, path: &str, text: &str) -> DocumentIngestRequest 
         policy: policy(),
         actor: actor(),
         stable_source_key: Some(repo_key.to_owned()),
+        source_metadata: None,
     }
 }
 
@@ -377,6 +378,7 @@ fn non_git_source_produces_no_repository_node() {
         policy: policy(),
         actor: actor(),
         stable_source_key: None,
+        source_metadata: None,
     };
     let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
     let extracted = block_on(GraphExtractor::new().extract_into(

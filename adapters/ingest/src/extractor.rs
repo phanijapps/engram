@@ -16,7 +16,10 @@ use serde_json::Value as JsonValue;
 
 use crate::{
     hash::content_hash,
-    source_key::{DOCUMENT_ID_KEY, SOURCE_PATH_KEY, STABLE_SOURCE_KEY},
+    source_key::{
+        BRANCH_KEY, DOCUMENT_ID_KEY, REPOSITORY_KEY, REVISION_KEY, SOURCE_PATH_KEY,
+        STABLE_SOURCE_KEY,
+    },
 };
 
 /// The graph records produced by one extraction pass.
@@ -116,19 +119,12 @@ impl GraphExtractor {
 
         let is_code = matches!(document.kind, SourceDocumentKind::Code);
 
-        // {repo} identity component = the stable-source-key (RFC-0020); the git
-        // remote + revision are metadata properties (Phase 4), not identity.
-        let repo_key = source
-            .metadata
-            .as_ref()
-            .and_then(|meta| meta.get(STABLE_SOURCE_KEY))
-            .and_then(|v| v.as_str());
-        let doc_path = document.path.as_deref();
-
-        // (qualified_name, bare_name, kind, body, chunk_index) per detected
-        // symbol, in document order. Code entities carry a qualified identity
-        // `{repo}/{path}::{bare_name}`; the bare name is retained for body
-        // matching (co-occurrence) and AST-callee resolution.
+        // RFC-0020 rev: the entity NAME is the bare logical symbol (function/
+        // class/etc). The disambiguating repo/path/branch live in `source_refs`
+        // + provenance, NOT jammed into the name. `is_noise_symbol` still drops
+        // bare generics. `qualified` here == `bare` (kept as a pair so the
+        // co-occurrence / AST-callee matching + `register_in_name_index` are
+        // unchanged); the entity `id` stays unique via `graph_id + name`.
         let mut symbols: Vec<(String, String, EntityKind, String, usize)> = Vec::new();
         if is_code {
             for (chunk_idx, chunk) in chunks.iter().enumerate() {
@@ -145,8 +141,7 @@ impl GraphExtractor {
                 if bare.is_empty() || is_noise_symbol(&bare) {
                     continue;
                 }
-                let qualified = qualified_symbol_name(repo_key, doc_path, &bare);
-                symbols.push((qualified, bare, kind, chunk.text.clone(), chunk_idx));
+                symbols.push((bare.clone(), bare, kind, chunk.text.clone(), chunk_idx));
             }
         } else {
             // RFC-0020 T3: non-code documents emit NO graph entities — the naive
@@ -164,6 +159,22 @@ impl GraphExtractor {
                 .entry(bare.clone())
                 .or_insert_with(|| qualified.clone());
         }
+
+        // RFC-0020 rev: git provenance (repository/branch/revision) is metadata,
+        // not identity. Lift the clean keys off the source's metadata (stamped by
+        // the scanner from the detect_git tuple) so each code entity carries them
+        // in its `record_json` — reachable by the cc entity-detail route. Identity
+        // (the bare name) is unchanged; re-indexing from a different branch only
+        // updates these metadata values.
+        let entity_git_meta: Option<Metadata> = source.metadata.as_ref().and_then(|m| {
+            let mut g = Metadata::default();
+            for key in [REPOSITORY_KEY, BRANCH_KEY, REVISION_KEY] {
+                if let Some(v) = m.get(key) {
+                    g.insert(key.to_owned(), v.clone());
+                }
+            }
+            if g.is_empty() { None } else { Some(g) }
+        });
 
         // Dedupe by qualified name (first wins), build entities + a name->index map.
         let mut entities: Vec<KnowledgeEntity> = Vec::new();
@@ -201,7 +212,7 @@ impl GraphExtractor {
                 updated_at: None,
                 valid_from: Some(now),
                 valid_until: None,
-                metadata: None,
+                metadata: entity_git_meta.clone(),
             });
         }
 
@@ -448,28 +459,6 @@ fn parse_symbol(anchor: &str) -> Option<(EntityKind, String)> {
         _ => return None,
     };
     Some((kind, name.to_owned()))
-}
-
-/// Composes a code entity's qualified identity `{repo}/{path}::{bare}` (RFC-0020).
-/// `{repo}` is the stable-source-key; when absent the path alone qualifies; when
-/// both are absent the bare name is returned (degraded but stable). The git
-/// remote + revision are metadata properties (Phase 4), never identity.
-fn qualified_symbol_name(repo: Option<&str>, path: Option<&str>, bare: &str) -> String {
-    let mut prefix = String::new();
-    if let Some(r) = repo.filter(|r| !r.is_empty()) {
-        prefix.push_str(r);
-    }
-    if let Some(p) = path.filter(|p| !p.is_empty()) {
-        if !prefix.is_empty() {
-            prefix.push('/');
-        }
-        prefix.push_str(p);
-    }
-    if prefix.is_empty() {
-        bare.to_owned()
-    } else {
-        format!("{prefix}::{bare}")
-    }
 }
 
 /// Registers an entity in the cross-file name index under BOTH its qualified
@@ -746,7 +735,7 @@ fn belongs_to_rel_id(graph_id: &KnowledgeGraphId, repo_entity_id: &EntityId) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::{is_noise_symbol, mentions, qualified_symbol_name};
+    use super::{is_noise_symbol, mentions};
 
     #[test]
     fn mentions_is_multibyte_safe() {
@@ -810,31 +799,5 @@ mod tests {
         for n in ["", "   ", "{}", "123", "_", "..."] {
             assert!(is_noise_symbol(n), "{n:?} should be noise");
         }
-    }
-
-    #[test]
-    fn qualified_symbol_name_formats_identity() {
-        // Full {repo}/{path}::{bare}.
-        assert_eq!(
-            qualified_symbol_name(Some("my-repo"), Some("src/lib.rs"), "alpha"),
-            "my-repo/src/lib.rs::alpha"
-        );
-        // No repo → path-qualified.
-        assert_eq!(
-            qualified_symbol_name(None, Some("lib.rs"), "alpha"),
-            "lib.rs::alpha"
-        );
-        // No path → repo-qualified.
-        assert_eq!(
-            qualified_symbol_name(Some("my-repo"), None, "alpha"),
-            "my-repo::alpha"
-        );
-        // Neither → bare (degraded but stable).
-        assert_eq!(qualified_symbol_name(None, None, "alpha"), "alpha");
-        // Empty repo/path are treated as absent.
-        assert_eq!(
-            qualified_symbol_name(Some(""), Some("lib.rs"), "alpha"),
-            "lib.rs::alpha"
-        );
     }
 }

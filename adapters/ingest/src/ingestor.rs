@@ -93,15 +93,19 @@ where
         };
         // Carry the stable-source-key (if present) onto the source's metadata so
         // the downstream extractor can stamp each KnowledgeGraph and emit the
-        // per-source Repository entity without additional plumbing.
-        let source_metadata = request.stable_source_key.as_deref().map(|key| {
-            let mut m = Metadata::default();
-            m.insert(
-                crate::source_key::STABLE_SOURCE_KEY.to_owned(),
-                serde_json::Value::String(key.to_owned()),
-            );
-            m
-        });
+        // per-source Repository entity without additional plumbing. Merge any
+        // caller-supplied source_metadata (RFC-0020: repository/branch/revision
+        // provenance from the scanner) alongside the key.
+        let source_metadata = {
+            let mut m: Metadata = request.source_metadata.clone().unwrap_or_default();
+            if let Some(key) = request.stable_source_key.as_deref() {
+                m.insert(
+                    crate::source_key::STABLE_SOURCE_KEY.to_owned(),
+                    serde_json::Value::String(key.to_owned()),
+                );
+            }
+            if m.is_empty() { None } else { Some(m) }
+        };
         let source = KnowledgeSource {
             id: source_id.clone(),
             kind: request.source_kind,

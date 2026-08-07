@@ -1058,7 +1058,7 @@ mod tests {
         assert!(
             entities
                 .iter()
-                .any(|e| e.name.ends_with("::alpha") || e.name.ends_with("::beta")),
+                .any(|e| e.name == "alpha" || e.name == "beta"),
             "scan_repo must index the functions: {entities:?}"
         );
     }
@@ -1624,26 +1624,14 @@ impl Store {
         let rels = block_on(q.list_relationships(&app.scope)).unwrap();
         assert!(
             rels.iter().any(|r| r.predicate == "calls"
-                && r.subject
-                    .name
-                    .as_deref()
-                    .is_some_and(|n| n.ends_with("::drive"))
-                && r.object
-                    .name
-                    .as_deref()
-                    .is_some_and(|n| n.ends_with("::save"))),
+                && r.subject.name.as_deref() == Some("drive")
+                && r.object.name.as_deref() == Some("save")),
             "receiver call drive->save should be extracted: {rels:?}"
         );
         assert!(
             rels.iter().any(|r| r.predicate == "calls"
-                && r.subject
-                    .name
-                    .as_deref()
-                    .is_some_and(|n| n.ends_with("::drive"))
-                && r.object
-                    .name
-                    .as_deref()
-                    .is_some_and(|n| n.ends_with("::process"))),
+                && r.subject.name.as_deref() == Some("drive")
+                && r.object.name.as_deref() == Some("process")),
             "receiver call drive->process should be extracted: {rels:?}"
         );
     }
@@ -1671,16 +1659,9 @@ impl Store {
             "build should succeed: {bbody}"
         );
 
-        // T1 qualified entity names — resolve the bare seed to the qualified name.
-        let q = app.provider.require_knowledge_query().expect("handle");
-        let entities = block_on(q.list_entities(&app.scope)).unwrap();
-        let alpha = entities
-            .iter()
-            .find(|e| e.name.ends_with("::alpha"))
-            .expect("alpha entity")
-            .name
-            .clone();
-        let path = crate::hierarchy::hierarchy_path(&app, &json!({ "seeds": [alpha] })).unwrap();
+        // RFC-0020 rev: entity names are bare logical symbols, so the bare seed
+        // resolves directly (no qualified-name lookup needed).
+        let path = crate::hierarchy::hierarchy_path(&app, &json!({ "seeds": ["alpha"] })).unwrap();
         let pbody = path["content"][0]["text"].as_str().unwrap();
         assert!(
             !pbody.contains("0 node(s)"),

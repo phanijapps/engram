@@ -4,6 +4,17 @@
 **Author:** engram-cc session
 **Related:** RFC-0012 (codegraph layer), RFC-0015 (unified MCP), the [AgentZero indexing guidance](https://github.com/phanijapps/agentzero/blob/main/docs/architecture/engram-code-graph-indexing.md), RFC-0014 (canonical identity), RFC-0018 (retrieval quality)
 
+> **Revision (2026-08-07):** Phase 1's code-entity identity was reversed. The
+> shipped version jammed `{repo}/{path}::{name}` into `entity.name`. The revision
+> makes **`entity.name` the bare logical symbol** (`makeRow`, not
+> `github.com/…/HeroInput.test.tsx::makeRow`); repo/path/branch are disambiguators
+> in `source_refs` + provenance/metadata. `branch` is provenance-only (one logical
+> entity per function; re-index updates it). The community graph now **keys nodes
+> by entity `id`** (not name) so two functions that share a logical name do not
+> collapse into one node; the display still shows the logical name. The identity
+> table and "Identity rule" below are updated; the original qualified-identity
+> wording is struck where it contradicted this.
+
 ## Problem
 
 The engram scanner conflates two fundamentally different knowledge types — **code
@@ -41,22 +52,27 @@ masquerades as a code function, and a code function never pollutes concept queri
 Only code-derived entities participate in code-topology queries. These are the nodes
 for centrality, callers/callees, blast-radius traversal.
 
-| Kind | Qualified identity format | Extracted by |
-|---|---|---|
-| Module/Package | `{repo}/{path}::{module}` | treesitter |
-| Function/Method | `{repo}/{path}::{module}::{receiver}::{name}` | treesitter |
-| Struct/Class/Type | `{repo}/{path}::{module}::{name}` | treesitter |
-| Trait/Interface | `{repo}/{path}::{module}::{name}` | treesitter |
-| API route | `{repo}::{method}::{path}` (e.g., `zbot::POST::/api/agents/{}`) | route scanner |
-| WebSocket event | `{repo}::ws::{event_type}` | protocol scanner |
-| Test case | `{repo}/{test_path}::{test_name}` | test scanner |
-| Configuration key | `{repo}::config::{key}` | config scanner |
+| Kind | `entity.name` (logical symbol) | Disambiguators (source_refs / metadata) | Extracted by |
+|---|---|---|---|
+| Module/Package | `{module}` | repo/path | treesitter |
+| Function/Method | `{name}` (Phase 1) / `{receiver}::{name}` (Phase 2) | repo/path/branch | treesitter |
+| Struct/Class/Type | `{name}` | repo/path/branch | treesitter |
+| Trait/Interface | `{name}` | repo/path/branch | treesitter |
+| API route | `{method} {path}` (e.g., `POST /api/agents/{}`) | repo | route scanner |
+| WebSocket event | `ws::{event_type}` | repo | protocol scanner |
+| Test case | `{test_name}` | repo/test_path | test scanner |
+| Configuration key | `config::{key}` | repo | config scanner |
 
-**Identity rule**: every code entity has a qualified identity — `{repo}/{path}::{qualified_name}`.
-`{repo}` is a **stable repo identifier** (the existing stable-source-key), NOT the git
-remote (see *Repository provenance*). A bare name like `get`, `new`, `clone` is never a
-sufficient identity. Entities without a qualified identity are suppressed at extraction
-time (not post-filtered).
+**Identity rule (revised)**: `entity.name` is the **bare logical symbol** (function/
+class/etc). Repo/path/branch are *disambiguators* carried in `source_refs` +
+provenance/metadata, NOT jammed into the name. The entity `id` (derived from
+`graph_id + name`) stays unique per document, so two functions that share a logical
+name (two `render`, two `index.ts`) are distinct entities — and the community graph
+keys nodes by `id` (not name) so they do not collapse into one node. Display shows the
+logical name, disambiguated by id + path. `branch` is provenance-only: one logical
+entity per function; re-indexing from a different branch updates the branch metadata.
+A bare name like `get`, `new`, `clone` is suppressed at extraction time by the noise
+filter (not post-filtered).
 
 **Noise suppression** (at extraction, not recall):
 - Bare generics + language primitives: `str`, `int`, `bool`, `void`, `None`, `Vec`, `Option`, `Result`, `new`, `clone`, `log`, `fmt`, `send`, `name`, `len`, `main`, `get`, `set`, `run`, `read`, `write`, `append`, etc.
@@ -133,11 +149,12 @@ Each edge carries: `{source_file, revision, extraction_method: "treesitter"|"heu
 
 ### Repository provenance (metadata, not identity)
 
-Every entity and edge carries `{repository, revision}` provenance metadata in `record_json`.
-`repository` is the git remote URL and `revision` is the commit SHA; both are **metadata
-properties**, not part of the qualified identity (the identity uses the stable repo id as
-`{repo}`). This enables **optional** `repository`/`revision` filtering in recall/search —
-useful for "show me only zbot code" — but is NOT a hard isolation boundary.
+Every entity and edge carries `{repository, branch, revision}` provenance metadata in `record_json`.
+`repository` is the git remote URL, `branch` is the indexed branch, and `revision` is the commit
+SHA; all three are **metadata properties**, not part of the entity name or id. `branch` is
+provenance-only — one logical entity per function regardless of branch, and re-indexing from a
+different branch updates the metadata. This enables **optional** `repository`/`branch`/`revision`
+filtering in recall/search — useful for "show me only zbot code" — but is NOT a hard isolation boundary.
 
 A workspace is a **visibility boundary** that intentionally contains multiple repos (e.g.,
 a microservices monorepo with shared libs, service A depending on service B). Cross-repo
@@ -162,7 +179,9 @@ visible — correct for cross-cutting queries ("how do these services interact?"
 ## Implementation phases
 
 ### Phase 1: Extraction quality (immediate)
-- **Code qualified identity at extraction**: `parse_symbol` produces `{repo}/{path}::{name}` identities instead of bare names.
+- **Code-entity logical-name identity at extraction (revised)**: `entity.name` is the bare logical symbol (`{name}`); repo/path/branch live in `source_refs`/provenance/metadata, NOT in the name. (Originally specified as qualified `{repo}/{path}::{name}` — reverted; see revision note.)
+- **Community nodes keyed by entity id (revised)**: the community graph keys nodes by entity `id` (not name) so same-named functions stay distinct; display still shows logical names.
+- **Git branch/revision as clean provenance metadata**: the scanner stamps `repository` (remote), `branch`, `revision` (SHA) on each entity's metadata from the `detect_git` tuple (provenance-only; re-index updates the branch).
 - **Code-symbol noise filter**: `is_noise_symbol` suppresses bare generics + primitives (DONE — shipped with tests).
 - **Document `concept_name` removal + `extract-knowledge` LLM op**: the naive heading-as-node path is removed from the deterministic extractor; a new `engram-maintain extract-knowledge` op extracts valid concepts/properties/relationships into Concept entities + typed edges.
 

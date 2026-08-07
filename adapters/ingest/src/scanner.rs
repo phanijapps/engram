@@ -159,6 +159,29 @@ where
         stable_source_key(remote, &opts.source_name)
     };
 
+    // RFC-0020 rev: clean git provenance keys (repository = remote URL, branch,
+    // revision = SHA) stamped on each document's KnowledgeSource.metadata so they
+    // flow to entity `record_json` (reachable via the cc entity-detail route).
+    // Branch is provenance-only — re-indexing from a different branch updates it;
+    // one logical entity per function regardless of branch. Built once here and
+    // carried into every per-document request.
+    let git_source_metadata = git.as_ref().map(|(remote, branch, sha)| {
+        let mut m = engram_domain::Metadata::default();
+        m.insert(
+            crate::source_key::REPOSITORY_KEY.to_owned(),
+            serde_json::Value::String(remote.clone()),
+        );
+        m.insert(
+            crate::source_key::BRANCH_KEY.to_owned(),
+            serde_json::Value::String(branch.clone()),
+        );
+        m.insert(
+            crate::source_key::REVISION_KEY.to_owned(),
+            serde_json::Value::String(sha.clone()),
+        );
+        m
+    });
+
     let code_ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
     let text_ingestor =
         KnowledgeIngestor::new(PlainTextChunker::new(PlainTextChunkerOptions::default())?);
@@ -379,6 +402,7 @@ where
                 policy: opts.policy.clone(),
                 actor: opts.actor.clone(),
                 stable_source_key: Some(source_key.clone()),
+                source_metadata: git_source_metadata.clone(),
             };
             // Tree-sitter chunking for supported extensions; fallback to the
             // ingestor's internal chunker for others.

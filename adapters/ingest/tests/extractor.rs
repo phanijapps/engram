@@ -33,6 +33,7 @@ fn ingest_code(
             metadata: None,
         },
         stable_source_key: Some(stable_source_key.to_owned()),
+        source_metadata: None,
     };
     block_on(ingestor.ingest(store, request)).expect("ingest")
 }
@@ -80,6 +81,7 @@ fn extracts_code_symbols_and_calls_edges() {
             metadata: None,
         },
         stable_source_key: None,
+        source_metadata: None,
     };
 
     let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
@@ -93,9 +95,9 @@ fn extracts_code_symbols_and_calls_edges() {
     .expect("extract");
 
     let names: Vec<String> = extracted.entities.iter().map(|e| e.name.clone()).collect();
-    assert!(names.contains(&"lib.rs::alpha".to_owned()));
-    assert!(names.contains(&"lib.rs::beta".to_owned()));
-    assert!(names.contains(&"lib.rs::Widget".to_owned()));
+    assert!(names.contains(&"alpha".to_owned()));
+    assert!(names.contains(&"beta".to_owned()));
+    assert!(names.contains(&"Widget".to_owned()));
 
     let calls: Vec<(String, String)> = extracted
         .relationships
@@ -109,9 +111,7 @@ fn extracts_code_symbols_and_calls_edges() {
         })
         .collect();
     assert!(
-        calls
-            .iter()
-            .any(|(s, o)| s == "lib.rs::alpha" && o == "lib.rs::beta"),
+        calls.iter().any(|(s, o)| s == "alpha" && o == "beta"),
         "expected alpha -> beta calls edge, got {calls:?}"
     );
 
@@ -119,7 +119,7 @@ fn extracts_code_symbols_and_calls_edges() {
     let alpha_id = extracted
         .entities
         .iter()
-        .find(|e| e.name == "lib.rs::alpha")
+        .find(|e| e.name == "alpha")
         .expect("alpha entity")
         .id
         .clone();
@@ -128,7 +128,7 @@ fn extracts_code_symbols_and_calls_edges() {
     assert!(
         neighbors
             .iter()
-            .any(|r| r.object.name.as_deref() == Some("lib.rs::beta"))
+            .any(|r| r.object.name.as_deref() == Some("beta"))
     );
 
     // Chunks carry the entity refs of the symbols extracted from them (Part A).
@@ -151,7 +151,7 @@ fn extracts_code_symbols_and_calls_edges() {
 }
 
 #[test]
-fn code_entities_carry_qualified_identities() {
+fn code_entities_carry_logical_names() {
     let store = SqlKnowledgeStore::open_in_memory().expect("open store");
     let ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
     let request = DocumentIngestRequest {
@@ -172,6 +172,7 @@ fn code_entities_carry_qualified_identities() {
             metadata: None,
         },
         stable_source_key: Some("my-repo".to_owned()),
+        source_metadata: None,
     };
 
     let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
@@ -184,23 +185,24 @@ fn code_entities_carry_qualified_identities() {
     ))
     .expect("extract");
 
-    // Identity is {repo}/{path}::{bare_name} with {repo} = stable-source-key.
+    // RFC-0020 rev: the entity NAME is the bare logical symbol. The repo/path/
+    // branch live in source_refs + provenance/metadata, NOT jammed into the name.
     let names: Vec<String> = extracted.entities.iter().map(|e| e.name.clone()).collect();
     assert!(
-        names.contains(&"my-repo/src/lib.rs::alpha".to_owned()),
-        "qualified alpha missing: {names:?}"
+        names.contains(&"alpha".to_owned()),
+        "bare alpha missing: {names:?}"
     );
     assert!(
-        names.contains(&"my-repo/src/lib.rs::beta".to_owned()),
-        "qualified beta missing: {names:?}"
+        names.contains(&"beta".to_owned()),
+        "bare beta missing: {names:?}"
     );
     assert!(
-        names.contains(&"my-repo/src/lib.rs::Widget".to_owned()),
-        "qualified Widget missing: {names:?}"
+        names.contains(&"Widget".to_owned()),
+        "bare Widget missing: {names:?}"
     );
 
     // Re-extraction converges: entity ids are stable across runs (id keyed on
-    // the qualified name).
+    // `graph_id + name`, both unchanged across runs).
     let again = block_on(GraphExtractor::new().extract_into(
         &store,
         &ingested.source,
@@ -212,14 +214,14 @@ fn code_entities_carry_qualified_identities() {
     let id_again = again
         .entities
         .iter()
-        .find(|e| e.name.ends_with("::alpha"))
+        .find(|e| e.name == "alpha")
         .expect("alpha entity")
         .id
         .clone();
     let id_first = extracted
         .entities
         .iter()
-        .find(|e| e.name.ends_with("::alpha"))
+        .find(|e| e.name == "alpha")
         .expect("alpha entity")
         .id
         .clone();
@@ -248,7 +250,7 @@ fn cross_file_calls_resolve_after_qualification() {
     let foo_id = ext_a
         .entities
         .iter()
-        .find(|e| e.name.ends_with("::foo"))
+        .find(|e| e.name == "foo")
         .expect("foo entity")
         .id
         .to_string();
@@ -315,6 +317,7 @@ fn non_code_documents_emit_no_graph_entities() {
             metadata: None,
         },
         stable_source_key: Some("repo".to_owned()),
+        source_metadata: None,
     };
     let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
     let extracted = block_on(GraphExtractor::new().extract_into(

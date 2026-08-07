@@ -6,6 +6,7 @@ import {
   createNativeHierarchyTransport,
   createNativeKnowledgeTransport,
   createNativeMemoryTransport,
+  createNativeProviderTransport,
   type NativeBinding
 } from "../src/index.js";
 
@@ -391,6 +392,58 @@ describe("@engram/node", () => {
       "hierarchy:1",
       "consolidation:hybrid",
       "eval:1"
+    ]);
+  });
+});
+
+describe("NativeProviderTransport list_graphs + list_chunks_by_document (RFC-0020 T4)", () => {
+  // The extract-knowledge op reaches these through the provider transport:
+  // listGraphs (discover documents) + listChunksByDocument (per-document reads).
+  // This pins the request-shape encode + decode so a binding/wiring regression
+  // (N-API js_name, the {documentId, scope} shape) is caught without a real
+  // addon — the op test mocks the whole transport, which would hide it.
+  function fakeProvider(capture: { listGraphs?: string; listChunks?: string }) {
+    return {
+      requireKnowledgeQueryApi: () => ({
+        listGraphsJson: (scopeJson: string) => {
+          capture.listGraphs = scopeJson;
+          return JSON.stringify([{ id: "graph-1", metadata: { document_id: "doc-1" } }]);
+        },
+        listChunksByDocumentJson: (requestJson: string) => {
+          capture.listChunks = requestJson;
+          return JSON.stringify([
+            { id: "chunk-1", text: "alpha" },
+            { id: "chunk-2", text: "beta" },
+          ]);
+        },
+      }),
+    } as never;
+  }
+
+  it("listGraphs encodes the scope and decodes the graph list", async () => {
+    const capture: { listGraphs?: string; listChunks?: string } = {};
+    const transport = createNativeProviderTransport({ provider: fakeProvider(capture) });
+    const graphs = (await transport.listGraphs({ tenant: "t", workspace: "w" })) as Array<{
+      id: string;
+      metadata: { document_id: string };
+    }>;
+    expect(JSON.parse(capture.listGraphs!)).toEqual({ tenant: "t", workspace: "w" });
+    expect(graphs).toEqual([{ id: "graph-1", metadata: { document_id: "doc-1" } }]);
+  });
+
+  it("listChunksByDocument encodes {documentId, scope} and decodes the chunk list", async () => {
+    const capture: { listGraphs?: string; listChunks?: string } = {};
+    const transport = createNativeProviderTransport({ provider: fakeProvider(capture) });
+    const chunks = (await transport.listChunksByDocument("doc-42", {
+      tenant: "t",
+      workspace: "w",
+    })) as Array<{ id: string; text: string }>;
+    const req = JSON.parse(capture.listChunks!);
+    expect(req.documentId).toBe("doc-42");
+    expect(req.scope).toEqual({ tenant: "t", workspace: "w" });
+    expect(chunks).toEqual([
+      { id: "chunk-1", text: "alpha" },
+      { id: "chunk-2", text: "beta" },
     ]);
   });
 });

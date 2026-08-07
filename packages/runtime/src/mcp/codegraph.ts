@@ -56,6 +56,10 @@ export interface SymbolContext {
  * suffix WITHOUT a leading `::` / `/` delimiter never matches (`foobar` is NOT
  * a suffix match for query `bar`), so the resolver does not flood on short
  * substrings.
+ *
+ * RFC-0020 T7 PARITY: this rule must match `mcp/engram-mcp/src/codegraph.rs`
+ * `resolve_symbol_names` (the Rust stdio MCP) — ADR-0022 surface parity. A
+ * one-sided change must update both or the two surfaces silently diverge.
  */
 export function resolveSymbolNames(
   names: Iterable<string>,

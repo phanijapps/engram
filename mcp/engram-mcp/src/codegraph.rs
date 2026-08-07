@@ -1246,6 +1246,10 @@ fn entity_names(app: &App) -> Vec<String> {
 /// the result can seed the name-keyed BFS in `symbol_context_bounded` /
 /// `blast_radius_bounded`. Case-sensitive — qualified names preserve the source
 /// casing of path + symbol.
+///
+/// RFC-0020 T7 PARITY: this rule must match `packages/runtime/src/mcp/codegraph.ts`
+/// `resolveSymbolNames` (the TS HTTP MCP) — ADR-0022 surface parity. A one-sided
+/// change must update both or the two surfaces silently diverge.
 fn resolve_symbol_names(entity_names: &[String], query: &str) -> Vec<String> {
     let dc = format!("::{query}");
     let sl = format!("/{query}");

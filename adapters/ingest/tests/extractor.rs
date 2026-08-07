@@ -1,6 +1,7 @@
 use engram_domain::*;
 use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
+    PlainTextChunker, PlainTextChunkerOptions,
 };
 use engram_knowledge::KnowledgeGraphRepository;
 use engram_store_sqlite::SqlKnowledgeStore;
@@ -285,5 +286,65 @@ fn cross_file_calls_resolve_after_qualification() {
         bar_calls_foo.object.id.as_ref().map(|id| id.to_string()),
         Some(foo_id),
         "cross-file callee must resolve to A's foo entity id"
+    );
+}
+
+#[test]
+fn non_code_documents_emit_no_graph_entities() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let ingestor = KnowledgeIngestor::new(
+        PlainTextChunker::new(PlainTextChunkerOptions::default()).expect("chunker"),
+    );
+    let request = DocumentIngestRequest {
+        source_kind: SourceKind::Filesystem,
+        source_name: "demo".to_owned(),
+        scope: scope(),
+        document_kind: SourceDocumentKind::Markdown,
+        document: DocumentMetadata {
+            path: Some("ARCHITECTURE.md".to_owned()),
+            ..Default::default()
+        },
+        text:
+            "# Architecture\n\nThe system uses SQLite for storage.\n\n## Overview\n\nIt is fast.\n"
+                .to_owned(),
+        policy: policy(),
+        actor: Actor {
+            id: Id::from("agent-1"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        },
+        stable_source_key: Some("repo".to_owned()),
+    };
+    let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
+    let extracted = block_on(GraphExtractor::new().extract_into(
+        &store,
+        &ingested.source,
+        &ingested.document,
+        &ingested.chunks,
+        None,
+    ))
+    .expect("extract");
+
+    // RFC-0020 T3: no Concept entities from documents — the naive heading-as-node
+    // rule is gone; documents are chunks-only at ingest.
+    assert!(
+        extracted
+            .entities
+            .iter()
+            .all(|e| e.kind != EntityKind::Concept),
+        "no Concept entities from non-code docs, got: {entities:?}",
+        entities = extracted
+            .entities
+            .iter()
+            .map(|e| (e.kind.clone(), e.name.clone()))
+            .collect::<Vec<_>>()
+    );
+    // The graph record is still persisted (the extract-knowledge op discovers
+    // documents via listGraphs — the T3↔T5 invariant).
+    let graphs = block_on(store.list_graphs(&scope())).expect("list graphs");
+    assert!(
+        graphs.iter().any(|g| g.id == extracted.graph.id),
+        "graph record must be persisted for non-code documents"
     );
 }

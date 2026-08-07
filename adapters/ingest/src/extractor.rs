@@ -149,19 +149,11 @@ impl GraphExtractor {
                 symbols.push((qualified, bare, kind, chunk.text.clone(), chunk_idx));
             }
         } else {
-            for (chunk_idx, chunk) in chunks.iter().enumerate() {
-                let name = concept_name(&chunk.text);
-                if name.is_empty() {
-                    continue;
-                }
-                symbols.push((
-                    name.clone(),
-                    name,
-                    EntityKind::Concept,
-                    chunk.text.clone(),
-                    chunk_idx,
-                ));
-            }
+            // RFC-0020 T3: non-code documents emit NO graph entities — the naive
+            // heading-as-node rule is gone. Documents are chunks-only at ingest;
+            // the LLM `extract-knowledge` op produces the concept sub-graph. The
+            // graph record above is created unconditionally so `listGraphs` can
+            // still discover documents (the extract-knowledge op relies on this).
         }
 
         // Bare→qualified map (first wins) for resolving AST callers/callees,
@@ -498,22 +490,15 @@ pub(crate) fn register_in_name_index(
     }
 }
 
-/// Derives a short, human-readable concept name from the first line of a prose
-/// chunk (used for non-code documents).
-fn concept_name(text: &str) -> String {
-    let first = text.lines().next().unwrap_or("").trim();
-    let stripped = first.trim_start_matches('#').trim();
-    let collapsed: String = stripped.split_whitespace().collect::<Vec<_>>().join(" ");
-    let name: String = collapsed.chars().take(48).collect();
-    if is_noise_concept(&name) {
-        return String::new();
-    }
-    name
-}
-
 /// Reject entities that aren't real concepts — punctuation tokens, single-char
 /// symbols, code-block delimiters, common type annotations, YAML keys.
 /// Returns true = "this is noise, skip it."
+///
+/// Reference implementation for the TS `extract-knowledge` noise filter
+/// (RFC-0020 T5): no longer called from the Rust extractor after T3 removed
+/// document→Concept emission, but kept as the canonical logic the TS op ports
+/// (plus a doc-heading-generic blocklist).
+#[allow(dead_code)]
 fn is_noise_concept(name: &str) -> bool {
     if name.len() < 3 {
         return true;

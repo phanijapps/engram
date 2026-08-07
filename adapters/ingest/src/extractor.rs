@@ -116,8 +116,20 @@ impl GraphExtractor {
 
         let is_code = matches!(document.kind, SourceDocumentKind::Code);
 
-        // (name, kind, body, chunk_index) per detected symbol, in document order.
-        let mut symbols: Vec<(String, EntityKind, String, usize)> = Vec::new();
+        // {repo} identity component = the stable-source-key (RFC-0020); the git
+        // remote + revision are metadata properties (Phase 4), not identity.
+        let repo_key = source
+            .metadata
+            .as_ref()
+            .and_then(|meta| meta.get(STABLE_SOURCE_KEY))
+            .and_then(|v| v.as_str());
+        let doc_path = document.path.as_deref();
+
+        // (qualified_name, bare_name, kind, body, chunk_index) per detected
+        // symbol, in document order. Code entities carry a qualified identity
+        // `{repo}/{path}::{bare_name}`; the bare name is retained for body
+        // matching (co-occurrence) and AST-callee resolution.
+        let mut symbols: Vec<(String, String, EntityKind, String, usize)> = Vec::new();
         if is_code {
             for (chunk_idx, chunk) in chunks.iter().enumerate() {
                 let Some(anchor) = chunk
@@ -127,13 +139,14 @@ impl GraphExtractor {
                 else {
                     continue;
                 };
-                let Some((kind, name)) = parse_symbol(anchor) else {
+                let Some((kind, bare)) = parse_symbol(anchor) else {
                     continue;
                 };
-                if name.is_empty() || is_noise_symbol(&name) {
+                if bare.is_empty() || is_noise_symbol(&bare) {
                     continue;
                 }
-                symbols.push((name, kind, chunk.text.clone(), chunk_idx));
+                let qualified = qualified_symbol_name(repo_key, doc_path, &bare);
+                symbols.push((qualified, bare, kind, chunk.text.clone(), chunk_idx));
             }
         } else {
             for (chunk_idx, chunk) in chunks.iter().enumerate() {
@@ -141,23 +154,38 @@ impl GraphExtractor {
                 if name.is_empty() {
                     continue;
                 }
-                symbols.push((name, EntityKind::Concept, chunk.text.clone(), chunk_idx));
+                symbols.push((
+                    name.clone(),
+                    name,
+                    EntityKind::Concept,
+                    chunk.text.clone(),
+                    chunk_idx,
+                ));
             }
         }
 
-        // Dedupe by name (first wins), build entities + a name->index map.
+        // Bare→qualified map (first wins) for resolving AST callers/callees,
+        // which treesitter emits as bare names, against the qualified entities.
+        let mut bare_to_qualified: HashMap<String, String> = HashMap::new();
+        for (qualified, bare, _, _, _) in &symbols {
+            bare_to_qualified
+                .entry(bare.clone())
+                .or_insert_with(|| qualified.clone());
+        }
+
+        // Dedupe by qualified name (first wins), build entities + a name->index map.
         let mut entities: Vec<KnowledgeEntity> = Vec::new();
         let mut index: HashMap<String, usize> = HashMap::new();
-        for (name, kind, _body, _chunk_idx) in &symbols {
-            if index.contains_key(name) {
+        for (qualified, _bare, kind, _body, _chunk_idx) in &symbols {
+            if index.contains_key(qualified) {
                 continue;
             }
-            index.insert(name.clone(), entities.len());
+            index.insert(qualified.clone(), entities.len());
             entities.push(KnowledgeEntity {
-                id: entity_id(&graph_id, name),
+                id: entity_id(&graph_id, qualified),
                 graph_id: Some(graph_id.clone()),
                 kind: kind.clone(),
-                name: name.clone(),
+                name: qualified.clone(),
                 aliases: Vec::new(),
                 scope: source.scope.clone(),
                 source_refs: vec![EvidenceRef {
@@ -192,22 +220,28 @@ impl GraphExtractor {
         let mut seen: HashSet<(String, String)> = HashSet::new();
 
         if let Some(calls) = ast_calls {
-            // AST-level calls: each (caller, callee) is a real call expression.
+            // AST-level calls: each (caller, callee) is a real call expression,
+            // emitted by treesitter as bare names. Resolve the caller (and a
+            // local callee) against the document's bare→qualified map; a
+            // non-local callee stays a bare name-only ref for cross-file
+            // resolution in `extract_into`.
             for (caller, callee) in calls {
                 if caller == callee {
                     continue;
                 }
-                if !index.contains_key(caller) {
+                let Some(caller_qual) = bare_to_qualified.get(caller) else {
+                    continue;
+                };
+                let Some(&subject_index) = index.get(caller_qual) else {
+                    continue;
+                };
+                let object_qual = bare_to_qualified.get(callee).cloned();
+                let object_key = object_qual.clone().unwrap_or_else(|| callee.clone());
+                if !seen.insert((caller_qual.clone(), object_key.clone())) {
                     continue;
                 }
-                if !seen.insert((caller.clone(), callee.clone())) {
-                    continue;
-                }
-                let subject_index = index[caller];
-                // Cross-file call: callee not in this document — create a
-                // name-only ref. The cross-file resolver connects it by name.
-                let object_ref = if let Some(&oi) = index.get(callee) {
-                    entity_ref(&entities[oi])
+                let object_ref = if let Some(oq) = &object_qual {
+                    entity_ref(&entities[index[oq]])
                 } else {
                     EntityRef {
                         id: None,
@@ -217,7 +251,7 @@ impl GraphExtractor {
                     }
                 };
                 relationships.push(KnowledgeRelationship {
-                    id: relationship_id(&graph_id, caller, callee),
+                    id: relationship_id(&graph_id, caller_qual, &object_key),
                     graph_id: Some(graph_id.clone()),
                     subject: entity_ref(&entities[subject_index]),
                     predicate: "calls".to_owned(),
@@ -231,21 +265,23 @@ impl GraphExtractor {
                 });
             }
         } else {
-            // Co-occurrence fallback: name appears in body text.
-            for (subject_name, _kind, body, _chunk_idx) in &symbols {
-                let Some(&subject_index) = index.get(subject_name) else {
+            // Co-occurrence fallback: a symbol's bare name appears in another
+            // symbol's body. Match on bare names (the body holds bare tokens);
+            // form the edge between the corresponding qualified entities.
+            for (subject_qual, _subject_bare, _kind, body, _chunk_idx) in &symbols {
+                let Some(&subject_index) = index.get(subject_qual) else {
                     continue;
                 };
-                for object_name in index.keys() {
-                    if object_name == subject_name || !mentions(body, object_name) {
+                for (object_qual, object_bare, _, _, _) in &symbols {
+                    if object_qual == subject_qual || !mentions(body, object_bare) {
                         continue;
                     }
-                    if !seen.insert((subject_name.clone(), object_name.clone())) {
+                    if !seen.insert((subject_qual.clone(), object_qual.clone())) {
                         continue;
                     }
-                    let object_index = index[object_name];
+                    let object_index = index[object_qual];
                     relationships.push(KnowledgeRelationship {
-                        id: relationship_id(&graph_id, subject_name, object_name),
+                        id: relationship_id(&graph_id, subject_qual, object_qual),
                         graph_id: Some(graph_id.clone()),
                         subject: entity_ref(&entities[subject_index]),
                         predicate: predicate.to_owned(),
@@ -265,8 +301,8 @@ impl GraphExtractor {
         // they came from so Q&A can find the actual code (not just text that
         // mentions the entity name).
         let mut chunk_entities_map: HashMap<usize, Vec<EntityRef>> = HashMap::new();
-        for (name, _kind, _body, chunk_idx) in &symbols {
-            if let Some(&entity_idx) = index.get(name) {
+        for (qualified, _bare, _kind, _body, chunk_idx) in &symbols {
+            if let Some(&entity_idx) = index.get(qualified) {
                 chunk_entities_map
                     .entry(*chunk_idx)
                     .or_default()
@@ -418,6 +454,28 @@ fn parse_symbol(anchor: &str) -> Option<(EntityKind, String)> {
         _ => return None,
     };
     Some((kind, name.to_owned()))
+}
+
+/// Composes a code entity's qualified identity `{repo}/{path}::{bare}` (RFC-0020).
+/// `{repo}` is the stable-source-key; when absent the path alone qualifies; when
+/// both are absent the bare name is returned (degraded but stable). The git
+/// remote + revision are metadata properties (Phase 4), never identity.
+fn qualified_symbol_name(repo: Option<&str>, path: Option<&str>, bare: &str) -> String {
+    let mut prefix = String::new();
+    if let Some(r) = repo.filter(|r| !r.is_empty()) {
+        prefix.push_str(r);
+    }
+    if let Some(p) = path.filter(|p| !p.is_empty()) {
+        if !prefix.is_empty() {
+            prefix.push('/');
+        }
+        prefix.push_str(p);
+    }
+    if prefix.is_empty() {
+        bare.to_owned()
+    } else {
+        format!("{prefix}::{bare}")
+    }
 }
 
 /// Derives a short, human-readable concept name from the first line of a prose
@@ -684,7 +742,7 @@ fn belongs_to_rel_id(graph_id: &KnowledgeGraphId, repo_entity_id: &EntityId) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::{is_noise_symbol, mentions};
+    use super::{is_noise_symbol, mentions, qualified_symbol_name};
 
     #[test]
     fn mentions_is_multibyte_safe() {
@@ -748,5 +806,31 @@ mod tests {
         for n in ["", "   ", "{}", "123", "_", "..."] {
             assert!(is_noise_symbol(n), "{n:?} should be noise");
         }
+    }
+
+    #[test]
+    fn qualified_symbol_name_formats_identity() {
+        // Full {repo}/{path}::{bare}.
+        assert_eq!(
+            qualified_symbol_name(Some("my-repo"), Some("src/lib.rs"), "alpha"),
+            "my-repo/src/lib.rs::alpha"
+        );
+        // No repo → path-qualified.
+        assert_eq!(
+            qualified_symbol_name(None, Some("lib.rs"), "alpha"),
+            "lib.rs::alpha"
+        );
+        // No path → repo-qualified.
+        assert_eq!(
+            qualified_symbol_name(Some("my-repo"), None, "alpha"),
+            "my-repo::alpha"
+        );
+        // Neither → bare (degraded but stable).
+        assert_eq!(qualified_symbol_name(None, None, "alpha"), "alpha");
+        // Empty repo/path are treated as absent.
+        assert_eq!(
+            qualified_symbol_name(Some(""), Some("lib.rs"), "alpha"),
+            "lib.rs::alpha"
+        );
     }
 }

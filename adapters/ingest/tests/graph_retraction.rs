@@ -103,7 +103,7 @@ fn re_ingest_replaces_changed_file_graph() {
 
     // Verify "alpha" entity exists.
     let entities_1 = block_on(store.list_entities(&scope())).expect("list entities 1");
-    let has_alpha = entities_1.iter().any(|e| e.name == "alpha");
+    let has_alpha = entities_1.iter().any(|e| e.name.ends_with("::alpha"));
     assert!(has_alpha, "entity 'alpha' must exist after first scan");
 
     // Second scan: change the file so "alpha" → "beta".
@@ -123,11 +123,11 @@ fn re_ingest_replaces_changed_file_graph() {
     // "alpha" is gone; "beta" is present.
     let entities_2 = block_on(store.list_entities(&scope())).expect("list entities 2");
     assert!(
-        !entities_2.iter().any(|e| e.name == "alpha"),
+        !entities_2.iter().any(|e| e.name.ends_with("::alpha")),
         "entity 'alpha' must be gone after re-ingest"
     );
     assert!(
-        entities_2.iter().any(|e| e.name == "beta"),
+        entities_2.iter().any(|e| e.name.ends_with("::beta")),
         "entity 'beta' must exist after re-ingest"
     );
 
@@ -210,11 +210,11 @@ fn removed_file_graph_is_deleted_after_rescan() {
     // Entities from a.rs are gone; entities from b.rs survive.
     let entities = block_on(store.list_entities(&scope())).expect("list entities");
     assert!(
-        !entities.iter().any(|e| e.name == "alpha"),
+        !entities.iter().any(|e| e.name.ends_with("::alpha")),
         "entity 'alpha' from a.rs must be gone"
     );
     assert!(
-        entities.iter().any(|e| e.name == "beta"),
+        entities.iter().any(|e| e.name.ends_with("::beta")),
         "entity 'beta' from b.rs must survive"
     );
 

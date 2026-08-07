@@ -3418,7 +3418,7 @@ mod tests {
     fn inject_exact_matches_skips_chunk_hits() {
         // A chunk whose label happens to match the query must NOT be marked
         // is_exact — that tag means "identifier match," not "content match."
-        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        let by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
         let mut hits = vec![hit_chunk("alphaFunction body text", Some("a.rs"), 0.05)];
         let injected = inject_exact_matches(&mut hits, &by_id, "alphaFunction");
         // No entities in by_id → nothing injected.

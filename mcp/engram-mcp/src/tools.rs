@@ -1058,25 +1058,21 @@ mod tests {
         assert!(
             entities
                 .iter()
-                .any(|e| e.name == "alpha" || e.name == "beta"),
+                .any(|e| e.name.ends_with("::alpha") || e.name.ends_with("::beta")),
             "scan_repo must index the functions: {entities:?}"
         );
     }
 
-    /// AC4 + AC6 — a markdown section whose heading matches a code symbol is
-    /// bridged to it: the concept `flange` (from docs/flange.md) `describes` the
-    /// function `flange` (from src/lib.rs), connecting docs to code.
+    /// RFC-0020 T3: the doc↔code `describes` bridge is removed — documents no
+    /// longer emit Concept entities (chunks-only at ingest; the LLM
+    /// extract-knowledge op produces the concept sub-graph).
     #[test]
-    fn scan_repo_bridges_doc_concept_to_code() {
+    fn scan_repo_no_describes_bridge_for_docs() {
         let dir = tempfile::tempdir().unwrap();
         let repo_dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
         std::fs::create_dir_all(repo_dir.path().join("docs")).unwrap();
-        std::fs::write(
-            repo_dir.path().join("src/lib.rs"),
-            "pub fn flange() {}\npub fn other() { flange(); }\n",
-        )
-        .unwrap();
+        std::fs::write(repo_dir.path().join("src/lib.rs"), "pub fn flange() {}\n").unwrap();
         std::fs::write(
             repo_dir.path().join("docs/flange.md"),
             "# flange\nThe flange connects the widgets.\n",
@@ -1085,59 +1081,11 @@ mod tests {
         let app = test_app(dir.path());
         crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
             .unwrap();
-        let q = app
-            .provider
-            .require_knowledge_query()
-            .expect("knowledge_query handle");
+        let q = app.provider.require_knowledge_query().expect("handle");
         let rels = block_on(q.list_relationships(&app.scope)).unwrap();
         assert!(
-            rels.iter().any(|r| r.predicate == "describes"
-                && r.subject.name.as_deref() == Some("flange")
-                && r.object.name.as_deref() == Some("flange")),
-            "expected a concept -[describes]-> function edge for 'flange': {rels:?}"
-        );
-    }
-
-    /// P1 AC1–AC3 — graph tools traverse the unified graph (concept ↔ code).
-    #[test]
-    fn graph_tools_traverse_doc_code_bridge() {
-        let dir = tempfile::tempdir().unwrap();
-        let repo_dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
-        std::fs::create_dir_all(repo_dir.path().join("docs")).unwrap();
-        std::fs::write(repo_dir.path().join("src/lib.rs"), "pub fn flange() {}\n").unwrap();
-        std::fs::write(
-            repo_dir.path().join("docs/flange.md"),
-            "# flange\ndocs body\n",
-        )
-        .unwrap();
-        let app = test_app(dir.path());
-        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
-            .unwrap();
-
-        // AC1: neighbors shows the describes bridge.
-        let nbrs = crate::graph::graph_neighbors(&app, &json!({ "name": "flange" })).unwrap();
-        let nbody = nbrs["content"][0]["text"].as_str().unwrap();
-        assert!(
-            nbody.contains("describes"),
-            "neighbors must show describes: {nbody}"
-        );
-
-        // AC2: subgraph includes the describes bridge.
-        let sub =
-            crate::graph::graph_subgraph(&app, &json!({ "name": "flange", "depth": 2 })).unwrap();
-        let sbody = sub["content"][0]["text"].as_str().unwrap();
-        assert!(
-            sbody.contains("describes"),
-            "subgraph must include describes: {sbody}"
-        );
-
-        // AC3: resolve finds flange.
-        let res = crate::graph::resolve_entity(&app, &json!({ "name": "flange" })).unwrap();
-        let rbody = res["content"][0]["text"].as_str().unwrap();
-        assert!(
-            rbody.contains("Resolved") && rbody.contains("flange"),
-            "resolve must find flange: {rbody}"
+            !rels.iter().any(|r| r.predicate == "describes"),
+            "no describes edges after T3 (bridge removed): {rels:?}"
         );
     }
 
@@ -1656,7 +1604,7 @@ mod tests {
             repo_dir.path().join("src/main.rs"),
             "struct Engine { store: Store }
 impl Engine {
-    fn run(&self) {
+    fn drive(&self) {
         self.store.save();
         self.process();
     }
@@ -1676,15 +1624,27 @@ impl Store {
         let rels = block_on(q.list_relationships(&app.scope)).unwrap();
         assert!(
             rels.iter().any(|r| r.predicate == "calls"
-                && r.subject.name.as_deref() == Some("run")
-                && r.object.name.as_deref() == Some("save")),
-            "receiver call run->save should be extracted: {rels:?}"
+                && r.subject
+                    .name
+                    .as_deref()
+                    .is_some_and(|n| n.ends_with("::drive"))
+                && r.object
+                    .name
+                    .as_deref()
+                    .is_some_and(|n| n.ends_with("::save"))),
+            "receiver call drive->save should be extracted: {rels:?}"
         );
         assert!(
             rels.iter().any(|r| r.predicate == "calls"
-                && r.subject.name.as_deref() == Some("run")
-                && r.object.name.as_deref() == Some("process")),
-            "receiver call run->process should be extracted: {rels:?}"
+                && r.subject
+                    .name
+                    .as_deref()
+                    .is_some_and(|n| n.ends_with("::drive"))
+                && r.object
+                    .name
+                    .as_deref()
+                    .is_some_and(|n| n.ends_with("::process"))),
+            "receiver call drive->process should be extracted: {rels:?}"
         );
     }
 
@@ -1711,7 +1671,16 @@ impl Store {
             "build should succeed: {bbody}"
         );
 
-        let path = crate::hierarchy::hierarchy_path(&app, &json!({ "seeds": ["alpha"] })).unwrap();
+        // T1 qualified entity names — resolve the bare seed to the qualified name.
+        let q = app.provider.require_knowledge_query().expect("handle");
+        let entities = block_on(q.list_entities(&app.scope)).unwrap();
+        let alpha = entities
+            .iter()
+            .find(|e| e.name.ends_with("::alpha"))
+            .expect("alpha entity")
+            .name
+            .clone();
+        let path = crate::hierarchy::hierarchy_path(&app, &json!({ "seeds": [alpha] })).unwrap();
         let pbody = path["content"][0]["text"].as_str().unwrap();
         assert!(
             !pbody.contains("0 node(s)"),

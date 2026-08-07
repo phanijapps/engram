@@ -562,7 +562,6 @@ fn is_noise_concept(name: &str) -> bool {
         "box",
         "rc",
         "arc",
-        "string",
         "object",
         "array",
         "map",

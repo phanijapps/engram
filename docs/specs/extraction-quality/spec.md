@@ -1,6 +1,6 @@
 # Spec: extraction-quality
 
-- **Status:** Draft
+- **Status:** Implementing
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** RFC-0020 (Accepted), RFC-0014 (canonical identity), RFC-0018 (retrieval quality), ADR-0022 (surface parity)
@@ -73,14 +73,14 @@ metadata, never an identity component).
 ## Acceptance Criteria
 
 - [x] Bare-generic symbols (`new`, `clone`, `len`, `fmt`, primitives) are suppressed at code extraction. *(shipped — `is_noise_symbol` tests green)*
-- [ ] Code entities extracted from a source carry qualified identities `{repo}/{path}::{bare_name}` with `{repo}` = stable-source-key.
-- [ ] `symbol_context`/`change_impact`/`search` resolve a user-supplied **bare** symbol (e.g. `parse_symbol`) against qualified identities via suffix match, on BOTH the TS HTTP MCP and the Rust stdio MCP — no empty-result regression on either transport.
-- [ ] Cross-file `calls` edges still resolve (`object.id` populated) after qualified identities land.
-- [ ] The naive document `concept_name` path emits zero entities from non-code documents at ingest; `concept_name()` is dead code and removed.
-- [ ] `extract-knowledge` over a fixture yields `Concept` entities + typed edges (`depends_on`/`has_property`/`relates_to`) for valid concepts, with doc-heading noise (`Architecture`, `overview`, `introduction`) excluded.
-- [ ] `extract-knowledge` is idempotent — a second run writes no duplicate entities or edges; the same concept from two documents converges to one entity (keyed on scope + canonical label, `graph_id = None`).
-- [ ] `extract-knowledge` is reachable through the existing `maintenance_run` MCP tool (`op=extract-knowledge`), with no new tool added (36-tool count unchanged).
-- [ ] `extract-knowledge` reads chunks per-document (`listGraphs` + `listChunksByDocument`); it never loads the full scope-wide chunk set (no OOM on the 442k-chunk store).
+- [x] Code entities extracted from a source carry qualified identities `{repo}/{path}::{bare_name}` with `{repo}` = stable-source-key. *(T1: `adapters/ingest/tests/extractor.rs` `code_entities_carry_qualified_identities`)*
+- [x] `symbol_context`/`change_impact`/`search` resolve a user-supplied **bare** symbol (e.g. `parse_symbol`) against qualified identities via suffix match, on BOTH the TS HTTP MCP and the Rust stdio MCP — no empty-result regression on either transport. *(T7: `packages/runtime/test/codegraph.test.ts` + `mcp/engram-mcp/src/codegraph.rs` tests)*
+- [x] Cross-file `calls` edges still resolve (`object.id` populated) after qualified identities land. *(T2: `adapters/ingest/tests/extractor.rs` `cross_file_calls_resolve_after_qualification`)*
+- [x] The naive document `concept_name` path emits zero entities from non-code documents at ingest; `concept_name()` is dead code and removed. *(T3: `adapters/ingest/tests/extractor.rs` `non_code_documents_emit_no_graph_entities`)*
+- [x] `extract-knowledge` over a fixture yields `Concept` entities + typed edges (`depends_on`/`has_property`/`relates_to`) for valid concepts, with doc-heading noise (`Architecture`, `overview`, `introduction`) excluded. *(T5: `packages/runtime/test/maintenance.extract-knowledge.test.ts`)*
+- [x] `extract-knowledge` is idempotent — a second run writes no duplicate entities or edges; the same concept from two documents converges to one entity (keyed on scope + canonical label, `graph_id = None`). *(T5: same test — idempotency + convergence cases)*
+- [x] `extract-knowledge` is reachable through the existing `maintenance_run` MCP tool (`op=extract-knowledge`), with no new tool added (36-tool count unchanged). *(T6: `packages/runtime/test/mcp.test.ts` — dispatch + 36-tool parity)*
+- [x] `extract-knowledge` reads chunks per-document (`listGraphs` + `listChunksByDocument`); it never loads the full scope-wide chunk set (no OOM on the 442k-chunk store). *(T4: `packages/node/test/transport.test.ts` `listChunksByDocument`; T5 op uses it per-document)*
 
 ## Assumptions
 

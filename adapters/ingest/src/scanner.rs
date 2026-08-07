@@ -464,18 +464,6 @@ where
                                     }
                                 }
                             }
-                            // T5: cross-document mentions resolution — fill name-only
-                            // `mentions` object refs against the global name index so
-                            // concepts from different documents are connected.
-                            if rel.predicate == "mentions" && rel.object.id.is_none() {
-                                if let Some(name) = &rel.object.name {
-                                    if opts.scan_filter.should_link_concept(name) {
-                                        if let Some(id) = idx.get(name) {
-                                            rel.object.id = Some(Id::from(id.clone()));
-                                        }
-                                    }
-                                }
-                            }
                         }
                     }
                     // Persist the graph + entities + relationships.

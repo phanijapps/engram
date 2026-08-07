@@ -193,7 +193,10 @@ export async function extractKnowledge(
         const subject = canonicalLabel(p.subject);
         const predicate = p.predicate;
         const value = p.value;
-        if (!subject || !predicate || !value || !conceptLabels.has(subject)) {
+        // Property edges are always `has_property` (concept → literal value);
+        // reject any other predicate so a malformed emission (e.g. depends_on)
+        // can't write an untyped concept→literal edge.
+        if (!subject || !value || !conceptLabels.has(subject) || predicate !== "has_property") {
           skipped++;
           continue;
         }

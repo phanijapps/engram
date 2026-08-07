@@ -7,10 +7,20 @@ import { buildEngramConfig, buildScope } from "../shared/config.js";
 import { createLlmProvider, type LlmProvider } from "./llm.js";
 import { reflectLlm } from "./reflect.js";
 import { contradictLlm } from "./contradict.js";
+import { extractKnowledge } from "./extract_knowledge.js";
 
 /** The maintenance operation to run. `consolidate` is the deterministic default. */
-export type MaintainOp = "consolidate" | "reflect-llm" | "contradict-llm";
-const OPS: readonly MaintainOp[] = ["consolidate", "reflect-llm", "contradict-llm"];
+export type MaintainOp =
+  | "consolidate"
+  | "reflect-llm"
+  | "contradict-llm"
+  | "extract-knowledge";
+const OPS: readonly MaintainOp[] = [
+  "consolidate",
+  "reflect-llm",
+  "contradict-llm",
+  "extract-knowledge",
+];
 
 /** Parsed `engram-maintain` flags. */
 export interface MaintainArgs {
@@ -30,7 +40,7 @@ export interface MaintainOptions {
   transport: NativeProviderTransport;
   scope: Scope;
   op?: MaintainOp;
-  /** Injected LLM provider (reflect-llm / contradict-llm). Defaults to env config. */
+  /** Injected LLM provider (reflect-llm / contradict-llm / extract-knowledge). Defaults to env config. */
   llm?: LlmProvider;
   dryRun?: boolean;
   since?: string;
@@ -129,6 +139,12 @@ export async function runMaintain(
           scope: opts.scope,
           ...(opts.llm ? { llm: opts.llm } : {}),
         });
+      } else if (op === "extract-knowledge") {
+        result = await extractKnowledge({
+          transport: opts.transport,
+          scope: opts.scope,
+          ...(opts.llm ? { llm: opts.llm } : {}),
+        });
       } else {
         result = (await opts.transport.consolidate({
           scope: opts.scope,
@@ -174,7 +190,9 @@ export async function runMaintainFromArgs(
     transport,
     scope,
     ...(args.op !== undefined ? { op: args.op } : {}),
-    ...(args.op === "reflect-llm" || args.op === "contradict-llm"
+    ...(args.op === "reflect-llm" ||
+    args.op === "contradict-llm" ||
+    args.op === "extract-knowledge"
       ? { llm: createLlmProvider() }
       : {}),
     ...(args.dryRun !== undefined ? { dryRun: args.dryRun } : {}),

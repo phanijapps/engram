@@ -36,6 +36,10 @@ function mockTransport(): NativeProviderTransport {
     hierarchyPath: vi.fn(async () => ({})),
     getEntity: vi.fn(async () => null),
     graphNeighbors: vi.fn(async () => []),
+    // extract-knowledge iterates per-document graphs + reads chunks per doc.
+    // Defaults return empty so the op short-circuits before any LLM call.
+    listGraphs: vi.fn(async () => []),
+    listChunksByDocument: vi.fn(async () => []),
     procedureUpsert: vi.fn(async () => ({})),
     procedureList: vi.fn(async () => []),
     procedureIncrementSuccess: vi.fn(async () => ({})),
@@ -178,6 +182,40 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     const ont = JSON.parse(ontText);
     expect(ont.layers).toBeInstanceOf(Array);
     expect(ont.layers.length).toBeGreaterThan(0);
+
+    await client.close();
+  }, 15000);
+
+  it("maintenance_run op=extract-knowledge dispatches to the op (36-tool list unchanged)", async () => {
+    const t = mockTransport();
+    const port = await start(t);
+
+    const client = new Client(
+      { name: "test-harness", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } }
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+    );
+
+    // The tool surface is unchanged — still exactly 36 tools (extract-knowledge
+    // is a new op value on maintenance_run, NOT a new tool).
+    const { tools } = await client.listTools();
+    expect(tools.length).toBe(36);
+
+    // maintenance_run op=extract-knowledge dispatches to the op: it iterates the
+    // scope's graphs via listGraphs (empty here → op short-circuits before any
+    // LLM call, so no provider/key is needed). Asserting listGraphs was invoked
+    // proves the dispatch reached extractKnowledge.
+    const result = await client.callTool({
+      name: "maintenance_run",
+      arguments: { scope: { tenant: "t" }, op: "extract-knowledge" }
+    });
+    expect(t.listGraphs).toHaveBeenCalledTimes(1);
+    const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "{}";
+    const payload = JSON.parse(text);
+    expect(payload.documentsRead).toBe(0);
+    expect(payload.entitiesWritten).toBe(0);
 
     await client.close();
   }, 15000);

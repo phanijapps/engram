@@ -291,10 +291,12 @@ export function registerTools(
     "maintenance_run",
     {
       description:
-        "Run a maintenance op over scope. PRIVACY: reflect-llm / contradict-llm route the scope's memories/beliefs to a third-party LLM (Anthropic by default; set PI_PROVIDER=ollama for local) and incur token cost — only call with consent. Ops: reflect-llm (synthesize beliefs), contradict-llm (detect contradictions), consolidate (deterministic, no LLM). Default reflect-llm.",
+        "Run a maintenance op over scope. PRIVACY: reflect-llm / contradict-llm / extract-knowledge route the scope's memories/beliefs/documents to a third-party LLM (Anthropic by default; set PI_PROVIDER=ollama for local) and incur token cost — only call with consent. Ops: reflect-llm (synthesize beliefs), contradict-llm (detect contradictions), extract-knowledge (derive Concept entities + typed edges from documents), consolidate (deterministic, no LLM). Default reflect-llm.",
       inputSchema: z.object({
         scope: scopeSchema,
-        op: z.enum(["reflect-llm", "contradict-llm", "consolidate"]).optional(),
+        op: z
+          .enum(["reflect-llm", "contradict-llm", "extract-knowledge", "consolidate"])
+          .optional(),
       }),
     },
     async ({ scope, op }) => {
@@ -308,6 +310,10 @@ export function registerTools(
       if (theOp === "contradict-llm") {
         const { contradictLlm } = await import("../maintenance/contradict.js");
         return textResult(await contradictLlm({ transport, scope: theScope, llm }));
+      }
+      if (theOp === "extract-knowledge") {
+        const { extractKnowledge } = await import("../maintenance/extract_knowledge.js");
+        return textResult(await extractKnowledge({ transport, scope: theScope, llm }));
       }
       const { reflectLlm } = await import("../maintenance/reflect.js");
       return textResult(await reflectLlm({ transport, scope: theScope, llm }));

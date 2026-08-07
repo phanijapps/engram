@@ -6,6 +6,36 @@ use engram_knowledge::KnowledgeGraphRepository;
 use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 
+/// Ingests one code file and returns the ingested source/document/chunks.
+fn ingest_code(
+    store: &SqlKnowledgeStore,
+    stable_source_key: &str,
+    path: &str,
+    text: &str,
+) -> engram_ingest::IngestedKnowledge {
+    let ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
+    let request = DocumentIngestRequest {
+        source_kind: SourceKind::Filesystem,
+        source_name: "demo".to_owned(),
+        scope: scope(),
+        document_kind: SourceDocumentKind::Code,
+        document: DocumentMetadata {
+            path: Some(path.to_owned()),
+            ..Default::default()
+        },
+        text: text.to_owned(),
+        policy: policy(),
+        actor: Actor {
+            id: Id::from("agent-1"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        },
+        stable_source_key: Some(stable_source_key.to_owned()),
+    };
+    block_on(ingestor.ingest(store, request)).expect("ingest")
+}
+
 fn scope() -> Scope {
     Scope {
         tenant: "tenant-a".to_owned(),
@@ -195,5 +225,65 @@ fn code_entities_carry_qualified_identities() {
     assert_eq!(
         id_first, id_again,
         "entity id must be stable across re-extraction"
+    );
+}
+
+#[test]
+fn cross_file_calls_resolve_after_qualification() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let mut index: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+    // Doc A defines `foo`. extract_into registers it under both the qualified
+    // name and the bare tail in the shared cross-file index (RFC-0020 T2).
+    let a = ingest_code(&store, "repo", "a.rs", "fn foo() {}\n");
+    let ext_a = block_on(GraphExtractor::new().extract_into(
+        &store,
+        &a.source,
+        &a.document,
+        &a.chunks,
+        Some(&mut index),
+    ))
+    .expect("extract A");
+    let foo_id = ext_a
+        .entities
+        .iter()
+        .find(|e| e.name.ends_with("::foo"))
+        .expect("foo entity")
+        .id
+        .to_string();
+    // The bare secondary key resolves to foo's id — the mechanism that lets a
+    // cross-file AST callee (bare "foo") resolve post-qualification.
+    assert_eq!(index.get("foo"), Some(&foo_id));
+
+    // Doc B calls foo (cross-file). extract_with_calls forms a bar->foo edge
+    // with a bare, unresolved object ref; the shared index resolves it (this
+    // mirrors the scanner's resolution step, deterministically).
+    let b = ingest_code(&store, "repo", "b.rs", "fn bar() {}\n");
+    let mut ext_b = GraphExtractor::new()
+        .extract_with_calls(
+            &b.source,
+            &b.document,
+            &b.chunks,
+            Some(&[("bar".to_string(), "foo".to_string())]),
+        )
+        .expect("extract B");
+    for rel in &mut ext_b.relationships {
+        if rel.predicate == "calls" && rel.object.id.is_none() {
+            if let Some(name) = &rel.object.name {
+                if let Some(id) = index.get(name) {
+                    rel.object.id = Some(Id::from(id.clone()));
+                }
+            }
+        }
+    }
+    let bar_calls_foo = ext_b
+        .relationships
+        .iter()
+        .find(|r| r.predicate == "calls" && r.object.name.as_deref() == Some("foo"))
+        .expect("bar -> foo cross-file calls edge");
+    assert_eq!(
+        bar_calls_foo.object.id.as_ref().map(|id| id.to_string()),
+        Some(foo_id),
+        "cross-file callee must resolve to A's foo entity id"
     );
 }

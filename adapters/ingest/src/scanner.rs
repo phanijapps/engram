@@ -454,7 +454,7 @@ where
                     // C1: cross-file resolution — register entities + resolve refs.
                     if let Ok(mut idx) = name_index.lock() {
                         for entity in &g.entities {
-                            idx.insert(entity.name.clone(), entity.id.to_string());
+                            crate::extractor::register_in_name_index(&mut idx, entity);
                         }
                         for rel in &mut g.relationships {
                             if rel.predicate == "calls" && rel.object.id.is_none() {

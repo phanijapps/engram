@@ -399,10 +399,12 @@ impl GraphExtractor {
         let mut extracted = Self.extract(source, document, chunks)?;
 
         // Cross-file edge resolution (C1): fill name-only calls object refs
-        // against the caller-maintained global name→id index.
+        // against the caller-maintained global name→id index. Each entity is
+        // registered under both its qualified name and its bare tail so AST
+        // callees (bare) resolve (RFC-0020 T2).
         if let Some(index) = name_index {
             for entity in &extracted.entities {
-                index.insert(entity.name.clone(), entity.id.to_string());
+                register_in_name_index(index, entity);
             }
             for rel in &mut extracted.relationships {
                 if rel.predicate == "calls" && rel.object.id.is_none() {
@@ -475,6 +477,24 @@ fn qualified_symbol_name(repo: Option<&str>, path: Option<&str>, bare: &str) -> 
         bare.to_owned()
     } else {
         format!("{prefix}::{bare}")
+    }
+}
+
+/// Registers an entity in the cross-file name index under BOTH its qualified
+/// name (primary) and its bare tail (secondary), so AST callees — which
+/// treesitter emits as bare names — resolve against qualified entities
+/// (RFC-0020 T2). Bare collisions are last-write-wins (a documented Phase-1
+/// degradation: a colliding bare callee may resolve to the wrong target;
+/// removed by a Phase 2 scope-wide symbol table).
+pub(crate) fn register_in_name_index(
+    index: &mut HashMap<String, String>,
+    entity: &KnowledgeEntity,
+) {
+    index.insert(entity.name.clone(), entity.id.to_string());
+    if let Some(bare) = entity.name.rsplit("::").next() {
+        if bare != entity.name {
+            index.insert(bare.to_owned(), entity.id.to_string());
+        }
     }
 }
 

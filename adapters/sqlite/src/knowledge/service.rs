@@ -250,7 +250,9 @@ impl SqlKnowledgeStore {
     pub async fn list_entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>> {
         let connection = self.lock()?;
         let mut statement = connection
-            .prepare("SELECT record_json FROM knowledge_entities ORDER BY id")
+            .prepare(
+                "SELECT record_json FROM knowledge_entities WHERE archived_at IS NULL ORDER BY id",
+            )
             .map_err(sql_error)?;
         let rows = statement
             .query_map([], |row| row.get::<_, String>(0))
@@ -371,6 +373,7 @@ impl SqlKnowledgeStore {
                 "SELECT record_json FROM knowledge_entities \
                  WHERE graph_id IN \
                      (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?1) \
+                   AND archived_at IS NULL \
                  ORDER BY id",
             )
             .map_err(sql_error)?;
@@ -404,6 +407,7 @@ impl SqlKnowledgeStore {
                 "SELECT record_json FROM knowledge_relationships \
                  WHERE graph_id IN \
                      (SELECT id FROM knowledge_graphs WHERE stable_source_key = ?1) \
+                   AND archived_at IS NULL \
                  ORDER BY id",
             )
             .map_err(sql_error)?;
@@ -429,7 +433,7 @@ impl SqlKnowledgeStore {
     ) -> CoreResult<Vec<KnowledgeRelationship>> {
         let connection = self.lock()?;
         let mut statement = connection
-            .prepare("SELECT record_json FROM knowledge_relationships ORDER BY id")
+            .prepare("SELECT record_json FROM knowledge_relationships WHERE archived_at IS NULL ORDER BY id")
             .map_err(sql_error)?;
         let rows = statement
             .query_map([], |row| row.get::<_, String>(0))
@@ -453,17 +457,26 @@ impl SqlKnowledgeStore {
     pub async fn relationship_endpoints(
         &self,
         scope: &Scope,
-    ) -> CoreResult<Vec<(Option<String>, Option<String>, Option<String>, Option<String>)>> {
+    ) -> CoreResult<
+        Vec<(
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )>,
+    > {
         let connection = self.lock()?;
         let ws = scope.workspace.as_deref().unwrap_or("");
         let mut statement = connection
             .prepare(
                 "SELECT record_json FROM knowledge_relationships \
-                 WHERE tenant = ?1 AND workspace = ?2 ORDER BY id",
+                 WHERE tenant = ?1 AND workspace = ?2 AND archived_at IS NULL ORDER BY id",
             )
             .map_err(sql_error)?;
         let rows = statement
-            .query_map(rusqlite::params![&scope.tenant, ws], |row| row.get::<_, String>(0))
+            .query_map(rusqlite::params![&scope.tenant, ws], |row| {
+                row.get::<_, String>(0)
+            })
             .map_err(sql_error)?;
         let mut out = Vec::new();
         for row in rows {
@@ -484,7 +497,7 @@ impl SqlKnowledgeStore {
         let conn = self.lock()?;
         let n: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM knowledge_entities WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2",
+                "SELECT COUNT(*) FROM knowledge_entities WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2 AND archived_at IS NULL",
                 rusqlite::params![&scope.tenant, scope.workspace.as_deref().unwrap_or("")],
                 |row| row.get(0),
             )
@@ -497,7 +510,7 @@ impl SqlKnowledgeStore {
         let conn = self.lock()?;
         let n: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM knowledge_relationships WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2",
+                "SELECT COUNT(*) FROM knowledge_relationships WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2 AND archived_at IS NULL",
                 rusqlite::params![&scope.tenant, scope.workspace.as_deref().unwrap_or("")],
                 |row| row.get(0),
             )
@@ -510,10 +523,17 @@ impl SqlKnowledgeStore {
         let conn = self.lock()?;
         let t = &scope.tenant;
         let w = scope.workspace.as_deref().unwrap_or("");
-        let count = |table: &str| -> CoreResult<usize> {
+        let count = |table: &str, archived_filter: bool| -> CoreResult<usize> {
+            let suffix = if archived_filter {
+                " AND archived_at IS NULL"
+            } else {
+                ""
+            };
             let n: i64 = conn
                 .query_row(
-                    &format!("SELECT COUNT(*) FROM {table} WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2"),
+                    &format!(
+                        "SELECT COUNT(*) FROM {table} WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2{suffix}"
+                    ),
                     rusqlite::params![t, w],
                     |row| row.get(0),
                 )
@@ -521,12 +541,12 @@ impl SqlKnowledgeStore {
             Ok(n as usize)
         };
         Ok(engram_domain::ScopeCounts {
-            entities: count("knowledge_entities")?,
-            relationships: count("knowledge_relationships")?,
-            memories: count("memories")?,
-            beliefs: count("beliefs")?,
-            hierarchy_nodes: count("hierarchy_nodes")?,
-            hierarchy_relations: count("hierarchy_relations")?,
+            entities: count("knowledge_entities", true)?,
+            relationships: count("knowledge_relationships", true)?,
+            memories: count("memories", false)?,
+            beliefs: count("beliefs", false)?,
+            hierarchy_nodes: count("hierarchy_nodes", false)?,
+            hierarchy_relations: count("hierarchy_relations", false)?,
         })
     }
 }

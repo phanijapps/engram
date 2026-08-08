@@ -586,3 +586,13 @@ returns a dry-run preview and (with the apply flag) applies transactionally.
   `discover_collisions` does not guarantee `entity_ids` order); the low-confidence
   test exercises the `confidence.or(provenance)` fallback; the toggle test adds
   single-toggle isolation.
+- 2026-08-08: T4 implemented + adversarial-review fixes — SQLite maintenance
+  adapter: `archived_at` column (idempotent ALTER) + port reads (cursor-paged,
+  active-default, `scope_allows`-isolated, kind/source/graph/confidence filters)
+  + archive/restore primitives (Provenance-stamped, edge-cascading, run on a
+  borrowed `&Connection` for T5a's tx). Review fixes: `put_*` now writes the
+  `archived_at` column AND preserves a prior archive across re-put (column↔json
+  lockstep); the existing `service.rs` read-seam (list/count/by_source/endpoints)
+  filters `archived_at IS NULL`; primitives thread `Actor` + deterministic `ts`.
+  Deferred: `object_id` denormalized column (the object-endpoint cascade uses a
+  `record_json LIKE` scan — correct, slow on huge stores).

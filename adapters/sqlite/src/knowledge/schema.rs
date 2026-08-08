@@ -152,6 +152,8 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
         "ALTER TABLE knowledge_entities ADD COLUMN graph_id TEXT",
         "ALTER TABLE knowledge_entities ADD COLUMN identity_key TEXT",
         "ALTER TABLE knowledge_relationships ADD COLUMN relationship_key TEXT",
+        "ALTER TABLE knowledge_entities ADD COLUMN archived_at TEXT",
+        "ALTER TABLE knowledge_relationships ADD COLUMN archived_at TEXT",
     ] {
         match connection.execute_batch(sql) {
             Ok(_) => {}

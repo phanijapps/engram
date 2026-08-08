@@ -15,6 +15,7 @@ mod graph;
 mod identity;
 #[allow(clippy::module_inception)]
 mod knowledge;
+mod maintenance;
 mod ontology;
 mod retrieval;
 mod schema;

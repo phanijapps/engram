@@ -6,12 +6,38 @@
 //! respective modules.
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use engram_domain::*;
 use engram_knowledge::KnowledgeRepository;
-use engram_runtime::CoreResult;
-use rusqlite::OptionalExtension;
+use engram_runtime::{CoreError, CoreResult};
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::knowledge::{schema::sql_error, service::SqlKnowledgeStore};
+
+/// Read the persisted `archived_at` for a record (if any), so a re-put preserves a
+/// prior maintenance archive instead of silently un-archiving (ingestion always
+/// passes `archived_at = None`). Keeps the column and `record_json` in lockstep.
+fn persisted_archived_at(
+    conn: &Connection,
+    table: &str,
+    id: &str,
+) -> CoreResult<Option<Timestamp>> {
+    let sql = format!("SELECT archived_at FROM {table} WHERE id = ?1");
+    let stored: Option<String> = conn
+        .query_row(&sql, rusqlite::params![id], |row| row.get(0))
+        .optional()
+        .map_err(sql_error)?;
+    stored
+        .map(|s| {
+            DateTime::parse_from_rfc3339(&s)
+                .map(|dt| dt.with_timezone(&Utc))
+                .map_err(|e| CoreError::Adapter {
+                    adapter: "engram-store-knowledge-sqlite".to_owned(),
+                    message: format!("invalid archived_at timestamp: {e}"),
+                })
+        })
+        .transpose()
+}
 
 #[async_trait]
 impl KnowledgeRepository for SqlKnowledgeStore {
@@ -192,19 +218,27 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     }
 
     async fn put_entity(&self, entity: KnowledgeEntity) -> CoreResult<KnowledgeEntity> {
-        let json = serde_json::to_string(&entity).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         let graph_id = entity
             .graph_id
             .as_ref()
             .map(ToString::to_string)
             .unwrap_or_default();
+        // Preserve a prior maintenance archive across re-put (ingestion passes
+        // archived_at = None); keep the column and record_json in lockstep.
+        let preserved =
+            persisted_archived_at(&connection, "knowledge_entities", &entity.id.to_string())?;
+        let mut stored = entity;
+        if let Some(ts) = preserved {
+            stored.archived_at = Some(ts);
+        }
+        let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
         connection
             .execute(
                 r#"
                 INSERT INTO knowledge_entities
-                    (id, graph_id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                    (id, graph_id, tenant, subject, workspace, session, environment, record_json, archived_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                 ON CONFLICT(id) DO UPDATE SET
                     graph_id = excluded.graph_id,
                     tenant = excluded.tenant,
@@ -212,29 +246,29 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                     workspace = excluded.workspace,
                     session = excluded.session,
                     environment = excluded.environment,
-                    record_json = excluded.record_json
+                    record_json = excluded.record_json,
+                    archived_at = excluded.archived_at
                 "#,
                 rusqlite::params![
-                    entity.id.to_string(),
+                    stored.id.to_string(),
                     graph_id,
-                    entity.scope.tenant,
-                    entity.scope.subject,
-                    entity.scope.workspace,
-                    entity.scope.session,
-                    entity.scope.environment,
-                    json
+                    stored.scope.tenant,
+                    stored.scope.subject,
+                    stored.scope.workspace,
+                    stored.scope.session,
+                    stored.scope.environment,
+                    json,
+                    stored.archived_at.map(|t| t.to_rfc3339())
                 ],
             )
             .map_err(sql_error)?;
-        Ok(entity)
+        Ok(stored)
     }
 
     async fn put_relationship(
         &self,
         relationship: KnowledgeRelationship,
     ) -> CoreResult<KnowledgeRelationship> {
-        let json =
-            serde_json::to_string(&relationship).map_err(crate::knowledge::schema::json_error)?;
         let connection = self.lock()?;
         let graph_id = relationship
             .graph_id
@@ -247,12 +281,23 @@ impl KnowledgeRepository for SqlKnowledgeStore {
             .as_ref()
             .map(ToString::to_string)
             .unwrap_or_default();
+        // Preserve a prior maintenance archive across re-put.
+        let preserved = persisted_archived_at(
+            &connection,
+            "knowledge_relationships",
+            &relationship.id.to_string(),
+        )?;
+        let mut stored = relationship;
+        if let Some(ts) = preserved {
+            stored.archived_at = Some(ts);
+        }
+        let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
         connection
             .execute(
                 r#"
                 INSERT INTO knowledge_relationships
-                    (id, graph_id, subject_id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                    (id, graph_id, subject_id, tenant, subject, workspace, session, environment, record_json, archived_at)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
                 ON CONFLICT(id) DO UPDATE SET
                     graph_id = excluded.graph_id,
                     subject_id = excluded.subject_id,
@@ -261,22 +306,24 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                     workspace = excluded.workspace,
                     session = excluded.session,
                     environment = excluded.environment,
-                    record_json = excluded.record_json
+                    record_json = excluded.record_json,
+                    archived_at = excluded.archived_at
                 "#,
                 rusqlite::params![
-                    relationship.id.to_string(),
+                    stored.id.to_string(),
                     graph_id,
                     subject_id,
-                    relationship.scope.tenant,
-                    relationship.scope.subject,
-                    relationship.scope.workspace,
-                    relationship.scope.session,
-                    relationship.scope.environment,
-                    json
+                    stored.scope.tenant,
+                    stored.scope.subject,
+                    stored.scope.workspace,
+                    stored.scope.session,
+                    stored.scope.environment,
+                    json,
+                    stored.archived_at.map(|t| t.to_rfc3339())
                 ],
             )
             .map_err(sql_error)?;
-        Ok(relationship)
+        Ok(stored)
     }
 
     async fn get_entity(

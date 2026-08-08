@@ -1,6 +1,6 @@
 # ADR-0018: Knowledge-graph retraction and convergence on re-ingest
 
-- **Status:** Accepted
+- **Status:** Superseded (partial) by ADR-0027
 - **Date:** 2026-07-04
 - **Decision-makers:** phanijapps
 - **Supersedes:** none

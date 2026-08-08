@@ -19,7 +19,7 @@
 | [0015](0015-memory-content-entities-as-cue-anchor-surface.md) | Memory cue anchor surface: MemoryContent.entities | Accepted |
 | [0016](0016-cross-repo-linkage-shared-contract-nodes.md) | Cross-repo linkage: shared contract nodes over symbol matching | Accepted |
 | [0017](0017-repository-model-source-and-node-in-one-scope.md) | Repository model: KnowledgeSource + Repository node in one shared scope | Accepted |
-| [0018](0018-knowledge-graph-retraction-and-convergence.md) | Knowledge-graph retraction and convergence on re-ingest | Accepted |
+| [0018](0018-knowledge-graph-retraction-and-convergence.md) | Knowledge-graph retraction and convergence on re-ingest | Superseded (partial) by 0027 |
 | [0019](0019-bi-temporal-knowledge-entities.md) | Bi-temporal knowledge entities | Accepted |
 | [0020](0020-extend-entity-kind-vocabulary.md) | Extend EntityKind vocabulary for code-structural symbols | Accepted |
 | [0021](0021-as-of-bitemporal-retrieval-filter.md) | `as_of` bi-temporal retrieval filter | Accepted |
@@ -28,6 +28,7 @@
 | [0024](0024-batch-embeddings-deferred-reindex.md) | Batch embeddings — deferred reindex over inline VectorIndex composition | Accepted |
 | [0025](0025-framework-content-boundary.md) | Framework/content boundary: ship mechanism, not domain ontology content | Accepted |
 | [0026](0026-recall-fusion-config-contract.md) | `[recall_fusion]` config contract for externally tunable recall fusion | Accepted |
+| [0027](0027-knowledge-archive-and-restore.md) | Knowledge entity/relationship archive and restore (soft-delete over hard delete) | Accepted |
 
 > **Note:** ADRs may reference feature specs that were consolidated into
 > [`docs/product/engram.md`](../product/engram.md). Those references are

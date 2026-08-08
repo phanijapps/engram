@@ -154,3 +154,15 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   identity (RFC-0014). Per-document chunk reads via the existing `list_chunks_by_document`.
   Constrained by RFC-0020 (Accepted), RFC-0014, RFC-0018, ADR-0022. Draft (spec
   review-clean; ready for the work-loop).
+- [`graph-maintenance-api`](graph-maintenance-api/spec.md): a first-class,
+  graph-scoped, source-filtered maintenance API over the knowledge graph —
+  list/filter/paginate, deterministic candidate detection
+  (orphan/low-confidence/unsupported/duplicate), a dry-run plan previewing exact
+  per-entity/per-relationship mutations, and a transactional apply
+  (archive/restore/delete/merge/alias/rewrite). Reversibility via archive+restore
+  only (no durable audit table, no export-snapshot rollback); atomicity
+  backend-dependent (SQLite single tx); candidates deterministic, no LLM. New
+  `GraphMaintenanceRepository` port + a `graph_maintenance` capability wired
+  through all four surfaces (facade → N-API → `@engram/node` → engram-mcp).
+  Constrained by ADR-0027 (Proposed), ADR-0022, RFC-0014, ADR-0018. Draft (spec
+  review-clean; ready for the work-loop).

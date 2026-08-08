@@ -11,6 +11,7 @@
 mod graph;
 pub mod identity;
 mod ingest;
+mod maintenance;
 mod ontology;
 mod repository;
 mod taxonomy;
@@ -21,6 +22,7 @@ pub use engram_runtime::{CoreError, CoreResult};
 pub use graph::KnowledgeGraphRepository;
 pub use identity::EntityIdentityRepository;
 pub use ingest::{Chunker, IngestionService, SourceReader};
+pub use maintenance::GraphMaintenanceRepository;
 pub use ontology::OntologyRepository;
 pub use repository::KnowledgeRepository;
 pub use taxonomy::TaxonomyRepository;

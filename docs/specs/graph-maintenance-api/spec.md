@@ -133,8 +133,10 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 - [ ] Merge combines two entities into one, rewiring subject/object references
   and coalescing duplicate relationships, and preserves `Provenance` on the
   survivor.
-- [ ] Alias add/remove and normalized-exact-identity resolution are exposed
-  through the port, reusing `resolve_or_put` semantics.
+- [ ] Alias add/remove are exposed through the maintenance port (`AddAlias`/
+  `RemoveAlias` mutations); normalized-exact-identity resolution composes the
+  existing `EntityIdentityRepository::resolve_or_put` at the facade surface (not
+  duplicated onto the maintenance port).
 - [ ] Relationship rewrite edits a predicate or endpoint in place without a full
   record re-put.
 - [ ] Candidate detection identifies orphan (no incident edges or no

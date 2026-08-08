@@ -14,8 +14,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Actor, EntityId, EvidenceRef, KnowledgeEntity, KnowledgeGraphId, KnowledgeRelationship,
-    RelationshipId, Scope,
+    Actor, EntityId, EntityKind, EvidenceRef, KnowledgeEntity, KnowledgeGraphId,
+    KnowledgeRelationship, RelationshipId, Scope, SourceId,
 };
 
 // ── Targets and mutation kinds ──────────────────────────────────────────────
@@ -272,10 +272,125 @@ pub struct MaintenanceApplyResult {
     pub plan_fingerprint: String,
 }
 
+// ── Port request/response supporting types ──────────────────────────────────
+
+/// Whether a maintenance operation mutates. `Preview` (the default) stages and
+/// reports without committing; `Apply` commits inside one backend transaction
+/// where the backend supports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApplyMode {
+    Preview,
+    Apply,
+}
+
+impl Default for ApplyMode {
+    fn default() -> Self {
+        Self::Preview
+    }
+}
+
+/// Filter for listing entities. Active records only by default
+/// (`include_archived = false`), per ADR-0027.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntityFilter {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_id: Option<KnowledgeGraphId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kinds: Vec<EntityKind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<SourceId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_confidence: Option<f32>,
+    #[serde(default)]
+    pub include_archived: bool,
+}
+
+impl Default for EntityFilter {
+    fn default() -> Self {
+        Self {
+            graph_id: None,
+            kinds: Vec::new(),
+            source_id: None,
+            min_confidence: None,
+            include_archived: false,
+        }
+    }
+}
+
+/// Filter for listing relationships. Active records only by default.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelationshipFilter {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_id: Option<KnowledgeGraphId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub predicate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<SourceId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_confidence: Option<f32>,
+    #[serde(default)]
+    pub include_archived: bool,
+}
+
+impl Default for RelationshipFilter {
+    fn default() -> Self {
+        Self {
+            graph_id: None,
+            predicate: None,
+            source_id: None,
+            min_confidence: None,
+            include_archived: false,
+        }
+    }
+}
+
+/// Request to build a dry-run maintenance plan.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaintenancePlanRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_id: Option<KnowledgeGraphId>,
+    pub scope: Scope,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mutations: Vec<MaintenanceMutation>,
+    #[serde(default)]
+    pub policy: MaintenancePolicy,
+}
+
+/// Point-in-time graph-health aggregates for one scope (+ optional graph). The
+/// adapter's `graph_health` computes these; a per-source breakdown may be added
+/// there. All fields default so partial aggregates deserialize cleanly.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MaintenanceHealth {
+    pub scope: Scope,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_id: Option<KnowledgeGraphId>,
+    #[serde(default)]
+    pub orphan_count: u32,
+    #[serde(default)]
+    pub low_confidence_count: u32,
+    #[serde(default)]
+    pub unsupported_count: u32,
+    #[serde(default)]
+    pub duplicate_count: u32,
+    #[serde(default)]
+    pub archived_entity_count: u32,
+    #[serde(default)]
+    pub archived_relationship_count: u32,
+}
+
 // ── Plan and fingerprint ────────────────────────────────────────────────────
 
-/// A dry-run maintenance plan: the exact mutations to apply, plus the policy and
-/// fingerprint that generated it.
+/// A maintenance plan: the exact mutations to apply, the policy that generated
+/// them, a deterministic fingerprint, and (when produced by the port's
+/// `build_plan`) the before/after previews for dry-run review.
+/// `MaintenancePlan::new` is the pure constructor (no previews); the maintenance
+/// port's `build_plan` fills `previews` by reading current state. `fingerprint`
+/// covers mutations only.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MaintenancePlan {
@@ -286,10 +401,15 @@ pub struct MaintenancePlan {
     pub policy: MaintenancePolicy,
     /// Deterministic digest over the sorted mutations (see [`plan_fingerprint`]).
     pub fingerprint: String,
+    /// Before/after previews for each mutation, filled by the port's `build_plan`.
+    /// Empty for a pure-constructed plan; not part of the fingerprint.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub previews: Vec<MaintenanceMutationPreview>,
 }
 
 impl MaintenancePlan {
-    /// Build a plan, computing its deterministic fingerprint.
+    /// Build a plan, computing its deterministic fingerprint (no previews — the
+    /// port's `build_plan` fills those by reading current state).
     pub fn new(
         graph_id: Option<KnowledgeGraphId>,
         scope: Scope,
@@ -303,6 +423,7 @@ impl MaintenancePlan {
             mutations,
             policy,
             fingerprint,
+            previews: Vec::new(),
         }
     }
 }
@@ -653,5 +774,60 @@ mod tests {
         let back2: MaintenanceMutation = serde_json::from_str(&j2).expect("deserialize");
         assert_eq!(back2, populated);
         assert_eq!(back2.kind(), MutationKind::RewriteRelationship);
+    }
+
+    fn scope_t() -> Scope {
+        Scope {
+            tenant: "t".to_string(),
+            subject: None,
+            workspace: None,
+            session: None,
+            environment: None,
+        }
+    }
+
+    #[test]
+    fn apply_mode_defaults_to_preview() {
+        assert_eq!(ApplyMode::default(), ApplyMode::Preview);
+    }
+
+    #[test]
+    fn filters_default_to_active_only() {
+        assert!(!EntityFilter::default().include_archived);
+        assert!(!RelationshipFilter::default().include_archived);
+    }
+
+    #[test]
+    fn plan_request_and_health_round_trip_camel_case() {
+        let request = MaintenancePlanRequest {
+            graph_id: None,
+            scope: scope_t(),
+            mutations: Vec::new(),
+            policy: MaintenancePolicy::default(),
+        };
+        let j = serde_json::to_string(&request).expect("serialize");
+        let back: MaintenancePlanRequest = serde_json::from_str(&j).expect("deserialize");
+        assert_eq!(back, request);
+
+        let health = MaintenanceHealth {
+            scope: scope_t(),
+            graph_id: None,
+            orphan_count: 3,
+            low_confidence_count: 1,
+            unsupported_count: 0,
+            duplicate_count: 2,
+            archived_entity_count: 5,
+            archived_relationship_count: 4,
+        };
+        let j2 = serde_json::to_string(&health).expect("serialize");
+        assert!(j2.contains("orphanCount"), "camelCase field");
+        let back2: MaintenanceHealth = serde_json::from_str(&j2).expect("deserialize");
+        assert_eq!(back2, health);
+    }
+
+    #[test]
+    fn pure_plan_has_no_previews() {
+        let plan = MaintenancePlan::new(None, scope_t(), Vec::new(), MaintenancePolicy::default());
+        assert!(plan.previews.is_empty(), "::new produces no previews");
     }
 }

@@ -114,10 +114,13 @@ completed plan and asserts zero new mutations (idempotency). A parity check
   `list_entities`/`list_relationships` (filters → `Page<T>` via `Cursor`),
   `detect_candidates(policy)`, `build_plan(plan_request) -> MaintenancePlan`
   (dry-run preview), `apply_plan(plan, ApplyMode { Preview, Apply }) ->
-  MaintenanceApplyResult`, `archive`/`restore`/`delete` (escalated permanent)/`merge`/`rewrite_relationship`/
-  `manage_alias` (each preview-then-apply), `graph_health(scope)`. Authorization
-  to mutate is the explicit `Apply` flag only — there is no "approved plan id"
-  path (plans are ephemeral; no durable plan store, per ADR-0027). No
+  MaintenanceApplyResult`, `graph_health(scope)`. The granular ops
+  (archive/restore/delete/merge/rewrite_relationship/manage_alias) are NOT
+  separate trait methods — each is a `MaintenanceMutation` variant a caller
+  stages in a single-mutation plan via `build_plan`+`apply_plan`, keeping the
+  port focused (the MCP layer, T8, provides the granular UX). Authorization to
+  mutate is the explicit `Apply` flag only — there is no "approved plan id" path
+  (plans are ephemeral; no durable plan store, per ADR-0027). No
   `contracts/<type>/` artifact — the contract is the Rust trait surfaced through
   N-API + MCP.
 - Re-exported at the crate root (`core/knowledge/src/lib.rs`) — whitelist `pub use`
@@ -378,9 +381,10 @@ rollback, idempotent reapply of Archive/Restore/Delete) green on SQLite.
   `Provenance` on the survivor, **archives** (not hard-deletes) absorbed entities
   AND coalesced duplicate relationships, and re-applies as `unchanged` when the
   duplicates are already absorbed. (AC: merge, attribution; AC11 reversibility)
-- The maintenance port surfaces normalized-exact-identity resolution
-  (`resolve_or_put` semantics) — re-resolving an already-canonical name returns
-  the existing entity, no duplicate. (AC: alias / normalized identity)
+- Normalized-exact-identity resolution is NOT duplicated on the maintenance
+  port — the facade (T6) composes `EntityIdentityRepository::resolve_or_put`
+  for it (re-resolving an already-canonical name returns the existing entity,
+  no duplicate). (AC: alias / normalized identity)
 
 **Approach:**
 - Extract a tx-aware merge core from `SqlIdentityStore::consolidate_entities`
@@ -393,8 +397,10 @@ rollback, idempotent reapply of Archive/Restore/Delete) green on SQLite.
   under `Delete`, `consolidate_entities` keeps its existing hard-`DELETE` behavior
   unchanged (regression net, `sqlite-consolidation` invariant). The existing
   `consolidate_entities` becomes a thin open-tx → core(`Delete`) → commit wrapper.
-- Implement `rewrite_relationship`, `manage_alias` (tx-aware), and surface
-  `resolve_or_put` through the port.
+- Implement `rewrite_relationship` and `manage_alias` (tx-aware). Normalized-
+  identity resolution is left to the facade (T6), which composes
+  `EntityIdentityRepository::resolve_or_put` — it is not a maintenance-port
+  method.
 
 **Done when:** per-op tests green; rewrite/alias/merge each idempotent on re-apply;
 existing `consolidate_entities` tests still green (regression).
@@ -562,3 +568,12 @@ returns a dry-run preview and (with the apply flag) applies transactionally.
   (no silent collision); `RewriteRelationship` round-trip test added;
   fingerprint doc narrowed to "mutations digest"; pre-existing `cargo fmt` drift
   in 5 unrelated files reverted to keep T1 focused.
+- 2026-08-08: T2 implemented + adversarial-review fixes — the `GraphMaintenanceRepository`
+  port exposes only list/detect/build_plan/apply_plan/graph_health; the six granular
+  ops collapse into `MaintenanceMutation` variants staged via single-mutation plans
+  (focused port; granular UX is the MCP layer, T8). AC8 amended: normalized-exact-
+  identity resolution is NOT duplicated on the maintenance port — the facade (T6)
+  composes `EntityIdentityRepository::resolve_or_put`. Added domain port-supporting
+  types (ApplyMode, EntityFilter, RelationshipFilter, MaintenancePlanRequest,
+  MaintenanceHealth) + `previews` on `MaintenancePlan`; `tokio` dev-dep on
+  `engram-knowledge` for async port tests.

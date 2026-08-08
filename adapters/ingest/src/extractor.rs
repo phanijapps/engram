@@ -213,6 +213,8 @@ impl GraphExtractor {
                 valid_from: Some(now),
                 valid_until: None,
                 metadata: entity_git_meta.clone(),
+
+                archived_at: None,
             });
         }
 
@@ -265,6 +267,8 @@ impl GraphExtractor {
                     provenance: source.provenance.clone(),
                     created_at: now,
                     updated_at: None,
+
+                    archived_at: None,
                 });
             }
         } else {
@@ -295,6 +299,8 @@ impl GraphExtractor {
                         provenance: source.provenance.clone(),
                         created_at: now,
                         updated_at: None,
+
+                        archived_at: None,
                     });
                 }
             }
@@ -351,6 +357,8 @@ impl GraphExtractor {
                 valid_from: Some(now),
                 valid_until: None,
                 metadata: Some(repo_meta),
+
+                archived_at: None,
             });
 
             relationships.push(KnowledgeRelationship {
@@ -375,6 +383,8 @@ impl GraphExtractor {
                 provenance: source.provenance.clone(),
                 created_at: now,
                 updated_at: None,
+
+                archived_at: None,
             });
         }
 

@@ -207,6 +207,8 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
             valid_from: None,
             valid_until: None,
             metadata: None,
+
+            archived_at: None,
         };
         block_on(knowledge.put_entity(entity)).map_err(internal)?;
         entity_count += 1;
@@ -239,6 +241,8 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
             provenance: prov.clone(),
             created_at: now,
             updated_at: None,
+
+            archived_at: None,
         };
         block_on(knowledge.put_relationship(rel)).map_err(internal)?;
     }
@@ -269,6 +273,8 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
             provenance: prov.clone(),
             created_at: now,
             updated_at: None,
+
+            archived_at: None,
         };
         block_on(knowledge.put_relationship(rel)).map_err(internal)?;
     }

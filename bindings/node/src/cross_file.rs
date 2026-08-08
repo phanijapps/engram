@@ -128,6 +128,8 @@ pub fn resolve_cross_file_edges(store: &SqlKnowledgeStore, scope: &Scope) {
                         provenance: prov.clone(),
                         created_at: now,
                         updated_at: None,
+
+                        archived_at: None,
                     };
                     let _ = block_on(store.put_relationship(rel));
                 }

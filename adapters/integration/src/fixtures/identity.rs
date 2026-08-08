@@ -167,6 +167,8 @@ fn test_entity(id: &str, name: &str, tenant: &str) -> KnowledgeEntity {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }
 }
 
@@ -206,5 +208,7 @@ fn test_relationship(
         provenance: provenance(),
         created_at: chrono::DateTime::from_timestamp(100, 0).unwrap(),
         updated_at: None,
+
+        archived_at: None,
     }
 }

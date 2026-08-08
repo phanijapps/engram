@@ -140,6 +140,8 @@ pub fn build_api_entity(
         valid_from: None,
         valid_until: None,
         metadata: Some(meta),
+
+        archived_at: None,
     }
 }
 
@@ -180,6 +182,8 @@ pub fn build_exposes_rel(
         provenance: provenance.clone(),
         created_at: now,
         updated_at: None,
+
+        archived_at: None,
     }
 }
 

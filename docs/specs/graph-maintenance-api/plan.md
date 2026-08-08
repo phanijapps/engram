@@ -229,9 +229,15 @@ incident edges with it. Active reads (`list_*`, retrieval, convergence) filter
 **Approach:**
 - Add `archived_at: Option<Timestamp>` to `KnowledgeEntity` and
   `KnowledgeRelationship` in `core/domain/src/knowledge.rs`.
-- Add `core/domain/src/maintenance.rs` with `MaintenanceMutation`,
-  `MaintenanceMutationPreview`, `MaintenancePlan`, `MaintenanceApplyResult`,
-  `MaintenanceCandidate`, `Atomicity`; re-export from `core/domain/src/lib.rs`.
+- Add `core/domain/src/maintenance.rs` with the maintenance data contracts —
+  `MaintenanceTarget`, `MutationKind`, `MaintenanceMutation` (+ `kind()`),
+  `MutationSnapshot`, `MaintenanceMutationPreview`, `MaintenancePolicy`
+  (+ `Default`), `CandidateKind`, `ReviewStatus`, `MaintenanceCandidate`,
+  `Atomicity`, `VerifySeverity`, `MaintenanceVerifyFinding`, `ApplyKindCount`,
+  `MaintenanceApplyResult`, `MaintenancePlan` (+ `::new`), and a dependency-free
+  `plan_fingerprint` (FNV-1a over sorted canonical JSON). Structs and the enum's
+  variant fields serialize camelCase (matching the domain convention; enums
+  snake_case). Re-export from `core/domain/src/lib.rs`.
 - Add a deterministic `plan_fingerprint` (hash over sorted, serialized mutations).
 - Update `docs/domain-data-model.md` (entity/relationship tables + a maintenance
   section); regenerate contracts (`pnpm run contracts:generate`).
@@ -256,7 +262,7 @@ diff (idempotent).
 
 **Approach:**
 - Add `core/knowledge/src/maintenance.rs` defining `GraphMaintenanceRepository`
-  plus `ApplyMode`, `MaintenancePolicy` (thresholds/toggles), and the list/filter
+  plus `ApplyMode` and the list/filter
   request types (`EntityFilter`, `RelationshipFilter`, reusing `Cursor`/`Page<T>`
   from `core/domain/src/paging.rs`).
 - Re-export at `core/knowledge/src/lib.rs`.
@@ -548,3 +554,11 @@ returns a dry-run preview and (with the apply flag) applies transactionally.
   flags ADR-0027 as Proposed; T6 scoped to add only `graph_maintenance` (the
   stale name and missing `identity`/`procedures` are out-of-scope drift); T1
   contracts Done-when reworded to idempotent.
+- 2026-08-07: T1 implemented + adversarial-review fixes — `MaintenancePolicy`
+  (and the full T1 type set) landed in `core/domain` (not T2) because
+  `MaintenancePlan.policy` requires it in-domain; structs + the enum's variant
+  fields serialize camelCase (Blocker: was snake_case, mismatching embedded
+  `KnowledgeEntity`); `plan_fingerprint` uses `expect` not `unwrap_or_default`
+  (no silent collision); `RewriteRelationship` round-trip test added;
+  fingerprint doc narrowed to "mutations digest"; pre-existing `cargo fmt` drift
+  in 5 unrelated files reverted to keep T1 focused.

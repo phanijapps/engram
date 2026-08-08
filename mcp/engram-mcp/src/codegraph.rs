@@ -2675,6 +2675,8 @@ mod tests {
             valid_from: None,
             valid_until: None,
             metadata: None,
+
+            archived_at: None,
         }
     }
 
@@ -3878,6 +3880,8 @@ mod tests {
             provenance: crate::tools::provenance("test"),
             created_at: chrono::Utc::now(),
             updated_at: None,
+
+            archived_at: None,
         }];
         // A bare user query resolves to the qualified name; the BFS then seeds
         // from that name and discovers the callee.

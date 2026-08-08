@@ -136,6 +136,8 @@ fn entity(
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }
 }
 
@@ -167,6 +169,8 @@ fn relationship(
         provenance: provenance_with(vec![evidence("doc-1")], observed_at),
         created_at: chrono::Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     }
 }
 

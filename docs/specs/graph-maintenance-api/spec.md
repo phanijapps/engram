@@ -1,6 +1,6 @@
 # Spec: Graph maintenance API
 
-- **Status:** Draft
+- **Status:** Implementing
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0027 (archive+restore durable state; supersedes ADR-0018's storage-mode consequence — *Accepted*), ADR-0022 (engine neutrality + surface parity), RFC-0014 (transactional consolidation — apply precedent), ADR-0018 (retraction ports + convergence remain in force over the active set)

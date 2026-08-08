@@ -90,6 +90,8 @@ fn make_entity(id: &str, graph_id: Option<&str>, tenant: &str) -> KnowledgeEntit
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }
 }
 
@@ -121,6 +123,8 @@ fn make_relationship(
         provenance: provenance(),
         created_at: Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     }
 }
 

@@ -217,6 +217,8 @@ pub fn put_entity(app: &App, args: &Value) -> Result<Value, ToolError> {
         valid_from,
         valid_until,
         metadata: None,
+
+        archived_at: None,
     };
     let stored = block_on(knowledge.put_entity(entity)).map_err(internal)?;
     Ok(protocol::text_content(format!(
@@ -255,6 +257,8 @@ pub fn put_relationship(app: &App, args: &Value) -> Result<Value, ToolError> {
         provenance: provenance("mcp-put-relationship"),
         created_at: Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     };
     block_on(knowledge.put_relationship(rel)).map_err(internal)?;
     Ok(protocol::text_content(format!(
@@ -472,6 +476,8 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
                 valid_from: None,
                 valid_until: None,
                 metadata: None,
+
+                archived_at: None,
             })
         })
         .collect();
@@ -507,6 +513,8 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
                 provenance: prov.clone(),
                 created_at: Utc::now(),
                 updated_at: None,
+
+                archived_at: None,
             })
         })
         .collect();
@@ -975,6 +983,8 @@ mod tests {
                 valid_from: None,
                 valid_until: None,
                 metadata: None,
+
+                archived_at: None,
             }],
             relationships: Vec::new(),
             evidence: Vec::new(),

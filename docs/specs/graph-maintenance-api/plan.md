@@ -577,3 +577,12 @@ returns a dry-run preview and (with the apply flag) applies transactionally.
   types (ApplyMode, EntityFilter, RelationshipFilter, MaintenancePlanRequest,
   MaintenanceHealth) + `previews` on `MaintenancePlan`; `tokio` dev-dep on
   `engram-knowledge` for async port tests.
+- 2026-08-08: T3 implemented + adversarial-review fixes — pure candidate detectors
+  (`detect_candidates` + `detect_orphans`/`low_confidence`/`duplicates`/
+  `unsupported`) over pre-fetched slices, gated by `MaintenancePolicy`;
+  `detect_candidates` re-exported for the adapter (T4/T5). Review fixes: the orphan
+  `connected` set filters archived relationships (active-graph consistency); the
+  duplicate canonical is the sorted min id (order-independent, since
+  `discover_collisions` does not guarantee `entity_ids` order); the low-confidence
+  test exercises the `confidence.or(provenance)` fallback; the toggle test adds
+  single-toggle isolation.

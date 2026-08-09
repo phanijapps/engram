@@ -74,6 +74,8 @@ fn ent(id: &str, name: &str, kind: EntityKind) -> KnowledgeEntity {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }
 }
 

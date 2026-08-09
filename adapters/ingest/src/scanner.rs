@@ -159,6 +159,29 @@ where
         stable_source_key(remote, &opts.source_name)
     };
 
+    // RFC-0020 rev: clean git provenance keys (repository = remote URL, branch,
+    // revision = SHA) stamped on each document's KnowledgeSource.metadata so they
+    // flow to entity `record_json` (reachable via the cc entity-detail route).
+    // Branch is provenance-only — re-indexing from a different branch updates it;
+    // one logical entity per function regardless of branch. Built once here and
+    // carried into every per-document request.
+    let git_source_metadata = git.as_ref().map(|(remote, branch, sha)| {
+        let mut m = engram_domain::Metadata::default();
+        m.insert(
+            crate::source_key::REPOSITORY_KEY.to_owned(),
+            serde_json::Value::String(remote.clone()),
+        );
+        m.insert(
+            crate::source_key::BRANCH_KEY.to_owned(),
+            serde_json::Value::String(branch.clone()),
+        );
+        m.insert(
+            crate::source_key::REVISION_KEY.to_owned(),
+            serde_json::Value::String(sha.clone()),
+        );
+        m
+    });
+
     let code_ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
     let text_ingestor =
         KnowledgeIngestor::new(PlainTextChunker::new(PlainTextChunkerOptions::default())?);
@@ -379,6 +402,7 @@ where
                 policy: opts.policy.clone(),
                 actor: opts.actor.clone(),
                 stable_source_key: Some(source_key.clone()),
+                source_metadata: git_source_metadata.clone(),
             };
             // Tree-sitter chunking for supported extensions; fallback to the
             // ingestor's internal chunker for others.
@@ -454,25 +478,13 @@ where
                     // C1: cross-file resolution — register entities + resolve refs.
                     if let Ok(mut idx) = name_index.lock() {
                         for entity in &g.entities {
-                            idx.insert(entity.name.clone(), entity.id.to_string());
+                            crate::extractor::register_in_name_index(&mut idx, entity);
                         }
                         for rel in &mut g.relationships {
                             if rel.predicate == "calls" && rel.object.id.is_none() {
                                 if let Some(name) = &rel.object.name {
                                     if let Some(id) = idx.get(name) {
                                         rel.object.id = Some(Id::from(id.clone()));
-                                    }
-                                }
-                            }
-                            // T5: cross-document mentions resolution — fill name-only
-                            // `mentions` object refs against the global name index so
-                            // concepts from different documents are connected.
-                            if rel.predicate == "mentions" && rel.object.id.is_none() {
-                                if let Some(name) = &rel.object.name {
-                                    if opts.scan_filter.should_link_concept(name) {
-                                        if let Some(id) = idx.get(name) {
-                                            rel.object.id = Some(Id::from(id.clone()));
-                                        }
                                     }
                                 }
                             }
@@ -542,38 +554,10 @@ where
         })
         .collect();
 
-    // T6: doc↔code bridge — connect each concept to the code entity sharing its
-    // name (heading/symbol exact match) via a `describes` edge. This is what
-    // makes documentation a layer of the unified knowledge graph rather than a
-    // parallel silo. Race-free: runs after the parallel ingest, over every
-    // emitted entity. Additive only; existing calls/belongs_to/mentions edges
-    // are untouched. The edge carries the concept's graph_id so it retracts with
-    // the document that sourced the concept.
-    let mut code_by_name: HashMap<String, KnowledgeEntity> = HashMap::new();
-    for (_, _, entities) in &outcomes {
-        for e in entities {
-            if is_code_symbol(&e.kind) {
-                code_by_name
-                    .entry(e.name.clone())
-                    .or_insert_with(|| e.clone());
-            }
-        }
-    }
-    let mut bridged: usize = 0;
-    for (_, _, entities) in &outcomes {
-        for concept in entities {
-            if concept.kind != EntityKind::Concept {
-                continue;
-            }
-            if let Some(code) = code_by_name.get(&concept.name) {
-                let rel = describes_relationship(concept, code, &opts.scope);
-                if block_on(repo.put_relationship(rel)).is_ok() {
-                    bridged += 1;
-                }
-            }
-        }
-    }
-    summary.relationships += bridged;
+    // RFC-0020 T3: the doc↔code `describes` bridge is removed — non-code
+    // documents no longer emit Concept entities, so there is nothing to bridge.
+    // Document↔code association is computed at recall time (chunk lane matches
+    // on symbol text/path), not stored as topology.
 
     // FIX 1(c): Serial post-pass — delete graphs for paths that were in the
     // prior manifest but were never observed during this scan (genuinely-absent
@@ -978,64 +962,9 @@ where
     }
 }
 
-/// `true` for entity kinds that represent structural code symbols (the targets
-/// a doc concept can `describe`).
-fn is_code_symbol(kind: &EntityKind) -> bool {
-    matches!(
-        kind,
-        EntityKind::Function
-            | EntityKind::Method
-            | EntityKind::Class
-            | EntityKind::Struct
-            | EntityKind::Enum
-            | EntityKind::Trait
-            | EntityKind::Interface
-            | EntityKind::TypeAlias
-            | EntityKind::Module
-    )
-}
-
 /// `true` for Markdown extensions routed through the structure-aware chunker.
 fn is_markdown_ext(ext: &str) -> bool {
     matches!(ext.to_ascii_lowercase().as_str(), "md" | "markdown")
-}
-
-/// A `describes` edge from a doc-derived concept to the code entity that
-/// realizes it (T6: doc↔code bridge). Carries the concept's `graph_id` so the
-/// edge retracts when the document graph that sourced the concept is removed.
-fn describes_relationship(
-    concept: &KnowledgeEntity,
-    code: &KnowledgeEntity,
-    scope: &Scope,
-) -> KnowledgeRelationship {
-    let id = Id::from(format!(
-        "describes-{}",
-        content_hash(format!("{}\u{1f}describes\u{1f}{}", concept.id, code.id))
-            .trim_start_matches("sha256:")
-    ));
-    KnowledgeRelationship {
-        id,
-        graph_id: concept.graph_id.clone(),
-        subject: EntityRef {
-            id: Some(concept.id.clone()),
-            kind: Some("concept".to_owned()),
-            name: Some(concept.name.clone()),
-            aliases: Vec::new(),
-        },
-        predicate: "describes".to_owned(),
-        object: EntityRef {
-            id: Some(code.id.clone()),
-            kind: Some("code".to_owned()),
-            name: Some(code.name.clone()),
-            aliases: Vec::new(),
-        },
-        scope: scope.clone(),
-        evidence: Vec::new(),
-        confidence: Some(0.8),
-        provenance: concept.provenance.clone(),
-        created_at: chrono::Utc::now(),
-        updated_at: None,
-    }
 }
 
 #[cfg(test)]

@@ -6,6 +6,7 @@ import {
   createNativeHierarchyTransport,
   createNativeKnowledgeTransport,
   createNativeMemoryTransport,
+  createNativeProviderTransport,
   type NativeBinding
 } from "../src/index.js";
 
@@ -94,6 +95,22 @@ class StubNativeProvider {
       }
     };
   }
+  requireGraphMaintenanceApi() {
+    return {
+      buildPlanJson(): string {
+        return '{"mutations":[],"fingerprint":"","previews":[],"scope":{"tenant":"t"},"policy":{},"actor":{"id":"a","kind":"system"}}';
+      },
+      applyPlanJson(): string {
+        return '{"applied":0,"unchanged":0,"failed":0,"byKind":[],"verifyFindings":[],"atomicity":"single_transaction","planFingerprint":""}';
+      },
+      listMaintenanceCandidatesJson(): string {
+        return "[]";
+      },
+      graphHealthJson(): string {
+        return '{"scope":{"tenant":"t"},"orphanCount":0,"lowConfidenceCount":0,"unsupportedCount":0,"duplicateCount":0,"archivedEntityCount":0,"archivedRelationshipCount":0}';
+      }
+    };
+  }
   requireBatchApi() {
     return {
       ingestJson(): string {
@@ -155,6 +172,54 @@ class StubNativeProvider {
       }
     };
   }
+  requireKnowledgeQueryApi() {
+    return {
+      listEntitiesJson(): string {
+        return "[]";
+      },
+      listRelationshipsJson(): string {
+        return "[]";
+      },
+      listGraphsJson(): string {
+        return "[]";
+      },
+      listChunksByDocumentJson(): string {
+        return "[]";
+      }
+    };
+  }
+  requireHierarchyApi() {
+    return {
+      pathForJson(): string {
+        return "null";
+      },
+      buildHierarchyJson(): string {
+        return JSON.stringify({
+          clusterCount: 0,
+          entitiesClustered: 0,
+          totalEntities: 0,
+          totalRelationships: 0,
+          interClusterRelationCount: 0,
+        });
+      }
+    };
+  }
+  requireProceduresApi() {
+    return {
+      upsertJson(): string {
+        return "null";
+      },
+      listJson(): string {
+        return "[]";
+      },
+      incrementSuccessJson(): string {
+        return "null";
+      },
+      incrementFailureJson(): string {
+        return "null";
+      }
+    };
+  }
   static fromProfileFile(_path: string): StubNativeProvider {
     return new StubNativeProvider();
   }
@@ -196,6 +261,7 @@ describe("@engram/node", () => {
         listEntitiesBySourceJson(): string { return "[]"; }
         listRelationshipsBySourceJson(): string { return "[]"; }
         listChunksJson(): string { return "[]"; }
+        listChunksByDocumentJson(): string { return "[]"; }
         listSourcesJson(): string { return "[]"; }
         graphCandidatesJson(): string { return "[]"; }
         associativeGraphCandidatesJson(): string { return "[]"; }
@@ -283,6 +349,7 @@ describe("@engram/node", () => {
         listEntitiesBySourceJson(): string { return "[]"; }
         listRelationshipsBySourceJson(): string { return "[]"; }
         listChunksJson(): string { return "[]"; }
+        listChunksByDocumentJson(): string { return "[]"; }
         listSourcesJson(): string { return "[]"; }
         graphCandidatesJson(): string { return "[]"; }
         associativeGraphCandidatesJson(): string { return "[]"; }
@@ -351,5 +418,101 @@ describe("@engram/node", () => {
       "consolidation:hybrid",
       "eval:1"
     ]);
+  });
+});
+
+describe("NativeProviderTransport list_graphs + list_chunks_by_document (RFC-0020 T4)", () => {
+  // The extract-knowledge op reaches these through the provider transport:
+  // listGraphs (discover documents) + listChunksByDocument (per-document reads).
+  // This pins the request-shape encode + decode so a binding/wiring regression
+  // (N-API js_name, the {documentId, scope} shape) is caught without a real
+  // addon — the op test mocks the whole transport, which would hide it.
+  function fakeProvider(capture: { listGraphs?: string; listChunks?: string }) {
+    return {
+      requireKnowledgeQueryApi: () => ({
+        listGraphsJson: (scopeJson: string) => {
+          capture.listGraphs = scopeJson;
+          return JSON.stringify([{ id: "graph-1", metadata: { document_id: "doc-1" } }]);
+        },
+        listChunksByDocumentJson: (requestJson: string) => {
+          capture.listChunks = requestJson;
+          return JSON.stringify([
+            { id: "chunk-1", text: "alpha" },
+            { id: "chunk-2", text: "beta" },
+          ]);
+        },
+      }),
+    } as never;
+  }
+
+  it("listGraphs encodes the scope and decodes the graph list", async () => {
+    const capture: { listGraphs?: string; listChunks?: string } = {};
+    const transport = createNativeProviderTransport({ provider: fakeProvider(capture) });
+    const graphs = (await transport.listGraphs({ tenant: "t", workspace: "w" })) as Array<{
+      id: string;
+      metadata: { document_id: string };
+    }>;
+    expect(JSON.parse(capture.listGraphs!)).toEqual({ tenant: "t", workspace: "w" });
+    expect(graphs).toEqual([{ id: "graph-1", metadata: { document_id: "doc-1" } }]);
+  });
+
+  it("listChunksByDocument encodes {documentId, scope} and decodes the chunk list", async () => {
+    const capture: { listGraphs?: string; listChunks?: string } = {};
+    const transport = createNativeProviderTransport({ provider: fakeProvider(capture) });
+    const chunks = (await transport.listChunksByDocument("doc-42", {
+      tenant: "t",
+      workspace: "w",
+    })) as Array<{ id: string; text: string }>;
+    const req = JSON.parse(capture.listChunks!);
+    expect(req.documentId).toBe("doc-42");
+    expect(req.scope).toEqual({ tenant: "t", workspace: "w" });
+    expect(chunks).toEqual([
+      { id: "chunk-1", text: "alpha" },
+      { id: "chunk-2", text: "beta" },
+    ]);
+  });
+});
+
+describe("NativeProviderTransport buildHierarchy (hierarchy-build wiring)", () => {
+  // The auto-build-after-ingest + maintenance_run op=hierarchy-build paths reach
+  // transport.buildHierarchy → requireHierarchyApi().buildHierarchyJson. This
+  // pins the request-shape encode ({ scope, maxPasses? }) and the stats decode
+  // so an N-API js_name / shape regression is caught without a real addon — the
+  // runtime op test mocks the whole transport, which would hide it.
+  function fakeProvider(capture: { built?: string }) {
+    return {
+      requireHierarchyApi: () => ({
+        pathForJson: () => "null",
+        buildHierarchyJson: (requestJson: string) => {
+          capture.built = requestJson;
+          return JSON.stringify({
+            clusterCount: 3,
+            entitiesClustered: 12,
+            totalEntities: 15,
+            totalRelationships: 40,
+            interClusterRelationCount: 2,
+          });
+        },
+      }),
+    } as never;
+  }
+
+  it("buildHierarchy encodes {scope} by default and decodes the stats", async () => {
+    const capture: { built?: string } = {};
+    const transport = createNativeProviderTransport({ provider: fakeProvider(capture) });
+    const stats = (await transport.buildHierarchy({ tenant: "t", workspace: "w" })) as {
+      clusterCount: number;
+      totalRelationships: number;
+    };
+    expect(JSON.parse(capture.built!)).toEqual({ scope: { tenant: "t", workspace: "w" } });
+    expect(stats.clusterCount).toBe(3);
+    expect(stats.totalRelationships).toBe(40);
+  });
+
+  it("buildHierarchy forwards maxPasses when provided", async () => {
+    const capture: { built?: string } = {};
+    const transport = createNativeProviderTransport({ provider: fakeProvider(capture) });
+    await transport.buildHierarchy({ tenant: "t" }, 8);
+    expect(JSON.parse(capture.built!)).toEqual({ scope: { tenant: "t" }, maxPasses: 8 });
   });
 });

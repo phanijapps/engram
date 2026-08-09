@@ -77,6 +77,8 @@ fn ent(id: &str, name: &str) -> KnowledgeEntity {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }
 }
 
@@ -102,6 +104,8 @@ fn rel(subject: &str, object: &str) -> KnowledgeRelationship {
         provenance: provenance(),
         created_at: chrono::Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     }
 }
 

@@ -373,6 +373,8 @@ mod tests {
             valid_from: None,
             valid_until: None,
             metadata: None,
+
+            archived_at: None,
         }
     }
 
@@ -398,6 +400,8 @@ mod tests {
             provenance: provenance(),
             created_at: Utc::now(),
             updated_at: None,
+
+            archived_at: None,
         }
     }
 

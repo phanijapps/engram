@@ -131,6 +131,50 @@ export interface NativeProviderTransport {
   communityMemberIndex(scope: unknown): Promise<CommunityMemberIndex>;
   /** Scope-filtered record counts (Rust-backed fast SQL COUNT). */
   scopeCounts(scope: unknown): Promise<ScopeCounts>;
+  /** Get a single belief by id (Rust-backed). Returns the `Belief` JSON or null. */
+  beliefGet(request: unknown): Promise<unknown>;
+  /** Retract (soft-delete) a belief (Rust-backed). Returns the retracted belief. */
+  beliefRetract(request: unknown): Promise<unknown>;
+  /** List beliefs marked stale in scope (Rust-backed). Returns `[Belief, …]`. */
+  beliefStaleList(scope: unknown): Promise<unknown[]>;
+  /** List all entities in scope (engine-neutral KnowledgeQuery port; Rust-backed).
+   *  Returns `[KnowledgeEntity, …]`. */
+  listEntities(scope: unknown): Promise<unknown[]>;
+  /** List all relationships in scope (engine-neutral KnowledgeQuery port). Each
+   *  relationship's `subject` / `object` are `EntityRef` (`{id, kind, name, aliases}`). */
+  listRelationships(scope: unknown): Promise<unknown[]>;
+  /** List all graphs in scope (engine-neutral KnowledgeQuery port). Returns
+   *  `[KnowledgeGraph, …]`; each graph's `metadata` carries its `document_id`. */
+  listGraphs(scope: unknown): Promise<unknown[]>;
+  /** List one document's chunks in scope (bounded per-document; RFC-0020 T4).
+   *  Returns `[KnowledgeChunk, …]`. */
+  listChunksByDocument(documentId: string, scope: unknown): Promise<unknown[]>;
+  /** Hierarchy navigation path for seed entity ids (Rust-backed). */
+  hierarchyPath(request: unknown): Promise<unknown>;
+  /** Build the hierarchy for a scope: cluster the KG's call edges via Louvain
+   *  and persist layer-0 cluster nodes + inter-cluster relations (Rust-backed,
+   *  deterministic — no LLM). Returns `HierarchyBuildStats`. */
+  buildHierarchy(scope: unknown, maxPasses?: number): Promise<unknown>;
+  /** Get an entity by id inside a scope (graph API; returns entity JSON or null). */
+  getEntity(id: string, scope: unknown): Promise<unknown>;
+  /** Graph neighbors of a node `{ graphId, nodeId, scope, limit? }` (graph API). */
+  graphNeighbors(request: unknown): Promise<unknown>;
+  /** Build a dry-run maintenance plan (fills before/after previews; non-mutating). */
+  graphMaintenanceBuildPlan(request: unknown): Promise<unknown>;
+  /** Apply (or preview) a reviewed maintenance plan `{ plan, mode }`. */
+  graphMaintenanceApplyPlan(request: unknown): Promise<unknown>;
+  /** Deterministic candidate detection `{ scope, graphId?, policy }` (no LLM). */
+  graphMaintenanceCandidates(request: unknown): Promise<unknown[]>;
+  /** Point-in-time graph-health aggregates `{ scope, graphId? }`. */
+  graphMaintenanceHealth(request: unknown): Promise<unknown>;
+  /** Upsert a replayable procedure (Layer 6). Returns the persisted `Procedure`. */
+  procedureUpsert(procedure: unknown): Promise<unknown>;
+  /** List procedures in scope (Layer 6). Returns `[Procedure, …]`. */
+  procedureList(scope: unknown): Promise<unknown[]>;
+  /** Bump a procedure's success counter `{ id, scope }` (Layer 6). */
+  procedureIncrementSuccess(request: unknown): Promise<unknown>;
+  /** Bump a procedure's failure counter `{ id, scope }` (Layer 6). */
+  procedureIncrementFailure(request: unknown): Promise<unknown>;
 }
 
 /** Creates a transport over the held `NativeProvider`. */
@@ -279,6 +323,104 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
   async scopeCounts(scope: unknown): Promise<ScopeCounts> {
     return decode<ScopeCounts>(
       this.provider.requireCommunityQueryApi().scopeCountsJson(encode(scope))
+    );
+  }
+
+  async beliefGet(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireBeliefsApi().getBeliefJson(encode(request)));
+  }
+
+  async beliefRetract(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireBeliefsApi().retractBeliefJson(encode(request)));
+  }
+
+  async beliefStaleList(scope: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(
+      this.provider.requireBeliefsApi().listStaleBeliefsJson(encode(scope)),
+    );
+  }
+
+  async listEntities(scope: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(
+      this.provider.requireKnowledgeQueryApi().listEntitiesJson(encode(scope)),
+    );
+  }
+
+  async listRelationships(scope: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(
+      this.provider.requireKnowledgeQueryApi().listRelationshipsJson(encode(scope)),
+    );
+  }
+
+  async listGraphs(scope: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(
+      this.provider.requireKnowledgeQueryApi().listGraphsJson(encode(scope)),
+    );
+  }
+
+  async listChunksByDocument(documentId: string, scope: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(
+      this.provider.requireKnowledgeQueryApi().listChunksByDocumentJson(
+        encode({ documentId, scope }),
+      ),
+    );
+  }
+
+  async hierarchyPath(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireHierarchyApi().pathForJson(encode(request)));
+  }
+
+  async buildHierarchy(scope: unknown, maxPasses?: number): Promise<unknown> {
+    return decode(
+      this.provider
+        .requireHierarchyApi()
+        .buildHierarchyJson(encode({ scope, ...(maxPasses ? { maxPasses } : {}) })),
+    );
+  }
+
+  async getEntity(id: string, scope: unknown): Promise<unknown> {
+    return decode(this.provider.requireGraphApi().getEntityJson(encode({ id, scope })));
+  }
+
+  async graphNeighbors(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireGraphApi().neighborsJson(encode(request)));
+  }
+
+  async graphMaintenanceBuildPlan(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireGraphMaintenanceApi().buildPlanJson(encode(request)));
+  }
+
+  async graphMaintenanceApplyPlan(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireGraphMaintenanceApi().applyPlanJson(encode(request)));
+  }
+
+  async graphMaintenanceCandidates(request: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(
+      this.provider.requireGraphMaintenanceApi().listMaintenanceCandidatesJson(encode(request)),
+    );
+  }
+
+  async graphMaintenanceHealth(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireGraphMaintenanceApi().graphHealthJson(encode(request)));
+  }
+
+  async procedureUpsert(procedure: unknown): Promise<unknown> {
+    return decode(this.provider.requireProceduresApi().upsertJson(encode(procedure)));
+  }
+
+  async procedureList(scope: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(this.provider.requireProceduresApi().listJson(encode(scope)));
+  }
+
+  async procedureIncrementSuccess(request: unknown): Promise<unknown> {
+    return decode(
+      this.provider.requireProceduresApi().incrementSuccessJson(encode(request)),
+    );
+  }
+
+  async procedureIncrementFailure(request: unknown): Promise<unknown> {
+    return decode(
+      this.provider.requireProceduresApi().incrementFailureJson(encode(request)),
     );
   }
 }

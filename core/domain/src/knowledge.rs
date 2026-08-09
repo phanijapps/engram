@@ -223,6 +223,9 @@ pub struct KnowledgeEntity {
     pub valid_from: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub valid_until: Option<Timestamp>,
+    /// Soft-delete timestamp (ADR-0027); None = active. Excluded from active reads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Metadata>,
 }
@@ -245,6 +248,9 @@ pub struct KnowledgeRelationship {
     pub created_at: Timestamp,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<Timestamp>,
+    /// Soft-delete timestamp (ADR-0027); None = active. Excluded from active reads.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archived_at: Option<Timestamp>,
 }
 
 // ── Knowledge-graph identity and consolidation (RFC-0014) ───────────────────

@@ -279,25 +279,24 @@ interface CommunityData {
 
 let communityDataCache: CommunityData | null = null;
 
-/** Fetches (and caches per mtime) the community overview + member index from
- *  the Rust facade. Shared by computeOverview + getMemberIndex so Louvain runs
- *  at most twice per store version (once per facade method). */
+/** Fetches (and caches per store-mtime) the community overview + member index
+ *  from the Rust facade. Shared by computeOverview + getMemberIndex so Louvain
+ *  runs at most twice per store version (once per facade method). The cache
+ *  invalidates when the store file changes (a re-index writes the db/WAL), so a
+ *  backend restart is NOT needed to pick up a freshly-indexed graph. */
 export async function getCommunityData(
   cfg: VizConfig,
   scope: Scope,
 ): Promise<CommunityData> {
-  // The viz is read-only (DryRun, no writes) → the community data doesn't change
-  // during a session. Cache once; the user restarts to pick up store changes.
-  // (A mtime-based key invalidated on every read-only `node:sqlite` open, which
-  // touches the WAL file + bumps the main db's read counter.)
-  if (communityDataCache) {
+  const mtimeMs = storeMtimeMs(cfg);
+  if (communityDataCache && communityDataCache.mtimeMs === mtimeMs) {
     return communityDataCache;
   }
   const [overview, memberIndex] = await Promise.all([
     getProvider(cfg).communityOverview(scope, 200),
     getProvider(cfg).communityMemberIndex(scope),
   ]);
-  communityDataCache = { mtimeMs: 0, overview, memberIndex };
+  communityDataCache = { mtimeMs, overview, memberIndex };
   return communityDataCache;
 }
 

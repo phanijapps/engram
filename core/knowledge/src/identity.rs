@@ -265,6 +265,8 @@ mod tests {
             valid_from: None,
             valid_until: None,
             metadata: None,
+
+            archived_at: None,
         }
     }
 
@@ -311,6 +313,8 @@ mod tests {
             },
             created_at: ts(100),
             updated_at: None,
+
+            archived_at: None,
         }
     }
 

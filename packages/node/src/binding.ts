@@ -31,6 +31,7 @@ export interface NativeKnowledgeEngineBinding {
   listRelationshipsJson(requestJson: string): string;
   listRelationshipsBySourceJson(requestJson: string): string;
   listChunksJson(requestJson: string): string;
+  listChunksByDocumentJson(requestJson: string): string;
   listSourcesJson(requestJson: string): string;
   putOntologyJson(ontologyJson: string): string;
   getOntologyJson(requestJson: string): string;
@@ -147,6 +148,14 @@ export interface NativeGraphApiBinding {
   neighborsJson(requestJson: string): string;
 }
 
+/** Graph-maintenance handle proxy: reversible plan/apply graph repair (ADR-0027). */
+export interface NativeGraphMaintenanceApiBinding {
+  buildPlanJson(requestJson: string): string;
+  applyPlanJson(requestJson: string): string;
+  listMaintenanceCandidatesJson(requestJson: string): string;
+  graphHealthJson(requestJson: string): string;
+}
+
 /** Batch-ingest API handle proxy: best-effort batch write + guarantee. */
 export interface NativeBatchApiBinding {
   ingestJson(requestJson: string): string;
@@ -179,6 +188,30 @@ export interface NativeCommunityQueryApiBinding {
   scopeCountsJson(scopeJson: string): string;
 }
 
+/** Knowledge-query handle proxy: scope-wide entity + relationship listing
+ *  (the engine-neutral port backing graph traversal / codegraph tools). */
+export interface NativeKnowledgeQueryApiBinding {
+  listEntitiesJson(scopeJson: string): string;
+  listRelationshipsJson(scopeJson: string): string;
+  listGraphsJson(scopeJson: string): string;
+  listChunksByDocumentJson(requestJson: string): string;
+}
+
+/** Hierarchy handle proxy: navigation path for seed entity ids + build (cluster
+ *  the KG via Louvain and persist layer-0 cluster nodes). */
+export interface NativeHierarchyApiBinding {
+  pathForJson(requestJson: string): string;
+  buildHierarchyJson(requestJson: string): string;
+}
+
+/** Procedures handle proxy: replayable runbook lifecycle (Layer 6). */
+export interface NativeProceduresApiBinding {
+  upsertJson(procedureJson: string): string;
+  listJson(scopeJson: string): string;
+  incrementSuccessJson(requestJson: string): string;
+  incrementFailureJson(requestJson: string): string;
+}
+
 /**
  * Native class shape for the held `EngramProvider`
  * (`bindings/node/src/provider.rs`): one provider opened from a config, reaching
@@ -195,10 +228,14 @@ export interface NativeProviderBinding {
   requireMemoryApi(): NativeMemoryApiBinding;
   requireRecallApi(): NativeRecallApiBinding;
   requireGraphApi(): NativeGraphApiBinding;
+  requireGraphMaintenanceApi(): NativeGraphMaintenanceApiBinding;
   requireBatchApi(): NativeBatchApiBinding;
   requireBeliefsApi(): NativeBeliefsApiBinding;
   requireObservabilityApi(): NativeObservabilityApiBinding;
   requireCommunityQueryApi(): NativeCommunityQueryApiBinding;
+  requireKnowledgeQueryApi(): NativeKnowledgeQueryApiBinding;
+  requireHierarchyApi(): NativeHierarchyApiBinding;
+  requireProceduresApi(): NativeProceduresApiBinding;
 }
 
 /** Constructor shape for the held `EngramProvider`. */

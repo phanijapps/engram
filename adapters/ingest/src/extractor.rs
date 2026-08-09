@@ -16,7 +16,10 @@ use serde_json::Value as JsonValue;
 
 use crate::{
     hash::content_hash,
-    source_key::{DOCUMENT_ID_KEY, SOURCE_PATH_KEY, STABLE_SOURCE_KEY},
+    source_key::{
+        BRANCH_KEY, DOCUMENT_ID_KEY, REPOSITORY_KEY, REVISION_KEY, SOURCE_PATH_KEY,
+        STABLE_SOURCE_KEY,
+    },
 };
 
 /// The graph records produced by one extraction pass.
@@ -116,8 +119,13 @@ impl GraphExtractor {
 
         let is_code = matches!(document.kind, SourceDocumentKind::Code);
 
-        // (name, kind, body, chunk_index) per detected symbol, in document order.
-        let mut symbols: Vec<(String, EntityKind, String, usize)> = Vec::new();
+        // RFC-0020 rev: the entity NAME is the bare logical symbol (function/
+        // class/etc). The disambiguating repo/path/branch live in `source_refs`
+        // + provenance, NOT jammed into the name. `is_noise_symbol` still drops
+        // bare generics. `qualified` here == `bare` (kept as a pair so the
+        // co-occurrence / AST-callee matching + `register_in_name_index` are
+        // unchanged); the entity `id` stays unique via `graph_id + name`.
+        let mut symbols: Vec<(String, String, EntityKind, String, usize)> = Vec::new();
         if is_code {
             for (chunk_idx, chunk) in chunks.iter().enumerate() {
                 let Some(anchor) = chunk
@@ -127,37 +135,60 @@ impl GraphExtractor {
                 else {
                     continue;
                 };
-                let Some((kind, name)) = parse_symbol(anchor) else {
+                let Some((kind, bare)) = parse_symbol(anchor) else {
                     continue;
                 };
-                if name.is_empty() {
+                if bare.is_empty() || is_noise_symbol(&bare) {
                     continue;
                 }
-                symbols.push((name, kind, chunk.text.clone(), chunk_idx));
+                symbols.push((bare.clone(), bare, kind, chunk.text.clone(), chunk_idx));
             }
         } else {
-            for (chunk_idx, chunk) in chunks.iter().enumerate() {
-                let name = concept_name(&chunk.text);
-                if name.is_empty() {
-                    continue;
-                }
-                symbols.push((name, EntityKind::Concept, chunk.text.clone(), chunk_idx));
-            }
+            // RFC-0020 T3: non-code documents emit NO graph entities — the naive
+            // heading-as-node rule is gone. Documents are chunks-only at ingest;
+            // the LLM `extract-knowledge` op produces the concept sub-graph. The
+            // graph record above is created unconditionally so `listGraphs` can
+            // still discover documents (the extract-knowledge op relies on this).
         }
 
-        // Dedupe by name (first wins), build entities + a name->index map.
+        // Bare→qualified map (first wins) for resolving AST callers/callees,
+        // which treesitter emits as bare names, against the qualified entities.
+        let mut bare_to_qualified: HashMap<String, String> = HashMap::new();
+        for (qualified, bare, _, _, _) in &symbols {
+            bare_to_qualified
+                .entry(bare.clone())
+                .or_insert_with(|| qualified.clone());
+        }
+
+        // RFC-0020 rev: git provenance (repository/branch/revision) is metadata,
+        // not identity. Lift the clean keys off the source's metadata (stamped by
+        // the scanner from the detect_git tuple) so each code entity carries them
+        // in its `record_json` — reachable by the cc entity-detail route. Identity
+        // (the bare name) is unchanged; re-indexing from a different branch only
+        // updates these metadata values.
+        let entity_git_meta: Option<Metadata> = source.metadata.as_ref().and_then(|m| {
+            let mut g = Metadata::default();
+            for key in [REPOSITORY_KEY, BRANCH_KEY, REVISION_KEY] {
+                if let Some(v) = m.get(key) {
+                    g.insert(key.to_owned(), v.clone());
+                }
+            }
+            if g.is_empty() { None } else { Some(g) }
+        });
+
+        // Dedupe by qualified name (first wins), build entities + a name->index map.
         let mut entities: Vec<KnowledgeEntity> = Vec::new();
         let mut index: HashMap<String, usize> = HashMap::new();
-        for (name, kind, _body, _chunk_idx) in &symbols {
-            if index.contains_key(name) {
+        for (qualified, _bare, kind, _body, _chunk_idx) in &symbols {
+            if index.contains_key(qualified) {
                 continue;
             }
-            index.insert(name.clone(), entities.len());
+            index.insert(qualified.clone(), entities.len());
             entities.push(KnowledgeEntity {
-                id: entity_id(&graph_id, name),
+                id: entity_id(&graph_id, qualified),
                 graph_id: Some(graph_id.clone()),
                 kind: kind.clone(),
-                name: name.clone(),
+                name: qualified.clone(),
                 aliases: Vec::new(),
                 scope: source.scope.clone(),
                 source_refs: vec![EvidenceRef {
@@ -181,7 +212,9 @@ impl GraphExtractor {
                 updated_at: None,
                 valid_from: Some(now),
                 valid_until: None,
-                metadata: None,
+                metadata: entity_git_meta.clone(),
+
+                archived_at: None,
             });
         }
 
@@ -192,22 +225,28 @@ impl GraphExtractor {
         let mut seen: HashSet<(String, String)> = HashSet::new();
 
         if let Some(calls) = ast_calls {
-            // AST-level calls: each (caller, callee) is a real call expression.
+            // AST-level calls: each (caller, callee) is a real call expression,
+            // emitted by treesitter as bare names. Resolve the caller (and a
+            // local callee) against the document's bare→qualified map; a
+            // non-local callee stays a bare name-only ref for cross-file
+            // resolution in `extract_into`.
             for (caller, callee) in calls {
                 if caller == callee {
                     continue;
                 }
-                if !index.contains_key(caller) {
+                let Some(caller_qual) = bare_to_qualified.get(caller) else {
+                    continue;
+                };
+                let Some(&subject_index) = index.get(caller_qual) else {
+                    continue;
+                };
+                let object_qual = bare_to_qualified.get(callee).cloned();
+                let object_key = object_qual.clone().unwrap_or_else(|| callee.clone());
+                if !seen.insert((caller_qual.clone(), object_key.clone())) {
                     continue;
                 }
-                if !seen.insert((caller.clone(), callee.clone())) {
-                    continue;
-                }
-                let subject_index = index[caller];
-                // Cross-file call: callee not in this document — create a
-                // name-only ref. The cross-file resolver connects it by name.
-                let object_ref = if let Some(&oi) = index.get(callee) {
-                    entity_ref(&entities[oi])
+                let object_ref = if let Some(oq) = &object_qual {
+                    entity_ref(&entities[index[oq]])
                 } else {
                     EntityRef {
                         id: None,
@@ -217,7 +256,7 @@ impl GraphExtractor {
                     }
                 };
                 relationships.push(KnowledgeRelationship {
-                    id: relationship_id(&graph_id, caller, callee),
+                    id: relationship_id(&graph_id, caller_qual, &object_key),
                     graph_id: Some(graph_id.clone()),
                     subject: entity_ref(&entities[subject_index]),
                     predicate: "calls".to_owned(),
@@ -228,24 +267,28 @@ impl GraphExtractor {
                     provenance: source.provenance.clone(),
                     created_at: now,
                     updated_at: None,
+
+                    archived_at: None,
                 });
             }
         } else {
-            // Co-occurrence fallback: name appears in body text.
-            for (subject_name, _kind, body, _chunk_idx) in &symbols {
-                let Some(&subject_index) = index.get(subject_name) else {
+            // Co-occurrence fallback: a symbol's bare name appears in another
+            // symbol's body. Match on bare names (the body holds bare tokens);
+            // form the edge between the corresponding qualified entities.
+            for (subject_qual, _subject_bare, _kind, body, _chunk_idx) in &symbols {
+                let Some(&subject_index) = index.get(subject_qual) else {
                     continue;
                 };
-                for object_name in index.keys() {
-                    if object_name == subject_name || !mentions(body, object_name) {
+                for (object_qual, object_bare, _, _, _) in &symbols {
+                    if object_qual == subject_qual || !mentions(body, object_bare) {
                         continue;
                     }
-                    if !seen.insert((subject_name.clone(), object_name.clone())) {
+                    if !seen.insert((subject_qual.clone(), object_qual.clone())) {
                         continue;
                     }
-                    let object_index = index[object_name];
+                    let object_index = index[object_qual];
                     relationships.push(KnowledgeRelationship {
-                        id: relationship_id(&graph_id, subject_name, object_name),
+                        id: relationship_id(&graph_id, subject_qual, object_qual),
                         graph_id: Some(graph_id.clone()),
                         subject: entity_ref(&entities[subject_index]),
                         predicate: predicate.to_owned(),
@@ -256,6 +299,8 @@ impl GraphExtractor {
                         provenance: source.provenance.clone(),
                         created_at: now,
                         updated_at: None,
+
+                        archived_at: None,
                     });
                 }
             }
@@ -265,8 +310,8 @@ impl GraphExtractor {
         // they came from so Q&A can find the actual code (not just text that
         // mentions the entity name).
         let mut chunk_entities_map: HashMap<usize, Vec<EntityRef>> = HashMap::new();
-        for (name, _kind, _body, chunk_idx) in &symbols {
-            if let Some(&entity_idx) = index.get(name) {
+        for (qualified, _bare, _kind, _body, chunk_idx) in &symbols {
+            if let Some(&entity_idx) = index.get(qualified) {
                 chunk_entities_map
                     .entry(*chunk_idx)
                     .or_default()
@@ -312,6 +357,8 @@ impl GraphExtractor {
                 valid_from: Some(now),
                 valid_until: None,
                 metadata: Some(repo_meta),
+
+                archived_at: None,
             });
 
             relationships.push(KnowledgeRelationship {
@@ -336,6 +383,8 @@ impl GraphExtractor {
                 provenance: source.provenance.clone(),
                 created_at: now,
                 updated_at: None,
+
+                archived_at: None,
             });
         }
 
@@ -363,10 +412,12 @@ impl GraphExtractor {
         let mut extracted = Self.extract(source, document, chunks)?;
 
         // Cross-file edge resolution (C1): fill name-only calls object refs
-        // against the caller-maintained global name→id index.
+        // against the caller-maintained global name→id index. Each entity is
+        // registered under both its qualified name and its bare tail so AST
+        // callees (bare) resolve (RFC-0020 T2).
         if let Some(index) = name_index {
             for entity in &extracted.entities {
-                index.insert(entity.name.clone(), entity.id.to_string());
+                register_in_name_index(index, entity);
             }
             for rel in &mut extracted.relationships {
                 if rel.predicate == "calls" && rel.object.id.is_none() {
@@ -420,13 +471,170 @@ fn parse_symbol(anchor: &str) -> Option<(EntityKind, String)> {
     Some((kind, name.to_owned()))
 }
 
-/// Derives a short, human-readable concept name from the first line of a prose
-/// chunk (used for non-code documents).
-fn concept_name(text: &str) -> String {
-    let first = text.lines().next().unwrap_or("").trim();
-    let stripped = first.trim_start_matches('#').trim();
-    let collapsed: String = stripped.split_whitespace().collect::<Vec<_>>().join(" ");
-    collapsed.chars().take(48).collect()
+/// Registers an entity in the cross-file name index under BOTH its qualified
+/// name (primary) and its bare tail (secondary), so AST callees — which
+/// treesitter emits as bare names — resolve against qualified entities
+/// (RFC-0020 T2). Bare collisions are last-write-wins (a documented Phase-1
+/// degradation: a colliding bare callee may resolve to the wrong target;
+/// removed by a Phase 2 scope-wide symbol table).
+pub(crate) fn register_in_name_index(
+    index: &mut HashMap<String, String>,
+    entity: &KnowledgeEntity,
+) {
+    index.insert(entity.name.clone(), entity.id.to_string());
+    if let Some(bare) = entity.name.rsplit("::").next() {
+        if bare != entity.name {
+            index.insert(bare.to_owned(), entity.id.to_string());
+        }
+    }
+}
+
+/// Reject entities that aren't real concepts — punctuation tokens, single-char
+/// symbols, code-block delimiters, common type annotations, YAML keys.
+/// Returns true = "this is noise, skip it."
+///
+/// Reference implementation for the TS `extract-knowledge` noise filter
+/// (RFC-0020 T5): no longer called from the Rust extractor after T3 removed
+/// document→Concept emission, but kept as the canonical logic the TS op ports
+/// (plus a doc-heading-generic blocklist).
+#[allow(dead_code)]
+fn is_noise_concept(name: &str) -> bool {
+    if name.len() < 3 {
+        return true;
+    }
+    // Must contain at least one alphanumeric char (reject punctuation-only).
+    if !name.chars().any(|c| c.is_alphanumeric()) {
+        return true;
+    }
+    let lower = name.to_lowercase();
+    // Common type annotations / system words that aren't real concepts.
+    const TYPE_NOISE: &[&str] = &[
+        "str",
+        "string",
+        "int",
+        "float",
+        "bool",
+        "void",
+        "null",
+        "none",
+        "nil",
+        "true",
+        "false",
+        "self",
+        "super",
+        "this",
+        "type",
+        "kind",
+        "value",
+        "name",
+        "pub",
+        "var",
+        "let",
+        "const",
+        "fn",
+        "def",
+        "class",
+        "struct",
+        "enum",
+        "import",
+        "export",
+        "return",
+        "async",
+        "await",
+        "yield",
+        "static",
+        "u8",
+        "u16",
+        "u32",
+        "u64",
+        "i8",
+        "i16",
+        "i32",
+        "i64",
+        "f32",
+        "f64",
+        "usize",
+        "isize",
+        "vec",
+        "option",
+        "result",
+        "box",
+        "rc",
+        "arc",
+        "object",
+        "array",
+        "map",
+        "set",
+        "list",
+        "dict",
+        "tuple",
+        "models",
+        "description",
+        "available",
+        "contents",
+        "approach",
+        "append",
+        "clone",
+        "print",
+        "join",
+        "exists",
+        "encode",
+    ];
+    if TYPE_NOISE.contains(&lower.as_str()) {
+        return true;
+    }
+    // Reject "key: value" patterns (YAML/TOML keys like "type: string").
+    if name.contains(':') && name.split(':').count() == 2 {
+        return true;
+    }
+    // Reject if it starts with a non-alpha char (likely code noise).
+    if !name.starts_with(|c: char| c.is_alphabetic()) {
+        return true;
+    }
+    false
+}
+
+/// Rejects code-symbol names that are too generic to be useful graph nodes —
+/// language primitives and ubiquitous one-word methods (`new`, `clone`, `len`,
+/// `fmt`, …) that, as bare names, collide across every crate and become massive
+/// cross-cutting hubs with no stable identity (RFC-0020 Phase 1).
+///
+/// Tuned for CODE, so unlike [`is_noise_concept`] it does NOT reject short
+/// names — `tx`, `db`, `id`, `kv` are meaningful identifiers in code. Only the
+/// bare-generic set is blocked. This is the pre-qualified-identity filter: once
+/// `parse_symbol` emits qualified identities (`{repo}/{path}::{module}::{name}`,
+/// RFC-0020 Phase 1), the generic-method portion of this list can be relaxed and
+/// only the true type primitives (`str`, `vec`, `option`, …) kept.
+///
+/// Returns true = "this symbol is noise, skip it."
+fn is_noise_symbol(name: &str) -> bool {
+    let lower = name.trim().to_lowercase();
+    if lower.is_empty() {
+        return true;
+    }
+    // Punctuation-only / non-alphanumeric / non-alpha-leading sanity.
+    if !lower.chars().any(|c| c.is_alphanumeric()) {
+        return true;
+    }
+    if !lower.starts_with(|c: char| c.is_alphabetic()) {
+        return true;
+    }
+    // Bare-generic names. Primitives/type words first, then the ubiquitous
+    // one-word methods named in RFC-0020 Phase 1 and the AgentZero indexing
+    // guidance (`get`, `str`, `append`, `new`, `clone`, `read`, `write`, …).
+    const SYMBOL_NOISE: &[&str] = &[
+        // Language primitives & type words.
+        "str", "string", "int", "integer", "float", "double", "bool", "boolean", "void", "null",
+        "none", "nil", "true", "false", "self", "super", "this", "type", "kind", "value", "pub",
+        "var", "let", "const", "static", "object", "array", "map", "set", "list", "dict", "tuple",
+        "vector", "vec", "option", "result", "box", "rc", "arc", "ref", "u8", "u16", "u32", "u64",
+        "i8", "i16", "i32", "i64", "f32", "f64", "usize", "isize",
+        // Generic ubiquitous one-word symbols — bare, they collide across every
+        // crate and dominate centrality without a stable identity.
+        "new", "clone", "copy", "len", "fmt", "format", "print", "log", "get", "set", "run", "init",
+        "send", "recv", "read", "write", "open", "close", "append", "name", "main",
+    ];
+    SYMBOL_NOISE.contains(&lower.as_str())
 }
 
 /// Word-boundary occurrence check so `File` does not match inside `Filesystem`.
@@ -537,7 +745,7 @@ fn belongs_to_rel_id(graph_id: &KnowledgeGraphId, repo_entity_id: &EntityId) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::mentions;
+    use super::{is_noise_symbol, mentions};
 
     #[test]
     fn mentions_is_multibyte_safe() {
@@ -552,5 +760,54 @@ mod tests {
         let body = "┌───────────┼───────────┐\n▼           ▼           ▼\n";
         assert!(!mentions(body, "│")); // body has corners/cross/down-arrow, no vertical bar
         assert!(mentions(body, "▼")); // present
+    }
+
+    #[test]
+    fn is_noise_symbol_blocks_bare_generics_and_primitives() {
+        // RFC-0020 Phase 1 + AgentZero guidance bare-generic set.
+        for n in [
+            "new", "clone", "len", "fmt", "log", "get", "set", "run", "read", "write", "append",
+            "send", "name", "main", "init",
+        ] {
+            assert!(is_noise_symbol(n), "{n:?} should be noise");
+        }
+        // Language primitives / type words.
+        for n in [
+            "str", "Vec", "Option", "Result", "bool", "void", "None", "u32", "usize", "Self",
+            "self", "type", "value",
+        ] {
+            assert!(is_noise_symbol(n), "{n:?} should be noise");
+        }
+    }
+
+    #[test]
+    fn is_noise_symbol_keeps_meaningful_symbols() {
+        // Real, qualified-looking, or specific symbols survive.
+        for n in [
+            "respond",
+            "persist_turn",
+            "parse_symbol",
+            "GraphExtractor",
+            "NativeProvider",
+            "sqlite_bootstrap",
+            "handle_create",
+            "recall",
+        ] {
+            assert!(!is_noise_symbol(n), "{n:?} should NOT be noise");
+        }
+        // Short code identifiers are meaningful — must NOT be filtered by length.
+        for n in ["tx", "db", "id", "kv", "rs"] {
+            assert!(
+                !is_noise_symbol(n),
+                "{n:?} should NOT be noise (short but meaningful)"
+            );
+        }
+    }
+
+    #[test]
+    fn is_noise_symbol_rejects_garbage() {
+        for n in ["", "   ", "{}", "123", "_", "..."] {
+            assert!(is_noise_symbol(n), "{n:?} should be noise");
+        }
     }
 }

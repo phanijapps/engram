@@ -4,7 +4,9 @@
 //! deterministic ingestor. They carry caller-provided metadata, policy, scope,
 //! and actor information without introducing filesystem or Git dependencies.
 
-use engram_domain::{Actor, Policy, Scope, SourceDocumentKind, SourceKind, SourceLocation};
+use engram_domain::{
+    Actor, Metadata, Policy, Scope, SourceDocumentKind, SourceKind, SourceLocation,
+};
 use serde::{Deserialize, Serialize};
 
 /// Optional document metadata supplied by a source reader or caller.
@@ -39,4 +41,10 @@ pub struct DocumentIngestRequest {
     /// `KnowledgeGraph` and emit the per-source `EntityKind::Repository` node.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stable_source_key: Option<String>,
+    /// Additional source-level metadata the scanner stamps onto the
+    /// `KnowledgeSource` (merged with the stable-source-key). RFC-0020: the
+    /// scanner fills `repository` (git remote), `branch`, and `revision` (SHA)
+    /// so they flow to entity/edge provenance. `None` for sources without git.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_metadata: Option<Metadata>,
 }

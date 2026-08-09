@@ -818,6 +818,8 @@ mod tests {
                 provenance: provenance(),
                 created_at: fixed_now(),
                 updated_at: None,
+
+                archived_at: None,
             },
             KnowledgeRelationship {
                 id: Id::from("rel-2"),
@@ -837,6 +839,8 @@ mod tests {
                 provenance: provenance(),
                 created_at: fixed_now(),
                 updated_at: None,
+
+                archived_at: None,
             },
         ];
         let _ = rels; // unused — protocol_rels is the test data.
@@ -937,6 +941,8 @@ mod tests {
             provenance: provenance(),
             created_at: fixed_now(),
             updated_at: None,
+
+            archived_at: None,
         }
     }
 
@@ -985,6 +991,8 @@ mod tests {
             provenance: provenance(),
             created_at: fixed_now(),
             updated_at: None,
+
+            archived_at: None,
         }
     }
 

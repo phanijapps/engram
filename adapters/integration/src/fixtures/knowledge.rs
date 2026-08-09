@@ -190,6 +190,8 @@ fn entity(id: Id, graph_id: Id) -> KnowledgeEntity {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }
 }
 
@@ -216,6 +218,8 @@ fn relationship(id: Id, subject: Id, object: Id, graph_id: Id) -> KnowledgeRelat
         provenance: provenance(),
         created_at: Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     }
 }
 

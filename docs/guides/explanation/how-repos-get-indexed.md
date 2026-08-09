@@ -260,6 +260,22 @@ journal blocks readers during writes. WAL lets readers + the writer coexist;
 4. **COBOL grammar** — `tree-sitter-cobol` (0.1.0) has no Rust lib target.
    A compatible grammar crate needs to be found or built.
 
+## Re-indexing after extraction-quality changes (RFC-0020)
+
+Code entities carry **qualified identities** `{repo}/{path}::{bare_name}` (the
+`{repo}` is the stable-source-key). When the identity scheme changes — e.g.
+upgrading to RFC-0020 Phase 1 — already-indexed entities keep their **legacy**
+ids until the source is re-scanned. A re-scan is convergent: it upserts the
+current qualified-id entities + relationships and retracts the prior document
+graph's stale records.
+
+**No re-embedding is needed.** Embeddings are `EmbeddingTargetType::Chunk`
+(content-keyed), and the identity change touches only the graph layer (entities +
+relationships), not chunk content. So re-scan rebuilds the graph; the 442k chunk
+vectors persist unchanged. To extract a **concept sub-graph** from documents (the
+LLM `extract-knowledge` op), run `engram-maintain --op extract-knowledge` (or the
+`maintenance_run` MCP tool) after the scan — documents are chunks-only at ingest.
+
 ## See also
 
 - [Integrating Engram as a Rust Library](../tutorials/integrating-engram-rust-library.md) — complete tutorial for using Engram as a library dependency with SQLite storage

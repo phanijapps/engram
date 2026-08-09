@@ -21,10 +21,11 @@
 
 use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
-    Actor, ActorKind, AllowedUse, Belief, ConsolidationRequest, Contradiction, ContextPayload,
-    DeleteMode, EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id, KnowledgeEntity,
-    KnowledgeRelationship, MemoryRecord, Page, Policy, Procedure, Provenance, Retention, RetrievalRequest, Scope,
-    Sensitivity, Visibility, WriteMemoryRequest, WriteMemoryResponse,
+    Actor, ActorKind, AllowedUse, ApplyMode, Belief, ConsolidationRequest, ContextPayload,
+    Contradiction, DeleteMode, EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id,
+    KnowledgeEntity, KnowledgeRelationship, MaintenancePlan, MaintenancePlanRequest,
+    MaintenancePolicy, MemoryRecord, Page, Policy, Procedure, Provenance, Retention,
+    RetrievalRequest, Scope, Sensitivity, Visibility, WriteMemoryRequest, WriteMemoryResponse,
 };
 use engram_hierarchy::HierarchyRepository;
 use engram_ingest::{
@@ -33,10 +34,12 @@ use engram_ingest::{
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, CommunityQuery,
     EmbeddingProvider, EngramConfig, EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed,
-    MigrationService, Observability, ProvenanceQuery, StepStatus, TransactionGuarantee, UnifiedRecall,
+    MigrationService, Observability, ProvenanceQuery, StepStatus, TransactionGuarantee,
+    UnifiedRecall,
 };
 use engram_knowledge::{
-    KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
+    GraphMaintenanceRepository, KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository,
+    TaxonomyRepository,
 };
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
@@ -142,6 +145,18 @@ impl NativeProvider {
             .clone();
         let graph = self.inner.require_graph().map_err(to_napi_error)?.clone();
         Ok(NativeGraphApi { knowledge, graph })
+    }
+
+    /// Returns a graph-maintenance handle (reversible plan/apply graph repair),
+    /// or throws if not wired (ADR-0027).
+    #[napi(js_name = "requireGraphMaintenanceApi")]
+    pub fn require_graph_maintenance_api(&self) -> Result<NativeGraphMaintenanceApi> {
+        let handle = self
+            .inner
+            .require_graph_maintenance()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeGraphMaintenanceApi { handle })
     }
 
     /// Returns a provenance / evidence handle, or throws if not wired.
@@ -255,7 +270,10 @@ impl NativeProvider {
         Ok(NativeBeliefsApi { handle })
     }
 
-    /// Returns a hierarchy handle, or throws if not wired.
+    /// Returns a hierarchy handle, or throws if not wired. When the provider
+    /// also wires knowledge-query, the handle is attached so `buildHierarchyJson`
+    /// can read the call edges it clusters (best-effort: build throws a typed
+    /// `CapabilityUnsupported` error when knowledge-query is absent).
     #[napi(js_name = "requireHierarchyApi")]
     pub fn require_hierarchy_api(&self) -> Result<NativeHierarchyApi> {
         let handle = self
@@ -263,7 +281,11 @@ impl NativeProvider {
             .require_hierarchy()
             .map_err(to_napi_error)?
             .clone();
-        Ok(NativeHierarchyApi { handle })
+        let knowledge_query = self.inner.knowledge_query().cloned();
+        Ok(NativeHierarchyApi {
+            handle,
+            knowledge_query,
+        })
     }
 
     /// Returns a lexical-feed handle (BM25 lane upserts), or throws if not wired.
@@ -406,13 +428,13 @@ impl NativeMemoryApi {
             .get("after")
             .and_then(|v| v.as_str())
             .map(|s| engram_domain::Cursor::new(s.to_owned()));
-        let limit = value
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(100) as usize;
-        let page: Page<MemoryRecord> =
-            block_on(self.handle.list_memories_paged(&scope, after.as_ref(), limit))
-                .map_err(to_napi_error)?;
+        let limit = value.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
+        let page: Page<MemoryRecord> = block_on(self.handle.list_memories_paged(
+            &scope,
+            after.as_ref(),
+            limit,
+        ))
+        .map_err(to_napi_error)?;
         encode(&page)
     }
 }
@@ -481,6 +503,89 @@ impl NativeGraphApi {
             .map(|n| n as u32);
         let result = block_on(self.graph.neighbors(&graph_id, &node_id, &scope, limit))
             .map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NativeGraphMaintenanceApi — reversible plan/apply graph repair (ADR-0027)
+// ---------------------------------------------------------------------------
+
+/// Graph-maintenance handle proxy. Holds an `Arc<dyn GraphMaintenanceRepository>`
+/// and exposes reversible, plan/apply graph repair as JSON-in / JSON-out methods.
+/// Mutating paths run through `build_plan` (dry-run, fills previews) then
+/// `apply_plan` with `ApplyMode::Apply`; `Preview` stages without committing.
+#[napi]
+pub struct NativeGraphMaintenanceApi {
+    handle: Arc<dyn GraphMaintenanceRepository>,
+}
+
+#[napi]
+impl NativeGraphMaintenanceApi {
+    /// Build a dry-run plan (fills before/after previews; never mutates). Takes a
+    /// `MaintenancePlanRequest` JSON, returns the `MaintenancePlan` JSON.
+    #[napi(js_name = "buildPlanJson")]
+    pub fn build_plan_json(&self, request_json: String) -> Result<String> {
+        let request: MaintenancePlanRequest = decode(&request_json)?;
+        let result = block_on(self.handle.build_plan(request)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Apply (or preview) a reviewed plan. Takes a `{ plan, mode }` JSON (`mode`
+    /// is `"preview"` or `"apply"`), returns the `MaintenanceApplyResult` JSON.
+    #[napi(js_name = "applyPlanJson")]
+    pub fn apply_plan_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let plan: MaintenancePlan = serde_json::from_value(
+            value
+                .get("plan")
+                .cloned()
+                .ok_or_else(|| Error::from_reason("missing 'plan' field"))?,
+        )
+        .map_err(|e| Error::from_reason(format!("invalid plan: {e}")))?;
+        let mode: ApplyMode = serde_json::from_value(
+            value
+                .get("mode")
+                .cloned()
+                .ok_or_else(|| Error::from_reason("missing 'mode' field"))?,
+        )
+        .map_err(|e| Error::from_reason(format!("invalid mode: {e}")))?;
+        let result = block_on(self.handle.apply_plan(&plan, mode)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Deterministic candidate detection (orphan / low-confidence / unsupported /
+    /// duplicate; no LLM). Takes a `{ scope, graphId?, policy }` JSON, returns a
+    /// `[MaintenanceCandidate, …]` JSON array.
+    #[napi(js_name = "listMaintenanceCandidatesJson")]
+    pub fn list_maintenance_candidates_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let graph_id = value.get("graphId").and_then(|v| v.as_str()).map(Id::from);
+        let policy: MaintenancePolicy = serde_json::from_value(
+            value
+                .get("policy")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!({})),
+        )
+        .map_err(|e| Error::from_reason(format!("invalid policy: {e}")))?;
+        let result = block_on(
+            self.handle
+                .detect_candidates(&scope, graph_id.as_ref(), &policy),
+        )
+        .map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Point-in-time graph-health aggregates. Takes a `{ scope, graphId? }` JSON,
+    /// returns the `MaintenanceHealth` JSON.
+    #[napi(js_name = "graphHealthJson")]
+    pub fn graph_health_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let graph_id = value.get("graphId").and_then(|v| v.as_str()).map(Id::from);
+        let result =
+            block_on(self.handle.graph_health(&scope, graph_id.as_ref())).map_err(to_napi_error)?;
         encode(&result)
     }
 }
@@ -749,6 +854,26 @@ impl NativeKnowledgeQueryApi {
         let result = block_on(self.handle.list_relationships(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
+
+    /// Lists graphs in a scope. Takes a `Scope` JSON, returns `[KnowledgeGraph, …]`.
+    #[napi(js_name = "listGraphsJson")]
+    pub fn list_graphs_json(&self, scope_json: String) -> Result<String> {
+        let scope: Scope = decode(&scope_json)?;
+        let result = block_on(self.handle.list_graphs(&scope)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Lists one document's chunks in scope. Takes `{ documentId, scope }` JSON,
+    /// returns `[KnowledgeChunk, …]` (RFC-0020 T4).
+    #[napi(js_name = "listChunksByDocumentJson")]
+    pub fn list_chunks_by_document_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let document_id = id_field(&value, "documentId")?;
+        let scope = scope_field(&value)?;
+        let result = block_on(self.handle.list_chunks_by_document(&document_id, &scope))
+            .map_err(to_napi_error)?;
+        encode(&result)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -768,12 +893,8 @@ impl NativeCommunityQueryApi {
     pub fn overview_json(&self, request_json: String) -> Result<String> {
         let value = decode::<serde_json::Value>(&request_json)?;
         let scope = scope_field(&value)?;
-        let limit = value
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(150) as usize;
-        let result =
-            block_on(self.handle.overview(&scope, limit)).map_err(to_napi_error)?;
+        let limit = value.get("limit").and_then(|v| v.as_u64()).unwrap_or(150) as usize;
+        let result = block_on(self.handle.overview(&scope, limit)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -790,10 +911,7 @@ impl NativeCommunityQueryApi {
     pub fn community_of_json(&self, request_json: String) -> Result<String> {
         let value = decode::<serde_json::Value>(&request_json)?;
         let scope = scope_field(&value)?;
-        let entity_id = value
-            .get("entityId")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let entity_id = value.get("entityId").and_then(|v| v.as_str()).unwrap_or("");
         let result =
             block_on(self.handle.community_of(&scope, entity_id)).map_err(to_napi_error)?;
         encode(&result)
@@ -902,13 +1020,13 @@ impl NativeBeliefsApi {
             .get("after")
             .and_then(|v| v.as_str())
             .map(|s| engram_domain::Cursor::new(s.to_owned()));
-        let limit = value
-            .get("limit")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(100) as usize;
-        let page: Page<Belief> =
-            block_on(self.handle.list_beliefs_paged(&scope, after.as_ref(), limit))
-                .map_err(to_napi_error)?;
+        let limit = value.get("limit").and_then(|v| v.as_u64()).unwrap_or(100) as usize;
+        let page: Page<Belief> = block_on(self.handle.list_beliefs_paged(
+            &scope,
+            after.as_ref(),
+            limit,
+        ))
+        .map_err(to_napi_error)?;
         encode(&page)
     }
 
@@ -917,8 +1035,7 @@ impl NativeBeliefsApi {
     #[napi(js_name = "listContradictionsJson")]
     pub fn list_contradictions_json(&self, scope_json: String) -> Result<String> {
         let scope: Scope = decode(&scope_json)?;
-        let result =
-            block_on(self.handle.list_contradictions(&scope)).map_err(to_napi_error)?;
+        let result = block_on(self.handle.list_contradictions(&scope)).map_err(to_napi_error)?;
         encode(&result)
     }
 
@@ -938,11 +1055,15 @@ impl NativeBeliefsApi {
 // ---------------------------------------------------------------------------
 
 /// Hierarchy handle proxy. Holds an `Arc<dyn HierarchyRepository>` and exposes
-/// hierarchy navigation as JSON-in / JSON-out methods (mirrors the MCP
-/// `hierarchy_path` tool).
+/// hierarchy navigation + build as JSON-in / JSON-out methods (mirrors the MCP
+/// `hierarchy_path` / `hierarchy_build` tools). The optional `KnowledgeQuery`
+/// handle is populated by [`NativeProvider::require_hierarchy_api`] when the
+/// provider also wires knowledge-query — `buildHierarchyJson` needs it to read
+/// the call edges it clusters; `pathForJson` does not.
 #[napi]
 pub struct NativeHierarchyApi {
     handle: Arc<dyn HierarchyRepository>,
+    knowledge_query: Option<Arc<dyn KnowledgeQuery>>,
 }
 
 #[napi]
@@ -969,6 +1090,38 @@ impl NativeHierarchyApi {
         let result =
             block_on(self.handle.path_for(&seeds, &scope, max_layer)).map_err(to_napi_error)?;
         encode(&result)
+    }
+
+    /// Builds the hierarchy for a scope: clusters the knowledge graph's call
+    /// edges via Louvain communities and persists one layer-0 cluster node per
+    /// community plus inter-cluster relations (the write counterpart to
+    /// `pathForJson`). Deterministic — no LLM. After this, `pathForJson` returns
+    /// navigation results for the scope.
+    ///
+    /// Takes `{ scope, maxPasses? }` JSON (default `maxPasses` = 3), returns a
+    /// `HierarchyBuildStats` JSON (`clusterCount`, `entitiesClustered`,
+    /// `totalEntities`, `totalRelationships`, `interClusterRelationCount`).
+    /// Throws `CapabilityUnsupported` when knowledge-query is not wired.
+    #[napi(js_name = "buildHierarchyJson")]
+    pub fn build_hierarchy_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let max_passes = value.get("maxPasses").and_then(|v| v.as_u64()).unwrap_or(3) as usize;
+        let knowledge_query = self.knowledge_query.clone().ok_or_else(|| {
+            to_napi_error(engram_runtime::CoreError::CapabilityUnsupported {
+                capability: "knowledge_query".to_string(),
+                reason: "hierarchy build needs knowledge-query to read call edges".to_string(),
+            })
+        })?;
+        let stats = block_on(engram_integration::build_hierarchy_from_communities(
+            &knowledge_query,
+            &self.handle,
+            &scope,
+            max_passes,
+            "engram-node",
+        ))
+        .map_err(to_napi_error)?;
+        encode(&stats)
     }
 }
 

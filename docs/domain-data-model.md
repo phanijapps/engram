@@ -817,6 +817,7 @@ Fields:
 | `updatedAt` | no | Timestamp | Last update |
 | `validFrom` | no | Timestamp | When this entity version became authoritative (bi-temporal; ADR-0019) |
 | `validUntil` | no | Timestamp | When this entity version stopped being authoritative (bi-temporal; ADR-0019) |
+| `archivedAt` | no | Timestamp | Soft-delete timestamp (ADR-0027); absent = active. Excluded from active reads and convergence. |
 | `metadata` | no | object | Adapter-specific metadata |
 
 ### EntityKind
@@ -865,6 +866,7 @@ Fields:
 | `provenance` | yes | Provenance | Extraction or declaration provenance |
 | `createdAt` | yes | Timestamp | Creation time |
 | `updatedAt` | no | Timestamp | Last update |
+| `archivedAt` | no | Timestamp | Soft-delete timestamp (ADR-0027); absent = active. Excluded from active reads and convergence. |
 
 Common predicates:
 
@@ -879,6 +881,38 @@ Common predicates:
 - `documents`
 - `derived_from`
 - `related_to`
+
+### Graph maintenance (ADR-0027)
+
+Reversible, plan/apply repair over knowledge entities and relationships. The host
+supplies policy; Engram supplies generic data-management primitives. Reversibility
+is archive/restore only (no durable audit table, no export-snapshot rollback);
+attribution rides `Provenance`. Atomicity is backend-dependent (ADR-0022). These
+are storage-neutral data contracts; the port lives in `engram-knowledge`.
+
+Types:
+
+| Type | Kind | Meaning |
+|------|------|---------|
+| `MaintenanceTarget` | enum | `entity` or `relationship` id |
+| `MaintenanceMutation` | enum | `archive` / `restore` / `delete` / `merge` / `add_alias` / `remove_alias` / `rewrite_relationship`; each carries target ids + payload |
+| `MaintenanceMutationPreview` | struct | One mutation + before/after `MutationSnapshot[]` for dry-run inspection |
+| `MaintenancePlan` | struct | graph/scope + mutations + policy + deterministic `fingerprint` |
+| `MaintenanceApplyResult` | struct | applied/unchanged/failed counts (+ per-kind), verify findings, `Atomicity`, echoed plan `fingerprint` |
+| `MaintenanceCandidate` | struct | kind / target / reason / confidence / sourceRefs / optional reviewStatus + reviewer |
+| `CandidateKind` | enum | `orphan` / `low_confidence` / `unsupported` / `duplicate` |
+| `MaintenancePolicy` | struct | detection toggles + optional `confidenceThreshold`; deterministic, no LLM |
+| `Atomicity` | enum | `single_transaction` / `best_effort` / `backend_dependent` |
+| `ReviewStatus` | enum | `pending` / `accepted` / `rejected` |
+
+Rules:
+
+- `delete` is escalated and permanent; every other mutation is reversible via
+  archive/restore. `merge` archives — does not hard-delete — absorbed entities and
+  coalesced relationships.
+- `archivedAt` on an entity/relationship marks the soft-deleted (hidden,
+  non-contractual) state; active reads and convergence exclude archived rows.
+- Candidate detection is deterministic given (graph, policy); no LLM.
 
 ### EmbeddingRef
 

@@ -28,6 +28,29 @@ function mockTransport(): NativeProviderTransport {
     communityOverview: vi.fn(async () => ({})),
     communityMemberIndex: vi.fn(async () => ({})),
     scopeCounts: vi.fn(async () => ({})),
+    beliefGet: vi.fn(async () => null),
+    beliefRetract: vi.fn(async () => ({})),
+    beliefStaleList: vi.fn(async () => []),
+    listEntities: vi.fn(async () => []),
+    listRelationships: vi.fn(async () => []),
+    hierarchyPath: vi.fn(async () => ({})),
+    buildHierarchy: vi.fn(async () => ({
+      clusterCount: 0,
+      entitiesClustered: 0,
+      totalEntities: 0,
+      totalRelationships: 0,
+      interClusterRelationCount: 0,
+    })),
+    getEntity: vi.fn(async () => null),
+    graphNeighbors: vi.fn(async () => []),
+    // extract-knowledge iterates per-document graphs + reads chunks per doc.
+    // Defaults return empty so the op short-circuits before any LLM call.
+    listGraphs: vi.fn(async () => []),
+    listChunksByDocument: vi.fn(async () => []),
+    procedureUpsert: vi.fn(async () => ({})),
+    procedureList: vi.fn(async () => []),
+    procedureIncrementSuccess: vi.fn(async () => ({})),
+    procedureIncrementFailure: vi.fn(async () => ({})),
   } as unknown as NativeProviderTransport;
 }
 
@@ -95,7 +118,7 @@ describe("engram-mcp-http guard", () => {
 });
 
 describe("engram-mcp-http client (MCP protocol)", () => {
-  it("lists the 14 tools and recall dispatches to the facade", async () => {
+  it("lists the 36 tools and recall dispatches to the facade", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -109,19 +132,41 @@ describe("engram-mcp-http client (MCP protocol)", () => {
 
     const { tools } = await client.listTools();
     expect(tools.map((x) => x.name).sort()).toEqual([
+      "architecture",
+      "belief_get",
       "belief_list",
       "belief_put",
+      "belief_retract",
+      "belief_stale_list",
+      "capability_report",
+      "change_impact",
+      "code_health",
+      "consolidate",
       "contradiction_detect",
       "contradiction_list",
       "forget",
+      "get_context",
+      "graph_neighbors",
       "graph_overview",
+      "graph_subgraph",
+      "hierarchy_path",
       "list_memories",
       "maintenance_run",
       "ontology_read",
+      "ping",
+      "procedure_increment",
+      "procedure_list",
+      "procedure_put",
       "put_entity",
       "put_relationship",
       "recall",
+      "resolve_entity",
+      "scan_repo",
+      "search",
+      "store_knowledge",
+      "symbol_context",
       "taxonomy_read",
+      "whats_changed",
       "write_memory",
     ]);
 
@@ -144,6 +189,142 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     const ont = JSON.parse(ontText);
     expect(ont.layers).toBeInstanceOf(Array);
     expect(ont.layers.length).toBeGreaterThan(0);
+
+    await client.close();
+  }, 15000);
+
+  it("maintenance_run op=extract-knowledge dispatches to the op (36-tool list unchanged)", async () => {
+    const t = mockTransport();
+    const port = await start(t);
+
+    const client = new Client(
+      { name: "test-harness", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } }
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+    );
+
+    // The tool surface is unchanged — still exactly 36 tools (extract-knowledge
+    // is a new op value on maintenance_run, NOT a new tool).
+    const { tools } = await client.listTools();
+    expect(tools.length).toBe(36);
+
+    // maintenance_run op=extract-knowledge dispatches to the op: it iterates the
+    // scope's graphs via listGraphs (empty here → op short-circuits before any
+    // LLM call, so no provider/key is needed). Asserting listGraphs was invoked
+    // proves the dispatch reached extractKnowledge.
+    const result = await client.callTool({
+      name: "maintenance_run",
+      arguments: { scope: { tenant: "t" }, op: "extract-knowledge" }
+    });
+    expect(t.listGraphs).toHaveBeenCalledTimes(1);
+    const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "{}";
+    const payload = JSON.parse(text);
+    expect(payload.documentsRead).toBe(0);
+    expect(payload.entitiesWritten).toBe(0);
+
+    await client.close();
+  }, 15000);
+
+  it("maintenance_run op=hierarchy-build dispatches to buildHierarchy (36-tool list unchanged)", async () => {
+    const t = mockTransport();
+    const port = await start(t);
+
+    const client = new Client(
+      { name: "test-harness", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } }
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+    );
+
+    // Still exactly 36 tools — hierarchy-build is a new op value on
+    // maintenance_run, NOT a new tool.
+    const { tools } = await client.listTools();
+    expect(tools.length).toBe(36);
+
+    // maintenance_run op=hierarchy-build dispatches to transport.buildHierarchy
+    // (deterministic Louvain cluster→persist, no LLM — so no provider/key needed).
+    const result = await client.callTool({
+      name: "maintenance_run",
+      arguments: { scope: { tenant: "t" }, op: "hierarchy-build" }
+    });
+    expect(t.buildHierarchy).toHaveBeenCalledTimes(1);
+    expect(t.buildHierarchy).toHaveBeenCalledWith({ tenant: "t" });
+    const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "{}";
+    const payload = JSON.parse(text);
+    expect(payload.clusterCount).toBe(0);
+
+    await client.close();
+  }, 15000);
+});
+
+describe("engram-mcp-http codegraph suffix resolver (RFC-0020 T7)", () => {
+  it("symbol_context with a bare symbol returns the qualified neighbors", async () => {
+    const t = mockTransport();
+    // After T1, entities carry qualified names; relationships carry qualified
+    // endpoints. A user types the BARE symbol `parse_symbol`.
+    (t.listEntities as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "e1", name: "my-repo/src/lib.rs::parse_symbol", kind: "Function" },
+      { id: "e2", name: "my-repo/src/parser.rs::tokenize", kind: "Function" },
+    ]);
+    (t.listRelationships as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        subject: { id: "e1", name: "my-repo/src/lib.rs::parse_symbol" },
+        predicate: "calls",
+        object: { id: "e2", name: "my-repo/src/parser.rs::tokenize" },
+      },
+    ]);
+    const port = await start(t);
+
+    const client = new Client(
+      { name: "test-harness", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } },
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)),
+    );
+
+    const result = await client.callTool({
+      name: "symbol_context",
+      arguments: { scope: { tenant: "t" }, symbol: "parse_symbol" },
+    });
+    const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "{}";
+    const payload = JSON.parse(text);
+    // The bare query resolved to the qualified name and its callee surfaced.
+    expect(payload.callees).toContain("my-repo/src/parser.rs::tokenize");
+
+    await client.close();
+  }, 15000);
+
+  it("search with a bare symbol returns the qualified entity match", async () => {
+    const t = mockTransport();
+    (t.listEntities as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { id: "e1", name: "my-repo/src/lib.rs::parse_symbol", kind: "Function" },
+      { id: "e2", name: "my-repo/src/parser.rs::tokenize", kind: "Function" },
+    ]);
+    const port = await start(t);
+
+    const client = new Client(
+      { name: "test-harness", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } },
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`)),
+    );
+
+    const result = await client.callTool({
+      name: "search",
+      arguments: { query: "parse_symbol", scope: { tenant: "t" } },
+    });
+    const text = (result.content as Array<{ text?: string }>)[0]?.text ?? "{}";
+    const payload = JSON.parse(text);
+    // The bare query resolved to the qualified-name entity.
+    expect(payload.exactEntityMatches.length).toBe(1);
+    expect(payload.exactEntityMatches[0].name).toBe(
+      "my-repo/src/lib.rs::parse_symbol",
+    );
 
     await client.close();
   }, 15000);

@@ -4,7 +4,8 @@ import type { NativeProviderTransport } from "@engram/node";
 
 import { parseIngestArgs, runIngest } from "../src/ingest/cli.js";
 
-/** A mock transport: only `scan` is exercised; the rest are no-op stubs. */
+/** A mock transport: `scan` + `buildHierarchy` are exercised; the rest are
+ *  no-op stubs. */
 function mockTransport(
   scanImpl: () => Promise<unknown> = async () => ({ scanned: 1, entities: 1 })
 ): NativeProviderTransport {
@@ -13,6 +14,7 @@ function mockTransport(
     recall: vi.fn(async () => ({})),
     write: vi.fn(async () => ({})),
     scan: vi.fn(scanImpl),
+    buildHierarchy: vi.fn(async () => ({})),
     consolidate: vi.fn(async () => ({})),
     putEntity: vi.fn(async () => ({})),
     batchIngest: vi.fn(async () => ({}))
@@ -32,6 +34,31 @@ describe("runIngest dispatch", () => {
       path: "/repo",
       scope: { tenant: "t", workspace: "w" }
     });
+  });
+
+  it("auto-builds the hierarchy after a successful scan (Observatory populates)", async () => {
+    const t = mockTransport();
+    await runIngest({
+      transport: t,
+      path: "/repo",
+      scope: { tenant: "t", workspace: "w" }
+    });
+    // After a successful scan, ingest best-effort builds the hierarchy so the
+    // Observatory (reads hierarchy_path) shows data with no manual step.
+    expect(t.buildHierarchy).toHaveBeenCalledTimes(1);
+    expect(t.buildHierarchy).toHaveBeenCalledWith({ tenant: "t", workspace: "w" });
+  });
+
+  it("hierarchy-build failure does NOT fail the scan (best-effort, logged)", async () => {
+    const t = mockTransport();
+    // scan succeeds; the auto-build throws — the scan summary must still be
+    // emitted and runIngest must NOT reject.
+    (t.buildHierarchy as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("boom"));
+    await expect(
+      runIngest({ transport: t, path: "/repo", scope: { tenant: "t" } })
+    ).resolves.toBeUndefined();
+    expect(t.scan).toHaveBeenCalledTimes(1);
+    expect(t.buildHierarchy).toHaveBeenCalledTimes(1);
   });
 
   it("every unset or <= 0 is one-shot", async () => {

@@ -103,6 +103,8 @@ fn knowledge_entity_serializes_bi_temporal_validity() {
         valid_from: Some(now),
         valid_until: Some(now),
         metadata: None,
+
+        archived_at: None,
     };
 
     let value = serde_json::to_value(&entity).expect("serialize entity");
@@ -252,6 +254,8 @@ fn knowledge_entity_ontology_class_refs_skip_when_empty() {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     };
 
     let value = serde_json::to_value(&entity).expect("serialize");
@@ -364,6 +368,8 @@ fn context_subgraph_populated_round_trips() {
         provenance: provenance(now),
         created_at: now,
         updated_at: None,
+
+        archived_at: None,
     };
     let subgraph = ContextSubgraph {
         nodes: vec![node],

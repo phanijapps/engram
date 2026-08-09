@@ -514,10 +514,20 @@ fn name_matches_query(name: &str, query: &str) -> bool {
 /// (Option B) to give a true identifier match a higher injected score than a
 /// substring/partial match. Distinct from [`name_matches_query`], which also
 /// accepts substring containment.
+///
+/// RFC-0020 T7: a bare query also exactly matches a QUALIFIED name by suffix
+/// (`{repo}/{path}::{bare}`), so a user typing the bare identifier gets the
+/// `is_exact` tag + anchor score on both the TS and Rust surfaces. The two
+/// suffix arms (`::{query}` and `/{query}`) are the qualified-identity
+/// equivalents of an exact identifier match; a bare suffix WITHOUT a leading
+/// `::` / `/` delimiter is still NOT exact (`foobar` ≠ `bar`).
 fn name_exact_match(name: &str, query: &str) -> bool {
     let n = name.trim().to_ascii_lowercase();
     let q = query.trim().to_ascii_lowercase();
-    !q.is_empty() && n == q
+    if q.is_empty() {
+        return false;
+    }
+    n == q || n.ends_with(&format!("::{q}")) || n.ends_with(&format!("/{q}"))
 }
 
 /// A resolved `search` hit carrying everything needed for rendering and the
@@ -1205,6 +1215,51 @@ fn entity_lookup(app: &App) -> HashMap<String, KnowledgeEntity> {
         .collect()
 }
 
+/// The set of entity NAME strings in the project scope (RFC-0020 T7). Used by
+/// `symbol_context` / `change_impact` to resolve a user-supplied bare symbol to
+/// its qualified name(s) before seeding the BFS. Leaner than [`entity_lookup`]
+/// (names only — no entity clones); prefers the shared graph snapshot cache so
+/// it reuses the materialized entity set recall already loaded. Empty when the
+/// knowledge-query capability is unavailable (callers fall back to the bare
+/// symbol).
+fn entity_names(app: &App) -> Vec<String> {
+    if let Some(cache) = app.provider.graph_cache()
+        && let Some(snap) = block_on(cache.get(&app.scope))
+    {
+        return snap.entities.iter().map(|e| e.name.clone()).collect();
+    }
+    app.provider
+        .require_knowledge_query()
+        .ok()
+        .and_then(|q| block_on(q.list_entities(&app.scope)).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|e| e.name)
+        .collect()
+}
+
+/// Resolve a user-supplied (possibly bare) symbol query to the qualified NAME(s)
+/// of matching entities (RFC-0020 T7). A query matches a name when the name
+/// equals the query verbatim, OR ends with `::{query}` (a bare symbol within a
+/// path-qualified name) OR ends with `/{query}` (the last path segment). A bare
+/// suffix WITHOUT a leading delimiter never matches. Returns NAMES (not ids) so
+/// the result can seed the name-keyed BFS in `symbol_context_bounded` /
+/// `blast_radius_bounded`. Case-sensitive — qualified names preserve the source
+/// casing of path + symbol.
+///
+/// RFC-0020 T7 PARITY: this rule must match `packages/runtime/src/mcp/codegraph.ts`
+/// `resolveSymbolNames` (the TS HTTP MCP) — ADR-0022 surface parity. A one-sided
+/// change must update both or the two surfaces silently diverge.
+fn resolve_symbol_names(entity_names: &[String], query: &str) -> Vec<String> {
+    let dc = format!("::{query}");
+    let sl = format!("/{query}");
+    entity_names
+        .iter()
+        .filter(|name| name.as_str() == query || name.ends_with(&dc) || name.ends_with(&sl))
+        .cloned()
+        .collect()
+}
+
 /// Fallback symbol scan (the pre-hybrid path): lists entities and keeps those
 /// whose `"{name} {kind}"` contains the query as a substring. Used only when
 /// unified recall is unavailable. When `repository` is set, entities are
@@ -1272,15 +1327,94 @@ fn parse_str_or_array(args: &Value, key: &str) -> Result<Vec<String>, ToolError>
     }
 }
 
+/// Union multiple `SymbolContextBounded` results into one (RFC-0020 T7). Used
+/// when a user-supplied bare symbol resolves to several qualified names: the BFS
+/// is run from EACH seed and the callers/callees are unioned, de-duped, and
+/// sorted for deterministic output. `truncated` is the OR of all inputs (any
+/// direction hitting the cap flags the whole union); `community` is the first
+/// non-`None` value (the seeds are the same symbol in different files, so any
+/// one community label is representative). An empty input yields an empty context.
+fn union_symbol_context(
+    ctxs: Vec<engram_codegraph_queries::SymbolContextBounded>,
+) -> engram_codegraph_queries::SymbolContextBounded {
+    let mut callers: HashSet<String> = HashSet::new();
+    let mut callees: HashSet<String> = HashSet::new();
+    let mut truncated = false;
+    let mut community = None;
+    for c in ctxs {
+        for caller in c.ctx.callers {
+            callers.insert(caller);
+        }
+        for callee in c.ctx.callees {
+            callees.insert(callee);
+        }
+        truncated |= c.truncated;
+        if community.is_none() {
+            community = c.ctx.community;
+        }
+    }
+    let mut callers: Vec<String> = callers.into_iter().collect();
+    callers.sort();
+    let mut callees: Vec<String> = callees.into_iter().collect();
+    callees.sort();
+    engram_codegraph_queries::SymbolContextBounded {
+        ctx: engram_codegraph_queries::SymbolContext {
+            callers,
+            callees,
+            community,
+        },
+        truncated,
+    }
+}
+
+/// Union multiple `BlastRadiusBounded` results into one (RFC-0020 T7). Callers
+/// are unioned, de-duped, and sorted; `truncated` is the OR of all inputs. An
+/// empty input yields an empty blast radius.
+fn union_blast_radius(
+    radii: Vec<engram_codegraph_queries::BlastRadiusBounded>,
+) -> engram_codegraph_queries::BlastRadiusBounded {
+    let mut callers: HashSet<String> = HashSet::new();
+    let mut truncated = false;
+    for r in radii {
+        for caller in r.callers {
+            callers.insert(caller);
+        }
+        truncated |= r.truncated;
+    }
+    let mut callers: Vec<String> = callers.into_iter().collect();
+    callers.sort();
+    engram_codegraph_queries::BlastRadiusBounded { callers, truncated }
+}
+
+/// Resolve `user_symbol` against `entity_names`, falling back to the bare
+/// symbol itself when no entity matches (empty store, un-qualified data, or a
+/// genuinely-unknown symbol). Returns a non-empty vec so the BFS always has a
+/// seed.
+fn resolve_seeds(entity_names: &[String], user_symbol: &str) -> Vec<String> {
+    let resolved = resolve_symbol_names(entity_names, user_symbol);
+    if resolved.is_empty() {
+        vec![user_symbol.to_owned()]
+    } else {
+        resolved
+    }
+}
+
 /// `symbol_context`: callers, callees, and community for one symbol — or, when
 /// `symbol` is passed as a JSON array, for each symbol in one call (Fix 1:
 /// batch symbol_context). An agent that finds 5 distinctive identifiers makes
 /// one call instead of five.
 ///
-/// - String `symbol` (legacy): returns the single `SymbolContextBounded` debug
-///   view, unchanged from prior behavior.
-/// - Array `symbol` (new): runs `symbol_context_bounded` for each + returns the
-///   results concatenated, one section per symbol with a header:
+/// RFC-0020 T7: each user-supplied symbol is resolved to its qualified NAME(s)
+/// (`{repo}/{path}::{bare}`) via suffix matching before seeding the BFS. When a
+/// bare symbol resolves to multiple qualified names, the BFS is run from EACH
+/// seed and the callers/callees are unioned, de-duped. Falls back to the bare
+/// symbol when no entity matches.
+///
+/// - String `symbol` (legacy): returns the single unioned `SymbolContextBounded`
+///   debug view (`{ctx:?}` with no header) so existing callers/tests are
+///   unaffected by a single-match resolution.
+/// - Array `symbol` (new): one section per USER symbol, each showing the unioned
+///   context over its resolved names, with a header
 ///   `=== symbol_context: <name> (depth=N) ===`.
 pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let symbols = parse_str_or_array(args, "symbol")?;
@@ -1289,21 +1423,33 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         .as_u64()
         .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
     let rels = fetch_rels(app)?;
+    let names = entity_names(app);
 
-    // Legacy single-string path: identical output to the prior implementation
-    // (`{ctx:?}` with no header) so existing callers and tests are unaffected.
+    // Legacy single-string path: identical output shape to the prior
+    // implementation (`{ctx:?}` with no header). The single user symbol may
+    // resolve to multiple qualified seeds; their contexts are unioned into one
+    // `SymbolContextBounded` so the debug output stays a single block.
     if symbols.len() == 1 && args["symbol"].is_string() {
-        let symbol = symbols[0].as_str();
-        let ctx = engram_codegraph_queries::symbol_context_bounded(&rels, symbol, depth, cap);
+        let seeds = resolve_seeds(&names, &symbols[0]);
+        let ctxs: Vec<engram_codegraph_queries::SymbolContextBounded> = seeds
+            .iter()
+            .map(|s| engram_codegraph_queries::symbol_context_bounded(&rels, s, depth, cap))
+            .collect();
+        let ctx = union_symbol_context(ctxs);
         return Ok(protocol::text_content(format!("{ctx:?}")));
     }
 
-    // Batch path: one section per symbol with a header. The relationship set
-    // (`rels`) is fetched ONCE and reused across all symbols — the network/store
-    // cost is the same as a single call.
+    // Batch path: one section per USER symbol with a header. Each user symbol is
+    // resolved + unioned independently. The relationship set (`rels`) and the
+    // entity-name set (`names`) are fetched ONCE and reused across all symbols.
     let mut sections = Vec::with_capacity(symbols.len());
     for symbol in &symbols {
-        let ctx = engram_codegraph_queries::symbol_context_bounded(&rels, symbol, depth, cap);
+        let seeds = resolve_seeds(&names, symbol);
+        let ctxs: Vec<engram_codegraph_queries::SymbolContextBounded> = seeds
+            .iter()
+            .map(|s| engram_codegraph_queries::symbol_context_bounded(&rels, s, depth, cap))
+            .collect();
+        let ctx = union_symbol_context(ctxs);
         sections.push(format!(
             "=== symbol_context: {symbol} (depth={depth}) ===\n{ctx:?}"
         ));
@@ -1315,8 +1461,14 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// `target` is passed as a JSON array, for each target in one call (Fix 1:
 /// batch change_impact). Mirrors [`symbol_context`]'s batch shape.
 ///
-/// - String `target` (legacy): single blast radius + (optional) dependency path
-///   to `to`. Identical to prior output.
+/// RFC-0020 T7: each user-supplied target is resolved to its qualified NAME(s)
+/// via suffix matching before seeding the reverse BFS; multiple seeds are
+/// unioned, de-duped. Falls back to the bare target when no entity matches.
+///
+/// - String `target` (legacy): single unioned blast radius + (optional)
+///   dependency path to `to`. The `target` and `to` are each resolved to their
+///   FIRST matching qualified name for the dependency-path lookup (a path needs
+///   single endpoints, not a union).
 /// - Array `target` (new): blast radius per target with a header
 ///   `=== change_impact: <name> (depth=N) ===`. The `to` / dependency-path
 ///   option is single-target-only and ignored in batch mode (a per-target `to`
@@ -1328,28 +1480,53 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
         .as_u64()
         .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
     let rels = fetch_rels(app)?;
+    let names = entity_names(app);
 
     // Legacy single-string path: preserve the dependency-path option.
     if targets.len() == 1 && args["target"].is_string() {
-        let target = targets[0].as_str();
-        let radius = engram_codegraph_queries::blast_radius_bounded(&rels, target, depth, cap);
-        let path = args["to"]
-            .as_str()
-            .and_then(|to| engram_codegraph_queries::dependency_path(&rels, target, to));
+        let seeds = resolve_seeds(&names, &targets[0]);
+        let radii: Vec<engram_codegraph_queries::BlastRadiusBounded> = seeds
+            .iter()
+            .map(|s| engram_codegraph_queries::blast_radius_bounded(&rels, s, depth, cap))
+            .collect();
+        let radius = union_blast_radius(radii);
+        // Dependency path: resolve both endpoints to their first match (a path
+        // needs single endpoints). Falls back to the bare strings on no match.
+        let from = names_first_match(&names, &targets[0], &targets[0]);
+        let path = args["to"].as_str().and_then(|to| {
+            let to_resolved = names_first_match(&names, to, to);
+            engram_codegraph_queries::dependency_path(&rels, &from, &to_resolved)
+        });
         return Ok(protocol::text_content(format!(
             "Blast radius ({depth} hops, cap {cap}): {radius:?}\nDependency path: {path:?}"
         )));
     }
 
-    // Batch path: blast radius per target with a header.
+    // Batch path: blast radius per USER target with a header. Each target is
+    // resolved + unioned independently.
     let mut sections = Vec::with_capacity(targets.len());
     for target in &targets {
-        let radius = engram_codegraph_queries::blast_radius_bounded(&rels, target, depth, cap);
+        let seeds = resolve_seeds(&names, target);
+        let radii: Vec<engram_codegraph_queries::BlastRadiusBounded> = seeds
+            .iter()
+            .map(|s| engram_codegraph_queries::blast_radius_bounded(&rels, s, depth, cap))
+            .collect();
+        let radius = union_blast_radius(radii);
         sections.push(format!(
             "=== change_impact: {target} (depth={depth}, cap {cap}) ===\nBlast radius: {radius:?}"
         ));
     }
     Ok(protocol::text_content(sections.join("\n\n")))
+}
+
+/// Resolve `query` to its first matching qualified name, falling back to
+/// `fallback` (the bare query) when no entity matches. Used by `change_impact`'s
+/// dependency-path lookup, which needs a single endpoint rather than a union.
+fn names_first_match(entity_names: &[String], query: &str, fallback: &str) -> String {
+    resolve_symbol_names(entity_names, query)
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| fallback.to_owned())
 }
 
 /// `code_health`: dead code (zero-caller symbols) + repository stats.
@@ -2498,6 +2675,8 @@ mod tests {
             valid_from: None,
             valid_until: None,
             metadata: None,
+
+            archived_at: None,
         }
     }
 
@@ -3245,7 +3424,7 @@ mod tests {
     fn inject_exact_matches_skips_chunk_hits() {
         // A chunk whose label happens to match the query must NOT be marked
         // is_exact — that tag means "identifier match," not "content match."
-        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        let by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
         let mut hits = vec![hit_chunk("alphaFunction body text", Some("a.rs"), 0.05)];
         let injected = inject_exact_matches(&mut hits, &by_id, "alphaFunction");
         // No entities in by_id → nothing injected.
@@ -3529,6 +3708,199 @@ mod tests {
         assert!(
             assessment.contains("(batch: all anchors in one call)"),
             "batch hint present: {assessment}"
+        );
+    }
+
+    // --- RFC-0020 T7: suffix/alias symbol resolver (both surfaces) -----------
+
+    #[test]
+    fn resolve_symbol_names_matches_bare_via_double_colon_suffix() {
+        let names = vec![
+            "my-repo/src/lib.rs::parse_symbol".to_owned(),
+            "other/file.rs::other_fn".to_owned(),
+        ];
+        let resolved = resolve_symbol_names(&names, "parse_symbol");
+        assert_eq!(
+            resolved,
+            vec!["my-repo/src/lib.rs::parse_symbol".to_owned()]
+        );
+    }
+
+    #[test]
+    fn resolve_symbol_names_matches_multiple_qualified_names() {
+        let names = vec![
+            "my-repo/src/lib.rs::parse_symbol".to_owned(),
+            "my-repo/src/parser.rs::parse_symbol".to_owned(),
+        ];
+        let resolved = resolve_symbol_names(&names, "parse_symbol");
+        assert_eq!(resolved.len(), 2, "both qualified names resolve");
+        assert!(resolved.contains(&"my-repo/src/lib.rs::parse_symbol".to_owned()));
+        assert!(resolved.contains(&"my-repo/src/parser.rs::parse_symbol".to_owned()));
+    }
+
+    #[test]
+    fn resolve_symbol_names_matches_last_path_segment_via_slash_suffix() {
+        let names = vec!["my-repo/lib".to_owned(), "my-repo/src/main".to_owned()];
+        let resolved = resolve_symbol_names(&names, "lib");
+        assert_eq!(resolved, vec!["my-repo/lib".to_owned()]);
+    }
+
+    #[test]
+    fn resolve_symbol_names_matches_qualified_query_verbatim() {
+        let names = vec!["my-repo/src/lib.rs::parse_symbol".to_owned()];
+        let q = "my-repo/src/lib.rs::parse_symbol";
+        let resolved = resolve_symbol_names(&names, q);
+        assert_eq!(
+            resolved,
+            vec!["my-repo/src/lib.rs::parse_symbol".to_owned()]
+        );
+    }
+
+    #[test]
+    fn resolve_symbol_names_rejects_bare_suffix_without_delimiter() {
+        // `foobar` does NOT suffix-match `bar` — no leading `::` / `/`.
+        assert!(resolve_symbol_names(&["foobar".to_owned()], "bar").is_empty());
+        // `parse_symbol_x` is NOT a suffix match for `parse_symbol`.
+        assert!(
+            resolve_symbol_names(&["my-repo/x.rs::parse_symbol_x".to_owned()], "parse_symbol")
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn resolve_seeds_falls_back_to_bare_symbol_when_no_entity_matches() {
+        // Unknown symbol → the bare string is the sole seed (BFS still runs;
+        // finds nothing, but the caller does not error).
+        let names = vec!["alpha".to_owned()];
+        let seeds = resolve_seeds(&names, "ghost");
+        assert_eq!(seeds, vec!["ghost".to_owned()]);
+        // Known symbol → resolved qualified name(s).
+        let names = vec!["repo/a.rs::fn".to_owned()];
+        let seeds = resolve_seeds(&names, "fn");
+        assert_eq!(seeds, vec!["repo/a.rs::fn".to_owned()]);
+    }
+
+    #[test]
+    fn name_exact_match_recognizes_suffix_qualified_names() {
+        // RFC-0020 T7: a bare query exactly matches a qualified name by suffix.
+        assert!(name_exact_match(
+            "my-repo/src/lib.rs::parse_symbol",
+            "parse_symbol"
+        ));
+        assert!(name_exact_match("my-repo/lib", "lib"));
+        // Verbatim match still exact.
+        assert!(name_exact_match("anthropicOAuth", "anthropicOAuth"));
+        assert!(name_exact_match("anthropicOAuth", "AnthropicOAuth"));
+        // Bare suffix WITHOUT a delimiter is still NOT exact.
+        assert!(!name_exact_match("foobar", "bar"));
+        assert!(!name_exact_match("loginAnthropic", "login"));
+        // Empty / whitespace query never matches.
+        assert!(!name_exact_match("alpha", ""));
+        assert!(!name_exact_match("alpha", "   "));
+    }
+
+    #[test]
+    fn union_symbol_context_unions_and_dedups_sorted() {
+        let ctx1 = engram_codegraph_queries::SymbolContextBounded {
+            ctx: engram_codegraph_queries::SymbolContext {
+                callers: vec!["a".to_owned()],
+                callees: vec!["b".to_owned(), "c".to_owned()],
+                community: Some(1),
+            },
+            truncated: false,
+        };
+        let ctx2 = engram_codegraph_queries::SymbolContextBounded {
+            ctx: engram_codegraph_queries::SymbolContext {
+                callers: vec!["a".to_owned(), "d".to_owned()],
+                callees: vec!["c".to_owned()],
+                community: Some(2),
+            },
+            truncated: true,
+        };
+        let unioned = union_symbol_context(vec![ctx1, ctx2]);
+        // Callers/callees unioned + sorted + de-duped.
+        assert_eq!(unioned.ctx.callers, vec!["a".to_owned(), "d".to_owned()]);
+        assert_eq!(unioned.ctx.callees, vec!["b".to_owned(), "c".to_owned()]);
+        // truncated is OR'd.
+        assert!(unioned.truncated);
+        // community is the first non-None.
+        assert_eq!(unioned.ctx.community, Some(1));
+    }
+
+    #[test]
+    fn union_symbol_context_empty_input_yields_empty_context() {
+        let unioned = union_symbol_context(Vec::new());
+        assert!(unioned.ctx.callers.is_empty());
+        assert!(unioned.ctx.callees.is_empty());
+        assert!(!unioned.truncated);
+        assert!(unioned.ctx.community.is_none());
+    }
+
+    #[test]
+    fn union_blast_radius_unions_and_dedups_sorted() {
+        let r1 = engram_codegraph_queries::BlastRadiusBounded {
+            callers: vec!["c1".to_owned()],
+            truncated: false,
+        };
+        let r2 = engram_codegraph_queries::BlastRadiusBounded {
+            callers: vec!["c1".to_owned(), "c2".to_owned()],
+            truncated: true,
+        };
+        let unioned = union_blast_radius(vec![r1, r2]);
+        assert_eq!(unioned.callers, vec!["c1".to_owned(), "c2".to_owned()]);
+        assert!(unioned.truncated);
+    }
+
+    /// RFC-0020 T7 parity: a bare user symbol resolves to its qualified name and
+    /// `symbol_context_bounded` then finds the qualified callee. This is the
+    /// Rust-stdio-MCP mirror of the TS `symbol_context({symbol: "parse_symbol"})`
+    /// test — proving the resolver seeds the BFS with the qualified NAME.
+    #[test]
+    fn symbol_context_bounded_seeds_from_resolved_qualified_name() {
+        use engram_domain::{EntityRef, KnowledgeRelationship};
+        let rels = vec![KnowledgeRelationship {
+            id: engram_domain::Id::from("rel-1"),
+            graph_id: None,
+            subject: EntityRef {
+                id: Some(engram_domain::Id::from("e1")),
+                kind: Some("Function".to_owned()),
+                name: Some("my-repo/src/lib.rs::parse_symbol".to_owned()),
+                aliases: Vec::new(),
+            },
+            predicate: "calls".to_owned(),
+            object: EntityRef {
+                id: Some(engram_domain::Id::from("e2")),
+                kind: Some("Function".to_owned()),
+                name: Some("my-repo/src/parser.rs::tokenize".to_owned()),
+                aliases: Vec::new(),
+            },
+            scope: crate::scope::project_scope("test-project", "default"),
+            evidence: Vec::new(),
+            confidence: None,
+            provenance: crate::tools::provenance("test"),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+
+            archived_at: None,
+        }];
+        // A bare user query resolves to the qualified name; the BFS then seeds
+        // from that name and discovers the callee.
+        let names = vec!["my-repo/src/lib.rs::parse_symbol".to_owned()];
+        let seeds = resolve_seeds(&names, "parse_symbol");
+        assert_eq!(seeds, vec!["my-repo/src/lib.rs::parse_symbol".to_owned()]);
+        let ctx = engram_codegraph_queries::symbol_context_bounded(&rels, &seeds[0], 2, 64);
+        assert!(
+            ctx.ctx
+                .callees
+                .contains(&"my-repo/src/parser.rs::tokenize".to_owned()),
+            "qualified callee discovered via resolved seed: {:?}",
+            ctx.ctx.callees
+        );
+        // Sanity: the bare symbol directly (pre-T7 behavior) would NOT seed.
+        let bare = engram_codegraph_queries::symbol_context_bounded(&rels, "parse_symbol", 2, 64);
+        assert!(
+            bare.ctx.callees.is_empty(),
+            "bare symbol does not seed the name-keyed BFS (the T7 bug)"
         );
     }
 }

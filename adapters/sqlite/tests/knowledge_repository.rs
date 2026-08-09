@@ -122,6 +122,8 @@ fn round_trips_scoped_graph_entities_and_neighbors() {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }))
     .expect("put entity");
 
@@ -148,6 +150,8 @@ fn round_trips_scoped_graph_entities_and_neighbors() {
             provenance: provenance(),
             created_at: Utc::now(),
             updated_at: None,
+
+            archived_at: None,
         }))
         .expect("put relationship");
     }
@@ -532,6 +536,8 @@ fn validate_graph_warns_on_undeclared_predicate_only() {
             provenance: provenance(),
             created_at: Utc::now(),
             updated_at: None,
+
+            archived_at: None,
         }))
         .expect("put relationship");
     }
@@ -572,6 +578,8 @@ fn list_graphs_entities_relationships_are_scope_filtered() {
             valid_from: None,
             valid_until: None,
             metadata: None,
+
+            archived_at: None,
         }))
         .expect("put entity");
         block_on(store.put_relationship(KnowledgeRelationship {
@@ -596,6 +604,8 @@ fn list_graphs_entities_relationships_are_scope_filtered() {
             provenance: provenance(),
             created_at: Utc::now(),
             updated_at: None,
+
+            archived_at: None,
         }))
         .expect("put relationship");
     }

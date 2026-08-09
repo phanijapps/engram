@@ -34,8 +34,13 @@ function defaultProvenance(): Provenance {
 }
 
 /** Build a `RetrievalRequest` from the few fields an MCP caller provides. */
-export function buildRetrievalRequest(query: string, scope: Scope): RetrievalRequest {
-  return { query, scope, requester: defaultRequester() };
+export function buildRetrievalRequest(query: string, scope: Scope, limit?: number): RetrievalRequest {
+  return {
+    query,
+    scope,
+    requester: defaultRequester(),
+    ...(limit !== undefined ? { limit } : {}),
+  } as RetrievalRequest;
 }
 
 /** Build a `WriteMemoryRequest` from a memory's text + scope. */

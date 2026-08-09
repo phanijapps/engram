@@ -11,6 +11,7 @@
 mod graph;
 pub mod identity;
 mod ingest;
+mod maintenance;
 mod ontology;
 mod repository;
 mod taxonomy;
@@ -21,6 +22,10 @@ pub use engram_runtime::{CoreError, CoreResult};
 pub use graph::KnowledgeGraphRepository;
 pub use identity::EntityIdentityRepository;
 pub use ingest::{Chunker, IngestionService, SourceReader};
+pub use maintenance::GraphMaintenanceRepository;
+/// Pure candidate detection over pre-fetched graph data — the cross-crate utility
+/// the SQLite adapter (T4/T5) composes inside its async `detect_candidates`.
+pub use maintenance::detect_candidates;
 pub use ontology::OntologyRepository;
 pub use repository::KnowledgeRepository;
 pub use taxonomy::TaxonomyRepository;

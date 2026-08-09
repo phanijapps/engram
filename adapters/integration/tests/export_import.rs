@@ -148,6 +148,8 @@ fn entity(id: &str, scope: &Scope) -> KnowledgeEntity {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }
 }
 
@@ -174,6 +176,8 @@ fn relationship(id: &str, scope: &Scope) -> KnowledgeRelationship {
         provenance: provenance(),
         created_at: chrono::Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     }
 }
 

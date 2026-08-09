@@ -243,6 +243,8 @@ fn seed_scope(
             valid_from: None,
             valid_until: None,
             metadata: None,
+
+            archived_at: None,
         }))
         .map_err(err("put_entity"))?;
     }
@@ -269,6 +271,8 @@ fn seed_scope(
         provenance: provenance(),
         created_at: chrono::Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     }))
     .map_err(err("put_relationship"))?;
 

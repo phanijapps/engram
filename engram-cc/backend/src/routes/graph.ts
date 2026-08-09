@@ -116,16 +116,35 @@ export function graphRoute(cfg: VizConfig): Hono {
         if (!row) return c.json({ error: "entity not found" }, 404);
         const entity = JSON.parse(row.record_json as string) as {
           provenance?: unknown;
+          metadata?: {
+            repository?: string;
+            branch?: string;
+            revision?: string;
+          };
         };
         const degree = countTable(db, "knowledge_relationships", "subject_id = ? AND tenant = ? AND workspace = ?", [
           id,
           ...scopeParams,
         ]);
+        // RFC-0020 rev: git provenance (repository/branch/revision) is carried on
+        // the entity's metadata (stamped by the scanner from the detect_git
+        // tuple). Surface the clean keys so the UI can show "indexed from
+        // <branch>" without parsing the enriched source-name string.
+        const md = entity.metadata;
+        const git =
+          md && (md.repository || md.branch || md.revision)
+            ? {
+                repository: md.repository ?? null,
+                branch: md.branch ?? null,
+                revision: md.revision ?? null,
+              }
+            : null;
         return c.json({
           ...projectEntity(entity),
           community,
           degree,
           provenance: entity.provenance ?? null,
+          git,
         });
       });
     } catch (err) {

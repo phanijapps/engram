@@ -533,3 +533,15 @@ Deferred items from the M2 adversarial review (tracked, not blocking the slice):
   for MCP-driven runs. Tool descriptions now disclose the third-party path.
 - **`--dry-run` for LLM ops**: CLI `--dry-run` is consolidate-only; LLM ops use
   `PI_DRY_RUN`. Wire `--dry-run` into the LLM ops or print a warning.
+
+## RFC-0020 Phase 1 — extract-knowledge observability
+
+- **split `skipped` counter**: `extract-knowledge` folds noise drops, malformed
+  rows, unknown predicates, and non-`record_extraction` tool calls into one
+  `skipped` count — opaque when high. Break into `skippedNoise` /
+  `skippedMalformed` / `skippedUnknownPredicate` / `skippedOtherTool`.
+- **`documentsRead` semantics + typed partial error**: `documentsRead` is
+  incremented before the LLM call (means "attempted"); a typed
+  `PartialExtractionError` carrying `{documentsRead, entitiesWritten,
+  relationshipsWritten}` would let the CLI/MCP report progress before a retry
+  (the current per-document error message already includes the counts inline).

@@ -51,6 +51,7 @@ fn request() -> DocumentIngestRequest {
         policy: policy(),
         actor: actor(),
         stable_source_key: None,
+        source_metadata: None,
     }
 }
 

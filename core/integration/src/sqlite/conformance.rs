@@ -730,6 +730,8 @@ fn entity(id: Id, graph_id: Id) -> KnowledgeEntity {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }
 }
 
@@ -756,6 +758,8 @@ fn relationship(id: Id, subject: Id, object: Id, graph_id: Id) -> KnowledgeRelat
         provenance: provenance_base(),
         created_at: chrono::Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     }
 }
 
@@ -926,6 +930,8 @@ fn prov_entity(id: Id, graph_id: Id) -> KnowledgeEntity {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }
 }
 
@@ -952,6 +958,8 @@ fn prov_relationship(id: Id, graph_id: Id) -> KnowledgeRelationship {
         provenance: provenance_with_evidence(),
         created_at: chrono::Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     }
 }
 
@@ -1047,6 +1055,8 @@ fn batch_entity(id: &str) -> KnowledgeEntity {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }
 }
 
@@ -1073,6 +1083,8 @@ fn batch_relationship(id: &str) -> KnowledgeRelationship {
         provenance: provenance_base(),
         created_at: chrono::Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     }
 }
 
@@ -1154,6 +1166,8 @@ fn seed_export(
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     }))
     .map_err(|_| ())?;
     block_on(memory.put_memory(MemoryRecord {

@@ -13,10 +13,16 @@ use crate::community_query::CommunityQuery;
 
 const MEMBER_CAP: usize = 1000;
 
+/// Community node key. RFC-0020 rev: prefer the entity **id** (stable, unique
+/// per `graph_id + name`) so two functions that share a logical name — two
+/// `render`, two `index.ts` — stay distinct graph nodes instead of collapsing
+/// into one. The logical name is still the display label (the cc display maps
+/// ids→names); only the partitioning key changed. Falls back to the name only
+/// when an endpoint carries no id (a name-only relationship ref).
 fn key_of(name: Option<&str>, id: Option<&str>) -> Option<String> {
-    name.filter(|s| !s.is_empty())
+    id.filter(|s| !s.is_empty())
         .map(String::from)
-        .or_else(|| id.map(String::from))
+        .or_else(|| name.filter(|s| !s.is_empty()).map(String::from))
 }
 
 fn endpoint_key(name: &Option<String>, id: &Option<String>) -> Option<String> {
@@ -29,9 +35,7 @@ impl CommunityQuery for SqlKnowledgeStore {
         let rels = SqlKnowledgeStore::relationship_endpoints(self, scope).await?;
         let edges: Vec<(String, String)> = rels
             .iter()
-            .filter_map(|(sn, si, on, oi)| {
-                Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?))
-            })
+            .filter_map(|(sn, si, on, oi)| Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?)))
             .collect();
         let name_to_label = communities(&edges, 2);
         let total_communities = name_to_label.len();
@@ -88,20 +92,18 @@ impl CommunityQuery for SqlKnowledgeStore {
         let rels = SqlKnowledgeStore::relationship_endpoints(self, scope).await?;
         let edges: Vec<(String, String)> = rels
             .iter()
-            .filter_map(|(sn, si, on, oi)| {
-                Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?))
-            })
+            .filter_map(|(sn, si, on, oi)| Some((endpoint_key(sn, si)?, endpoint_key(on, oi)?)))
             .collect();
         let name_to_label = communities(&edges, 2);
 
         let mut label_to_ids: HashMap<usize, Vec<String>> = HashMap::new();
         for (sn, si, on, oi) in &rels {
-            // subject endpoint
+            // subject endpoint — push entity id if not already in the community
             if let Some(key) = endpoint_key(sn, si) {
                 if let Some(&label) = name_to_label.get(&key) {
                     if let Some(eid) = si {
                         let b = label_to_ids.entry(label).or_default();
-                        if b.len() < MEMBER_CAP {
+                        if b.len() < MEMBER_CAP && !b.contains(eid) {
                             b.push(eid.clone());
                         }
                     }
@@ -112,14 +114,17 @@ impl CommunityQuery for SqlKnowledgeStore {
                 if let Some(&label) = name_to_label.get(&key) {
                     if let Some(eid) = oi {
                         let b = label_to_ids.entry(label).or_default();
-                        if b.len() < MEMBER_CAP {
+                        if b.len() < MEMBER_CAP && !b.contains(eid) {
                             b.push(eid.clone());
                         }
                     }
                 }
             }
         }
-        Ok(label_to_ids.into_iter().map(|(l, ids)| (l as u32, ids)).collect())
+        Ok(label_to_ids
+            .into_iter()
+            .map(|(l, ids)| (l as u32, ids))
+            .collect())
     }
 
     async fn community_of(&self, scope: &Scope, entity_id: &str) -> CoreResult<Option<u32>> {

@@ -104,6 +104,8 @@ fn pg_recipe_knowledge_write_read_round_trip() {
         valid_from: None,
         valid_until: None,
         metadata: None,
+
+        archived_at: None,
     };
 
     block_on(repo.put_entity(entity)).expect("put_entity");
@@ -175,6 +177,8 @@ fn pg_recipe_relationship_round_trip() {
         },
         created_at: chrono::Utc::now(),
         updated_at: None,
+
+        archived_at: None,
     };
 
     block_on(repo.put_relationship(rel)).expect("put_relationship");

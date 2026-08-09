@@ -11,7 +11,9 @@
 //! directly; this port removes that need).
 
 use async_trait::async_trait;
-use engram_domain::{KnowledgeChunk, KnowledgeEntity, KnowledgeRelationship, Scope};
+use engram_domain::{
+    DocumentId, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeRelationship, Scope,
+};
 use engram_runtime::CoreResult;
 
 /// Read port: list the entities / relationships / chunks visible to a scope.
@@ -25,6 +27,21 @@ pub trait KnowledgeQuery: Send + Sync {
 
     /// All chunks in `scope` (for embedding/indexing). Default: empty (not supported).
     async fn list_chunks(&self, _scope: &Scope) -> CoreResult<Vec<KnowledgeChunk>> {
+        Ok(Vec::new())
+    }
+
+    /// All graphs in `scope`. Default: empty (not supported).
+    async fn list_graphs(&self, _scope: &Scope) -> CoreResult<Vec<KnowledgeGraph>> {
+        Ok(Vec::new())
+    }
+
+    /// The chunks of one `document_id` within `scope` (bounded per-document read,
+    /// used by the extract-knowledge op). Default: empty (not supported).
+    async fn list_chunks_by_document(
+        &self,
+        _document_id: &DocumentId,
+        _scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeChunk>> {
         Ok(Vec::new())
     }
 }

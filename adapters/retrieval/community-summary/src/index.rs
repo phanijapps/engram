@@ -366,6 +366,8 @@ mod tests {
             valid_from: None,
             valid_until: None,
             metadata: None,
+
+            archived_at: None,
         }
     }
 
@@ -405,6 +407,8 @@ mod tests {
             },
             created_at: chrono::Utc::now(),
             updated_at: None,
+
+            archived_at: None,
         }
     }
 

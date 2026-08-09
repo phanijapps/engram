@@ -1,6 +1,6 @@
 # Spec: Graph maintenance API
 
-- **Status:** Implementing
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0027 (archive+restore durable state; supersedes ADR-0018's storage-mode consequence — *Accepted*), ADR-0022 (engine neutrality + surface parity), RFC-0014 (transactional consolidation — apply precedent), ADR-0018 (retraction ports + convergence remain in force over the active set)
@@ -114,43 +114,43 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 
 ## Acceptance Criteria
 
-- [ ] A host lists and filters entities and relationships by graph, scope,
+- [x]A host lists and filters entities and relationships by graph, scope,
   source, kind, and confidence with cursor pagination, without direct store
   access.
-- [ ] Every mutating operation returns an exact dry-run preview — per-entity and
+- [x]Every mutating operation returns an exact dry-run preview — per-entity and
   per-relationship before/after — when invoked without an explicit apply flag;
   only an explicit apply flag (`ApplyMode::Apply`) commits mutations.
-- [ ] On a transactional backend, applying a maintenance plan runs inside one
+- [x]On a transactional backend, applying a maintenance plan runs inside one
   transaction; a verification failure leaves the graph byte-for-byte unchanged,
   and the apply result surfaces the backend's atomicity guarantee level.
-- [ ] Reapplying a completed plan is idempotent — a second apply produces no new
+- [x]Reapplying a completed plan is idempotent — a second apply produces no new
   mutations.
-- [ ] Archive moves an entity or relationship to a hidden, non-contractual state
+- [x]Archive moves an entity or relationship to a hidden, non-contractual state
   and is reversed by restore; the active graph (reads and convergence) excludes
   archived rows.
-- [ ] Archiving a node archives its incident edges with it, and restore returns
+- [x]Archiving a node archives its incident edges with it, and restore returns
   both, so the active graph never shows a dangling edge to an archived node.
-- [ ] Merge combines two entities into one, rewiring subject/object references
+- [x]Merge combines two entities into one, rewiring subject/object references
   and coalescing duplicate relationships, and preserves `Provenance` on the
   survivor.
-- [ ] Alias add/remove are exposed through the maintenance port (`AddAlias`/
+- [x]Alias add/remove are exposed through the maintenance port (`AddAlias`/
   `RemoveAlias` mutations); normalized-exact-identity resolution composes the
   existing `EntityIdentityRepository::resolve_or_put` at the facade surface (not
   duplicated onto the maintenance port).
-- [ ] Relationship rewrite edits a predicate or endpoint in place without a full
+- [x]Relationship rewrite edits a predicate or endpoint in place without a full
   record re-put.
-- [ ] Candidate detection identifies orphan (no incident edges or no
+- [x]Candidate detection identifies orphan (no incident edges or no
   `source_refs`), low-confidence (below a policy threshold), unsupported
   (ontology-violating via `validate_graph`), and duplicate (via
   `discover_collisions`) candidates — deterministically, with no LLM.
-- [ ] Every mutation is attributable from the affected entity or relationship's
+- [x]Every mutation is attributable from the affected entity or relationship's
   `Provenance` (actor, method, observed_at) and reversible through
   archive/restore; merge archives absorbed entities (recoverable via restore),
   and escalated Delete is the one permanent mutation.
-- [ ] Graph health metrics report, per graph and source, candidate volume
+- [x]Graph health metrics report, per graph and source, candidate volume
   (orphan, low-confidence, unsupported, duplicate counts) and archived-row count
   as point-in-time read-only aggregates.
-- [ ] The capability is reachable from the Rust `EngramProvider` facade, the
+- [x]The capability is reachable from the Rust `EngramProvider` facade, the
   N-API binding, `@engram/node`, and engram-mcp tools (candidates, build/apply
   plan, archive, restore, delete, merge, rewrite, alias, list/filter, health), and is
   reflected in `CapabilityReport` as a `graph_maintenance` entry distinct from

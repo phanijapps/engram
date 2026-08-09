@@ -475,6 +475,83 @@ export function registerTools(
   );
 
   server.registerTool(
+    "list_maintenance_candidates",
+    {
+      description:
+        "Deterministic graph-maintenance candidate detection (orphan/low-confidence/unsupported/duplicate; no LLM). Returns [MaintenanceCandidate, …].",
+      inputSchema: z.object({
+        scope: scopeSchema,
+        graphId: z.string().optional(),
+        policy: z.any().optional(),
+      }),
+    },
+    async ({ scope, graphId, policy }) => {
+      const result = await transport.graphMaintenanceCandidates({
+        scope: buildScope(scope),
+        ...(graphId !== undefined ? { graphId } : {}),
+        ...(policy !== undefined ? { policy } : {}),
+      });
+      return textResult(result);
+    },
+  );
+
+  server.registerTool(
+    "build_maintenance_plan",
+    {
+      description:
+        "Build a dry-run maintenance plan (fills before/after previews; never mutates). Takes a MaintenancePlanRequest.",
+      inputSchema: z.object({
+        scope: scopeSchema,
+        mutations: z.array(z.any()),
+        policy: z.any().optional(),
+        actor: z.any(),
+      }),
+    },
+    async (request) => {
+      const result = await transport.graphMaintenanceBuildPlan({
+        ...request,
+        scope: buildScope(request.scope),
+      });
+      return textResult(result);
+    },
+  );
+
+  server.registerTool(
+    "apply_maintenance_plan",
+    {
+      description:
+        'Apply (mode: "apply") or preview (mode: "preview") a reviewed maintenance plan. Apply commits in one transaction with a referential-integrity verify.',
+      inputSchema: z.object({
+        plan: z.any(),
+        mode: z.enum(["preview", "apply"]),
+      }),
+    },
+    async ({ plan, mode }) => {
+      const result = await transport.graphMaintenanceApplyPlan({ plan, mode });
+      return textResult(result);
+    },
+  );
+
+  server.registerTool(
+    "graph_health",
+    {
+      description:
+        "Point-in-time graph-health aggregates (orphan/low-conf/unsupported/duplicate + archived counts) per scope.",
+      inputSchema: z.object({
+        scope: scopeSchema,
+        graphId: z.string().optional(),
+      }),
+    },
+    async ({ scope, graphId }) => {
+      const result = await transport.graphMaintenanceHealth({
+        scope: buildScope(scope),
+        ...(graphId !== undefined ? { graphId } : {}),
+      });
+      return textResult(result);
+    },
+  );
+
+  server.registerTool(
     "graph_subgraph",
     {
       description:

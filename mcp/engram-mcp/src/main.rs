@@ -19,6 +19,7 @@ mod config;
 mod dependencies;
 mod graph;
 mod hierarchy;
+mod maintenance;
 mod ontology;
 mod ownership;
 mod predict;
@@ -433,6 +434,69 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
             "required": ["name"]
         }),
         handler: graph::graph_neighbors,
+    });
+    registry.register(ToolRecord {
+        name: "list_maintenance_candidates",
+        description: "Deterministic graph-maintenance candidate detection \
+                      (orphan/low-confidence/unsupported/duplicate). No LLM. \
+                      Returns [MaintenanceCandidate, …].",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "scope": { "type": "object" },
+                "graphId": { "type": "string" },
+                "policy": { "type": "object" }
+            },
+            "required": ["scope"]
+        }),
+        handler: maintenance::list_maintenance_candidates,
+    });
+    registry.register(ToolRecord {
+        name: "build_maintenance_plan",
+        description: "Build a dry-run maintenance plan (fills before/after previews; \
+                      never mutates). Takes a MaintenancePlanRequest, returns a \
+                      MaintenancePlan with previews.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "scope": { "type": "object" },
+                "mutations": { "type": "array" },
+                "policy": { "type": "object" },
+                "actor": { "type": "object" }
+            },
+            "required": ["scope", "mutations", "actor"]
+        }),
+        handler: maintenance::build_maintenance_plan,
+    });
+    registry.register(ToolRecord {
+        name: "apply_maintenance_plan",
+        description: "Apply (mode: \"apply\") or preview (mode: \"preview\") a reviewed \
+                      maintenance plan. Apply commits inside one backend transaction with \
+                      a referential-integrity verify; preview stages without committing.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "plan": { "type": "object" },
+                "mode": { "type": "string", "enum": ["preview", "apply"] }
+            },
+            "required": ["plan", "mode"]
+        }),
+        handler: maintenance::apply_maintenance_plan,
+    });
+    registry.register(ToolRecord {
+        name: "graph_health",
+        description: "Point-in-time graph-health aggregates: orphan/low-confidence/\
+                      unsupported/duplicate candidate counts + archived entity/relationship \
+                      counts, per scope (+ optional graphId).",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "scope": { "type": "object" },
+                "graphId": { "type": "string" }
+            },
+            "required": ["scope"]
+        }),
+        handler: maintenance::graph_health,
     });
     registry.register(ToolRecord {
         name: "graph_subgraph",

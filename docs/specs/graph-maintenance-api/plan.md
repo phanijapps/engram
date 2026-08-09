@@ -635,3 +635,8 @@ returns a dry-run preview and (with the apply flag) applies transactionally.
   (NativeGraphMaintenanceApiBinding interface + 4 flattened transport methods
   graphMaintenanceBuildPlan/ApplyPlan/Candidates/Health + index re-export +
   StubNativeProvider stub).
+- 2026-08-08: T8 implemented — 4 engram-mcp tools (list_maintenance_candidates,
+  build_maintenance_plan, apply_maintenance_plan, graph_health) registered in both
+  the Rust stdio server (mcp/engram-mcp/src/maintenance.rs) and the TS HTTP server
+  (packages/runtime/src/mcp/tools.ts). Full mutation surface reachable via
+  build+apply.

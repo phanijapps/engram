@@ -164,5 +164,7 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   backend-dependent (SQLite single tx); candidates deterministic, no LLM. New
   `GraphMaintenanceRepository` port + a `graph_maintenance` capability wired
   through all four surfaces (facade → N-API → `@engram/node` → engram-mcp).
-  Constrained by ADR-0027 (Proposed), ADR-0022, RFC-0014, ADR-0018. Draft (spec
-  review-clean; ready for the work-loop).
+  Constrained by ADR-0027 (Accepted), ADR-0022, RFC-0014, ADR-0018. **Shipped**
+  (T1–T8: domain types + archived_at, port + detectors, SQLite adapter with
+  transactional apply/merge/coalesce, facade + CapabilityReport, N-API binding +
+  @engram/node, engram-mcp tools).

@@ -622,3 +622,10 @@ returns a dry-run preview and (with the apply flag) applies transactionally.
   (avoids re-locking via discover_collisions), and SQL-counts archived entities/
   relationships. `unsupported_count` is 0 (deferred — validate_graph re-locks the
   shared Mutex; a separate lock phase would be needed). 1 test.
+- 2026-08-08: T6 implemented — `graph_maintenance` wired through the EngramProvider
+  facade (field, accessor, `require_graph_maintenance()`, builder field/setter/seeds)
+  + CapabilityReport (field, `all_supported()`, `graph_maintenance_supported()`,
+  builder default/setter, test key list) + the SQLite backend recipe (bootstrap.rs
+  attaches `store.clone()` as `Arc<dyn GraphMaintenanceRepository>`, gated on
+  `graph_ok`, capability flips Supported). Distinct from the existing `maintenance`
+  field. The capability key-list test was updated (no `#[serde(default)]` needed).

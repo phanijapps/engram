@@ -31,6 +31,9 @@ pub struct CapabilityReport {
     /// Knowledge graph traversal and neighbor queries.
     pub graph: CapabilityState,
 
+    /// Graph maintenance (archive/restore/merge/plan-apply; ADR-0027).
+    pub graph_maintenance: CapabilityState,
+
     /// Ontology axioms, classes, and properties.
     pub ontology: CapabilityState,
 
@@ -118,6 +121,7 @@ impl CapabilityReport {
             memory: state.clone(),
             knowledge: state.clone(),
             graph: state.clone(),
+            graph_maintenance: state.clone(),
             ontology: state.clone(),
             taxonomy: state.clone(),
             beliefs: state.clone(),
@@ -147,6 +151,7 @@ impl CapabilityReport {
         self.memory.is_supported()
             && self.knowledge.is_supported()
             && self.graph.is_supported()
+            && self.graph_maintenance.is_supported()
             && self.ontology.is_supported()
             && self.taxonomy.is_supported()
             && self.beliefs.is_supported()
@@ -180,6 +185,11 @@ impl CapabilityReport {
     /// Returns true if graph operations are supported.
     pub fn graph_supported(&self) -> bool {
         self.graph.is_supported()
+    }
+
+    /// Returns true if graph maintenance operations are supported.
+    pub fn graph_maintenance_supported(&self) -> bool {
+        self.graph_maintenance.is_supported()
     }
 
     /// Returns true if ontology operations are supported.
@@ -302,6 +312,7 @@ impl CapabilityReportBuilder {
                 memory: provider_unavailable.clone(),
                 knowledge: provider_unavailable.clone(),
                 graph: provider_unavailable.clone(),
+                graph_maintenance: provider_unavailable.clone(),
                 ontology: provider_unavailable.clone(),
                 taxonomy: provider_unavailable.clone(),
                 beliefs: provider_unavailable.clone(),
@@ -339,6 +350,12 @@ impl CapabilityReportBuilder {
     /// Sets the graph capability state.
     pub fn graph(mut self, state: CapabilityState) -> Self {
         self.report.graph = state;
+        self
+    }
+
+    /// Sets the graph-maintenance capability state.
+    pub fn graph_maintenance(mut self, state: CapabilityState) -> Self {
+        self.report.graph_maintenance = state;
         self
     }
 
@@ -522,6 +539,7 @@ mod tests {
             "memory",
             "knowledge",
             "graph",
+            "graph_maintenance",
             "ontology",
             "taxonomy",
             "beliefs",

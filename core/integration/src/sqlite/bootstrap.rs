@@ -19,7 +19,8 @@ use engram_belief::BeliefRepository;
 use engram_domain::{CapabilityReason, CapabilityState, RerankStrategy};
 use engram_hierarchy::HierarchyRepository;
 use engram_knowledge::{
-    KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
+    GraphMaintenanceRepository, KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository,
+    TaxonomyRepository,
 };
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
@@ -144,6 +145,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut memory_state = failed();
     let mut knowledge_state = failed();
     let mut graph_state = failed();
+    let mut graph_maintenance_state = failed();
     let mut ontology_state = failed();
     let mut taxonomy_state = failed();
     let mut beliefs_state = failed();
@@ -172,6 +174,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     #[allow(unused_mut)]
     let mut embedding_provider: Option<Arc<dyn crate::EmbeddingProvider>> = None;
     let mut graph: Option<Arc<dyn KnowledgeGraphRepository>> = None;
+    let mut graph_maintenance: Option<Arc<dyn GraphMaintenanceRepository>> = None;
     let mut ontology: Option<Arc<dyn OntologyRepository>> = None;
     let mut taxonomy: Option<Arc<dyn TaxonomyRepository>> = None;
     let mut beliefs: Option<Arc<dyn BeliefRepository>> = None;
@@ -241,6 +244,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             if graph_ok {
                 graph = Some(store.clone());
                 graph_state = CapabilityState::Supported;
+                // graph_maintenance rides the same store (SqlKnowledgeStore implements it).
+                graph_maintenance = Some(store.clone());
+                graph_maintenance_state = CapabilityState::Supported;
             }
             if ontology_ok {
                 ontology = Some(store.clone());
@@ -601,6 +607,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         .memory(memory_state)
         .knowledge(knowledge_state)
         .graph(graph_state)
+        .graph_maintenance(graph_maintenance_state)
         .ontology(ontology_state)
         .taxonomy(taxonomy_state)
         .beliefs(beliefs_state)
@@ -656,6 +663,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
     if let Some(h) = graph {
         builder = builder.graph(h);
+    }
+    if let Some(h) = graph_maintenance {
+        builder = builder.graph_maintenance(h);
     }
     if let Some(h) = ontology {
         builder = builder.ontology(h);

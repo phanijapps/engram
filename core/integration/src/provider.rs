@@ -15,8 +15,8 @@ use engram_belief::BeliefRepository;
 use engram_domain::{CapabilityReason, CapabilityState};
 use engram_hierarchy::HierarchyRepository;
 use engram_knowledge::{
-    EntityIdentityRepository, KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository,
-    TaxonomyRepository,
+    EntityIdentityRepository, GraphMaintenanceRepository, KnowledgeGraphRepository,
+    KnowledgeRepository, OntologyRepository, TaxonomyRepository,
 };
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
@@ -59,6 +59,7 @@ pub struct EngramProvider {
     memory: Option<Arc<dyn MemoryService>>,
     knowledge: Option<Arc<dyn KnowledgeRepository>>,
     graph: Option<Arc<dyn KnowledgeGraphRepository>>,
+    graph_maintenance: Option<Arc<dyn GraphMaintenanceRepository>>,
     ontology: Option<Arc<dyn OntologyRepository>>,
     taxonomy: Option<Arc<dyn TaxonomyRepository>>,
     beliefs: Option<Arc<dyn BeliefRepository>>,
@@ -241,6 +242,11 @@ impl EngramProvider {
         self.graph.as_ref()
     }
 
+    /// Returns the graph-maintenance repository handle if supported.
+    pub fn graph_maintenance(&self) -> Option<&Arc<dyn GraphMaintenanceRepository>> {
+        self.graph_maintenance.as_ref()
+    }
+
     /// Returns the ontology repository handle if supported.
     pub fn ontology(&self) -> Option<&Arc<dyn OntologyRepository>> {
         self.ontology.as_ref()
@@ -399,6 +405,15 @@ impl EngramProvider {
         self.graph()
             .ok_or_else(|| CoreError::CapabilityUnsupported {
                 capability: "graph".to_string(),
+                reason: "not wired".to_string(),
+            })
+    }
+
+    /// Returns the graph-maintenance repository handle or an error if it is not wired.
+    pub fn require_graph_maintenance(&self) -> CoreResult<&Arc<dyn GraphMaintenanceRepository>> {
+        self.graph_maintenance()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "graph_maintenance".to_string(),
                 reason: "not wired".to_string(),
             })
     }
@@ -585,6 +600,7 @@ impl EngramProvider {
             memory: None,
             knowledge: None,
             graph: None,
+            graph_maintenance: None,
             ontology: None,
             taxonomy: None,
             beliefs: None,
@@ -623,6 +639,7 @@ pub struct EngramProviderBuilder {
     memory: Option<Arc<dyn MemoryService>>,
     knowledge: Option<Arc<dyn KnowledgeRepository>>,
     graph: Option<Arc<dyn KnowledgeGraphRepository>>,
+    graph_maintenance: Option<Arc<dyn GraphMaintenanceRepository>>,
     ontology: Option<Arc<dyn OntologyRepository>>,
     taxonomy: Option<Arc<dyn TaxonomyRepository>>,
     beliefs: Option<Arc<dyn BeliefRepository>>,
@@ -655,6 +672,7 @@ impl EngramProviderBuilder {
             memory: None,
             knowledge: None,
             graph: None,
+            graph_maintenance: None,
             ontology: None,
             taxonomy: None,
             beliefs: None,
@@ -695,6 +713,12 @@ impl EngramProviderBuilder {
     /// Attaches the knowledge-graph repository handle.
     pub fn graph(mut self, handle: Arc<dyn KnowledgeGraphRepository>) -> Self {
         self.graph = Some(handle);
+        self
+    }
+
+    /// Attaches the graph-maintenance repository handle.
+    pub fn graph_maintenance(mut self, handle: Arc<dyn GraphMaintenanceRepository>) -> Self {
+        self.graph_maintenance = Some(handle);
         self
     }
 
@@ -840,6 +864,7 @@ impl EngramProviderBuilder {
             memory: self.memory,
             knowledge: self.knowledge,
             graph: self.graph,
+            graph_maintenance: self.graph_maintenance,
             ontology: self.ontology,
             taxonomy: self.taxonomy,
             beliefs: self.beliefs,

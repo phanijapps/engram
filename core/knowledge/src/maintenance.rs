@@ -289,6 +289,7 @@ mod tests {
                 request.scope,
                 request.mutations,
                 request.policy,
+                request.actor,
             );
             plan.previews = previews;
             Ok(plan)
@@ -359,6 +360,12 @@ mod tests {
                 },
             ],
             policy: MaintenancePolicy::default(),
+            actor: Actor {
+                id: ActorId::from("tester"),
+                kind: ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
         };
         let plan = backend.build_plan(request).await.expect("build_plan");
         assert_eq!(plan.mutations.len(), 2);
@@ -369,7 +376,18 @@ mod tests {
     #[tokio::test]
     async fn apply_only_commits_in_apply_mode() {
         let backend = StubBackend::default();
-        let plan = MaintenancePlan::new(None, scope_t(), Vec::new(), MaintenancePolicy::default());
+        let plan = MaintenancePlan::new(
+            None,
+            scope_t(),
+            Vec::new(),
+            MaintenancePolicy::default(),
+            Actor {
+                id: ActorId::from("tester"),
+                kind: ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
+        );
 
         let preview = backend
             .apply_plan(&plan, ApplyMode::Preview)

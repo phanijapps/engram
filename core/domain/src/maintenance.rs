@@ -358,6 +358,8 @@ pub struct MaintenancePlanRequest {
     pub mutations: Vec<MaintenanceMutation>,
     #[serde(default)]
     pub policy: MaintenancePolicy,
+    /// The actor applying the plan — stamped into each mutation's `Provenance`.
+    pub actor: Actor,
 }
 
 /// Point-in-time graph-health aggregates for one scope (+ optional graph). The
@@ -405,6 +407,8 @@ pub struct MaintenancePlan {
     /// Empty for a pure-constructed plan; not part of the fingerprint.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub previews: Vec<MaintenanceMutationPreview>,
+    /// The actor applying the plan — stamped into each mutation's `Provenance`.
+    pub actor: Actor,
 }
 
 impl MaintenancePlan {
@@ -415,6 +419,7 @@ impl MaintenancePlan {
         scope: Scope,
         mutations: Vec<MaintenanceMutation>,
         policy: MaintenancePolicy,
+        actor: Actor,
     ) -> Self {
         let fingerprint = plan_fingerprint(&mutations);
         Self {
@@ -424,6 +429,7 @@ impl MaintenancePlan {
             policy,
             fingerprint,
             previews: Vec::new(),
+            actor,
         }
     }
 }
@@ -671,6 +677,12 @@ mod tests {
             },
             mutations.clone(),
             MaintenancePolicy::default(),
+            crate::Actor {
+                id: crate::ActorId::from("tester"),
+                kind: crate::ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
         );
         assert_eq!(plan.fingerprint, plan_fingerprint(&mutations));
         assert!(!plan.fingerprint.is_empty());
@@ -804,6 +816,12 @@ mod tests {
             scope: scope_t(),
             mutations: Vec::new(),
             policy: MaintenancePolicy::default(),
+            actor: crate::Actor {
+                id: crate::ActorId::from("tester"),
+                kind: crate::ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
         };
         let j = serde_json::to_string(&request).expect("serialize");
         let back: MaintenancePlanRequest = serde_json::from_str(&j).expect("deserialize");
@@ -827,7 +845,18 @@ mod tests {
 
     #[test]
     fn pure_plan_has_no_previews() {
-        let plan = MaintenancePlan::new(None, scope_t(), Vec::new(), MaintenancePolicy::default());
+        let plan = MaintenancePlan::new(
+            None,
+            scope_t(),
+            Vec::new(),
+            MaintenancePolicy::default(),
+            crate::Actor {
+                id: crate::ActorId::from("tester"),
+                kind: crate::ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
+        );
         assert!(plan.previews.is_empty(), "::new produces no previews");
     }
 }

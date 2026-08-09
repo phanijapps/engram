@@ -97,7 +97,7 @@ completed plan and asserts zero new mutations (idempotency). A parity check
   `MaintenanceMutation` (enum: Archive / Restore / Delete / Merge / AddAlias /
   RemoveAlias / RewriteRelationship, each carrying target ids + payload),
   `MaintenanceMutationPreview` (before/after snapshots), `MaintenancePlan`
-  (graph/scope, mutation list, policy that generated it, fingerprint),
+  (graph/scope, mutation list, policy, fingerprint, actor, previews),
   `MaintenanceApplyResult` (applied/unchanged/failed counts per kind, verify
   findings, `Atomicity` guarantee level, plan fingerprint), `MaintenanceCandidate`
   (kind, target id, reason, confidence, source refs, optional `review_status` +
@@ -596,3 +596,12 @@ returns a dry-run preview and (with the apply flag) applies transactionally.
   filters `archived_at IS NULL`; primitives thread `Actor` + deterministic `ts`.
   Deferred: `object_id` denormalized column (the object-endpoint cascade uses a
   `record_json LIKE` scan — correct, slow on huge stores).
+- 2026-08-08: T5a implemented + adversarial-review fixes — SQLite `build_plan`
+  (before/after previews, non-mutating) + `apply_plan` (single `conn.transaction()`,
+  scoped referential-integrity verify → rollback, per-variant idempotency) for
+  Archive/Restore/Delete (Merge/Alias/Rewrite return Unsupported — T5b). Added
+  `actor: Actor` to `MaintenancePlan`/`MaintenancePlanRequest` (apply stamps
+  `Provenance` via it, AC11). Review fixes: `StageOutcome` so store errors
+  propagate (not swallowed); `by_kind.applied` folds into `failed` on rollback;
+  verify scoped to the plan's targeted entities (pre-existing damage stays
+  repairable); Restore/Delete idempotency tested; stale `#[allow(dead_code)]` removed.

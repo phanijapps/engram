@@ -8,10 +8,12 @@
 //! re-stamps `Provenance` (actor/method/observed_at) so it is attributable.
 
 use async_trait::async_trait;
+use chrono::Utc;
 use engram_domain::*;
 use engram_knowledge::GraphMaintenanceRepository;
 use engram_runtime::{CoreError, CoreResult};
 use rusqlite::{Connection, OptionalExtension, params};
+use std::collections::HashSet;
 
 use crate::knowledge::SqlKnowledgeStore;
 use crate::knowledge::schema::{json_error, sql_error};
@@ -220,6 +222,138 @@ impl GraphMaintenanceRepository for SqlKnowledgeStore {
         };
         Ok(Page::new(items, next_cursor))
     }
+
+    async fn build_plan(&self, request: MaintenancePlanRequest) -> CoreResult<MaintenancePlan> {
+        let scope = request.scope.clone();
+        let ts = Utc::now();
+        let conn = self.lock()?;
+        let mut previews = Vec::with_capacity(request.mutations.len());
+        for m in &request.mutations {
+            previews.push(build_mutation_preview(&conn, m, &scope, ts)?);
+        }
+        let mut plan = MaintenancePlan::new(
+            request.graph_id,
+            request.scope,
+            request.mutations,
+            request.policy,
+            request.actor,
+        );
+        plan.previews = previews;
+        Ok(plan)
+    }
+
+    async fn apply_plan(
+        &self,
+        plan: &MaintenancePlan,
+        mode: ApplyMode,
+    ) -> CoreResult<MaintenanceApplyResult> {
+        let fingerprint = plan.fingerprint.clone();
+        // Preview: report shape without committing (no writes).
+        if matches!(mode, ApplyMode::Preview) {
+            return Ok(MaintenanceApplyResult {
+                applied: 0,
+                unchanged: 0,
+                failed: 0,
+                by_kind: Vec::new(),
+                verify_findings: Vec::new(),
+                atomicity: Atomicity::BackendDependent,
+                plan_fingerprint: fingerprint,
+            });
+        }
+        let scope = &plan.scope;
+        let actor = &plan.actor;
+        let ts = Utc::now();
+        let mut conn = self.lock()?;
+        let tx = conn.transaction().map_err(sql_error)?;
+
+        // Entities this plan removes from the active graph (deleted, or archived —
+        // archive cascades its incident edges, so only a *leftover* active edge
+        // referencing one of these is a plan-induced dangling reference).
+        let targeted: HashSet<String> = plan
+            .mutations
+            .iter()
+            .filter_map(|m| match m {
+                MaintenanceMutation::Delete {
+                    target: MaintenanceTarget::Entity(id),
+                }
+                | MaintenanceMutation::Archive {
+                    target: MaintenanceTarget::Entity(id),
+                } => Some(id.to_string()),
+                _ => None,
+            })
+            .collect();
+
+        let mut applied: u32 = 0;
+        let mut unchanged: u32 = 0;
+        let mut failed: u32 = 0;
+        let mut by_kind: Vec<ApplyKindCount> = Vec::new();
+        for m in &plan.mutations {
+            let kind = m.kind();
+            // Store errors propagate as Err (not swallowed); only Unsupported is soft.
+            let slot = match stage_mutation(&tx, m, scope, actor, ts)? {
+                StageOutcome::Changed => 0,
+                StageOutcome::Unchanged => 1,
+                StageOutcome::Unsupported => 2,
+            };
+            match slot {
+                0 => applied += 1,
+                1 => unchanged += 1,
+                _ => failed += 1,
+            }
+            let entry = if let Some(e) = by_kind.iter_mut().find(|c| c.kind == kind) {
+                e
+            } else {
+                by_kind.push(ApplyKindCount {
+                    kind,
+                    applied: 0,
+                    unchanged: 0,
+                    failed: 0,
+                });
+                by_kind.last_mut().expect("just pushed")
+            };
+            match slot {
+                0 => entry.applied += 1,
+                1 => entry.unchanged += 1,
+                _ => entry.failed += 1,
+            }
+        }
+
+        // Referential-integrity verify before commit, scoped to the plan's targeted
+        // entities so pre-existing damage elsewhere stays repairable.
+        let verify_findings = if failed == 0 {
+            verify_referential_integrity(&tx, scope, &targeted)?
+        } else {
+            Vec::new()
+        };
+
+        if failed > 0 || !verify_findings.is_empty() {
+            // Rollback: nothing committed. Staged-but-uncommitted mutations are
+            // failures, so by_kind.applied folds into by_kind.failed.
+            for entry in by_kind.iter_mut() {
+                entry.failed += entry.applied;
+                entry.applied = 0;
+            }
+            return Ok(MaintenanceApplyResult {
+                applied: 0,
+                unchanged,
+                failed: applied + failed + verify_findings.len() as u32,
+                by_kind,
+                verify_findings,
+                atomicity: Atomicity::SingleTransaction,
+                plan_fingerprint: fingerprint,
+            });
+        }
+        tx.commit().map_err(sql_error)?;
+        Ok(MaintenanceApplyResult {
+            applied,
+            unchanged,
+            failed,
+            by_kind,
+            verify_findings: Vec::new(),
+            atomicity: Atomicity::SingleTransaction,
+            plan_fingerprint: fingerprint,
+        })
+    }
 }
 
 /// Best-effort source match for an entity: provenance source or any source_ref.
@@ -237,15 +371,316 @@ fn relationship_from_source(r: &KnowledgeRelationship, source_id: &SourceId) -> 
     r.provenance.source == s || r.evidence.iter().any(|e| e.target_id.as_deref() == Some(s))
 }
 
+// ── Plan staging (apply) ─────────────────────────────────────────────────────
+
+/// Outcome of staging one mutation: changed state, already in target state
+/// (idempotent), or an unsupported kind (T5b). Store errors propagate as `Err`
+/// (not swallowed) so a real SQL/IO failure surfaces instead of a silent `failed`.
+enum StageOutcome {
+    Changed,
+    Unchanged,
+    Unsupported,
+}
+
+/// Stage one mutation against an open connection (inside apply_plan's tx).
+fn stage_mutation(
+    conn: &Connection,
+    m: &MaintenanceMutation,
+    scope: &Scope,
+    actor: &Actor,
+    ts: Timestamp,
+) -> CoreResult<StageOutcome> {
+    match m {
+        MaintenanceMutation::Archive { target } => {
+            Ok(if archive_target(conn, target, scope, actor, ts, true)? {
+                StageOutcome::Changed
+            } else {
+                StageOutcome::Unchanged
+            })
+        }
+        MaintenanceMutation::Restore { target } => {
+            Ok(if archive_target(conn, target, scope, actor, ts, false)? {
+                StageOutcome::Changed
+            } else {
+                StageOutcome::Unchanged
+            })
+        }
+        MaintenanceMutation::Delete { target } => Ok(if delete_target(conn, target, scope)? {
+            StageOutcome::Changed
+        } else {
+            StageOutcome::Unchanged
+        }),
+        MaintenanceMutation::Merge { .. }
+        | MaintenanceMutation::AddAlias { .. }
+        | MaintenanceMutation::RemoveAlias { .. }
+        | MaintenanceMutation::RewriteRelationship { .. } => Ok(StageOutcome::Unsupported),
+    }
+}
+
+fn archive_target(
+    conn: &Connection,
+    target: &MaintenanceTarget,
+    scope: &Scope,
+    actor: &Actor,
+    ts: Timestamp,
+    archive: bool,
+) -> CoreResult<bool> {
+    match target {
+        MaintenanceTarget::Entity(id) => {
+            if archive {
+                archive_entity(conn, id, scope, actor, ts)
+            } else {
+                restore_entity(conn, id, scope, actor, ts)
+            }
+        }
+        MaintenanceTarget::Relationship(id) => {
+            if archive {
+                archive_relationship(conn, id, scope, actor, ts)
+            } else {
+                restore_relationship(conn, id, scope, actor, ts)
+            }
+        }
+    }
+}
+
+fn delete_target(conn: &Connection, target: &MaintenanceTarget, scope: &Scope) -> CoreResult<bool> {
+    match target {
+        MaintenanceTarget::Entity(id) => hard_delete_entity(conn, id, scope),
+        MaintenanceTarget::Relationship(id) => hard_delete_relationship(conn, id, scope),
+    }
+}
+
+/// Hard-delete an entity (escalated, permanent — ADR-0027). Scope-checked.
+fn hard_delete_entity(conn: &Connection, id: &EntityId, scope: &Scope) -> CoreResult<bool> {
+    let Some(entity) = load_entity(conn, id, scope)? else {
+        return Ok(false);
+    };
+    if !scope_allows(&entity.scope, scope) {
+        return Ok(false);
+    }
+    conn.execute(
+        "DELETE FROM knowledge_entities WHERE id = ?1",
+        params![id.to_string()],
+    )
+    .map_err(sql_error)?;
+    Ok(true)
+}
+
+/// Hard-delete a relationship. Scope-checked.
+fn hard_delete_relationship(
+    conn: &Connection,
+    id: &RelationshipId,
+    scope: &Scope,
+) -> CoreResult<bool> {
+    let Some(rel) = load_relationship(conn, id, scope)? else {
+        return Ok(false);
+    };
+    if !scope_allows(&rel.scope, scope) {
+        return Ok(false);
+    }
+    conn.execute(
+        "DELETE FROM knowledge_relationships WHERE id = ?1",
+        params![id.to_string()],
+    )
+    .map_err(sql_error)?;
+    Ok(true)
+}
+
+/// Load a scope-visible entity by id (SQL tenant/workspace pre-filter).
+fn load_entity(
+    conn: &Connection,
+    id: &EntityId,
+    scope: &Scope,
+) -> CoreResult<Option<KnowledgeEntity>> {
+    let ws = workspace_param(scope);
+    let json: Option<String> = conn
+        .query_row(
+            "SELECT record_json FROM knowledge_entities WHERE id = ?1 AND tenant = ?2 AND COALESCE(workspace, '') = ?3",
+            params![id.to_string(), scope.tenant, ws],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(sql_error)?;
+    json.map(|j| serde_json::from_str(&j).map_err(json_error))
+        .transpose()
+}
+
+/// Load a scope-visible relationship by id.
+fn load_relationship(
+    conn: &Connection,
+    id: &RelationshipId,
+    scope: &Scope,
+) -> CoreResult<Option<KnowledgeRelationship>> {
+    let ws = workspace_param(scope);
+    let json: Option<String> = conn
+        .query_row(
+            "SELECT record_json FROM knowledge_relationships WHERE id = ?1 AND tenant = ?2 AND COALESCE(workspace, '') = ?3",
+            params![id.to_string(), scope.tenant, ws],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(sql_error)?;
+    json.map(|j| serde_json::from_str(&j).map_err(json_error))
+        .transpose()
+}
+
+// ── Dry-run preview ──────────────────────────────────────────────────────────
+
+#[derive(Clone, Copy)]
+enum PreviewEffect {
+    Archive,
+    Restore,
+    Delete,
+}
+
+fn build_mutation_preview(
+    conn: &Connection,
+    m: &MaintenanceMutation,
+    scope: &Scope,
+    ts: Timestamp,
+) -> CoreResult<MaintenanceMutationPreview> {
+    let mutation = m.clone();
+    let (before, after) = match m {
+        MaintenanceMutation::Archive { target } => {
+            preview_target(conn, target, scope, ts, PreviewEffect::Archive)?
+        }
+        MaintenanceMutation::Restore { target } => {
+            preview_target(conn, target, scope, ts, PreviewEffect::Restore)?
+        }
+        MaintenanceMutation::Delete { target } => {
+            preview_target(conn, target, scope, ts, PreviewEffect::Delete)?
+        }
+        // Merge/alias/rewrite previews enriched in T5b.
+        _ => (Vec::new(), Vec::new()),
+    };
+    Ok(MaintenanceMutationPreview {
+        mutation,
+        before,
+        after,
+    })
+}
+
+/// Build before/after snapshots for a target under a preview effect.
+fn preview_target(
+    conn: &Connection,
+    target: &MaintenanceTarget,
+    scope: &Scope,
+    ts: Timestamp,
+    effect: PreviewEffect,
+) -> CoreResult<(Vec<MutationSnapshot>, Vec<MutationSnapshot>)> {
+    Ok(match target {
+        MaintenanceTarget::Entity(id) => {
+            let cur = load_entity(conn, id, scope)?;
+            let after = match effect {
+                PreviewEffect::Archive => cur.clone().map(|mut e| {
+                    e.archived_at = Some(ts);
+                    e
+                }),
+                PreviewEffect::Restore => cur.clone().map(|mut e| {
+                    e.archived_at = None;
+                    e
+                }),
+                PreviewEffect::Delete => None,
+            };
+            (snap_entity(cur), snap_entity(after))
+        }
+        MaintenanceTarget::Relationship(id) => {
+            let cur = load_relationship(conn, id, scope)?;
+            let after = match effect {
+                PreviewEffect::Archive => cur.clone().map(|mut r| {
+                    r.archived_at = Some(ts);
+                    r
+                }),
+                PreviewEffect::Restore => cur.clone().map(|mut r| {
+                    r.archived_at = None;
+                    r
+                }),
+                PreviewEffect::Delete => None,
+            };
+            (snap_rel(cur), snap_rel(after))
+        }
+    })
+}
+
+fn snap_entity(e: Option<KnowledgeEntity>) -> Vec<MutationSnapshot> {
+    e.map(MutationSnapshot::Entity).into_iter().collect()
+}
+
+fn snap_rel(r: Option<KnowledgeRelationship>) -> Vec<MutationSnapshot> {
+    r.map(MutationSnapshot::Relationship).into_iter().collect()
+}
+
+// ── Referential-integrity verify ─────────────────────────────────────────────
+
+/// Enforceable integrity gate (not advisory `validate_graph`): every ACTIVE
+/// relationship's subject/object id must resolve to an ACTIVE entity. Run against
+/// the open transaction so it sees staged mutations; findings trip rollback.
+fn verify_referential_integrity(
+    tx: &Connection,
+    scope: &Scope,
+    targeted: &HashSet<String>,
+) -> CoreResult<Vec<MaintenanceVerifyFinding>> {
+    if targeted.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ws = workspace_param(scope);
+    let mut findings = Vec::new();
+    let mut stmt = tx
+        .prepare(
+            "SELECT id, record_json FROM knowledge_relationships
+             WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2 AND archived_at IS NULL",
+        )
+        .map_err(sql_error)?;
+    let rows = stmt
+        .query_map(params![scope.tenant, ws], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })
+        .map_err(sql_error)?;
+    for r in rows {
+        let (id, json) = r.map_err(sql_error)?;
+        let Ok(rel) = serde_json::from_str::<KnowledgeRelationship>(&json) else {
+            continue;
+        };
+        if !scope_allows(&rel.scope, scope) {
+            continue;
+        }
+        // A plan-induced dangling reference: an active edge whose subject or object
+        // is an entity the plan removed (deleted, or archived without its edge
+        // archived too). Archive cascades edges, so only Delete (or a missed edge)
+        // trips this — pre-existing damage elsewhere is left repairable.
+        let subj_dangling = rel
+            .subject
+            .id
+            .as_ref()
+            .map(|i| targeted.contains(i.as_str()))
+            .unwrap_or(false);
+        let obj_dangling = rel
+            .object
+            .id
+            .as_ref()
+            .map(|i| targeted.contains(i.as_str()))
+            .unwrap_or(false);
+        if subj_dangling || obj_dangling {
+            findings.push(MaintenanceVerifyFinding {
+                severity: VerifySeverity::Error,
+                message: format!(
+                    "relationship {id} references an entity removed by the plan (dangling)"
+                ),
+                target: Some(MaintenanceTarget::Relationship(RelationshipId::from(
+                    id.as_str(),
+                ))),
+            });
+        }
+    }
+    drop(stmt);
+    Ok(findings)
+}
+
 // ── Archive / restore primitives (run on a borrowed connection) ──────────────
-//
-// `#[allow(dead_code)]` until T5a's `apply_plan` wires them into the port; today
-// they are exercised by the maintenance tests below.
 
 /// Archive an entity (soft-delete): sets `archived_at` on the entity and on its
 /// incident relationships (subject or object endpoint), re-stamping `Provenance`.
 /// Returns `false` if the entity is missing, out of scope, or already archived.
-#[allow(dead_code)]
 pub fn archive_entity(
     conn: &Connection,
     id: &EntityId,
@@ -286,7 +721,6 @@ pub fn archive_entity(
 
 /// Restore an entity: clears `archived_at` on the entity and on its incident
 /// relationships (node and edges restore together).
-#[allow(dead_code)]
 pub fn restore_entity(
     conn: &Connection,
     id: &EntityId,
@@ -326,7 +760,6 @@ pub fn restore_entity(
 }
 
 /// Archive a single relationship (no children to cascade).
-#[allow(dead_code)]
 pub fn archive_relationship(
     conn: &Connection,
     id: &RelationshipId,
@@ -338,7 +771,6 @@ pub fn archive_relationship(
 }
 
 /// Restore a single relationship.
-#[allow(dead_code)]
 pub fn restore_relationship(
     conn: &Connection,
     id: &RelationshipId,
@@ -974,5 +1406,214 @@ mod tests {
             1,
             "cross-scope archive is denied; entity stays active"
         );
+    }
+
+    fn plan_request(scope: Scope, mutations: Vec<MaintenanceMutation>) -> MaintenancePlanRequest {
+        MaintenancePlanRequest {
+            graph_id: None,
+            scope,
+            mutations,
+            policy: MaintenancePolicy::default(),
+            actor: actor(),
+        }
+    }
+
+    #[test]
+    fn build_plan_preview_carries_before_and_after() {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        block_on(store.put_entity(entity("a"))).unwrap();
+        let req = plan_request(
+            scope_t(),
+            vec![MaintenanceMutation::Archive {
+                target: MaintenanceTarget::Entity(EntityId::from("a")),
+            }],
+        );
+        let plan = block_on(store.build_plan(req)).unwrap();
+        assert_eq!(plan.previews.len(), 1);
+        let preview = &plan.previews[0];
+        assert_eq!(
+            preview.before.len(),
+            1,
+            "before snapshot of the current entity"
+        );
+        assert_eq!(preview.after.len(), 1, "after snapshot");
+        let before_archived = match &preview.before[0] {
+            MutationSnapshot::Entity(e) => e.archived_at,
+            _ => unreachable!(),
+        };
+        let after_archived = match &preview.after[0] {
+            MutationSnapshot::Entity(e) => e.archived_at,
+            _ => unreachable!(),
+        };
+        assert!(before_archived.is_none(), "before is the active state");
+        assert!(after_archived.is_some(), "after reflects the archive");
+        // build_plan never mutates: a is still active afterwards.
+        let page = block_on(
+            <SqlKnowledgeStore as GraphMaintenanceRepository>::list_entities(
+                &store,
+                &scope_t(),
+                &EntityFilter::default(),
+                None,
+                10,
+            ),
+        )
+        .unwrap();
+        assert_eq!(page.items.len(), 1);
+    }
+
+    #[test]
+    fn apply_archives_in_one_transaction() {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        block_on(store.put_entity(entity("a"))).unwrap();
+        block_on(store.put_entity(entity("b"))).unwrap();
+        block_on(store.put_relationship(rel("r1", "a", "b"))).unwrap();
+        let plan = MaintenancePlan::new(
+            None,
+            scope_t(),
+            vec![MaintenanceMutation::Archive {
+                target: MaintenanceTarget::Entity(EntityId::from("a")),
+            }],
+            MaintenancePolicy::default(),
+            actor(),
+        );
+        let result = block_on(store.apply_plan(&plan, ApplyMode::Apply)).unwrap();
+        assert_eq!(result.applied, 1);
+        assert_eq!(result.failed, 0);
+        assert_eq!(result.atomicity, Atomicity::SingleTransaction);
+        // a + its incident edge r1 archived (cascade); b stays active.
+        let rels = block_on(
+            <SqlKnowledgeStore as GraphMaintenanceRepository>::list_relationships(
+                &store,
+                &scope_t(),
+                &RelationshipFilter::default(),
+                None,
+                10,
+            ),
+        )
+        .unwrap();
+        assert!(rels.items.is_empty(), "incident edge archived with a");
+        let ents = block_on(
+            <SqlKnowledgeStore as GraphMaintenanceRepository>::list_entities(
+                &store,
+                &scope_t(),
+                &EntityFilter::default(),
+                None,
+                10,
+            ),
+        )
+        .unwrap();
+        assert_eq!(ents.items.len(), 1, "b active; a archived");
+    }
+
+    #[test]
+    fn apply_rolls_back_on_referential_failure() {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        block_on(store.put_entity(entity("a"))).unwrap();
+        block_on(store.put_entity(entity("b"))).unwrap();
+        block_on(store.put_relationship(rel("r1", "a", "b"))).unwrap();
+        // Delete a — still referenced by r1 -> verify fails -> rollback.
+        let plan = MaintenancePlan::new(
+            None,
+            scope_t(),
+            vec![MaintenanceMutation::Delete {
+                target: MaintenanceTarget::Entity(EntityId::from("a")),
+            }],
+            MaintenancePolicy::default(),
+            actor(),
+        );
+        let result = block_on(store.apply_plan(&plan, ApplyMode::Apply)).unwrap();
+        assert_eq!(result.applied, 0, "nothing committed");
+        assert!(
+            !result.verify_findings.is_empty(),
+            "referential finding surfaced"
+        );
+        assert!(
+            result.by_kind.iter().all(|c| c.applied == 0),
+            "by_kind.applied is consistent with the rolled-back top-level applied=0"
+        );
+        // a survived the rollback.
+        let ents = block_on(
+            <SqlKnowledgeStore as GraphMaintenanceRepository>::list_entities(
+                &store,
+                &scope_t(),
+                &EntityFilter::default(),
+                None,
+                10,
+            ),
+        )
+        .unwrap();
+        assert_eq!(ents.items.len(), 2, "graph unchanged after rollback");
+    }
+
+    #[test]
+    fn apply_is_idempotent() {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        block_on(store.put_entity(entity("a"))).unwrap();
+        let plan = MaintenancePlan::new(
+            None,
+            scope_t(),
+            vec![MaintenanceMutation::Archive {
+                target: MaintenanceTarget::Entity(EntityId::from("a")),
+            }],
+            MaintenancePolicy::default(),
+            actor(),
+        );
+        let first = block_on(store.apply_plan(&plan, ApplyMode::Apply)).unwrap();
+        assert_eq!(first.applied, 1);
+        // Re-apply: a is already archived -> unchanged.
+        let second = block_on(store.apply_plan(&plan, ApplyMode::Apply)).unwrap();
+        assert_eq!(second.applied, 0);
+        assert_eq!(second.unchanged, 1);
+    }
+
+    #[test]
+    fn apply_restore_and_delete_are_idempotent() {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        block_on(store.put_entity(entity("a"))).unwrap();
+        block_on(store.put_entity(entity("b"))).unwrap();
+        let scope = scope_t();
+        // Archive a first so Restore has something to act on.
+        {
+            let conn = store.lock().unwrap();
+            assert!(archive_entity(&conn, &EntityId::from("a"), &scope, &actor(), ts()).unwrap());
+        }
+        // Restore a -> applied; re-restore (already active) -> unchanged.
+        let restore_plan = MaintenancePlan::new(
+            None,
+            scope_t(),
+            vec![MaintenanceMutation::Restore {
+                target: MaintenanceTarget::Entity(EntityId::from("a")),
+            }],
+            MaintenancePolicy::default(),
+            actor(),
+        );
+        assert_eq!(
+            block_on(store.apply_plan(&restore_plan, ApplyMode::Apply))
+                .unwrap()
+                .applied,
+            1
+        );
+        let r2 = block_on(store.apply_plan(&restore_plan, ApplyMode::Apply)).unwrap();
+        assert_eq!(r2.applied, 0);
+        assert_eq!(r2.unchanged, 1);
+        // Delete b (no incident edges) -> applied; re-delete (gone) -> unchanged.
+        let delete_plan = MaintenancePlan::new(
+            None,
+            scope_t(),
+            vec![MaintenanceMutation::Delete {
+                target: MaintenanceTarget::Entity(EntityId::from("b")),
+            }],
+            MaintenancePolicy::default(),
+            actor(),
+        );
+        assert_eq!(
+            block_on(store.apply_plan(&delete_plan, ApplyMode::Apply))
+                .unwrap()
+                .applied,
+            1
+        );
+        let d2 = block_on(store.apply_plan(&delete_plan, ApplyMode::Apply)).unwrap();
+        assert_eq!(d2.applied, 0);
+        assert_eq!(d2.unchanged, 1);
     }
 }

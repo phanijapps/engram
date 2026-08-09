@@ -605,3 +605,14 @@ returns a dry-run preview and (with the apply flag) applies transactionally.
   propagate (not swallowed); `by_kind.applied` folds into `failed` on rollback;
   verify scoped to the plan's targeted entities (pre-existing damage stays
   repairable); Restore/Delete idempotency tested; stale `#[allow(dead_code)]` removed.
+- 2026-08-08: T5b implemented + adversarial-review fixes — alias add/remove,
+  relationship rewrite, and tx-aware merge (stage_alias/stage_rewrite/stage_merge +
+  redirect_relationships_to + coalesce_survivor_relationships). Merge folds absorbed
+  refs (aliases/source_refs/concept_refs/ontology_class_refs) into the survivor,
+  redirects both endpoints to the survivor, ARCHIVES (not hard-deletes) absorbed
+  entities + coalesced duplicate edges. Review fixes: idempotent merge no longer
+  re-stamps the survivor (fold-changed guard); merge-absorbed ids added to the
+  verify `targeted` set (merge has a correctness backstop now); coalesce widened to
+  both endpoints (incoming dups collapse too); redirect + coalesce scope_allows-
+  check each edge; build_plan previews added for alias/rewrite/merge; merge
+  idempotency test snapshots the survivor's updated_at/observed_at.

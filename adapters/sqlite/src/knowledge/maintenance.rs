@@ -13,7 +13,7 @@ use engram_domain::*;
 use engram_knowledge::GraphMaintenanceRepository;
 use engram_runtime::{CoreError, CoreResult};
 use rusqlite::{Connection, OptionalExtension, params};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::knowledge::SqlKnowledgeStore;
 use crate::knowledge::schema::{json_error, sql_error};
@@ -272,14 +272,19 @@ impl GraphMaintenanceRepository for SqlKnowledgeStore {
         let targeted: HashSet<String> = plan
             .mutations
             .iter()
-            .filter_map(|m| match m {
+            .flat_map(|m| match m {
                 MaintenanceMutation::Delete {
                     target: MaintenanceTarget::Entity(id),
                 }
                 | MaintenanceMutation::Archive {
                     target: MaintenanceTarget::Entity(id),
-                } => Some(id.to_string()),
-                _ => None,
+                } => vec![id.to_string()],
+                // A correct merge leaves no active edge referencing an absorbed id;
+                // the verify backstop catches a redirect miss.
+                MaintenanceMutation::Merge { absorbed, .. } => {
+                    absorbed.iter().map(|i| i.to_string()).collect()
+                }
+                _ => vec![],
             })
             .collect();
 
@@ -293,7 +298,6 @@ impl GraphMaintenanceRepository for SqlKnowledgeStore {
             let slot = match stage_mutation(&tx, m, scope, actor, ts)? {
                 StageOutcome::Changed => 0,
                 StageOutcome::Unchanged => 1,
-                StageOutcome::Unsupported => 2,
             };
             match slot {
                 0 => applied += 1,
@@ -373,13 +377,12 @@ fn relationship_from_source(r: &KnowledgeRelationship, source_id: &SourceId) -> 
 
 // ── Plan staging (apply) ─────────────────────────────────────────────────────
 
-/// Outcome of staging one mutation: changed state, already in target state
-/// (idempotent), or an unsupported kind (T5b). Store errors propagate as `Err`
-/// (not swallowed) so a real SQL/IO failure surfaces instead of a silent `failed`.
+/// Outcome of staging one mutation: changed state, or already in target state
+/// (idempotent). Store errors propagate as `Err` (not swallowed) so a real
+/// SQL/IO failure surfaces instead of a silent `failed`.
 enum StageOutcome {
     Changed,
     Unchanged,
-    Unsupported,
 }
 
 /// Stage one mutation against an open connection (inside apply_plan's tx).
@@ -410,10 +413,30 @@ fn stage_mutation(
         } else {
             StageOutcome::Unchanged
         }),
-        MaintenanceMutation::Merge { .. }
-        | MaintenanceMutation::AddAlias { .. }
-        | MaintenanceMutation::RemoveAlias { .. }
-        | MaintenanceMutation::RewriteRelationship { .. } => Ok(StageOutcome::Unsupported),
+        MaintenanceMutation::AddAlias { entity, alias } => {
+            stage_alias(conn, entity, alias, true, scope, actor, ts)
+        }
+        MaintenanceMutation::RemoveAlias { entity, alias } => {
+            stage_alias(conn, entity, alias, false, scope, actor, ts)
+        }
+        MaintenanceMutation::RewriteRelationship {
+            relationship,
+            new_predicate,
+            new_subject,
+            new_object,
+        } => stage_rewrite(
+            conn,
+            relationship,
+            new_predicate.as_ref(),
+            new_subject.as_ref(),
+            new_object.as_ref(),
+            scope,
+            actor,
+            ts,
+        ),
+        MaintenanceMutation::Merge { survivor, absorbed } => {
+            stage_merge(conn, survivor, absorbed, scope, actor, ts)
+        }
     }
 }
 
@@ -448,6 +471,363 @@ fn delete_target(conn: &Connection, target: &MaintenanceTarget, scope: &Scope) -
         MaintenanceTarget::Entity(id) => hard_delete_entity(conn, id, scope),
         MaintenanceTarget::Relationship(id) => hard_delete_relationship(conn, id, scope),
     }
+}
+
+/// Add or remove an alias on an entity (idempotent). Re-stamps Provenance.
+fn stage_alias(
+    conn: &Connection,
+    entity_id: &EntityId,
+    alias: &str,
+    add: bool,
+    scope: &Scope,
+    actor: &Actor,
+    ts: Timestamp,
+) -> CoreResult<StageOutcome> {
+    let Some(mut entity) = load_entity(conn, entity_id, scope)? else {
+        return Ok(StageOutcome::Unchanged);
+    };
+    if !scope_allows(&entity.scope, scope) {
+        return Ok(StageOutcome::Unchanged);
+    }
+    let already = entity.aliases.iter().any(|a| a == alias);
+    let changed = if add {
+        if already {
+            false
+        } else {
+            entity.aliases.push(alias.to_string());
+            true
+        }
+    } else if already {
+        entity.aliases.retain(|a| a != alias);
+        true
+    } else {
+        false
+    };
+    if !changed {
+        return Ok(StageOutcome::Unchanged);
+    }
+    entity.updated_at = Some(ts);
+    entity.provenance = stamp_provenance(
+        &entity.provenance,
+        actor,
+        if add { "add_alias" } else { "remove_alias" },
+        ts,
+    );
+    let json = serde_json::to_string(&entity).map_err(json_error)?;
+    conn.execute(
+        "UPDATE knowledge_entities SET record_json = ?1 WHERE id = ?2",
+        params![json, entity_id.to_string()],
+    )
+    .map_err(sql_error)?;
+    Ok(StageOutcome::Changed)
+}
+
+/// Rewrite a relationship's predicate/subject/object in place (idempotent).
+fn stage_rewrite(
+    conn: &Connection,
+    rel_id: &RelationshipId,
+    new_predicate: Option<&String>,
+    new_subject: Option<&EntityId>,
+    new_object: Option<&EntityId>,
+    scope: &Scope,
+    actor: &Actor,
+    ts: Timestamp,
+) -> CoreResult<StageOutcome> {
+    let Some(mut rel) = load_relationship(conn, rel_id, scope)? else {
+        return Ok(StageOutcome::Unchanged);
+    };
+    if !scope_allows(&rel.scope, scope) {
+        return Ok(StageOutcome::Unchanged);
+    }
+    let mut changed = false;
+    if let Some(p) = new_predicate {
+        if &rel.predicate != p {
+            rel.predicate = p.clone();
+            changed = true;
+        }
+    }
+    if let Some(s) = new_subject {
+        if rel.subject.id.as_ref() != Some(s) {
+            rel.subject.id = Some(s.clone());
+            changed = true;
+        }
+    }
+    if let Some(o) = new_object {
+        if rel.object.id.as_ref() != Some(o) {
+            rel.object.id = Some(o.clone());
+            changed = true;
+        }
+    }
+    if !changed {
+        return Ok(StageOutcome::Unchanged);
+    }
+    rel.updated_at = Some(ts);
+    rel.provenance = stamp_provenance(&rel.provenance, actor, "rewrite_relationship", ts);
+    let json = serde_json::to_string(&rel).map_err(json_error)?;
+    let subject_id = rel
+        .subject
+        .id
+        .as_ref()
+        .map(ToString::to_string)
+        .unwrap_or_default();
+    conn.execute(
+        "UPDATE knowledge_relationships SET subject_id = ?1, record_json = ?2 WHERE id = ?3",
+        params![subject_id, json, rel_id.to_string()],
+    )
+    .map_err(sql_error)?;
+    Ok(StageOutcome::Changed)
+}
+
+/// Merge `absorbed` entities into the `survivor`: fold their aliases/source_refs
+/// into the survivor, redirect their incident edges to the survivor, then ARCHIVE
+/// (not hard-delete) the absorbed entities and coalesced duplicate edges
+/// (ADR-0027). Runs against the open tx; Provenance re-stamped.
+fn stage_merge(
+    conn: &Connection,
+    survivor_id: &EntityId,
+    absorbed_ids: &[EntityId],
+    scope: &Scope,
+    actor: &Actor,
+    ts: Timestamp,
+) -> CoreResult<StageOutcome> {
+    let survivor_str = survivor_id.to_string();
+    let Some(mut survivor) = load_entity(conn, survivor_id, scope)? else {
+        return Ok(StageOutcome::Unchanged);
+    };
+    if !scope_allows(&survivor.scope, scope) {
+        return Ok(StageOutcome::Unchanged);
+    }
+    // Fold each absorbed entity's refs into the survivor. Track whether anything
+    // actually changed so the survivor row is re-written (and the outcome reported
+    // Changed) only on a real fold — a re-apply must not re-stamp the survivor.
+    let mut fold_changed = false;
+    for absorbed_id in absorbed_ids {
+        let Some(absorbed) = load_entity(conn, absorbed_id, scope)? else {
+            continue;
+        };
+        if !scope_allows(&absorbed.scope, scope) {
+            continue;
+        }
+        for a in &absorbed.aliases {
+            if !survivor.aliases.contains(a) {
+                survivor.aliases.push(a.clone());
+                fold_changed = true;
+            }
+        }
+        for r in &absorbed.source_refs {
+            if !survivor.source_refs.contains(r) {
+                survivor.source_refs.push(r.clone());
+                fold_changed = true;
+            }
+        }
+        for c in &absorbed.concept_refs {
+            if !survivor.concept_refs.contains(c) {
+                survivor.concept_refs.push(c.clone());
+                fold_changed = true;
+            }
+        }
+        for o in &absorbed.ontology_class_refs {
+            if !survivor.ontology_class_refs.contains(o) {
+                survivor.ontology_class_refs.push(o.clone());
+                fold_changed = true;
+            }
+        }
+    }
+    if fold_changed {
+        survivor.updated_at = Some(ts);
+        survivor.provenance = stamp_provenance(&survivor.provenance, actor, "merge", ts);
+        let sjson = serde_json::to_string(&survivor).map_err(json_error)?;
+        conn.execute(
+            "UPDATE knowledge_entities SET record_json = ?1 WHERE id = ?2",
+            params![sjson, survivor_str],
+        )
+        .map_err(sql_error)?;
+    }
+
+    // Redirect each absorbed entity's edges to the survivor, then archive it.
+    let mut changed = fold_changed;
+    for absorbed_id in absorbed_ids {
+        let absorbed_str = absorbed_id.to_string();
+        redirect_relationships_to(conn, &absorbed_str, &survivor_str, scope)?;
+        if archive_entity(conn, absorbed_id, scope, actor, ts)? {
+            changed = true;
+        }
+    }
+    // Coalesce duplicate edges incident to the survivor (archive the losers).
+    coalesce_survivor_relationships(conn, &survivor_str, scope, actor, ts)?;
+    Ok(if changed {
+        StageOutcome::Changed
+    } else {
+        StageOutcome::Unchanged
+    })
+}
+
+/// Redirect every active edge whose subject or object endpoint is `from` to `to`,
+/// recomputing the relationship_key. Subject endpoint uses the indexed
+/// `subject_id` column; object endpoint lives only in record_json.
+fn redirect_relationships_to(
+    conn: &Connection,
+    from: &str,
+    to: &str,
+    scope: &Scope,
+) -> CoreResult<()> {
+    let ws = workspace_param(scope);
+    let update = |rel: &mut KnowledgeRelationship| {
+        let mut changed = false;
+        if rel.subject.id.as_ref().map(|i| i.as_str()) == Some(from) {
+            rel.subject.id = Some(EntityId::from(to));
+            changed = true;
+        }
+        if rel.object.id.as_ref().map(|i| i.as_str()) == Some(from) {
+            rel.object.id = Some(EntityId::from(to));
+            changed = true;
+        }
+        changed
+    };
+    let write = |conn: &Connection, rel: &KnowledgeRelationship, id: &str| -> CoreResult<()> {
+        let json = serde_json::to_string(rel).map_err(json_error)?;
+        let subject_id = rel
+            .subject
+            .id
+            .as_ref()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        let rkey = engram_knowledge::identity::compute_relationship_key(rel);
+        conn.execute(
+            "UPDATE knowledge_relationships SET subject_id = ?1, record_json = ?2, relationship_key = ?3 WHERE id = ?4",
+            params![subject_id, json, rkey, id],
+        )
+        .map_err(sql_error)?;
+        Ok(())
+    };
+
+    // Subject endpoint (indexed column).
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, record_json FROM knowledge_relationships
+             WHERE subject_id = ?1 AND tenant = ?2 AND COALESCE(workspace, '') = ?3 AND archived_at IS NULL",
+        )
+        .map_err(sql_error)?;
+    let rows: Vec<(String, String)> = stmt
+        .query_map(params![from, scope.tenant, ws], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })
+        .map_err(sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    drop(stmt);
+    for (id, json) in rows {
+        let mut rel: KnowledgeRelationship = serde_json::from_str(&json).map_err(json_error)?;
+        if !scope_allows(&rel.scope, scope) {
+            continue;
+        }
+        if update(&mut rel) {
+            write(conn, &rel, &id)?;
+        }
+    }
+
+    // Object endpoint (record_json only) — catches edges whose object is `from`.
+    let pat = format!("%{from}%");
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, record_json FROM knowledge_relationships
+             WHERE record_json LIKE ?1 AND tenant = ?2 AND COALESCE(workspace, '') = ?3 AND archived_at IS NULL",
+        )
+        .map_err(sql_error)?;
+    let rows: Vec<(String, String)> = stmt
+        .query_map(params![pat, scope.tenant, ws], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })
+        .map_err(sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    drop(stmt);
+    for (id, json) in rows {
+        let mut rel: KnowledgeRelationship = serde_json::from_str(&json).map_err(json_error)?;
+        if !scope_allows(&rel.scope, scope) {
+            continue;
+        }
+        if update(&mut rel) {
+            write(conn, &rel, &id)?;
+        }
+    }
+    Ok(())
+}
+
+/// Among the survivor's active edges, archive duplicates by relationship_key
+/// (keep the lowest-rowid one per key). Scoped to subject_id = survivor so it only
+/// collapses edges the merge brought together.
+fn coalesce_survivor_relationships(
+    conn: &Connection,
+    survivor: &str,
+    scope: &Scope,
+    actor: &Actor,
+    ts: Timestamp,
+) -> CoreResult<()> {
+    let ws = workspace_param(scope);
+    // Load active edges incident to the survivor on EITHER endpoint, group by
+    // computed relationship_key in Rust (robust to a NULL relationship_key column),
+    // and archive the losers — so both outgoing and incoming duplicates collapse.
+    let mut stmt = conn
+        .prepare(
+            "SELECT rowid, record_json FROM knowledge_relationships
+             WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2 AND archived_at IS NULL",
+        )
+        .map_err(sql_error)?;
+    let rows: Vec<(i64, String)> = stmt
+        .query_map(params![scope.tenant, ws], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+        })
+        .map_err(sql_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(sql_error)?;
+    drop(stmt);
+
+    let mut entries: Vec<(i64, KnowledgeRelationship)> = Vec::new();
+    for (rowid, json) in rows {
+        let rel: KnowledgeRelationship = serde_json::from_str(&json).map_err(json_error)?;
+        if !scope_allows(&rel.scope, scope) {
+            continue;
+        }
+        let incident = rel
+            .subject
+            .id
+            .as_ref()
+            .map(|i| i.as_str() == survivor)
+            .unwrap_or(false)
+            || rel
+                .object
+                .id
+                .as_ref()
+                .map(|i| i.as_str() == survivor)
+                .unwrap_or(false);
+        if incident {
+            entries.push((rowid, rel));
+        }
+    }
+    entries.sort_by_key(|(rowid, _)| *rowid);
+    let mut seen: HashMap<String, i64> = HashMap::new();
+    let mut to_archive: Vec<(i64, KnowledgeRelationship)> = Vec::new();
+    for (rowid, rel) in entries {
+        let key = engram_knowledge::identity::compute_relationship_key(&rel);
+        if seen.contains_key(&key) {
+            to_archive.push((rowid, rel));
+        } else {
+            seen.insert(key, rowid);
+        }
+    }
+    for (rowid, mut rel) in to_archive {
+        rel.archived_at = Some(ts);
+        rel.updated_at = Some(ts);
+        rel.provenance = stamp_provenance(&rel.provenance, actor, "merge_coalesce", ts);
+        let new_json = serde_json::to_string(&rel).map_err(json_error)?;
+        conn.execute(
+            "UPDATE knowledge_relationships SET archived_at = ?1, record_json = ?2 WHERE rowid = ?3",
+            params![ts.to_rfc3339(), new_json, rowid],
+        )
+        .map_err(sql_error)?;
+    }
+    Ok(())
 }
 
 /// Hard-delete an entity (escalated, permanent — ADR-0027). Scope-checked.
@@ -550,8 +930,65 @@ fn build_mutation_preview(
         MaintenanceMutation::Delete { target } => {
             preview_target(conn, target, scope, ts, PreviewEffect::Delete)?
         }
-        // Merge/alias/rewrite previews enriched in T5b.
-        _ => (Vec::new(), Vec::new()),
+        MaintenanceMutation::AddAlias { entity, alias } => {
+            let cur = load_entity(conn, entity, scope)?;
+            let after = cur.clone().map(|mut e| {
+                if !e.aliases.contains(alias) {
+                    e.aliases.push(alias.clone());
+                }
+                e
+            });
+            (snap_entity(cur), snap_entity(after))
+        }
+        MaintenanceMutation::RemoveAlias { entity, alias } => {
+            let cur = load_entity(conn, entity, scope)?;
+            let after = cur.clone().map(|mut e| {
+                e.aliases.retain(|a| a != alias);
+                e
+            });
+            (snap_entity(cur), snap_entity(after))
+        }
+        MaintenanceMutation::RewriteRelationship {
+            relationship,
+            new_predicate,
+            new_subject,
+            new_object,
+        } => {
+            let cur = load_relationship(conn, relationship, scope)?;
+            let after = cur.clone().map(|mut r| {
+                if let Some(p) = new_predicate {
+                    r.predicate = p.clone();
+                }
+                if let Some(s) = new_subject {
+                    r.subject.id = Some(s.clone());
+                }
+                if let Some(o) = new_object {
+                    r.object.id = Some(o.clone());
+                }
+                r
+            });
+            (snap_rel(cur), snap_rel(after))
+        }
+        MaintenanceMutation::Merge { survivor, absorbed } => {
+            let mut before = Vec::new();
+            let mut surv = load_entity(conn, survivor, scope)?;
+            if let Some(s) = &surv {
+                before.push(MutationSnapshot::Entity(s.clone()));
+            }
+            for a_id in absorbed {
+                if let Some(a) = load_entity(conn, a_id, scope)? {
+                    before.push(MutationSnapshot::Entity(a.clone()));
+                    if let Some(s) = &mut surv {
+                        for al in &a.aliases {
+                            if !s.aliases.contains(al) {
+                                s.aliases.push(al.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            (before, snap_entity(surv))
+        }
     };
     Ok(MaintenanceMutationPreview {
         mutation,
@@ -1615,5 +2052,173 @@ mod tests {
         let d2 = block_on(store.apply_plan(&delete_plan, ApplyMode::Apply)).unwrap();
         assert_eq!(d2.applied, 0);
         assert_eq!(d2.unchanged, 1);
+    }
+
+    #[test]
+    fn add_and_remove_alias_are_idempotent() {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        block_on(store.put_entity(entity("a"))).unwrap();
+        let scope = scope_t();
+        let add = MaintenancePlan::new(
+            None,
+            scope.clone(),
+            vec![MaintenanceMutation::AddAlias {
+                entity: EntityId::from("a"),
+                alias: "x".to_string(),
+            }],
+            MaintenancePolicy::default(),
+            actor(),
+        );
+        assert_eq!(
+            block_on(store.apply_plan(&add, ApplyMode::Apply))
+                .unwrap()
+                .applied,
+            1
+        );
+        let again = block_on(store.apply_plan(&add, ApplyMode::Apply)).unwrap();
+        assert_eq!(again.applied, 0);
+        assert_eq!(again.unchanged, 1);
+        let e = block_on(store.get_entity(&EntityId::from("a"), &scope))
+            .unwrap()
+            .unwrap();
+        assert!(e.aliases.contains(&"x".to_string()));
+        let rm = MaintenancePlan::new(
+            None,
+            scope,
+            vec![MaintenanceMutation::RemoveAlias {
+                entity: EntityId::from("a"),
+                alias: "x".to_string(),
+            }],
+            MaintenancePolicy::default(),
+            actor(),
+        );
+        assert_eq!(
+            block_on(store.apply_plan(&rm, ApplyMode::Apply))
+                .unwrap()
+                .applied,
+            1
+        );
+        assert_eq!(
+            block_on(store.apply_plan(&rm, ApplyMode::Apply))
+                .unwrap()
+                .applied,
+            0
+        );
+    }
+
+    #[test]
+    fn rewrite_relationship_edits_in_place() {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        block_on(store.put_entity(entity("a"))).unwrap();
+        block_on(store.put_entity(entity("b"))).unwrap();
+        block_on(store.put_entity(entity("c"))).unwrap();
+        block_on(store.put_relationship(rel("r1", "a", "b"))).unwrap();
+        let plan = MaintenancePlan::new(
+            None,
+            scope_t(),
+            vec![MaintenanceMutation::RewriteRelationship {
+                relationship: RelationshipId::from("r1"),
+                new_predicate: Some("implements".to_string()),
+                new_subject: None,
+                new_object: Some(EntityId::from("c")),
+            }],
+            MaintenancePolicy::default(),
+            actor(),
+        );
+        assert_eq!(
+            block_on(store.apply_plan(&plan, ApplyMode::Apply))
+                .unwrap()
+                .applied,
+            1
+        );
+        let rels = block_on(
+            <SqlKnowledgeStore as GraphMaintenanceRepository>::list_relationships(
+                &store,
+                &scope_t(),
+                &RelationshipFilter::default(),
+                None,
+                10,
+            ),
+        )
+        .unwrap();
+        assert_eq!(rels.items.len(), 1);
+        assert_eq!(rels.items[0].predicate, "implements");
+        assert_eq!(rels.items[0].object.id.as_ref().unwrap().as_str(), "c");
+        // re-rewrite to the same values -> unchanged
+        assert_eq!(
+            block_on(store.apply_plan(&plan, ApplyMode::Apply))
+                .unwrap()
+                .applied,
+            0
+        );
+    }
+
+    #[test]
+    fn merge_archives_absorbed_redirects_and_coalesces() {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        let mut s = entity("s");
+        s.aliases = vec!["s-alias".to_string()];
+        let mut a = entity("a");
+        a.aliases = vec!["a-alias".to_string()];
+        block_on(store.put_entity(s)).unwrap();
+        block_on(store.put_entity(a)).unwrap();
+        block_on(store.put_entity(entity("x"))).unwrap();
+        block_on(store.put_relationship(rel("r1", "s", "x"))).unwrap();
+        block_on(store.put_relationship(rel("r2", "a", "x"))).unwrap();
+        let plan = MaintenancePlan::new(
+            None,
+            scope_t(),
+            vec![MaintenanceMutation::Merge {
+                survivor: EntityId::from("s"),
+                absorbed: vec![EntityId::from("a")],
+            }],
+            MaintenancePolicy::default(),
+            actor(),
+        );
+        let r = block_on(store.apply_plan(&plan, ApplyMode::Apply)).unwrap();
+        assert_eq!(r.applied, 1);
+        // a archived; s + x active.
+        let ents = block_on(
+            <SqlKnowledgeStore as GraphMaintenanceRepository>::list_entities(
+                &store,
+                &scope_t(),
+                &EntityFilter::default(),
+                None,
+                10,
+            ),
+        )
+        .unwrap();
+        let ids: Vec<&str> = ents.items.iter().map(|e| e.id.as_str()).collect();
+        assert!(ids.contains(&"s") && ids.contains(&"x") && !ids.contains(&"a"));
+        // one active edge s->x (r2 redirected to s->x and coalesced with r1).
+        let rels = block_on(
+            <SqlKnowledgeStore as GraphMaintenanceRepository>::list_relationships(
+                &store,
+                &scope_t(),
+                &RelationshipFilter::default(),
+                None,
+                10,
+            ),
+        )
+        .unwrap();
+        assert_eq!(rels.items.len(), 1, "duplicate edge coalesced");
+        assert_eq!(rels.items[0].subject.id.as_ref().unwrap().as_str(), "s");
+        // survivor absorbed a's alias.
+        let sv = block_on(store.get_entity(&EntityId::from("s"), &scope_t()))
+            .unwrap()
+            .unwrap();
+        assert!(sv.aliases.contains(&"a-alias".to_string()));
+        // idempotent: re-apply (a already archived) -> unchanged.
+        // idempotent: re-apply (a already archived) -> unchanged, survivor NOT re-stamped.
+        let sv1 = block_on(store.get_entity(&EntityId::from("s"), &scope_t()))
+            .unwrap()
+            .unwrap();
+        let r2 = block_on(store.apply_plan(&plan, ApplyMode::Apply)).unwrap();
+        assert_eq!(r2.applied, 0);
+        let sv2 = block_on(store.get_entity(&EntityId::from("s"), &scope_t()))
+            .unwrap()
+            .unwrap();
+        assert_eq!(sv1.updated_at, sv2.updated_at);
+        assert_eq!(sv1.provenance.observed_at, sv2.provenance.observed_at);
     }
 }

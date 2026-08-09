@@ -95,6 +95,22 @@ class StubNativeProvider {
       }
     };
   }
+  requireGraphMaintenanceApi() {
+    return {
+      buildPlanJson(): string {
+        return '{"mutations":[],"fingerprint":"","previews":[],"scope":{"tenant":"t"},"policy":{},"actor":{"id":"a","kind":"system"}}';
+      },
+      applyPlanJson(): string {
+        return '{"applied":0,"unchanged":0,"failed":0,"byKind":[],"verifyFindings":[],"atomicity":"single_transaction","planFingerprint":""}';
+      },
+      listMaintenanceCandidatesJson(): string {
+        return "[]";
+      },
+      graphHealthJson(): string {
+        return '{"scope":{"tenant":"t"},"orphanCount":0,"lowConfidenceCount":0,"unsupportedCount":0,"duplicateCount":0,"archivedEntityCount":0,"archivedRelationshipCount":0}';
+      }
+    };
+  }
   requireBatchApi() {
     return {
       ingestJson(): string {

@@ -629,3 +629,9 @@ returns a dry-run preview and (with the apply flag) applies transactionally.
   attaches `store.clone()` as `Arc<dyn GraphMaintenanceRepository>`, gated on
   `graph_ok`, capability flips Supported). Distinct from the existing `maintenance`
   field. The capability key-list test was updated (no `#[serde(default)]` needed).
+- 2026-08-08: T7 implemented — N-API binding (`requireGraphMaintenanceApi` +
+  `NativeGraphMaintenanceApi` with buildPlanJson/applyPlanJson/
+  listMaintenanceCandidatesJson/graphHealthJson) + @engram/node TS transport
+  (NativeGraphMaintenanceApiBinding interface + 4 flattened transport methods
+  graphMaintenanceBuildPlan/ApplyPlan/Candidates/Health + index re-export +
+  StubNativeProvider stub).

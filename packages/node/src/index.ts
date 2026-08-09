@@ -5,6 +5,7 @@ export {
   type NativeBatchApiBinding,
   type NativeBeliefsApiBinding,
   type NativeGraphApiBinding,
+  type NativeGraphMaintenanceApiBinding,
   type NativeMemoryApiBinding,
   type NativeProviderBinding,
   type NativeProviderConstructor,

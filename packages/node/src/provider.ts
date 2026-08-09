@@ -159,6 +159,14 @@ export interface NativeProviderTransport {
   getEntity(id: string, scope: unknown): Promise<unknown>;
   /** Graph neighbors of a node `{ graphId, nodeId, scope, limit? }` (graph API). */
   graphNeighbors(request: unknown): Promise<unknown>;
+  /** Build a dry-run maintenance plan (fills before/after previews; non-mutating). */
+  graphMaintenanceBuildPlan(request: unknown): Promise<unknown>;
+  /** Apply (or preview) a reviewed maintenance plan `{ plan, mode }`. */
+  graphMaintenanceApplyPlan(request: unknown): Promise<unknown>;
+  /** Deterministic candidate detection `{ scope, graphId?, policy }` (no LLM). */
+  graphMaintenanceCandidates(request: unknown): Promise<unknown[]>;
+  /** Point-in-time graph-health aggregates `{ scope, graphId? }`. */
+  graphMaintenanceHealth(request: unknown): Promise<unknown>;
   /** Upsert a replayable procedure (Layer 6). Returns the persisted `Procedure`. */
   procedureUpsert(procedure: unknown): Promise<unknown>;
   /** List procedures in scope (Layer 6). Returns `[Procedure, …]`. */
@@ -376,6 +384,24 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async graphNeighbors(request: unknown): Promise<unknown> {
     return decode(this.provider.requireGraphApi().neighborsJson(encode(request)));
+  }
+
+  async graphMaintenanceBuildPlan(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireGraphMaintenanceApi().buildPlanJson(encode(request)));
+  }
+
+  async graphMaintenanceApplyPlan(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireGraphMaintenanceApi().applyPlanJson(encode(request)));
+  }
+
+  async graphMaintenanceCandidates(request: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(
+      this.provider.requireGraphMaintenanceApi().listMaintenanceCandidatesJson(encode(request)),
+    );
+  }
+
+  async graphMaintenanceHealth(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireGraphMaintenanceApi().graphHealthJson(encode(request)));
   }
 
   async procedureUpsert(procedure: unknown): Promise<unknown> {

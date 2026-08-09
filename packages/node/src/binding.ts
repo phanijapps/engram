@@ -148,6 +148,14 @@ export interface NativeGraphApiBinding {
   neighborsJson(requestJson: string): string;
 }
 
+/** Graph-maintenance handle proxy: reversible plan/apply graph repair (ADR-0027). */
+export interface NativeGraphMaintenanceApiBinding {
+  buildPlanJson(requestJson: string): string;
+  applyPlanJson(requestJson: string): string;
+  listMaintenanceCandidatesJson(requestJson: string): string;
+  graphHealthJson(requestJson: string): string;
+}
+
 /** Batch-ingest API handle proxy: best-effort batch write + guarantee. */
 export interface NativeBatchApiBinding {
   ingestJson(requestJson: string): string;
@@ -220,6 +228,7 @@ export interface NativeProviderBinding {
   requireMemoryApi(): NativeMemoryApiBinding;
   requireRecallApi(): NativeRecallApiBinding;
   requireGraphApi(): NativeGraphApiBinding;
+  requireGraphMaintenanceApi(): NativeGraphMaintenanceApiBinding;
   requireBatchApi(): NativeBatchApiBinding;
   requireBeliefsApi(): NativeBeliefsApiBinding;
   requireObservabilityApi(): NativeObservabilityApiBinding;

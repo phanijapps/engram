@@ -616,3 +616,9 @@ returns a dry-run preview and (with the apply flag) applies transactionally.
   both endpoints (incoming dups collapse too); redirect + coalesce scope_allows-
   check each edge; build_plan previews added for alias/rewrite/merge; merge
   idempotency test snapshots the survivor's updated_at/observed_at.
+- 2026-08-08: T5c implemented — `graph_health` override on SqlKnowledgeStore: loads
+  active entities/relationships (scope_allows-filtered), reuses `detect_candidates`
+  for orphan + low-confidence counts, counts duplicate identity-key groups inline
+  (avoids re-locking via discover_collisions), and SQL-counts archived entities/
+  relationships. `unsupported_count` is 0 (deferred — validate_graph re-locks the
+  shared Mutex; a separate lock phase would be needed). 1 test.

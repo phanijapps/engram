@@ -358,6 +358,111 @@ impl GraphMaintenanceRepository for SqlKnowledgeStore {
             plan_fingerprint: fingerprint,
         })
     }
+
+    async fn graph_health(
+        &self,
+        scope: &Scope,
+        graph_id: Option<&KnowledgeGraphId>,
+    ) -> CoreResult<MaintenanceHealth> {
+        let conn = self.lock()?;
+        let ws = workspace_param(scope);
+        let graph = graph_id.map(ToString::to_string).unwrap_or_default();
+
+        // Active entities + relationships (scope_allows-filtered).
+        let mut stmt = conn
+            .prepare(
+                "SELECT record_json FROM knowledge_entities
+                 WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2 AND archived_at IS NULL
+                   AND (?3 = '' OR graph_id = ?3)",
+            )
+            .map_err(sql_error)?;
+        let entities: Vec<KnowledgeEntity> = stmt
+            .query_map(params![scope.tenant, ws, &graph], |r| r.get::<_, String>(0))
+            .map_err(sql_error)?
+            .filter_map(|r| r.ok())
+            .filter_map(|j| serde_json::from_str::<KnowledgeEntity>(&j).ok())
+            .filter(|e| scope_allows(&e.scope, scope))
+            .collect();
+        drop(stmt);
+        let mut stmt = conn
+            .prepare(
+                "SELECT record_json FROM knowledge_relationships
+                 WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2 AND archived_at IS NULL
+                   AND (?3 = '' OR graph_id = ?3)",
+            )
+            .map_err(sql_error)?;
+        let relationships: Vec<KnowledgeRelationship> = stmt
+            .query_map(params![scope.tenant, ws, &graph], |r| r.get::<_, String>(0))
+            .map_err(sql_error)?
+            .filter_map(|r| r.ok())
+            .filter_map(|j| serde_json::from_str::<KnowledgeRelationship>(&j).ok())
+            .filter(|r| scope_allows(&r.scope, scope))
+            .collect();
+        drop(stmt);
+
+        // Orphan + low-confidence reuse the pure detector (duplicates/unsupported
+        // off — those need discover_collisions/validate_graph which re-lock the
+        // shared Mutex; duplicate is counted inline below, unsupported deferred).
+        let policy = MaintenancePolicy {
+            confidence_threshold: Some(0.5),
+            detect_orphans: true,
+            detect_low_confidence: true,
+            detect_duplicates: false,
+            detect_unsupported: false,
+        };
+        let candidates =
+            engram_knowledge::detect_candidates(&entities, &relationships, &[], &[], &policy);
+        let orphan_count = candidates
+            .iter()
+            .filter(|c| c.kind == CandidateKind::Orphan)
+            .count() as u32;
+        let low_confidence_count = candidates
+            .iter()
+            .filter(|c| c.kind == CandidateKind::LowConfidence)
+            .count() as u32;
+
+        // Duplicate entities (inline — avoids re-locking via discover_collisions).
+        let duplicate_count: i64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(c - 1), 0) FROM \
+                 (SELECT COUNT(*) AS c FROM knowledge_entities \
+                  WHERE identity_key IS NOT NULL AND tenant = ?1 \
+                  GROUP BY identity_key HAVING COUNT(*) > 1)",
+                params![scope.tenant],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+
+        let archived_entity_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM knowledge_entities \
+                 WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2 AND (?3 = '' OR graph_id = ?3) \
+                   AND archived_at IS NOT NULL",
+                params![scope.tenant, ws, &graph],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+        let archived_relationship_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM knowledge_relationships \
+                 WHERE tenant = ?1 AND COALESCE(workspace, '') = ?2 AND (?3 = '' OR graph_id = ?3) \
+                   AND archived_at IS NOT NULL",
+                params![scope.tenant, ws, &graph],
+                |row| row.get(0),
+            )
+            .map_err(sql_error)?;
+
+        Ok(MaintenanceHealth {
+            scope: scope.clone(),
+            graph_id: graph_id.cloned(),
+            orphan_count,
+            low_confidence_count,
+            unsupported_count: 0,
+            duplicate_count: duplicate_count as u32,
+            archived_entity_count: archived_entity_count as u32,
+            archived_relationship_count: archived_relationship_count as u32,
+        })
+    }
 }
 
 /// Best-effort source match for an entity: provenance source or any source_ref.
@@ -2220,5 +2325,53 @@ mod tests {
             .unwrap();
         assert_eq!(sv1.updated_at, sv2.updated_at);
         assert_eq!(sv1.provenance.observed_at, sv2.provenance.observed_at);
+    }
+
+    fn evref() -> EvidenceRef {
+        EvidenceRef {
+            target_type: EvidenceTargetType::Document,
+            target_id: Some("d".to_string()),
+            uri: None,
+            quote: None,
+            location: None,
+        }
+    }
+
+    #[test]
+    fn graph_health_counts_orphans_low_confidence_and_archived() {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        let scope = scope_t();
+        // e_orphan: no edges, no source_refs -> orphan.
+        let e_orphan = entity("orphan");
+        // e_low: has an incident edge + source_refs, confidence 0.1 -> low-confidence only.
+        let mut e_low = entity("low");
+        e_low.provenance.confidence = Some(0.1);
+        e_low.source_refs.push(evref());
+        // e_ok: has an edge + source, confidence 0.9 -> neither.
+        let mut e_ok = entity("ok");
+        e_ok.provenance.confidence = Some(0.9);
+        e_ok.source_refs.push(evref());
+        block_on(store.put_entity(e_orphan)).unwrap();
+        block_on(store.put_entity(e_low.clone())).unwrap();
+        block_on(store.put_entity(e_ok.clone())).unwrap();
+        block_on(store.put_relationship(rel("r1", "low", "ok"))).unwrap();
+        // archive one entity.
+        let mut e_arch = entity("arch");
+        e_arch.source_refs.push(evref());
+        block_on(store.put_entity(e_arch)).unwrap();
+        {
+            let conn = store.lock().unwrap();
+            assert!(
+                archive_entity(&conn, &EntityId::from("arch"), &scope, &actor(), ts()).unwrap()
+            );
+        }
+        let health = block_on(
+            <SqlKnowledgeStore as GraphMaintenanceRepository>::graph_health(&store, &scope, None),
+        )
+        .unwrap();
+        assert!(health.orphan_count >= 1, "orphan detected");
+        assert!(health.low_confidence_count >= 1, "low-confidence detected");
+        assert_eq!(health.archived_entity_count, 1, "one archived entity");
+        assert_eq!(health.archived_relationship_count, 0);
     }
 }

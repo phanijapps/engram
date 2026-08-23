@@ -132,7 +132,9 @@ change yet.
 ### T2 — `engram-code` scaffold + parser relocation
 Depends on: T1. Mode: goal-based (relocation; regression net).
 Tests: existing `adapters/ingest` + knowledge-adapter suites pass unchanged;
-`cargo tree -p engram-ingest` shows no tree-sitter crates.
+`cargo tree -p engram-ingest --depth 1` shows no tree-sitter crate in the
+direct dependency list (tree-sitter arrives transitively via `engram-code`,
+which is the design).
 Approach: Create `core/code` crate (facade root, focused modules); move
 `tree_sitter_chunker.rs`, `code_symbol.rs`, noise filter from `adapters/ingest`
 verbatim into `parser/` + `noise.rs`; `adapters/ingest` depends on

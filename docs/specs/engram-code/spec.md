@@ -119,7 +119,9 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 - [ ] `engram-code` exists at `core/code` as a behavior crate with no I/O,
       git, storage, async-runtime, or LLM dependencies; `adapters/ingest`
       consumes it to build the code graph, and no tree-sitter dependency
-      remains in `adapters/ingest` (`cargo tree -p engram-ingest` audit).
+      remains in `adapters/ingest`'s direct dependency list
+      (`cargo tree -p engram-ingest --depth 1` audit; tree-sitter arrives
+      transitively via `engram-code`, by design).
 - [ ] Entity names follow the RFC-0020 Phase 2 receiver-qualified form
       (`{receiver}::{name}` where a receiver exists, bare otherwise), and the
       global name-resolution index is a scope-wide multi-candidate symbol

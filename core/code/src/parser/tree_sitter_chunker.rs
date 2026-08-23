@@ -8,9 +8,9 @@
 use std::collections::HashMap;
 
 use engram_domain::{KnowledgeChunkKind, SourceLocation};
-use engram_knowledge::{CoreError, CoreResult};
+use engram_runtime::{CoreError, CoreResult};
 
-use crate::chunker::{ChunkCandidate, Chunker};
+use crate::parser::chunking::{ChunkCandidate, Chunker};
 
 /// One grammar entry: the tree-sitter Language + a node-type → keyword map.
 struct LangEntry {

@@ -186,7 +186,7 @@ where
     let text_ingestor =
         KnowledgeIngestor::new(PlainTextChunker::new(PlainTextChunkerOptions::default())?);
     let markdown_ingestor = KnowledgeIngestor::new(MarkdownChunker::new()?);
-    let ts_chunker = crate::tree_sitter_chunker::TreeSitterChunker::new().ok();
+    let ts_chunker = crate::TreeSitterChunker::new().ok();
     let extractor = GraphExtractor::new();
 
     // Walk + filter (sequential).

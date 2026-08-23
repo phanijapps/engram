@@ -5,9 +5,9 @@
 //! anchors, but it is not an AST parser and does not infer relationships.
 
 use engram_domain::{KnowledgeChunkKind, SourceLocation};
-use engram_knowledge::{CoreError, CoreResult};
+use engram_runtime::{CoreError, CoreResult};
 
-use crate::chunker::{ChunkCandidate, Chunker};
+use crate::parser::chunking::{ChunkCandidate, Chunker};
 
 /// Line-oriented chunker for common source-code declarations.
 ///

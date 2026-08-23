@@ -1544,6 +1544,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-code"
+version = "0.1.0"
+dependencies = [
+ "engram-domain",
+ "engram-runtime",
+ "tree-sitter",
+ "tree-sitter-bash",
+ "tree-sitter-c",
+ "tree-sitter-c-sharp",
+ "tree-sitter-cpp",
+ "tree-sitter-go",
+ "tree-sitter-java",
+ "tree-sitter-kotlin-ng",
+ "tree-sitter-perl",
+ "tree-sitter-php",
+ "tree-sitter-python",
+ "tree-sitter-ruby",
+ "tree-sitter-rust",
+ "tree-sitter-scala",
+ "tree-sitter-sfapex",
+ "tree-sitter-swift",
+ "tree-sitter-typescript",
+]
+
+[[package]]
 name = "engram-codegraph-queries"
 version = "0.1.0"
 dependencies = [
@@ -1650,6 +1675,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "engram-code",
  "engram-domain",
  "engram-knowledge",
  "engram-store-sqlite",
@@ -1661,23 +1687,6 @@ dependencies = [
  "serde_yml",
  "sha2 0.11.0",
  "tempfile",
- "tree-sitter",
- "tree-sitter-bash",
- "tree-sitter-c",
- "tree-sitter-c-sharp",
- "tree-sitter-cpp",
- "tree-sitter-go",
- "tree-sitter-java",
- "tree-sitter-kotlin-ng",
- "tree-sitter-perl",
- "tree-sitter-php",
- "tree-sitter-python",
- "tree-sitter-ruby",
- "tree-sitter-rust",
- "tree-sitter-scala",
- "tree-sitter-sfapex",
- "tree-sitter-swift",
- "tree-sitter-typescript",
 ]
 
 [[package]]
@@ -1737,6 +1746,7 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-runtime",
+ "tokio",
 ]
 
 [[package]]

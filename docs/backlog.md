@@ -545,3 +545,16 @@ Deferred items from the M2 adversarial review (tracked, not blocking the slice):
   `PartialExtractionError` carrying `{documentsRead, entitiesWritten,
   relationshipsWritten}` would let the CLI/MCP report progress before a retry
   (the current per-document error message already includes the counts inline).
+
+## Cross-server MCP tool drift (surfaced by engram-code T10)
+
+The shared fixture (`mcp/engram-mcp/tests/tool_names.txt`, 43 tools) exposed
+a pre-existing 13-tool asymmetry between the two MCP transports: the Rust
+stdio server is missing `belief_list`, `contradiction_detect`,
+`graph_overview`, `list_memories`, `maintenance_run`; the TS HTTP server is
+missing `hierarchy_build`, `index_docs`, `predict_context`,
+`scan_dependencies`, `scan_ownership`, `scan_protocols` (plus the
+maintenance trio it now has). Also: `prototype/frontend` typecheck/build
+fails on React JSX typing (pre-existing, no engram deps); `@engram/runtime`
+has one real-addon boot-timeout test (mcp.smoke). Source:
+`docs/specs/engram-code/notes.md` T8/T10.

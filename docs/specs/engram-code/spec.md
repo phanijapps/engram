@@ -116,44 +116,44 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
 
 ## Acceptance Criteria
 
-- [ ] `engram-code` exists at `core/code` as a behavior crate with no I/O,
+- [x] `engram-code` exists at `core/code` as a behavior crate with no I/O,
       git, storage, async-runtime, or LLM dependencies; `adapters/ingest`
       consumes it to build the code graph, and no tree-sitter dependency
       remains in `adapters/ingest`'s direct dependency list
       (`cargo tree -p engram-ingest --depth 1` audit; tree-sitter arrives
       transitively via `engram-code`, by design).
-- [ ] Entity names follow the RFC-0020 Phase 2 receiver-qualified form
+- [x] Entity names follow the RFC-0020 Phase 2 receiver-qualified form
       (`{receiver}::{name}` where a receiver exists, bare otherwise), and the
       global name-resolution index is a scope-wide multi-candidate symbol
       table: two same-named symbols from different files (or repos, per the
       ADR-0017 multi-repo scope model) coexist as candidates keyed with their
       repo/path discriminators — no silent last-write-wins overwrite.
-- [ ] Existing bare-name and `::suffix` queries still resolve on **both** MCP
+- [x] Existing bare-name and `::suffix` queries still resolve on **both** MCP
       servers (the Rust stdio server and the TS HTTP server) against the new
       identity model, verified by the existing suffix-resolver fixtures.
-- [ ] Extraction emits typed structural edges — `imports`, `contains`,
+- [x] Extraction emits typed structural edges — `imports`, `contains`,
       `extends`, `implements`, `calls`, and `routes_to` — with counts
       assertable on the fixture repo.
-- [ ] A cross-file reference to a not-yet-ingested symbol produces a
+- [x] A cross-file reference to a not-yet-ingested symbol produces a
       pending ledger record carrying candidates; ingesting the target file
       later resolves it via the orphan sweep without re-ingesting the
       referring file.
-- [ ] The framework resolver starter set extracts route entities wired to
+- [x] The framework resolver starter set extracts route entities wired to
       their handlers via `routes_to` edges, and React event-handler callbacks
       appear as `calls` edges, on dedicated fixtures.
-- [ ] `file_dependencies` returns the file-level import graph, and `explore`
+- [x] `file_dependencies` returns the file-level import graph, and `explore`
       answers a natural-language query with a relevance-seeded bounded
       subgraph (default budget: 24 nodes, expansion depth 2, at most 64
       edges) — both reachable from the Rust facade, the N-API binding,
       `@engram/node`, both MCP servers (tool lists pinned equal by the
       cross-server tool-list parity check), and listed in `CapabilityReport`
       as `code_graph`.
-- [ ] The lexical lane indexes code-symbol signatures and docstrings; a
+- [x] The lexical lane indexes code-symbol signatures and docstrings; a
       keyword query matches a symbol by a signature fragment.
-- [ ] Re-ingest convergence is unchanged: changing or removing a fixture
+- [x] Re-ingest convergence is unchanged: changing or removing a fixture
       file retracts prior entities, edges, and ledger rows (existing
       reconcile tests pass without modification).
-- [ ] A scale benchmark run against a large public repository is documented
+- [x] A scale benchmark run against a large public repository is documented
       in `docs/perf/` (index time, symbol and edge counts, sync time after a
       one-file edit).
 

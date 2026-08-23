@@ -673,3 +673,61 @@ fn opts2_with(manifest: std::collections::HashMap<String, String>) -> ScanOption
         scan_filter: engram_ingest::ScanFilter::default(),
     }
 }
+
+/// The sweep heals a pending `routes_to` handler as `routes_to` (not
+/// `calls`): a route whose handler lands in a LATER scan keeps its edge
+/// shape (final-review Concern 1 pin).
+#[test]
+fn sweep_heals_route_handlers_as_routes_to() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-sweeproute", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    // Scan 1: the route exists; the handler does not (pending ledger row).
+    fs::write(
+        root.join("routes.ts"),
+        "const app = {} as any;\napp.get('/health', healthHandler);\n",
+    )
+    .expect("write routes.ts");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "sweeproute-fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (_summary, manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan 1");
+    let pending = block_on(
+        store.list_unresolved_refs(&scope(), engram_domain::UnresolvedReferenceStatus::Pending),
+    )
+    .expect("pending");
+    assert!(
+        pending.iter().any(|r| r.reference_name == "healthHandler"),
+        "route handler must be ledgered: {pending:?}"
+    );
+
+    // Scan 2: the handler lands — the sweep heals the row.
+    fs::write(root.join("handlers.ts"), "function healthHandler() {}\n").expect("write handlers");
+    let opts2 = ScanOptions { manifest, ..opts };
+    scan_repository(&root, &opts2, &store, |_| {}).expect("scan 2");
+
+    let rels = block_on(store.list_relationships(&scope())).expect("rels");
+    let ents = block_on(store.list_entities(&scope())).expect("entities");
+    let endpoint_id = ents
+        .iter()
+        .find(|e| e.name == "GET /health")
+        .expect("endpoint entity")
+        .id
+        .clone();
+    assert!(
+        rels.iter().any(|r| r.predicate == "routes_to"
+            && r.subject.id.as_ref() == Some(&endpoint_id)
+            && r.object.name.as_deref() == Some("healthHandler")
+            && r.object.id.is_some()),
+        "the healed edge must be routes_to from the endpoint: {rels:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}

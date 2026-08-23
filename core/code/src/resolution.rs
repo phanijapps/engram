@@ -63,7 +63,8 @@ fn resolve_one(
     index.resolve(name, from_path, from_repo)
 }
 
-/// Fill name-only object refs (`calls`, `extends`, `implements`) and return
+/// Fill name-only object refs (`calls`, `extends`, `implements`,
+/// `routes_to`) and return
 /// the unresolved-reference ledger for everything that did not settle.
 /// Ledger records are `pending`; persistence + the orphan sweep are T6.
 pub fn resolve_refs(
@@ -267,6 +268,15 @@ mod tests {
         // bare tail within the file.
         assert!(ledger.is_empty(), "ledger: {ledger:?}");
         assert_eq!(rels[0].object.id, Some(EntityId::from("e7")));
+    }
+
+    #[test]
+    fn routes_to_handlers_ledger_when_unresolved() {
+        let index = SymbolIndex::new();
+        let mut rels = vec![rel("routes_to", "GET /health", "healthHandler")];
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("routes.ts"));
+        assert_eq!(ledger.len(), 1, "unresolved route handler must be ledgered");
+        assert_eq!(ledger[0].reference_name, "healthHandler");
     }
 
     #[test]

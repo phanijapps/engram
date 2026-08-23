@@ -637,9 +637,8 @@ impl GraphExtractor {
                 .and_then(|v| v.as_str());
             let path = document.path.as_deref();
             register_entities(index, &extracted.entities, repo, path);
-            // Import scope for this document is empty here (structural facts
-            // are threaded by the scanner path); resolution still runs the
-            // same-doc / same-repo / unique / ledger ladder.
+            // Resolution runs the same-doc / same-repo / unique / ledger
+            // ladder (the scanner path adds cross-file context the same way).
             extracted.unresolved =
                 engram_code::resolve_refs(index, &mut extracted.relationships, repo, path);
         }
@@ -744,9 +743,9 @@ pub fn resolve_call_refs(
     repo: Option<&str>,
     path: Option<&str>,
 ) -> Vec<engram_domain::UnresolvedReference> {
-    // Delegates to engram-code's Phase-2 resolver (receiver hints, import
-    // scope, ledger); returns the ledger records for callers that persist
-    // them (T6). The scanner is the single resolution site with imports.
+    // Delegates to engram-code's Phase-2 resolver (receiver hints, the
+    // same-doc/same-repo/unique/ledger ladder); returns the ledger records
+    // for callers that persist them (T6).
     engram_code::resolve_refs(index, relationships, repo, path)
 }
 

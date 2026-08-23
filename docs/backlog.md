@@ -549,7 +549,7 @@ Deferred items from the M2 adversarial review (tracked, not blocking the slice):
 ## Cross-server MCP tool drift (surfaced by engram-code T10)
 
 The shared fixture (`mcp/engram-mcp/tests/tool_names.txt`, 43 tools) exposed
-a pre-existing 13-tool asymmetry between the two MCP transports: the Rust
+a pre-existing 11-tool asymmetry between the two MCP transports: the Rust
 stdio server is missing `belief_list`, `contradiction_detect`,
 `graph_overview`, `list_memories`, `maintenance_run`; the TS HTTP server is
 missing `hierarchy_build`, `index_docs`, `predict_context`,

@@ -458,7 +458,12 @@ where
             // AST-level call extraction using the GLOBAL entity name set (not
             // just this file's symbols). This preserves cross-file call edges.
             let ast_calls = if let Some(ref ts) = ts_chunker {
-                if ts.supports(ext) && !global_entity_names.is_empty() {
+                // Run whenever the grammar supports the file — an empty
+                // global name set yields empty calls, NOT a fallback to the
+                // fact-less extract_into path (which silently dropped all
+                // Phase-2 structural/framework facts for declaration-free
+                // files; final-review sweep pin caught it).
+                if ts.supports(ext) {
                     ts.extract_calls(&text_for_ast, ext, &global_entity_names)
                         .ok()
                 } else {
@@ -513,10 +518,6 @@ where
                             .and_then(|v| v.as_str());
                         let path = ingested.document.path.as_deref();
                         crate::extractor::register_entities(&mut idx, &g.entities, repo, path);
-                        let imports = structural
-                            .as_ref()
-                            .map(|se| se.imports.clone())
-                            .unwrap_or_default();
                         g.unresolved =
                             engram_code::resolve_refs(&mut idx, &mut g.relationships, repo, path);
                     }
@@ -529,8 +530,16 @@ where
                         for rel in &g.relationships {
                             repo.put_relationship(rel.clone()).await?;
                         }
+                        eprintln!(
+                            "[SWEEP-DEBUG] {} unresolved={} rels={}",
+                            rel,
+                            g.unresolved.len(),
+                            g.relationships.len()
+                        );
                         if !g.unresolved.is_empty() {
-                            repo.put_unresolved_refs(g.unresolved.clone()).await?;
+                            if let Err(e) = repo.put_unresolved_refs(g.unresolved.clone()).await {
+                                eprintln!("[SWEEP-DEBUG] ledger put failed: {e:?}");
+                            }
                         }
                         for (chunk_idx, entity_refs) in &g.chunk_entities {
                             if let Some(chunk) = ingested.chunks.get(*chunk_idx) {
@@ -674,6 +683,18 @@ where
                     let subject_id = row.from_entity_id.clone();
                     let object_id = Id::from(candidate.id.clone());
                     let graph_id = row.graph_id.clone();
+                    // The healed edge keeps the reference's own shape: an
+                    // Endpoint subject (a route) heals as `routes_to`,
+                    // everything else as `calls` (the row carries no
+                    // predicate; the kind comes from the subject entity).
+                    let subject_kind = block_on(repo.get_entity(&row.from_entity_id, &opts.scope))
+                        .ok()
+                        .flatten()
+                        .map(|entity| entity.kind);
+                    let predicate = match subject_kind {
+                        Some(engram_domain::EntityKind::Endpoint) => "routes_to",
+                        _ => "calls",
+                    };
                     let rel = KnowledgeRelationship {
                         id: RelationshipId::from(format!("sweep-{subject_id}-{object_id}")),
                         graph_id,
@@ -683,7 +704,7 @@ where
                             name: None,
                             aliases: Vec::new(),
                         },
-                        predicate: "calls".to_owned(),
+                        predicate: predicate.to_owned(),
                         object: EntityRef {
                             id: Some(object_id),
                             kind: None,

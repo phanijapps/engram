@@ -68,6 +68,11 @@ impl SymbolIndex {
         }
     }
 
+    /// All candidates registered under a name key (import-scope matching).
+    pub fn bucket(&self, name: &str) -> Option<&[SymbolCandidate]> {
+        self.entries.get(name).map(|v| v.as_slice())
+    }
+
     /// Resolve a reference written at `from_path` (in repo `from_repo`) to
     /// the best candidate for `name` (a bare or qualified form).
     pub fn resolve(

@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+chrono.workspace = true
 engram-domain = { path = "../domain" }
 engram-runtime = { path = "../runtime" }
 tree-sitter = "0.26"

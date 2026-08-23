@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
-use engram_code::{Resolution, SymbolCandidate, SymbolIndex};
+use engram_code::{SymbolCandidate, SymbolIndex};
 use engram_domain::*;
 use engram_knowledge::{CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
 use serde_json::Value as JsonValue;
@@ -33,6 +33,10 @@ pub struct ExtractedGraph {
     /// chunk. Used by `extract_into` to stamp entity refs back onto chunks so
     /// Q&A can find the actual code that defines an entity.
     pub chunk_entities: Vec<(usize, Vec<EntityRef>)>,
+    /// Unresolved-reference ledger (RFC-0020 Phase 2): every cross-file
+    /// reference that did not settle, with its candidates. Persistence +
+    /// the orphan sweep land in T6; extraction carries it.
+    pub unresolved: Vec<engram_domain::UnresolvedReference>,
 }
 
 /// Deterministic extractor that turns ingested chunks into a scoped graph.
@@ -524,6 +528,7 @@ impl GraphExtractor {
             entities,
             relationships,
             chunk_entities,
+            unresolved: Vec::new(),
         })
     }
 
@@ -555,7 +560,11 @@ impl GraphExtractor {
                 .and_then(|v| v.as_str());
             let path = document.path.as_deref();
             register_entities(index, &extracted.entities, repo, path);
-            resolve_call_refs(index, &mut extracted.relationships, repo, path);
+            // Import scope for this document is empty here (structural facts
+            // are threaded by the scanner path); resolution still runs the
+            // same-doc / same-repo / unique / ledger ladder.
+            extracted.unresolved =
+                engram_code::resolve_refs(index, &mut extracted.relationships, repo, path, &[]);
         }
 
         repository.put_graph(extracted.graph.clone()).await?;
@@ -657,21 +666,11 @@ pub fn resolve_call_refs(
     relationships: &mut [KnowledgeRelationship],
     repo: Option<&str>,
     path: Option<&str>,
-) {
-    const RESOLVABLE: [&str; 3] = ["calls", "extends", "implements"];
-    for rel in relationships.iter_mut() {
-        if RESOLVABLE.contains(&rel.predicate.as_str()) && rel.object.id.is_none() {
-            let Some(name) = rel.object.name.clone() else {
-                continue;
-            };
-            match index.resolve(&name, path, repo) {
-                Resolution::Resolved(candidate) => {
-                    rel.object.id = Some(Id::from(candidate.id));
-                }
-                Resolution::Ambiguous(_) | Resolution::NotFound => {}
-            }
-        }
-    }
+) -> Vec<engram_domain::UnresolvedReference> {
+    // Delegates to engram-code's Phase-2 resolver (receiver hints, import
+    // scope, ledger); returns the ledger records for callers that persist
+    // them (T6). The scanner is the single resolution site with imports.
+    engram_code::resolve_refs(index, relationships, repo, path, &[])
 }
 
 /// Reject entities that aren't real concepts — punctuation tokens, single-char

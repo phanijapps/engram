@@ -508,11 +508,16 @@ where
                             .and_then(|v| v.as_str());
                         let path = ingested.document.path.as_deref();
                         crate::extractor::register_entities(&mut idx, &g.entities, repo, path);
-                        crate::extractor::resolve_call_refs(
+                        let imports = structural
+                            .as_ref()
+                            .map(|se| se.imports.clone())
+                            .unwrap_or_default();
+                        g.unresolved = engram_code::resolve_refs(
                             &mut idx,
                             &mut g.relationships,
                             repo,
                             path,
+                            &imports,
                         );
                     }
                     // Persist the graph + entities + relationships.

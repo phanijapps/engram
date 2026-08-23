@@ -185,7 +185,9 @@ impl TreeSitterChunker {
         // calls that would pollute the graph with noise.
         let mut edges = Vec::new();
         for (call_line, callee) in &call_sites {
-            if !entity_names.contains(callee) {
+            // Dotted references match known entities by their bare tail.
+            let tail = callee.rsplit('.').next().unwrap_or(callee);
+            if !entity_names.contains(tail) {
                 continue;
             }
             for (start, end, caller) in &fn_spans {
@@ -394,6 +396,35 @@ fn has_declaration_descendant(node: &tree_sitter::Node, kind_map: &HashMap<&str,
 /// Walks the AST collecting: (1) function declaration spans for scope tracking,
 /// and (2) call-expression sites with their callee names (not filtered — the
 /// caller decides which to keep).
+
+/// Reference name for a call site: the callee node's full dotted text with
+/// `self`/`Self` prefixes stripped (`self.store.save` → `store.save`);
+/// non-dotted calls return the bare callee name.
+fn dotted_reference(full_text: &str, bare_callee: &str) -> String {
+    if !full_text.contains('.') {
+        return bare_callee.to_owned();
+    }
+    let segments: Vec<&str> = full_text.split('.').filter(|s| !s.is_empty()).collect();
+    if segments.len() < 2 {
+        return bare_callee.to_owned();
+    }
+    // Only keep a hint when the text really is a receiver chain ending in
+    // the callee identifier (guards against calls inside strings/paths).
+    let name = segments[segments.len() - 1];
+    if name != bare_callee {
+        return bare_callee.to_owned();
+    }
+    // Closest non-self segment before the callee carries the hint.
+    let mut hint_idx = segments.len() - 2;
+    while hint_idx > 0 && matches!(segments[hint_idx], "self" | "Self") {
+        hint_idx -= 1;
+    }
+    if matches!(segments[hint_idx], "self" | "Self") {
+        return bare_callee.to_owned();
+    }
+    format!("{}.{}", segments[hint_idx], name)
+}
+
 fn collect_calls_and_spans(
     node: &tree_sitter::Node,
     source: &[u8],
@@ -429,7 +460,13 @@ fn collect_calls_and_spans(
         if let Some(callee_node) = callee_node {
             let callee = extract_name(&callee_node, source);
             if !callee.is_empty() {
-                call_sites.push((node.start_position().row, callee));
+                // Dotted callees keep their receiver hint as-written
+                // (`self.store.save` → `store.save`): resolution (Phase 2)
+                // tries `Store::save` through the hint before the bare
+                // ladder. `self`/`Self` receivers carry no hint.
+                let full = callee_node.utf8_text(source).unwrap_or("");
+                let reference = dotted_reference(full, &callee);
+                call_sites.push((node.start_position().row, reference));
             }
         }
     }
@@ -804,6 +841,43 @@ fn extract_inheritance(
             }
         }
         _ => {}
+    }
+}
+
+#[cfg(test)]
+mod dotted_reference_tests {
+    use super::*;
+
+    fn calls(source: &str, ext: &str, names: &[&str]) -> Vec<(String, String)> {
+        let set: std::collections::HashSet<String> =
+            names.iter().map(|n| (*n).to_owned()).collect();
+        TreeSitterChunker::new()
+            .expect("chunker")
+            .extract_calls(source, ext, &set)
+            .expect("calls")
+    }
+
+    #[test]
+    fn dotted_reference_keeps_receiver_hint() {
+        assert_eq!(dotted_reference("self.store.save", "save"), "store.save");
+        assert_eq!(dotted_reference("self.store.save", "wrong"), "wrong");
+        assert_eq!(dotted_reference("self.save", "save"), "save");
+        assert_eq!(dotted_reference("save", "save"), "save");
+        assert_eq!(dotted_reference("client.db.query", "query"), "db.query");
+    }
+
+    #[test]
+    fn rust_method_calls_carry_their_receiver_hint() {
+        let source = "impl Engine {\n    fn drive(&self) {\n        self.store.save();\n    }\n}\nstruct Store;\nimpl Store {\n    fn save(&self) {}\n}\n";
+        let edges = calls(
+            source,
+            "rs",
+            &["save", "drive", "Store::save", "Engine::drive"],
+        );
+        assert!(
+            edges.iter().any(|(_caller, callee)| callee == "store.save"),
+            "edges: {edges:?}"
+        );
     }
 }
 

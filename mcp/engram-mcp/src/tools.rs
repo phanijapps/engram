@@ -1634,11 +1634,15 @@ impl Store {
             .unwrap();
         let q = app.provider.require_knowledge_query().expect("handle");
         let rels = block_on(q.list_relationships(&app.scope)).unwrap();
+        // Phase 2: the object name is the reference as-written at the call
+        // site (`store.save`); the receiver hint resolves its id to the
+        // `Store::save` entity.
         assert!(
             rels.iter().any(|r| r.predicate == "calls"
                 && r.subject.name.as_deref() == Some("Engine::drive")
-                && r.object.name.as_deref() == Some("Store::save")),
-            "receiver call Engine::drive -> Store::save should be extracted: {rels:?}"
+                && r.object.name.as_deref() == Some("store.save")
+                && r.object.id.is_some()),
+            "receiver call Engine::drive -> store.save (resolved) should be extracted: {rels:?}"
         );
         assert!(
             rels.iter().any(|r| r.predicate == "calls"

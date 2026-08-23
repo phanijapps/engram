@@ -10,9 +10,11 @@
 pub mod edges;
 pub mod identity;
 pub mod parser;
+pub mod resolution;
 
 pub use edges::{StructuralEdges, contains_pairs};
 pub use identity::{Resolution, SymbolCandidate, SymbolIndex, bare_tail, qualified_name};
 pub use parser::chunking::{ChunkCandidate, Chunker};
 pub use parser::code_symbol::CodeSymbolChunker;
 pub use parser::tree_sitter_chunker::TreeSitterChunker;
+pub use resolution::resolve_refs;

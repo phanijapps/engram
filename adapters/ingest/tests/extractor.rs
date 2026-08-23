@@ -286,6 +286,85 @@ fn cross_file_calls_resolve_after_qualification() {
         Some(foo_id),
         "cross-file callee must resolve to A's foo entity id"
     );
+    assert!(
+        ext_b.unresolved.is_empty(),
+        "resolved references must not appear in the ledger: {:?}",
+        ext_b.unresolved
+    );
+}
+
+/// RFC-0020 Phase 2 ledger: a reference to a symbol nothing defines is
+/// recorded as a pending unresolved reference instead of being dropped.
+#[test]
+fn unresolved_reference_lands_in_the_ledger() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
+    let request = DocumentIngestRequest {
+        source_kind: SourceKind::Filesystem,
+        source_name: "demo".to_owned(),
+        scope: scope(),
+        document_kind: SourceDocumentKind::Code,
+        document: DocumentMetadata {
+            path: Some("src/caller.rs".to_owned()),
+            ..Default::default()
+        },
+        text: "fn run() {}
+"
+        .to_owned(),
+        policy: policy(),
+        actor: Actor {
+            id: Id::from("agent-1"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        },
+        stable_source_key: Some("my-repo".to_owned()),
+        source_metadata: None,
+    };
+    let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
+    let mut index = engram_code::SymbolIndex::new();
+    let mut extracted = block_on(GraphExtractor::new().extract_into(
+        &store,
+        &ingested.source,
+        &ingested.document,
+        &ingested.chunks,
+        Some(&mut index),
+    ))
+    .expect("extract");
+    // Inject a name-only call edge to an undefined symbol (mirrors what the
+    // scanner would thread from AST extraction of a ghost call).
+    extracted.relationships.push(KnowledgeRelationship {
+        id: Id::from("rel-test-ghost"),
+        graph_id: Some(extracted.graph.id),
+        subject: EntityRef {
+            id: extracted.entities.first().map(|e| e.id.clone()),
+            kind: None,
+            name: Some("run".to_owned()),
+            aliases: Vec::new(),
+        },
+        predicate: "calls".to_owned(),
+        object: EntityRef {
+            id: None,
+            kind: None,
+            name: Some("ghost_fn".to_owned()),
+            aliases: Vec::new(),
+        },
+        scope: scope(),
+        evidence: Vec::new(),
+        confidence: None,
+        provenance: extracted.graph.provenance,
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        archived_at: None,
+    });
+    let ledger = engram_ingest::resolve_call_refs(&index, &mut extracted.relationships, None, None);
+    assert_eq!(ledger.len(), 1, "ghost reference must be ledgered");
+    assert_eq!(ledger[0].reference_name, "ghost_fn");
+    assert_eq!(
+        ledger[0].status,
+        engram_domain::UnresolvedReferenceStatus::Pending
+    );
+    assert!(ledger[0].candidates.is_empty());
 }
 
 #[test]

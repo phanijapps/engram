@@ -234,10 +234,11 @@ fn code_entities_carry_logical_names() {
 #[test]
 fn cross_file_calls_resolve_after_qualification() {
     let store = SqlKnowledgeStore::open_in_memory().expect("open store");
-    let mut index: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut index = engram_code::SymbolIndex::new();
 
     // Doc A defines `foo`. extract_into registers it under both the qualified
-    // name and the bare tail in the shared cross-file index (RFC-0020 T2).
+    // name and the bare tail as a candidate carrying repo/path discriminators
+    // (RFC-0020 Phase 2 multi-candidate symbol table).
     let a = ingest_code(&store, "repo", "a.rs", "fn foo() {}\n");
     let ext_a = block_on(GraphExtractor::new().extract_into(
         &store,
@@ -256,7 +257,10 @@ fn cross_file_calls_resolve_after_qualification() {
         .to_string();
     // The bare secondary key resolves to foo's id — the mechanism that lets a
     // cross-file AST callee (bare "foo") resolve post-qualification.
-    assert_eq!(index.get("foo"), Some(&foo_id));
+    assert!(matches!(
+        index.resolve("foo", None, None),
+        engram_code::Resolution::Resolved(ref c) if c.id == foo_id
+    ));
 
     // Doc B calls foo (cross-file). extract_with_calls forms a bar->foo edge
     // with a bare, unresolved object ref; the shared index resolves it (this
@@ -270,15 +274,7 @@ fn cross_file_calls_resolve_after_qualification() {
             Some(&[("bar".to_string(), "foo".to_string())]),
         )
         .expect("extract B");
-    for rel in &mut ext_b.relationships {
-        if rel.predicate == "calls" && rel.object.id.is_none() {
-            if let Some(name) = &rel.object.name {
-                if let Some(id) = index.get(name) {
-                    rel.object.id = Some(Id::from(id.clone()));
-                }
-            }
-        }
-    }
+    engram_ingest::resolve_call_refs(&index, &mut ext_b.relationships, None, None);
     let bar_calls_foo = ext_b
         .relationships
         .iter()

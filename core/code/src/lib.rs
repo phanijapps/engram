@@ -7,8 +7,10 @@
 //! I/O, git, storage, async runtime, or LLM; `adapters/ingest` consumes it to
 //! build the code graph.
 
+pub mod identity;
 pub mod parser;
 
+pub use identity::{Resolution, SymbolCandidate, SymbolIndex, bare_tail, qualified_name};
 pub use parser::chunking::{ChunkCandidate, Chunker};
 pub use parser::code_symbol::CodeSymbolChunker;
 pub use parser::tree_sitter_chunker::TreeSitterChunker;

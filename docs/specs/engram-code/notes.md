@@ -25,3 +25,18 @@
   `prototype/frontend` (React JSX typing) both before and after T1;
   `prototype/frontend` declares no engram dependencies. Packages T1 touches
   (`packages/contracts`, `engram-cc/frontend`) typecheck clean.
+
+## 2026-08-23 (T3)
+
+- **Pre-existing failure, not ours:** `extractor::code_entities_carry_logical_names`
+  fails at the T2 commit in a clean worktree (`Invalid column type Null …
+  archived_at` on the second `extract_into` — a store-side ADR-0027 read,
+  in-flight sqlite work territory). Same classification as the
+  contract_ingestion set. The other three extractor tests — including the
+  Phase-2-updated `cross_file_calls_resolve_after_qualification` — pass.
+- `register_entities` / `resolve_call_refs` are `pub` on the extractor + lib
+  whitelist (scanner-facing API; the integration test mirrors the scanner).
+- Rust receiver chains required adding `impl_item → "impl"` to `rust_kinds`
+  (parse_symbol already anticipated `impl` anchors). Trait impls name the
+  concrete type (`type` field), so `impl Display for Foo` methods are
+  `Foo::fmt`.

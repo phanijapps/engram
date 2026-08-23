@@ -10,6 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
+use engram_code::{Resolution, SymbolCandidate, SymbolIndex};
 use engram_domain::*;
 use engram_knowledge::{CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
 use serde_json::Value as JsonValue;
@@ -135,13 +136,17 @@ impl GraphExtractor {
                 else {
                     continue;
                 };
-                let Some((kind, bare)) = parse_symbol(anchor) else {
+                let Some((kind, name)) = parse_symbol(anchor) else {
                     continue;
                 };
+                // RFC-0020 Phase 2: `name` is the receiver-qualified logical
+                // name (`Foo::bar`) when the declaration is nested, bare at
+                // top level. Noise filtering applies to the bare tail.
+                let bare = engram_code::bare_tail(&name).unwrap_or(&name).to_owned();
                 if bare.is_empty() || is_noise_symbol(&bare) {
                     continue;
                 }
-                symbols.push((bare.clone(), bare, kind, chunk.text.clone(), chunk_idx));
+                symbols.push((name, bare, kind, chunk.text.clone(), chunk_idx));
             }
         } else {
             // RFC-0020 T3: non-code documents emit NO graph entities — the naive
@@ -151,13 +156,16 @@ impl GraphExtractor {
             // still discover documents (the extract-knowledge op relies on this).
         }
 
-        // Bare→qualified map (first wins) for resolving AST callers/callees,
-        // which treesitter emits as bare names, against the qualified entities.
-        let mut bare_to_qualified: HashMap<String, String> = HashMap::new();
+        // Document symbol table (RFC-0020 Phase 2): bare tail → ALL local
+        // qualified candidates. A unique candidate qualifies the reference;
+        // an ambiguous one stays bare for cross-file resolution (never an
+        // arbitrary pick — the Phase-1 first-wins map is gone).
+        let mut bare_to_qualified: HashMap<String, Vec<String>> = HashMap::new();
         for (qualified, bare, _, _, _) in &symbols {
             bare_to_qualified
                 .entry(bare.clone())
-                .or_insert_with(|| qualified.clone());
+                .or_default()
+                .push(qualified.clone());
         }
 
         // RFC-0020 rev: git provenance (repository/branch/revision) is metadata,
@@ -234,13 +242,13 @@ impl GraphExtractor {
                 if caller == callee {
                     continue;
                 }
-                let Some(caller_qual) = bare_to_qualified.get(caller) else {
+                let Some(caller_qual) = local_qualify(&bare_to_qualified, caller) else {
                     continue;
                 };
-                let Some(&subject_index) = index.get(caller_qual) else {
+                let Some(&subject_index) = index.get(caller_qual.as_str()) else {
                     continue;
                 };
-                let object_qual = bare_to_qualified.get(callee).cloned();
+                let object_qual = local_qualify(&bare_to_qualified, callee);
                 let object_key = object_qual.clone().unwrap_or_else(|| callee.clone());
                 if !seen.insert((caller_qual.clone(), object_key.clone())) {
                     continue;
@@ -256,7 +264,7 @@ impl GraphExtractor {
                     }
                 };
                 relationships.push(KnowledgeRelationship {
-                    id: relationship_id(&graph_id, caller_qual, &object_key),
+                    id: relationship_id(&graph_id, &caller_qual, &object_key),
                     graph_id: Some(graph_id.clone()),
                     subject: entity_ref(&entities[subject_index]),
                     predicate: "calls".to_owned(),
@@ -404,7 +412,7 @@ impl GraphExtractor {
         source: &KnowledgeSource,
         document: &SourceDocument,
         chunks: &[KnowledgeChunk],
-        name_index: Option<&mut HashMap<String, String>>,
+        name_index: Option<&mut SymbolIndex>,
     ) -> CoreResult<ExtractedGraph>
     where
         R: KnowledgeRepository + KnowledgeGraphRepository + ?Sized,
@@ -412,22 +420,19 @@ impl GraphExtractor {
         let mut extracted = Self.extract(source, document, chunks)?;
 
         // Cross-file edge resolution (C1): fill name-only calls object refs
-        // against the caller-maintained global name→id index. Each entity is
-        // registered under both its qualified name and its bare tail so AST
-        // callees (bare) resolve (RFC-0020 T2).
+        // against the caller-maintained scope-wide symbol table. Each entity
+        // is registered under both its qualified name and its bare tail with
+        // repo/path discriminators; resolution prefers same-document then
+        // same-repo candidates (RFC-0020 Phase 2).
         if let Some(index) = name_index {
-            for entity in &extracted.entities {
-                register_in_name_index(index, entity);
-            }
-            for rel in &mut extracted.relationships {
-                if rel.predicate == "calls" && rel.object.id.is_none() {
-                    if let Some(name) = &rel.object.name {
-                        if let Some(id) = index.get(name) {
-                            rel.object.id = Some(Id::from(id.clone()));
-                        }
-                    }
-                }
-            }
+            let repo = source
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get(REPOSITORY_KEY))
+                .and_then(|v| v.as_str());
+            let path = document.path.as_deref();
+            register_entities(index, &extracted.entities, repo, path);
+            resolve_call_refs(index, &mut extracted.relationships, repo, path);
         }
 
         repository.put_graph(extracted.graph.clone()).await?;
@@ -471,20 +476,62 @@ fn parse_symbol(anchor: &str) -> Option<(EntityKind, String)> {
     Some((kind, name.to_owned()))
 }
 
-/// Registers an entity in the cross-file name index under BOTH its qualified
-/// name (primary) and its bare tail (secondary), so AST callees — which
-/// treesitter emits as bare names — resolve against qualified entities
-/// (RFC-0020 T2). Bare collisions are last-write-wins (a documented Phase-1
-/// degradation: a colliding bare callee may resolve to the wrong target;
-/// removed by a Phase 2 scope-wide symbol table).
-pub(crate) fn register_in_name_index(
-    index: &mut HashMap<String, String>,
-    entity: &KnowledgeEntity,
+/// Unique local qualified candidate for a bare name, if exactly one exists.
+/// Ambiguous bare names (two receivers defining the same tail in one file)
+/// intentionally return None — the reference stays bare for cross-file
+/// resolution instead of an arbitrary pick.
+fn local_qualify(bare_to_qualified: &HashMap<String, Vec<String>>, bare: &str) -> Option<String> {
+    let candidates = bare_to_qualified.get(bare)?;
+    match candidates.as_slice() {
+        [only] => Some(only.clone()),
+        _ => None,
+    }
+}
+
+/// Registers entities in the scope-wide symbol table under BOTH their
+/// qualified name (primary) and bare tail (secondary), so AST callees —
+/// which treesitter emits as bare names — resolve against qualified
+/// entities. Appends per key: collisions coexist as candidates with their
+/// repo/path discriminators (RFC-0020 Phase 2 multi-candidate table — the
+/// Phase-1 last-write-wins degradation is gone).
+pub fn register_entities(
+    index: &mut SymbolIndex,
+    entities: &[KnowledgeEntity],
+    repo: Option<&str>,
+    path: Option<&str>,
 ) {
-    index.insert(entity.name.clone(), entity.id.to_string());
-    if let Some(bare) = entity.name.rsplit("::").next() {
-        if bare != entity.name {
-            index.insert(bare.to_owned(), entity.id.to_string());
+    for entity in entities {
+        index.register(
+            &entity.name,
+            SymbolCandidate {
+                id: entity.id.to_string(),
+                repo: repo.map(str::to_owned),
+                path: path.map(str::to_owned),
+            },
+        );
+    }
+}
+
+/// Fills name-only `calls` object refs against the scope-wide symbol table,
+/// preferring same-document then same-repo candidates. Ambiguous or unknown
+/// references stay name-only (recorded by the Phase-2 ledger, T5).
+pub fn resolve_call_refs(
+    index: &SymbolIndex,
+    relationships: &mut [KnowledgeRelationship],
+    repo: Option<&str>,
+    path: Option<&str>,
+) {
+    for rel in relationships.iter_mut() {
+        if rel.predicate == "calls" && rel.object.id.is_none() {
+            let Some(name) = rel.object.name.clone() else {
+                continue;
+            };
+            match index.resolve(&name, path, repo) {
+                Resolution::Resolved(candidate) => {
+                    rel.object.id = Some(Id::from(candidate.id));
+                }
+                Resolution::Ambiguous(_) | Resolution::NotFound => {}
+            }
         }
     }
 }

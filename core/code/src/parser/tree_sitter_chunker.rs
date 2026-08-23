@@ -258,6 +258,20 @@ fn walk_declarations(
     kind_map: &HashMap<&str, &str>,
     chunks: &mut Vec<ChunkCandidate>,
 ) {
+    walk_declarations_with_receivers(node, source, kind_map, &[], chunks);
+}
+
+/// Receiver-aware walk (RFC-0020 Phase 2): a declaration nested inside other
+/// declarations (a method inside `impl Foo`, a nested `fn`) carries its
+/// enclosing chain in the anchor — `fn Foo::bar` — so the extractor can form
+/// receiver-qualified entity names. Top-level declarations stay bare.
+fn walk_declarations_with_receivers(
+    node: &tree_sitter::Node,
+    source: &[u8],
+    kind_map: &HashMap<&str, &str>,
+    receivers: &[String],
+    chunks: &mut Vec<ChunkCandidate>,
+) {
     let kind = node.kind();
     if let Some(keyword) = kind_map.get(kind) {
         // Try the `name` field first (works for most languages).
@@ -280,6 +294,13 @@ fn walk_declarations(
                 } else {
                     node.utf8_text(source).unwrap_or("").to_owned()
                 };
+                // Receiver-qualified anchor: `fn Foo::bar` inside `impl Foo`,
+                // bare `fn parse` at the top level.
+                let qualified = if receivers.is_empty() {
+                    name_text.clone()
+                } else {
+                    format!("{}::{}", receivers.join("::"), name_text)
+                };
                 chunks.push(ChunkCandidate {
                     kind: KnowledgeChunkKind::CodeSymbol,
                     text,
@@ -289,16 +310,31 @@ fn walk_declarations(
                         end_line: Some(end_line),
                         start_offset: None,
                         end_offset: None,
-                        anchor: Some(format!("{keyword} {name_text}")),
+                        anchor: Some(format!("{keyword} {qualified}")),
                     }),
                 });
+                // Children of this declaration descend with it on the
+                // receiver chain (its bare name, not the qualified form).
+                let mut child_receivers = receivers.to_vec();
+                child_receivers.push(name_text);
+                let mut cursor = node.walk();
+                for child in node.named_children(&mut cursor) {
+                    walk_declarations_with_receivers(
+                        &child,
+                        source,
+                        kind_map,
+                        &child_receivers,
+                        chunks,
+                    );
+                }
+                return;
             }
         }
     }
-    // Recurse into named children.
+    // Not a recognized declaration — recurse with the unchanged chain.
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
-        walk_declarations(&child, source, kind_map, chunks);
+        walk_declarations_with_receivers(&child, source, kind_map, receivers, chunks);
     }
 }
 
@@ -416,6 +452,11 @@ fn rust_kinds() -> HashMap<&'static str, &'static str> {
         ("struct_item", "struct"),
         ("enum_item", "enum"),
         ("trait_item", "trait"),
+        // RFC-0020 Phase 2: impl blocks are declarations too — the impl target
+        // becomes the receiver chain for its methods (`impl Foo { fn bar }` →
+        // anchor `fn Foo::bar`). `impl Trait for Type` names the concrete type
+        // (the `type` field), so trait-impl methods are `Type::method`.
+        ("impl_item", "impl"),
     ]
     .into()
 }
@@ -543,4 +584,104 @@ fn php_kinds() -> HashMap<&'static str, &'static str> {
         ("method_declaration", "fn"),
     ]
     .into()
+}
+
+#[cfg(test)]
+mod receiver_chain_tests {
+    use super::*;
+
+    fn anchors_for(source: &str, ext: &str) -> Vec<String> {
+        let chunker = TreeSitterChunker::new().expect("chunker");
+        let candidates = chunker.chunk_with_ext(source, ext).expect("chunk ok");
+        candidates
+            .iter()
+            .map(|c| {
+                c.location
+                    .as_ref()
+                    .and_then(|l| l.anchor.clone())
+                    .unwrap_or_default()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn rust_methods_carry_their_impl_receiver() {
+        let source = "impl Foo {\n    fn bar(&self) {}\n    fn baz(&self) {}\n}\n";
+        let anchors = anchors_for(source, "rs");
+        assert!(
+            anchors.contains(&"impl Foo".to_owned()),
+            "anchors: {anchors:?}"
+        );
+        assert!(
+            anchors.contains(&"fn Foo::bar".to_owned()),
+            "anchors: {anchors:?}"
+        );
+        assert!(
+            anchors.contains(&"fn Foo::baz".to_owned()),
+            "anchors: {anchors:?}"
+        );
+    }
+
+    #[test]
+    fn trait_impl_methods_use_the_concrete_type() {
+        let source = "impl Display for Foo {\n    fn fmt(&self) {}\n}\n";
+        let anchors = anchors_for(source, "rs");
+        assert!(
+            anchors.contains(&"fn Foo::fmt".to_owned()),
+            "anchors: {anchors:?}"
+        );
+    }
+
+    #[test]
+    fn nested_declarations_chain_all_receivers() {
+        let source = "struct Outer {\n}\nimpl Outer {\n    fn run(&self) {}\n}\n";
+        let anchors = anchors_for(source, "rs");
+        assert!(
+            anchors.contains(&"struct Outer".to_owned()),
+            "anchors: {anchors:?}"
+        );
+        assert!(
+            anchors.contains(&"impl Outer".to_owned()),
+            "anchors: {anchors:?}"
+        );
+        assert!(
+            anchors.contains(&"fn Outer::run".to_owned()),
+            "anchors: {anchors:?}"
+        );
+    }
+
+    #[test]
+    fn top_level_functions_stay_bare() {
+        let source = "fn parse(input: &str) {}\n";
+        let anchors = anchors_for(source, "rs");
+        assert_eq!(anchors, vec!["fn parse".to_owned()]);
+    }
+
+    #[test]
+    fn python_methods_carry_their_class_receiver() {
+        let source = "class Config:\n    def parse(self):\n        pass\n";
+        let anchors = anchors_for(source, "py");
+        assert!(
+            anchors.contains(&"class Config".to_owned()),
+            "anchors: {anchors:?}"
+        );
+        assert!(
+            anchors.contains(&"def Config::parse".to_owned()),
+            "anchors: {anchors:?}"
+        );
+    }
+
+    #[test]
+    fn typescript_methods_carry_their_class_receiver() {
+        let source = "class Greeter {\n    greet(): void {}\n}\n";
+        let anchors = anchors_for(source, "ts");
+        assert!(
+            anchors.contains(&"class Greeter".to_owned()),
+            "anchors: {anchors:?}"
+        );
+        assert!(
+            anchors.contains(&"fn Greeter::greet".to_owned()),
+            "anchors: {anchors:?}"
+        );
+    }
 }

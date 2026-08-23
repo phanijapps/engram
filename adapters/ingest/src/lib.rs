@@ -30,7 +30,7 @@ pub use contract::{detect_and_parse_openapi, normalize_contract_key};
 pub use contract_entities::ParsedOperation;
 pub use engram_code::CodeSymbolChunker;
 pub use engram_code::TreeSitterChunker;
-pub use extractor::{ExtractedGraph, GraphExtractor};
+pub use extractor::{ExtractedGraph, GraphExtractor, register_entities, resolve_call_refs};
 pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
 pub use git::GitSourceReader;
 pub use git_detect::detect_git;

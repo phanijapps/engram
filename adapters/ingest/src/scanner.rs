@@ -6,7 +6,7 @@
 //! tested; the security controls are ported from `demo/backend/src/decide.ts`
 //! and must not be relaxed.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -362,8 +362,20 @@ where
                             c.location
                                 .as_ref()
                                 .and_then(|l| l.anchor.as_deref())
-                                .and_then(|a| a.split_once(' ').map(|x| x.1).map(|s| s.to_owned()))
+                                // Anchor name part — receiver-qualified (`Foo::bar`)
+                                // for nested declarations. Emit BOTH the qualified
+                                // form and the bare tail: AST callees are bare, so
+                                // extract_calls matches the tail (RFC-0020 Phase 2).
+                                .and_then(|a| a.split_once(' ').map(|x| x.1))
+                                .map(|name| {
+                                    let mut names = vec![name.to_owned()];
+                                    if let Some(tail) = engram_code::bare_tail(name) {
+                                        names.push(tail.to_owned());
+                                    }
+                                    names
+                                })
                         })
+                        .flatten()
                         .collect::<Vec<String>>(),
                 )
             })
@@ -371,7 +383,8 @@ where
             .collect(),
     );
 
-    let name_index: Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(HashMap::new()));
+    let name_index: Arc<Mutex<engram_code::SymbolIndex>> =
+        Arc::new(Mutex::new(engram_code::SymbolIndex::new()));
     let outcomes: Vec<(String, Outcome, Vec<KnowledgeEntity>)> = to_ingest
         .par_iter()
         .map(|item| {
@@ -477,18 +490,20 @@ where
                 Ok(mut g) => {
                     // C1: cross-file resolution — register entities + resolve refs.
                     if let Ok(mut idx) = name_index.lock() {
-                        for entity in &g.entities {
-                            crate::extractor::register_in_name_index(&mut idx, entity);
-                        }
-                        for rel in &mut g.relationships {
-                            if rel.predicate == "calls" && rel.object.id.is_none() {
-                                if let Some(name) = &rel.object.name {
-                                    if let Some(id) = idx.get(name) {
-                                        rel.object.id = Some(Id::from(id.clone()));
-                                    }
-                                }
-                            }
-                        }
+                        let repo = ingested
+                            .source
+                            .metadata
+                            .as_ref()
+                            .and_then(|m| m.get(crate::source_key::REPOSITORY_KEY))
+                            .and_then(|v| v.as_str());
+                        let path = ingested.document.path.as_deref();
+                        crate::extractor::register_entities(&mut idx, &g.entities, repo, path);
+                        crate::extractor::resolve_call_refs(
+                            &mut idx,
+                            &mut g.relationships,
+                            repo,
+                            path,
+                        );
                     }
                     // Persist the graph + entities + relationships.
                     let _ = block_on(async {

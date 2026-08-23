@@ -1604,7 +1604,9 @@ mod tests {
 
     /// Regression: receiver-method calls (self.store.save(), self.process())
     /// are extracted as call edges. Before the fix, `extract_name` returned the
-    /// receiver ("self") instead of the method name.
+    /// receiver ("self") instead of the method name. RFC-0020 Phase 2: nested
+    /// methods carry their receiver in the entity name (`Engine::drive`), so
+    /// the edge endpoints are receiver-qualified.
     #[test]
     fn scan_repo_extracts_receiver_method_calls() {
         let dir = tempfile::tempdir().unwrap();
@@ -1634,15 +1636,15 @@ impl Store {
         let rels = block_on(q.list_relationships(&app.scope)).unwrap();
         assert!(
             rels.iter().any(|r| r.predicate == "calls"
-                && r.subject.name.as_deref() == Some("drive")
-                && r.object.name.as_deref() == Some("save")),
-            "receiver call drive->save should be extracted: {rels:?}"
+                && r.subject.name.as_deref() == Some("Engine::drive")
+                && r.object.name.as_deref() == Some("Store::save")),
+            "receiver call Engine::drive -> Store::save should be extracted: {rels:?}"
         );
         assert!(
             rels.iter().any(|r| r.predicate == "calls"
-                && r.subject.name.as_deref() == Some("drive")
-                && r.object.name.as_deref() == Some("process")),
-            "receiver call drive->process should be extracted: {rels:?}"
+                && r.subject.name.as_deref() == Some("Engine::drive")
+                && r.object.name.as_deref() == Some("Engine::process")),
+            "receiver call Engine::drive -> Engine::process should be extracted: {rels:?}"
         );
     }
 

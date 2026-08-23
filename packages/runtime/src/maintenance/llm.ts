@@ -29,41 +29,10 @@ export interface LlmCompleteOptions {
   tools?: Tool[];
 }
 
-export interface LlmAgentMessage {
-  role: "user" | "assistant" | "toolResult";
-  content?: unknown;
-  toolCallId?: string;
-  toolName?: string;
-  isError?: boolean;
-  timestamp: number;
-}
-
-export interface LlmAgentContent {
-  type: string;
-  text?: string;
-  name?: string;
-  arguments?: unknown;
-  id?: string;
-}
-
-export interface LlmAgentResult {
-  content: LlmAgentContent[];
-  text: string;
-  toolCalls: LlmToolCall[];
-}
-
 export interface LlmProvider {
   readonly provider: string;
   readonly model: string;
   complete(opts: LlmCompleteOptions): Promise<LlmCompleteResult>;
-  /** Agentic round-trip: takes a full message history + tools, returns the
-   *  raw model response (content blocks: text + toolCall). The caller
-   *  executes tool calls + pushes toolResult messages for the next round. */
-  completeAgent(opts: {
-    systemPrompt?: string;
-    messages: LlmAgentMessage[];
-    tools?: Tool[];
-  }): Promise<LlmAgentResult>;
 }
 
 export interface LlmProviderConfig {
@@ -94,13 +63,6 @@ export function createLlmProvider(
       provider: config.provider,
       model: config.model,
       complete: config.completeOverride,
-      completeAgent: async ({ systemPrompt, messages, tools }) => {
-        // For overrides (tests), delegate to the simple complete in a loop.
-        const lastUser = [...messages].reverse().find((m) => m.role === "user");
-        const userText = typeof lastUser?.content === "string" ? lastUser.content : JSON.stringify(lastUser?.content ?? "");
-        const r = await config.completeOverride!({ ...(systemPrompt !== undefined ? { systemPrompt } : {}), userText, ...(tools !== undefined ? { tools } : {}) });
-        return { content: [{ type: "text", text: r.text }, ...r.toolCalls.map((tc) => ({ type: "toolCall", name: tc.name, arguments: tc.arguments }))], text: r.text, toolCalls: r.toolCalls };
-      },
     };
   }
   if (process.env.PI_DRY_RUN === "1") {
@@ -165,29 +127,6 @@ function piMonoProvider(config: LlmProviderConfig): LlmProvider {
         .join("");
       return { toolCalls, text };
     },
-    completeAgent: async ({ systemPrompt, messages, tools }) => {
-      const context: Context = {
-        messages: messages as Context["messages"],
-        ...(systemPrompt !== undefined ? { systemPrompt } : {}),
-        ...(tools && tools.length > 0 ? { tools } : {}),
-      };
-      const resp = await models.complete(model, context, auth);
-      const errMsg2 = (resp as { errorMessage?: unknown }).errorMessage;
-      if (typeof errMsg2 === "string" && errMsg2.length > 0) {
-        throw new Error(`LLM agent call failed (${config.provider}/${config.model}): ${errMsg2}`);
-      }
-      const ablocks = (resp.content ?? []) as LlmAgentContent[];
-      return {
-        content: ablocks,
-        text: ablocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join(""),
-        toolCalls: ablocks
-          .filter((b) => b.type === "toolCall" && typeof b.name === "string")
-          .map((b) => ({
-            name: b.name as string,
-            arguments: (b.arguments as Record<string, unknown> | undefined) ?? {},
-          })),
-      };
-    },
   };
 }
 
@@ -218,22 +157,13 @@ function dryRunProvider(config: LlmProviderConfig): LlmProvider {
     provider: config.provider,
     model: config.model,
     complete: async ({ tools }) => {
+      // One toolCall per provided tool with empty args — exercises the maintenance
+      // op wiring (the op writes a record per toolCall) without tokens/network.
       const toolCalls: LlmToolCall[] = (tools ?? []).map((t) => ({
         name: t.name,
         arguments: {},
       }));
       return { toolCalls, text: "" };
-    },
-    completeAgent: async ({ tools }) => {
-      const toolCalls: LlmToolCall[] = (tools ?? []).map((t) => ({
-        name: t.name,
-        arguments: {},
-      }));
-      return {
-        content: [{ type: "text", text: "" }, ...toolCalls.map((tc) => ({ type: "toolCall", name: tc.name, arguments: tc.arguments }))],
-        text: "",
-        toolCalls,
-      };
     },
   };
 }

@@ -1,6 +1,7 @@
 //! Parsing-layer chunk contract (moved from `adapters/ingest/src/chunker.rs`;
-//! transitional home while the ADR-0028 `parse()`/`resolve()` API lands with
-//! Phase-2 identity).
+//! the ADR-0028 `parse()`/`resolve()` API reshapes this when the ingest
+//! cutover lands (T8) — text/markdown chunkers in the adapter keep
+//! implementing this trait until then).
 
 use engram_domain::{KnowledgeChunkKind, SourceLocation};
 use engram_runtime::CoreResult;

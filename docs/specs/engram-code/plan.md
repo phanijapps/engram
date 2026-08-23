@@ -268,8 +268,8 @@ Approach: final sweep — product doc, specs README status, any drift fixes.
   moves only if/when the extractor itself relocates, T8); (2) the polyglot
   fixture repo is deferred to T5/T8 — T3/T4 verified with inline fixtures
   because multi-file scans hit the pre-existing shared-Repository upsert bug
-  (notes.md); (3) T4 asserts edge presence, not counts — counts are pinned by
-  the per-language unit tests in `engram-code`; (4) `imports` is contracted
+  (notes.md); (3) T4 asserts edge presence at both levels (scan verticals + unit
+  tests); exact counts land with the T8 multi-file fixture; (4) `imports` is contracted
   as file → module path (domain model reworded); `file_dependencies` (T10)
   owns module-path → file resolution.
 - 2026-08-23: pass 2 (1 Major, 3 Minor) — the "existing tool-parity test"

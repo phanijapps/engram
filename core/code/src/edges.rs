@@ -181,6 +181,26 @@ mod extraction_tests {
     }
 
     #[test]
+    fn python_comma_imports_fan_out() {
+        let edges = structural("import os, sys as system\n", "py");
+        assert!(
+            edges.imports.contains(&"os".to_owned()),
+            "{:?}",
+            edges.imports
+        );
+        assert!(
+            edges.imports.contains(&"sys".to_owned()),
+            "{:?}",
+            edges.imports
+        );
+        assert!(
+            !edges.imports.iter().any(|i| i.contains(" as ")),
+            "{:?}",
+            edges.imports
+        );
+    }
+
+    #[test]
     fn go_import_paths() {
         let edges = structural("package main\nimport \"fmt\"\nfunc main() {}\n", "go");
         assert!(edges.imports.contains(&"fmt".to_owned()));

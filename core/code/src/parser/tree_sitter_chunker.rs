@@ -632,10 +632,9 @@ fn walk_structural(
     let kind = node.kind();
     // Imports: language-specific node kinds; the path text is normalized by
     // `import_path`.
-    if let Some(path) = import_path(node, source, ext) {
-        if !path.is_empty() {
-            edges.imports.push(path);
-        }
+    let paths = import_paths(node, source, ext);
+    if !paths.is_empty() {
+        edges.imports.extend(paths);
     } else if kind_map.contains_key(kind) {
         let name_node = node
             .child_by_field_name("name")
@@ -667,10 +666,11 @@ fn walk_structural(
     }
 }
 
-/// Import path for a node, when the node is an import statement for the
-/// language. Returns `None` for non-import nodes. Kind is matched before any
-/// text is sliced (the walk calls this for every AST node).
-fn import_path(node: &tree_sitter::Node, source: &[u8], ext: &str) -> Option<String> {
+/// Import paths for a node, when the node is an import statement for the
+/// language — a Vec so `import a, b` records every module. Empty for
+/// non-import nodes. Kind is matched before any text is sliced (the walk
+/// calls this for every AST node).
+fn import_paths(node: &tree_sitter::Node, source: &[u8], ext: &str) -> Vec<String> {
     match (ext, node.kind()) {
         ("rs", "use_declaration") => {
             let text = node.utf8_text(source).unwrap_or("").trim();
@@ -681,39 +681,51 @@ fn import_path(node: &tree_sitter::Node, source: &[u8], ext: &str) -> Option<Str
                 .or_else(|| text.strip_prefix("pub(crate) "))
                 .or_else(|| text.strip_prefix("pub(super) "))
                 .unwrap_or(text);
-            let body = body.strip_prefix("use ")?.trim_end_matches(';');
+            let Some(body) = body.strip_prefix("use ").map(|b| b.trim_end_matches(';')) else {
+                return Vec::new();
+            };
             // Grouped uses (`std::io::{Read, Write}`) attribute the group's
             // parent path; plain uses keep the full path.
             let path = body.split('{').next().unwrap_or(body).trim_matches(':');
-            Some(path.to_owned())
+            vec![path.to_owned()]
         }
         ("py", "import_statement") => {
             let text = node.utf8_text(source).unwrap_or("").trim();
-            let body = text.strip_prefix("import ")?;
+            let Some(body) = text.strip_prefix("import ") else {
+                return Vec::new();
+            };
             // `import a, b as c` → one module per comma item, alias stripped.
-            let first = body.split(',').next().unwrap_or(body);
-            Some(first.split(" as ").next().unwrap_or(first).to_owned())
+            body.split(',')
+                .filter_map(|item| item.split(" as ").next().map(|m| m.trim().to_owned()))
+                .filter(|m| !m.is_empty())
+                .collect()
         }
         ("py", "import_from_statement") => {
             let text = node.utf8_text(source).unwrap_or("").trim();
-            let after = text.strip_prefix("from ")?;
-            Some(after.split(" import").next().unwrap_or(after).to_owned())
+            let Some(after) = text.strip_prefix("from ") else {
+                return Vec::new();
+            };
+            vec![after.split(" import").next().unwrap_or(after).to_owned()]
         }
         ("ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs", "import_statement") => {
             // `import { x } from './y'` / `import "z"` → the quoted module,
             // single- or double-quoted.
             let text = node.utf8_text(source).unwrap_or("").trim();
-            let start = text.find('\'').or_else(|| text.find('"'))?;
+            let Some(start) = text.find('\'').or_else(|| text.find('"')) else {
+                return Vec::new();
+            };
             let quote = &text[start..start + 1];
             let rest = &text[start + 1..];
-            let end = rest.find(quote)?;
-            Some(rest[..end].to_owned())
+            let Some(end) = rest.find(quote) else {
+                return Vec::new();
+            };
+            vec![rest[..end].to_owned()]
         }
         ("go", "import_spec") => {
             let text = node.utf8_text(source).unwrap_or("").trim();
-            Some(text.trim_matches('"').to_owned())
+            vec![text.trim_matches('"').to_owned()]
         }
-        _ => None,
+        _ => Vec::new(),
     }
 }
 

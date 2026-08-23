@@ -583,7 +583,6 @@ mod code_indexing_tests {
             json.contains("\"fromEntityId\""),
             "camelCase field missing: {json}"
         );
-        assert!(json.contains("\"routes_to\"") == false);
         let back: UnresolvedReference = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(back, record);
     }

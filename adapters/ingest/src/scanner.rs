@@ -533,7 +533,7 @@ where
                         if !g.unresolved.is_empty() {
                             if let Err(e) = repo.put_unresolved_refs(g.unresolved.clone()).await {
                                 // Sibling pattern of the five warning-tagged
-                                // scans below: surface + count, never swallow.
+                                // scans below: surface, never swallow.
                                 eprintln!(
                                     "[engram-ingest] warning: failed to persist ledger rows for '{rel}': {e}"
                                 );

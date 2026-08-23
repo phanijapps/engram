@@ -881,6 +881,74 @@ Common predicates:
 - `documents`
 - `derived_from`
 - `related_to`
+- `routes_to`
+
+### Code indexing (engram-code, ADR-0028)
+
+Code extraction (the `engram-code` behavior crate, consumed by the ingest
+adapter) emits knowledge entities and relationships under the closed predicate
+vocabulary below. Predicates remain open strings on `KnowledgeRelationship`;
+`CodeEdgeKind` is the typed vocabulary the code extractor is contracted to emit.
+
+#### CodeEdgeKind
+
+Enum (closed; RFC-0020 Phase 2):
+
+- `calls` — function/method invocation edge
+- `imports` — file-to-file import edge
+- `contains` — parent declaration contains member declaration
+- `extends` — class/interface inheritance edge
+- `implements` — class-implements-interface edge
+- `routes_to` — framework route (an `Endpoint`-kind entity) wired to its
+  handler
+
+Code entities use existing `EntityKind` values (`Function`, `Method`, `Class`,
+`Struct`, `Interface`, `Trait`, `Enum`, `TypeAlias`, `Module`, `File`,
+`Repository`, `Endpoint` for framework routes).
+
+#### Code identity rule (RFC-0020 Phase 2)
+
+- `KnowledgeEntity.name` for code symbols is the **receiver-qualified logical
+  name**: `{receiver}::{name}` where a receiver exists (`Impl::method`,
+  `Class::inner`), bare `name` otherwise. Repo, path, and revision are carried
+  as disambiguators in `sourceRefs`/provenance — never in the name
+  (path-qualified names were reverted by RFC-0020's revision note).
+- Cross-file name resolution uses a **scope-wide multi-candidate symbol
+  table**: a name maps to every candidate `{id, repo, path}` it may denote;
+  same-document matches outrank same-repo matches, which outrank returning the
+  full candidate set. No candidate is silently overwritten by another
+  (supersedes the Phase-1 last-write-wins `name_index`).
+
+#### UnresolvedReference
+
+A recorded, best-effort-failed cross-file reference (the honesty ledger for
+code resolution). Rows persist in the knowledge store with the same lifecycle
+as relationships (retracted with their referring document on re-ingest;
+re-attempted by the orphan sweep whenever new symbols land).
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `id` | yes | string | Stable record identifier |
+| `graphId` | no | KnowledgeGraphId | Containing graph, if graph-scoped |
+| `fromEntityId` | yes | string | Referring entity |
+| `referenceName` | yes | string | Name as written at the reference site |
+| `candidates` | no | string[] | Candidate target ids known at record time |
+| `status` | yes | UnresolvedReferenceStatus | `pending` \| `resolved` \| `failed` |
+| `path` | yes | string | Referring file path (disambiguator) |
+| `line` | no | number | Reference site line |
+| `scope` | yes | Scope | Ownership scope |
+| `createdAt` | yes | Timestamp | Creation time |
+| `updatedAt` | no | Timestamp | Last sweep touch |
+
+Rules:
+
+- `pending` → `resolved` when a later ingest defines a unique target; the edge
+  is written and the record flips (the referring file is NOT re-ingested).
+- `pending` → `failed` only by explicit operator action, never automatically.
+- Re-ingesting the referring file retracts its records (they are regenerated
+  by the fresh extraction pass).
 
 ### Graph maintenance (ADR-0027)
 

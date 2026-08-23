@@ -1,6 +1,10 @@
 /* Generated from contracts/v1/schemas/engram-v1.schema.json. Do not edit. */
 
 export type Identifier = string;
+/**
+ * Closed predicate vocabulary emitted by the engram-code extractor (RFC-0020 Phase 2, ADR-0028). KnowledgeRelationship.predicate stays an open string; this is the contracted code set.
+ */
+export type CodeEdgeKind = "calls" | "imports" | "contains" | "extends" | "implements" | "routes_to";
 export type Timestamp = string;
 export type DeleteMode = "delete" | "redact" | "tombstone" | "archive";
 export type EvidenceRef = EvidenceRef1 & {
@@ -72,9 +76,14 @@ export type MemoryEventKind =
   | "contradiction_detected"
   | "hierarchy_built";
 export type MemoryStatus = "active" | "archived" | "redacted" | "forgotten" | "expired";
+/**
+ * Lifecycle of a recorded unresolved cross-file code reference. pending -> resolved (orphan sweep); pending -> failed (operator only); terminal states never change.
+ */
+export type UnresolvedReferenceStatus = "pending" | "resolved" | "failed";
 
 export interface EngramV1Types {
   Actor: Actor;
+  CodeEdgeKind: CodeEdgeKind;
   ConceptRef: ConceptRef;
   ContextBudget: ContextBudget;
   ContextPayload: ContextPayload;
@@ -122,6 +131,8 @@ export interface EngramV1Types {
   SourceKind: SourceKind;
   SourceLocation: SourceLocation;
   Timestamp: Timestamp;
+  UnresolvedReference: UnresolvedReference;
+  UnresolvedReferenceStatus: UnresolvedReferenceStatus;
   WriteMemoryRequest: WriteMemoryRequest;
   WriteMemoryResponse: WriteMemoryResponse;
 }
@@ -439,6 +450,22 @@ export interface MemoryRecord {
   provenance: Provenance;
   scope: Scope;
   status: MemoryStatus;
+  updatedAt?: Timestamp;
+}
+/**
+ * Recorded best-effort-failed cross-file code reference (the code-resolution honesty ledger). Same lifecycle as relationships: retracted with the referring document on re-ingest, re-attempted by the orphan sweep.
+ */
+export interface UnresolvedReference {
+  candidates?: Identifier[];
+  createdAt: Timestamp;
+  fromEntityId: Identifier;
+  graphId?: Identifier;
+  id: Identifier;
+  line?: number;
+  path: string;
+  referenceName: string;
+  scope: Scope;
+  status: UnresolvedReferenceStatus;
   updatedAt?: Timestamp;
 }
 export interface WriteMemoryResponse {

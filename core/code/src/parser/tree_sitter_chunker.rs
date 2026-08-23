@@ -487,6 +487,9 @@ fn rust_kinds() -> HashMap<&'static str, &'static str> {
         // anchor `fn Foo::bar`). `impl Trait for Type` names the concrete type
         // (the `type` field), so trait-impl methods are `Type::method`.
         ("impl_item", "impl"),
+        // `mod` blocks likewise: `mod a { fn f }` → anchor `fn a::f`, so
+        // same-named fns in different mods stay distinct entities.
+        ("mod_item", "mod"),
     ]
     .into()
 }
@@ -665,32 +668,50 @@ fn walk_structural(
 }
 
 /// Import path for a node, when the node is an import statement for the
-/// language. Returns `None` for non-import nodes.
+/// language. Returns `None` for non-import nodes. Kind is matched before any
+/// text is sliced (the walk calls this for every AST node).
 fn import_path(node: &tree_sitter::Node, source: &[u8], ext: &str) -> Option<String> {
-    let text = node.utf8_text(source).unwrap_or("").trim().to_owned();
     match (ext, node.kind()) {
         ("rs", "use_declaration") => {
-            let body = text.strip_prefix("use ")?.trim_end_matches(';');
+            let text = node.utf8_text(source).unwrap_or("").trim();
+            // `pub[crate] use …` carries an OPTIONAL visibility modifier in
+            // the node text — strip it when present, then the `use` keyword.
+            let body = text
+                .strip_prefix("pub ")
+                .or_else(|| text.strip_prefix("pub(crate) "))
+                .or_else(|| text.strip_prefix("pub(super) "))
+                .unwrap_or(text);
+            let body = body.strip_prefix("use ")?.trim_end_matches(';');
             // Grouped uses (`std::io::{Read, Write}`) attribute the group's
             // parent path; plain uses keep the full path.
             let path = body.split('{').next().unwrap_or(body).trim_matches(':');
             Some(path.to_owned())
         }
-        ("py", "import_statement") => Some(text.strip_prefix("import ")?.to_owned()),
+        ("py", "import_statement") => {
+            let text = node.utf8_text(source).unwrap_or("").trim();
+            let body = text.strip_prefix("import ")?;
+            // `import a, b as c` → one module per comma item, alias stripped.
+            let first = body.split(',').next().unwrap_or(body);
+            Some(first.split(" as ").next().unwrap_or(first).to_owned())
+        }
         ("py", "import_from_statement") => {
+            let text = node.utf8_text(source).unwrap_or("").trim();
             let after = text.strip_prefix("from ")?;
             Some(after.split(" import").next().unwrap_or(after).to_owned())
         }
         ("ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs", "import_statement") => {
-            // `import { x } from './y'` / `import 'z'` → the quoted module.
-            let start = text.find('\'')?;
+            // `import { x } from './y'` / `import "z"` → the quoted module,
+            // single- or double-quoted.
+            let text = node.utf8_text(source).unwrap_or("").trim();
+            let start = text.find('\'').or_else(|| text.find('"'))?;
+            let quote = &text[start..start + 1];
             let rest = &text[start + 1..];
-            let end = rest.find('\'')?;
+            let end = rest.find(quote)?;
             Some(rest[..end].to_owned())
         }
         ("go", "import_spec") => {
-            let t = text.trim_matches('"');
-            Some(t.to_owned())
+            let text = node.utf8_text(source).unwrap_or("").trim();
+            Some(text.trim_matches('"').to_owned())
         }
         _ => None,
     }

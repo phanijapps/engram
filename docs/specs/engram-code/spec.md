@@ -1,6 +1,6 @@
 # Spec: engram-code — dedicated code-indexing crate with codegraph-parity extraction
 
-- **Status:** Draft
+- **Status:** Implementing
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0022 (engine neutrality + surface parity), ADR-0009 (retrieval seam, read-path only), RFC-0012 (codegraph on-top layer), RFC-0020 (unified knowledge indexing — this spec is the Phase 2 vehicle; identity conforms to §Phase 2 `{receiver}::{name}`), `extraction-quality` spec (Phase 1 compat surface), RFC-0009/ADR-0018 (re-ingest retraction convergence), ADR-0017 (multi-repo scope model), ADR-0028 (new — `engram-code` crate placement)

@@ -480,17 +480,25 @@ impl GraphExtractor {
             let mut structural_edge = |predicate: &str, from: &str, to: &str| {
                 let subject = index.get(from).map(|&i| entity_ref(&entities[i]));
                 let Some(subject) = subject else { return };
+                // Containment targets are same-document by construction —
+                // resolve the id directly; inheritance targets may be
+                // external and stay name-only for cross-file resolution.
+                let object = match predicate {
+                    "contains" => index.get(to).map(|&i| entity_ref(&entities[i])),
+                    _ => None,
+                }
+                .unwrap_or(EntityRef {
+                    id: None,
+                    kind: None,
+                    name: Some(to.to_owned()),
+                    aliases: Vec::new(),
+                });
                 relationships.push(KnowledgeRelationship {
                     id: relationship_id(&graph_id, from, &format!("{predicate}:{to}")),
                     graph_id: Some(graph_id.clone()),
                     subject,
                     predicate: predicate.to_owned(),
-                    object: EntityRef {
-                        id: None,
-                        kind: None,
-                        name: Some(to.to_owned()),
-                        aliases: Vec::new(),
-                    },
+                    object,
                     scope: source.scope.clone(),
                     evidence: Vec::new(),
                     confidence: Some(1.0),
@@ -586,6 +594,9 @@ fn parse_symbol(anchor: &str) -> Option<(EntityKind, String)> {
         "interface" => EntityKind::Interface,
         "type" => EntityKind::TypeAlias,
         "class" | "impl" => EntityKind::Class,
+        // Namespaces/modules (C++/C# `namespace`, Rust `mod`) carry the
+        // receiver chain for their members.
+        "module" | "namespace" | "mod" => EntityKind::Module,
         _ => return None,
     };
     Some((kind, name.to_owned()))
@@ -616,10 +627,14 @@ pub fn register_entities(
     path: Option<&str>,
 ) {
     for entity in entities {
-        // File/Module entities (import endpoints) are not call targets —
-        // registering their path-shaped names would pollute bare-name
-        // resolution (an import path like `fmt` colliding with a `fmt` fn).
-        if matches!(entity.kind, EntityKind::File | EntityKind::Module) {
+        // File/Module/Repository entities are not call targets — registering
+        // their path-shaped names would pollute bare-name resolution (an
+        // import path like `fmt` colliding with a `fmt` fn; the repository
+        // key likewise). This also covers namespace Module entities.
+        if matches!(
+            entity.kind,
+            EntityKind::File | EntityKind::Module | EntityKind::Repository
+        ) {
             continue;
         }
         index.register(

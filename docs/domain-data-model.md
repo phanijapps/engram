@@ -895,7 +895,9 @@ vocabulary below. Predicates remain open strings on `KnowledgeRelationship`;
 Enum (closed; RFC-0020 Phase 2):
 
 - `calls` — function/method invocation edge
-- `imports` — file-to-file import edge
+- `imports` — file → imported module path (the import statement's
+  target as written; resolution of module paths to file entities lands with
+  the `file_dependencies` query)
 - `contains` — parent declaration contains member declaration
 - `extends` — class/interface inheritance edge
 - `implements` — class-implements-interface edge

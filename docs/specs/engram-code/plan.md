@@ -225,7 +225,8 @@ against the TS HTTP tool table in `packages/runtime/test/mcp.test.ts` (which
 today pins only the TS list's length — no cross-server comparison exists);
 `CapabilityReport` exposes `code_graph` covering both queries.
 Approach: facade methods over the knowledge graph (file-level rollup of
-`imports`; lexical seed + bounded BFS expansion reusing `graph_neighbors`);
+`imports`, resolving module paths to file entities within the scanned
+source; lexical seed + bounded BFS expansion reusing `graph_neighbors`);
 bind through `bindings/node`, `packages/node`, both MCP servers' tool tables;
 author the shared tool-name fixture + both assertions; update the capability
 report.
@@ -262,6 +263,15 @@ Approach: final sweep — product doc, specs README status, any drift fixes.
   nodes / depth 2 / ≤64 edges); capability entry renamed `code_graph`;
   stale extraction-quality README entry fix moved into T0; both-MCP compat
   verification added to T8/AC3.
+- 2026-08-23 (T0–T4 review fixes): deviations recorded — (1) the noise
+  filter stays in `extractor.rs` (it gates entity emission, not parsing;
+  moves only if/when the extractor itself relocates, T8); (2) the polyglot
+  fixture repo is deferred to T5/T8 — T3/T4 verified with inline fixtures
+  because multi-file scans hit the pre-existing shared-Repository upsert bug
+  (notes.md); (3) T4 asserts edge presence, not counts — counts are pinned by
+  the per-language unit tests in `engram-code`; (4) `imports` is contracted
+  as file → module path (domain model reworded); `file_dependencies` (T10)
+  owns module-path → file resolution.
 - 2026-08-23: pass 2 (1 Major, 3 Minor) — the "existing tool-parity test"
   claim corrected: no cross-server comparison exists today, so T10 now ADDS
   one (shared tool-name fixture asserted by a Rust registry test and the TS

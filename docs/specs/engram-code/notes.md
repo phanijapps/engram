@@ -61,3 +61,13 @@
   entities; `resolve_call_refs` generalized to `calls|extends|implements`;
   File/Module entities are excluded from symbol-table registration (import
   paths would pollute bare-name resolution).
+
+## 2026-08-23 (T8)
+
+- **TS-side MCP check (AC3):** `@engram/runtime` has 3 failing tests, all
+  10-second boot timeouts on "real addon" tests (`mcp.smoke` + two
+  `mcp.test` dispatch cases). The worktree carries in-flight uncommitted
+  `packages/runtime` changes (`index.ts`, `maintenance/llm.ts`) from prior
+  sessions; nothing in this spec touches the addon boot path. Suspect
+  pre-existing/environmental (stale native build). **T10 gate depends on
+  these** — needs resolution before the cross-server parity check ships.

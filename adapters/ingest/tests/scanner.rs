@@ -560,3 +560,109 @@ fn scan_extracts_framework_routes_and_callbacks() {
     );
     let _ = fs::remove_dir_all(&root);
 }
+
+/// RFC-0020 Phase 2 end-to-end (T8): a multi-file polyglot scan produces
+/// receiver-qualified identities, all six edge kinds, cross-file resolution
+/// with the ledger, and converges on re-scan.
+#[test]
+fn polyglot_scan_end_to_end_phase2() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-polyglot", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("src")).expect("create src");
+    // Rust: impl receiver + cross-file call + a use import.
+    fs::write(
+        root.join("src/engine.rs"),
+        "use crate::store;\nstruct Engine;\nimpl Engine {\n    fn drive(&self) {\n        store::save();\n        helper();\n    }\n}\n",
+    )
+    .expect("write engine.rs");
+    // Rust: same-named symbol in a second file (bare-name collision →
+    // same-doc disambiguation or ledgered ambiguity) + the helper + save.
+    fs::write(
+        root.join("src/store.rs"),
+        "mod inner { pub fn helper() {} }\nstruct Engine;\nimpl Engine {\n    fn idle(&self) {}\n}\npub fn save() {}\n",
+    )
+    .expect("write store.rs");
+    // TS: extends/implements/contains/imports + an Express route.
+    fs::write(
+        root.join("src/api.ts"),
+        "import { helper } from './store';\nclass Repo extends Base implements Store {\n    find(): void {}\n}\nconst app = {} as any;\napp.get('/items', helper);\n",
+    )
+    .expect("write api.ts");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "polyglot".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (summary, manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    assert_eq!(summary.ingested, 3, "all three files: {summary:?}");
+
+    let rels = block_on(store.list_relationships(&scope())).expect("rels");
+    let has = |predicate: &str, subject: &str, object: &str| {
+        rels.iter().any(|r| {
+            r.predicate == predicate
+                && r.subject.name.as_deref() == Some(subject)
+                && r.object.name.as_deref() == Some(object)
+        })
+    };
+    // All six edge kinds.
+    assert!(has("calls", "Engine::drive", "save"), "calls: {rels:?}");
+    assert!(
+        has("contains", "Engine", "Engine::drive"),
+        "contains: {rels:?}"
+    );
+    assert!(
+        has("contains", "inner", "inner::helper"),
+        "mod contains: {rels:?}"
+    );
+    assert!(has("extends", "Repo", "Base"), "extends: {rels:?}");
+    assert!(has("implements", "Repo", "Store"), "implements: {rels:?}");
+    assert!(
+        has("routes_to", "GET /items", "helper"),
+        "routes_to: {rels:?}"
+    );
+    assert!(
+        rels.iter()
+            .any(|r| r.predicate == "imports" && r.subject.name.as_deref() == Some("src/api.ts")),
+        "imports: {rels:?}"
+    );
+    // Receiver-qualified identities coexist for the same bare name across
+    // files (Engine in engine.rs and store.rs are distinct entities).
+    let ents = block_on(store.list_entities(&scope())).expect("entities");
+    let engines: Vec<_> = ents.iter().filter(|e| e.name == "Engine").collect();
+    assert!(
+        engines.len() >= 2
+            && engines
+                .iter()
+                .map(|e| e.id.to_string())
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                == engines.len(),
+        "same-named Engine entities must be distinct: {ents:?}"
+    );
+    // Convergence: an identical re-scan changes nothing (manifest skip).
+    let (summary2, _) =
+        scan_repository(&root, &opts2_with(manifest), &store, |_| {}).expect("rescan");
+    assert_eq!(
+        summary2.ingested, 0,
+        "unchanged files are skipped: {summary2:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+fn opts2_with(manifest: std::collections::HashMap<String, String>) -> ScanOptions {
+    ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "polyglot".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest,
+        scan_filter: engram_ingest::ScanFilter::default(),
+    }
+}

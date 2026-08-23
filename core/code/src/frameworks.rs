@@ -66,16 +66,27 @@ fn handler_after_paren(line: &str) -> Option<String> {
     // follows the path argument. Simple split: last identifier before `)` or `;`.
     let body = line.split('(').nth(1)?;
     let mut ident = String::new();
+    let mut terminated = false;
     for ch in body.chars() {
         if ch.is_alphanumeric() || ch == '_' {
             ident.push(ch);
-        } else if ch == ')' || ch == ';' {
+        } else if ch == ')' {
+            // The identifier must end at the call's closing paren — inline
+            // arrow handlers (`(req, res) => …`) break their own parens and
+            // are rejected rather than mis-attributed to a parameter name.
+            terminated = true;
+            break;
+        } else if ch == ';' {
             break;
         } else {
             ident.clear();
         }
     }
-    if ident.is_empty() { None } else { Some(ident) }
+    if ident.is_empty() || !terminated {
+        None
+    } else {
+        Some(ident)
+    }
 }
 
 /// Express (`app.get("/x", handler)`, `router.post('/x', h)`) and NestJS
@@ -108,7 +119,12 @@ fn extract_express_or_nestjs(text: &str) -> FrameworkFacts {
                 }
             }
         }
-        // The method following a decorator is its handler.
+        // Decorators/comments/blank lines after a route decorator do NOT
+        // consume it — only a real declaration line is the handler
+        // (stacked `@UseInterceptors`-style decorators are skipped).
+        if line.starts_with('@') || line.starts_with("//") || line.is_empty() {
+            continue;
+        }
         if let Some((method, path)) = pending_decorator.take() {
             if let Some(handler) = declaration_name(line) {
                 facts.routes.push(RouteFact {
@@ -195,6 +211,9 @@ fn extract_python_routes(text: &str) -> FrameworkFacts {
                 }
             }
         }
+        if line.starts_with('#') || line.starts_with("//") || line.is_empty() {
+            continue;
+        }
         if let Some((method, path)) = pending.take() {
             if let Some(handler) = declaration_name(line) {
                 facts.routes.push(RouteFact {
@@ -231,6 +250,9 @@ fn extract_spring_routes(text: &str) -> FrameworkFacts {
                 pending = Some((method.to_owned(), path));
                 continue;
             }
+        }
+        if line.starts_with('#') || line.starts_with("//") || line.is_empty() {
+            continue;
         }
         if let Some((method, path)) = pending.take() {
             if let Some(handler) = declaration_name(line) {
@@ -396,6 +418,36 @@ mod tests {
                 .contains(&("UserList".to_owned(), "handleClick".to_owned())),
             "{:?}",
             facts.callbacks
+        );
+    }
+
+    #[test]
+    fn stacked_decorators_do_not_steal_the_handler() {
+        let facts = extract_frameworks(
+            "@Get('/x')\n@UseInterceptors(LogInterceptor)\nasync find() {}\n",
+            "ts",
+        );
+        assert!(
+            facts.routes.contains(&RouteFact {
+                method: "GET".into(),
+                path: "/x".into(),
+                handler: "find".into()
+            }),
+            "{:?}",
+            facts.routes
+        );
+    }
+
+    #[test]
+    fn inline_arrow_handlers_are_rejected_not_misattributed() {
+        let facts = extract_frameworks(
+            "const app = {} as any;\napp.get('/x', (req, res) => res.send('hi'));\n",
+            "ts",
+        );
+        assert!(
+            facts.routes.is_empty(),
+            "arrow must not yield a bogus handler: {:?}",
+            facts.routes
         );
     }
 

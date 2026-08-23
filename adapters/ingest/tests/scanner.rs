@@ -523,7 +523,7 @@ fn scan_extracts_framework_routes_and_callbacks() {
     .expect("write server.ts");
     fs::write(
         root.join("button.tsx"),
-        "function handleClick() {}\nfunction UserButton() {\n  return null as any;\n}\nconst x = { onClick: handleClick };\n",
+        "function handleClick() {}\nfunction UserButton() {\n  return <button onClick={handleClick}>go</button>;\n}\n",
     )
     .expect("write button.tsx");
 
@@ -557,6 +557,13 @@ fn scan_extracts_framework_routes_and_callbacks() {
     assert!(
         ents.iter().any(|e| e.name == "GET /users"),
         "endpoint entity missing: {ents:?}"
+    );
+    // React callback: UserButton --calls--> handleClick (T7/AC6).
+    assert!(
+        rels.iter().any(|r| r.predicate == "calls"
+            && r.subject.name.as_deref() == Some("UserButton")
+            && r.object.name.as_deref() == Some("handleClick")),
+        "react callback edge missing: {rels:?}"
     );
     let _ = fs::remove_dir_all(&root);
 }

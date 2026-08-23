@@ -71,3 +71,37 @@
   sessions; nothing in this spec touches the addon boot path. Suspect
   pre-existing/environmental (stale native build). **T10 gate depends on
   these** — needs resolution before the cross-server parity check ships.
+
+## 2026-08-23 (final review, T5–T12)
+
+Findings routed apply (5 Blockers, 6 Concerns, 5 Nits):
+- **B2 — bundling accident:** a3940ad's `git add packages/runtime` swept
+  two UNCOMMITTED in-flight files (llm.ts completeAgent, index.ts export)
+  into the T10b commit. Unbundled in f2fa59c: both files restored to their
+  pre-bundle committed content in history, in-flight changes reapplied to
+  the working tree uncommitted (exactly the pre-accident state).
+- **B3:** `routes_to` joined RESOLVABLE — framework handlers now resolve
+  cross-file or ledger like every other reference.
+- **B4:** the React fixture actually uses JSX (`onClick={handleClick}`) and
+  the component→handler calls edge is asserted.
+- **B1/B5:** AC7 amended to the fixture+intersection parity contract with
+  the full-equality deferral anchored in docs/backlog.md; spec → Shipped.
+- **C6 — import-scope rung removed:** raw import strings never
+  suffix-matched real file paths (Rust `crate::x`, Python `.x`) except as
+  cross-directory false positives; the rung was dead code with tests that
+  passed without exercising it. Ladder is same-doc > same-repo > unique >
+  ambiguous. Revisit with importer-relative path normalization if needed.
+- **C8:** explore is a true BFS now (FIFO deque); the plan's "lexical seed"
+  wording deviates from the implemented identifier-token seeding — recorded
+  in the plan changelog.
+- **C9:** framework parser skips stacked decorators/comments (no handler
+  theft) and rejects inline arrow handlers instead of mis-attributing them.
+- **C10:** docstring harvesting rejects preprocessor/shebang lines.
+- **C11:** same-stem module resolution stays unresolved on ambiguity (no
+  silent first-match pick).
+- **C7:** list_unresolved_refs applies the same scope post-filter as every
+  sibling list. **N12:** the sweep reuses engram-code's (now-pub)
+  split/hint helpers. **N13:** subjectless references skip the ledger
+  instead of collapsing onto an "unknown" id. **N14:** Rust explore clamps
+  mirror the TS contract. **N16:** SQL literal spacing. **N15:** kernel-
+  scale benchmark gap recorded as a backlog deferral.

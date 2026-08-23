@@ -517,13 +517,8 @@ where
                             .as_ref()
                             .map(|se| se.imports.clone())
                             .unwrap_or_default();
-                        g.unresolved = engram_code::resolve_refs(
-                            &mut idx,
-                            &mut g.relationships,
-                            repo,
-                            path,
-                            &imports,
-                        );
+                        g.unresolved =
+                            engram_code::resolve_refs(&mut idx, &mut g.relationships, repo, path);
                     }
                     // Persist the graph + entities + relationships + ledger.
                     let _ = block_on(async {
@@ -665,11 +660,12 @@ where
             let idx = name_index.lock().unwrap_or_else(|e| e.into_inner());
             for row in pending {
                 let reference = row.reference_name.clone();
-                let (hint, name) = split_reference(&reference);
+                let (hint, name) = engram_code::split_dotted(&reference);
                 let mut outcome = idx.resolve(name, None, None);
                 if !matches!(outcome, engram_code::Resolution::Resolved(_)) {
                     if let Some(hint) = hint {
-                        let qualified = format!("{}::{}", capitalize(hint), name);
+                        let qualified =
+                            format!("{}::{}", engram_code::receiver_type_hint(hint), name);
                         outcome = idx.resolve(&qualified, None, None);
                     }
                 }
@@ -1118,30 +1114,5 @@ mod tests {
         assert!(detect_workspace(&no_marker).is_none());
 
         std::fs::remove_dir_all(&tmp).unwrap();
-    }
-}
-
-/// Split a ledger reference for sweep resolution: dotted references carry a
-/// receiver hint (`store.save` → hint `store`, name `save`).
-fn split_reference(reference: &str) -> (Option<&str>, &str) {
-    let Some((head, name)) = reference.rsplit_once('.') else {
-        return (None, reference);
-    };
-    if head.is_empty() {
-        return (None, reference);
-    }
-    let hint = head.rsplit('.').next().unwrap_or(head);
-    if matches!(hint, "self" | "Self" | "crate" | "super") {
-        return (None, name);
-    }
-    (Some(hint), name)
-}
-
-/// Capitalize a receiver hint for the qualified-key attempt (`store` → `Store`).
-fn capitalize(hint: &str) -> String {
-    let mut chars = hint.chars();
-    match chars.next() {
-        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-        None => hint.to_owned(),
     }
 }

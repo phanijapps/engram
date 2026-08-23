@@ -55,14 +55,22 @@ fn resolve_module_path(import: &str, file_paths: &[String]) -> Option<String> {
     if stem.is_empty() {
         return None;
     }
-    file_paths
+    let matches: Vec<&String> = file_paths
         .iter()
-        .find(|path| {
+        .filter(|path| {
             let file_stem = path.rsplit('/').next().unwrap_or(path);
             let without_ext = file_stem.split('.').next().unwrap_or(file_stem);
             without_ext == stem
         })
-        .cloned()
+        .collect();
+    // Ambiguity stays honest: multiple same-stem files in different
+    // directories do not silently pick a winner (spec principle) — the
+    // dependency stays unresolved.
+    if matches.len() == 1 {
+        Some(matches[0].clone())
+    } else {
+        None
+    }
 }
 
 /// One node of an `explore` result: an entity matched by the query seed or
@@ -134,14 +142,11 @@ pub fn explore(
     let mut out = Vec::new();
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut edge_count = 0usize;
-    let mut frontier: Vec<(String, u32)> = seeds
+    let mut frontier: std::collections::VecDeque<(String, u32)> = seeds
         .iter()
-        .map(|(name, kind)| {
-            let _ = kind;
-            (name.clone(), 0)
-        })
+        .map(|(name, _kind)| (name.clone(), 0))
         .collect();
-    while let Some((name, hop)) = frontier.pop() {
+    while let Some((name, hop)) = frontier.pop_front() {
         if out.len() >= max_nodes || !seen.insert(name.clone()) {
             continue;
         }
@@ -159,7 +164,7 @@ pub fn explore(
                     break;
                 }
                 edge_count += 1;
-                frontier.push((next.clone(), hop + 1));
+                frontier.push_back((next.clone(), hop + 1));
             }
         }
     }

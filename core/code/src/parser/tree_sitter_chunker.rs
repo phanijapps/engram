@@ -405,6 +405,18 @@ fn leading_doc_comment(node: &tree_sitter::Node, source: &[u8]) -> Option<String
         if line.is_empty() {
             break;
         }
+        // Preprocessor directives and shebangs are not documentation.
+        if line.starts_with("#!")
+            || line.starts_with("#include")
+            || line.starts_with("#import")
+            || line.starts_with("#pragma")
+            || line.starts_with("#define")
+            || line.starts_with("#ifdef")
+            || line.starts_with("#ifndef")
+            || line.starts_with("#endif")
+        {
+            break;
+        }
         let is_doc = line.starts_with("///")
             || line.starts_with("//")
             || line.starts_with('#')

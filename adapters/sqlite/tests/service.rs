@@ -498,8 +498,7 @@ fn list_memories_paged_returns_disjoint_keyset_pages() {
         .next_cursor
         .expect("a full page carries a next cursor");
 
-    let page2 =
-        block_on(svc.list_memories_paged(&scope, Some(&cursor1), 2)).expect("page 2");
+    let page2 = block_on(svc.list_memories_paged(&scope, Some(&cursor1), 2)).expect("page 2");
     assert_eq!(page2.items.len(), 1, "page 2 has the remainder");
     assert!(page2.next_cursor.is_none(), "page 2 is terminal");
 

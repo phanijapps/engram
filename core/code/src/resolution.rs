@@ -15,34 +15,9 @@ use engram_domain::{KnowledgeRelationship, UnresolvedReference, UnresolvedRefere
 use crate::identity::{Resolution, SymbolCandidate, SymbolIndex};
 use engram_domain::Id;
 
-/// Preference ranking for import-scope path matching: a candidate whose
-/// defining path suffix-matches one of the referring file's import paths
-/// outranks same-repo candidates (narrower evidence), but not same-document
-/// candidates.
-struct ImportScope<'a> {
-    imports: &'a [String],
-}
-
-impl ImportScope<'_> {
-    fn matches(&self, candidate: &SymbolCandidate) -> bool {
-        let Some(path) = candidate.path.as_deref() else {
-            return false;
-        };
-        self.imports.iter().any(|import| {
-            let import_trimmed = import.trim_start_matches("./").trim_start_matches("../");
-            !import_trimmed.is_empty()
-                && (path.ends_with(import_trimmed)
-                    || path
-                        .rsplit_once('/')
-                        .map(|(_, file)| file)
-                        .is_some_and(|file| import_trimmed.contains('.') && file == import_trimmed))
-        })
-    }
-}
-
 /// Pascal-case a receiver hint (`store` → `Store`) for the qualified-name
 /// attempt; already-capitalized hints pass through.
-fn receiver_type_hint(hint: &str) -> String {
+pub fn receiver_type_hint(hint: &str) -> String {
     let mut chars = hint.chars();
     match chars.next() {
         Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
@@ -52,7 +27,7 @@ fn receiver_type_hint(hint: &str) -> String {
 
 /// Split a dotted reference as-written (`self.store.save` → hint `store`,
 /// name `save`); `self`/`Self` receivers carry no useful hint.
-fn split_dotted(reference: &str) -> (Option<&str>, &str) {
+pub fn split_dotted(reference: &str) -> (Option<&str>, &str) {
     let Some((head, name)) = reference.rsplit_once('.') else {
         return (None, reference);
     };
@@ -74,30 +49,17 @@ fn resolve_one(
     name: &str,
     from_path: Option<&str>,
     from_repo: Option<&str>,
-    imports: Option<&ImportScope<'_>>,
 ) -> Resolution {
-    // 1. Same document.
+    // Same document first, then the SymbolIndex ladder (same repo / unique
+    // survivor / ambiguity). The planned import-scope rung was removed: raw
+    // import strings (`./x`, `crate::x`, `.x`) never suffix-matched real
+    // file paths except as cross-directory false positives — recorded in
+    // the spec notes + plan changelog.
     if let Some(path) = from_path {
         if let Resolution::Resolved(c) = index.resolve(name, Some(path), from_repo) {
             return Resolution::Resolved(c);
         }
     }
-    // 2. Import scope: candidates whose defining file the referring file
-    //    imports (narrower than same-repo when a name is defined in many
-    //    files of the repo).
-    if let Some(scope) = imports {
-        if let Some(bucket) = index.bucket(name) {
-            let in_scope: Vec<_> = bucket
-                .iter()
-                .filter(|c| scope.matches(c))
-                .cloned()
-                .collect();
-            if in_scope.len() == 1 {
-                return Resolution::Resolved(in_scope[0].clone());
-            }
-        }
-    }
-    // 3. Same repo / unique survivor / ambiguity (the SymbolIndex ladder).
     index.resolve(name, from_path, from_repo)
 }
 
@@ -109,10 +71,8 @@ pub fn resolve_refs(
     relationships: &mut [KnowledgeRelationship],
     repo: Option<&str>,
     path: Option<&str>,
-    imports: &[String],
 ) -> Vec<UnresolvedReference> {
-    const RESOLVABLE: [&str; 3] = ["calls", "extends", "implements"];
-    let import_scope = ImportScope { imports };
+    const RESOLVABLE: [&str; 4] = ["calls", "extends", "implements", "routes_to"];
     let mut ledger = Vec::new();
     let now = Utc::now();
 
@@ -124,20 +84,20 @@ pub fn resolve_refs(
             continue;
         };
         let (hint, name) = split_dotted(&reference);
-        let from_id = rel
-            .subject
-            .id
-            .clone()
-            .unwrap_or_else(|| Id::from("unknown"))
-            .to_string();
-        let mut outcome = resolve_one(index, name, path, repo, Some(&import_scope));
+        // Subjectless references have no stable ledger key — skipping them
+        // beats collapsing distinct rows onto one "unknown" id.
+        let Some(subject_id) = rel.subject.id.clone() else {
+            continue;
+        };
+        let from_id = subject_id.to_string();
+        let mut outcome = resolve_one(index, name, path, repo);
 
         // Receiver-hint attempt: `store.save` → `Store::save` when a
         // declaration with that receiver exists.
         if !matches!(outcome, Resolution::Resolved(_)) {
             if let Some(hint) = hint {
                 let qualified_attempt = format!("{}::{}", receiver_type_hint(hint), name);
-                outcome = resolve_one(index, &qualified_attempt, path, repo, Some(&import_scope));
+                outcome = resolve_one(index, &qualified_attempt, path, repo);
             }
         }
 
@@ -148,7 +108,7 @@ pub fn resolve_refs(
             Resolution::Ambiguous(candidates) => ledger.push(UnresolvedReference {
                 id: Id::from(format!("unref-{}-{}", from_id, content_key(&reference))),
                 graph_id: rel.graph_id.clone(),
-                from_entity_id: Id::from(from_id.clone()),
+                from_entity_id: subject_id.clone(),
                 reference_name: reference.clone(),
                 candidates: candidates.iter().map(|c| Id::from(c.id.clone())).collect(),
                 status: UnresolvedReferenceStatus::Pending,
@@ -161,7 +121,7 @@ pub fn resolve_refs(
             Resolution::NotFound => ledger.push(UnresolvedReference {
                 id: Id::from(format!("unref-{}-{}", from_id, content_key(&reference))),
                 graph_id: rel.graph_id.clone(),
-                from_entity_id: Id::from(from_id.clone()),
+                from_entity_id: subject_id.clone(),
                 reference_name: reference.clone(),
                 candidates: Vec::new(),
                 status: UnresolvedReferenceStatus::Pending,
@@ -255,7 +215,7 @@ mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "Config::parse", "e1", "r", "src/config.rs");
         let mut rels = vec![rel("calls", "caller", "Config::parse")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/other.rs"), &[]);
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/other.rs"));
         assert!(ledger.is_empty());
         assert_eq!(rels[0].object.id, Some(EntityId::from("e1")));
     }
@@ -266,7 +226,7 @@ mod tests {
         register(&mut index, "parse", "e1", "r", "src/a.rs");
         register(&mut index, "parse", "e2", "r", "src/b.rs");
         let mut rels = vec![rel("calls", "caller", "parse")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), None, &[]);
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), None);
         assert_eq!(ledger.len(), 1, "ambiguous reference must be recorded");
         assert_eq!(ledger[0].status, UnresolvedReferenceStatus::Pending);
         assert_eq!(ledger[0].candidates.len(), 2);
@@ -277,7 +237,7 @@ mod tests {
     fn not_found_lands_in_the_ledger() {
         let index = SymbolIndex::new();
         let mut rels = vec![rel("calls", "caller", "ghost_fn")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/a.rs"), &[]);
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/a.rs"));
         assert_eq!(ledger.len(), 1);
         assert!(ledger[0].candidates.is_empty());
         assert_eq!(ledger[0].reference_name, "ghost_fn");
@@ -288,7 +248,7 @@ mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "Store::save", "e9", "r", "src/store.rs");
         let mut rels = vec![rel("calls", "Engine::drive", "store.save")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/engine.rs"), &[]);
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/engine.rs"));
         assert!(ledger.is_empty(), "ledger: {ledger:?}");
         assert_eq!(
             rels[0].object.id,
@@ -302,7 +262,7 @@ mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "Engine::process", "e7", "r", "src/engine.rs");
         let mut rels = vec![rel("calls", "Engine::drive", "self.process")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/engine.rs"), &[]);
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/engine.rs"));
         // Same document: Engine::drive → Engine::process resolves via the
         // bare tail within the file.
         assert!(ledger.is_empty(), "ledger: {ledger:?}");
@@ -310,50 +270,12 @@ mod tests {
     }
 
     #[test]
-    fn import_scope_narrows_a_same_repo_ambiguity() {
-        let mut index = SymbolIndex::new();
-        register(&mut index, "helper", "e1", "r", "src/a/utils.rs");
-        register(&mut index, "helper", "e2", "r", "src/b/utils.rs");
-        let mut rels = vec![rel("calls", "main", "helper")];
-        // src/a/main.rs imports ./utils — but both candidates live in
-        // *some* utils.rs; only src/a/utils.rs suffix-matches the import
-        // relative to the importer's directory when the path aligns.
-        let imports = vec!["./utils".to_owned()];
-        let ledger = resolve_refs(
-            &index,
-            &mut rels,
-            Some("r"),
-            Some("src/a/main.rs"),
-            &imports,
-        );
-        // `./utils` relative to src/a/ is src/a/utils.rs — but suffix
-        // matching alone sees both. Ambiguity is honest here; the rung
-        // matters when paths distinguish (see next test).
-        assert_eq!(ledger.len(), 1);
-    }
-
-    #[test]
-    fn import_scope_resolves_when_paths_distinguish() {
-        let mut index = SymbolIndex::new();
-        register(&mut index, "helper", "e1", "repo-a", "src/utils.rs");
-        register(&mut index, "helper", "e2", "repo-b", "lib/other.rs");
-        let mut rels = vec![rel("calls", "main", "helper")];
-        // Import "./utils" matches src/utils.rs by suffix; lib/other.rs does
-        // not match. Cross-repo: import scope picks e1 before same-repo
-        // could veto.
-        let imports = vec!["./utils".to_owned()];
-        let ledger = resolve_refs(&index, &mut rels, Some("repo-a"), None, &imports);
-        assert!(ledger.is_empty(), "ledger: {ledger:?}");
-        assert_eq!(rels[0].object.id, Some(EntityId::from("e1")));
-    }
-
-    #[test]
     fn ledger_ids_are_deterministic_per_subject_and_name() {
         let index = SymbolIndex::new();
         let mut rels = vec![rel("calls", "caller", "ghost_fn")];
-        let first = resolve_refs(&index, &mut rels, Some("r"), None, &[]);
+        let first = resolve_refs(&index, &mut rels, Some("r"), None);
         let mut rels2 = vec![rel("calls", "caller", "ghost_fn")];
-        let second = resolve_refs(&index, &mut rels2, Some("r"), None, &[]);
+        let second = resolve_refs(&index, &mut rels2, Some("r"), None);
         assert_eq!(first[0].id, second[0].id);
     }
 

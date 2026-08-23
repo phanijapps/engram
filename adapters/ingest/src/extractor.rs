@@ -641,7 +641,7 @@ impl GraphExtractor {
             // are threaded by the scanner path); resolution still runs the
             // same-doc / same-repo / unique / ledger ladder.
             extracted.unresolved =
-                engram_code::resolve_refs(index, &mut extracted.relationships, repo, path, &[]);
+                engram_code::resolve_refs(index, &mut extracted.relationships, repo, path);
         }
 
         repository.put_graph(extracted.graph.clone()).await?;
@@ -747,7 +747,7 @@ pub fn resolve_call_refs(
     // Delegates to engram-code's Phase-2 resolver (receiver hints, import
     // scope, ledger); returns the ledger records for callers that persist
     // them (T6). The scanner is the single resolution site with imports.
-    engram_code::resolve_refs(index, relationships, repo, path, &[])
+    engram_code::resolve_refs(index, relationships, repo, path)
 }
 
 /// Word-boundary occurrence check so `File` does not match inside `Filesystem`.

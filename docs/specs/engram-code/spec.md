@@ -1,6 +1,6 @@
 # Spec: engram-code — dedicated code-indexing crate with codegraph-parity extraction
 
-- **Status:** Implementing
+- **Status:** Shipped
 - **Owner:** phanijapps
 - **Plan:** [`plan.md`](plan.md)
 - **Constrained by:** ADR-0022 (engine neutrality + surface parity), ADR-0009 (retrieval seam, read-path only), RFC-0012 (codegraph on-top layer), RFC-0020 (unified knowledge indexing — this spec is the Phase 2 vehicle; identity conforms to §Phase 2 `{receiver}::{name}`), `extraction-quality` spec (Phase 1 compat surface), RFC-0009/ADR-0018 (re-ingest retraction convergence), ADR-0017 (multi-repo scope model), ADR-0028 (new — `engram-code` crate placement)
@@ -145,9 +145,12 @@ before proceeding; *Never do* is a hard rule, even under time pressure.
       answers a natural-language query with a relevance-seeded bounded
       subgraph (default budget: 24 nodes, expansion depth 2, at most 64
       edges) — both reachable from the Rust facade, the N-API binding,
-      `@engram/node`, both MCP servers (tool lists pinned equal by the
-      cross-server tool-list parity check), and listed in `CapabilityReport`
-      as `code_graph`.
+      `@engram/node`, both MCP servers, and listed in `CapabilityReport` as
+      `code_graph`. Parity is pinned by the shared tool-name fixture (Rust
+      registry test) plus the TS intersection test; full list equality is
+      deferred (deferred: cross-server-mcp-tool-drift) — an 11-tool
+      pre-existing asymmetry between the transports predates this spec and
+      is recorded in `docs/backlog.md`.
 - [x] The lexical lane indexes code-symbol signatures and docstrings; a
       keyword query matches a symbol by a signature fragment.
 - [x] Re-ingest convergence is unchanged: changing or removing a fixture

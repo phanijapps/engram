@@ -3948,9 +3948,11 @@ pub fn explore(app: &App, args: &Value) -> Result<Value, ToolError> {
     let query = args["query"]
         .as_str()
         .ok_or_else(|| crate::tools::invalid("explore: query must be a string"))?;
-    let depth = args["depth"].as_u64().unwrap_or(2) as u32;
-    let max_nodes = args["max_nodes"].as_u64().unwrap_or(24) as usize;
-    let max_edges = args["max_edges"].as_u64().unwrap_or(64) as usize;
+    // Clamps mirror the TS HTTP tool's contract so the pair behaves
+    // identically for the same-named tool.
+    let depth = args["depth"].as_u64().unwrap_or(2).clamp(0, 4) as u32;
+    let max_nodes = args["max_nodes"].as_u64().unwrap_or(24).clamp(1, 64) as usize;
+    let max_edges = args["max_edges"].as_u64().unwrap_or(64).clamp(1, 256) as usize;
     let rels = fetch_rels(app)?;
     let query_handle = app
         .provider

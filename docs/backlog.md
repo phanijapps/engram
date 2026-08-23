@@ -558,3 +558,4 @@ maintenance trio it now has). Also: `prototype/frontend` typecheck/build
 fails on React JSX typing (pre-existing, no engram deps); `@engram/runtime`
 has one real-addon boot-timeout test (mcp.smoke). Source:
 `docs/specs/engram-code/notes.md` T8/T10.
+- **Kernel-scale benchmark (engram-code AC10 gap):** the recorded benchmark covers two ~900-file repos; Linux/Swift-scale (codegraph's comparison target) not yet run (docs/perf/engram-code-benchmark.md).

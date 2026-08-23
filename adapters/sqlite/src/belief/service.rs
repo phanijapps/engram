@@ -335,9 +335,14 @@ impl BeliefRepository for SqlBeliefStore {
         // to a rowid, run a scope-filtered keyset query, emit a next cursor when the
         // page is full.
         let after_rowid = match after {
-            Some(cursor) => cursor.as_str().parse::<i64>().map_err(|_| CoreError::InvalidRequest {
-                reason: format!("invalid belief cursor: {}", cursor.as_str()),
-            })?,
+            Some(cursor) => {
+                cursor
+                    .as_str()
+                    .parse::<i64>()
+                    .map_err(|_| CoreError::InvalidRequest {
+                        reason: format!("invalid belief cursor: {}", cursor.as_str()),
+                    })?
+            }
             None => 0,
         };
         let page_limit = limit.clamp(1, 500) as i64;

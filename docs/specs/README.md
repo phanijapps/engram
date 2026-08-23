@@ -184,5 +184,5 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   indexing, and a documented scale benchmark. Constrained by RFC-0020
   (Accepted, §Phase 2), extraction-quality (Phase 1 compat; `name_index`
   Ask-first consciously superseded), ADR-0022, ADR-0009, RFC-0012,
-  ADR-0017, RFC-0009/ADR-0018, ADR-0028. **Implementing** (spec review-clean,
-  3 passes; T0–T4 shipped).
+  ADR-0017, RFC-0009/ADR-0018, ADR-0028. **Shipped** (T0–T12; adversarial review
+  cycles to clean across the full range).

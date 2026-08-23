@@ -23,4 +23,4 @@ pub use parser::chunking::{ChunkCandidate, Chunker};
 pub use parser::code_symbol::CodeSymbolChunker;
 pub use parser::tree_sitter_chunker::TreeSitterChunker;
 pub use queries::{ExploreNode, FileDependency, explore, file_dependencies};
-pub use resolution::resolve_refs;
+pub use resolution::{receiver_type_hint, resolve_refs, split_dotted};

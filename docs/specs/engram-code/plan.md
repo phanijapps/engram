@@ -250,6 +250,15 @@ Approach: final sweep — product doc, specs README status, any drift fixes.
 
 ## Changelog
 
+- 2026-08-23 (final review): T10's explore shipped with identifier-token
+  seeding (not the lexical lane) and a hand-rolled adjacency walk (not
+  graph_neighbors) — bounded BFS is now FIFO; the lexical-seed wording was
+  aspirational and the simpler composition verified equivalent for the
+  seeded-subgraph contract. The import-scope resolution rung was removed
+  (dead code; see notes.md). AC7's parity contract amended to
+  fixture+intersection with the full-equality deferral recorded in
+  docs/backlog.md.
+
 - 2026-08-23: initial plan from the §7 comparison deltas (all eight), scoped
   with user sign-off on architecture ("ingest uses the new crate").
 - 2026-08-23: spec-mode adversarial review pass 1 (2 Critical, 6 Major,

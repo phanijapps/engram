@@ -186,7 +186,7 @@ impl KnowledgeGraphRepository for SqlKnowledgeStore {
             serde_json::to_string(&status).map_err(crate::knowledge::schema::json_error)?;
         let mut statement = connection
             .prepare(
-                "SELECT record_json FROM knowledge_unresolved_refs                  WHERE tenant = ?1 AND status = ?2 ORDER BY id",
+                "SELECT record_json FROM knowledge_unresolved_refs WHERE tenant = ?1 AND status = ?2 ORDER BY id",
             )
             .map_err(sql_error)?;
         let rows = statement
@@ -197,8 +197,12 @@ impl KnowledgeGraphRepository for SqlKnowledgeStore {
         let mut out = Vec::new();
         for row in rows {
             let json = row.map_err(sql_error)?;
-            let reference = serde_json::from_str(&json).map_err(json_error)?;
-            out.push(reference);
+            let reference: UnresolvedReference = serde_json::from_str(&json).map_err(json_error)?;
+            // Same scope post-filter as every sibling list in this file —
+            // the SQL narrows by tenant only.
+            if scope_allows(&reference.scope, scope) {
+                out.push(reference);
+            }
         }
         Ok(out)
     }

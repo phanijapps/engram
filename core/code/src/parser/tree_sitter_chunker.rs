@@ -324,10 +324,25 @@ fn walk_declarations_with_receivers(
                 // multi-thousand-line body is never embedded. Empty-text chunks
                 // are skipped by the embedder (scan_repo filters them) and by
                 // every retrieval lane, so they are graph-only anchors.
+                // T9: code-symbol chunks carry their doc comment +
+                // signature for the lexical lane. Containers (whose whole
+                // body would bloat embeddings) get a SYNTHESIZED small text
+                // — docstring + signature line — instead of empty text, so
+                // they are lexically searchable; leaves prepend the doc
+                // comment to their full body.
+                let doc = leading_doc_comment(node, source);
+                let signature = signature_line(node, source);
                 let text = if has_declaration_descendant(node, kind_map) {
-                    String::new()
+                    match (&doc, signature.is_empty()) {
+                        (Some(d), _) => format!("{d}\n{signature}"),
+                        (None, true) => String::new(),
+                        (None, false) => signature,
+                    }
                 } else {
-                    node.utf8_text(source).unwrap_or("").to_owned()
+                    match &doc {
+                        Some(d) => format!("{d}\n{}", node.utf8_text(source).unwrap_or("")),
+                        None => node.utf8_text(source).unwrap_or("").to_owned(),
+                    }
                 };
                 // Receiver-qualified anchor: `fn Foo::bar` inside `impl Foo`,
                 // bare `fn parse` at the top level.
@@ -371,6 +386,61 @@ fn walk_declarations_with_receivers(
     for child in node.named_children(&mut cursor) {
         walk_declarations_with_receivers(&child, source, kind_map, receivers, chunks);
     }
+}
+
+/// Contiguous comment lines immediately above a declaration (up to 5):
+/// `//`, `///`, `#`, or block-comment `*`/`*/` tails. Returns None when the
+/// declaration has no doc comment.
+fn leading_doc_comment(node: &tree_sitter::Node, source: &[u8]) -> Option<String> {
+    let start_row = node.start_position().row;
+    if start_row == 0 {
+        return None;
+    }
+    let text = std::str::from_utf8(source).ok()?;
+    let lines: Vec<&str> = text.lines().collect();
+    let mut collected: Vec<&str> = Vec::new();
+    let mut row = start_row as isize - 1;
+    while row >= 0 && collected.len() < 5 {
+        let line = lines.get(row as usize)?.trim();
+        if line.is_empty() {
+            break;
+        }
+        let is_doc = line.starts_with("///")
+            || line.starts_with("//")
+            || line.starts_with('#')
+            || line.starts_with('*')
+            || line.starts_with("/*");
+        if !is_doc {
+            break;
+        }
+        let stripped = line
+            .trim_start_matches("///")
+            .trim_start_matches("//")
+            .trim_start_matches("/*")
+            .trim_start_matches('*')
+            .trim_start_matches('#')
+            .trim();
+        if !stripped.is_empty() {
+            collected.push(stripped);
+        }
+        row -= 1;
+    }
+    if collected.is_empty() {
+        None
+    } else {
+        collected.reverse();
+        Some(collected.join("\n"))
+    }
+}
+
+/// First source line of the declaration (its signature), trimmed.
+fn signature_line(node: &tree_sitter::Node, source: &[u8]) -> String {
+    let text = std::str::from_utf8(source).ok().unwrap_or("");
+    let lines: Vec<&str> = text.lines().collect();
+    lines
+        .get(node.start_position().row)
+        .map(|l: &&str| l.trim().to_owned())
+        .unwrap_or_default()
 }
 
 /// True when `node`'s subtree contains at least one named descendant whose
@@ -981,5 +1051,89 @@ mod receiver_chain_tests {
             anchors.contains(&"fn Greeter::greet".to_owned()),
             "anchors: {anchors:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod lexical_text_tests {
+    use super::*;
+
+    fn chunk_texts(source: &str, ext: &str) -> Vec<(String, String)> {
+        TreeSitterChunker::new()
+            .expect("chunker")
+            .chunk_with_ext(source, ext)
+            .expect("chunk")
+            .into_iter()
+            .map(|c| {
+                let anchor = c
+                    .location
+                    .as_ref()
+                    .and_then(|l| l.anchor.clone())
+                    .unwrap_or_default();
+                (anchor, c.text)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn leaf_chunks_carry_their_docstring() {
+        let chunks = chunk_texts(
+            "/// Persists the aggregate root to the store.\nfn save_all(root: &Root) {}\n",
+            "rs",
+        );
+        let (anchor, text) = chunks.iter().find(|(a, _)| a == "fn save_all").expect("fn");
+        let _ = anchor;
+        assert!(
+            text.contains("Persists the aggregate root"),
+            "docstring missing from chunk text: {text:?}"
+        );
+        assert!(text.contains("fn save_all"), "signature missing: {text:?}");
+    }
+
+    #[test]
+    fn container_chunks_are_lexically_searchable() {
+        // A class with a method is a container: its text is synthesized
+        // (docstring + signature) instead of empty, so lexical search can
+        // find it — while the multi-line body stays out.
+        let chunks = chunk_texts(
+            "// Manages user sessions.\nclass SessionManager {\n    fn touch(&self) {}\n}\n",
+            "ts",
+        );
+        let (_, text) = chunks
+            .iter()
+            .find(|(a, _)| a == "class SessionManager")
+            .expect("class");
+        assert!(
+            text.contains("Manages user sessions"),
+            "container docstring missing: {text:?}"
+        );
+        assert!(
+            text.contains("class SessionManager"),
+            "container signature missing: {text:?}"
+        );
+        assert!(
+            !text.contains("touch"),
+            "container text must not include the body: {text:?}"
+        );
+    }
+
+    #[test]
+    fn python_docstrings_attach() {
+        let chunks = chunk_texts(
+            "# Validates the incoming payload.\ndef validate(payload):\n    pass\n",
+            "py",
+        );
+        let (_, text) = chunks
+            .iter()
+            .find(|(a, _)| a == "def validate")
+            .expect("def");
+        assert!(text.contains("Validates the incoming payload"), "{text:?}");
+    }
+
+    #[test]
+    fn undocummented_declarations_unchanged() {
+        let chunks = chunk_texts("fn plain() {}\n", "rs");
+        let (_, text) = chunks.iter().find(|(a, _)| a == "fn plain").expect("fn");
+        assert_eq!(text, "fn plain() {}");
     }
 }

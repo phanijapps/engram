@@ -146,3 +146,49 @@ pub fn match_api_topology_json(request_json: String) -> Result<String> {
     let calls: Vec<String> = serde_json::from_value(value["calls"].clone()).map_err(json_error)?;
     encode(&cgq::match_api_topology(&endpoints, &calls))
 }
+
+/// `{scope}` -> file-level import graph (RFC-0020 Phase 2): files → imported
+/// module paths, resolved to defining files by stem suffix.
+pub fn file_dependencies_json(
+    store: &Arc<SqlKnowledgeStore>,
+    request_json: String,
+) -> Result<String> {
+    let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
+    let scope = scope_of(&value)?;
+    let relationships = relationships_for(store, &scope)?;
+    let entities = block_on(store.list_entities(&scope)).map_err(to_napi_error)?;
+    let paths: Vec<String> = entities
+        .into_iter()
+        .filter(|e| matches!(e.kind, engram_domain::EntityKind::File))
+        .map(|e| e.name)
+        .collect();
+    encode(&cgq::file_dependencies(&relationships, &paths))
+}
+
+/// `{scope, query, depth?, maxNodes?, maxEdges?}` -> relevance-seeded bounded
+/// subgraph (RFC-0020 Phase 2 explore).
+pub fn explore_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> Result<String> {
+    let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
+    let scope = scope_of(&value)?;
+    let query_text = value["query"]
+        .as_str()
+        .ok_or_else(|| Error::from_reason("explore: `query` must be a string"))?
+        .to_owned();
+    let depth = value["depth"].as_u64().unwrap_or(2) as u32;
+    let max_nodes = value["maxNodes"].as_u64().unwrap_or(24) as usize;
+    let max_edges = value["maxEdges"].as_u64().unwrap_or(64) as usize;
+    let relationships = relationships_for(store, &scope)?;
+    let entities = block_on(store.list_entities(&scope)).map_err(to_napi_error)?;
+    let names: Vec<(String, Option<String>)> = entities
+        .into_iter()
+        .map(|e| (e.name, Some(format!("{:?}", e.kind).to_lowercase())))
+        .collect();
+    encode(&cgq::explore(
+        &relationships,
+        &names,
+        &query_text,
+        depth,
+        max_nodes,
+        max_edges,
+    ))
+}

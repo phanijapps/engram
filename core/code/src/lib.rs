@@ -12,6 +12,7 @@ pub mod frameworks;
 pub mod identity;
 pub mod noise;
 pub mod parser;
+pub mod queries;
 pub mod resolution;
 
 pub use edges::{StructuralEdges, contains_pairs};
@@ -21,4 +22,5 @@ pub use noise::is_noise_symbol;
 pub use parser::chunking::{ChunkCandidate, Chunker};
 pub use parser::code_symbol::CodeSymbolChunker;
 pub use parser::tree_sitter_chunker::TreeSitterChunker;
+pub use queries::{ExploreNode, FileDependency, explore, file_dependencies};
 pub use resolution::resolve_refs;

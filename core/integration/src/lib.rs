@@ -39,6 +39,7 @@
 
 pub mod batch;
 pub mod capability;
+pub mod code_graph;
 pub mod community_query;
 pub mod config;
 pub mod dto;
@@ -64,6 +65,7 @@ pub use batch::{
     StepStatus, TransactionGuarantee, aggregate_status,
 };
 pub use capability::{CapabilityReport, CapabilityReportBuilder};
+pub use code_graph::{ExploreNodeView, FileDependencyView};
 pub use community_query::CommunityQuery;
 pub use config::{
     BackendProfile, CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode,

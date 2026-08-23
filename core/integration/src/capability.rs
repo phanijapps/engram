@@ -91,6 +91,19 @@ pub struct CapabilityReport {
     /// Replayable procedures with success/failure accounting (RFC-0016 Layer 6).
     #[serde(default = "default_procedures")]
     pub procedures: CapabilityState,
+
+    /// Phase-2 code-graph queries: `file_dependencies` + `explore`
+    /// (RFC-0020 / engram-code spec) — Supported when the KnowledgeQuery
+    /// port backs them.
+    #[serde(default = "default_code_graph")]
+    pub code_graph: CapabilityState,
+}
+
+/// Serde default for the `code_graph` field.
+fn default_code_graph() -> CapabilityState {
+    CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    }
 }
 
 /// Serde default for the `identity` field.
@@ -139,7 +152,8 @@ impl CapabilityReport {
             observability: state.clone(),
             consolidation: state.clone(),
             identity: state.clone(),
-            procedures: state,
+            procedures: state.clone(),
+            code_graph: state,
         }
     }
 
@@ -237,6 +251,11 @@ impl CapabilityReport {
         self.episodes_evidence.is_supported()
     }
 
+    /// Returns true if Phase-2 code-graph queries are supported.
+    pub fn code_graph_supported(&self) -> bool {
+        self.code_graph.is_supported()
+    }
+
     /// Returns true if contradiction tracking is supported.
     pub fn contradiction_supported(&self) -> bool {
         self.contradiction.is_supported()
@@ -330,7 +349,8 @@ impl CapabilityReportBuilder {
                 maintenance: feature_disabled.clone(),
                 observability: feature_disabled.clone(),
                 consolidation: feature_disabled.clone(),
-                identity: feature_disabled,
+                identity: feature_disabled.clone(),
+                code_graph: feature_disabled,
             },
         }
     }
@@ -414,6 +434,11 @@ impl CapabilityReportBuilder {
     }
 
     /// Sets the episodes/evidence capability state.
+    pub fn code_graph(mut self, state: CapabilityState) -> Self {
+        self.report.code_graph = state;
+        self
+    }
+
     pub fn episodes_evidence(mut self, state: CapabilityState) -> Self {
         self.report.episodes_evidence = state;
         self

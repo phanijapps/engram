@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+engram-code = { path = "../code" }
 engram-domain = { path = "../domain" }
 engram-runtime = { path = "../runtime" }
 engram-graph-analytics = { path = "../graph-analytics" }

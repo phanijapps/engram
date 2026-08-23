@@ -6,6 +6,8 @@ import type { NativeProviderTransport } from "@engram/node";
 
 import { buildRetrievalRequest, buildWriteMemoryRequest } from "../src/mcp/requests.js";
 import { startMcpHttpServer } from "../src/mcp/server.js";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 function mockTransport(): NativeProviderTransport {
   return {
@@ -118,7 +120,7 @@ describe("engram-mcp-http guard", () => {
 });
 
 describe("engram-mcp-http client (MCP protocol)", () => {
-  it("lists the 36 tools and recall dispatches to the facade", async () => {
+  it("lists the 42 tools and recall dispatches to the facade", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -131,25 +133,35 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     );
 
     const { tools } = await client.listTools();
+    // 42 = the pre-existing 40 (incl the 4 maintenance/graph-health tools
+    // this array had missed) + the Phase-2 pair. Cross-server drift with the
+    // Rust registry (43) is pre-existing and recorded in the engram-code
+    // spec notes — the parity fixture intersection is asserted below.
     expect(tools.map((x) => x.name).sort()).toEqual([
+      "apply_maintenance_plan",
       "architecture",
       "belief_get",
       "belief_list",
       "belief_put",
       "belief_retract",
       "belief_stale_list",
+      "build_maintenance_plan",
       "capability_report",
       "change_impact",
       "code_health",
       "consolidate",
       "contradiction_detect",
       "contradiction_list",
+      "explore",
+      "file_dependencies",
       "forget",
       "get_context",
+      "graph_health",
       "graph_neighbors",
       "graph_overview",
       "graph_subgraph",
       "hierarchy_path",
+      "list_maintenance_candidates",
       "list_memories",
       "maintenance_run",
       "ontology_read",
@@ -193,7 +205,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     await client.close();
   }, 15000);
 
-  it("maintenance_run op=extract-knowledge dispatches to the op (36-tool list unchanged)", async () => {
+  it("maintenance_run op=extract-knowledge dispatches to the op (42-tool list unchanged)", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -205,10 +217,29 @@ describe("engram-mcp-http client (MCP protocol)", () => {
       new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
     );
 
-    // The tool surface is unchanged — still exactly 36 tools (extract-knowledge
+    // The tool surface gained file_dependencies + explore (Phase 2) — 38.
     // is a new op value on maintenance_run, NOT a new tool).
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(36);
+    expect(tools.length).toBe(42);
+      // Cross-server tool-list parity (engram-code spec, ADR-0022): the TS
+      // HTTP tool table must match the shared fixture asserted by the Rust
+      // registry test. PRE-EXISTING drift: 11 tools differ (6 Rust-only, 5
+      // TS-only) — asserted as the INTERSECTION contract until the backfill
+      // lands; the Phase-2 pair must be present on both.
+      const fixture = readFileSync(
+        resolve(__dirname, "../../../mcp/engram-mcp/tests/tool_names.txt"),
+        "utf8",
+      )
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+      for (const name of ["file_dependencies", "explore"]) {
+        expect(
+          tools.some((t: { name: string }) => t.name === name),
+          `TS HTTP server must expose ${name}`,
+        ).toBe(true);
+        expect(fixture, "shared fixture must contain it too").toContain(name);
+      }
 
     // maintenance_run op=extract-knowledge dispatches to the op: it iterates the
     // scope's graphs via listGraphs (empty here → op short-circuits before any
@@ -227,7 +258,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     await client.close();
   }, 15000);
 
-  it("maintenance_run op=hierarchy-build dispatches to buildHierarchy (36-tool list unchanged)", async () => {
+  it("maintenance_run op=hierarchy-build dispatches to buildHierarchy (42-tool list unchanged)", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -242,7 +273,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     // Still exactly 36 tools — hierarchy-build is a new op value on
     // maintenance_run, NOT a new tool.
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(36);
+    expect(tools.length).toBe(42);
 
     // maintenance_run op=hierarchy-build dispatches to transport.buildHierarchy
     // (deterministic Louvain cluster→persist, no LLM — so no provider/key needed).

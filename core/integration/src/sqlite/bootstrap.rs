@@ -169,6 +169,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut memory: Option<Arc<dyn MemoryService>> = None;
     let mut knowledge: Option<Arc<dyn KnowledgeRepository>> = None;
     let mut knowledge_query: Option<Arc<dyn crate::KnowledgeQuery>> = None;
+    let mut code_graph_state = CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    };
     let mut community_query: Option<Arc<dyn crate::CommunityQuery>> = None;
     let mut lexical_feed: Option<Arc<dyn crate::LexicalFeed>> = None;
     #[allow(unused_mut)]
@@ -236,6 +239,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             let store: Arc<SqlKnowledgeStore> = Arc::new(store);
             knowledge_store = Some(store.clone());
             knowledge_query = Some(store.clone());
+            code_graph_state = CapabilityState::Supported;
             community_query = Some(store.clone());
             if knowledge_ok {
                 knowledge = Some(store.clone());
@@ -616,6 +620,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         .vectors(vectors_state)
         .migration(migration_state)
         .episodes_evidence(episodes_evidence_state)
+        .code_graph(code_graph_state)
         .atomic_batch(atomic_batch_state)
         .unified_recall(unified_recall_state)
         .export_import(export_import_state)

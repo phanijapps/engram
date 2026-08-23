@@ -709,6 +709,76 @@ export function registerTools(
   // maintenance-tool pattern) so listTools / recall never load the codegraph
   // module and the server stays light.
 
+  // ---- Parity tools (Phase 2, RFC-0020) — file dependencies + explore.
+  // One Rust implementation reached through the node binding (the binding is
+  // a transport, never a second implementation).
+
+  server.registerTool(
+    "file_dependencies",
+    {
+      description:
+        "File-level import graph (RFC-0020 Phase 2): every scanned file → the module paths it imports, resolved to defining files by stem suffix where the scanned source contains them.",
+      inputSchema: z.object({ scope: scopeSchema }),
+    },
+    async ({ scope }) => {
+      const deps = await transport.fileDependencies(buildScope(scope));
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              Array.isArray(deps) && deps.length > 0
+                ? deps
+                    .map(
+                      (d: { fromPath: string; importPath: string; resolvedTo?: string }) =>
+                        `${d.fromPath} -> ${d.importPath}${
+                          d.resolvedTo ? ` (=> ${d.resolvedTo})` : ""
+                        }`,
+                    )
+                    .join("\n")
+                : "No import edges — scan a repository first.",
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    "explore",
+    {
+      description:
+        "Natural-language entry point (RFC-0020 Phase 2): identifier-shaped tokens in the query seed entity matches; matched seeds expand over calls/contains edges into a bounded, relevance-ordered subgraph (defaults: depth 2, 24 nodes, 64 edges).",
+      inputSchema: z.object({
+        query: z.string(),
+        scope: scopeSchema,
+        depth: z.number().int().min(0).max(4).optional(),
+        maxNodes: z.number().int().min(1).max(64).optional(),
+        maxEdges: z.number().int().min(1).max(256).optional(),
+      }),
+    },
+    async ({ query, scope, depth, maxNodes, maxEdges }) => {
+      const nodes = (await transport.explore({
+        scope: buildScope(scope),
+        query,
+        ...(depth !== undefined ? { depth } : {}),
+        ...(maxNodes !== undefined ? { maxNodes } : {}),
+        ...(maxEdges !== undefined ? { maxEdges } : {}),
+      })) as Array<{ name: string; kind?: string; hop: number }>;
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text:
+              nodes && nodes.length > 0
+                ? `=== explore: ${JSON.stringify(query)} ===\n` +
+                  nodes.map((n) => `[${n.kind ?? "?"}] ${n.name} (hop ${n.hop})`).join("\n")
+                : `No entities matched the query's identifier tokens: ${JSON.stringify(query)}`,
+          },
+        ],
+      };
+    },
+  );
+
   server.registerTool(
     "search",
     {

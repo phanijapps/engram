@@ -6,6 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+engram-code = { path = "../../core/code" }
 engram-domain = { path = "../../core/domain" }
 engram-graph-analytics = { path = "../../core/graph-analytics" }
 serde = { workspace = true, features = ["derive"] }

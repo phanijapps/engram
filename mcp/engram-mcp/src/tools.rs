@@ -697,7 +697,7 @@ pub fn index_docs(app: &App, args: &Value) -> Result<Value, ToolError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::ontology::{OntologyConfig, TaxonomyConfig};
     use crate::scope::project_scope;
@@ -707,7 +707,7 @@ mod tests {
     };
     use serde_json::json;
 
-    fn test_app(dir: &std::path::Path) -> App {
+    pub(crate) fn test_app(dir: &std::path::Path) -> App {
         let config = EngramConfig::new(
             dir.join("engram_data.db"),
             dir.to_path_buf(),

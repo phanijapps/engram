@@ -96,6 +96,8 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
             "get_context",
             "symbol_context",
             "change_impact",
+            "file_dependencies",
+            "explore",
             "resolve_entity",
             "graph_neighbors",
             "write_memory",
@@ -120,6 +122,8 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
             "architecture",
             "code_health",
             "whats_changed",
+            "file_dependencies",
+            "explore",
             "predict_context",
             "capability_report",
             "ontology_read",
@@ -647,6 +651,18 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
         handler: codegraph::change_impact,
     });
     registry.register(ToolRecord {
+        name: "file_dependencies",
+        description: "File-level import graph from `imports` edges (RFC-0020 Phase 2): each scanned file → the module paths it imports, resolved to defining files by stem suffix where the scanned source contains them.",
+        input_schema: json!({ "type": "object", "properties": {} }),
+        handler: codegraph::file_dependencies,
+    });
+    registry.register(ToolRecord {
+        name: "explore",
+        description: "Natural-language entry point (RFC-0020 Phase 2): identifier-shaped tokens in the query seed entity matches; matched seeds expand over calls/contains edges into a bounded, relevance-ordered subgraph (defaults: depth 2, 24 nodes, 64 edges).",
+        input_schema: json!({ "type": "object", "properties": { "query": { "type": "string", "description": "Natural-language question, e.g. 'how does parse_config flow into validate?'" }, "depth": { "type": "integer" }, "max_nodes": { "type": "integer" }, "max_edges": { "type": "integer" } }, "required": ["query"] }),
+        handler: codegraph::explore,
+    });
+    registry.register(ToolRecord {
         name: "code_health",
         description: "Dead code + repository stats.",
         input_schema: json!({ "type": "object", "properties": {} }),
@@ -714,4 +730,39 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
 
 fn ping(_app: &App, _args: &Value) -> Result<Value, ToolError> {
     Ok(protocol::text_content("pong"))
+}
+
+#[cfg(test)]
+mod parity_tests {
+    use super::*;
+
+    /// Cross-server tool-list parity (engram-code spec, ADR-0022): the
+    /// shared fixture `tests/tool_names.txt` is asserted against BOTH this
+    /// server's registry and the TS HTTP server's tool table — the two
+    /// transports must never drift apart.
+    #[test]
+    fn registry_matches_shared_tool_name_fixture() {
+        let fixture = std::fs::read_to_string("tests/tool_names.txt").expect("fixture");
+        let expected: Vec<String> = fixture
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_owned)
+            .collect();
+        let mut registry: ToolRegistry<App> = ToolRegistry::new();
+        register_all_tools(&mut registry);
+        let mut actual: Vec<String> = registry
+            .list()
+            .iter()
+            .filter_map(|t| t["name"].as_str().map(str::to_owned))
+            .collect();
+        actual.sort();
+        let mut expected = expected;
+        expected.sort();
+        assert_eq!(
+            actual, expected,
+            "Rust stdio registry drifted from the shared fixture — update \
+             tests/tool_names.txt (and the TS HTTP tool table) together"
+        );
+    }
 }

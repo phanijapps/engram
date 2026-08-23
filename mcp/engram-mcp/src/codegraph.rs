@@ -3904,3 +3904,119 @@ mod tests {
         );
     }
 }
+
+/// `file_dependencies` (RFC-0020 Phase 2): the file-level import graph.
+/// File-entity names double as the scanned-path set for module resolution.
+pub fn file_dependencies(app: &App, _args: &Value) -> Result<Value, ToolError> {
+    let rels = fetch_rels(app)?;
+    // Resolution needs EVERY scanned file (importers and non-importers
+    // alike) — source paths from File-kind entities, not just edge subjects.
+    let query_handle = app
+        .provider
+        .require_knowledge_query()
+        .map_err(|e| crate::tools::internal(e.to_string()))?;
+    let paths: Vec<String> = block_on(async { query_handle.list_entities(&app.scope).await })
+        .map_err(|e| crate::tools::internal(e.to_string()))?
+        .into_iter()
+        .filter(|e| matches!(e.kind, engram_domain::EntityKind::File))
+        .map(|e| e.name)
+        .collect();
+    let deps = engram_codegraph_queries::file_dependencies(&rels, &paths);
+    let lines: Vec<String> = deps
+        .iter()
+        .map(|d| {
+            format!(
+                "{} -> {}{}",
+                d.from_path,
+                d.import_path,
+                d.resolved_to
+                    .as_deref()
+                    .map(|r| format!(" (=> {r})"))
+                    .unwrap_or_default()
+            )
+        })
+        .collect();
+    Ok(protocol::text_content(if lines.is_empty() {
+        "No import edges — scan a repository first (scan_repo).".to_owned()
+    } else {
+        lines.join("\n")
+    }))
+}
+
+/// `explore` (RFC-0020 Phase 2): NL query → seeded bounded subgraph.
+pub fn explore(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let query = args["query"]
+        .as_str()
+        .ok_or_else(|| crate::tools::invalid("explore: query must be a string"))?;
+    let depth = args["depth"].as_u64().unwrap_or(2) as u32;
+    let max_nodes = args["max_nodes"].as_u64().unwrap_or(24) as usize;
+    let max_edges = args["max_edges"].as_u64().unwrap_or(64) as usize;
+    let rels = fetch_rels(app)?;
+    let query_handle = app
+        .provider
+        .require_knowledge_query()
+        .map_err(|e| crate::tools::internal(e.to_string()))?;
+    let entries: Vec<(String, Option<String>)> =
+        block_on(async { query_handle.list_entities(&app.scope).await })
+            .map_err(|e| crate::tools::internal(e.to_string()))?
+            .into_iter()
+            .map(|e| (e.name, Some(format!("{:?}", e.kind).to_lowercase())))
+            .collect();
+    let nodes =
+        engram_codegraph_queries::explore(&rels, &entries, query, depth, max_nodes, max_edges);
+    if nodes.is_empty() {
+        return Ok(protocol::text_content(format!(
+            "No entities matched the query's identifier tokens: {query:?}"
+        )));
+    }
+    let mut out = format!("=== explore: {query:?} (depth={depth}) ===");
+    for node in &nodes {
+        let kind = node.kind.as_deref().unwrap_or("?");
+        out.push_str(&format!("\n[{kind}] {} (hop {})", node.name, node.hop));
+    }
+    Ok(protocol::text_content(out))
+}
+
+#[cfg(test)]
+mod phase2_tool_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn explore_and_file_dependencies_answer_over_a_scanned_fixture() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/api.ts"),
+            "import { helper } from './utils';\nclass Repo extends Base {\n    find(): void { helper(); }\n}\nconst app = {} as any;\nfunction helper2() {}\napp.get('/items', helper2);\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/utils.ts"),
+            "export function helper() {}\n",
+        )
+        .unwrap();
+        let app = crate::tools::tests::test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+
+        // explore: the query's identifier token seeds `helper` and expands.
+        let out = explore(&app, &json!({ "query": "how does helper work?" })).unwrap();
+        let text = out["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("helper"), "explore output: {text}");
+        assert!(text.contains("hop 0"), "explore output: {text}");
+
+        // file_dependencies: api.ts imports ./utils, resolved by stem.
+        let deps = file_dependencies(&app, &json!({})).unwrap();
+        let dep_text = deps["content"][0]["text"].as_str().unwrap();
+        assert!(
+            dep_text.contains("src/api.ts -> ./utils"),
+            "deps output: {dep_text}"
+        );
+        assert!(
+            dep_text.contains("=> src/utils.ts"),
+            "deps output: {dep_text}"
+        );
+    }
+}

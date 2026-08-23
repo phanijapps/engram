@@ -419,7 +419,26 @@ impl GraphExtractor {
                 name: Some(file_name.clone()),
                 aliases: Vec::new(),
             };
-            let mut has_imports = false;
+            // Every code document gets its File entity (resolution needs
+            // importer and non-importer files alike), not just importers.
+            entities.push(KnowledgeEntity {
+                id: file_id.clone(),
+                graph_id: Some(graph_id.clone()),
+                kind: EntityKind::File,
+                name: file_name.clone(),
+                aliases: Vec::new(),
+                scope: source.scope.clone(),
+                source_refs: Vec::new(),
+                concept_refs: Vec::new(),
+                ontology_class_refs: Vec::new(),
+                provenance: source.provenance.clone(),
+                created_at: now,
+                updated_at: None,
+                valid_from: Some(now),
+                valid_until: None,
+                metadata: entity_git_meta.clone(),
+                archived_at: None,
+            });
             for path in &edges.imports {
                 let module_id = entity_id(&graph_id, &format!("module:{path}"));
                 let module_ref = EntityRef {
@@ -428,27 +447,6 @@ impl GraphExtractor {
                     name: Some(path.clone()),
                     aliases: Vec::new(),
                 };
-                if !has_imports {
-                    has_imports = true;
-                    entities.push(KnowledgeEntity {
-                        id: file_id.clone(),
-                        graph_id: Some(graph_id.clone()),
-                        kind: EntityKind::File,
-                        name: file_name.clone(),
-                        aliases: Vec::new(),
-                        scope: source.scope.clone(),
-                        source_refs: Vec::new(),
-                        concept_refs: Vec::new(),
-                        ontology_class_refs: Vec::new(),
-                        provenance: source.provenance.clone(),
-                        created_at: now,
-                        updated_at: None,
-                        valid_from: Some(now),
-                        valid_until: None,
-                        metadata: entity_git_meta.clone(),
-                        archived_at: None,
-                    });
-                }
                 entities.push(KnowledgeEntity {
                     id: module_id,
                     graph_id: Some(graph_id.clone()),

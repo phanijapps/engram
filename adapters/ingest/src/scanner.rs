@@ -530,15 +530,13 @@ where
                         for rel in &g.relationships {
                             repo.put_relationship(rel.clone()).await?;
                         }
-                        eprintln!(
-                            "[SWEEP-DEBUG] {} unresolved={} rels={}",
-                            rel,
-                            g.unresolved.len(),
-                            g.relationships.len()
-                        );
                         if !g.unresolved.is_empty() {
                             if let Err(e) = repo.put_unresolved_refs(g.unresolved.clone()).await {
-                                eprintln!("[SWEEP-DEBUG] ledger put failed: {e:?}");
+                                // Sibling pattern of the five warning-tagged
+                                // scans below: surface + count, never swallow.
+                                eprintln!(
+                                    "[engram-ingest] warning: failed to persist ledger rows for '{rel}': {e}"
+                                );
                             }
                         }
                         for (chunk_idx, entity_refs) in &g.chunk_entities {

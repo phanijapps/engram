@@ -35,6 +35,11 @@ core/                      Storage-neutral Rust crates.
   integration/             SDK facade: EngramProvider, EngramConfig, CapabilityReport.
   eval/                    Deterministic fixtures and regression harness.
   graph-analytics/         Pure graph algorithms (PageRank, betweenness, communities, reachability).
+  code/                    Deterministic code-indexing behavior crate (engram-code, ADR-0028):
+                           tree-sitter parsing, symbol identity, typed code edges,
+                           cross-file resolution + unresolved-refs ledger, framework
+                           patterns. Pure (no I/O/git/storage/LLM); adapters/ingest
+                           consumes it to build the code graph.
 
 adapters/                  Replaceable infrastructure crates.
   ingest/                  Filesystem/Git ingestion adapter until split.

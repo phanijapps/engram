@@ -144,16 +144,17 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   `contradiction` + `maintenance` to `Supported`. **Rust stays LLM-free** (LLM config is
   TS/env-only). Extends `ts-runtime-maintenance`. Constrained by RFC-0017, ADR-0022.
   **Ready to plan** (milestone 2).
-- [`extraction-quality`](extraction-quality/spec.md): RFC-0020 Phase 1 — qualified code
-  identities (`{repo}/{path}::{bare_name}`) + a code-symbol noise filter (shipped) +
-  suffix/alias resolution so `symbol_context`/`change_impact`/`search` match bare symbols
-  on **both** the TS HTTP MCP and the Rust stdio MCP (ADR-0022); removes the naive
-  document heading→Concept emission; adds an LLM `extract-knowledge` `engram-maintain` op
-  (mirrors `reflect`/`contradict`) that reads each document's chunks and writes valid
-  `Concept` entities + typed relationships, consolidated across documents by canonical
-  identity (RFC-0014). Per-document chunk reads via the existing `list_chunks_by_document`.
-  Constrained by RFC-0020 (Accepted), RFC-0014, RFC-0018, ADR-0022. Draft (spec
-  review-clean; ready for the work-loop).
+- [`extraction-quality`](extraction-quality/spec.md): RFC-0020 Phase 1 — bare logical
+  code identities (path-qualified names were reverted by RFC-0020's revision; repo/path
+  are disambiguators, RFC-0020 Phase 2 will receiver-qualify) + a code-symbol noise
+  filter + suffix/alias resolution so `symbol_context`/`change_impact`/`search` match
+  bare symbols on **both** the TS HTTP MCP and the Rust stdio MCP (ADR-0022); removes
+  the naive document heading→Concept emission; adds an LLM `extract-knowledge`
+  `engram-maintain` op (mirrors `reflect`/`contradict`) that reads each document's
+  chunks and writes valid `Concept` entities + typed relationships, consolidated across
+  documents by canonical identity (RFC-0014). Per-document chunk reads via the existing
+  `list_chunks_by_document`. Constrained by RFC-0020 (Accepted), RFC-0014, RFC-0018,
+  ADR-0022. Implementing (all ACs shipped).
 - [`graph-maintenance-api`](graph-maintenance-api/spec.md): a first-class,
   graph-scoped, source-filtered maintenance API over the knowledge graph —
   list/filter/paginate, deterministic candidate detection
@@ -168,3 +169,20 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   (T1–T8: domain types + archived_at, port + detectors, SQLite adapter with
   transactional apply/merge/coalesce, facade + CapabilityReport, N-API binding +
   @engram/node, engram-mcp tools).
+- [`engram-code`](engram-code/spec.md): RFC-0020 Phase 2 vehicle — code indexing
+  carved into a dedicated behavior crate `engram-code` (`core/code`, pure
+  `parse → CodeModel` / `resolve → ResolvedCodeGraph`, tree-sitter grammars
+  in-crate per ADR-0028) that `adapters/ingest` uses to build the code graph;
+  adopts the codegraph-parity deltas from the TencentDB comparison §7:
+  receiver-qualified identity + scope-wide multi-candidate symbol table
+  (replaces last-write-wins `name_index`), typed edges
+  (`imports`/`contains`/`extends`/`implements`/`routes_to` beside `calls`),
+  an unresolved-refs ledger with orphan sweep, framework resolvers (starter
+  five + React callbacks), `file_dependencies` + NL `explore` queries on all
+  five surfaces (facade → N-API → @engram/node → both MCP servers, pinned by
+  a new cross-server tool-list parity check), signature/docstring lexical
+  indexing, and a documented scale benchmark. Constrained by RFC-0020
+  (Accepted, §Phase 2), extraction-quality (Phase 1 compat; `name_index`
+  Ask-first consciously superseded), ADR-0022, ADR-0009, RFC-0012,
+  ADR-0017, RFC-0009/ADR-0018, ADR-0028. **Draft** (spec review-clean, 3
+  passes; ready for the work-loop).

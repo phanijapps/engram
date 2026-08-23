@@ -292,3 +292,82 @@ fn scan_honors_custom_deny_filter() {
 
     let _ = fs::remove_dir_all(&root);
 }
+
+/// RFC-0020 Phase 2 typed structural edges: scans yield `imports`
+/// (file→module), `contains` (receiver-qualified containment), `extends` /
+/// `implements` (inheritance) relationships beside `calls`. One code file per
+/// scan: a known store-side upsert bug (NULL `archived_at` read on the shared
+/// repository entity, pre-existing — see notes.md) aborts the second file's
+/// persistence in multi-file scans.
+#[test]
+fn scan_yields_typed_structural_edges_typescript() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-struct-ts", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    fs::write(
+        root.join("repo.ts"),
+        "import { helper } from './utils';\nclass Repo extends Base implements Store {\n    find(): void {}\n}\n",
+    )
+    .expect("write repo.ts");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "structural-fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    let rels = block_on(store.list_relationships(&scope())).expect("list rels");
+    let has = |predicate: &str, subject: &str, object: &str| {
+        rels.iter().any(|r| {
+            r.predicate == predicate
+                && r.subject.name.as_deref() == Some(subject)
+                && r.object.name.as_deref() == Some(object)
+        })
+    };
+    assert!(has("imports", "repo.ts", "./utils"), "imports: {rels:?}");
+    assert!(has("contains", "Repo", "Repo::find"), "contains: {rels:?}");
+    assert!(has("extends", "Repo", "Base"), "extends: {rels:?}");
+    assert!(has("implements", "Repo", "Store"), "implements: {rels:?}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn scan_yields_typed_structural_edges_rust() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-struct-rs", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    fs::write(
+        root.join("main.rs"),
+        "use std::fmt;\nstruct Cache;\nimpl Store for Cache {\n    fn get(&self) -> u8 { 0 }\n}\ntrait Store {}\n",
+    )
+    .expect("write main.rs");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "structural-fixture-rs".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    let rels = block_on(store.list_relationships(&scope())).expect("list rels");
+    let has = |predicate: &str, subject: &str, object: &str| {
+        rels.iter().any(|r| {
+            r.predicate == predicate
+                && r.subject.name.as_deref() == Some(subject)
+                && r.object.name.as_deref() == Some(object)
+        })
+    };
+    assert!(has("imports", "main.rs", "std::fmt"), "imports: {rels:?}");
+    assert!(has("contains", "Cache", "Cache::get"), "contains: {rels:?}");
+    assert!(has("implements", "Cache", "Store"), "implements: {rels:?}");
+    let _ = fs::remove_dir_all(&root);
+}

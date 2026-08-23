@@ -53,7 +53,7 @@ impl GraphExtractor {
         document: &SourceDocument,
         chunks: &[KnowledgeChunk],
     ) -> CoreResult<ExtractedGraph> {
-        self.extract_with_calls(source, document, chunks, None)
+        self.extract_with_calls(source, document, chunks, None, None)
     }
 
     /// Extracts a graph, optionally using pre-computed AST call edges instead of
@@ -65,6 +65,7 @@ impl GraphExtractor {
         document: &SourceDocument,
         chunks: &[KnowledgeChunk],
         ast_calls: Option<&[(String, String)]>,
+        structural: Option<&engram_code::StructuralEdges>,
     ) -> CoreResult<ExtractedGraph> {
         let now = Utc::now();
         let graph_id = graph_id_for(document);
@@ -396,6 +397,120 @@ impl GraphExtractor {
             });
         }
 
+        // RFC-0020 Phase 2 typed structural edges. Containment is
+        // intra-document (both endpoints are local entities); inheritance
+        // targets may be external (name-only, resolved cross-file in
+        // `extract_into`); imports form a File entity → Module entity edge
+        // per import path (graph-only entities, like the Repository entity).
+        if let Some(edges) = structural {
+            let file_name = document
+                .path
+                .clone()
+                .unwrap_or_else(|| document.id.to_string());
+            let file_id = entity_id(&graph_id, &file_name);
+            let file_ref = EntityRef {
+                id: Some(file_id.clone()),
+                kind: Some("file".to_owned()),
+                name: Some(file_name.clone()),
+                aliases: Vec::new(),
+            };
+            let mut has_imports = false;
+            for path in &edges.imports {
+                let module_id = entity_id(&graph_id, &format!("module:{path}"));
+                let module_ref = EntityRef {
+                    id: Some(module_id.clone()),
+                    kind: Some("module".to_owned()),
+                    name: Some(path.clone()),
+                    aliases: Vec::new(),
+                };
+                if !has_imports {
+                    has_imports = true;
+                    entities.push(KnowledgeEntity {
+                        id: file_id.clone(),
+                        graph_id: Some(graph_id.clone()),
+                        kind: EntityKind::File,
+                        name: file_name.clone(),
+                        aliases: Vec::new(),
+                        scope: source.scope.clone(),
+                        source_refs: Vec::new(),
+                        concept_refs: Vec::new(),
+                        ontology_class_refs: Vec::new(),
+                        provenance: source.provenance.clone(),
+                        created_at: now,
+                        updated_at: None,
+                        valid_from: Some(now),
+                        valid_until: None,
+                        metadata: entity_git_meta.clone(),
+                        archived_at: None,
+                    });
+                }
+                entities.push(KnowledgeEntity {
+                    id: module_id,
+                    graph_id: Some(graph_id.clone()),
+                    kind: EntityKind::Module,
+                    name: path.clone(),
+                    aliases: Vec::new(),
+                    scope: source.scope.clone(),
+                    source_refs: Vec::new(),
+                    concept_refs: Vec::new(),
+                    ontology_class_refs: Vec::new(),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    valid_from: Some(now),
+                    valid_until: None,
+                    metadata: entity_git_meta.clone(),
+                    archived_at: None,
+                });
+                relationships.push(KnowledgeRelationship {
+                    id: relationship_id(&graph_id, &file_name, path),
+                    graph_id: Some(graph_id.clone()),
+                    subject: file_ref.clone(),
+                    predicate: "imports".to_owned(),
+                    object: module_ref,
+                    scope: source.scope.clone(),
+                    evidence: Vec::new(),
+                    confidence: Some(1.0),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    archived_at: None,
+                });
+            }
+            let mut structural_edge = |predicate: &str, from: &str, to: &str| {
+                let subject = index.get(from).map(|&i| entity_ref(&entities[i]));
+                let Some(subject) = subject else { return };
+                relationships.push(KnowledgeRelationship {
+                    id: relationship_id(&graph_id, from, &format!("{predicate}:{to}")),
+                    graph_id: Some(graph_id.clone()),
+                    subject,
+                    predicate: predicate.to_owned(),
+                    object: EntityRef {
+                        id: None,
+                        kind: None,
+                        name: Some(to.to_owned()),
+                        aliases: Vec::new(),
+                    },
+                    scope: source.scope.clone(),
+                    evidence: Vec::new(),
+                    confidence: Some(1.0),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    archived_at: None,
+                });
+            };
+            for (parent, member) in &edges.contains {
+                structural_edge("contains", parent, member);
+            }
+            for (child, base) in &edges.extends {
+                structural_edge("extends", child, base);
+            }
+            for (child, iface) in &edges.implements {
+                structural_edge("implements", child, iface);
+            }
+        }
+
         Ok(ExtractedGraph {
             graph,
             entities,
@@ -501,6 +616,12 @@ pub fn register_entities(
     path: Option<&str>,
 ) {
     for entity in entities {
+        // File/Module entities (import endpoints) are not call targets —
+        // registering their path-shaped names would pollute bare-name
+        // resolution (an import path like `fmt` colliding with a `fmt` fn).
+        if matches!(entity.kind, EntityKind::File | EntityKind::Module) {
+            continue;
+        }
         index.register(
             &entity.name,
             SymbolCandidate {
@@ -512,17 +633,19 @@ pub fn register_entities(
     }
 }
 
-/// Fills name-only `calls` object refs against the scope-wide symbol table,
-/// preferring same-document then same-repo candidates. Ambiguous or unknown
-/// references stay name-only (recorded by the Phase-2 ledger, T5).
+/// Fills name-only object refs (`calls`, `extends`, `implements`) against the
+/// scope-wide symbol table, preferring same-document then same-repo
+/// candidates. Ambiguous or unknown references stay name-only (recorded by
+/// the Phase-2 ledger, T5).
 pub fn resolve_call_refs(
     index: &SymbolIndex,
     relationships: &mut [KnowledgeRelationship],
     repo: Option<&str>,
     path: Option<&str>,
 ) {
+    const RESOLVABLE: [&str; 3] = ["calls", "extends", "implements"];
     for rel in relationships.iter_mut() {
-        if rel.predicate == "calls" && rel.object.id.is_none() {
+        if RESOLVABLE.contains(&rel.predicate.as_str()) && rel.object.id.is_none() {
             let Some(name) = rel.object.name.clone() else {
                 continue;
             };

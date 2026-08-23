@@ -7,9 +7,11 @@
 //! I/O, git, storage, async runtime, or LLM; `adapters/ingest` consumes it to
 //! build the code graph.
 
+pub mod edges;
 pub mod identity;
 pub mod parser;
 
+pub use edges::{StructuralEdges, contains_pairs};
 pub use identity::{Resolution, SymbolCandidate, SymbolIndex, bare_tail, qualified_name};
 pub use parser::chunking::{ChunkCandidate, Chunker};
 pub use parser::code_symbol::CodeSymbolChunker;

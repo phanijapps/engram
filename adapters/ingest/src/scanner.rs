@@ -467,6 +467,15 @@ where
             } else {
                 None
             };
+            let structural = if let Some(ref ts) = ts_chunker {
+                if ts.supports(ext) {
+                    ts.extract_structural(&text_for_ast, ext).ok()
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
             let extracted_result = if let Some(ref calls) = ast_calls {
                 extractor
                     .extract_with_calls(
@@ -474,6 +483,7 @@ where
                         &ingested.document,
                         &ingested.chunks,
                         Some(calls),
+                        structural.as_ref(),
                     )
                     .map(|graph| {
                         // Persist manually (extract_with_calls doesn't persist).

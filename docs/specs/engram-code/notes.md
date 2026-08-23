@@ -40,3 +40,24 @@
   (parse_symbol already anticipated `impl` anchors). Trait impls name the
   concrete type (`type` field), so `impl Display for Foo` methods are
   `Foo::fmt`.
+
+## 2026-08-23 (T4)
+
+- **Root cause of the pre-existing failure cluster identified:** multi-file
+  code scans share the per-source Repository entity; the second file's
+  `put_entity` upsert of that shared entity fails with `Invalid column type
+  Null … archived_at` (store read-back), aborting that file's whole
+  persistence block. Instrumentation proved it: in a two-file scan, whichever
+  file persists second fails, the first succeeds. This is the same bug behind
+  the pre-existing `contract_ingestion` (7 fails) and
+  `code_entities_carry_logical_names` failures — all predate engram-code and
+  live in the in-flight ADR-0027 sqlite work's territory. **Blocks nothing in
+  T4** (tests restructured to single-file scans); **will surface in T8**
+  (multi-file cutover) unless the sqlite upsert lands first — flag for the
+  human at the T8 gate.
+- Structural wiring: `extract_with_calls` takes `structural:
+  Option<&StructuralEdges>`; imports form File→Module entities (graph-only,
+  like Repository); contains/extends/implements attach between declaration
+  entities; `resolve_call_refs` generalized to `calls|extends|implements`;
+  File/Module entities are excluded from symbol-table registration (import
+  paths would pollute bare-name resolution).

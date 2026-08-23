@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use engram_domain::{KnowledgeChunkKind, SourceLocation};
 use engram_runtime::{CoreError, CoreResult};
 
+use crate::edges::{StructuralEdges, contains_pairs};
 use crate::parser::chunking::{ChunkCandidate, Chunker};
 
 /// One grammar entry: the tree-sitter Language + a node-type → keyword map.
@@ -111,6 +112,35 @@ impl TreeSitterChunker {
 
     pub fn supports(&self, ext: &str) -> bool {
         self.entries.contains_key(ext)
+    }
+
+    /// Extracts typed structural facts (imports / contains / extends /
+    /// implements) from the AST (RFC-0020 Phase 2). Pure name-level output —
+    /// the extractor attaches entity refs. Languages without a mapped
+    /// import/inheritance node kind emit nothing for that fact.
+    pub fn extract_structural(&self, text: &str, ext: &str) -> CoreResult<StructuralEdges> {
+        let Some(entry) = self.entries.get(ext) else {
+            return Ok(StructuralEdges::default());
+        };
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&entry.language)
+            .map_err(|e| CoreError::InvalidRequest {
+                reason: format!("tree-sitter language error: {e}"),
+            })?;
+        let tree = parser.parse(text, None).ok_or(CoreError::InvalidRequest {
+            reason: "tree-sitter parse failed".to_owned(),
+        })?;
+        let mut edges = StructuralEdges::default();
+        walk_structural(
+            &tree.root_node(),
+            text.as_bytes(),
+            &entry.kind_map,
+            ext,
+            &[],
+            &mut edges,
+        );
+        Ok(edges)
     }
 
     /// Extracts (caller, callee) pairs from AST call expressions. Walks the tree
@@ -584,6 +614,164 @@ fn php_kinds() -> HashMap<&'static str, &'static str> {
         ("method_declaration", "fn"),
     ]
     .into()
+}
+
+/// Receiver-aware structural walk: collects containment pairs from
+/// declaration nesting, inheritance clauses, and import statements.
+fn walk_structural(
+    node: &tree_sitter::Node,
+    source: &[u8],
+    kind_map: &HashMap<&str, &str>,
+    ext: &str,
+    receivers: &[String],
+    edges: &mut StructuralEdges,
+) {
+    let kind = node.kind();
+    // Imports: language-specific node kinds; the path text is normalized by
+    // `import_path`.
+    if let Some(path) = import_path(node, source, ext) {
+        if !path.is_empty() {
+            edges.imports.push(path);
+        }
+    } else if kind_map.contains_key(kind) {
+        let name_node = node
+            .child_by_field_name("name")
+            .or_else(|| node.child_by_field_name("declarator"))
+            .or_else(|| node.child_by_field_name("type"));
+        if let Some(name_node) = name_node {
+            let name_text = extract_name(&name_node, source);
+            if !name_text.is_empty() {
+                let qualified = if receivers.is_empty() {
+                    name_text.clone()
+                } else {
+                    format!("{}::{}", receivers.join("::"), name_text)
+                };
+                edges.contains.extend(contains_pairs(receivers, &name_text));
+                extract_inheritance(node, source, ext, &qualified, edges);
+                let mut child_receivers = receivers.to_vec();
+                child_receivers.push(name_text);
+                let mut cursor = node.walk();
+                for child in node.named_children(&mut cursor) {
+                    walk_structural(&child, source, kind_map, ext, &child_receivers, edges);
+                }
+                return;
+            }
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        walk_structural(&child, source, kind_map, ext, receivers, edges);
+    }
+}
+
+/// Import path for a node, when the node is an import statement for the
+/// language. Returns `None` for non-import nodes.
+fn import_path(node: &tree_sitter::Node, source: &[u8], ext: &str) -> Option<String> {
+    let text = node.utf8_text(source).unwrap_or("").trim().to_owned();
+    match (ext, node.kind()) {
+        ("rs", "use_declaration") => {
+            let body = text.strip_prefix("use ")?.trim_end_matches(';');
+            // Grouped uses (`std::io::{Read, Write}`) attribute the group's
+            // parent path; plain uses keep the full path.
+            let path = body.split('{').next().unwrap_or(body).trim_matches(':');
+            Some(path.to_owned())
+        }
+        ("py", "import_statement") => Some(text.strip_prefix("import ")?.to_owned()),
+        ("py", "import_from_statement") => {
+            let after = text.strip_prefix("from ")?;
+            Some(after.split(" import").next().unwrap_or(after).to_owned())
+        }
+        ("ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs", "import_statement") => {
+            // `import { x } from './y'` / `import 'z'` → the quoted module.
+            let start = text.find('\'')?;
+            let rest = &text[start + 1..];
+            let end = rest.find('\'')?;
+            Some(rest[..end].to_owned())
+        }
+        ("go", "import_spec") => {
+            let t = text.trim_matches('"');
+            Some(t.to_owned())
+        }
+        _ => None,
+    }
+}
+
+/// Recursively collect `extends_clause` / `implements_clause` targets under a
+/// TS class node; each clause's named children are the base/interface names.
+fn collect_heritage(
+    node: &tree_sitter::Node,
+    source: &[u8],
+    qualified: &str,
+    edges: &mut StructuralEdges,
+) {
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        match child.kind() {
+            "extends_clause" | "implements_clause" => {
+                let mut inner = child.walk();
+                for target in child.named_children(&mut inner) {
+                    let name = extract_name(&target, source);
+                    if name.is_empty() {
+                        continue;
+                    }
+                    if child.kind() == "implements_clause" {
+                        edges.implements.push((qualified.to_owned(), name));
+                    } else {
+                        edges.extends.push((qualified.to_owned(), name));
+                    }
+                }
+            }
+            _ => collect_heritage(&child, source, qualified, edges),
+        }
+    }
+}
+
+/// Inheritance clauses: Python bases, TS heritage clauses, Rust trait impls.
+fn extract_inheritance(
+    node: &tree_sitter::Node,
+    source: &[u8],
+    ext: &str,
+    qualified: &str,
+    edges: &mut StructuralEdges,
+) {
+    match ext {
+        "py" => {
+            if node.kind() == "class_definition" {
+                if let Some(supers) = node.child_by_field_name("superclasses") {
+                    let text = supers.utf8_text(source).unwrap_or("");
+                    for base in text.split(',') {
+                        let base = base.trim().trim_start_matches('(').trim_end_matches(')');
+                        if !base.is_empty() {
+                            edges.extends.push((qualified.to_owned(), base.to_owned()));
+                        }
+                    }
+                }
+            }
+        }
+        "ts" | "tsx" | "js" | "jsx" | "mjs" | "cjs" => {
+            // The grammar nests `extends_clause` / `implements_clause` under
+            // `class_heritage` on the class node.
+            if node.kind() == "class_declaration" || node.kind() == "class" {
+                collect_heritage(node, source, qualified, edges);
+            }
+        }
+        "rs" => {
+            // `impl Trait for Type` → Type implements Trait.
+            if node.kind() == "impl_item" {
+                if let (Some(trait_node), Some(type_node)) = (
+                    node.child_by_field_name("trait"),
+                    node.child_by_field_name("type"),
+                ) {
+                    let trait_name = extract_name(&trait_node, source);
+                    let type_name = extract_name(&type_node, source);
+                    if !trait_name.is_empty() && !type_name.is_empty() {
+                        edges.implements.push((type_name, trait_name));
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]

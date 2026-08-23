@@ -8,12 +8,14 @@
 //! build the code graph.
 
 pub mod edges;
+pub mod frameworks;
 pub mod identity;
 pub mod noise;
 pub mod parser;
 pub mod resolution;
 
 pub use edges::{StructuralEdges, contains_pairs};
+pub use frameworks::{FrameworkFacts, RouteFact, extract_frameworks};
 pub use identity::{Resolution, SymbolCandidate, SymbolIndex, bare_tail, qualified_name};
 pub use noise::is_noise_symbol;
 pub use parser::chunking::{ChunkCandidate, Chunker};

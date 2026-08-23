@@ -381,7 +381,11 @@ fn orphan_sweep_heals_pending_references_on_later_scans() {
     let root = std::env::temp_dir().join(format!("engram-scan-{}-sweep", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).expect("create root");
-    fs::write(root.join("caller.rs"), "fn run() {\n    ghost_fn();\n}\n").expect("write caller.rs");
+    fs::write(
+        root.join("caller.rs"),
+        "fn orchestrate() {\n    ghost_fn();\n}\n",
+    )
+    .expect("write caller.rs");
 
     let store = SqlKnowledgeStore::open_in_memory().expect("open store");
     let opts = ScanOptions {
@@ -434,9 +438,16 @@ fn orphan_sweep_heals_pending_references_on_later_scans() {
     );
 
     let rels = block_on(store.list_relationships(&scope())).expect("rels");
+    let ents = block_on(store.list_entities(&scope())).expect("entities");
+    let orchestrate_id = ents
+        .iter()
+        .find(|e| e.name == "orchestrate")
+        .expect("orchestrate entity")
+        .id
+        .clone();
     assert!(
         rels.iter().any(|r| r.predicate == "calls"
-            && r.subject.name.as_deref() == Some("run")
+            && r.subject.id.as_ref() == Some(&orchestrate_id)
             && r.object.name.as_deref() == Some("ghost_fn")
             && r.object.id.is_some()),
         "sweep must write the healed calls edge: {rels:?}"
@@ -451,7 +462,11 @@ fn reingest_retracts_prior_ledger_rows() {
     let root = std::env::temp_dir().join(format!("engram-scan-{}-ledretract", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     fs::create_dir_all(&root).expect("create root");
-    fs::write(root.join("caller.rs"), "fn run() {\n    ghost_fn();\n}\n").expect("write caller.rs");
+    fs::write(
+        root.join("caller.rs"),
+        "fn orchestrate() {\n    ghost_fn();\n}\n",
+    )
+    .expect("write caller.rs");
 
     let store = SqlKnowledgeStore::open_in_memory().expect("open store");
     let opts = ScanOptions {
@@ -474,7 +489,7 @@ fn reingest_retracts_prior_ledger_rows() {
     // ledger rows) and regenerates extraction for the new content.
     fs::write(
         root.join("caller.rs"),
-        "fn run() {\n    other_ghost();\n}\n",
+        "fn orchestrate() {\n    other_ghost();\n}\n",
     )
     .expect("rewrite caller.rs");
     scan_repository(&root, &opts, &store, |_| {}).expect("scan 2");
@@ -489,6 +504,59 @@ fn reingest_retracts_prior_ledger_rows() {
     assert!(
         pending2.iter().any(|r| r.reference_name == "other_ghost"),
         "the new extraction regenerates its own row: {pending2:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// RFC-0020 Phase 2 framework resolvers: an Express route yields an
+/// `Endpoint` entity wired to its handler via `routes_to`; a React
+/// `onClick={handler}` prop yields a `calls` edge from the component.
+#[test]
+fn scan_extracts_framework_routes_and_callbacks() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-frameworks", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    fs::write(
+        root.join("server.ts"),
+        "const app = {} as any;\nfunction listUsers() {}\nfunction createUser() {}\napp.get('/users', listUsers);\napp.post('/users', createUser);\n",
+    )
+    .expect("write server.ts");
+    fs::write(
+        root.join("button.tsx"),
+        "function handleClick() {}\nfunction UserButton() {\n  return null as any;\n}\nconst x = { onClick: handleClick };\n",
+    )
+    .expect("write button.tsx");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "frameworks-fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (summary, _) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    assert_eq!(summary.ingested, 2, "both files: {summary:?}");
+
+    let rels = block_on(store.list_relationships(&scope())).expect("rels");
+    assert!(
+        rels.iter().any(|r| r.predicate == "routes_to"
+            && r.subject.name.as_deref() == Some("GET /users")
+            && r.object.name.as_deref() == Some("listUsers")),
+        "express route edge missing: {rels:?}"
+    );
+    assert!(
+        rels.iter().any(|r| r.predicate == "routes_to"
+            && r.subject.name.as_deref() == Some("POST /users")
+            && r.object.name.as_deref() == Some("createUser")),
+        "second route edge missing: {rels:?}"
+    );
+    let ents = block_on(store.list_entities(&scope())).expect("entities");
+    assert!(
+        ents.iter().any(|e| e.name == "GET /users"),
+        "endpoint entity missing: {ents:?}"
     );
     let _ = fs::remove_dir_all(&root);
 }

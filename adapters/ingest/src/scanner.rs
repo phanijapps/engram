@@ -467,6 +467,10 @@ where
             } else {
                 None
             };
+            let frameworks = {
+                let facts = engram_code::extract_frameworks(&text_for_ast, ext);
+                if facts.is_empty() { None } else { Some(facts) }
+            };
             let structural = if let Some(ref ts) = ts_chunker {
                 if ts.supports(ext) {
                     ts.extract_structural(&text_for_ast, ext).ok()
@@ -484,6 +488,7 @@ where
                         &ingested.chunks,
                         Some(calls),
                         structural.as_ref(),
+                        frameworks.as_ref(),
                     )
                     .map(|graph| {
                         // Persist manually (extract_with_calls doesn't persist).

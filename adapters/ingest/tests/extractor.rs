@@ -273,6 +273,7 @@ fn cross_file_calls_resolve_after_qualification() {
             &b.chunks,
             Some(&[("bar".to_string(), "foo".to_string())]),
             None,
+            None,
         )
         .expect("extract B");
     engram_ingest::resolve_call_refs(&index, &mut ext_b.relationships, None, None);

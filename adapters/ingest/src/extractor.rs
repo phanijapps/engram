@@ -57,7 +57,7 @@ impl GraphExtractor {
         document: &SourceDocument,
         chunks: &[KnowledgeChunk],
     ) -> CoreResult<ExtractedGraph> {
-        self.extract_with_calls(source, document, chunks, None, None)
+        self.extract_with_calls(source, document, chunks, None, None, None)
     }
 
     /// Extracts a graph, optionally using pre-computed AST call edges instead of
@@ -70,6 +70,7 @@ impl GraphExtractor {
         chunks: &[KnowledgeChunk],
         ast_calls: Option<&[(String, String)]>,
         structural: Option<&engram_code::StructuralEdges>,
+        frameworks: Option<&engram_code::FrameworkFacts>,
     ) -> CoreResult<ExtractedGraph> {
         let now = Utc::now();
         let graph_id = graph_id_for(document);
@@ -520,6 +521,84 @@ impl GraphExtractor {
             }
             for (child, iface) in &edges.implements {
                 structural_edge("implements", child, iface);
+            }
+        }
+
+        // RFC-0020 Phase 2 framework patterns: routes become Endpoint
+        // entities (`GET /users`) wired to their handlers via `routes_to`;
+        // React callbacks become `calls` edges from the component. Handlers
+        // resolve against the document symbol table; handlers declared in
+        // other files stay name-only for cross-file resolution.
+        if let Some(facts) = frameworks {
+            for route in &facts.routes {
+                let endpoint_name = format!("{} {}", route.method, route.path);
+                let endpoint_id = entity_id(&graph_id, &endpoint_name);
+                entities.push(KnowledgeEntity {
+                    id: endpoint_id.clone(),
+                    graph_id: Some(graph_id.clone()),
+                    kind: EntityKind::Endpoint,
+                    name: endpoint_name.clone(),
+                    aliases: Vec::new(),
+                    scope: source.scope.clone(),
+                    source_refs: Vec::new(),
+                    concept_refs: Vec::new(),
+                    ontology_class_refs: Vec::new(),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    valid_from: Some(now),
+                    valid_until: None,
+                    metadata: entity_git_meta.clone(),
+                    archived_at: None,
+                });
+                relationships.push(KnowledgeRelationship {
+                    id: relationship_id(&graph_id, &endpoint_name, &route.handler),
+                    graph_id: Some(graph_id.clone()),
+                    subject: EntityRef {
+                        id: Some(endpoint_id),
+                        kind: Some("endpoint".to_owned()),
+                        name: Some(endpoint_name),
+                        aliases: Vec::new(),
+                    },
+                    predicate: "routes_to".to_owned(),
+                    object: EntityRef {
+                        id: None,
+                        kind: None,
+                        name: Some(route.handler.clone()),
+                        aliases: Vec::new(),
+                    },
+                    scope: source.scope.clone(),
+                    evidence: Vec::new(),
+                    confidence: Some(1.0),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    archived_at: None,
+                });
+            }
+            for (component, handler) in &facts.callbacks {
+                let Some(&component_index) = index.get(component) else {
+                    continue;
+                };
+                relationships.push(KnowledgeRelationship {
+                    id: relationship_id(&graph_id, component, &format!("jsx:{handler}")),
+                    graph_id: Some(graph_id.clone()),
+                    subject: entity_ref(&entities[component_index]),
+                    predicate: "calls".to_owned(),
+                    object: EntityRef {
+                        id: None,
+                        kind: None,
+                        name: Some(handler.clone()),
+                        aliases: Vec::new(),
+                    },
+                    scope: source.scope.clone(),
+                    evidence: Vec::new(),
+                    confidence: Some(0.9),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    archived_at: None,
+                });
             }
         }
 

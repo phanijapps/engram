@@ -23,11 +23,15 @@ fn persisted_archived_at(
     id: &str,
 ) -> CoreResult<Option<Timestamp>> {
     let sql = format!("SELECT archived_at FROM {table} WHERE id = ?1");
-    let stored: Option<String> = conn
+    // The column is nullable: read NULL as None inside the row closure —
+    // inferring `String` there throws "Invalid column type Null" on any
+    // re-put of an un-archived row (the multi-file/second-scan upsert bug).
+    let stored: Option<Option<String>> = conn
         .query_row(&sql, rusqlite::params![id], |row| row.get(0))
         .optional()
         .map_err(sql_error)?;
     stored
+        .flatten()
         .map(|s| {
             DateTime::parse_from_rfc3339(&s)
                 .map(|dt| dt.with_timezone(&Utc))

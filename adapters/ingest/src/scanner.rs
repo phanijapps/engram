@@ -520,7 +520,7 @@ where
                             &imports,
                         );
                     }
-                    // Persist the graph + entities + relationships.
+                    // Persist the graph + entities + relationships + ledger.
                     let _ = block_on(async {
                         repo.put_graph(g.graph.clone()).await?;
                         for entity in &g.entities {
@@ -528,6 +528,9 @@ where
                         }
                         for rel in &g.relationships {
                             repo.put_relationship(rel.clone()).await?;
+                        }
+                        if !g.unresolved.is_empty() {
+                            repo.put_unresolved_refs(g.unresolved.clone()).await?;
                         }
                         for (chunk_idx, entity_refs) in &g.chunk_entities {
                             if let Some(chunk) = ingested.chunks.get(*chunk_idx) {
@@ -642,6 +645,86 @@ where
     let mut new_manifest = std::collections::HashMap::new();
 
     // Accumulate contract keys emitted during the parallel phase so we can do
+    // RFC-0020 Phase 2 orphan sweep: re-attempt every pending ledger
+    // reference against the symbol table built from this scan's ingested
+    // files. A reference whose target landed in a LATER scan resolves here
+    // — the edge is written and the row flips to resolved, without
+    // re-ingesting the referring file. (Unchanged files are not re-indexed
+    // into this scan's table, so a sweep only heals rows whose target was
+    // (re)defined in files ingested this pass.)
+    {
+        let pending =
+            block_on(repo.list_unresolved_refs(&opts.scope, UnresolvedReferenceStatus::Pending))
+                .unwrap_or_default();
+        if !pending.is_empty() {
+            let idx = name_index.lock().unwrap_or_else(|e| e.into_inner());
+            for row in pending {
+                let reference = row.reference_name.clone();
+                let (hint, name) = split_reference(&reference);
+                let mut outcome = idx.resolve(name, None, None);
+                if !matches!(outcome, engram_code::Resolution::Resolved(_)) {
+                    if let Some(hint) = hint {
+                        let qualified = format!("{}::{}", capitalize(hint), name);
+                        outcome = idx.resolve(&qualified, None, None);
+                    }
+                }
+                if let engram_code::Resolution::Resolved(candidate) = outcome {
+                    let scope = row.scope.clone();
+                    let subject_id = row.from_entity_id.clone();
+                    let object_id = Id::from(candidate.id.clone());
+                    let graph_id = row.graph_id.clone();
+                    let rel = KnowledgeRelationship {
+                        id: RelationshipId::from(format!("sweep-{subject_id}-{object_id}")),
+                        graph_id,
+                        subject: EntityRef {
+                            id: Some(subject_id),
+                            kind: None,
+                            name: None,
+                            aliases: Vec::new(),
+                        },
+                        predicate: "calls".to_owned(),
+                        object: EntityRef {
+                            id: Some(object_id),
+                            kind: None,
+                            name: Some(reference.clone()),
+                            aliases: Vec::new(),
+                        },
+                        scope: scope.clone(),
+                        evidence: Vec::new(),
+                        confidence: Some(0.9),
+                        provenance: Provenance {
+                            source: "engram-orphans-sweep".to_owned(),
+                            actor: opts.actor.clone(),
+                            observed_at: chrono::Utc::now(),
+                            evidence: Vec::new(),
+                            derivations: Vec::new(),
+                            confidence: None,
+                            method: Some("deterministic_orphan_sweep".to_owned()),
+                        },
+                        created_at: chrono::Utc::now(),
+                        updated_at: None,
+                        archived_at: None,
+                    };
+                    let row_id = row.id.clone();
+                    if (block_on(async {
+                        repo.put_relationship(rel).await?;
+                        repo.update_unresolved_status(
+                            &row_id,
+                            UnresolvedReferenceStatus::Resolved,
+                            &scope,
+                        )
+                        .await?;
+                        Ok::<(), CoreError>(())
+                    }))
+                    .is_err()
+                    {
+                        summary.errors += 1;
+                    }
+                }
+            }
+        }
+    }
+
     // T8 retraction and update the contract manifest in the serial post-pass.
     let mut current_contract_ops: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
@@ -1030,5 +1113,30 @@ mod tests {
         assert!(detect_workspace(&no_marker).is_none());
 
         std::fs::remove_dir_all(&tmp).unwrap();
+    }
+}
+
+/// Split a ledger reference for sweep resolution: dotted references carry a
+/// receiver hint (`store.save` → hint `store`, name `save`).
+fn split_reference(reference: &str) -> (Option<&str>, &str) {
+    let Some((head, name)) = reference.rsplit_once('.') else {
+        return (None, reference);
+    };
+    if head.is_empty() {
+        return (None, reference);
+    }
+    let hint = head.rsplit('.').next().unwrap_or(head);
+    if matches!(hint, "self" | "Self" | "crate" | "super") {
+        return (None, name);
+    }
+    (Some(hint), name)
+}
+
+/// Capitalize a receiver hint for the qualified-key attempt (`store` → `Store`).
+fn capitalize(hint: &str) -> String {
+    let mut chars = hint.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+        None => hint.to_owned(),
     }
 }

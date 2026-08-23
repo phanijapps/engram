@@ -180,14 +180,17 @@ impl TreeSitterChunker {
             &mut call_sites,
         );
 
-        // Match each call to its enclosing function. Only emit edges where the
-        // callee is a known entity — filters out language keywords and stdlib
-        // calls that would pollute the graph with noise.
+        // Match each call to its enclosing function. Known callees emit
+        // immediately; unknown-but-plausible callees (not bare generics —
+        // the noise filter) emit as name-only references so Phase-2
+        // resolution can settle them cross-file or ledger them. Bare
+        // generics (`new`, `clone`, `len`, …) are dropped: they collide
+        // across every crate and never resolve to a stable identity.
         let mut edges = Vec::new();
         for (call_line, callee) in &call_sites {
             // Dotted references match known entities by their bare tail.
             let tail = callee.rsplit('.').next().unwrap_or(callee);
-            if !entity_names.contains(tail) {
+            if !entity_names.contains(tail) && crate::noise::is_noise_symbol(tail) {
                 continue;
             }
             for (start, end, caller) in &fn_spans {

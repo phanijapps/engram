@@ -61,4 +61,58 @@ pub trait KnowledgeGraphRepository: Send + Sync {
             message: "list_graphs_by_source is not supported".to_owned(),
         })
     }
+
+    // ── Unresolved-reference ledger (RFC-0020 Phase 2) ─────────────────────
+    //
+    // The honesty ledger for cross-file code resolution: pending references
+    // persist with the same lifecycle as relationships (retracted with their
+    // graph; re-attempted by the ingest orphan sweep).
+
+    /// Stores ledger rows (upsert by id; deterministic ids regenerate the
+    /// same row on re-ingest).
+    async fn put_unresolved_refs(&self, _refs: Vec<UnresolvedReference>) -> CoreResult<()> {
+        Err(CoreError::Adapter {
+            adapter: "knowledge_repository".to_owned(),
+            message: "put_unresolved_refs is not supported".to_owned(),
+        })
+    }
+
+    /// Lists ledger rows by status within the caller's scope.
+    async fn list_unresolved_refs(
+        &self,
+        _scope: &Scope,
+        _status: UnresolvedReferenceStatus,
+    ) -> CoreResult<Vec<UnresolvedReference>> {
+        Err(CoreError::Adapter {
+            adapter: "knowledge_repository".to_owned(),
+            message: "list_unresolved_refs is not supported".to_owned(),
+        })
+    }
+
+    /// Flips a row's status (`pending → resolved` by the sweep;
+    /// `pending → failed` only by explicit operator action).
+    async fn update_unresolved_status(
+        &self,
+        _id: &Id,
+        _status: UnresolvedReferenceStatus,
+        _scope: &Scope,
+    ) -> CoreResult<()> {
+        Err(CoreError::Adapter {
+            adapter: "knowledge_repository".to_owned(),
+            message: "update_unresolved_status is not supported".to_owned(),
+        })
+    }
+
+    /// Deletes ledger rows for a graph — part of the retraction cascade
+    /// (`delete_graph` calls this alongside entities and relationships).
+    async fn delete_unresolved_for_graph(
+        &self,
+        _graph_id: &KnowledgeGraphId,
+        _scope: &Scope,
+    ) -> CoreResult<()> {
+        Err(CoreError::Adapter {
+            adapter: "knowledge_repository".to_owned(),
+            message: "delete_unresolved_for_graph is not supported".to_owned(),
+        })
+    }
 }

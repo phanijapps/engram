@@ -5,9 +5,10 @@
 
 import { useEffect, useState, type ComponentType } from "react";
 import { BrowserRouter, Routes, Route, Navigate, NavLink, Link } from "react-router-dom";
-import { Brain, Network, Layers, Activity, Upload, Sparkles } from "lucide-react";
+import { Brain, Network, Layers, Activity, Upload, Sparkles, MessageCircle } from "lucide-react";
 
 import { api, type Health } from "./lib/api.ts";
+import { AskTab } from "./features/ask/AskTab.tsx";
 import { GlobeGraph } from "./features/graph/GlobeGraph.tsx";
 import { IngestTab } from "./features/ingest/IngestTab.tsx";
 import { MaintainTab } from "./features/maintain/MaintainTab.tsx";
@@ -26,6 +27,7 @@ const NAV: NavItem[] = [
   { to: "/graph", label: "Graph", icon: Layers },
   { to: "/ingest", label: "Ingest", icon: Upload },
   { to: "/maintain", label: "Maintain", icon: Sparkles },
+  { to: "/ask", label: "Ask", icon: MessageCircle },
 ];
 
 function WebAppShell() {
@@ -43,11 +45,6 @@ function WebAppShell() {
 
   return (
     <div className="app-shell">
-      <span className="app-shell__reticle app-shell__reticle--tl" />
-      <span className="app-shell__reticle app-shell__reticle--tr" />
-      <span className="app-shell__reticle app-shell__reticle--bl" />
-      <span className="app-shell__reticle app-shell__reticle--br" />
-
       <header className="topbar">
         <Link to="/observatory" className="topbar__brand">
           <span className="topbar__brand-mark">e</span>
@@ -92,6 +89,7 @@ function WebAppShell() {
           <Route path="/graph" element={<GlobeGraph />} />
           <Route path="/ingest" element={<IngestTab />} />
           <Route path="/maintain" element={<MaintainTab />} />
+          <Route path="/ask" element={<AskTab />} />
           <Route path="*" element={<Navigate to="/observatory" replace />} />
         </Routes>
       </main>

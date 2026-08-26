@@ -9,6 +9,7 @@
 import { Hono, type Context } from "hono";
 import { DatabaseSync } from "node:sqlite";
 
+import type { RetrievalRequest } from "@engram/contracts";
 import { dbPath, type VizConfig } from "../config.ts";
 import { resolveScope } from "../scope.ts";
 import { getProvider } from "../engram/provider.ts";
@@ -35,16 +36,23 @@ export function memoryRoute(cfg: VizConfig): Hono {
     table: string,
     proj: (record: unknown) => unknown,
     kindFilter?: string,
+    searchQuery?: string,
   ): Response => {
     try {
       const limit = queryLimit(c.req.query("limit"));
       const cursorRowid = decodeCursor(c.req.query("cursor"));
       const db = new DatabaseSync(dbPath(cfg), { readOnly: true });
       try {
-        const where = kindFilter
-          ? scopeWhere + " AND json_extract(record_json, '$.kind') = ?"
-          : scopeWhere;
-        const params = kindFilter ? [...scopeParams, kindFilter] : [...scopeParams];
+        let where = scopeWhere;
+        const params: string[] = [...scopeParams];
+        if (kindFilter) {
+          where += " AND json_extract(record_json, '$.kind') = ?";
+          params.push(kindFilter);
+        }
+        if (searchQuery) {
+          where += " AND json_extract(record_json, '$.content.text') LIKE ?";
+          params.push(`%${searchQuery}%`);
+        }
         const page = paginate(db, {
           table,
           columns: "record_json",
@@ -70,6 +78,10 @@ export function memoryRoute(cfg: VizConfig): Hono {
   // `list_memories_paged` in engram-integration; this route holds no SQL. (Beliefs,
   // procedures, contradictions still use the read-only node:sqlite path until P2.)
   app.get("/memory", async (c) => {
+    const q = c.req.query("q");
+    if (q) {
+      return list(c, "memories", projectMemory, undefined, q);
+    }
     try {
       const limit = queryLimit(c.req.query("limit"));
       const cursor = c.req.query("cursor") ?? null;
@@ -88,6 +100,24 @@ export function memoryRoute(cfg: VizConfig): Hono {
   // Contradictions have no table — they are synthesized from beliefs. 0 beliefs
   // today → an honest empty page (no fabricated records).
   app.get("/contradictions", (c) => c.json({ items: [], nextCursor: null }));
+
+  // Hybrid recall — vector + graph + associative + temporal fusion (the real
+  // search). Returns a ContextPayload with scored items. Requires vectors on
+  // (ENGRAM_ENABLE_VECTOR=true) for the vector lane; other lanes always work.
+  app.get("/recall", async (c) => {
+    const q = c.req.query("q");
+    if (!q) return c.json({ error: "query required (?q=text)" }, 422);
+    try {
+      const result = await getProvider(cfg).recall({
+        query: q,
+        scope,
+        requester: { actor: { id: "engram-cc", kind: "agent", displayName: "engram-cc" } },
+      } as unknown as RetrievalRequest);
+      return c.json(result);
+    } catch (err) {
+      return c.json({ error: msg(err), degraded: true }, 503);
+    }
+  });
 
   return app;
 }

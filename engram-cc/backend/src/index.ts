@@ -10,6 +10,7 @@ import { cors } from "hono/cors";
 import { logger } from "hono/logger";
 
 import { loadConfig } from "./config.ts";
+import { askRoute } from "./routes/ask.ts";
 import { graphRoute } from "./routes/graph.ts";
 import { healthRoute } from "./routes/health.ts";
 import { ingestRoute } from "./routes/ingest.ts";
@@ -30,6 +31,7 @@ app.route("/api", graphRoute(cfg));
 app.route("/api", memoryRoute(cfg));
 app.route("/api", ingestRoute(cfg));
 app.route("/api", maintainRoute(cfg));
+app.route("/api", askRoute(cfg));
 
 serve({ fetch: app.fetch, port: cfg.port }, (info) => {
   console.log(`engram-cc backend listening on http://localhost:${info.port}`);

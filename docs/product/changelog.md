@@ -48,6 +48,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `enum`, `endpoint` (ADR-0020).
 - On-top codegraph layer begun: `engram-codegraph-queries` (the first `codegraph/`
   crate) — dead-code, blast-radius, and dependency-path over `calls` edges.
+- Agentic **Ask tab** in engram-cc: an LLM agent loop over the BFF
+  (`/api/ask`) whose model autonomously calls `recall`, `list_memories`,
+  `graph_overview`, and `write_memory` tools, iterating until it can answer —
+  with the full tool-call trace rendered in the UI.
+- Runtime `createLlmProvider` gains a `completeAgent` surface (full message
+  history + tools → content blocks incl. tool calls) for agent loops, wired
+  through pi-mono, the dry-run fixture, and test overrides.
+- Hybrid recall search in engram-cc: `/api/recall` BFF endpoint + Memory-tab
+  debounced two-phase search (instant content match, then recall-fusion
+  upgrade). The vector lane is opt-in via `ENGRAM_ENABLE_VECTOR=true`
+  (FastEmbed BGE-small, also wired through `mcp/dev.sh`).
+- ForceGraph: a d3-force 2D canvas overview replaces the deck.gl viewport in
+  engram-cc (smaller bundle, no WebGL dependency); e2e drill clicks use live
+  node positions exposed by an e2e hook.
 
 ### Changed
 

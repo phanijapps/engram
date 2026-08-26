@@ -41,12 +41,15 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 ## viz-memory-search
 
 - **Memory hybrid search (deferred: viz-memory-search):** the Memory tab's hybrid
-  recall search (debounced; returns the recall `ContextPayload`, not a keyset page)
-  is deferred — the `agentzero` store's retrieval is `Unsupported` (`UnsupportedStoreFamily`)
-  and vectors are `RequiresReindex` (`EmbeddingSpaceMismatch`), so recall returns no
-  usable results today. Ships when retrieval is supported on this store (or vectors
-  are reindexed). The browse lists (Facts/Beliefs/Procedures) + empty-states are
-  shipped without it. Blocked on retrieval support. [spec viz-memory AC3]
+  recall search is now **wired** — debounced two-phase (instant `content.text`
+  match, then a recall-fusion upgrade via `/api/recall` returning the recall
+  `ContextPayload`, not a keyset page), with the vector lane opt-in through
+  `ENGRAM_ENABLE_VECTOR=true`. AC3 stays open because recall still returns no
+  usable results on the `agentzero` store: retrieval is `Unsupported`
+  (`UnsupportedStoreFamily`), vectors are `RequiresReindex`
+  (`EmbeddingSpaceMismatch`) until a reindex runs with vectors enabled, and the
+  store is currently empty in this scope. Closes when retrieval returns usable
+  results on a populated store. [spec viz-memory AC3]
 
 ## viz-community-friendly-names
 

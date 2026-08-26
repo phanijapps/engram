@@ -115,7 +115,7 @@ const densBase: CSSProperties = {
   padding: "1px var(--spacing-2)",
 };
 const densStyle: CSSProperties = { ...densBase };
-const densActiveStyle: CSSProperties = { ...densBase, color: "var(--primary, #7df9ff)", borderColor: "var(--primary, #7df9ff)" };
+const densActiveStyle: CSSProperties = { ...densBase, color: "var(--primary)", borderColor: "var(--primary)" };
 const refreshBtnStyle: CSSProperties = {
   ...densBase,
   display: "inline-flex",

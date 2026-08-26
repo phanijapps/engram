@@ -40,7 +40,7 @@ const mono = "var(--font-mono)" as const;
 const overlayStyle: CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.5)",
+  background: "var(--overlay)",
   zIndex: 20,
   display: "flex",
   justifyContent: "flex-end",

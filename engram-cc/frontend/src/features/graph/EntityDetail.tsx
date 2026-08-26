@@ -168,7 +168,7 @@ const kindChipStyle: CSSProperties = {
   borderRadius: "var(--radius-sm)",
   padding: "1px 6px",
 };
-const kindCountStyle: CSSProperties = { color: "var(--primary, #7df9ff)" };
+const kindCountStyle: CSSProperties = { color: "var(--primary)" };
 const listHeadStyle: CSSProperties = { fontSize: 10, letterSpacing: "0.1em", color: "var(--muted-foreground)" };
 const listStyle: CSSProperties = {
   display: "flex",
@@ -196,11 +196,11 @@ const memberBase: CSSProperties = {
 const memberStyle: CSSProperties = { ...memberBase };
 const memberActiveStyle: CSSProperties = {
   ...memberBase,
-  background: "rgba(192,139,255,0.14)",
-  borderLeft: "2px solid #c08bff",
+  background: "var(--purple-muted)",
+  borderLeft: "2px solid var(--purple)",
 };
 const memberKindStyle: CSSProperties = {
-  color: "var(--primary, #7df9ff)",
+  color: "var(--primary)",
   fontSize: 9,
   textTransform: "uppercase",
   minWidth: 52,

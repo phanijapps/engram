@@ -1,98 +1,86 @@
 /* ============================================================================
-   DESIGN TOKENS — Futuristic Dark
-   Single dark theme inspired by the z-Bot Design System (claude.ai/design).
-   Cyan/violet accent stack on a deep void background. Holo borders, glow halos.
-
-   The four `--fx-*` vars are runtime-tunable from the AccentPicker UI:
-     --fx-accent  master accent color (cyan default; violet/amber/magenta presets)
-     --fx-glow    box/text-shadow blur multiplier (0..2)
-     --fx-grid    page-grid line opacity (0..0.18)
-     --fx-scan    scanline overlay opacity (0..1)
+   DESIGN TOKENS — Light Admin
+   Single light theme inspired by TencentDB-Agent-Memory's Memory Hub panel:
+   white surfaces, slate text, one restrained blue accent, subtle borders.
+   Variable names are kept from the previous dark theme so downstream CSS
+   and tailwind mappings keep resolving.
    ============================================================================ */
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
   /* ========================================================================
-     RUNTIME-TUNABLE EFFECTS
-     ======================================================================== */
-  --fx-accent: #7df9ff;
-  --fx-glow: 1;
-  --fx-grid: 0.04;
-  --fx-scan: 0.3;
-
-  /* ========================================================================
      COLORS — Semantic palette
      ======================================================================== */
 
-  /* Backgrounds (deep void → holo surface → elevated) */
-  --background: #07080d;
-  --background-surface: #0d1018;
-  --background-elevated: #131826;
-  --sidebar: rgba(7, 9, 18, 0.85);
+  /* Backgrounds (page → surface/card → elevated) */
+  --background: #ffffff;
+  --background-surface: #f8fafc;
+  --background-elevated: #ffffff;
+  --sidebar: #ffffff;
 
   /* Foreground hierarchy (4 stops) */
-  --foreground: #e6f0ff;
-  --muted-foreground: #7d8db0;
-  --subtle-foreground: #5a6788;
-  --dim-foreground: #3e4868;
+  --foreground: #0f172a;
+  --muted-foreground: #475569;
+  --subtle-foreground: #64748b;
+  --dim-foreground: #94a3b8;
 
-  /* Borders — barely-there, accent-tinted */
-  --border: rgba(120, 160, 255, 0.10);
-  --border-hover: var(--fx-accent);
+  /* Borders — quiet hairlines, darker on hover */
+  --border: #e2e8f0;
+  --border-hover: #cbd5e1;
 
-  /* Primary accent — driven by --fx-accent (live-mutated by picker) */
-  --primary: var(--fx-accent);
-  --primary-foreground: #03060f;
-  --primary-hover: color-mix(in srgb, var(--fx-accent) 80%, white);
-  --primary-muted: color-mix(in srgb, var(--fx-accent) 14%, transparent);
-  --primary-subtle: color-mix(in srgb, var(--fx-accent) 6%, transparent);
+  /* Primary accent — restrained blue */
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --primary-hover: #1d4ed8;
+  --primary-muted: #dbeafe;
+  --primary-subtle: #eff6ff;
 
-  /* Semantic colors — bright on dark */
-  --success: #4cf2c2;
-  --success-muted: rgba(76, 242, 194, 0.12);
-  --warning: #ffce5a;
-  --warning-muted: rgba(255, 206, 90, 0.12);
-  --destructive: #ff5d7a;
-  --destructive-muted: rgba(255, 93, 122, 0.12);
+  /* Semantic colors — 600-weight on light backgrounds */
+  --success: #16a34a;
+  --success-muted: #f0fdf4;
+  --warning: #d97706;
+  --warning-muted: #fffbeb;
+  --destructive: #dc2626;
+  --destructive-muted: #fef2f2;
 
-  /* Additional palette — agent avatar tints */
-  --blue: #6aa9ff;
-  --blue-muted: rgba(106, 169, 255, 0.14);
-  --purple: #c08bff;
-  --purple-muted: rgba(192, 139, 255, 0.14);
-  --teal: var(--fx-accent);
-  --teal-muted: color-mix(in srgb, var(--fx-accent) 14%, transparent);
+  /* Additional palette — agent avatar tints (readable pairs on white) */
+  --blue: #2563eb;
+  --blue-muted: #dbeafe;
+  --purple: #9333ea;
+  --purple-muted: #f3e8ff;
+  --teal: #0f766e;
+  --teal-muted: #ccfbf1;
 
   /* Backwards-compat aliases — preserved so existing components reskin cleanly */
-  --card: var(--background-surface);
+  --card: var(--background-elevated);
   --card-foreground: var(--foreground);
   --popover: var(--background-elevated);
   --popover-foreground: var(--foreground);
-  --muted: var(--background-elevated);
-  --secondary: var(--background-elevated);
+  --muted: #f1f5f9;
+  --secondary: #f1f5f9;
   --secondary-foreground: var(--foreground);
-  --secondary-hover: rgba(120, 160, 255, 0.08);
+  --secondary-hover: #e2e8f0;
   --accent: var(--primary);
   --accent-foreground: var(--primary-foreground);
   --input: var(--border);
-  --input-background: var(--background-surface);
+  --input-background: #ffffff;
   --ring: var(--primary);
   --ring-muted: var(--border);
-  --overlay: rgba(0, 0, 0, 0.6);
+  --overlay: rgba(15, 23, 42, 0.4);
   --selection: var(--primary-muted);
   --selection-border: var(--primary);
   --destructive-foreground: #ffffff;
-  --destructive-hover: color-mix(in srgb, var(--destructive) 80%, white);
-  --success-foreground: #03060f;
-  --success-hover: color-mix(in srgb, var(--success) 80%, white);
-  --warning-foreground: #03060f;
-  --warning-hover: color-mix(in srgb, var(--warning) 80%, white);
-  --sidebar-foreground: #e6f0ff;
+  --destructive-hover: #b91c1c;
+  --success-foreground: #ffffff;
+  --success-hover: #15803d;
+  --warning-foreground: #ffffff;
+  --warning-hover: #b45309;
+  --sidebar-foreground: var(--foreground);
   --sidebar-accent: var(--primary-muted);
   --sidebar-accent-hover: var(--primary-subtle);
-  --sidebar-muted: #95a5c8;
-  --sidebar-border: rgba(120, 160, 255, 0.12);
+  --sidebar-muted: var(--subtle-foreground);
+  --sidebar-border: var(--border);
 
   /* ========================================================================
      TYPOGRAPHY
@@ -136,19 +124,18 @@
   --radius-full: 9999px;
 
   /* ========================================================================
-     SHADOWS — minimal in dark theme (1px borders carry elevation;
-     accent-tinted glow halos are layered separately in components)
+     SHADOWS — soft elevation (1px borders + gentle shadow, no glow)
      ======================================================================== */
-  --shadow-card: none;
-  --shadow-card-hover: 0 0 calc(20px * var(--fx-glow)) color-mix(in srgb, var(--fx-accent) 8%, transparent);
-  --shadow-modal: 0 4px 24px rgba(0, 0, 0, 0.5);
-  --shadow-dropdown: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-card-hover: 0 2px 8px rgba(15, 23, 42, 0.10);
+  --shadow-modal: 0 8px 30px rgba(15, 23, 42, 0.16);
+  --shadow-dropdown: 0 4px 16px rgba(15, 23, 42, 0.12);
 
   /* ========================================================================
      LAYOUT DIMENSIONS
      ======================================================================== */
   --sidebar-width: 14rem;           /* 224px (legacy — top-bar shell uses --topbar-height) */
-  --topbar-height: 44px;
+  --topbar-height: 48px;
   --panel-sidebar-width: 18rem;     /* 288px */
   --content-max-width: 64rem;       /* 1024px */
   --content-narrow-width: 32rem;    /* 512px */
@@ -157,13 +144,13 @@
   --modal-lg-width: 36rem;          /* 576px */
 
   /* ========================================================================
-     CHARTS
+     CHARTS — categorical set readable on white
      ======================================================================== */
-  --chart-1: var(--fx-accent);
-  --chart-2: #4cf2c2;
-  --chart-3: #c08bff;
-  --chart-4: #ff5d7a;
-  --chart-5: #6aa9ff;
+  --chart-1: #2563eb;
+  --chart-2: #16a34a;
+  --chart-3: #9333ea;
+  --chart-4: #ea580c;
+  --chart-5: #0891b2;
 }
 
 /* ============================================================================
@@ -241,13 +228,13 @@
   }
 
   ::selection {
-    background-color: var(--primary);
-    color: var(--primary-foreground);
+    background-color: var(--primary-muted);
+    color: var(--foreground);
   }
 
   ::-moz-selection {
-    background-color: var(--primary);
-    color: var(--primary-foreground);
+    background-color: var(--primary-muted);
+    color: var(--foreground);
   }
 
   html {
@@ -255,12 +242,37 @@
     font-size: 15px;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    background-color: #02030a;
+    background-color: var(--background);
   }
 
   body {
     background-color: var(--background);
     color: var(--foreground);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  /* Quiet light scrollbars */
+  * {
+    scrollbar-color: #cbd5e1 transparent;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 9999px;
+    border: 2px solid var(--background);
   }
 
   /* Radix UI Select styling */

@@ -144,8 +144,8 @@ export function IngestTab() {
 function JobMonitor({ job }: { job: IngestJob }) {
   if (job.status === "running") {
     return (
-      <section style={{ ...card, borderColor: "var(--primary, #7df9ff)" }}>
-        <div style={{ ...formRow, color: "var(--primary, #7df9ff)" }}>
+      <section style={{ ...card, borderColor: "var(--primary)" }}>
+        <div style={{ ...formRow, color: "var(--primary)" }}>
           <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} aria-hidden />
           <span>Running — this may take a while…</span>
           <span style={muted}>job {job.jobId}</span>
@@ -155,8 +155,8 @@ function JobMonitor({ job }: { job: IngestJob }) {
   }
   if (job.status === "error") {
     return (
-      <section style={{ ...card, borderColor: "var(--destructive, #f87171)" }}>
-        <div style={{ ...errLine, color: "var(--destructive, #f87171)" }}>
+      <section style={{ ...card, borderColor: "var(--destructive)" }}>
+        <div style={{ ...errLine, color: "var(--destructive)" }}>
           <AlertTriangle style={{ width: 14, height: 14 }} aria-hidden /> Scan failed
         </div>
         <div style={{ fontFamily: mono, fontSize: 12, marginTop: 6, color: "var(--muted-foreground)" }}>
@@ -168,8 +168,8 @@ function JobMonitor({ job }: { job: IngestJob }) {
   // done
   const s = job.summary ?? {};
   return (
-    <section style={{ ...card, borderColor: "var(--success, #34d399)" }}>
-      <div style={{ ...formRow, color: "var(--success, #34d399)" }}>
+    <section style={{ ...card, borderColor: "var(--success)" }}>
+      <div style={{ ...formRow, color: "var(--success)" }}>
         <CheckCircle2 style={{ width: 14, height: 14 }} aria-hidden /> Scan complete
       </div>
       <div style={summaryGrid}>
@@ -286,14 +286,16 @@ const btnBase: CSSProperties = {
 const kindBtn: CSSProperties = { ...btnBase };
 const kindActive: CSSProperties = {
   ...btnBase,
-  color: "var(--primary, #7df9ff)",
-  borderColor: "var(--primary, #7df9ff)",
+  color: "var(--primary)",
+  borderColor: "var(--primary)",
 };
 const startBtn: CSSProperties = {
   ...btnBase,
   marginLeft: "auto",
-  color: "var(--foreground)",
-  borderColor: "var(--primary, #7df9ff)",
+  background: "var(--primary)",
+  color: "var(--primary-foreground)",
+  borderColor: "var(--primary)",
+  fontWeight: 600,
 };
 const startBtnDisabled: CSSProperties = { ...startBtn, opacity: 0.5, cursor: "not-allowed" };
 const kindLabel: CSSProperties = {
@@ -307,7 +309,7 @@ const errLine: CSSProperties = {
   gap: 6,
   fontSize: 12,
   marginTop: 8,
-  color: "var(--destructive, #f87171)",
+  color: "var(--destructive)",
 };
 const summaryGrid: CSSProperties = {
   display: "grid",

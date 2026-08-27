@@ -17,6 +17,7 @@ import {
   MAX_COMMUNITY_NODES,
 } from "../aggregation/communities.ts";
 import { communityMembers, entityCommunity } from "../aggregation/members.ts";
+import { computeSubgraph } from "../aggregation/subgraph.ts";
 import { projectEntity, projectOutgoingNeighbor } from "../views/graph.ts";
 
 function msg(err: unknown): string {
@@ -63,6 +64,22 @@ export function graphRoute(cfg: VizConfig): Hono {
         hierarchyNodes: counts.hierarchyNodes,
         hierarchyRelations: counts.hierarchyRelations,
       });
+    } catch (err) {
+      return c.json({ error: msg(err), degraded: true }, 503);
+    }
+  });
+
+  // The actual graph: real symbols + call edges (not the community meta-
+  // graph). Degree-ranked, node-capped, resolved-only by default. Read-only
+  // via the node:sqlite secondary path like the other aggregations.
+  app.get("/graph/subgraph", (c) => {
+    try {
+      const result = computeSubgraph(cfg, scope, {
+        limit: c.req.query("limit"),
+        predicates: c.req.query("predicates"),
+        resolved: c.req.query("resolved"),
+      });
+      return c.json(result);
     } catch (err) {
       return c.json({ error: msg(err), degraded: true }, 503);
     }

@@ -9,7 +9,7 @@ import { Brain, Network, Layers, Activity, Upload, Sparkles, MessageCircle } fro
 
 import { api, type Health } from "./lib/api.ts";
 import { AskTab } from "./features/ask/AskTab.tsx";
-import { GlobeGraph } from "./features/graph/GlobeGraph.tsx";
+import { GraphOverview } from "./features/graph/GraphOverview.tsx";
 import { IngestTab } from "./features/ingest/IngestTab.tsx";
 import { MaintainTab } from "./features/maintain/MaintainTab.tsx";
 import { MemoryTab } from "./features/memory/MemoryTab.tsx";
@@ -86,7 +86,7 @@ function WebAppShell() {
           <Route path="/" element={<Navigate to="/observatory" replace />} />
           <Route path="/memory" element={<MemoryTab />} />
           <Route path="/observatory" element={<ObservatoryTab />} />
-          <Route path="/graph" element={<GlobeGraph />} />
+          <Route path="/graph" element={<GraphOverview defaultView="graph" />} />
           <Route path="/ingest" element={<IngestTab />} />
           <Route path="/maintain" element={<MaintainTab />} />
           <Route path="/ask" element={<AskTab />} />

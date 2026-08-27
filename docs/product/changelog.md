@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capability report honestly marking the lanes not yet wired on that engine.
   The recipe now wires a Postgres `KnowledgeQuery` (the code-intel read
   surface) in addition to the storage cells.
+- **Actual-graph view in engram-cc**: the Graph tab now renders the real
+  symbol graph (entities + resolved call edges via `/api/graph/subgraph`,
+  degree-ranked + bounded, minified-name noise deprioritized) instead of the
+  3D community globe; the Observatory keeps the community meta-graph, and both
+  offer a view toggle. Clicking a symbol opens the entity-detail panel.
 - Lazy query-time embeddings (BGE-small) generated on demand, cached, and
   persisted to a durable sqlite-vec store; per-query warm-up (hit-rate climbs
   across passes).

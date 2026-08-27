@@ -42,6 +42,28 @@ export interface CommunitiesResponse {
   totalCommunities?: number;
 }
 
+export interface SymbolGraphNode {
+  id: string;
+  name: string;
+  kind: string;
+  degree: number;
+}
+
+export interface SymbolGraphEdge {
+  source: string;
+  target: string;
+  predicate: string;
+}
+
+export interface SubgraphResponse {
+  nodes: SymbolGraphNode[];
+  edges: SymbolGraphEdge[];
+  totalNodes: number;
+  totalEdges: number;
+  resolvedOnly: boolean;
+  predicates: string[];
+}
+
 export interface GraphEntityView {
   id: string;
   name: string;
@@ -195,6 +217,10 @@ export const api = {
   stats: () => getJson<GraphStats>("/graph/stats"),
   communities: (limit?: number) =>
     getJson<CommunitiesResponse>(`/graph/communities${limit ? `?limit=${limit}` : ""}`),
+
+  // The actual graph — real symbols + call edges, degree-ranked + bounded.
+  subgraph: (limit?: number) =>
+    getJson<SubgraphResponse>(`/graph/subgraph${limit ? `?limit=${limit}` : ""}`),
 
   // Drill — entity ids contain slashes (e.g. "endpoint-post-/api/..."), so they
   // MUST be URL-encoded in the path or Hono's single-segment :id won't match.

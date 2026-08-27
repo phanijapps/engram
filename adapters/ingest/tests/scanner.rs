@@ -796,3 +796,75 @@ fn sweep_heals_route_handlers_as_routes_to() {
     );
     let _ = fs::remove_dir_all(&root);
 }
+
+// --- code-graph-quality [minified-vendor-noise] ------------------------------
+
+#[test]
+fn minified_assets_skip_and_previously_ingested_ones_retract() {
+    let root = std::env::temp_dir().join(format!("engram-scan-min-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("static")).expect("create static");
+    // Regular source — must be indexed.
+    std::fs::write(root.join("main.rs"), "pub fn one() {}\n").expect("write main.rs");
+    // Minified by NAME.
+    std::fs::write(root.join("static/vue.min.js"), "function a(){}\n").expect("write min.js");
+    // Minified by CONTENT: 8 KiB on one line (avg line length 8 KiB >> 400).
+    let bundled = format!("var x=1;{}//padding\n", "y".repeat(8 * 1024));
+    std::fs::write(root.join("static/app.js"), bundled).expect("write app.js");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+
+    // Seed the manifest as if a PRE-fix scan had ingested the minified files —
+    // the retraction path only fires for previously-ingested paths.
+    let mut prior = std::collections::HashMap::new();
+    prior.insert("static/app.js".to_owned(), "stale-hash".to_owned());
+
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: prior,
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (summary, manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+
+    // Both minified files skipped; main.rs ingested; nothing errored.
+    assert_eq!(summary.errors, 0, "{summary:?}");
+    assert_eq!(
+        summary.skipped, 2,
+        "min.js by name + app.js by content: {summary:?}"
+    );
+    assert_eq!(summary.ingested, 1, "only main.rs: {summary:?}");
+    // The previously-ingested app.js is NOT carried into the new manifest —
+    // its retraction dropped it (the stale hash is gone).
+    assert!(!manifest.contains_key("static/app.js"), "{manifest:?}");
+    assert!(manifest.contains_key("main.rs"));
+
+    // A never-ingested minified file (vue.min.js) is just skipped — no
+    // retraction, no manifest entry.
+    assert!(!manifest.contains_key("static/vue.min.js"), "{manifest:?}");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn minified_heuristic_does_not_trip_on_source() {
+    // Real code averages 10-35 bytes/line; the threshold is 400.
+    let source = "pub fn alpha() {\n    let value = compute(input) + 1;\n    value\n}\n".repeat(50);
+    assert!(!engram_ingest::looks_minified_bytes(source.as_bytes()));
+    // Small one-liner files are exempt regardless.
+    assert!(!engram_ingest::looks_minified_bytes(
+        &b"var x=1;".repeat(100)
+    ));
+    // A webpack bundle: 100 KiB on one line.
+    let bundle = "var a=1;".repeat(16 * 1024);
+    assert!(engram_ingest::looks_minified_bytes(bundle.as_bytes()));
+    assert!(engram_ingest::looks_minified_name(
+        "static/js/chunk-vendors.min.js"
+    ));
+    assert!(engram_ingest::looks_minified_name("assets/app.js.map"));
+    assert!(!engram_ingest::looks_minified_name("src/App.tsx"));
+    assert!(!engram_ingest::looks_minified_name("src/main.js"));
+}

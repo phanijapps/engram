@@ -25,7 +25,10 @@ mod source_key;
 mod yaml_safety;
 
 pub use chunker::{ChunkCandidate, Chunker, PlainTextChunker, PlainTextChunkerOptions};
-pub use classifier::{FileKind, classify_file, is_denylisted, is_secret_file, is_within_root};
+pub use classifier::{
+    FileKind, classify_file, is_denylisted, is_secret_file, is_within_root, looks_minified_bytes,
+    looks_minified_name,
+};
 pub use contract::{detect_and_parse_openapi, normalize_contract_key};
 pub use contract_entities::ParsedOperation;
 pub use engram_code::CodeSymbolChunker;

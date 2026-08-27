@@ -18,7 +18,9 @@ use rayon::prelude::*;
 use crate::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
     MarkdownChunker, PlainTextChunker, PlainTextChunkerOptions,
-    classifier::{classify_file, is_secret_file, is_within_root},
+    classifier::{
+        classify_file, is_secret_file, is_within_root, looks_minified_bytes, looks_minified_name,
+    },
     content_hash, contract,
     git_detect::detect_git,
     reconcile,
@@ -200,6 +202,11 @@ where
     // so that a transiently-filtered or newly-oversize file present on disk is
     // NOT mistaken for a genuinely-absent removal (adversarial Concern 4).
     let mut observed_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // code-graph-quality [minified-vendor-noise]: paths filtered THIS scan by
+    // the minified-asset rules (name or content). A path here that was in the
+    // prior manifest was previously indexed and is retracted below — filter
+    // upgrades clean existing stores instead of leaving stale bundle symbols.
+    let mut filtered_paths: HashSet<String> = HashSet::new();
     for entry in walker {
         let entry = match entry {
             Ok(e) => e,
@@ -251,6 +258,16 @@ where
         observed_paths.insert(rel.clone());
         if opts.scan_filter.is_denylisted(&rel) || is_secret_file(&rel) {
             summary.skipped += 1;
+            continue;
+        }
+        // code-graph-quality [minified-vendor-noise]: minified/bundled asset
+        // names are a stable, non-transient filter signal. Skipped at walk
+        // time; if such a file was previously INGESTED (present in the prior
+        // manifest) the pre-pass retracts its graph — a filter upgrade must
+        // clean existing stores, not just future ones.
+        if looks_minified_name(&rel) {
+            summary.skipped += 1;
+            filtered_paths.insert(rel.clone());
             continue;
         }
         let Some(kind) = classify_file(&rel) else {
@@ -313,6 +330,15 @@ where
             // File grew between the stat-based walk check and the read
             // (TOCTOU edge).  Treat as skipped; prior graph persists.
             summary.skipped += 1;
+            continue;
+        }
+        // code-graph-quality [minified-vendor-noise]: content heuristic —
+        // bundled assets with innocuous names (e.g. `app.js`) are caught by
+        // their shape: very long average lines. Skipped, and retracted when
+        // previously ingested.
+        if looks_minified_bytes(&bytes) {
+            summary.skipped += 1;
+            filtered_paths.insert(rel.clone());
             continue;
         }
         let text = String::from_utf8_lossy(&bytes).into_owned();
@@ -627,7 +653,10 @@ where
     let removed_paths: Vec<String> = opts
         .manifest
         .keys()
-        .filter(|k| !k.starts_with(CONTRACT_PREFIX) && !observed_paths.contains(*k))
+        .filter(|k| {
+            !k.starts_with(CONTRACT_PREFIX)
+                && (!observed_paths.contains(*k) || filtered_paths.contains(*k))
+        })
         .cloned()
         .collect();
     let mut removed_delete_failed: std::collections::HashSet<String> =

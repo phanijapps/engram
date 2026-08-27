@@ -36,13 +36,42 @@ pub fn call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(String, Strin
         .collect()
 }
 
+/// Analytics-grade `(caller, callee)` pairs: `calls`-family relationships
+/// whose **both endpoints carry resolved entity ids**.
+///
+/// scan-reliability AC4: name-only endpoints are pre-resolution-scan leftovers
+/// for bare generics (`new`, `clone`, `get`, …) that never resolved to a stable
+/// identity. They are not evidence of a real edge — counting them made
+/// `dead_code` mark every `new` live and `central_symbols` rank std/trait
+/// methods as the graph's hubs. Navigation queries keep [`call_edges`]
+/// (name-based) unchanged: suffix seed resolution depends on names.
+pub fn resolved_call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(String, String)> {
+    relationships
+        .iter()
+        .filter(|r| {
+            matches!(
+                r.predicate.as_str(),
+                "calls" | "sends_request" | "handled_by"
+            )
+        })
+        .filter_map(|r| {
+            if r.subject.id.is_none() || r.object.id.is_none() {
+                return None;
+            }
+            let caller = entity_key(&r.subject)?;
+            let callee = entity_key(&r.object)?;
+            Some((caller, callee))
+        })
+        .collect()
+}
+
 /// Returns the dead-code set: symbols in the call graph with zero callers
 /// (zero in-degree on `calls` edges), sorted for determinism.
 ///
 /// Note: entry points (main, HTTP handlers) also have zero callers and surface
 /// here — callers filter known entry points. Mirrors memtrace's `find_dead_code`.
 pub fn dead_code(relationships: &[KnowledgeRelationship]) -> Vec<String> {
-    let edges = call_edges(relationships);
+    let edges = resolved_call_edges(relationships);
     let in_degree = engram_graph_analytics::in_degree(&edges);
     let mut defined: HashSet<String> = HashSet::new();
     for (caller, callee) in &edges {
@@ -86,7 +115,7 @@ pub fn central_symbols(
     relationships: &[KnowledgeRelationship],
     limit: usize,
 ) -> Vec<(String, f64)> {
-    let edges = call_edges(relationships);
+    let edges = resolved_call_edges(relationships);
     let mut ranked: Vec<(String, f64)> = engram_graph_analytics::pagerank(&edges, 0.85, 100, 1e-6)
         .into_iter()
         .collect();
@@ -99,7 +128,7 @@ pub fn central_symbols(
 /// chokepoints. Touching these has outsized blast radius. Mirrors memtrace's
 /// `find_bridge_symbols`.
 pub fn bridge_symbols(relationships: &[KnowledgeRelationship], limit: usize) -> Vec<(String, f64)> {
-    let edges = call_edges(relationships);
+    let edges = resolved_call_edges(relationships);
     let mut ranked: Vec<(String, f64)> = engram_graph_analytics::betweenness(&edges)
         .into_iter()
         .collect();
@@ -114,7 +143,7 @@ pub fn call_communities(
     relationships: &[KnowledgeRelationship],
     max_passes: usize,
 ) -> HashMap<String, usize> {
-    let edges = call_edges(relationships);
+    let edges = resolved_call_edges(relationships);
     engram_graph_analytics::communities(&edges, max_passes)
 }
 
@@ -477,7 +506,7 @@ pub struct RepositoryStats {
 
 /// Returns node + edge counts over `calls` relationships.
 pub fn repository_stats(relationships: &[KnowledgeRelationship]) -> RepositoryStats {
-    let edges = call_edges(relationships);
+    let edges = resolved_call_edges(relationships);
     let mut nodes: HashSet<String> = HashSet::new();
     for (caller, callee) in &edges {
         nodes.insert(caller.clone());
@@ -953,6 +982,70 @@ mod tests {
             name: None,
             aliases: Vec::new(),
         }
+    }
+
+    /// Like `ref_named` but WITHOUT an id — the pre-resolution-scan shape for
+    /// bare generics that never resolved (`new`, `clone`, …). Name-only.
+    fn ref_unresolved(name: &str) -> EntityRef {
+        EntityRef {
+            id: None,
+            kind: None,
+            name: Some(name.to_owned()),
+            aliases: Vec::new(),
+        }
+    }
+
+    /// A `calls` relationship with an unresolved (name-only) object — legacy
+    /// leftover shape that analytics must not count as caller evidence.
+    fn rel_unresolved_callee(caller: &str, callee: &str) -> KnowledgeRelationship {
+        let mut r = rel(caller, callee);
+        r.object = ref_unresolved(callee);
+        r
+    }
+
+    #[test]
+    fn resolved_call_edges_drops_name_only_endpoints() {
+        let rels = vec![rel("a", "b"), rel_unresolved_callee("a", "new")];
+        let edges = resolved_call_edges(&rels);
+        assert_eq!(edges, vec![("a".to_owned(), "b".to_owned())]);
+    }
+
+    #[test]
+    fn dead_code_ignores_unresolved_caller_evidence() {
+        // `helper` -> `new` is a name-only leftover: it must not mark `new`
+        // live — and since `new` has no resolved defining edge either, it must
+        // not appear in analytics AT ALL (it is invisible to the resolved
+        // graph). `entry` has a resolved caller, so it lives; `caller` has
+        // none, so it is dead.
+        let rels = vec![
+            rel("caller", "entry"),
+            rel_unresolved_callee("helper", "new"),
+        ];
+        let dead = dead_code(&rels);
+        assert_eq!(dead, vec!["caller".to_owned()], "dead: {dead:?}");
+        assert!(
+            !dead.contains(&"new".to_owned()),
+            "noise symbol must be invisible, not live"
+        );
+    }
+
+    #[test]
+    fn central_symbols_ignores_unresolved_edges() {
+        // 3 unresolved edges into `new` vs 1 resolved edge into `real_hub`:
+        // with name-only edges counted, `new` would dominate PageRank.
+        let mut rels = vec![rel("a", "real_hub"), rel("b", "real_hub")];
+        for c in ["x", "y", "z"] {
+            rels.push(rel_unresolved_callee(c, "new"));
+        }
+        let ranked = central_symbols(&rels, 2);
+        assert_eq!(
+            ranked[0].0, "real_hub",
+            "resolved hub outranks noise symbol"
+        );
+        assert!(
+            !ranked.iter().any(|(n, _)| n == "new"),
+            "`new` has no resolved in-edges"
+        );
     }
 
     /// Like `ref_of` but sets BOTH an opaque id and a human-readable name (the

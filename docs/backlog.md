@@ -562,3 +562,26 @@ fails on React JSX typing (pre-existing, no engram deps); `@engram/runtime`
 has one real-addon boot-timeout test (mcp.smoke). Source:
 `docs/specs/engram-code/notes.md` T8/T10.
 - **Kernel-scale benchmark (engram-code AC10 gap):** the recorded benchmark covers two ~900-file repos; Linux/Swift-scale (codegraph's comparison target) not yet run (docs/perf/engram-code-benchmark.md).
+
+## scan-reliability-followups
+
+Follow-ups opened by `scan-reliability` (Shipped — see
+`docs/specs/scan-reliability/spec.md`). All blocked on nothing unless noted.
+
+- **Scan manifest persistence across `scan_repo` calls:** the MCP handler
+  passes an empty manifest on every call, so each scan re-ingests unchanged
+  files (~18s on this repo). Persisting the per-source manifest (store-backed)
+  would make re-scans incremental end-to-end. [spec scan-reliability non-goals]
+- **Per-repo analytics partitioning:** legacy scans that *resolved* bare
+  generics (`as_str`, `lock`, `is_empty`) still dominate cross-repo centrality
+  because those edges carry ids. Partition `architecture`/`code_health` by
+  source repository, or re-scan the legacy repositories under the post-T5
+  noise filter. [spec scan-reliability non-goals]
+- **Embed backlog drain:** `scan_repo` embeds 256 chunks per call from the
+  scan's source; the eval store shows ~4.8k pending from this source (more from
+  legacy sources). Either a dedicated reindex tool or background draining with
+  progress; also revisit the `list_chunks`+`embedded_ids` full-list overhead
+  once stores grow past ~100k chunks. [spec scan-reliability AC1]
+- **Scan cancellation / job model:** a timed-out scan still completes
+  server-side (bounded now, but invisible to the caller). A job handle with
+  progress + cancel is the durable fix. [spec scan-reliability non-goals]

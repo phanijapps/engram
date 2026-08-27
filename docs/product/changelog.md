@@ -79,7 +79,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- (nothing yet)
+- `scan_repo` now returns within client timeouts on a populated store: the
+  lexical feed is scoped to the scan's own entities (was: every entity in the
+  scope re-fed per scan) and the vector-embed step is scoped + capped per call
+  with the remainder reported (was: an unbounded cross-source backlog ground
+  through the shared model mutex inside the tool response). Chunk text sent to
+  the embedder is bounded to 8 KiB.
+- Maintenance tools (`graph_health`, `list_maintenance_candidates`,
+  `build_maintenance_plan`, `apply_maintenance_plan`) default a missing/null
+  `scope` argument to the launch scope instead of erroring.
+- `code_health` and `architecture` responses are capped (dead list truncated
+  to 100 + count; community map to top 10) — previously up to 255 KB of
+  inlined output.
+- Code-graph analytics (`dead_code`, `central_symbols`, `bridge_symbols`,
+  `call_communities`, `repository_stats`) count only relationships with both
+  endpoints resolved to entity ids — legacy name-only edges no longer fake
+  caller evidence or centrality.
+- JSX element usage (`<Button …>` in tsx/jsx) now counts as a reference from
+  the enclosing component, so JSX-referenced components are no longer flagged
+  as dead code; lowercase DOM intrinsics do not emit edges.
 
 ### Security
 

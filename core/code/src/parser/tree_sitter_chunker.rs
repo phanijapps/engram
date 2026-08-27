@@ -556,6 +556,21 @@ fn collect_calls_and_spans(
         }
     }
 
+    // scan-reliability AC5: JSX element usage is a reference. Components are
+    // used declaratively (`<Button …>`), never via a call_expression, so
+    // without this every React component has zero incoming `calls` edges and
+    // dead-code analytics flag them all as dead. Only PascalCase element
+    // names count — lowercase names are DOM intrinsics (`<div>`, `<span>`),
+    // not entities, and would otherwise flood the unresolved-refs ledger.
+    if kind == "jsx_opening_element" || kind == "jsx_self_closing_element" {
+        if let Some(name_node) = node.child_by_field_name("name") {
+            let name = extract_name(&name_node, source);
+            if name.chars().next().is_some_and(char::is_uppercase) {
+                call_sites.push((node.start_position().row, name));
+            }
+        }
+    }
+
     // Recurse.
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
@@ -962,6 +977,25 @@ mod dotted_reference_tests {
         assert!(
             edges.iter().any(|(_caller, callee)| callee == "store.save"),
             "edges: {edges:?}"
+        );
+    }
+
+    #[test]
+    fn jsx_element_usage_counts_as_reference() {
+        // scan-reliability AC5: `<Button …>` inside a component is a usage of
+        // Button — dead-code analytics must see it as an incoming edge.
+        let source = "function Page() {\n    return (<div>\n        <Button onClick={handleClick} />\n    </div>);\n}\n";
+        let edges = calls(source, "tsx", &["Page", "Button", "handleClick"]);
+        assert!(
+            edges
+                .iter()
+                .any(|(caller, callee)| caller == "Page" && callee == "Button"),
+            "JSX usage must yield (Page, Button): {edges:?}"
+        );
+        // Lowercase DOM intrinsics must NOT emit edges (they are not entities).
+        assert!(
+            !edges.iter().any(|(_c, callee)| callee == "div"),
+            "div is a DOM intrinsic, not a reference: {edges:?}"
         );
     }
 }

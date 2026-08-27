@@ -218,6 +218,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     };
     let (summary, _manifest) =
         scan_repository(std::path::Path::new(path), &opts, &repo, |_| ()).map_err(internal)?;
+    eprintln!("engram-mcp: scan_repository done: {summary:?}");
 
     // The scan just wrote entities + relationships for this scope. Invalidate
     // the graph snapshot cache for this scope so the next `search`/`recall`
@@ -228,6 +229,18 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     }
 
     // Feed code-symbol names to the lexical lane so keyword search finds them.
+    // scan-reliability AC1: DELTA feed — only entities whose provenance source
+    // is this scan (the git-enriched source name `scan_repository` stamps on
+    // every record). Feeding the whole scope made every scan O(store): a
+    // populated store re-upserted ~17.7k lexical docs per scan and blew past
+    // client timeouts even for a two-file probe. Batched so a large fresh scan
+    // commits incrementally instead of one giant commit.
+    let scan_source = match (&summary.git_remote, &summary.git_branch, &summary.git_sha) {
+        (Some(remote), Some(branch), Some(sha)) => {
+            format!("{} [{}@{}:{}]", opts.source_name, remote, branch, sha)
+        }
+        _ => opts.source_name.clone(),
+    };
     if let (Ok(query), Ok(feed)) = (
         app.provider.require_knowledge_query(),
         app.provider.require_lexical_feed(),
@@ -235,14 +248,19 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         let entries: Vec<(String, String)> = block_on(query.list_entities(&app.scope))
             .unwrap_or_default()
             .into_iter()
+            .filter(|e| e.provenance.source == scan_source)
             .map(|e| (e.id.to_string(), format!("{} {:?}", e.name, e.kind)))
             .collect();
-        if !entries.is_empty() {
-            if let Err(e) = block_on(feed.upsert_batch(&entries)) {
+        for chunk in entries.chunks(1000) {
+            if let Err(e) = block_on(feed.upsert_batch(chunk)) {
                 // Non-fatal: search may return no code symbols, but the scan itself succeeded.
                 eprintln!("engram-mcp: lexical feed warning: {e}");
             }
         }
+        eprintln!(
+            "engram-mcp: lexical delta feed done ({} entries)",
+            entries.len()
+        );
     }
 
     // Embed chunks into the vector index (when fastembed is wired).
@@ -250,9 +268,25 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     // Incremental + batched (indexing-embed-performance): only chunks whose id
     // is NOT already in the vector index are embedded, and the embedding work
     // runs in batches through `embed_batch` (one FastEmbed model call per batch
-    // instead of one per chunk). Re-scanning an unchanged repo embeds ~0 chunks;
-    // adding a repo to a populated DB embeds only the new repo's chunks.
+    // instead of one per chunk). Re-scanning an unchanged repo embeds ~0 chunks.
+    //
+    // scan-reliability AC1 (embed side): the pending set is scoped to THIS
+    // scan's source and capped per call. The prior shape listed every chunk in
+    // the scope — on a store holding other repos' history that meant an
+    // unbounded cross-source backlog ground through the shared model mutex
+    // inside the tool response (the eval store sat at ~81.6k chunks and the
+    // call never returned). Embedding now costs O(this scan), re-running a
+    // scan continues the remainder, and the summary reports what is left.
+    // Chunk text sent to the embedder is bounded: BGE truncates at 512 tokens
+    // (~2 KiB of code), so longer texts only fed the tokenizer — megabyte
+    // legacy chunks spent minutes in BPE before being truncated anyway.
+    const EMBED_TEXT_CAP: usize = 8 * 1024;
+    // 512 briefly flirted with the 60s MCP request ceiling once the chunk
+    // listing overhead (an 81k-chunk store) stacked on top; 256 keeps the
+    // whole call ~45s worst-case with headroom, and re-runs continue the rest.
+    const EMBED_PER_CALL_CAP: usize = 256;
     let mut embedded = 0usize;
+    let mut pending_after_cap = 0usize;
     if let (Ok(query), Some(embedder), Ok(vector_index)) = (
         app.provider.require_knowledge_query(),
         app.provider.embedding_provider(),
@@ -265,14 +299,26 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         // failed listing degrades to "embed everything" (current behavior).
         let have: std::collections::HashSet<engram_domain::Id> =
             block_on(vector_index.embedded_ids()).unwrap_or_default();
-        let pending: Vec<&engram_domain::KnowledgeChunk> = chunks
+        let mut source_pending: Vec<&engram_domain::KnowledgeChunk> = chunks
             .iter()
-            .filter(|c| !c.text.is_empty() && !have.contains(&c.id))
+            .filter(|c| {
+                !c.text.is_empty() && !have.contains(&c.id) && c.provenance.source == scan_source
+            })
             .collect();
+        source_pending.sort_by_key(|c| c.id.as_str().to_owned());
+        pending_after_cap = source_pending.len().saturating_sub(EMBED_PER_CALL_CAP);
+        let pending: Vec<&&engram_domain::KnowledgeChunk> =
+            source_pending.iter().take(EMBED_PER_CALL_CAP).collect();
 
         const EMBED_BATCH_SIZE: usize = 64;
         for batch in pending.chunks(EMBED_BATCH_SIZE) {
-            let texts: Vec<String> = batch.iter().map(|c| c.text.clone()).collect();
+            let texts: Vec<String> = batch
+                .iter()
+                .map(|c| {
+                    let t = c.text.trim();
+                    t.chars().take(EMBED_TEXT_CAP).collect::<String>()
+                })
+                .collect();
             // Skip empty-text chunks defensively (the filter above already
             // dropped them) and warn per-chunk on insert errors, as before.
             match embedder.embed_batch(&texts) {
@@ -301,8 +347,16 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         }
     }
 
+    let embed_note = if pending_after_cap > 0 {
+        format!(
+            "\nembedded {embedded} chunks ({pending_after_cap} more pending from this source — re-run scan_repo to continue)"
+        )
+    } else {
+        format!("\nembedded {embedded} chunks")
+    };
+    eprintln!("engram-mcp: embed done ({embedded} embedded, {pending_after_cap} pending)");
     Ok(protocol::text_content(format!(
-        "{summary:?}\n{filter_note}\nembedded {embedded} chunks"
+        "{summary:?}\n{filter_note}{embed_note}"
     )))
 }
 
@@ -1530,26 +1584,46 @@ fn names_first_match(entity_names: &[String], query: &str, fallback: &str) -> St
 }
 
 /// `code_health`: dead code (zero-caller symbols) + repository stats.
+/// scan-reliability AC3: the dead list is truncated (first 100 + `… and N
+/// more`) — the full list once inlined 3.4k symbols / 138 KB into an agent
+/// context. Analytics count only resolved-endpoint edges (AC4), so bare
+/// generics from pre-resolution scans (`new` ×4.5k on the eval store) no
+/// longer masquerade as caller evidence.
 pub fn code_health(app: &App, _args: &Value) -> Result<Value, ToolError> {
     let rels = fetch_rels(app)?;
     let dead = engram_codegraph_queries::dead_code(&rels);
     let stats = engram_codegraph_queries::repository_stats(&rels);
+    const DEAD_LIST_CAP: usize = 100;
+    let shown: Vec<&String> = dead.iter().take(DEAD_LIST_CAP).collect();
+    let more = dead.len().saturating_sub(DEAD_LIST_CAP);
+    let tail = if more > 0 {
+        format!("\n… and {more} more (pass a smaller repo scope or raise the cap in codegraph.rs)")
+    } else {
+        String::new()
+    };
     Ok(protocol::text_content(format!(
-        "Dead code ({} symbols): {dead:?}\nStats: {stats:?}",
+        "Dead code ({} symbols, showing first {DEAD_LIST_CAP}): {shown:?}{tail}\nStats: {stats:?}",
         dead.len()
     )))
 }
 
 /// `architecture`: central symbols, bridges, communities, stats — one map.
+/// scan-reliability AC3: the community map is truncated to the top 10 by
+/// member count (the full map once serialized to 255 KB).
 pub fn architecture(app: &App, args: &Value) -> Result<Value, ToolError> {
     let limit = args["limit"].as_u64().unwrap_or(10) as usize;
     let rels = fetch_rels(app)?;
     let central = engram_codegraph_queries::central_symbols(&rels, limit);
     let bridges = engram_codegraph_queries::bridge_symbols(&rels, limit);
-    let communities = engram_codegraph_queries::call_communities(&rels, 3);
+    let mut communities: Vec<(String, usize)> =
+        engram_codegraph_queries::call_communities(&rels, 3)
+            .into_iter()
+            .collect();
+    communities.sort_by(|a, b| b.1.cmp(&a.1));
+    communities.truncate(10);
     let stats = engram_codegraph_queries::repository_stats(&rels);
     Ok(protocol::text_content(format!(
-        "Central: {central:?}\nBridges: {bridges:?}\nCommunities: {communities:?}\nStats: {stats:?}"
+        "Central: {central:?}\nBridges: {bridges:?}\nCommunities (top 10): {communities:?}\nStats: {stats:?}"
     )))
 }
 

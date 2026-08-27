@@ -629,6 +629,7 @@ Debt register from the 2026-08-27 tree-sitter performance + noise audit
 relationships from 781 ingested files; see the audit memory in engram for raw
 numbers). Ordered by leverage; each item links its fix commit as it lands.
 
+> **Fixed 2026-08-27:** filename + content-shape filter, previously-ingested bundles retract via the manifest. Fresh-store verified: 9 `.min.js` docs → 0; short-name entities 372 → 4.
 - **[minified-vendor-noise] Minified/bundled assets are indexed as symbols.**
   9 vendored `.js` bundles under `static/`/`resources/` (1.2% of documents)
   injected 372 minified entities (12% of the store: `M`, `s`, `tn`, `R`, `A`,
@@ -636,16 +637,19 @@ numbers). Ordered by leverage; each item links its fix commit as it lands.
   filename deny (`.min.js`/`.min.css`/`.map`) + content heuristic (avg line
   length), plus retraction when a previously-ingested file becomes
   filtered — otherwise filter upgrades never clean existing stores.
+> **Fixed 2026-08-27:** `TreeSitterChunker::parse` + `*_tree` variants; the scanner parses once per file in the main phase (4 parses/file → 2 incl. the pre-pass). All suites green through the shared-tree path.
 - **[parse-multiplicity] Every code file is tree-sitter-parsed 4× per scan.**
   Pre-pass name collection (1) + main-pass chunk (2) + extract_calls (3) +
   extract_structural (4) each call `parser.parse` independently. 4× the
   dominant CPU for 1× the information; kernel-scale scans pay 4× needlessly.
   Fix: parse once in the main phase and share the `&Tree`.
+> **Fixed 2026-08-27:** the `KnowledgeRepoGraph` fan-in never forwarded the T6 ledger methods — every MCP/N-API scan hit the default-erroring trait impl (`put_unresolved_refs is not supported`) and the ledger stayed empty. Forwarded + regression test through the fan-in; live store now holds 1,734 pending refs for cross-scan healing.
 - **[ledger-not-capturing] The unresolved-refs ledger stays empty.**
   `knowledge_unresolved_refs` = 0 rows despite 2,875 name-only `calls` edges —
   cross-scan healing (the Phase-2 sweep) has nothing to heal, so name-only
   edges stay unresolved forever by construction. Fix: ledger every name-only
   edge `resolve_refs` fails to settle.
+> **Partially fixed 2026-08-27:** JDK/stdlib/chained idioms added to the noise filter (declared symbols still resolve). The package-import ladder + receiver-hint qualification remain open.
 - **[java-resolution] Java cross-file resolution barely resolves.**
   89% of real-named Java call edges are unresolved; top offenders (`run`×65,
   `info`×44, `build`×25, `get`×24) split into (a) JDK/stdlib/chained calls

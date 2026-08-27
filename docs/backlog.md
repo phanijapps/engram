@@ -568,20 +568,51 @@ has one real-addon boot-timeout test (mcp.smoke). Source:
 Follow-ups opened by `scan-reliability` (Shipped — see
 `docs/specs/scan-reliability/spec.md`). All blocked on nothing unless noted.
 
-- **Scan manifest persistence across `scan_repo` calls:** the MCP handler
-  passes an empty manifest on every call, so each scan re-ingests unchanged
-  files (~18s on this repo). Persisting the per-source manifest (store-backed)
-  would make re-scans incremental end-to-end. [spec scan-reliability non-goals]
+> **Closed:** manifest persistence shipped (`scan-incremental-manifest`) —
+> per-root sidecar under `<storage>/scan-manifests/`, `force=true` bypass;
+> verified live 53s → 18s with `unchanged: 933`.
 - **Per-repo analytics partitioning:** legacy scans that *resolved* bare
   generics (`as_str`, `lock`, `is_empty`) still dominate cross-repo centrality
   because those edges carry ids. Partition `architecture`/`code_health` by
   source repository, or re-scan the legacy repositories under the post-T5
   noise filter. [spec scan-reliability non-goals]
-- **Embed backlog drain:** `scan_repo` embeds 256 chunks per call from the
-  scan's source; the eval store shows ~4.8k pending from this source (more from
-  legacy sources). Either a dedicated reindex tool or background draining with
-  progress; also revisit the `list_chunks`+`embedded_ids` full-list overhead
-  once stores grow past ~100k chunks. [spec scan-reliability AC1]
+- **Embed backlog drain (reindex op):** `scan_repo` embeds 256 chunks per call
+  scoped to the scan's sha-stamped source — fine for changed files, but it
+  cannot drain chunks whose source name no longer matches (old SHAs from
+  pre-manifest scans; fresh vector stores on a backend switch). Need a reindex
+  op keyed on the vector index's embedded-set with progress. Also: the per-call
+  `list_chunks` + `embedded_ids` full-list overhead is O(store) (~12s of the
+  18s incremental scan) — needs a store-side un-embedded query. [spec
+  pgvector-backend PS5; scan-reliability AC1]
 - **Scan cancellation / job model:** a timed-out scan still completes
   server-side (bounded now, but invisible to the caller). A job handle with
   progress + cancel is the durable fix. [spec scan-reliability non-goals]
+
+## pgvector-production-switch
+
+Working set for production readiness on the Postgres switch (spec
+`pgvector-backend`, ACs PS1–PS6; assessment dated 2026-08-27). Ordered by
+leverage; PS1/PS2 are the switch-enablers, the rest harden it.
+
+- **PS1 — MCP pgvector surface:** `engram-mcp` is SQLite-only today; wire a
+  `--backend pgvector` path through `backends::pgvector::open` (recipe entry),
+  keep `capability_report` honest about missing lanes. Blocked on nothing.
+- **PS2 — recall vector lane on Postgres:** `PgUnifiedRecall` fuses facts +
+  beliefs only; the `PgVectorIndex` cell exists but is not composed into
+  recall. Fuse it (query-vector provider port already exists); document or
+  ship the lexical (tsvector) lane. Blocked on nothing.
+- **PS3 — CI Postgres service:** add a Postgres+pgvector service container
+  (shape of `docs/how-to-pg/docker-compose.yaml`) to CI and run the pgvector
+  conformance + integration tests in the gate. Blocked on nothing.
+- **PS4 — migration runbook:** demonstrate SQLite export → Postgres import →
+  recall parity spot-check; write `docs/guides/how-to/migrate-sqlite-to-pg.md`.
+  Blocked on nothing (export/import capability exists).
+- **PS5 — reindex op:** see `scan-reliability-followups` (embed backlog drain,
+  keyed on embedded-set, with progress). Blocked on nothing.
+- **PS6 — ops hardening:** schema versioning beyond idempotent DDL, pool/TLS
+  validation errors at `open`, backup/restore runbook. Blocked on nothing.
+- **Test hygiene (gate trustworthiness):** fix the pre-existing failures so
+  the gates are green going into the switch — `mcp.test` extract-knowledge
+  dispatch (spy 0 calls + afterEach hook timeout), `mcp.smoke` boot timeout,
+  engram-cc `graph.routes` live-store tests (empty agentzero scope),
+  `prototype/frontend` React JSX typecheck. Blocked on nothing.

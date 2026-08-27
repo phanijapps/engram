@@ -22,6 +22,9 @@ pub struct App {
     pub scope: Scope,
     pub ontology: OntologyConfig,
     pub taxonomy: TaxonomyConfig,
+    /// Storage directory (the `--storage` launch path). Hosts persistent
+    /// sidecar state here — e.g. `scan-manifests/` incremental-scan manifests.
+    pub storage_dir: std::path::PathBuf,
 }
 
 /// `ontology_read`: return the active multi-layer ontology config.

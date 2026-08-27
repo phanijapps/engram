@@ -197,6 +197,57 @@ fn format_no_results_diag(
     parts.join("; ")
 }
 
+/// Deterministic manifest path for a scan root: `<storage>/scan-manifests/<hash>.json`
+/// where `hash` is derived from the canonicalized root path. Canonicalizing
+/// makes `/repo` and `/repo/` (and symlinked spellings that resolve to the
+/// same target) share one manifest — the identity the scanner itself uses.
+fn manifest_path_for(storage: &std::path::Path, root: &std::path::Path) -> std::path::PathBuf {
+    use std::hash::{Hash, Hasher};
+    let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    canonical.hash(&mut hasher);
+    let key = format!(
+        "{:016x}-{}",
+        hasher.finish(),
+        canonical
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "root".to_owned())
+    );
+    storage.join("scan-manifests").join(format!("{key}.json"))
+}
+
+/// Loads a persisted scan manifest. Any read/parse failure degrades to an
+/// empty manifest — a stale or corrupt sidecar must never break the scan,
+/// only cost one full re-ingest.
+fn load_manifest(path: &std::path::Path) -> HashMap<String, String> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Persists a scan manifest atomically (tmp + rename) so a crash mid-write
+/// leaves either the old or the new file, never a truncated one. Write
+/// failures are non-fatal (next scan degrades to full) but surfaced.
+fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>) {
+    if let Some(parent) = path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            eprintln!("engram-mcp: scan manifest dir warning: {e}");
+            return;
+        }
+    }
+    let tmp = path.with_extension("json.tmp");
+    match serde_json::to_string(manifest) {
+        Ok(text) => {
+            if let Err(e) = std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, path)) {
+                eprintln!("engram-mcp: scan manifest write warning: {e}");
+            }
+        }
+        Err(e) => eprintln!("engram-mcp: scan manifest serialize warning: {e}"),
+    }
+}
+
 /// `scan_repo`: treesitter-index a code repository into the project workspace,
 /// routed through the provider via the fan-in adapter. Feeds code-symbol names
 /// to the lexical lane so `search`/`recall` find them.
@@ -206,6 +257,23 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     let graph = app.provider.require_graph().map_err(internal)?.clone();
     let repo = KnowledgeRepoGraph::new(knowledge, graph);
 
+    // scan-manifest-persistence: load the prior manifest for this root so the
+    // scanner skips unchanged files (the N-API `manifestPath` pattern — the
+    // MCP path previously passed an empty manifest every call, re-ingesting
+    // the whole repo (~18s on this repo) per scan). Keyed by the canonical
+    // root path so re-scanning the same root resumes; stored under
+    // `<storage>/scan-manifests/`. Missing/corrupt file → empty manifest
+    // (full scan), never an error. A `force=true` arg skips the prior
+    // manifest (full re-ingest) but still persists the fresh one.
+    let force = args["force"].as_bool().unwrap_or(false);
+    let root = std::path::Path::new(path);
+    let manifest_path = manifest_path_for(&app.storage_dir, root);
+    let prior: HashMap<String, String> = if force {
+        HashMap::new()
+    } else {
+        load_manifest(&manifest_path)
+    };
+
     let (scan_filter, filter_note) = resolve_scan_filter(path, args);
     let opts = ScanOptions {
         scope: app.scope.clone(),
@@ -213,11 +281,11 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         actor: system_actor(),
         source_name: "engram-mcp-scan".to_owned(),
         max_bytes: 0,
-        manifest: HashMap::new(),
+        manifest: prior,
         scan_filter,
     };
-    let (summary, _manifest) =
-        scan_repository(std::path::Path::new(path), &opts, &repo, |_| ()).map_err(internal)?;
+    let (summary, new_manifest) = scan_repository(root, &opts, &repo, |_| ()).map_err(internal)?;
+    save_manifest(&manifest_path, &new_manifest);
     eprintln!("engram-mcp: scan_repository done: {summary:?}");
 
     // The scan just wrote entities + relationships for this scope. Invalidate
@@ -4057,6 +4125,57 @@ pub fn explore(app: &App, args: &Value) -> Result<Value, ToolError> {
 mod phase2_tool_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn scan_repo_is_incremental_across_calls_and_persists_manifest() {
+        // scan-manifest-persistence: second scan of the same root skips
+        // unchanged files (summary.unchanged > 0, ingested == 0), and the
+        // manifest sidecar exists under <storage>/scan-manifests/.
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/lib.rs"),
+            "pub fn alpha() {}\npub fn beta() { alpha(); }\n",
+        )
+        .unwrap();
+        let app = crate::tools::tests::test_app(dir.path());
+        let path_arg = json!({ "path": repo_dir.path().to_str().unwrap() });
+
+        let first = crate::codegraph::scan_repo(&app, &path_arg).unwrap();
+        let first_text = first["content"][0]["text"].as_str().unwrap();
+        assert!(first_text.contains("ingested: 1"), "first: {first_text}");
+
+        // Manifest sidecar persisted under the storage dir.
+        let manifests_dir = dir.path().join("scan-manifests");
+        let persisted: Vec<_> = std::fs::read_dir(&manifests_dir)
+            .expect("scan-manifests dir")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+            .collect();
+        assert_eq!(persisted.len(), 1, "one manifest per root");
+
+        // Second scan: unchanged files skipped, nothing re-ingested.
+        let second = crate::codegraph::scan_repo(&app, &path_arg).unwrap();
+        let second_text = second["content"][0]["text"].as_str().unwrap();
+        assert!(
+            second_text.contains("ingested: 0"),
+            "re-scan re-ingested: {second_text}"
+        );
+        assert!(
+            second_text.contains("unchanged: 1"),
+            "re-scan did not skip: {second_text}"
+        );
+
+        // force=true bypasses the manifest: everything re-ingested.
+        let forced = crate::codegraph::scan_repo(
+            &app,
+            &json!({ "path": repo_dir.path().to_str().unwrap(), "force": true }),
+        )
+        .unwrap();
+        let forced_text = forced["content"][0]["text"].as_str().unwrap();
+        assert!(forced_text.contains("ingested: 1"), "forced: {forced_text}");
+    }
 
     #[test]
     fn explore_and_file_dependencies_answer_over_a_scanned_fixture() {

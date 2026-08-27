@@ -79,6 +79,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `scan_repo` is now incremental across calls: a per-root manifest is persisted
+  under `<storage>/scan-manifests/` and re-scans skip unchanged files
+  (`force=true` re-ingests everything). Consecutive scans of a ~1,200-file
+  repository drop from ~53s to ~18s.
 - `scan_repo` now returns within client timeouts on a populated store: the
   lexical feed is scoped to the scan's own entities (was: every entity in the
   scope re-fed per scan) and the vector-embed step is scoped + capped per call

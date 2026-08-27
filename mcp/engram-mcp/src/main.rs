@@ -76,6 +76,7 @@ fn main() {
         ),
         ontology,
         taxonomy,
+        storage_dir: std::path::PathBuf::from(&config.storage_path),
     };
 
     let mut registry: ToolRegistry<App> = ToolRegistry::new();
@@ -330,6 +331,8 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
     registry.register(ToolRecord {
         name: "scan_repo",
         description: "Treesitter-index a code repository into the project workspace (code lane). \
+                      Incremental: a per-root manifest is persisted under <storage>/scan-manifests/ \
+                      so re-scans skip unchanged files; pass force=true to re-ingest everything. \
                       Honors an optional scan config: pass `scan_config` (path to a JSON file) or \
                       drop one at `<repo>/.engram/scan.json` to tune the concept-link filter \
                       (blocklist/allowlist/min_name_length) and the file denylist (dirs/extensions). \
@@ -338,6 +341,7 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
             "type": "object",
             "properties": {
                 "path": { "type": "string", "description": "Repository root path." },
+                "force": { "type": "boolean", "description": "Skip the incremental manifest and re-ingest every file (default false)." },
                 "scan_config": { "type": "string", "description": "Optional path to a scan-filter JSON config (overrides <repo>/.engram/scan.json)." }
             },
             "required": ["path"]

@@ -728,6 +728,7 @@ pub(crate) mod tests {
             scope: project_scope("test-project", "default"),
             ontology: OntologyConfig::default(),
             taxonomy: TaxonomyConfig::default(),
+            storage_dir: dir.to_path_buf(),
         }
     }
 

@@ -74,7 +74,55 @@ Per the 2026-07-16 amendments:
 - **Integration**: a `PgUnifiedRecall` integration test (mirror of `SqlUnifiedRecall` tests) over a test Postgres instance (docker-compose or CI service).
 - **Migration**: `export_import` capability moves data SQLite → pgvector (a dry-run + apply round-trip test).
 
-## Acceptance Criteria (Phase A — P0 hot path)
+## Revision (2026-08-27): production-switch gap assessment
+
+Reality check against the codebase: the P0 hot path largely **shipped** —
+`adapters/pgvector/` (memory, knowledge+graph, vectors, schema) and the
+`backends/pgvector` recipe (connection lifecycle, idempotent schema, cell
+composition incl. belief/hierarchy/procedures cells, `PgUnifiedRecall`) exist,
+and `pgvector-recipe` is Shipped. Two of the original ACs are obsolete by the
+recipe's design (pgvector no longer routes through `EngramProvider::open` —
+hosts call `backends::pgvector::open` directly; that supersedes the
+"`EngramConfig` dispatch" AC and is *better* for neutrality).
+
+What actually blocks a production switch (verified 2026-08-27):
+
+1. **No agent surface.** `engram-mcp` is SQLite-only — no pgvector wiring, no
+   launch flag. The switch does not exist for the MCP/agent path.
+2. **Recall is degraded on Postgres.** `PgUnifiedRecall` composes facts +
+   beliefs lanes only — the vector lane (the `PgVectorIndex` cell exists but is
+   not fused into recall) and lexical lane (no tsvector implementation) are
+   missing. SQLite recall fuses 6 lanes; Postgres would fuse 2.
+3. **No CI safety net.** CI runs no Postgres service; conformance/
+   integration tests against Postgres are not in the gate.
+4. **No migration runbook.** SQLite → Postgres export/import round-trip is
+   specced but not demonstrated end-to-end.
+5. **Embed/reindex operations.** `scan_repo` embeds 256 chunks/call scoped to
+   the scan's source; there is no reindex op with progress for initial
+   backfill (needed on ANY backend switch — vectors start empty).
+
+These become the working ACs for promoting this spec; the original Phase-A
+ACs below stay as the (mostly met) historical record.
+
+## Acceptance Criteria (production switch — working set)
+
+- [ ] PS1 — `engram-mcp --storage <dir> --backend pgvector` (or the
+  equivalent config env/flag) opens through `backends::pgvector::open` and
+  serves the full tool surface on Postgres; `capability_report` is honest
+  about lanes that are missing.
+- [ ] PS2 — recall on Postgres fuses the vector lane (and documents the
+  lexical gap or ships a tsvector lane).
+- [ ] PS3 — CI runs a Postgres service (docs/how-to-pg compose shape) and the
+  pgvector conformance + integration tests are part of the gate.
+- [ ] PS4 — migration runbook demonstrated: SQLite export → Postgres import →
+  recall parity spot-check; documented under docs/guides/how-to/.
+- [ ] PS5 — a reindex op (MCP tool or CLI) drains the embed backlog with
+  progress, keyed on the vector index's embedded-set, not per-scan scope.
+- [ ] PS6 — ops hardening: schema versioning/migration strategy beyond
+  idempotent DDL, connection-string/TLS/pool validation errors surfaced at
+  `open`, and a backup/restore runbook page.
+
+## Acceptance Criteria (Phase A — P0 hot path, historical)
 
 - [ ] `adapters/pgvector/` crate exists with `PgMemoryService`, `PgKnowledgeStore`, `PgVectorIndex` implementing the P0 ports.
 - [ ] `core/integration/src/pgvector/bootstrap.rs` constructs an `EngramProvider` from a Postgres config (feature-gated `pgvector`).

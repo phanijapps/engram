@@ -37,7 +37,9 @@ pub fn dead_code_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> R
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
     let relationships = relationships_for(store, &scope)?;
-    encode(&cgq::dead_code(&relationships))
+    encode(&cgq::dead_code(&cgq::AnalyticsGraph::from_relationships(
+        &relationships,
+    )))
 }
 
 /// `{scope, target, depth?}` -> transitive caller keys (blast radius).
@@ -76,7 +78,10 @@ pub fn central_symbols_json(
     let scope = scope_of(&value)?;
     let relationships = relationships_for(store, &scope)?;
     let limit = value["limit"].as_u64().unwrap_or(20) as usize;
-    encode(&cgq::central_symbols(&relationships, limit))
+    encode(&cgq::central_symbols(
+        &cgq::AnalyticsGraph::from_relationships(&relationships),
+        limit,
+    ))
 }
 
 /// `{scope, limit?}` -> `[[symbol, score], ...]` ranked by betweenness (bridges).
@@ -85,7 +90,10 @@ pub fn bridge_symbols_json(store: &Arc<SqlKnowledgeStore>, request_json: String)
     let scope = scope_of(&value)?;
     let relationships = relationships_for(store, &scope)?;
     let limit = value["limit"].as_u64().unwrap_or(20) as usize;
-    encode(&cgq::bridge_symbols(&relationships, limit))
+    encode(&cgq::bridge_symbols(
+        &cgq::AnalyticsGraph::from_relationships(&relationships),
+        limit,
+    ))
 }
 
 /// `{scope, maxPasses?}` -> `{symbol: label}` Louvain communities.
@@ -97,7 +105,10 @@ pub fn call_communities_json(
     let scope = scope_of(&value)?;
     let relationships = relationships_for(store, &scope)?;
     let max_passes = value["maxPasses"].as_u64().unwrap_or(10) as usize;
-    encode(&cgq::call_communities(&relationships, max_passes))
+    encode(&cgq::call_communities(
+        &cgq::AnalyticsGraph::from_relationships(&relationships),
+        max_passes,
+    ))
 }
 
 /// `{source}` -> cyclomatic complexity (integer).

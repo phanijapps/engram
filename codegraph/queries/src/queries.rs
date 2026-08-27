@@ -70,18 +70,107 @@ pub fn resolved_call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(Stri
 ///
 /// Note: entry points (main, HTTP handlers) also have zero callers and surface
 /// here — callers filter known entry points. Mirrors memtrace's `find_dead_code`.
-pub fn dead_code(relationships: &[KnowledgeRelationship]) -> Vec<String> {
-    let edges = resolved_call_edges(relationships);
-    let in_degree = engram_graph_analytics::in_degree(&edges);
+/// An **id-keyed** analytics graph over resolved call edges: nodes are entity
+/// IDS, so distinct symbols that share a bare name (`User` ×17 across Maven
+/// modules, `UserController` ×8) stay distinct — the name-keyed analytics of
+/// the scan-reliability era merged them into one node, double-counting
+/// degrees and hiding per-module structure (code-graph-quality
+/// [analytics-name-collision]). Display names are carried for output only.
+pub struct AnalyticsGraph {
+    edges: Vec<(String, String)>,
+    names: HashMap<String, String>,
+}
+
+impl AnalyticsGraph {
+    /// Builds the graph from resolved-endpoint `calls`-family relationships
+    /// ([`resolved_call_edges`] semantics: both endpoints must carry ids).
+    pub fn from_relationships(relationships: &[KnowledgeRelationship]) -> Self {
+        let mut names: HashMap<String, String> = HashMap::new();
+        let mut edges: Vec<(String, String)> = Vec::new();
+        for r in relationships.iter().filter(|r| {
+            matches!(
+                r.predicate.as_str(),
+                "calls" | "sends_request" | "handled_by"
+            )
+        }) {
+            let (Some(subject_id), Some(object_id)) = (&r.subject.id, &r.object.id) else {
+                continue;
+            };
+            let (s, o) = (subject_id.to_string(), object_id.to_string());
+            if let Some(name) = &r.subject.name {
+                names.entry(s.clone()).or_insert_with(|| name.clone());
+            }
+            if let Some(name) = &r.object.name {
+                names.entry(o.clone()).or_insert_with(|| name.clone());
+            }
+            if s != o {
+                edges.push((s, o));
+            }
+        }
+        Self { edges, names }
+    }
+
+    /// Raw id-keyed edges — the input shape `engram_graph_analytics` expects.
+    pub fn edges(&self) -> &[(String, String)] {
+        &self.edges
+    }
+
+    /// Display name for an id (the bare name; falls back to the id itself
+    /// when no name was carried on any relationship endpoint).
+    pub fn display<'a>(&'a self, id: &'a str) -> &'a str {
+        self.names.get(id).map(String::as_str).unwrap_or(id)
+    }
+
+    /// Distinct node count (endpoints across the edge set).
+    pub fn node_count(&self) -> usize {
+        let mut nodes: HashSet<&str> = HashSet::new();
+        for (s, o) in &self.edges {
+            nodes.insert(s.as_str());
+            nodes.insert(o.as_str());
+        }
+        nodes.len()
+    }
+
+    /// Unique display labels for a collection of ids, in INPUT ORDER: nodes
+    /// sharing a bare name get a `#2`, `#3`… suffix so per-module duplicates
+    /// stay distinguishable in agent-facing output. Deterministic when the
+    /// input order is (callers with nondeterministic sources — e.g. a HashMap
+    /// — must sort first).
+    pub fn display_all<'a, I>(&'a self, ids: I) -> Vec<String>
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        let mut seen: HashMap<&str, usize> = HashMap::new();
+        ids.into_iter()
+            .map(|id| {
+                let base = self.display(id);
+                let n = seen.entry(base).or_insert(0);
+                *n += 1;
+                if *n == 1 {
+                    base.to_owned()
+                } else {
+                    format!("{base}#{n}")
+                }
+            })
+            .collect()
+    }
+}
+
+pub fn dead_code(graph: &AnalyticsGraph) -> Vec<String> {
+    let edges = graph.edges();
+    let in_degree = engram_graph_analytics::in_degree(edges);
     let mut defined: HashSet<String> = HashSet::new();
-    for (caller, callee) in &edges {
+    for (caller, callee) in edges {
         defined.insert(caller.clone());
         defined.insert(callee.clone());
     }
-    let mut dead: Vec<String> = defined
-        .into_iter()
-        .filter(|node| !in_degree.contains_key(node))
+    let mut dead_ids: Vec<&str> = defined
+        .iter()
+        .filter(|node| !in_degree.contains_key(*node))
+        .map(|n| n.as_str())
         .collect();
+    dead_ids.sort_unstable(); // deterministic #2/#3 disambiguation assignment
+    let mut dead = graph.display_all(dead_ids);
     dead.sort();
     dead
 }
@@ -110,41 +199,59 @@ pub fn dependency_path(
 
 /// Returns the most central symbols (PageRank over `calls` edges), best-first.
 /// Mirrors memtrace's `find_central_symbols` — the functions/classes most other
-/// code depends on.
-pub fn central_symbols(
-    relationships: &[KnowledgeRelationship],
-    limit: usize,
-) -> Vec<(String, f64)> {
-    let edges = resolved_call_edges(relationships);
-    let mut ranked: Vec<(String, f64)> = engram_graph_analytics::pagerank(&edges, 0.85, 100, 1e-6)
+/// code depends on. Id-keyed internally; display names in the output
+/// (same-name duplicates disambiguated `#2`, `#3`, …).
+pub fn central_symbols(graph: &AnalyticsGraph, limit: usize) -> Vec<(String, f64)> {
+    let ranked: Vec<(String, f64)> =
+        engram_graph_analytics::pagerank(graph.edges(), 0.85, 100, 1e-6)
+            .into_iter()
+            .collect();
+    let mut ranked = ranked
         .into_iter()
-        .collect();
+        .map(|(id, score)| (id, score))
+        .collect::<Vec<_>>();
     ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     ranked.truncate(limit);
+    let labels = graph.display_all(ranked.iter().map(|(id, _)| id.as_str()));
     ranked
+        .into_iter()
+        .zip(labels)
+        .map(|((_, score), label)| (label, score))
+        .collect()
 }
 
 /// Returns the highest-betweenness symbols over `calls` edges, best-first — the
 /// chokepoints. Touching these has outsized blast radius. Mirrors memtrace's
-/// `find_bridge_symbols`.
-pub fn bridge_symbols(relationships: &[KnowledgeRelationship], limit: usize) -> Vec<(String, f64)> {
-    let edges = resolved_call_edges(relationships);
-    let mut ranked: Vec<(String, f64)> = engram_graph_analytics::betweenness(&edges)
+/// `find_bridge_symbols`. Id-keyed internally; display names in the output.
+pub fn bridge_symbols(graph: &AnalyticsGraph, limit: usize) -> Vec<(String, f64)> {
+    let mut ranked: Vec<(String, f64)> = engram_graph_analytics::betweenness(graph.edges())
         .into_iter()
         .collect();
     ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     ranked.truncate(limit);
+    let labels = graph.display_all(ranked.iter().map(|(id, _)| id.as_str()));
     ranked
+        .into_iter()
+        .zip(labels)
+        .map(|((_, score), label)| (label, score))
+        .collect()
 }
 
 /// Returns the community label per symbol (Louvain over `calls` edges). Mirrors
 /// memtrace's `list_communities` — clusters of tightly-coupled symbols.
-pub fn call_communities(
-    relationships: &[KnowledgeRelationship],
-    max_passes: usize,
-) -> HashMap<String, usize> {
-    let edges = resolved_call_edges(relationships);
-    engram_graph_analytics::communities(&edges, max_passes)
+/// Id-keyed internally; display names in the output keys (same-name
+/// duplicates disambiguated `#2`, `#3`, …).
+pub fn call_communities(graph: &AnalyticsGraph, max_passes: usize) -> HashMap<String, usize> {
+    let raw = engram_graph_analytics::communities(graph.edges(), max_passes);
+    // Deterministic disambiguation + pairing: sort the ids FIRST, then zip the
+    // sorted ids with their labels (HashMap iteration order is not stable).
+    let mut ids: Vec<String> = raw.keys().cloned().collect();
+    ids.sort();
+    let labels = graph.display_all(ids.iter().map(|s| s.as_str()));
+    ids.into_iter()
+        .zip(labels)
+        .filter_map(|(id, name)| raw.get(&id).map(|label| (name, *label)))
+        .collect()
 }
 
 /// A 360° view of one symbol: its transitive callers, transitive callees, and
@@ -505,16 +612,10 @@ pub struct RepositoryStats {
 }
 
 /// Returns node + edge counts over `calls` relationships.
-pub fn repository_stats(relationships: &[KnowledgeRelationship]) -> RepositoryStats {
-    let edges = resolved_call_edges(relationships);
-    let mut nodes: HashSet<String> = HashSet::new();
-    for (caller, callee) in &edges {
-        nodes.insert(caller.clone());
-        nodes.insert(callee.clone());
-    }
+pub fn repository_stats(graph: &AnalyticsGraph) -> RepositoryStats {
     RepositoryStats {
-        node_count: nodes.len(),
-        edge_count: edges.len(),
+        node_count: graph.node_count(),
+        edge_count: graph.edges().len(),
     }
 }
 
@@ -571,7 +672,8 @@ mod tests {
     fn dead_code_returns_zero_caller_symbols() {
         // a -> b -> c -> d. Only `a` is never called.
         let rels = vec![rel("a", "b"), rel("b", "c"), rel("c", "d")];
-        assert_eq!(dead_code(&rels), vec!["a".to_owned()]);
+        let graph = AnalyticsGraph::from_relationships(&rels);
+        assert_eq!(dead_code(&graph), vec!["a".to_owned()]);
     }
 
     #[test]
@@ -603,7 +705,8 @@ mod tests {
     fn central_symbols_ranks_hub_highest() {
         // a, b, c all call `hub` -> hub is the most central.
         let rels = vec![rel("a", "hub"), rel("b", "hub"), rel("c", "hub")];
-        let central = central_symbols(&rels, 1);
+        let graph = AnalyticsGraph::from_relationships(&rels);
+        let central = central_symbols(&graph, 1);
         assert_eq!(central[0].0, "hub");
     }
 
@@ -611,7 +714,7 @@ mod tests {
     fn bridge_symbols_ranks_chokepoint_highest() {
         // a -> b -> c: b is the bridge.
         let rels = vec![rel("a", "b"), rel("b", "c")];
-        let bridges = bridge_symbols(&rels, 1);
+        let bridges = bridge_symbols(&AnalyticsGraph::from_relationships(&rels), 1);
         assert_eq!(bridges[0].0, "b");
     }
 
@@ -619,7 +722,11 @@ mod tests {
     fn call_communities_collapses_tightly_coupled_symbols() {
         // A triangle is one community.
         let rels = vec![rel("a", "b"), rel("b", "c"), rel("a", "c")];
-        let labels: HashSet<usize> = call_communities(&rels, 10).values().copied().collect();
+        let labels: HashSet<usize> =
+            call_communities(&AnalyticsGraph::from_relationships(&rels), 10)
+                .values()
+                .copied()
+                .collect();
         assert_eq!(labels.len(), 1);
     }
 
@@ -801,7 +908,7 @@ mod tests {
     #[test]
     fn repository_stats_counts_nodes_and_edges() {
         let rels = vec![rel("a", "b"), rel("b", "c"), rel("a", "c")];
-        let stats = repository_stats(&rels);
+        let stats = repository_stats(&AnalyticsGraph::from_relationships(&rels));
         assert_eq!(stats.node_count, 3);
         assert_eq!(stats.edge_count, 3);
     }
@@ -1004,6 +1111,44 @@ mod tests {
     }
 
     #[test]
+    fn same_name_symbols_across_modules_stay_distinct() {
+        // code-graph-quality [analytics-name-collision]: `UserController` in
+        // two modules is TWO entities (distinct ids, same bare name). The
+        // name-keyed analytics merged them; the id-keyed graph must not —
+        // one being dead does not keep the other alive, and display labels
+        // disambiguate.
+        let rels = vec![
+            // Module A's UserController — called (alive).
+            rel_named("id-c", "caller", "id-a", "UserController"),
+            rel_named("id-a", "UserController", "id-a-helper", "helper"),
+            // Module B's UserController — calls out but has NO callers (dead).
+            rel_named("id-b", "UserController", "id-b-util", "util"),
+        ];
+        let graph = AnalyticsGraph::from_relationships(&rels);
+        // 5 distinct nodes: both UserControllers + caller + helper + util.
+        // The name-keyed analytics merged id-a/id-b into ONE node.
+        assert_eq!(graph.node_count(), 5, "both UserControllers stay distinct");
+        let dead = dead_code(&graph);
+        assert!(
+            dead.iter().any(|d| d.starts_with("UserController")),
+            "the uncalled UserController must surface dead: {dead:?}"
+        );
+        // Display disambiguation: two same-name ids get distinct labels.
+        let labels = graph.display_all(["id-a", "id-b"]);
+        assert_eq!(labels.len(), 2);
+        assert_ne!(labels[0], labels[1], "same-name ids must disambiguate");
+
+        // Centrality: the resolved graph ranks per-entity, so a name shared by
+        // a dead symbol and a live one reports both independently.
+        let ranked = central_symbols(&graph, 10);
+        let uc_labels: Vec<&str> = ranked.iter().map(|(n, _)| n.as_str()).collect();
+        assert!(
+            uc_labels.iter().any(|n| n.starts_with("UserController")),
+            "UserController present in centrality: {ranked:?}"
+        );
+    }
+
+    #[test]
     fn resolved_call_edges_drops_name_only_endpoints() {
         let rels = vec![rel("a", "b"), rel_unresolved_callee("a", "new")];
         let edges = resolved_call_edges(&rels);
@@ -1021,7 +1166,7 @@ mod tests {
             rel("caller", "entry"),
             rel_unresolved_callee("helper", "new"),
         ];
-        let dead = dead_code(&rels);
+        let dead = dead_code(&AnalyticsGraph::from_relationships(&rels));
         assert_eq!(dead, vec!["caller".to_owned()], "dead: {dead:?}");
         assert!(
             !dead.contains(&"new".to_owned()),
@@ -1037,7 +1182,7 @@ mod tests {
         for c in ["x", "y", "z"] {
             rels.push(rel_unresolved_callee(c, "new"));
         }
-        let ranked = central_symbols(&rels, 2);
+        let ranked = central_symbols(&AnalyticsGraph::from_relationships(&rels), 2);
         assert_eq!(
             ranked[0].0, "real_hub",
             "resolved hub outranks noise symbol"

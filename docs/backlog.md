@@ -656,6 +656,14 @@ numbers). Ordered by leverage; each item links its fix commit as it lands.
   that belong in the noise filter, and (b) genuine local-util calls
   (`toJsonStr`, `newArrayList`) that need a Java package-import resolution
   ladder + receiver-hint qualification.
+> **Fixed 2026-08-27:** `AnalyticsGraph` — the five analytics fns
+> (`dead_code`, `central_symbols`, `bridge_symbols`, `call_communities`,
+> `repository_stats`) now operate on an id-keyed graph built from resolved
+> edges, with display names (disambiguated `#2`, `#3`…) for output only.
+> Navigation queries stay name-keyed (they are invoked by name). Verified
+> live: dead code now reports `GlobalExceptionHandler` and
+> `GlobalExceptionHandler#2` separately. N-API call sites updated
+> (parity held by the compiler).
 - **[analytics-name-collision] Analytics merge same-name classes across
   modules.** `User`×17, `UserController`×8 are distinct entities (distinct
   ids) but `dead_code`/`central_symbols` key by bare name, merging them.

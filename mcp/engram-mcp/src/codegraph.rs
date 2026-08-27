@@ -1659,8 +1659,12 @@ fn names_first_match(entity_names: &[String], query: &str, fallback: &str) -> St
 /// longer masquerade as caller evidence.
 pub fn code_health(app: &App, _args: &Value) -> Result<Value, ToolError> {
     let rels = fetch_rels(app)?;
-    let dead = engram_codegraph_queries::dead_code(&rels);
-    let stats = engram_codegraph_queries::repository_stats(&rels);
+    // code-graph-quality [analytics-name-collision]: id-keyed graph — same-name
+    // symbols across modules stay distinct (display names carry `#2` suffixes
+    // when they collide).
+    let graph = engram_codegraph_queries::AnalyticsGraph::from_relationships(&rels);
+    let dead = engram_codegraph_queries::dead_code(&graph);
+    let stats = engram_codegraph_queries::repository_stats(&graph);
     const DEAD_LIST_CAP: usize = 100;
     let shown: Vec<&String> = dead.iter().take(DEAD_LIST_CAP).collect();
     let more = dead.len().saturating_sub(DEAD_LIST_CAP);
@@ -1681,15 +1685,16 @@ pub fn code_health(app: &App, _args: &Value) -> Result<Value, ToolError> {
 pub fn architecture(app: &App, args: &Value) -> Result<Value, ToolError> {
     let limit = args["limit"].as_u64().unwrap_or(10) as usize;
     let rels = fetch_rels(app)?;
-    let central = engram_codegraph_queries::central_symbols(&rels, limit);
-    let bridges = engram_codegraph_queries::bridge_symbols(&rels, limit);
+    let graph = engram_codegraph_queries::AnalyticsGraph::from_relationships(&rels);
+    let central = engram_codegraph_queries::central_symbols(&graph, limit);
+    let bridges = engram_codegraph_queries::bridge_symbols(&graph, limit);
     let mut communities: Vec<(String, usize)> =
-        engram_codegraph_queries::call_communities(&rels, 3)
+        engram_codegraph_queries::call_communities(&graph, 3)
             .into_iter()
             .collect();
     communities.sort_by(|a, b| b.1.cmp(&a.1));
     communities.truncate(10);
-    let stats = engram_codegraph_queries::repository_stats(&rels);
+    let stats = engram_codegraph_queries::repository_stats(&graph);
     Ok(protocol::text_content(format!(
         "Central: {central:?}\nBridges: {bridges:?}\nCommunities (top 10): {communities:?}\nStats: {stats:?}"
     )))
@@ -1724,7 +1729,8 @@ pub fn whats_changed(app: &App, _args: &Value) -> Result<Value, ToolError> {
     let recent = engram_codegraph_temporal::recent(&versions, now, 14.0);
     let impact = engram_codegraph_temporal::impact(&versions);
     let compound = engram_codegraph_temporal::compound(&versions, now, 14.0);
-    let communities = engram_codegraph_queries::call_communities(&rels, 3);
+    let graph = engram_codegraph_queries::AnalyticsGraph::from_relationships(&rels);
+    let communities = engram_codegraph_queries::call_communities(&graph, 3);
     let overview = engram_codegraph_temporal::overview(&communities);
     Ok(protocol::text_content(format!(
         "Recent: {recent:?}\nImpact: {impact:?}\nCompound: {compound:?}\nOverview: {overview:?}"

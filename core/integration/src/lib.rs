@@ -89,3 +89,5 @@ pub use observability::{DiagnosticsSnapshot, Observability, RecordCounts};
 pub use provenance::{ProvenanceEntry, ProvenanceQuery, TimeWindow};
 pub use provider::{EngramProvider, EngramProviderBuilder};
 pub use recall::UnifiedRecall;
+#[cfg(feature = "fastembed")]
+pub use sqlite::fastembed_embedding::FastEmbedEmbeddingProvider;

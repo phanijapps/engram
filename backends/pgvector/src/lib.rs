@@ -64,6 +64,10 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let hierarchy = Arc::new(PgHierarchyStore::new(mk_conn()?));
     let procedures = Arc::new(PgProcedureStore::new(mk_conn()?));
 
+    // The vector space: the config's embedding block by default; overridden
+    // to the model's TRUE space when fastembed is compiled in (the index and
+    // the embedder must agree on one space for insert/search to match).
+    #[cfg_attr(not(feature = "fastembed"), allow(unused_variables))]
     let space = EmbeddingSpace::new(
         &config.embedding_provider.provider_type,
         &config.embedding_provider.model,
@@ -71,12 +75,57 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         &config.embedding_provider.prompt_profile,
         config.embedding_provider.normalization.clone(),
     );
-    let vectors = Arc::new(PgVectorIndex::new(mk_conn()?, space));
+    // PS2: when fastembed is compiled in, the vector space is the model's
+    // true space (BGE-small/384/query profile) — the config's
+    // `embedding_provider` block may say "none" on a pg-only deployment, and
+    // the index + embedder MUST agree on one space for insert/search to match.
+    #[cfg(feature = "fastembed")]
+    let space = EmbeddingSpace::new(
+        "fastembed",
+        "BAAI/bge-small-en-v1.5",
+        384,
+        "query",
+        None::<&str>,
+    );
+    let vectors = Arc::new(PgVectorIndex::new(mk_conn()?, space.clone()));
 
-    // Unified recall: composes memory.retrieve + beliefs via RRF.
+    // PS2: the vector recall lane needs a query-vector provider. Wired only
+    // when the `fastembed` feature is on AND the model loads — absent
+    // embedder ⇒ degraded recall (facts + beliefs), never a boot failure.
+    // The embedder is also exposed on the provider so the MCP scan path can
+    // embed chunks into PgVectorIndex (scan_repo's incremental embed step
+    // requires `embedding_provider()` + `require_vectors()`).
+    let mut embedding_provider: Option<Arc<dyn engram_integration::EmbeddingProvider>> = None;
+    #[cfg(feature = "fastembed")]
+    {
+        // Model-load failure DEGRADES (no embedder ⇒ facts+beliefs recall, the
+        // capability report shows vector unsupported) — a missing model cache
+        // must never take a production deployment's boot down.
+        match engram_store_sqlite::FastEmbedBgeSmallQueryProvider::new() {
+            Ok(inner) => {
+                let embedder: Arc<dyn engram_integration::EmbeddingProvider> =
+                    Arc::new(engram_integration::FastEmbedEmbeddingProvider::new(
+                        std::sync::Arc::new(inner),
+                        space.clone(),
+                    ));
+                embedding_provider = Some(embedder);
+            }
+            Err(e) => {
+                eprintln!(
+                    "engram-backend-pgvector: fastembed model unavailable — vector lane disabled (degraded recall): {e}"
+                );
+            }
+        }
+    }
+
+    // Unified recall: composes memory.retrieve + beliefs + the vector lane
+    // (PS2) via RRF. Lexical (tsvector) is a documented gap on this engine.
     let recall = Arc::new(PgUnifiedRecall {
         memory: memory.clone(),
         beliefs: beliefs.clone(),
+        knowledge: knowledge.clone(),
+        vectors: Some(vectors.clone()),
+        embedder: embedding_provider.clone(),
     });
 
     // Knowledge query: the read surface behind the MCP code-intel tools
@@ -97,7 +146,7 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .unified_recall(CapabilityState::Supported)
         .build();
 
-    let provider = EngramProviderBuilder::new(report)
+    let mut provider_builder = EngramProviderBuilder::new(report)
         .memory(memory)
         .knowledge(knowledge.clone())
         .graph(knowledge)
@@ -107,6 +156,10 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .vectors(vectors)
         .knowledge_query(knowledge_query)
         .recall(recall);
+    if let Some(embedder) = embedding_provider {
+        provider_builder = provider_builder.embedding_provider(embedder);
+    }
+    let provider = provider_builder;
 
     Ok(provider.build())
 }

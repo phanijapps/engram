@@ -120,8 +120,21 @@ ACs below stay as the (mostly met) historical record.
   ["beta","gamma"]`, memory write→recall round-trips, capability report shows
   `knowledge_query: supported` and honestly `unsupported` for lexical /
   consolidation / ontology / taxonomy / identity / vector-lanes.
-- [ ] PS2 — recall on Postgres fuses the vector lane (and documents the
-  lexical gap or ships a tsvector lane).
+- [x] PS2 — recall on Postgres fuses the vector lane (and documents the
+  lexical gap or ships a tsvector lane). **Shipped 2026-08-27:**
+  `PgUnifiedRecall` composes facts + beliefs + the vector lane (embed →
+  pgvector search → chunk rehydration) with per-lane `source_failures`
+  degradation; the recipe wires a FastEmbed `EmbeddingProvider` under its
+  `fastembed` feature (model-load failure degrades, never fails boot), also
+  enabling scan-side chunk embedding. Two latent bugs found + fixed: the
+  pgvector `$n::vector` param binding always failed client-side in
+  tokio-postgres (cast via text now — the lane had never actually run
+  against real Postgres), and `PgKnowledgeQuery::list_chunks` queried scope
+  columns that don't exist on `knowledge_chunks` (now joined through
+  `knowledge_sources`). Verified live: scan embeds chunks into pgvector;
+  recall returns the semantically-matching chunk first (no lexical lane
+  exists on pg — the hit could only arrive via the vector lane). Lexical
+  (tsvector) remains a documented gap.
 - [ ] PS3 — CI runs a Postgres service (docs/how-to-pg compose shape) and the
   pgvector conformance + integration tests are part of the gate.
 - [ ] PS4 — migration runbook demonstrated: SQLite export → Postgres import →

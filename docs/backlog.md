@@ -602,6 +602,14 @@ leverage; PS1/PS2 are the switch-enablers, the rest harden it.
 > lane, no embedding provider in the recipe (scan embed is a no-op), and the
 > unresolved-refs ledger is default-unsupported on the pg cells (cross-scan
 > healing lost; same-scan resolution unaffected).
+> **Closed:** PS2 shipped 2026-08-27 — vector lane fused into PgUnifiedRecall
+> (facts + beliefs + vector, per-lane degradation), FastEmbed wired under the
+> recipe's `fastembed` feature (degrades on missing model), scan-side chunk
+> embedding live (`embedded 5 chunks` on Docker Postgres; recall surfaced the
+> semantic chunk first). Fixed en route: tokio-postgres `$n::vector` param
+> binding (never worked — cast via text), `list_chunks` scope-column bug
+> (joined through sources), mcp `pgvector` feature now forwards `fastembed`.
+> Lexical (tsvector) lane remains the documented gap.
 - **PS2 — recall vector lane on Postgres:** `PgUnifiedRecall` fuses facts +
   beliefs only; the `PgVectorIndex` cell exists but is not composed into
   recall. Fuse it (query-vector provider port already exists); document or

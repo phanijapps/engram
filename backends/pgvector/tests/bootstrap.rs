@@ -307,3 +307,166 @@ fn pg_recipe_knowledge_query_lists_scope() {
         "pgvector recipe knowledge_query: entities + relationships listed via the query handle ✓"
     );
 }
+
+/// PS2: the vector recall lane. Scan-embeds a chunk (via the provider's
+/// embedding provider + vector index), then verifies recall surfaces it
+/// through semantic similarity — the lane the recipe was missing. Requires
+/// Docker Postgres + the fastembed model cache.
+#[test]
+#[ignore]
+#[cfg(feature = "fastembed")]
+fn pg_recipe_recall_fuses_vector_lane() {
+    use engram_domain::*;
+    use engram_integration::UnifiedRecall as _;
+
+    // fastembed's model cache is cwd-relative (.fastembed_cache at the repo
+    // root); cargo tests run from the crate dir.
+    let repo_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    std::env::set_current_dir(&repo_root).expect("cd to repo root");
+
+    let config = pg_config();
+    let provider = open(&config).expect("recipe opens (fastembed)");
+
+    // The embedding provider must be wired for the vector lane to exist.
+    let embedder = provider
+        .require_embedding_provider()
+        .expect("embedding provider wired under the fastembed feature");
+    let vectors = provider.require_vectors().expect("vector index wired");
+    let knowledge = provider.require_knowledge().expect("knowledge handle");
+
+    let scope = Scope {
+        tenant: "pgvector-test".to_owned(),
+        subject: None,
+        workspace: Some("vector-lane".to_owned()),
+        session: None,
+        environment: None,
+    };
+
+    // A chunk whose text shares vocabulary with the query but no exact match.
+    let chunk = KnowledgeChunk {
+        id: Id::from("pg-vec-chunk-1"),
+        document_id: Id::from("pg-vec-doc-1"),
+        source_id: Id::from("pg-vec-src-1"),
+        kind: KnowledgeChunkKind::CodeBlock,
+        text: "pub fn fibonacci(n: u64) -> u64 { match n { 0 => 0, 1 => 1, _ => fibonacci(n-1) + fibonacci(n-2) } }"
+            .to_owned(),
+        summary: None,
+        location: None,
+        entities: Vec::new(),
+        concepts: Vec::new(),
+        embedding_refs: Vec::new(),
+        content_hash: "hash-1".to_owned(),
+        provenance: Provenance {
+            source: "test".to_owned(),
+            actor: Actor {
+                id: Id::from("test"),
+                kind: ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
+            observed_at: chrono::Utc::now(),
+            evidence: Vec::new(),
+            derivations: Vec::new(),
+            confidence: Some(1.0),
+            method: None,
+        },
+        policy: Policy {
+            visibility: Visibility::Workspace,
+            retention: Retention::Durable,
+            sensitivity: Some(Sensitivity::Medium),
+            allowed_uses: vec![AllowedUse::Retrieval],
+            expires_at: None,
+            delete_mode: Some(DeleteMode::Tombstone),
+        },
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        metadata: None,
+    };
+    // The chunks table is FK-bound: parent source + document must exist first.
+    let src = KnowledgeSource {
+        id: Id::from("pg-vec-src-1"),
+        kind: SourceKind::Filesystem,
+        scope: scope.clone(),
+        name: "vector-lane-test".to_owned(),
+        uri: None,
+        version: None,
+        policy: chunk.policy.clone(),
+        provenance: chunk.provenance.clone(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        metadata: None,
+    };
+    let doc = SourceDocument {
+        id: Id::from("pg-vec-doc-1"),
+        source_id: src.id.clone(),
+        kind: SourceDocumentKind::Code,
+        uri: None,
+        path: Some("vector_lane.rs".to_owned()),
+        title: None,
+        mime_type: None,
+        language: Some("rust".to_owned()),
+        version: None,
+        content_hash: "hash-doc".to_owned(),
+        provenance: chunk.provenance.clone(),
+        policy: chunk.policy.clone(),
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        metadata: None,
+    };
+    block_on(knowledge.put_source(src)).expect("put_source");
+    block_on(knowledge.put_document(doc)).expect("put_document");
+    block_on(knowledge.put_chunk(chunk.clone())).expect("put_chunk");
+
+    // Embed + index the chunk (the scan path's embed step, done by hand here).
+    let space = embedder.embedding_space();
+    let passage = embedder.embed_passage(&chunk.text).expect("embed passage");
+    block_on(vectors.insert(&chunk.id, &space, passage)).expect("vector insert");
+
+    // Recall: the query shares semantics ("recursive number sequence") with
+    // the chunk but no exact tokens — only the vector lane can find it.
+    let recall = provider.require_recall().expect("recall handle");
+    let payload = block_on(recall.recall(RetrievalRequest {
+        query: "recursive number sequence computation".to_owned(),
+        scope: scope.clone(),
+        modes: vec![],
+        filters: None,
+        cues: vec![],
+        limit: None,
+        budget: None,
+        include_explanations: None,
+        requester: Requester {
+            actor: Actor {
+                id: Id::from("test"),
+                kind: ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
+            roles: Vec::new(),
+            permissions: Vec::new(),
+            on_behalf_of: None,
+        },
+    }))
+    .expect("recall");
+
+    assert!(
+        payload
+            .items
+            .iter()
+            .any(|r| r.target_id == "pg-vec-chunk-1"),
+        "vector lane must surface the chunk: {:?}",
+        payload
+            .items
+            .iter()
+            .map(|r| r.target_id.clone())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        payload.source_failures.iter().all(|f| f.source != "vector"),
+        "vector lane must not fail: {:?}",
+        payload.source_failures
+    );
+
+    // Cleanup.
+    block_on(vectors.delete_target(&chunk.id)).expect("vector delete");
+    println!("pgvector recipe recall: vector lane fused ✓");
+}

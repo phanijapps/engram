@@ -7,6 +7,11 @@
 //! `adapters/pgvector` cells (which implement core ports only). Scope matching
 //! mirrors the cells' `get_scoped` shape: `tenant` equality + `subject` /
 //! `workspace` matching NULL-or-equal — the strict-scope read contract.
+//!
+//! Table shapes differ: entities/relationships/graphs carry scope columns;
+//! `knowledge_chunks` does NOT (its scope lives inside `record_json`), so the
+//! chunk listing is a full read with the scope filter applied in Rust — the
+//! same shape as the sqlite `list_chunks`.
 
 use async_trait::async_trait;
 use engram_domain::{
@@ -33,12 +38,13 @@ impl PgKnowledgeQuery {
         }
     }
 
-    /// Scope predicate shared by every list query — identical to the cells'
-    /// `get_scoped` WHERE clause so reads and queries agree on scope.
+    /// Scope predicate shared by the scope-column tables — identical to the
+    /// cells' `get_scoped` WHERE clause so reads and queries agree on scope.
     const SCOPE_WHERE: &'static str =
         "tenant=$1 AND (subject IS NULL OR subject=$2) AND (workspace IS NULL OR workspace=$3)";
 
-    async fn list_records<T: serde::de::DeserializeOwned + Send>(
+    /// Lists records from a table that carries scope columns, SQL-filtered.
+    async fn list_scoped_column_records<T: serde::de::DeserializeOwned + Send>(
         &self,
         table: &str,
         scope: &Scope,
@@ -61,23 +67,51 @@ impl PgKnowledgeQuery {
             })
             .collect()
     }
+
+    /// Lists chunks scope-filtered through their parent source (chunks carry
+    /// no scope columns/field — the knowledge_sources table does, and every
+    /// chunk is FK-bound to one).
+    async fn list_chunks_scoped(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeChunk>> {
+        let sql = format!(
+            "SELECT c.record_json FROM knowledge_chunks c \
+             JOIN knowledge_sources s ON s.id = c.source_id \
+             WHERE s.{} ORDER BY c.id",
+            Self::SCOPE_WHERE
+        );
+        let rows = self.conn.block_on(async {
+            self.conn
+                .client
+                .query(&sql, &[&scope.tenant, &scope.subject, &scope.workspace])
+                .await
+                .map_err(|e| Self::pg_err(e.to_string()))
+        })?;
+        rows.into_iter()
+            .map(|row| {
+                let value: serde_json::Value = row.get(0);
+                serde_json::from_value(value).map_err(|e| Self::pg_err(e.to_string()))
+            })
+            .collect()
+    }
 }
 
 #[async_trait]
 impl KnowledgeQuery for PgKnowledgeQuery {
     async fn list_entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>> {
-        self.list_records("knowledge_entities", scope).await
+        self.list_scoped_column_records("knowledge_entities", scope)
+            .await
     }
 
     async fn list_relationships(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeRelationship>> {
-        self.list_records("knowledge_relationships", scope).await
+        self.list_scoped_column_records("knowledge_relationships", scope)
+            .await
     }
 
     async fn list_chunks(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeChunk>> {
-        self.list_records("knowledge_chunks", scope).await
+        self.list_chunks_scoped(scope).await
     }
 
     async fn list_graphs(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeGraph>> {
-        self.list_records("knowledge_graphs", scope).await
+        self.list_scoped_column_records("knowledge_graphs", scope)
+            .await
     }
 }

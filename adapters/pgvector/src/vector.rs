@@ -59,7 +59,7 @@ impl VectorIndex for PgVectorIndex {
         self.conn.block_on(async {
             self.conn.client.execute(
                 "INSERT INTO vectors (id, embedding, target_type, target_id, model, dimensions, content_hash) \
-                 VALUES ($1, $2::vector, 'chunk', $1, $3, $4, $5) \
+                 VALUES ($1, $2::text::vector, 'chunk', $1, $3, $4, $5) \
                  ON CONFLICT (id) DO UPDATE SET embedding=EXCLUDED.embedding, content_hash=EXCLUDED.content_hash, last_updated_at=now()",
                 &[&target_id.to_string(), &vec_text, &space.model, &(space.dimensions as i32), &content_hash],
             ).await.map_err(|e| Self::pg_err(e.to_string()))?;
@@ -84,8 +84,8 @@ impl VectorIndex for PgVectorIndex {
                 .conn
                 .client
                 .query(
-                    "SELECT id, 1 - (embedding <=> $1::vector) AS score FROM vectors \
-                 ORDER BY embedding <=> $1::vector LIMIT $2",
+                    "SELECT id, 1 - (embedding <=> $1::text::vector) AS score FROM vectors \
+                 ORDER BY embedding <=> $1::text::vector LIMIT $2",
                     &[&q_text, &(limit as i64)],
                 )
                 .await

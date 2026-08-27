@@ -314,18 +314,23 @@ export function registerTools(
       if (theOp === "hierarchy-build") {
         return textResult(await transport.buildHierarchy(theScope));
       }
-      const { createLlmProvider } = await import("../maintenance/llm.js");
-      const llm = createLlmProvider();
+      // LLM ops construct their provider LAZILY inside the op (empty scopes
+      // short-circuit without one) — ambient env (PI_MODEL pointing at a
+      // non-builtin model) must not break the dispatch itself.
       if (theOp === "contradict-llm") {
+        const { createLlmProvider } = await import("../maintenance/llm.js");
         const { contradictLlm } = await import("../maintenance/contradict.js");
-        return textResult(await contradictLlm({ transport, scope: theScope, llm }));
+        return textResult(await contradictLlm({ transport, scope: theScope, llm: createLlmProvider() }));
       }
       if (theOp === "extract-knowledge") {
         const { extractKnowledge } = await import("../maintenance/extract_knowledge.js");
-        return textResult(await extractKnowledge({ transport, scope: theScope, llm }));
+        // No eager provider: the op constructs one only when a document
+        // actually needs extraction (empty scope ⇒ no provider, no env read).
+        return textResult(await extractKnowledge({ transport, scope: theScope }));
       }
+      const { createLlmProvider } = await import("../maintenance/llm.js");
       const { reflectLlm } = await import("../maintenance/reflect.js");
-      return textResult(await reflectLlm({ transport, scope: theScope, llm }));
+      return textResult(await reflectLlm({ transport, scope: theScope, llm: createLlmProvider() }));
     },
   );
 

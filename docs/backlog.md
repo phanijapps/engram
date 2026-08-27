@@ -624,6 +624,13 @@ leverage; PS1/PS2 are the switch-enablers, the rest harden it.
   keyed on embedded-set, with progress). Blocked on nothing.
 - **PS6 — ops hardening:** schema versioning beyond idempotent DDL, pool/TLS
   validation errors at `open`, backup/restore runbook. Blocked on nothing.
+> **Closed:** test hygiene shipped 2026-08-27 (6d277e6) — all four
+> pre-existing failures root-caused and fixed: lazy LLM-provider
+> construction (ambient-env-hermetic extract-knowledge), the smoke
+> "timeout" unmasked as a stale tool list + fragile teardown, the
+> live-store tests' era-dependent thresholds relaxed PLUS a real
+> drill-edges⊆items route bug fixed, and prototype/frontend on
+> @types/react 19. Full gate: typecheck exit 0, 8/8 test suites.
 - **Test hygiene (gate trustworthiness):** fix the pre-existing failures so
   the gates are green going into the switch — `mcp.test` extract-knowledge
   dispatch (spy 0 calls + afterEach hook timeout), `mcp.smoke` boot timeout,

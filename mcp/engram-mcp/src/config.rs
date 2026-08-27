@@ -17,6 +17,16 @@ pub enum McpSqliteLayout {
     Multi,
 }
 
+/// Storage backend the server opens. SQLite is the zero-dependency default;
+/// `pgvector` routes through the `backends/pgvector` recipe (requires the
+/// `pgvector` cargo feature + a connection string).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum McpBackend {
+    #[default]
+    Sqlite,
+    Pgvector,
+}
+
 /// Everything the server needs to open a provider and resolve scope.
 ///
 /// `ontology_path` / `taxonomy_path` are accepted here and consumed by the
@@ -45,6 +55,13 @@ pub struct McpConfig {
     /// Tool profile: restricts which MCP tools are registered. Empty = all tools.
     /// Values: "investigate", "read", "scan", "write", "maintain", or empty (all).
     pub tool_profile: String,
+    /// Storage backend (PS1). `--backend pgvector` opens through the
+    /// `backends/pgvector` recipe instead of the SQLite bootstrap.
+    pub backend: McpBackend,
+    /// Postgres connection string when `backend == pgvector`. Required for
+    /// that backend; accepted from `--pg-connection-string` or the
+    /// `ENGRAM_PG_CONNECTION_STRING` env var.
+    pub pg_connection_string: Option<String>,
 }
 
 impl McpConfig {
@@ -63,6 +80,8 @@ impl McpConfig {
         let mut domain: Option<String> = None;
         let mut subdomain: Option<String> = None;
         let mut tool_profile = String::new();
+        let mut backend: Option<McpBackend> = None;
+        let mut pg_connection_string: Option<String> = None;
         // Default-on (RFC-0019 D3 reversed): vector compiles in with the
         // `fastembed` default feature; `--no-vector` disables it at runtime
         // without a rebuild.
@@ -96,6 +115,8 @@ impl McpConfig {
                     | "--domain"
                     | "--subdomain"
                     | "--tools"
+                    | "--backend"
+                    | "--pg-connection-string"
             ) {
                 return Err(format!("unknown argument: {flag}"));
             }
@@ -126,11 +147,37 @@ impl McpConfig {
                 "--domain" => domain = Some(value),
                 "--subdomain" => subdomain = Some(value),
                 "--tools" => tool_profile = value,
+                "--backend" => {
+                    backend = Some(match value.as_str() {
+                        "sqlite" => McpBackend::Sqlite,
+                        "pgvector" | "pg" | "postgres" => McpBackend::Pgvector,
+                        other => {
+                            return Err(format!(
+                                "unknown --backend value: {other}; expected sqlite|pgvector"
+                            ));
+                        }
+                    });
+                }
+                "--pg-connection-string" => pg_connection_string = Some(value),
                 _ => unreachable!("known flags are matched above"),
             }
             i += 2;
         }
         let storage_path = storage_path.ok_or("missing required --storage <path>")?;
+        let backend = backend.unwrap_or_default();
+        // The env var is a fallback, not an override: an explicit flag wins.
+        let pg_connection_string = pg_connection_string.or_else(|| {
+            std::env::var("ENGRAM_PG_CONNECTION_STRING")
+                .ok()
+                .filter(|s| !s.is_empty())
+        });
+        if backend == McpBackend::Pgvector && pg_connection_string.is_none() {
+            return Err(
+                "--backend pgvector requires --pg-connection-string <url> or the \
+                 ENGRAM_PG_CONNECTION_STRING env var"
+                    .to_string(),
+            );
+        }
         Ok(Self {
             storage_path,
             project: project.unwrap_or_else(|| "default".to_string()),
@@ -159,6 +206,8 @@ impl McpConfig {
             subdomain,
             enable_vector,
             tool_profile,
+            backend,
+            pg_connection_string,
         })
     }
 }
@@ -307,5 +356,53 @@ mod tests {
         let c = McpConfig::from_args(&argv).unwrap();
         assert!(!c.enable_vector);
         assert_eq!(c.project, "p");
+    }
+    #[test]
+    fn from_args_parses_pgvector_backend() {
+        let argv = [
+            "--storage".to_string(),
+            "/tmp/x".to_string(),
+            "--backend".to_string(),
+            "pgvector".to_string(),
+            "--pg-connection-string".to_string(),
+            "postgres://u:p@h:5432/d".to_string(),
+        ];
+        let c = McpConfig::from_args(&argv).unwrap();
+        assert_eq!(c.backend, McpBackend::Pgvector);
+        assert_eq!(
+            c.pg_connection_string.as_deref(),
+            Some("postgres://u:p@h:5432/d")
+        );
+    }
+
+    #[test]
+    fn from_args_defaults_sqlite_backend() {
+        let argv = ["--storage".to_string(), "/tmp/x".to_string()];
+        let c = McpConfig::from_args(&argv).unwrap();
+        assert_eq!(c.backend, McpBackend::Sqlite);
+        assert_eq!(c.pg_connection_string, None);
+    }
+
+    #[test]
+    fn from_args_pgvector_requires_connection_string() {
+        let argv = [
+            "--storage".to_string(),
+            "/tmp/x".to_string(),
+            "--backend".to_string(),
+            "pgvector".to_string(),
+        ];
+        let err = McpConfig::from_args(&argv).unwrap_err();
+        assert!(err.contains("pg-connection-string"), "err: {err}");
+    }
+
+    #[test]
+    fn from_args_rejects_unknown_backend() {
+        let argv = [
+            "--storage".to_string(),
+            "/tmp/x".to_string(),
+            "--backend".to_string(),
+            "mysql".to_string(),
+        ];
+        assert!(McpConfig::from_args(&argv).is_err());
     }
 }

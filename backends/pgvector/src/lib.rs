@@ -8,6 +8,7 @@
 //! `integration → backends` dependency would be a cycle, so the recipe — not
 //! `EngramProvider::open` — is the entry point).
 
+mod query;
 mod recall;
 
 use std::sync::Arc;
@@ -20,6 +21,7 @@ use engram_store_pgvector::{
     PgProcedureStore, PgVectorIndex, schema,
 };
 
+use query::PgKnowledgeQuery;
 use recall::PgUnifiedRecall;
 
 /// Opens a Postgres (pgvector)-backed [`EngramProvider`] from a config carrying
@@ -77,6 +79,12 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         beliefs: beliefs.clone(),
     });
 
+    // Knowledge query: the read surface behind the MCP code-intel tools
+    // (search / symbol_context / architecture / whats_changed / the scan's
+    // lexical delta feed + embed listing). Without this handle those tools
+    // fail on `knowledge_query not wired` even though the cells are healthy.
+    let knowledge_query = Arc::new(PgKnowledgeQuery::new(mk_conn()?));
+
     let report = CapabilityReport::builder()
         .memory(CapabilityState::Supported)
         .knowledge(CapabilityState::Supported)
@@ -97,6 +105,7 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .hierarchy(hierarchy)
         .procedures(procedures)
         .vectors(vectors)
+        .knowledge_query(knowledge_query)
         .recall(recall);
 
     Ok(provider.build())

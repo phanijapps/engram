@@ -25,6 +25,7 @@ futures = { workspace = true }
 regex = "1"
 serde = { workspace = true }
 serde_json = { workspace = true }
+engram-backend-pgvector = { path = "../../backends/pgvector", optional = true }
 
 [features]
 # RFC-0019 D3 (reversed): the MCP ships vector (fastembed) ON by default so a
@@ -36,6 +37,9 @@ fastembed = ["engram-integration/fastembed"]
 # Cross-encoder reranker (RFC-0019 T4). Forwards to the integration feature so
 # an mcp build can opt into the cross-encoder dispatch path.
 cross-encoder-rerank = ["engram-integration/cross-encoder-rerank"]
+# Postgres/pgvector backend (pgvector-backend PS1). Wires `--backend pgvector`
+# through the backends/pgvector recipe; SQLite stays the zero-dep default.
+pgvector = ["dep:engram-backend-pgvector"]
 
 [dev-dependencies]
 tempfile = "3"

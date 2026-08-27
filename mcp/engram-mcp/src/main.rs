@@ -43,7 +43,8 @@ fn main() {
             "usage: engram-mcp --storage <path> [--project <name>] \
              [--org <name> --domain <name> [--subdomain <name>]] \
              [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
-             [--db-file <name>]"
+             [--db-file <name>] [--backend sqlite|pgvector] \
+             [--pg-connection-string <url>] [--tools <profile>] [--no-vector]"
         );
         std::process::exit(2);
     });

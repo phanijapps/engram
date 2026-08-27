@@ -6,11 +6,58 @@
 
 use engram_integration::{EngramConfig, EngramProvider, SqliteStorageLayout};
 
-use crate::config::{McpConfig, McpSqliteLayout};
+use crate::config::{McpBackend, McpConfig, McpSqliteLayout};
 
 /// Open the provider described by `config`. Errors are surfaced as a string
 /// for the caller (`main`) to report.
 pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
+    match config.backend {
+        McpBackend::Pgvector => open_pgvector(config),
+        McpBackend::Sqlite => open_sqlite(config),
+    }
+}
+
+/// PS1: open through the `backends/pgvector` recipe — Postgres holds the graph
+/// + chunks + memories + vectors. The recipe (ADR-0022) owns connection
+/// lifecycle, idempotent schema application, and cell composition; this
+/// function only builds the engine-neutral config. Requires the `pgvector`
+/// cargo feature at build time.
+fn open_pgvector(config: &McpConfig) -> Result<EngramProvider, String> {
+    #[cfg(feature = "pgvector")]
+    {
+        let trusted_root = config
+            .storage_path
+            .parent()
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        let conn_str = config
+            .pg_connection_string
+            .clone()
+            .expect("config validation guarantees a pg connection string");
+        let engram_config = EngramConfig::new(
+            config.storage_path.clone(),
+            trusted_root,
+            config.scope_strategy,
+            config.embedding.clone(),
+            config.migration_mode,
+            config.capability_policy,
+        )
+        .with_pgvector(conn_str);
+        engram_backend_pgvector::open(&engram_config)
+            .map_err(|e| format!("failed to open pgvector provider: {e}"))
+    }
+    #[cfg(not(feature = "pgvector"))]
+    {
+        let _ = config;
+        Err(
+            "--backend pgvector requires a build with the `pgvector` feature: \
+             cargo build -p engram-mcp --features pgvector"
+                .to_string(),
+        )
+    }
+}
+
+fn open_sqlite(config: &McpConfig) -> Result<EngramProvider, String> {
     // `EngramProvider::open` validates that `storage_path` is inside
     // `trusted_root`, so default the trusted root to the storage path's parent
     // (mirroring `EngramConfig::from_profile_file`) instead of a hardcoded
@@ -105,6 +152,8 @@ mod tests {
             // tests directly.
             enable_vector: false,
             tool_profile: String::new(),
+            backend: McpBackend::Sqlite,
+            pg_connection_string: None,
         }
     }
 

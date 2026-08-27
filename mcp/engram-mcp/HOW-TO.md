@@ -262,3 +262,30 @@ wired.
 - Design + roadmap: `docs/rfcs/0016-zbot-class-memory-kg-code-as-final-layer.md`
 - Build a connected graph from docs: the **`engram-distill`** skill
 - All commands/flags: run `engram-mcp` with no args (prints usage)
+
+---
+
+## Running on Postgres (pgvector backend)
+
+The server can open a Postgres+pgvector store instead of SQLite (requires a
+build with the feature and a running Postgres — `docs/how-to-pg/`):
+
+```bash
+cargo build --release -p engram-mcp --features pgvector
+docker compose -f docs/how-to-pg/docker-compose.yaml up -d
+
+target/release/engram-mcp \
+  --storage ~/.engram/myproject \
+  --project myproject \
+  --backend pgvector \
+  --pg-connection-string "postgres://engram:engram@localhost:5432/engram"
+```
+
+`--pg-connection-string` (or the `ENGRAM_PG_CONNECTION_STRING` env var) is
+required with `--backend pgvector`. The schema is applied idempotently on
+boot. The capability report (`engram_capability_report`) marks the lanes not
+yet wired on Postgres — recall currently fuses memory + beliefs only (the
+knowledge/vector/lexical lanes land with the pgvector-backend PS2 work), and
+scan-side embedding is a no-op until an embedding provider is wired into the
+recipe. Everything else (scans with cross-file `calls` edges, symbol context,
+blast radius, memory/belief/procedure writes) works.

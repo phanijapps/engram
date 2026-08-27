@@ -594,9 +594,14 @@ Working set for production readiness on the Postgres switch (spec
 `pgvector-backend`, ACs PS1–PS6; assessment dated 2026-08-27). Ordered by
 leverage; PS1/PS2 are the switch-enablers, the rest harden it.
 
-- **PS1 — MCP pgvector surface:** `engram-mcp` is SQLite-only today; wire a
-  `--backend pgvector` path through `backends::pgvector::open` (recipe entry),
-  keep `capability_report` honest about missing lanes. Blocked on nothing.
+> **Closed:** PS1 shipped 2026-08-27 — `--backend pgvector` +
+> `--pg-connection-string` (feature `pgvector`), recipe gained `PgKnowledgeQuery`
+> (the code-intel read surface). Live-verified on Docker Postgres: resolved
+> `calls` edges, `symbol_context` callers/callees, memory write→recall.
+> Known degradations recorded for PS2: no knowledge lane in recall, no lexical
+> lane, no embedding provider in the recipe (scan embed is a no-op), and the
+> unresolved-refs ledger is default-unsupported on the pg cells (cross-scan
+> healing lost; same-scan resolution unaffected).
 - **PS2 — recall vector lane on Postgres:** `PgUnifiedRecall` fuses facts +
   beliefs only; the `PgVectorIndex` cell exists but is not composed into
   recall. Fuse it (query-vector provider port already exists); document or

@@ -106,10 +106,20 @@ ACs below stay as the (mostly met) historical record.
 
 ## Acceptance Criteria (production switch — working set)
 
-- [ ] PS1 — `engram-mcp --storage <dir> --backend pgvector` (or the
+- [x] PS1 — `engram-mcp --storage <dir> --backend pgvector` (or the
   equivalent config env/flag) opens through `backends::pgvector::open` and
   serves the full tool surface on Postgres; `capability_report` is honest
-  about lanes that are missing.
+  about lanes that are missing. **Shipped 2026-08-27** (feature `pgvector`):
+  `--backend sqlite|pgvector` + `--pg-connection-string` (or
+  `ENGRAM_PG_CONNECTION_STRING`), dispatch in `open_provider`; the recipe
+  gained a `PgKnowledgeQuery` (the read surface behind search /
+  symbol_context / architecture / the scan's lexical delta + embed listing —
+  previously `knowledge_query not wired` on Postgres). Verified live against
+  Docker Postgres: scan lands 6 entities + 5 relationships (3 resolved `calls`
+  edges confirmed via SQL), `symbol_context("alpha")` → `callers:
+  ["beta","gamma"]`, memory write→recall round-trips, capability report shows
+  `knowledge_query: supported` and honestly `unsupported` for lexical /
+  consolidation / ontology / taxonomy / identity / vector-lanes.
 - [ ] PS2 — recall on Postgres fuses the vector lane (and documents the
   lexical gap or ships a tsvector lane).
 - [ ] PS3 — CI runs a Postgres service (docs/how-to-pg compose shape) and the

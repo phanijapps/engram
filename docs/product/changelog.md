@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Postgres/pgvector backend for the MCP server** (feature `pgvector`):
+  `engram-mcp --backend pgvector --pg-connection-string <url>` opens through
+  the `backends/pgvector` recipe — scan, code-intel tools (`symbol_context`,
+  `architecture`, …), memory writes, and recall all run on Postgres, with the
+  capability report honestly marking the lanes not yet wired on that engine.
+  The recipe now wires a Postgres `KnowledgeQuery` (the code-intel read
+  surface) in addition to the storage cells.
 - Lazy query-time embeddings (BGE-small) generated on demand, cached, and
   persisted to a durable sqlite-vec store; per-query warm-up (hit-rate climbs
   across passes).

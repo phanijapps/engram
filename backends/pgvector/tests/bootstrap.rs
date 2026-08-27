@@ -190,3 +190,120 @@ fn pg_recipe_relationship_round_trip() {
 
     println!("pgvector recipe relationship round-trip: put → get → delete ✓");
 }
+
+/// PS1: the recipe wires a `KnowledgeQuery` handle — the read surface the MCP
+/// code-intel tools (`search`, `symbol_context`, `architecture`, the scan's
+/// lexical delta feed + embed listing) fail without. Writes entities +
+/// relationships through the knowledge port, reads them back through the
+/// query handle, and checks scope matching.
+#[test]
+#[ignore]
+fn pg_recipe_knowledge_query_lists_scope() {
+    use engram_domain::*;
+
+    let config = pg_config();
+    let provider = open(&config).expect("recipe opens");
+    let repo = provider.require_knowledge().expect("knowledge handle");
+    let query = provider
+        .require_knowledge_query()
+        .expect("knowledge_query handle wired (PS1)");
+
+    let scope = Scope {
+        tenant: "pgvector-test".to_owned(),
+        subject: None,
+        workspace: Some("query-test".to_owned()),
+        session: None,
+        environment: None,
+    };
+    let entity = KnowledgeEntity {
+        id: Id::from("pg-q-entity"),
+        graph_id: None,
+        kind: EntityKind::Concept,
+        name: "query-surface-probe".to_owned(),
+        aliases: Vec::new(),
+        scope: scope.clone(),
+        source_refs: Vec::new(),
+        concept_refs: Vec::new(),
+        ontology_class_refs: Vec::new(),
+        provenance: Provenance {
+            source: "test".to_owned(),
+            actor: Actor {
+                id: Id::from("test"),
+                kind: ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
+            observed_at: chrono::Utc::now(),
+            evidence: Vec::new(),
+            derivations: Vec::new(),
+            confidence: Some(1.0),
+            method: None,
+        },
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        metadata: Default::default(),
+        valid_from: None,
+        valid_until: None,
+        archived_at: None,
+    };
+    let rel = KnowledgeRelationship {
+        id: Id::from("pg-q-rel"),
+        graph_id: None,
+        subject: EntityRef {
+            id: Some(entity.id.clone()),
+            kind: None,
+            name: Some("query-surface-probe".to_owned()),
+            aliases: Vec::new(),
+        },
+        predicate: "calls".to_owned(),
+        object: EntityRef {
+            id: Some(Id::from("pg-q-entity-2")),
+            kind: None,
+            name: Some("callee-probe".to_owned()),
+            aliases: Vec::new(),
+        },
+        scope: scope.clone(),
+        evidence: Vec::new(),
+        confidence: Some(1.0),
+        provenance: Provenance {
+            source: "test".to_owned(),
+            actor: Actor {
+                id: Id::from("test"),
+                kind: ActorKind::System,
+                display_name: None,
+                metadata: None,
+            },
+            observed_at: chrono::Utc::now(),
+            evidence: Vec::new(),
+            derivations: Vec::new(),
+            confidence: Some(1.0),
+            method: None,
+        },
+        created_at: chrono::Utc::now(),
+        updated_at: None,
+        archived_at: None,
+    };
+
+    block_on(repo.put_entity(entity)).expect("put_entity");
+    block_on(repo.put_relationship(rel)).expect("put_relationship");
+
+    let entities = block_on(query.list_entities(&scope)).expect("list_entities");
+    assert!(
+        entities.iter().any(|e| e.name == "query-surface-probe"),
+        "entity must appear in list_entities: {entities:?}"
+    );
+    let rels = block_on(query.list_relationships(&scope)).expect("list_relationships");
+    assert!(
+        rels.iter()
+            .any(|r| r.predicate == "calls" && r.object.name.as_deref() == Some("callee-probe")),
+        "relationship must appear in list_relationships: {rels:?}"
+    );
+
+    // Cleanup so the test is re-runnable.
+    block_on(repo.delete_relationship(&Id::from("pg-q-rel"), &scope)).expect("delete_relationship");
+    block_on(repo.delete_entity(&Id::from("pg-q-entity"), &scope)).expect("delete_entity");
+
+    println!(
+        "pgvector recipe knowledge_query: entities + relationships listed via the query handle ✓"
+    );
+}

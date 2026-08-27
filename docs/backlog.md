@@ -621,3 +621,45 @@ leverage; PS1/PS2 are the switch-enablers, the rest harden it.
   dispatch (spy 0 calls + afterEach hook timeout), `mcp.smoke` boot timeout,
   engram-cc `graph.routes` live-store tests (empty agentzero scope),
   `prototype/frontend` React JSX typecheck. Blocked on nothing.
+
+## code-graph-quality
+
+Debt register from the 2026-08-27 tree-sitter performance + noise audit
+(measured against the spring-boot-demo store: 3,149 entities / 5,219
+relationships from 781 ingested files; see the audit memory in engram for raw
+numbers). Ordered by leverage; each item links its fix commit as it lands.
+
+- **[minified-vendor-noise] Minified/bundled assets are indexed as symbols.**
+  9 vendored `.js` bundles under `static/`/`resources/` (1.2% of documents)
+  injected 372 minified entities (12% of the store: `M`, `s`, `tn`, `R`, `A`,
+  `ucs2decode`, …) and 1,237 of 3,324 `calls` edges (37%) touch them. Fix:
+  filename deny (`.min.js`/`.min.css`/`.map`) + content heuristic (avg line
+  length), plus retraction when a previously-ingested file becomes
+  filtered — otherwise filter upgrades never clean existing stores.
+- **[parse-multiplicity] Every code file is tree-sitter-parsed 4× per scan.**
+  Pre-pass name collection (1) + main-pass chunk (2) + extract_calls (3) +
+  extract_structural (4) each call `parser.parse` independently. 4× the
+  dominant CPU for 1× the information; kernel-scale scans pay 4× needlessly.
+  Fix: parse once in the main phase and share the `&Tree`.
+- **[ledger-not-capturing] The unresolved-refs ledger stays empty.**
+  `knowledge_unresolved_refs` = 0 rows despite 2,875 name-only `calls` edges —
+  cross-scan healing (the Phase-2 sweep) has nothing to heal, so name-only
+  edges stay unresolved forever by construction. Fix: ledger every name-only
+  edge `resolve_refs` fails to settle.
+- **[java-resolution] Java cross-file resolution barely resolves.**
+  89% of real-named Java call edges are unresolved; top offenders (`run`×65,
+  `info`×44, `build`×25, `get`×24) split into (a) JDK/stdlib/chained calls
+  that belong in the noise filter, and (b) genuine local-util calls
+  (`toJsonStr`, `newArrayList`) that need a Java package-import resolution
+  ladder + receiver-hint qualification.
+- **[analytics-name-collision] Analytics merge same-name classes across
+  modules.** `User`×17, `UserController`×8 are distinct entities (distinct
+  ids) but `dead_code`/`central_symbols` key by bare name, merging them.
+  Fix: id-keyed analytics graph with names only for display. (Related to the
+  per-repo-partitioning item in scan-reliability-followups.)
+
+Structural context from the same audit (no action item): ~10% of the edge
+store is high-signal (449 resolved calls + 93 `routes_to`), 33% structural
+(`contains`/`belongs_to`), 12% `file` entities; throughput is fine
+(~170 files/s Java, ~53 files/s mixed) and incremental manifests make
+re-scans ~0.

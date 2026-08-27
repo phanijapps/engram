@@ -86,6 +86,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `engram-mcp` creates a missing `--storage` directory tree at boot instead
+  of failing validation with a confusing "trusted_root does not exist"
+  (zero-config boot for any path depth).
+- Repo scans no longer count empty files (0-byte or whitespace-only) as
+  errors: they are skipped, their prior graph is retracted when a file becomes
+  empty, and their hash is manifest-recorded so later scans treat them as
+  unchanged. Verified against spring-boot-demo: 6 errors → 0.
 - `scan_repo` is now incremental across calls: a per-root manifest is persisted
   under `<storage>/scan-manifests/` and re-scans skip unchanged files
   (`force=true` re-ingests everything). Consecutive scans of a ~1,200-file

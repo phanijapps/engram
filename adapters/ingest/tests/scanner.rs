@@ -37,6 +37,71 @@ fn actor() -> Actor {
 }
 
 #[test]
+fn empty_files_skip_cleanly_and_are_manifest_unchanged() {
+    // Empty-file-fix: 0-byte and whitespace-only files count as `skipped`
+    // (never `errors`) — the chunker rejects empty text by contract. Their
+    // hashes land in the manifest so a re-scan treats them as unchanged,
+    // and a file that BECOMES empty retracts its prior graph.
+    let root = std::env::temp_dir().join(format!("engram-scan-empty-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("create root");
+    std::fs::write(root.join("main.rs"), "pub fn one() {}\n").expect("write main.rs");
+    std::fs::write(root.join("empty.properties"), "").expect("write empty");
+    std::fs::write(root.join("blank.md"), "   \n\t ").expect("write blank");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "fixture".to_owned(),
+        max_bytes: 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (summary, manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    assert_eq!(summary.errors, 0, "empty files are not errors: {summary:?}");
+    assert_eq!(summary.skipped, 2, "empty + blank skipped: {summary:?}");
+    assert_eq!(summary.ingested, 1, "only main.rs ingested: {summary:?}");
+    assert!(
+        manifest.contains_key("empty.properties"),
+        "empty hash recorded"
+    );
+    assert!(manifest.contains_key("blank.md"), "blank hash recorded");
+
+    // Re-scan: both empty files are now unchanged — no re-skip, no errors.
+    let opts2 = ScanOptions {
+        manifest,
+        ..opts.clone()
+    };
+    let (summary2, _m2) = scan_repository(&root, &opts2, &store, |_| {}).expect("rescan");
+    assert_eq!(summary2.errors, 0, "rescan errors: {summary2:?}");
+    assert_eq!(
+        summary2.skipped, 0,
+        "empties now unchanged, not skipped: {summary2:?}"
+    );
+    assert_eq!(summary2.unchanged, 3, "all three unchanged: {summary2:?}");
+
+    // A file that becomes empty retracts its graph: scan once with content,
+    // then empty it and re-scan.
+    std::fs::write(root.join("main.rs"), "").expect("empty main.rs");
+    let (summary3, _m3) = scan_repository(&root, &opts2, &store, |_| {}).expect("rescan3");
+    assert_eq!(
+        summary3.errors, 0,
+        "became-empty not an error: {summary3:?}"
+    );
+    assert_eq!(summary3.skipped, 1, "became-empty skipped: {summary3:?}");
+    assert_eq!(summary3.ingested, 0, "nothing ingested: {summary3:?}");
+    let entities = block_on(store.list_entities(&scope())).expect("list");
+    assert!(
+        entities.iter().all(|e| e.name != "one"),
+        "prior graph retracted: {entities:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
 fn scans_fixture_skipping_secrets_oversized_and_denylist() {
     let root =
         std::env::temp_dir().join(format!("engram-scan-{}-{}", std::process::id(), "fixture"));

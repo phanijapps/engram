@@ -11,6 +11,18 @@ use crate::config::{McpBackend, McpConfig, McpSqliteLayout};
 /// Open the provider described by `config`. Errors are surfaced as a string
 /// for the caller (`main`) to report.
 pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
+    // storage-dir-fix: the server owns its storage lifecycle — create the
+    // `--storage` directory tree up front. Previously a path with a missing
+    // PARENT failed validation with the confusing "trusted_root does not
+    // exist" (the trusted root is the storage path's parent), and the failure
+    // surfaced only on stderr of a stdio server — invisible to MCP clients.
+    // Creating the tree makes `--storage /any/deep/path` boot zero-config.
+    if let Err(e) = std::fs::create_dir_all(&config.storage_path) {
+        return Err(format!(
+            "cannot create storage directory {}: {e}",
+            config.storage_path.display()
+        ));
+    }
     match config.backend {
         McpBackend::Pgvector => open_pgvector(config),
         McpBackend::Sqlite => open_sqlite(config),
@@ -296,5 +308,24 @@ mod tests {
                 "malformed recall.json must boot-error, but provider opened (config was ignored — Blocker 1 regression)"
             ),
         }
+    }
+
+    /// storage-dir-fix: a `--storage` path whose PARENT directories do not
+    /// exist boots zero-config — the server creates the tree instead of
+    /// failing validation with "trusted_root does not exist".
+    #[test]
+    fn open_provider_creates_missing_storage_tree() {
+        let base = tempfile::tempdir().expect("tempdir");
+        // Two levels that do not exist yet.
+        let storage = base.path().join("deep").join("nested").join("store");
+        let config = test_config(&storage);
+        let provider =
+            open_provider(&config).expect("boots with a missing storage tree (creates it)");
+        let _ = provider.capabilities();
+        assert!(
+            storage.is_dir(),
+            "storage tree created: {}",
+            storage.display()
+        );
     }
 }

@@ -294,6 +294,12 @@ where
     let mut unchanged_rels: Vec<String> = Vec::new();
     let mut delete_failed: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut to_ingest: Vec<ReadyToIngest> = Vec::new();
+    // Trim-empty files (0-byte or whitespace-only): nothing to index, but the
+    // path still goes through prior-graph retraction + manifest recording so
+    // a file that BECAME empty retracts cleanly and later scans treat it as
+    // unchanged. Previously these reached the chunker, which rejects empty
+    // text by contract — surfacing as scan `errors` (empty-file-fix).
+    let mut empty_rels: Vec<(String, String)> = Vec::new();
 
     for (canonical, kind, rel) in &readable {
         let bytes = match std::fs::read(canonical) {
@@ -322,12 +328,23 @@ where
             &source_key,
             rel,
         )) {
-            Ok(()) => to_ingest.push(ReadyToIngest {
-                kind: *kind,
-                rel: rel.clone(),
-                content: bytes,
-                hash,
-            }),
+            Ok(()) => {
+                if text.trim().is_empty() {
+                    // Empty-file-fix: skip ingest (the chunker rejects empty
+                    // text by contract); count as skipped and remember the
+                    // hash for the manifest so the next scan is a no-op for
+                    // this path. The prior-graph delete above already ran, so
+                    // a file that shrank to empty retracts its old graph.
+                    empty_rels.push((rel.clone(), hash));
+                } else {
+                    to_ingest.push(ReadyToIngest {
+                        kind: *kind,
+                        rel: rel.clone(),
+                        content: bytes,
+                        hash,
+                    })
+                }
+            }
             Err(_) => {
                 // Delete failed: surface the error, skip the write (no
                 // duplicate graph), retain old hash in manifest for retry.
@@ -911,6 +928,18 @@ where
         progress(ScanProgress {
             file: rel,
             status: "unchanged",
+        });
+    }
+
+    // Empty-file-fix: count trim-empty files as skipped and carry their
+    // hashes into the manifest so the next scan treats them as unchanged
+    // (zero retraction work). They are NOT indexed — there is no content.
+    for (rel, hash) in empty_rels {
+        summary.skipped += 1;
+        new_manifest.insert(rel.clone(), hash);
+        progress(ScanProgress {
+            file: rel,
+            status: "skipped",
         });
     }
 

@@ -463,26 +463,22 @@ where
             // Tree-sitter chunking for supported extensions; fallback to the
             // ingestor's internal chunker for others.
             let ext = rel.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
-            let ingested = if let Some(ref ts) = ts_chunker {
-                if ts.supports(ext) {
-                    let candidates = match ts.chunk_with_ext(&text, ext) {
-                        Ok(c) => c,
-                        Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
-                    };
-                    let mut req = request;
-                    req.text = text;
-                    block_on(code_ingestor.ingest_with_candidates(repo, req, candidates))
-                } else {
-                    let mut req = request;
-                    req.text = text;
-                    match kind {
-                        FileKind::Code => block_on(code_ingestor.ingest(repo, req)),
-                        FileKind::Text if is_markdown_ext(ext) => {
-                            block_on(markdown_ingestor.ingest(repo, req))
-                        }
-                        FileKind::Text => block_on(text_ingestor.ingest(repo, req)),
-                    }
-                }
+            // code-graph-quality [parse-multiplicity]: parse ONCE per file and
+            // share the tree across chunking, call extraction, and structural
+            // extraction (previously 3 independent parses here + 1 in the
+            // pre-pass name collection — 4× the dominant scan CPU).
+            let shared_tree = ts_chunker
+                .as_ref()
+                .filter(|ts| ts.supports(ext))
+                .and_then(|ts| ts.parse(&text_for_ast, ext).ok());
+            let ingested = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
+                let candidates = match ts.chunk_with_tree(tree, &text, ext) {
+                    Ok(c) => c,
+                    Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
+                };
+                let mut req = request;
+                req.text = text;
+                block_on(code_ingestor.ingest_with_candidates(repo, req, candidates))
             } else {
                 let mut req = request;
                 req.text = text;
@@ -500,18 +496,14 @@ where
             };
             // AST-level call extraction using the GLOBAL entity name set (not
             // just this file's symbols). This preserves cross-file call edges.
-            let ast_calls = if let Some(ref ts) = ts_chunker {
+            let ast_calls = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
                 // Run whenever the grammar supports the file — an empty
                 // global name set yields empty calls, NOT a fallback to the
                 // fact-less extract_into path (which silently dropped all
                 // Phase-2 structural/framework facts for declaration-free
                 // files; final-review sweep pin caught it).
-                if ts.supports(ext) {
-                    ts.extract_calls(&text_for_ast, ext, &global_entity_names)
-                        .ok()
-                } else {
-                    None
-                }
+                ts.extract_calls_tree(tree, &text_for_ast, ext, &global_entity_names)
+                    .ok()
             } else {
                 None
             };
@@ -519,12 +511,8 @@ where
                 let facts = engram_code::extract_frameworks(&text_for_ast, ext);
                 if facts.is_empty() { None } else { Some(facts) }
             };
-            let structural = if let Some(ref ts) = ts_chunker {
-                if ts.supports(ext) {
-                    ts.extract_structural(&text_for_ast, ext).ok()
-                } else {
-                    None
-                }
+            let structural = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
+                ts.extract_structural_tree(tree, &text_for_ast, ext).ok()
             } else {
                 None
             };

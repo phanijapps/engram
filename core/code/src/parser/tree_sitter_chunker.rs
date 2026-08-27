@@ -114,13 +114,16 @@ impl TreeSitterChunker {
         self.entries.contains_key(ext)
     }
 
-    /// Extracts typed structural facts (imports / contains / extends /
-    /// implements) from the AST (RFC-0020 Phase 2). Pure name-level output —
-    /// the extractor attaches entity refs. Languages without a mapped
-    /// import/inheritance node kind emit nothing for that fact.
-    pub fn extract_structural(&self, text: &str, ext: &str) -> CoreResult<StructuralEdges> {
+    /// Parses `text` once for `ext` — the shared-tree entry point
+    /// (code-graph-quality [parse-multiplicity]): chunking, call extraction,
+    /// and structural extraction each used to re-parse the same text (3×
+    /// redundant parses per file in the main scan phase, 4× with the pre-pass
+    /// name collection). Parse here, pass `&Tree` to the `*_tree` variants.
+    pub fn parse(&self, text: &str, ext: &str) -> CoreResult<tree_sitter::Tree> {
         let Some(entry) = self.entries.get(ext) else {
-            return Ok(StructuralEdges::default());
+            return Err(CoreError::InvalidRequest {
+                reason: format!("no tree-sitter grammar for .{ext}"),
+            });
         };
         let mut parser = tree_sitter::Parser::new();
         parser
@@ -128,9 +131,45 @@ impl TreeSitterChunker {
             .map_err(|e| CoreError::InvalidRequest {
                 reason: format!("tree-sitter language error: {e}"),
             })?;
-        let tree = parser.parse(text, None).ok_or(CoreError::InvalidRequest {
+        parser.parse(text, None).ok_or(CoreError::InvalidRequest {
             reason: "tree-sitter parse failed".to_owned(),
-        })?;
+        })
+    }
+
+    /// Extracts typed structural facts (imports / contains / extends /
+    /// implements) from the AST (RFC-0020 Phase 2). Pure name-level output —
+    /// the extractor attaches entity refs. Languages without a mapped
+    /// import/inheritance node kind emit nothing for that fact.
+    ///
+    /// One-shot convenience (parses internally). Scan paths should use
+    /// [`Self::parse`] + [`Self::extract_structural_tree`].
+    pub fn extract_structural(&self, text: &str, ext: &str) -> CoreResult<StructuralEdges> {
+        let Some(entry) = self.entries.get(ext) else {
+            return Ok(StructuralEdges::default());
+        };
+        let tree = self.parse(text, ext)?;
+        let mut edges = StructuralEdges::default();
+        walk_structural(
+            &tree.root_node(),
+            text.as_bytes(),
+            &entry.kind_map,
+            ext,
+            &[],
+            &mut edges,
+        );
+        Ok(edges)
+    }
+
+    /// [`Self::extract_structural`] over a pre-parsed tree — see [`Self::parse`].
+    pub fn extract_structural_tree(
+        &self,
+        tree: &tree_sitter::Tree,
+        text: &str,
+        ext: &str,
+    ) -> CoreResult<StructuralEdges> {
+        let Some(entry) = self.entries.get(ext) else {
+            return Ok(StructuralEdges::default());
+        };
         let mut edges = StructuralEdges::default();
         walk_structural(
             &tree.root_node(),
@@ -147,8 +186,30 @@ impl TreeSitterChunker {
     /// for call nodes, tracks which function declaration each call is inside,
     /// and returns only pairs where the callee matches a known entity name.
     /// More accurate than co-occurrence (no false positives from comments/strings).
+    /// Extracts (caller, callee) pairs from AST call expressions. Walks the tree
+    /// for call nodes, tracks which function declaration each call is inside,
+    /// and returns only pairs where the callee matches a known entity name.
+    /// More accurate than co-occurrence (no false positives from comments/strings).
+    ///
+    /// One-shot convenience (parses internally). Scan paths should use
+    /// [`Self::parse`] + [`Self::extract_calls_tree`].
     pub fn extract_calls(
         &self,
+        text: &str,
+        ext: &str,
+        entity_names: &std::collections::HashSet<String>,
+    ) -> CoreResult<Vec<(String, String)>> {
+        if !self.supports(ext) {
+            return Ok(Vec::new());
+        }
+        let tree = self.parse(text, ext)?;
+        self.extract_calls_tree(&tree, text, ext, entity_names)
+    }
+
+    /// [`Self::extract_calls`] over a pre-parsed tree — see [`Self::parse`].
+    pub fn extract_calls_tree(
+        &self,
+        tree: &tree_sitter::Tree,
         text: &str,
         ext: &str,
         entity_names: &std::collections::HashSet<String>,
@@ -156,15 +217,6 @@ impl TreeSitterChunker {
         let Some(entry) = self.entries.get(ext) else {
             return Ok(Vec::new());
         };
-        let mut parser = tree_sitter::Parser::new();
-        parser
-            .set_language(&entry.language)
-            .map_err(|e| CoreError::InvalidRequest {
-                reason: format!("tree-sitter language error: {e}"),
-            })?;
-        let tree = parser.parse(text, None).ok_or(CoreError::InvalidRequest {
-            reason: "tree-sitter parse failed".to_owned(),
-        })?;
         let root = tree.root_node();
         let source = text.as_bytes();
 
@@ -213,20 +265,32 @@ impl TreeSitterChunker {
                 reason: "document text must not be empty".to_owned(),
             });
         }
+        if !self.supports(ext) {
+            return Err(CoreError::InvalidRequest {
+                reason: format!("no tree-sitter grammar for .{ext}"),
+            });
+        }
+        let tree = self.parse(text, ext)?;
+        self.chunk_with_tree(&tree, text, ext)
+    }
+
+    /// [`Self::chunk_with_ext`] over a pre-parsed tree — see [`Self::parse`].
+    pub fn chunk_with_tree(
+        &self,
+        tree: &tree_sitter::Tree,
+        text: &str,
+        ext: &str,
+    ) -> CoreResult<Vec<ChunkCandidate>> {
+        if text.trim().is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: "document text must not be empty".to_owned(),
+            });
+        }
         let Some(entry) = self.entries.get(ext) else {
             return Err(CoreError::InvalidRequest {
                 reason: format!("no tree-sitter grammar for .{ext}"),
             });
         };
-        let mut parser = tree_sitter::Parser::new();
-        parser
-            .set_language(&entry.language)
-            .map_err(|e| CoreError::InvalidRequest {
-                reason: format!("tree-sitter language error: {e}"),
-            })?;
-        let tree = parser.parse(text, None).ok_or(CoreError::InvalidRequest {
-            reason: "tree-sitter parse failed".to_owned(),
-        })?;
         let root = tree.root_node();
         let mut chunks = Vec::new();
         walk_declarations(&root, text.as_bytes(), &entry.kind_map, &mut chunks);

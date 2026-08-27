@@ -868,3 +868,82 @@ fn minified_heuristic_does_not_trip_on_source() {
     assert!(!engram_ingest::looks_minified_name("src/App.tsx"));
     assert!(!engram_ingest::looks_minified_name("src/main.js"));
 }
+
+// --- code-graph-quality [ledger-not-capturing] --------------------------------
+// Regression: scans through the KnowledgeRepoGraph FAN-IN (the MCP/N-API path)
+// silently dropped ledger rows — the fan-in never forwarded the T6 ledger
+// methods, so `put_unresolved_refs` hit the default-erroring trait method and
+// the cross-scan healing sweep had nothing to heal (observed live: 0 ledger
+// rows despite ~2.9k name-only call edges).
+
+#[test]
+fn ledger_rows_persist_through_the_fan_in_and_heal_on_next_scan() {
+    use engram_domain::UnresolvedReferenceStatus;
+    use engram_ingest::KnowledgeRepoGraph;
+    use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
+
+    let root = std::env::temp_dir().join(format!("engram-scan-ledger-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("src")).expect("create src");
+    // Round 1: caller references a target that does not exist YET — the edge
+    // stays name-only and the ledger captures it.
+    std::fs::write(
+        root.join("src/caller.rs"),
+        "pub fn caller() {\n    later_target();\n}\n",
+    )
+    .expect("write caller");
+
+    let store = std::sync::Arc::new(SqlKnowledgeStore::open_in_memory().expect("store"));
+    // THE FAN-IN — exactly what the MCP handler builds.
+    let repo = KnowledgeRepoGraph::new(
+        store.clone() as std::sync::Arc<dyn KnowledgeRepository>,
+        store.clone() as std::sync::Arc<dyn KnowledgeGraphRepository>,
+    );
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (s1, manifest) = scan_repository(&root, &opts, &repo, |_| {}).expect("scan 1");
+    assert_eq!(s1.errors, 0, "{s1:?}");
+
+    let pending = block_on(store_pending(&store)).expect("ledger list");
+    assert!(
+        pending.iter().any(|r| r.reference_name == "later_target"),
+        "ledger row must persist through the fan-in: {pending:?}"
+    );
+
+    // Round 2: the target lands — the sweep heals the reference (row flips to
+    // resolved, the edge gains its object id).
+    std::fs::write(root.join("src/target.rs"), "pub fn later_target() {}\n").expect("write target");
+    let opts2 = ScanOptions {
+        manifest,
+        ..opts.clone()
+    };
+    let (s2, _m2) = scan_repository(&root, &opts2, &repo, |_| {}).expect("scan 2");
+    assert_eq!(s2.errors, 0, "{s2:?}");
+
+    let still_pending = block_on(store_pending(&store)).expect("ledger list 2");
+    assert!(
+        !still_pending
+            .iter()
+            .any(|r| r.reference_name == "later_target"),
+        "healed reference must leave the pending ledger: {still_pending:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+async fn store_pending(
+    store: &std::sync::Arc<SqlKnowledgeStore>,
+) -> engram_knowledge::CoreResult<Vec<engram_domain::UnresolvedReference>> {
+    use engram_knowledge::KnowledgeGraphRepository as _;
+    let handle: std::sync::Arc<dyn KnowledgeGraphRepository> = store.clone();
+    handle
+        .list_unresolved_refs(&scope(), UnresolvedReferenceStatus::Pending)
+        .await
+}

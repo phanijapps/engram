@@ -30,5 +30,7 @@ fastembed = ["engram-integration/fastembed", "dep:engram-store-sqlite"]
 
 [dev-dependencies]
 engram-domain = { path = "../../core/domain" }
-engram-integration = { path = "../../core/integration" }
+# sqlite feature: the PS4 migration round-trip exports FROM a SQLite provider.
+engram-integration = { path = "../../core/integration", features = ["sqlite"] }
 futures.workspace = true
+tempfile = "3"

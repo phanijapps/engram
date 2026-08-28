@@ -470,3 +470,196 @@ fn pg_recipe_recall_fuses_vector_lane() {
     block_on(vectors.delete_target(&chunk.id)).expect("vector delete");
     println!("pgvector recipe recall: vector lane fused ✓");
 }
+
+/// PS4: the SQLite → Postgres migration round-trip, executable. Seeds a
+/// SQLite provider (temp store), exports via the facade's ExportImport,
+/// writes the records into the Postgres recipe provider through its ports,
+/// then recall-parity spot-checks: the same query must surface the same
+/// memory on both engines. Requires Docker Postgres.
+#[test]
+#[ignore]
+fn pg_recipe_sqlite_export_import_round_trip() {
+    use engram_domain::*;
+    use engram_integration::{
+        CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, EngramProvider, ExportImport as _,
+        MigrationMode, UnifiedRecall as _,
+    };
+
+    // ---- 1. Seed a SQLite provider with one memory (typed full request).
+    let dir = tempfile::tempdir().expect("tempdir");
+    let sqlite_config = EngramConfig::new(
+        dir.path().join("mig.db"),
+        dir.path().to_path_buf(),
+        engram_domain::ScopeMappingStrategy::Strict,
+        EmbeddingProviderConfig {
+            provider_type: "none".to_owned(),
+            model: "none".to_owned(),
+            dimensions: 384,
+            prompt_profile: "query".to_owned(),
+            normalization: None,
+        },
+        MigrationMode::Apply,
+        CapabilityPolicy::FailClosed,
+    );
+    let sqlite = EngramProvider::open(&sqlite_config).expect("sqlite provider");
+    let scope = Scope {
+        tenant: "default".to_owned(),
+        subject: None,
+        workspace: Some("migration-demo".to_owned()),
+        session: None,
+        environment: None,
+    };
+    let now = chrono::Utc::now();
+    let policy = Policy {
+        visibility: Visibility::Workspace,
+        retention: Retention::Durable,
+        sensitivity: Some(Sensitivity::Medium),
+        allowed_uses: vec![AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: Some(DeleteMode::Tombstone),
+    };
+    let provenance = Provenance {
+        source: "migration-test".to_owned(),
+        actor: Actor {
+            id: Id::from("migrator"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        },
+        observed_at: now,
+        evidence: Vec::new(),
+        derivations: Vec::new(),
+        confidence: Some(1.0),
+        method: Some("migration-round-trip".to_owned()),
+    };
+    let request = engram_domain::WriteMemoryRequest {
+        kind: MemoryKind::Fact,
+        content: MemoryContent {
+            text: "The migration runbook demo memory: engram moves stores engine-neutrally"
+                .to_owned(),
+            summary: None,
+            entities: Vec::new(),
+            language: None,
+            format: None,
+            structured: None,
+            hash: None,
+        },
+        scope: scope.clone(),
+        requester: Requester {
+            actor: Actor {
+                id: Id::from("migrator"),
+                kind: ActorKind::Agent,
+                display_name: None,
+                metadata: None,
+            },
+            roles: Vec::new(),
+            permissions: Vec::new(),
+            on_behalf_of: None,
+        },
+        provenance: provenance.clone(),
+        policy: policy.clone(),
+        links: Vec::new(),
+        idempotency_key: None,
+    };
+    let memory = sqlite.require_memory().expect("memory handle");
+    block_on(async { memory.write_memory(request).await }).expect("write memory to sqlite");
+
+    // ---- 2. Export from SQLite (the facade's engine-neutral ExportImport).
+    let export = sqlite.require_export_import().expect("export handle");
+    let data = block_on(async { export.export(&scope).await }).expect("sqlite export");
+    assert!(
+        !data.memories.is_empty(),
+        "export must carry the seeded memory"
+    );
+
+    // ---- 3. Import into Postgres through the recipe's ports (typed records
+    //      rebuilt from the export's JSON strings — same domain contracts).
+    let config = pg_config();
+    let pg = open(&config).expect("recipe opens");
+    let pg_memory = pg.require_memory().expect("pg memory");
+    for record in &data.memories {
+        // The import-record shape is the flattened export (text + scope JSON +
+        // policy JSON + timestamp) — rebuild a typed request from those fields.
+        let scope_json: engram_domain::Scope =
+            serde_json::from_str(&record.scope).expect("scope json");
+        let policy_json: engram_domain::Policy =
+            serde_json::from_str(&record.policy).expect("policy json");
+        block_on(async {
+            pg_memory
+                .write_memory(engram_domain::WriteMemoryRequest {
+                    kind: MemoryKind::Observation,
+                    content: MemoryContent {
+                        text: record.content.clone(),
+                        summary: None,
+                        entities: Vec::new(),
+                        language: None,
+                        format: None,
+                        structured: None,
+                        hash: None,
+                    },
+                    scope: scope_json,
+                    requester: Requester {
+                        actor: provenance.actor.clone(),
+                        roles: Vec::new(),
+                        permissions: Vec::new(),
+                        on_behalf_of: None,
+                    },
+                    provenance: provenance.clone(),
+                    policy: policy_json,
+                    links: Vec::new(),
+                    idempotency_key: None,
+                })
+                .await
+        })
+        .expect("write memory to pg");
+    }
+
+    // ---- 4. Recall parity: the same query surfaces the memory on BOTH engines.
+    let query = |provider: &EngramProvider| {
+        let recall = provider.require_recall().expect("recall");
+        block_on(async {
+            recall
+                .recall(RetrievalRequest {
+                    query: "migration runbook engine-neutral".to_owned(),
+                    scope: scope.clone(),
+                    requester: Requester {
+                        actor: Actor {
+                            id: Id::from("migrator"),
+                            kind: ActorKind::Agent,
+                            display_name: None,
+                            metadata: None,
+                        },
+                        roles: Vec::new(),
+                        permissions: Vec::new(),
+                        on_behalf_of: None,
+                    },
+                    modes: vec![],
+                    filters: None,
+                    cues: vec![],
+                    limit: None,
+                    budget: None,
+                    include_explanations: None,
+                })
+                .await
+        })
+        .expect("recall")
+    };
+    let from_sqlite = query(&sqlite);
+    let from_pg = query(&pg);
+    let needle = "migration runbook demo memory";
+    assert!(
+        from_sqlite.items.iter().any(|r| r.content.contains(needle)),
+        "sqlite recall must surface the memory"
+    );
+    assert!(
+        from_pg.items.iter().any(|r| r.content.contains(needle)),
+        "pg recall must surface the SAME memory after import: {:?}",
+        from_pg
+            .items
+            .iter()
+            .map(|r| r.content.clone())
+            .collect::<Vec<_>>()
+    );
+
+    println!("pgvector recipe migration: sqlite export → pg import → recall parity ✓");
+}

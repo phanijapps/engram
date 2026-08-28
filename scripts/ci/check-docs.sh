@@ -8,7 +8,9 @@ marker_pattern="TO""DO|\\[TO""DO"
 mapfile -t marker_paths < <(
   git ls-files README.md AGENTS.md 'docs/**' 'contracts/**' '.codex/skills/**' 2>/dev/null \
     | while IFS= read -r path; do
-        [[ -f "$path" ]] && printf '%s\n' "$path"
+        # *.upstream.md files are frozen upstream snapshots, not our docs —
+        # they quote upstream prose (including the word TODO) verbatim.
+        [[ -f "$path" && "$path" != *.upstream.md ]] && printf '%s\n' "$path"
       done
 )
 

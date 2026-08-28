@@ -201,5 +201,23 @@ CREATE INDEX IF NOT EXISTS idx_events_scope ON memory_events (tenant, subject, w
 
 /// Substitutes the vector dimensions into the schema SQL.
 pub fn schema_sql(dimensions: u32) -> String {
-    SCHEMA_SQL.replace("{dimensions}", &dimensions.to_string())
+    let mut sql = SCHEMA_SQL.replace("{dimensions}", &dimensions.to_string());
+    stamp_schema_version(&mut sql);
+    sql
+}
+
+/// The pgvector schema version — bumped on any non-additive DDL change.
+/// Stamped at open (below) so an operator can query
+/// `SELECT * FROM schema_meta` to see which schema a database carries and
+/// detect version skew before it becomes a mystery.
+pub const SCHEMA_VERSION: &str = "1";
+
+/// Stamps the schema version into `schema_meta` (idempotent upsert).
+pub fn stamp_schema_version(sql: &mut String) {
+    sql.push_str(&format!(
+        "\nCREATE TABLE IF NOT EXISTS schema_meta (\
+            key TEXT PRIMARY KEY, value TEXT NOT NULL);\
+         INSERT INTO schema_meta (key, value) VALUES ('schema_version', '{SCHEMA_VERSION}')\
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;\n"
+    ));
 }

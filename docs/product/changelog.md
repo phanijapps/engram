@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CI runs a live Postgres+pgvector service** and the pgvector recipe's
+  conformance tests in the gate; the engine-neutrality and surface-parity
+  lints are enforced in CI (they had been referenced but never wired, and the
+  contract/docs jobs had been calling deleted hook scripts since the
+  agent-bundle refresh — all four gates now live under `scripts/ci/`).
+- **SQLite → Postgres migration runbook**, executable as a Docker-gated test
+  (export → import → recall parity on both engines) plus
+  `docs/guides/how-to/migrate-sqlite-to-pg.md`.
+- **Ops hardening (pgvector)**: `schema_meta.schema_version` stamped at open,
+  actionable connection errors, and `docs/guides/how-to/backup-restore.md`.
 - **Postgres/pgvector backend for the MCP server** (feature `pgvector`):
   `engram-mcp --backend pgvector --pg-connection-string <url>` opens through
   the `backends/pgvector` recipe — scan, code-intel tools (`symbol_context`,

@@ -698,3 +698,56 @@ store is high-signal (449 resolved calls + 93 `routes_to`), 33% structural
 (`contains`/`belongs_to`), 12% `file` entities; throughput is fine
 (~170 files/s Java, ~53 files/s mixed) and incremental manifests make
 re-scans ~0.
+
+## code-graph-perfection
+
+The "perfect code graph" register — every known gap between what indexing
+produces today and a graph where **every meaningful relationship in a repo is
+captured, resolved, and navigable**. Seeded from the dreamhouse-lwc findings
+(2026-08-28); items land here as new repos expose new gaps. Ordered by
+leverage.
+
+- **[js-apex-boundary] Unify LWC `@salesforce/apex` imports with parsed Apex
+  entities.** `import getPagedPropertyList from
+  '@salesforce/apex/PropertyController.getPagedPropertyList'` creates a module
+  entity; the Apex parser creates the real
+  `PropertyController::getPagedPropertyList` entity — TWO nodes for one symbol,
+  so `change_impact`/`blast_radius` stop at the JS↔Apex boundary. Fix: teach
+  the import resolver the `@salesforce/apex/<Class>.<method>` shape — resolve
+  the import-module entity's target to the parsed Apex entity (a
+  framework-aware resolution rule, sibling to the T7 framework resolvers).
+  Unblocks: full-stack impact analysis on Salesforce repos (the exact query
+  you want there). Blocked on nothing.
+- **[js-this-receiver] Resolve LWC/JS `this.method` receivers.** Class-method
+  calls written `this.fireChangeEvent()` carry the `this` receiver, which gives
+  no type hint, so most intra-component JS edges stay name-only (dreamhouse:
+  resolved graph ≈ 25 nodes out of 126 `calls`). Fix options, in order of
+  preference: (a) same-file class-scope resolution — `this.x` inside class
+  `C` resolves against `C::x` when declared in the same file (the declaration
+  is visible at extract time); (b) import-scope for constructor-injected
+  receivers (`this.svc = new Service()` field-inference). (a) alone should
+  resolve the bulk of LWC intra-component edges. Blocked on nothing.
+- **[java-package-imports] Java package-import resolution ladder** (carried
+  from the audit): `import com.xkcoding.x.…` should qualify bare calls so
+  cross-module Java edges resolve (89% unresolved today on spring-boot-demo;
+  the ledger now captures them — resolution would let the sweep heal them).
+  Blocked on nothing.
+- **[community-key-fallback] Community map keys fall back to raw
+  `entity-…` ids** when a relationship endpoint carries no name (cosmetic
+  from the id-keyed analytics work; join-able against entities at the
+  handler). Blocked on nothing.
+- **[unembedded-query] Store-side un-embedded query** (carried): the per-call
+  `list_chunks` + `embedded_ids` full-list is O(store) (~seconds at 30k+
+  chunks); a store-side pending-set query bounds reindex/scan-embed latency.
+  Blocked on nothing.
+- **[parse-floor] The pre-pass still parses every to-ingest file once** for
+  global names (2 parses/file total). The 1× floor needs a persisted
+  name-index keyed by content hash — only worth it at kernel scale. Blocked
+  on a scale target actually being exercised.
+
+Definition of done for this register: indexing any repo yields a graph where
+(a) every source file is classified and parsed (no silent skips beyond
+denylists), (b) every call/reference either resolves to an entity or lands in
+the healing ledger with a reason, (c) framework boundaries (JS↔Apex, JSX,
+routes) are edges, not node silos, and (d) navigation queries reach across
+file, module, and language boundaries.

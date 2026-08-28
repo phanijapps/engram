@@ -736,15 +736,16 @@ leverage.
   `entity-…` ids** when a relationship endpoint carries no name (cosmetic
   from the id-keyed analytics work; join-able against entities at the
   handler). Blocked on nothing.
-- **[unembedded-query] Store-side un-embedded query** — HALF DONE 2026-08-28
-  (376cc3f): the chunk listing is now lean (`list_chunk_refs`: id + source +
-  has_text, no record materialization — bounded memory, no text transfer).
-  What remains, precisely measured on the 92k-chunk agentzero store: the
-  ~1.0s of the ~1.15s listing cost is `embedded_ids()` scanning the vec0
-  virtual table. The clean finish is a JOIN-shaped pending query
-  (`SELECT chunk refs WHERE id NOT IN (SELECT id FROM vectors)`) — needs a
-  store-side shape that sees both tables (sqlite: same DB file; pg: same
-  database), i.e. an engine-level method, not a facade default.
+> **Closed:** [unembedded-query] shipped 2026-08-28 (376cc3f + e953dc6 +
+> 8ca4242): lean refs listing with SQL-pushed scope visibility (the cost was
+> never json_extract — it was deserializing every source/document record for
+> in-memory visibility checks), vec0 `vectors_rowids` shadow-table id reads
+> (12ms vs 1.0s; virtual-table fallback), and durable content-hash dedup.
+> Measured: reindex-256 17.4s → 6.1s; listing-only 1.20s → ~0.2s steady.
+> Residual: ~0.3-0.5s first-call overhead (suspect rusqlite row
+> materialization + lazy init) — re-open if it matters. Lesson recorded:
+> SQLite cannot ALTER-ADD a STORED generated column; and `IS NULL OR =` is
+> NOT scope_allows semantics (NULL is not a wildcard).
 > **Closed:** [durable-dedup] shipped 2026-08-28 (e953dc6) — text-hash →
 > embedded-twin reuse via `VectorIndex::vector_for_target` point reads (no
 > schema changes; ChunkRef carries the scanner-stamped content hash).

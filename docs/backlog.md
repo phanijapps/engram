@@ -745,13 +745,11 @@ leverage.
   (`SELECT chunk refs WHERE id NOT IN (SELECT id FROM vectors)`) — needs a
   store-side shape that sees both tables (sqlite: same DB file; pg: same
   database), i.e. an engine-level method, not a facade default.
-- **[durable-dedup] Cross-call content-hash embed reuse** — the measured 3×
-  prize: 92,859 chunks over 31,223 distinct texts, but per-call dedup only
-  fires within a sorted-id window (the pending set's dups are spread across
-  repos/SHAs). Durable dedup = skip inference when the text's hash is
-  already embedded (vectors carry `content_hash`), inserting the twin's
-  vector for the new chunk id. Needs a `VectorIndex` lookup-by-content-hash
-  (default: unsupported → current behavior). Blocked on nothing.
+> **Closed:** [durable-dedup] shipped 2026-08-28 (e953dc6) — text-hash →
+> embedded-twin reuse via `VectorIndex::vector_for_target` point reads (no
+> schema changes; ChunkRef carries the scanner-stamped content hash).
+> Measured: reindex-256 17.4s → 7.0s, 176/256 reused (69% inference
+> skipped); reindex reports the new/reused split.
 - **[parse-floor] The pre-pass still parses every to-ingest file once** for
   global names (2 parses/file total). The 1× floor needs a persisted
   name-index keyed by content hash — only worth it at kernel scale. Blocked

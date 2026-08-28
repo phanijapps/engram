@@ -622,6 +622,10 @@ leverage; PS1/PS2 are the switch-enablers, the rest harden it.
   beliefs only; the `PgVectorIndex` cell exists but is not composed into
   recall. Fuse it (query-vector provider port already exists); document or
   ship the lexical (tsvector) lane. Blocked on nothing.
+> **Closed:** PS3+PS4+PS6 shipped 2026-08-28 — see the spec. PS3 also fixed
+> CI having been broken since the hook deletion (contract/docs jobs called
+> `.codex/hooks/*` from beyond the grave); all four gates live in `scripts/ci/`
+> and run in CI, Postgres service included.
 - **PS3 — CI Postgres service:** add a Postgres+pgvector service container
   (shape of `docs/how-to-pg/docker-compose.yaml`) to CI and run the pgvector
   conformance + integration tests in the gate. Blocked on nothing.

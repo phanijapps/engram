@@ -1,6 +1,6 @@
 # Spec: pgvector-backend (RFC-0017 Phase A)
 
-Status: Draft
+Status: Shipped (production-switch ACs PS1-PS6 closed 2026-08-28)
 Mode: full (new engine — structural, multi-crate, conformance-gated)
 Shape: data
 Constrained by: ADR-0022 (engine neutrality, recipe = feature-gated submodule, one crate per backend), RFC-0017 (the 3-module + pgvector target), RFC-0005 (backend-agnostic retrieval composition)
@@ -135,10 +135,19 @@ ACs below stay as the (mostly met) historical record.
   recall returns the semantically-matching chunk first (no lexical lane
   exists on pg — the hit could only arrive via the vector lane). Lexical
   (tsvector) remains a documented gap.
-- [ ] PS3 — CI runs a Postgres service (docs/how-to-pg compose shape) and the
+- [x] PS3 — CI runs a Postgres service (docs/how-to-pg compose shape) and the
   pgvector conformance + integration tests are part of the gate.
-- [ ] PS4 — migration runbook demonstrated: SQLite export → Postgres import →
+  **Shipped 2026-08-28:** pgvector/pgvector:pg17 service container
+  (health-gated) on the Rust job + the recipe's Docker-gated tests in the
+  gate; the ADR-0022 lints (engine neutrality, surface parity) are in CI at
+  last. Also fixed: CI had been calling the deleted `.codex/hooks/*`
+  scripts — all four gates recovered to `scripts/ci/`.
+- [x] PS4 — migration runbook demonstrated: SQLite export → Postgres import →
   recall parity spot-check; documented under docs/guides/how-to/.
+  **Shipped 2026-08-28:** the executable demonstration is
+  `pg_recipe_sqlite_export_import_round_trip` (parity on both engines);
+  `docs/guides/how-to/migrate-sqlite-to-pg.md` walks the flow incl. the
+  empty-vector reindex drain and the SQLite rollback path.
 - [x] PS5 — a reindex op (MCP tool or CLI) drains the embed backlog with
   progress, keyed on the vector index's embedded-set, not per-scan scope.
   **Shipped 2026-08-27:** `reindex` MCP tool (both backends — it rides the
@@ -146,9 +155,13 @@ ACs below stay as the (mostly met) historical record.
   sqlite-vec and pgvector alike). Live first run on the agentzero store:
   31,487 pending surfaced, 300/call deterministic drain with continue
   reporting; scan_repo and reindex share the `embed_pending` helper.
-- [ ] PS6 — ops hardening: schema versioning/migration strategy beyond
+- [x] PS6 — ops hardening: schema versioning/migration strategy beyond
   idempotent DDL, connection-string/TLS/pool validation errors surfaced at
-  `open`, and a backup/restore runbook page.
+  `open`, and a backup/restore runbook page. **Shipped 2026-08-28:**
+  `schema_meta.schema_version` stamped at open; actionable connect errors
+  (scheme + URL + reachability/credentials/pgvector hints);
+  `docs/guides/how-to/backup-restore.md` (pg_dump + VACUUM INTO, restore
+  verification, sidecar-cost notes).
 
 ## Acceptance Criteria (Phase A — P0 hot path, historical)
 

@@ -736,10 +736,22 @@ leverage.
   `entity-…` ids** when a relationship endpoint carries no name (cosmetic
   from the id-keyed analytics work; join-able against entities at the
   handler). Blocked on nothing.
-- **[unembedded-query] Store-side un-embedded query** (carried): the per-call
-  `list_chunks` + `embedded_ids` full-list is O(store) (~seconds at 30k+
-  chunks); a store-side pending-set query bounds reindex/scan-embed latency.
-  Blocked on nothing.
+- **[unembedded-query] Store-side un-embedded query** — HALF DONE 2026-08-28
+  (376cc3f): the chunk listing is now lean (`list_chunk_refs`: id + source +
+  has_text, no record materialization — bounded memory, no text transfer).
+  What remains, precisely measured on the 92k-chunk agentzero store: the
+  ~1.0s of the ~1.15s listing cost is `embedded_ids()` scanning the vec0
+  virtual table. The clean finish is a JOIN-shaped pending query
+  (`SELECT chunk refs WHERE id NOT IN (SELECT id FROM vectors)`) — needs a
+  store-side shape that sees both tables (sqlite: same DB file; pg: same
+  database), i.e. an engine-level method, not a facade default.
+- **[durable-dedup] Cross-call content-hash embed reuse** — the measured 3×
+  prize: 92,859 chunks over 31,223 distinct texts, but per-call dedup only
+  fires within a sorted-id window (the pending set's dups are spread across
+  repos/SHAs). Durable dedup = skip inference when the text's hash is
+  already embedded (vectors carry `content_hash`), inserting the twin's
+  vector for the new chunk id. Needs a `VectorIndex` lookup-by-content-hash
+  (default: unsupported → current behavior). Blocked on nothing.
 - **[parse-floor] The pre-pass still parses every to-ingest file once** for
   global names (2 parses/file total). The 1× floor needs a persisted
   name-index keyed by content hash — only worth it at kernel scale. Blocked

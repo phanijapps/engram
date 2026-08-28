@@ -30,6 +30,7 @@ procedure_put
 put_entity
 put_relationship
 recall
+reindex
 resolve_entity
 scan_dependencies
 scan_ownership

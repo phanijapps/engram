@@ -22,7 +22,7 @@ fn bad(ctx: &str, e: impl std::fmt::Display) -> ToolError {
     })
 }
 
-fn scope_from_args(app: &App, args: &Value) -> Result<Scope, ToolError> {
+pub(crate) fn scope_from_args(app: &App, args: &Value) -> Result<Scope, ToolError> {
     // scan-reliability AC2: a missing/null `scope` defaults to the launch
     // scope (the fused-per-project workspace every other tool uses) instead
     // of a deserialization error.

@@ -350,6 +350,24 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
         handler: codegraph::scan_repo,
     });
     registry.register(ToolRecord {
+        name: "reindex",
+        description: "Drain the vector-embed backlog (PS5): embeds un-embedded chunks in the \\
+                      scope regardless of source — the backfill path for old-source leftovers \\
+                      and fresh stores after a backend switch (vectors start empty). Keyed on \\
+                      the vector index's embedded-set. Capped per call (`limit`, default 256, \\
+                      max 1024) in deterministic chunk-id order; re-run to continue. Reports \\
+                      embedded count + remaining. Requires the vector lane (fastembed feature, \\
+                      no --no-vector).",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "limit": { "type": "number", "description": "Max chunks to embed this call (default 256, max 1024)." },
+                "scope": { "type": "object", "description": "Optional scope override; defaults to the launch scope." }
+            }
+        }),
+        handler: codegraph::reindex,
+    });
+    registry.register(ToolRecord {
         name: "scan_protocols",
         description: "Post-index scan: extract HTTP protocol boundaries (client fetch calls + \
                       server route registrations), normalize route patterns, create endpoint \

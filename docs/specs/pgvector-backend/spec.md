@@ -139,8 +139,13 @@ ACs below stay as the (mostly met) historical record.
   pgvector conformance + integration tests are part of the gate.
 - [ ] PS4 — migration runbook demonstrated: SQLite export → Postgres import →
   recall parity spot-check; documented under docs/guides/how-to/.
-- [ ] PS5 — a reindex op (MCP tool or CLI) drains the embed backlog with
+- [x] PS5 — a reindex op (MCP tool or CLI) drains the embed backlog with
   progress, keyed on the vector index's embedded-set, not per-scan scope.
+  **Shipped 2026-08-27:** `reindex` MCP tool (both backends — it rides the
+  engine-neutral EmbeddingProvider + VectorIndex ports, so it works on
+  sqlite-vec and pgvector alike). Live first run on the agentzero store:
+  31,487 pending surfaced, 300/call deterministic drain with continue
+  reporting; scan_repo and reindex share the `embed_pending` helper.
 - [ ] PS6 — ops hardening: schema versioning/migration strategy beyond
   idempotent DDL, connection-string/TLS/pool validation errors surfaced at
   `open`, and a backup/restore runbook page.

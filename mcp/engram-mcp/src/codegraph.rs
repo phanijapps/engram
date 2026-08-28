@@ -248,6 +248,115 @@ fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>) {
     }
 }
 
+/// Embeds pending chunks into the vector index (scan-reliability AC1 + PS5).
+///
+/// Shared by `scan_repo` (delta scope: only `source_filter`-matching chunks —
+/// embedding costs O(this scan), never O(store)) and the `reindex` tool
+/// (no filter: drains EVERY un-embedded chunk in scope — old-source leftovers
+/// and fresh stores after a backend switch). Deterministic order (sorted by
+/// chunk id), capped per call, batched through the model, chunk text bounded
+/// (BGE truncates at 512 tokens; longer text only fed the tokenizer).
+/// Returns (embedded this call, remaining after the cap).
+fn embed_pending(
+    app: &App,
+    scope: &engram_domain::Scope,
+    source_filter: Option<&str>,
+    cap: usize,
+) -> (usize, usize) {
+    const EMBED_TEXT_CAP: usize = 8 * 1024;
+    const EMBED_BATCH_SIZE: usize = 64;
+    let (Ok(query), Some(embedder), Ok(vector_index)) = (
+        app.provider.require_knowledge_query(),
+        app.provider.embedding_provider(),
+        app.provider.require_vectors(),
+    ) else {
+        // No embedder wired (fastembed off / --no-vector): nothing to do.
+        // Callers surface the honest "0 embedded" count.
+        return (0, 0);
+    };
+    let chunks = block_on(query.list_chunks(scope)).unwrap_or_default();
+    let space = embedder.embedding_space();
+    let have: std::collections::HashSet<engram_domain::Id> =
+        block_on(vector_index.embedded_ids()).unwrap_or_default();
+    let mut pending: Vec<&engram_domain::KnowledgeChunk> = chunks
+        .iter()
+        .filter(|c| {
+            !c.text.is_empty()
+                && !have.contains(&c.id)
+                && source_filter.map_or(true, |src| c.provenance.source == src)
+        })
+        .collect();
+    pending.sort_by_key(|c| c.id.as_str().to_owned());
+    let remaining = pending.len().saturating_sub(cap);
+    let batch_input: Vec<&&engram_domain::KnowledgeChunk> = pending.iter().take(cap).collect();
+
+    let mut embedded = 0usize;
+    for batch in batch_input.chunks(EMBED_BATCH_SIZE) {
+        let texts: Vec<String> = batch
+            .iter()
+            .map(|c| {
+                let t = c.text.trim();
+                t.chars().take(EMBED_TEXT_CAP).collect::<String>()
+            })
+            .collect();
+        match embedder.embed_batch(&texts) {
+            Ok(vectors) => {
+                for (chunk, vector) in batch.iter().zip(vectors.into_iter()) {
+                    if vector.is_empty() {
+                        continue;
+                    }
+                    if let Err(e) = block_on(vector_index.insert(&chunk.id, &space, vector)) {
+                        eprintln!("engram-mcp: embed warning for {}: {e}", chunk.id);
+                    } else {
+                        embedded += 1;
+                    }
+                }
+            }
+            Err(e) => {
+                // Whole batch failed — never abort the caller; warn and move on.
+                for chunk in batch {
+                    eprintln!("engram-mcp: embed error for {}: {e}", chunk.id);
+                }
+            }
+        }
+    }
+    (embedded, remaining)
+}
+
+/// `reindex` (PS5): drains the vector-embed backlog with progress. Unlike
+/// scan_repo's delta embed (this-scan chunks only), reindex embeds EVERY
+/// un-embedded chunk in scope regardless of source — the backfill path for
+/// old-source leftovers (pre-manifest scans whose source name no longer
+/// matches) and for fresh stores after a backend switch (vectors start
+/// empty). Keyed on the vector index's embedded-set, not per-scan scope.
+/// Capped per call (`limit`, default 256, max 1024); re-run to continue.
+pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
+    // scope defaults to the launch scope when absent (same contract as the
+    // maintenance tools — the AC2 fix).
+    let scope = crate::maintenance::scope_from_args(app, args)?;
+    let limit = std::cmp::min(args["limit"].as_u64().unwrap_or(256) as usize, 1024);
+    if app.provider.embedding_provider().is_none() {
+        return Ok(protocol::text_content(
+            "reindex: no embedding provider wired (build with the fastembed feature and run \
+             without --no-vector) — nothing embedded, 0 pending reported as 0.",
+        ));
+    }
+    let t0 = std::time::Instant::now();
+    let (embedded, remaining) = embed_pending(app, &scope, None, limit);
+    eprintln!(
+        "engram-mcp: reindex done ({embedded} embedded, {remaining} pending) in {:.1}s",
+        t0.elapsed().as_secs_f32()
+    );
+    let note = if remaining > 0 {
+        format!("\n{remaining} more pending — call reindex again to continue (deterministic order)")
+    } else {
+        "\nbacklog drained".to_owned()
+    };
+    Ok(protocol::text_content(format!(
+        "reindex: embedded {embedded} chunks (limit {limit}){note}"
+    )))
+}
+
 /// `scan_repo`: treesitter-index a code repository into the project workspace,
 /// routed through the provider via the fan-in adapter. Feeds code-symbol names
 /// to the lexical lane so `search`/`recall` find them.
@@ -338,83 +447,10 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     // runs in batches through `embed_batch` (one FastEmbed model call per batch
     // instead of one per chunk). Re-scanning an unchanged repo embeds ~0 chunks.
     //
-    // scan-reliability AC1 (embed side): the pending set is scoped to THIS
-    // scan's source and capped per call. The prior shape listed every chunk in
-    // the scope — on a store holding other repos' history that meant an
-    // unbounded cross-source backlog ground through the shared model mutex
-    // inside the tool response (the eval store sat at ~81.6k chunks and the
-    // call never returned). Embedding now costs O(this scan), re-running a
-    // scan continues the remainder, and the summary reports what is left.
-    // Chunk text sent to the embedder is bounded: BGE truncates at 512 tokens
-    // (~2 KiB of code), so longer texts only fed the tokenizer — megabyte
-    // legacy chunks spent minutes in BPE before being truncated anyway.
-    const EMBED_TEXT_CAP: usize = 8 * 1024;
-    // 512 briefly flirted with the 60s MCP request ceiling once the chunk
-    // listing overhead (an 81k-chunk store) stacked on top; 256 keeps the
-    // whole call ~45s worst-case with headroom, and re-runs continue the rest.
-    const EMBED_PER_CALL_CAP: usize = 256;
-    let mut embedded = 0usize;
-    let mut pending_after_cap = 0usize;
-    if let (Ok(query), Some(embedder), Ok(vector_index)) = (
-        app.provider.require_knowledge_query(),
-        app.provider.embedding_provider(),
-        app.provider.require_vectors(),
-    ) {
-        let chunks = block_on(query.list_chunks(&app.scope)).unwrap_or_default();
-        let space = embedder.embedding_space();
-
-        // Skip chunks that already have a vector — the incremental win. A
-        // failed listing degrades to "embed everything" (current behavior).
-        let have: std::collections::HashSet<engram_domain::Id> =
-            block_on(vector_index.embedded_ids()).unwrap_or_default();
-        let mut source_pending: Vec<&engram_domain::KnowledgeChunk> = chunks
-            .iter()
-            .filter(|c| {
-                !c.text.is_empty() && !have.contains(&c.id) && c.provenance.source == scan_source
-            })
-            .collect();
-        source_pending.sort_by_key(|c| c.id.as_str().to_owned());
-        pending_after_cap = source_pending.len().saturating_sub(EMBED_PER_CALL_CAP);
-        let pending: Vec<&&engram_domain::KnowledgeChunk> =
-            source_pending.iter().take(EMBED_PER_CALL_CAP).collect();
-
-        const EMBED_BATCH_SIZE: usize = 64;
-        for batch in pending.chunks(EMBED_BATCH_SIZE) {
-            let texts: Vec<String> = batch
-                .iter()
-                .map(|c| {
-                    let t = c.text.trim();
-                    t.chars().take(EMBED_TEXT_CAP).collect::<String>()
-                })
-                .collect();
-            // Skip empty-text chunks defensively (the filter above already
-            // dropped them) and warn per-chunk on insert errors, as before.
-            match embedder.embed_batch(&texts) {
-                Ok(vectors) => {
-                    for (chunk, vector) in batch.iter().zip(vectors.into_iter()) {
-                        if vector.is_empty() {
-                            // Mirrors the skip-empty-text behavior for slots
-                            // the batch path left empty.
-                            continue;
-                        }
-                        if let Err(e) = block_on(vector_index.insert(&chunk.id, &space, vector)) {
-                            eprintln!("engram-mcp: embed warning for {}: {e}", chunk.id);
-                        } else {
-                            embedded += 1;
-                        }
-                    }
-                }
-                Err(e) => {
-                    // Whole batch failed — do not abort the scan; warn and move
-                    // on so a single bad batch never blocks indexing.
-                    for chunk in batch {
-                        eprintln!("engram-mcp: embed error for {}: {e}", chunk.id);
-                    }
-                }
-            }
-        }
-    }
-
+    // scan-reliability AC1 (embed side) + PS5: the scan embeds only THIS
+    // scan's source chunks (delta); the `reindex` tool drains the rest
+    // (old-source + backend-switch backlogs) — both share embed_pending.
+    let (embedded, pending_after_cap) = embed_pending(app, &app.scope, Some(&scan_source), 256);
     let embed_note = if pending_after_cap > 0 {
         format!(
             "\nembedded {embedded} chunks ({pending_after_cap} more pending from this source — re-run scan_repo to continue)"
@@ -4218,6 +4254,40 @@ mod phase2_tool_tests {
         assert!(
             dep_text.contains("=> src/utils.ts"),
             "deps output: {dep_text}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod reindex_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// PS5: `reindex` over an empty store answers with the progress-report
+    /// shape (never errors, never pretends to embed) and its scope defaults
+    /// to the launch scope when omitted (same contract as the maintenance
+    /// tools' AC2 fix).
+    #[test]
+    fn reindex_answers_with_progress_shape_and_default_scope() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = crate::tools::tests::test_app(dir.path());
+        let res = reindex(&app, &json!({})).unwrap();
+        let text = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            text.starts_with("reindex:") && text.contains("embedded 0 chunks"),
+            "progress-report shape: {text}"
+        );
+        // The runtime no-embedder path (--no-vector) returns the honest
+        // unavailable message — exercised live; here the stub provider
+        // reports the same never-error contract.
+        let res2 = reindex(&app, &json!({ "limit": 5 })).unwrap();
+        assert!(
+            res2["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("limit 5"),
+            "limit threads through: {}",
+            res2["content"][0]["text"].as_str().unwrap()
         );
     }
 }

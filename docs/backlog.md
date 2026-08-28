@@ -576,6 +576,14 @@ Follow-ups opened by `scan-reliability` (Shipped — see
   because those edges carry ids. Partition `architecture`/`code_health` by
   source repository, or re-scan the legacy repositories under the post-T5
   noise filter. [spec scan-reliability non-goals]
+> **Closed:** PS5 shipped 2026-08-27 — `reindex` MCP tool drains the
+> vector-embed backlog keyed on the embedded-set (no source filter): live
+> first run against agentzero reported **31,487 pending**, drained 300/call
+> deterministically (31,487 → 31,187 → 30,887), capped per call with a
+> continue note. scan_repo's delta embed and reindex now share one
+> `embed_pending` helper. TS-side reindex joins the documented tool-table
+> drift. The O(store) `list_chunks`+`embedded_ids` listing per call remains
+> the follow-up (store-side un-embedded query).
 - **Embed backlog drain (reindex op):** `scan_repo` embeds 256 chunks per call
   scoped to the scan's sha-stamped source — fine for changed files, but it
   cannot drain chunks whose source name no longer matches (old SHAs from

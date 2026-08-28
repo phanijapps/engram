@@ -105,6 +105,15 @@ pub fn resolve_refs(
         match outcome {
             Resolution::Resolved(candidate) => {
                 rel.object.id = Some(Id::from(candidate.id));
+                // Canonicalize the endpoint name to the resolved entity's
+                // qualified name: edges previously kept their AS-WRITTEN bare
+                // callee (`getPagedPropertyList`) even after resolution set
+                // the id, so name-keyed navigation (symbol_context,
+                // blast_radius — invoked BY name) missed resolved edges whose
+                // entity is qualified (`PropertyController::getPagedPropertyList`).
+                if rel.object.name.as_deref() != Some(candidate.name.as_str()) {
+                    rel.object.name = Some(candidate.name.clone());
+                }
             }
             Resolution::Ambiguous(candidates) => ledger.push(UnresolvedReference {
                 id: Id::from(format!("unref-{}-{}", from_id, content_key(&reference))),
@@ -205,6 +214,7 @@ mod tests {
             name,
             SymbolCandidate {
                 id: id.to_owned(),
+                name: name.to_owned(),
                 repo: Some(repo.to_owned()),
                 path: Some(path.to_owned()),
             },

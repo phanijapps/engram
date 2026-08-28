@@ -719,10 +719,11 @@ where
                     // Endpoint subject (a route) heals as `routes_to`,
                     // everything else as `calls` (the row carries no
                     // predicate; the kind comes from the subject entity).
-                    let subject_kind = block_on(repo.get_entity(&row.from_entity_id, &opts.scope))
-                        .ok()
-                        .flatten()
-                        .map(|entity| entity.kind);
+                    let subject_entity =
+                        block_on(repo.get_entity(&row.from_entity_id, &opts.scope))
+                            .ok()
+                            .flatten();
+                    let subject_kind = subject_entity.as_ref().map(|entity| entity.kind.clone());
                     let predicate = match subject_kind {
                         Some(engram_domain::EntityKind::Endpoint) => "routes_to",
                         _ => "calls",
@@ -731,16 +732,25 @@ where
                         id: RelationshipId::from(format!("sweep-{subject_id}-{object_id}")),
                         graph_id,
                         subject: EntityRef {
-                            id: Some(subject_id),
+                            id: Some(subject_id.clone()),
                             kind: None,
-                            name: None,
+                            // Canonical names (code-graph-quality follow-up):
+                            // healed edges previously carried an EMPTY subject
+                            // name and the AS-WRITTEN bare object reference —
+                            // invisible to name-keyed navigation. Stamp both
+                            // endpoints with the resolved entities' names.
+                            name: subject_entity.as_ref().map(|e| e.name.clone()),
                             aliases: Vec::new(),
                         },
                         predicate: predicate.to_owned(),
                         object: EntityRef {
-                            id: Some(object_id),
+                            id: Some(object_id.clone()),
                             kind: None,
-                            name: Some(reference.clone()),
+                            name: Some(
+                                idx.lookup(object_id.as_str())
+                                    .map(|c| c.name.clone())
+                                    .unwrap_or(reference.clone()),
+                            ),
                             aliases: Vec::new(),
                         },
                         scope: scope.clone(),

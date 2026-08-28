@@ -51,6 +51,12 @@ const CODE_EXTENSIONS: &[&str] = &[
     "cljs", "ex", "exs", "erl", "hs", "ml", "mli", "lua", "php", "pl", "pm", "r", "rb", "sh",
     "bash", "zsh", "fish", "ps1", "c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "cs", "swift",
     "dart", "vue", "svelte", "sql", "proto", "graphql", "gradle", "groovy", "vim",
+    // Salesforce: Apex classes (`.cls`) + triggers (`.trigger`) — the sfapex
+    // grammar is registered in the tree-sitter chunker but these were never
+    // routed to the code path, so Apex source was silently un-indexed
+    // (dreamhouse-lwc: 0 `.cls` documents; the Apex surface only appeared via
+    // LWC `@salesforce/apex` imports).
+    "cls", "apex", "trigger",
 ];
 const TEXT_EXTENSIONS: &[&str] = &[
     "md",

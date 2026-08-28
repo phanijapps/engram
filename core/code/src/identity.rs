@@ -13,6 +13,11 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolCandidate {
     pub id: String,
+    /// The candidate's CANONICAL (qualified) entity name — e.g.
+    /// `PropertyController::getPagedPropertyList` for a bare call written as
+    /// `getPagedPropertyList(...)`. Resolution stamps this onto the
+    /// relationship so name-keyed navigation walks the resolved topology.
+    pub name: String,
     /// Repo discriminator (the source's stable repository key, if known).
     pub repo: Option<String>,
     /// Path discriminator (the defining file path, if known).
@@ -41,6 +46,8 @@ pub enum Resolution {
 #[derive(Debug, Default)]
 pub struct SymbolIndex {
     entries: HashMap<String, Vec<SymbolCandidate>>,
+    /// entity-id → candidate (canonical-name lookup for healed edges).
+    by_id: HashMap<String, SymbolCandidate>,
 }
 
 impl SymbolIndex {
@@ -62,6 +69,9 @@ impl SymbolIndex {
     }
 
     fn append(&mut self, key: &str, candidate: SymbolCandidate) {
+        self.by_id
+            .entry(candidate.id.clone())
+            .or_insert_with(|| candidate.clone());
         let bucket = self.entries.entry(key.to_owned()).or_default();
         if !bucket.iter().any(|c| c.id == candidate.id) {
             bucket.push(candidate);
@@ -116,6 +126,13 @@ impl SymbolIndex {
     }
 
     /// Number of distinct name keys (diagnostics/tests).
+
+    /// Looks a candidate up by its entity id (the canonical-name source for
+    /// healed sweep edges).
+    pub fn lookup(&self, id: &str) -> Option<&SymbolCandidate> {
+        self.by_id.get(id)
+    }
+
     pub fn len(&self) -> usize {
         self.entries.len()
     }
@@ -142,6 +159,7 @@ mod tests {
     fn cand(id: &str, repo: Option<&str>, path: Option<&str>) -> SymbolCandidate {
         SymbolCandidate {
             id: id.to_owned(),
+            name: id.to_owned(),
             repo: repo.map(str::to_owned),
             path: path.map(str::to_owned),
         }

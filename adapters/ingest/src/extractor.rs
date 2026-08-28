@@ -726,6 +726,7 @@ pub fn register_entities(
             &entity.name,
             SymbolCandidate {
                 id: entity.id.to_string(),
+                name: entity.name.clone(),
                 repo: repo.map(str::to_owned),
                 path: path.map(str::to_owned),
             },

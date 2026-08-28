@@ -33,6 +33,16 @@ pub struct SqlKnowledgeStore {
     connection: Arc<Mutex<Connection>>,
 }
 
+/// Lean chunk reference — the store-level shape of the facade's `ChunkRef`
+/// (this crate cannot depend on the facade; the integration trait impl maps
+/// between them).
+#[derive(Debug, Clone)]
+pub struct ChunkRefLite {
+    pub id: ChunkId,
+    pub source: String,
+    pub has_text: bool,
+}
+
 impl SqlKnowledgeStore {
     /// Opens an in-memory SQLite knowledge store and initializes its schema.
     pub fn open_in_memory() -> CoreResult<Self> {
@@ -305,6 +315,52 @@ impl SqlKnowledgeStore {
             }
         }
         Ok(chunks)
+    }
+
+    /// Lean chunk listing (embed/index paths): id + provenance source +
+    /// text-nonemptiness, scope-filtered through the chunk's source — same
+    /// visibility rule as [`Self::list_chunks`] without materializing record
+    /// JSON or text (json_extract in-engine; ~90k rows in well under a
+    /// second vs ~1.4s + hundreds of MB for full records).
+    pub async fn list_chunk_refs(&self, scope: &Scope) -> CoreResult<Vec<ChunkRefLite>> {
+        let connection = self.lock()?;
+        let sources = load_all_sources(&connection)?;
+        let documents = load_all_documents(&connection)?;
+        let mut statement = connection
+            .prepare(
+                "SELECT id, \
+                        json_extract(record_json, '$.documentId'), \
+                        json_extract(record_json, '$.provenance.source'), \
+                        length(coalesce(json_extract(record_json, '$.text'), '')) > 0 \
+                 FROM knowledge_chunks ORDER BY id",
+            )
+            .map_err(sql_error)?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, bool>(3)?,
+                ))
+            })
+            .map_err(sql_error)?;
+        let mut refs = Vec::new();
+        for row in rows {
+            let (id, document_id, source, has_text) = row.map_err(sql_error)?;
+            let visible = documents
+                .get(&DocumentId::from(document_id.unwrap_or_default()))
+                .and_then(|doc| sources.get(&doc.source_id))
+                .is_some_and(|s| scope_allows(&s.scope, scope));
+            if visible {
+                refs.push(ChunkRefLite {
+                    id: ChunkId::from(id),
+                    source: source.unwrap_or_default(),
+                    has_text,
+                });
+            }
+        }
+        Ok(refs)
     }
 
     /// Lists knowledge sources (repos) visible to `scope`. One record per scan.

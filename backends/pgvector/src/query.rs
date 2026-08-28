@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use engram_domain::{
     KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeRelationship, Scope,
 };
-use engram_integration::KnowledgeQuery;
+use engram_integration::{ChunkRef, KnowledgeQuery};
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_pgvector::PgConnection;
 
@@ -108,6 +108,35 @@ impl KnowledgeQuery for PgKnowledgeQuery {
 
     async fn list_chunks(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeChunk>> {
         self.list_chunks_scoped(scope).await
+    }
+
+    /// Lean override: id + source + text-nonemptiness via in-engine jsonb
+    /// extraction (no text transfer, no full record deserialization).
+    async fn list_chunk_refs(&self, scope: &Scope) -> CoreResult<Vec<ChunkRef>> {
+        let sql = format!(
+            "SELECT c.id, \
+                    jsonb_extract_path_text(c.record_json, 'provenance', 'source'), \
+                    length(coalesce(jsonb_extract_path_text(c.record_json, 'text'), '')) > 0 \
+             FROM knowledge_chunks c \
+             JOIN knowledge_sources s ON s.id = c.source_id \
+             WHERE s.{} ORDER BY c.id",
+            Self::SCOPE_WHERE
+        );
+        let rows = self.conn.block_on(async {
+            self.conn
+                .client
+                .query(&sql, &[&scope.tenant, &scope.subject, &scope.workspace])
+                .await
+                .map_err(|e| Self::pg_err(e.to_string()))
+        })?;
+        Ok(rows
+            .iter()
+            .map(|r| ChunkRef {
+                id: engram_domain::ChunkId::from(r.get::<_, String>(0)),
+                source: r.get(1),
+                has_text: r.get(2),
+            })
+            .collect())
     }
 
     async fn list_graphs(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeGraph>> {

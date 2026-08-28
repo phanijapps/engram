@@ -274,53 +274,122 @@ fn embed_pending(
         // Callers surface the honest "0 embedded" count.
         return (0, 0);
     };
-    let chunks = block_on(query.list_chunks(scope)).unwrap_or_default();
+    // Perf (perf pass 2026-08-28): the LEAN refs listing (id + source +
+    // text-nonemptiness — no record deserialization, no text transfer) cut
+    // the per-call listing from ~1.4s/hundreds-of-MB on a 90k-chunk store to
+    // ~0.1s. Text is fetched lazily per SELECTED chunk (indexed pk lookups).
+    let refs = block_on(query.list_chunk_refs(scope)).unwrap_or_default();
     let space = embedder.embedding_space();
     let have: std::collections::HashSet<engram_domain::Id> =
         block_on(vector_index.embedded_ids()).unwrap_or_default();
-    let mut pending: Vec<&engram_domain::KnowledgeChunk> = chunks
+    let mut pending: Vec<&engram_integration::ChunkRef> = refs
         .iter()
-        .filter(|c| {
-            !c.text.is_empty()
-                && !have.contains(&c.id)
-                && source_filter.map_or(true, |src| c.provenance.source == src)
+        .filter(|r| {
+            r.has_text && !have.contains(&r.id) && source_filter.map_or(true, |src| r.source == src)
         })
         .collect();
-    pending.sort_by_key(|c| c.id.as_str().to_owned());
+    pending.sort_by_key(|r| r.id.as_str().to_owned());
     let remaining = pending.len().saturating_sub(cap);
-    let batch_input: Vec<&&engram_domain::KnowledgeChunk> = pending.iter().take(cap).collect();
+    let selected: Vec<&engram_integration::ChunkRef> = pending.into_iter().take(cap).collect();
 
-    let mut embedded = 0usize;
-    for batch in batch_input.chunks(EMBED_BATCH_SIZE) {
-        let texts: Vec<String> = batch
-            .iter()
+    // Content dedup (perf pass 2026-08-28): the eval store holds 92,859
+    // chunks over 31,223 distinct texts (3× duplication — forked repos,
+    // re-scans under new SHAs). The model runs once per DISTINCT text and
+    // the vector is inserted for every chunk id sharing it — inference is
+    // the dominant cost (~62ms/chunk); inserts are indexed upserts.
+    let knowledge = app.provider.require_knowledge().ok();
+    let mut by_text: std::collections::HashMap<u64, (String, Vec<engram_domain::Id>)> =
+        std::collections::HashMap::new();
+    for r in &selected {
+        let Some(text) = knowledge
+            .as_ref()
+            .and_then(|k| block_on(k.get_chunk(&r.id, scope)).ok().flatten())
             .map(|c| {
                 let t = c.text.trim();
                 t.chars().take(EMBED_TEXT_CAP).collect::<String>()
             })
-            .collect();
-        match embedder.embed_batch(&texts) {
-            Ok(vectors) => {
-                for (chunk, vector) in batch.iter().zip(vectors.into_iter()) {
-                    if vector.is_empty() {
-                        continue;
-                    }
-                    if let Err(e) = block_on(vector_index.insert(&chunk.id, &space, vector)) {
-                        eprintln!("engram-mcp: embed warning for {}: {e}", chunk.id);
+            .filter(|t| !t.is_empty())
+        else {
+            continue; // defensive: has_text said otherwise
+        };
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash(&text, &mut hasher);
+        let entry = by_text
+            .entry(std::hash::Hasher::finish(&hasher))
+            .or_insert_with(|| (text, Vec::new()));
+        entry.1.push(r.id.clone());
+    }
+
+    let mut embedded = 0usize;
+    let mut distinct_embedded = 0usize;
+    let mut distinct_batch: Vec<(String, Vec<engram_domain::Id>)> = by_text.into_values().collect();
+    // Deterministic order (stable dedup reporting), then ONE flush per batch
+    // slice — flush_batch takes an immutable slice; there is no shared mutable
+    // batch and no trailing re-flush (a leftover final flush here previously
+    // re-embedded the entire set: exactly 2× the inference and the count).
+    distinct_batch.sort_by(|a, b| a.1[0].as_str().cmp(b.1[0].as_str()));
+    for batch in distinct_batch.chunks(EMBED_BATCH_SIZE) {
+        embedded += flush_batch(
+            embedder.as_ref(),
+            vector_index.as_ref(),
+            &space,
+            batch,
+            &mut distinct_embedded,
+        );
+    }
+    LAST_DEDUP_REPORT.with(|c| c.set((embedded, distinct_embedded)));
+    (embedded, remaining)
+}
+
+thread_local! {
+    /// (chunks covered, distinct texts embedded) from the last embed_pending
+    /// call — surfaced by reindex/scan summaries for honest dedup reporting.
+    static LAST_DEDUP_REPORT: std::cell::Cell<(usize, usize)> =
+        const { std::cell::Cell::new((0, 0)) };
+}
+
+/// Embeds one deduped batch and inserts the vector for every chunk id sharing
+/// each text. Batch errors degrade (warn + skip) — never abort the caller.
+fn flush_batch(
+    embedder: &dyn engram_integration::EmbeddingProvider,
+    vector_index: &dyn engram_retrieval::VectorIndex,
+    space: &engram_domain::EmbeddingSpace,
+    batch: &[(String, Vec<engram_domain::Id>)],
+    distinct_embedded: &mut usize,
+) -> usize {
+    if batch.is_empty() {
+        return 0;
+    }
+    let texts: Vec<String> = batch.iter().map(|(t, _)| t.clone()).collect();
+    match embedder.embed_batch(&texts) {
+        Ok(vectors) => {
+            let mut inserted = 0usize;
+            for ((text, ids), vector) in batch.iter().zip(vectors.into_iter()) {
+                if vector.is_empty() {
+                    continue;
+                }
+                *distinct_embedded += 1;
+                for id in ids {
+                    if let Err(e) =
+                        futures::executor::block_on(vector_index.insert(id, space, vector.clone()))
+                    {
+                        eprintln!("engram-mcp: embed warning for {id}: {e}");
                     } else {
-                        embedded += 1;
+                        inserted += 1;
                     }
                 }
             }
-            Err(e) => {
-                // Whole batch failed — never abort the caller; warn and move on.
-                for chunk in batch {
-                    eprintln!("engram-mcp: embed error for {}: {e}", chunk.id);
+            inserted
+        }
+        Err(e) => {
+            for (_text, ids) in batch.iter() {
+                for id in ids {
+                    eprintln!("engram-mcp: embed error for {id}: {e}");
                 }
             }
+            0
         }
     }
-    (embedded, remaining)
 }
 
 /// `reindex` (PS5): drains the vector-embed backlog with progress. Unlike
@@ -352,8 +421,14 @@ pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
     } else {
         "\nbacklog drained".to_owned()
     };
+    let (covered, distinct) = LAST_DEDUP_REPORT.with(|c| c.get());
+    let dedup_note = if covered > distinct && distinct > 0 {
+        format!(" ({distinct} distinct texts — {covered}/{distinct:.0}x dedup)")
+    } else {
+        String::new()
+    };
     Ok(protocol::text_content(format!(
-        "reindex: embedded {embedded} chunks (limit {limit}){note}"
+        "reindex: embedded {embedded} chunks (limit {limit}){dedup_note}{note}"
     )))
 }
 

@@ -75,7 +75,7 @@ pub use dto::{GraphQuery, MemorySearch, RecallRequest, scope, workspace_scope};
 pub use embedding::EmbeddingProvider;
 pub use export_import::ExportImport;
 pub use hierarchy_build::{HierarchyBuildStats, build_hierarchy_from_communities};
-pub use knowledge_query::KnowledgeQuery;
+pub use knowledge_query::{ChunkRef, KnowledgeQuery};
 pub use lexical_feed::LexicalFeed;
 pub use migration::{
     BeliefImportRecord, ConceptImportRecord, ConceptSchemeImportRecord, EmbeddingSpaceValidation,

@@ -297,38 +297,86 @@ fn embed_pending(
     // re-scans under new SHAs). The model runs once per DISTINCT text and
     // the vector is inserted for every chunk id sharing it — inference is
     // the dominant cost (~62ms/chunk); inserts are indexed upserts.
+    // Durable dedup ([durable-dedup]): the text-hash → already-embedded
+    // chunk map, built from the refs x embedded-ids intersection (in-memory,
+    // no new port surface). A pending chunk whose hash is present reuses the
+    // twin's vector (point-read via VectorIndex::vector_for_target) instead
+    // of re-running inference — the measured prize is 3x on the eval store
+    // (92,859 chunks over 31,223 distinct texts; dups are re-scans of the
+    // same content under new SHAs). Falls back to the model whenever the
+    // point read is unsupported or the twin is gone.
+    let mut embedded_twin_by_hash: std::collections::HashMap<&str, &engram_domain::Id> =
+        std::collections::HashMap::new();
+    for r in &refs {
+        if have.contains(&r.id) && !r.content_hash.is_empty() {
+            embedded_twin_by_hash
+                .entry(r.content_hash.as_str())
+                .or_insert_with(|| &r.id);
+        }
+    }
+
     let knowledge = app.provider.require_knowledge().ok();
-    let mut by_text: std::collections::HashMap<u64, (String, Vec<engram_domain::Id>)> =
+    // Per-call grouping by the SAME content-hash domain (scanner-stamped,
+    // full text) — consistent with the durable map (previously the in-call
+    // dedup hashed the 8-KiB-capped text: a slightly different domain).
+    let mut by_hash: std::collections::HashMap<&str, Vec<engram_domain::Id>> =
+        std::collections::HashMap::new();
+    let mut text_by_hash: std::collections::HashMap<&str, String> =
         std::collections::HashMap::new();
     for r in &selected {
-        let Some(text) = knowledge
-            .as_ref()
-            .and_then(|k| block_on(k.get_chunk(&r.id, scope)).ok().flatten())
-            .map(|c| {
-                let t = c.text.trim();
-                t.chars().take(EMBED_TEXT_CAP).collect::<String>()
-            })
-            .filter(|t| !t.is_empty())
-        else {
-            continue; // defensive: has_text said otherwise
-        };
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        std::hash::Hash::hash(&text, &mut hasher);
-        let entry = by_text
-            .entry(std::hash::Hasher::finish(&hasher))
-            .or_insert_with(|| (text, Vec::new()));
-        entry.1.push(r.id.clone());
+        if r.content_hash.is_empty() {
+            continue; // pre-hash chunks always go to the model
+        }
+        by_hash
+            .entry(r.content_hash.as_str())
+            .or_default()
+            .push(r.id.clone());
+        // Text is fetched lazily — ONLY for hashes with no embedded twin
+        // (the model path); reuse paths never need the text.
+        if !embedded_twin_by_hash.contains_key(r.content_hash.as_str()) {
+            let text = knowledge
+                .as_ref()
+                .and_then(|k| block_on(k.get_chunk(&r.id, scope)).ok().flatten())
+                .map(|c| {
+                    let t = c.text.trim();
+                    t.chars().take(EMBED_TEXT_CAP).collect::<String>()
+                })
+                .unwrap_or_default();
+            if !text.is_empty() {
+                text_by_hash.entry(r.content_hash.as_str()).or_insert(text);
+            }
+        }
     }
 
     let mut embedded = 0usize;
     let mut distinct_embedded = 0usize;
-    let mut distinct_batch: Vec<(String, Vec<engram_domain::Id>)> = by_text.into_values().collect();
-    // Deterministic order (stable dedup reporting), then ONE flush per batch
-    // slice — flush_batch takes an immutable slice; there is no shared mutable
-    // batch and no trailing re-flush (a leftover final flush here previously
-    // re-embedded the entire set: exactly 2× the inference and the count).
-    distinct_batch.sort_by(|a, b| a.1[0].as_str().cmp(b.1[0].as_str()));
-    for batch in distinct_batch.chunks(EMBED_BATCH_SIZE) {
+    let mut reused = 0usize;
+    let mut model_batches: Vec<(String, Vec<engram_domain::Id>)> = Vec::new();
+    for (hash, ids) in by_hash {
+        // Reuse path: an already-embedded twin with identical text exists —
+        // point-read its vector, insert for every id in this group. Falls to
+        // the model when the twin is gone or the read is unsupported.
+        if let Some(twin) = embedded_twin_by_hash.get(hash) {
+            if let Ok(Some(vector)) = block_on(vector_index.vector_for_target(twin)) {
+                if !vector.is_empty() {
+                    for id in &ids {
+                        if let Err(e) = block_on(vector_index.insert(id, &space, vector.clone())) {
+                            eprintln!("engram-mcp: embed reuse warning for {id}: {e}");
+                        } else {
+                            embedded += 1;
+                        }
+                    }
+                    reused += ids.len();
+                    continue;
+                }
+            }
+        }
+        if let Some(text) = text_by_hash.get(hash) {
+            model_batches.push((text.clone(), ids));
+        }
+    }
+    model_batches.sort_by(|a, b| a.1[0].as_str().cmp(b.1[0].as_str()));
+    for batch in model_batches.chunks(EMBED_BATCH_SIZE) {
         embedded += flush_batch(
             embedder.as_ref(),
             vector_index.as_ref(),
@@ -337,15 +385,17 @@ fn embed_pending(
             &mut distinct_embedded,
         );
     }
-    LAST_DEDUP_REPORT.with(|c| c.set((embedded, distinct_embedded)));
+    let _ = &refs;
+    LAST_DEDUP_REPORT.with(|c| c.set((embedded, distinct_embedded, reused)));
     (embedded, remaining)
 }
 
 thread_local! {
-    /// (chunks covered, distinct texts embedded) from the last embed_pending
-    /// call — surfaced by reindex/scan summaries for honest dedup reporting.
-    static LAST_DEDUP_REPORT: std::cell::Cell<(usize, usize)> =
-        const { std::cell::Cell::new((0, 0)) };
+    /// (chunks covered, distinct texts embedded, reused-from-twins) from the
+    /// last embed_pending call — surfaced by reindex/scan summaries for
+    /// honest dedup reporting.
+    static LAST_DEDUP_REPORT: std::cell::Cell<(usize, usize, usize)> =
+        const { std::cell::Cell::new((0, 0, 0)) };
 }
 
 /// Embeds one deduped batch and inserts the vector for every chunk id sharing
@@ -364,7 +414,7 @@ fn flush_batch(
     match embedder.embed_batch(&texts) {
         Ok(vectors) => {
             let mut inserted = 0usize;
-            for ((text, ids), vector) in batch.iter().zip(vectors.into_iter()) {
+            for ((_text, ids), vector) in batch.iter().zip(vectors.into_iter()) {
                 if vector.is_empty() {
                     continue;
                 }
@@ -421,9 +471,9 @@ pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
     } else {
         "\nbacklog drained".to_owned()
     };
-    let (covered, distinct) = LAST_DEDUP_REPORT.with(|c| c.get());
-    let dedup_note = if covered > distinct && distinct > 0 {
-        format!(" ({distinct} distinct texts — {covered}/{distinct:.0}x dedup)")
+    let (_covered, distinct, reused) = LAST_DEDUP_REPORT.with(|c| c.get());
+    let dedup_note = if reused > 0 || distinct > 0 {
+        format!(" ({distinct} new + {reused} reused from existing vectors)")
     } else {
         String::new()
     };

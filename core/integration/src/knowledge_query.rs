@@ -28,6 +28,9 @@ pub struct ChunkRef {
     /// `false` for empty-text chunks — excluded from embedding without
     /// needing the text itself.
     pub has_text: bool,
+    /// The chunk's text content hash (scanner-stamped, full-text domain) —
+    /// the durable-dedup key: two chunks with identical text share it.
+    pub content_hash: String,
 }
 
 #[async_trait]
@@ -59,6 +62,7 @@ pub trait KnowledgeQuery: Send + Sync {
                 id: c.id,
                 source: c.provenance.source,
                 has_text: !c.text.is_empty(),
+                content_hash: c.content_hash,
             })
             .collect())
     }

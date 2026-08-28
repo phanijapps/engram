@@ -116,7 +116,8 @@ impl KnowledgeQuery for PgKnowledgeQuery {
         let sql = format!(
             "SELECT c.id, \
                     jsonb_extract_path_text(c.record_json, 'provenance', 'source'), \
-                    length(coalesce(jsonb_extract_path_text(c.record_json, 'text'), '')) > 0 \
+                    length(coalesce(jsonb_extract_path_text(c.record_json, 'text'), '')) > 0, \
+                    coalesce(jsonb_extract_path_text(c.record_json, 'contentHash'), '') \
              FROM knowledge_chunks c \
              JOIN knowledge_sources s ON s.id = c.source_id \
              WHERE s.{} ORDER BY c.id",
@@ -135,6 +136,7 @@ impl KnowledgeQuery for PgKnowledgeQuery {
                 id: engram_domain::ChunkId::from(r.get::<_, String>(0)),
                 source: r.get(1),
                 has_text: r.get(2),
+                content_hash: r.get(3),
             })
             .collect())
     }

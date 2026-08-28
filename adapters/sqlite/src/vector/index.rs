@@ -321,6 +321,24 @@ impl VectorIndex for SqliteVectorIndex {
         Ok(set)
     }
 
+    /// Durable content dedup point read: the stored embedding for one target
+    /// id, deserialized from the sqlite-vec LE-f32 blob. ([durable-dedup])
+    async fn vector_for_target(&self, target_id: &Id) -> CoreResult<Option<Vec<f32>>> {
+        let conn = self.connection.lock().unwrap();
+        let blob: Option<Vec<u8>> = conn
+            .prepare("SELECT embedding FROM vectors WHERE id = ?1")
+            .map_err(sql_error)?
+            .query_row(params![target_id.as_str()], |row| row.get::<_, Vec<u8>>(0))
+            .optional()
+            .map_err(sql_error)?;
+        Ok(blob.map(|bytes| {
+            bytes
+                .chunks_exact(4)
+                .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                .collect()
+        }))
+    }
+
     async fn delete_target(&self, target_id: &Id) -> CoreResult<()> {
         let conn = self.connection.lock().unwrap();
         conn.execute("DELETE FROM vectors WHERE id = ?1", [target_id.as_str()])
@@ -632,5 +650,34 @@ mod tests {
         );
 
         let _ = std::fs::remove_file(&dir);
+    }
+}
+
+#[cfg(test)]
+mod durable_dedup_tests {
+    use super::*;
+    use engram_domain::EmbeddingSpace;
+    use engram_retrieval::VectorIndex as _;
+    use futures::executor::block_on;
+
+    /// [durable-dedup] point read: insert a vector for a target, read it
+    /// back bit-exact (LE-f32 round-trip) — the reuse path's primitive.
+    #[test]
+    fn vector_for_target_round_trips() {
+        let index = SqliteVectorIndex::open_in_memory(4).unwrap();
+        let id = Id::from("chunk-roundtrip");
+        let vector = vec![0.25f32, -0.5, 1.0, 0.0];
+        let space = index.embedding_space().clone();
+        block_on(async {
+            engram_retrieval::VectorIndex::insert(&index, &id, &space, vector.clone()).await
+        })
+        .unwrap();
+        let back = block_on(index.vector_for_target(&id))
+            .unwrap()
+            .expect("stored");
+        assert_eq!(back, vector, "LE-f32 blob round-trip must be bit-exact");
+        // Unknown target: Ok(None) (not an error — the caller falls to model).
+        let missing = block_on(index.vector_for_target(&Id::from("nope"))).unwrap();
+        assert!(missing.is_none());
     }
 }

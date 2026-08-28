@@ -101,6 +101,28 @@ impl VectorIndex for PgVectorIndex {
         })
     }
 
+    /// Durable content dedup point read: the stored embedding for one target
+    /// id. pgvector returns `[f32, f32, ...]` text; parsed back to Vec<f32>.
+    /// ([durable-dedup])
+    async fn vector_for_target(&self, target_id: &Id) -> CoreResult<Option<Vec<f32>>> {
+        let id = target_id.to_string();
+        let row = self.conn.block_on(async {
+            self.conn
+                .client
+                .query_opt("SELECT embedding::text FROM vectors WHERE id = $1", &[&id])
+                .await
+                .map_err(|e| Self::pg_err(e.to_string()))
+        })?;
+        Ok(row.map(|r| {
+            let text: String = r.get(0);
+            text.trim_start_matches('[')
+                .trim_end_matches(']')
+                .split(',')
+                .filter_map(|part| part.trim().parse::<f32>().ok())
+                .collect()
+        }))
+    }
+
     async fn delete_target(&self, target_id: &Id) -> CoreResult<()> {
         self.conn.block_on(async {
             self.conn

@@ -42,6 +42,7 @@ impl KnowledgeQuery for SqlKnowledgeStore {
                 id: r.id,
                 source: r.source,
                 has_text: r.has_text,
+                content_hash: r.content_hash,
             })
             .collect())
     }

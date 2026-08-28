@@ -41,6 +41,7 @@ pub struct ChunkRefLite {
     pub id: ChunkId,
     pub source: String,
     pub has_text: bool,
+    pub content_hash: String,
 }
 
 impl SqlKnowledgeStore {
@@ -331,7 +332,8 @@ impl SqlKnowledgeStore {
                 "SELECT id, \
                         json_extract(record_json, '$.documentId'), \
                         json_extract(record_json, '$.provenance.source'), \
-                        length(coalesce(json_extract(record_json, '$.text'), '')) > 0 \
+                        length(coalesce(json_extract(record_json, '$.text'), '')) > 0, \
+                        coalesce(json_extract(record_json, '$.contentHash'), '') \
                  FROM knowledge_chunks ORDER BY id",
             )
             .map_err(sql_error)?;
@@ -342,12 +344,13 @@ impl SqlKnowledgeStore {
                     row.get::<_, Option<String>>(1)?,
                     row.get::<_, Option<String>>(2)?,
                     row.get::<_, bool>(3)?,
+                    row.get::<_, Option<String>>(4)?,
                 ))
             })
             .map_err(sql_error)?;
         let mut refs = Vec::new();
         for row in rows {
-            let (id, document_id, source, has_text) = row.map_err(sql_error)?;
+            let (id, document_id, source, has_text, content_hash) = row.map_err(sql_error)?;
             let visible = documents
                 .get(&DocumentId::from(document_id.unwrap_or_default()))
                 .and_then(|doc| sources.get(&doc.source_id))
@@ -357,6 +360,7 @@ impl SqlKnowledgeStore {
                     id: ChunkId::from(id),
                     source: source.unwrap_or_default(),
                     has_text,
+                    content_hash: content_hash.unwrap_or_default(),
                 });
             }
         }

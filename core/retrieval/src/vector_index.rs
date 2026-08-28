@@ -8,7 +8,7 @@
 
 use async_trait::async_trait;
 use engram_domain::{EmbeddingSpace, Id};
-use engram_runtime::CoreResult;
+use engram_runtime::{CoreError, CoreResult};
 use std::collections::HashSet;
 
 /// Vector index with embedding-space validation.
@@ -49,6 +49,20 @@ pub trait VectorIndex: Send + Sync {
         query_vector: Vec<f32>,
         limit: usize,
     ) -> CoreResult<Vec<(Id, f32)>>;
+
+    /// Fetches the stored embedding for one target id (point read).
+    ///
+    /// Durable content dedup ([durable-dedup]) uses this to REUSE a twin
+    /// chunk's vector instead of re-running inference: when a pending chunk's
+    /// text hash matches an already-embedded chunk, the twin's vector is
+    /// fetched and inserted for the new id. Default: unsupported — callers
+    /// fall back to the model (previous behavior).
+    async fn vector_for_target(&self, _target_id: &Id) -> CoreResult<Option<Vec<f32>>> {
+        Err(CoreError::Adapter {
+            adapter: "vector_index".to_owned(),
+            message: "vector_for_target is not supported".to_owned(),
+        })
+    }
 
     /// Returns the set of target ids that already have a vector in this index.
     ///

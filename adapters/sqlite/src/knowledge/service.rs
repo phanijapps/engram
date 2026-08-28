@@ -325,44 +325,56 @@ impl SqlKnowledgeStore {
     /// second vs ~1.4s + hundreds of MB for full records).
     pub async fn list_chunk_refs(&self, scope: &Scope) -> CoreResult<Vec<ChunkRefLite>> {
         let connection = self.lock()?;
-        let sources = load_all_sources(&connection)?;
-        let documents = load_all_documents(&connection)?;
-        let mut statement = connection
-            .prepare(
-                "SELECT id, \
-                        json_extract(record_json, '$.documentId'), \
-                        json_extract(record_json, '$.provenance.source'), \
-                        length(coalesce(json_extract(record_json, '$.text'), '')) > 0, \
-                        coalesce(json_extract(record_json, '$.contentHash'), '') \
-                 FROM knowledge_chunks ORDER BY id",
-            )
-            .map_err(sql_error)?;
+        // Perf (2026-08-28): visibility via the source_id COLUMN (both tables
+        // carry it) and the scope predicate pushed into SQL — the previous
+        // shape loaded + deserialized EVERY source and document record into
+        // in-memory maps for per-row visibility checks (~1.1s on the
+        // 92k-chunk store per call; the equivalent SQL runs in ~20ms, and
+        // json_extract itself is cheap — the Rust-side record parsing was
+        // the cost).
+        //
+        // Scope semantics mirror scope_allows EXACTLY: a Some request field
+        // requires record equality (NULL is NOT a wildcard — the first
+        // version of this query used `IS NULL OR =` and silently widened
+        // visibility by ~19k chunks); a None request field is unconstrained.
+        let mut predicate = String::from("tenant = ?");
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(scope.tenant.clone())];
+        for (column, value) in [
+            ("subject", &scope.subject),
+            ("workspace", &scope.workspace),
+            ("session", &scope.session),
+            ("environment", &scope.environment),
+        ] {
+            if let Some(v) = value {
+                predicate.push_str(&format!(" AND {column} = ?"));
+                params.push(Box::new(v.clone()));
+            }
+        }
+        let sql = format!(
+            "SELECT c.id, \
+                    coalesce(json_extract(c.record_json, '$.provenance.source'), ''), \
+                    length(coalesce(json_extract(c.record_json, '$.text'), '')) > 0, \
+                    coalesce(json_extract(c.record_json, '$.contentHash'), '') \
+             FROM knowledge_chunks c \
+             WHERE c.source_id IN (\
+                 SELECT id FROM knowledge_sources WHERE {predicate}\
+             ) ORDER BY c.id"
+        );
+        let mut statement = connection.prepare(&sql).map_err(sql_error)?;
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
         let rows = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, Option<String>>(1)?,
-                    row.get::<_, Option<String>>(2)?,
-                    row.get::<_, bool>(3)?,
-                    row.get::<_, Option<String>>(4)?,
-                ))
+            .query_map(param_refs.as_slice(), |row| {
+                Ok(ChunkRefLite {
+                    id: ChunkId::from(row.get::<_, String>(0)?),
+                    source: row.get::<_, String>(1)?,
+                    has_text: row.get::<_, bool>(2)?,
+                    content_hash: row.get::<_, String>(3)?,
+                })
             })
             .map_err(sql_error)?;
         let mut refs = Vec::new();
         for row in rows {
-            let (id, document_id, source, has_text, content_hash) = row.map_err(sql_error)?;
-            let visible = documents
-                .get(&DocumentId::from(document_id.unwrap_or_default()))
-                .and_then(|doc| sources.get(&doc.source_id))
-                .is_some_and(|s| scope_allows(&s.scope, scope));
-            if visible {
-                refs.push(ChunkRefLite {
-                    id: ChunkId::from(id),
-                    source: source.unwrap_or_default(),
-                    has_text,
-                    content_hash: content_hash.unwrap_or_default(),
-                });
-            }
+            refs.push(row.map_err(sql_error)?);
         }
         Ok(refs)
     }

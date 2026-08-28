@@ -307,13 +307,30 @@ impl VectorIndex for SqliteVectorIndex {
 
     async fn embedded_ids(&self) -> CoreResult<std::collections::HashSet<Id>> {
         let conn = self.connection.lock().unwrap();
-        let rows: Vec<String> = conn
-            .prepare("SELECT id FROM vectors")
-            .map_err(sql_error)?
-            .query_map([], |row| row.get::<_, String>(0))
-            .map_err(sql_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(sql_error)?;
+        // Fast path: the vec0 SHADOW table `vectors_rowids` is a plain sqlite
+        // table holding the id map — reading it skips the virtual-table
+        // machinery entirely (~12ms for 41k ids vs ~1.0s through vec0 on the
+        // eval store; the scan runs on EVERY scan/reindex call). The shadow
+        // layout (`<table>_rowids`, `id TEXT UNIQUE`) is defined by the
+        // pinned sqlite-vec; if a future sqlite-vec renames it, the query
+        // errors and we fall back to the virtual-table scan — behavior is
+        // never lost, only speed.
+        let rows: Vec<String> =
+            match conn
+                .prepare("SELECT id FROM vectors_rowids")
+                .and_then(|mut stmt| {
+                    stmt.query_map([], |row| row.get::<_, String>(0))?
+                        .collect::<Result<Vec<_>, _>>()
+                }) {
+                Ok(rows) => rows,
+                Err(_) => conn
+                    .prepare("SELECT id FROM vectors")
+                    .map_err(sql_error)?
+                    .query_map([], |row| row.get::<_, String>(0))
+                    .map_err(sql_error)?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(sql_error)?,
+            };
         // A stored id that fails validation is adapter-level corruption; skip
         // it rather than failing the whole listing (the per-chunk insert path
         // still validates ids on read).
@@ -679,5 +696,40 @@ mod durable_dedup_tests {
         // Unknown target: Ok(None) (not an error — the caller falls to model).
         let missing = block_on(index.vector_for_target(&Id::from("nope"))).unwrap();
         assert!(missing.is_none());
+    }
+}
+
+#[cfg(test)]
+mod shadow_fast_path_tests {
+    use super::*;
+    use engram_domain::EmbeddingSpace;
+    use engram_retrieval::VectorIndex as _;
+    use futures::executor::block_on;
+
+    /// The `vectors_rowids` shadow fast path and the virtual-table scan must
+    /// agree exactly after inserts (and after a delete — shadow rows go too).
+    #[test]
+    fn shadow_and_virtual_table_agree() {
+        let index = SqliteVectorIndex::open_in_memory(4).unwrap();
+        let space = index.embedding_space().clone();
+        let a = Id::from("chunk-a");
+        let b = Id::from("chunk-b");
+        block_on(async {
+            engram_retrieval::VectorIndex::insert(&index, &a, &space, vec![1.0, 0.0, 0.0, 0.0])
+                .await
+        })
+        .unwrap();
+        block_on(async {
+            engram_retrieval::VectorIndex::insert(&index, &b, &space, vec![0.0, 1.0, 0.0, 0.0])
+                .await
+        })
+        .unwrap();
+        let ids = block_on(index.embedded_ids()).unwrap();
+        assert_eq!(ids.len(), 2);
+        // Delete one — the shadow row must follow (fast path stays honest).
+        block_on(index.delete_target(&b)).unwrap();
+        let after = block_on(index.embedded_ids()).unwrap();
+        assert_eq!(after.len(), 1);
+        assert!(after.contains(&a));
     }
 }

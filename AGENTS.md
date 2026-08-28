@@ -11,7 +11,7 @@ The implementation stack is accepted (`docs/adr/0003-implementation-stack.md`,
 Status: Accepted). Before implementation work, run:
 
 ```bash
-.codex/hooks/pre-implementation-check.sh
+scripts/ci/check-contracts.sh && scripts/ci/check-engine-neutrality.sh
 ```
 
 ## Target Repository Shape
@@ -236,27 +236,21 @@ cargo check --workspace
 pnpm run contracts:generate
 pnpm run typecheck
 pnpm run test
-.codex/hooks/check-contracts.sh
-.codex/hooks/check-docs.sh
-.codex/hooks/check-engine-neutrality.sh   # ADR-0022 rule-1 gate (engine neutrality)
-.codex/hooks/check-surface-parity.sh      # ADR-0022 surface-parity gate (Rust facade ↔ N-API binding)
+scripts/ci/check-contracts.sh
+scripts/ci/check-docs.sh
+scripts/ci/check-engine-neutrality.sh     # ADR-0022 rule-1 gate (engine neutrality)
+scripts/ci/check-surface-parity.sh        # ADR-0022 surface-parity gate (Rust facade ↔ N-API binding)
 ```
 
 Run `pnpm run build` after TypeScript package surface changes.
 
 ## Local Codex Assets
 
-- Use `.codex/skills/engram-contract` for changes to
-  `docs/domain-data-model.md`, JSON schemas, generated contracts, or
-  compatibility policy.
-- Use `.codex/skills/engram-plan` when sequencing crates, packages, adapters,
-  bindings, or milestones.
-- Use `.codex/skills/engram-eval` when designing recall, leakage, policy,
-  ranking, belief, hierarchy, or ingestion evaluations.
-- Use `.codex/skills/engram-code-docs` when adding or reviewing Rust,
-  TypeScript, SDK, binding, adapter, example, or public API documentation.
-- Use `.codex/agents/` as role briefs for contract, Rust-core, evaluation, and
-  integration-boundary reviews.
+- The project-specific `.codex/skills/engram-*` and `.codex/agents/*` briefs
+  were superseded by the agent-bundle refresh (2026-08-26). The generic
+  workflow skills now present under `.codex/skills/` (`new-spec`, `new-adr`,
+  `new-rcf`, `work-loop`, `new-guide`) cover the same loop; the CI gates under
+  `scripts/ci/` carry the enforcement the old hooks owned.
 - Install local Git hooks with `git config core.hooksPath .githooks` when this
   workspace should enforce checks on commit.
 

@@ -796,6 +796,7 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
     registry.register(ToolRecord {
         name: "code",
         description: "Understand this codebase. ONE code-intel surface. \
+                      op=search: ranked code search by query text. \
                       op=context: callers/callees/community for a symbol. \
                       op=impact: blast radius + dependency path from a change. \
                       op=health: dead code + repository stats. \
@@ -806,7 +807,7 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
         input_schema: json!({
             "type": "object",
             "properties": {
-                "op": { "type": "string", "enum": ["context", "impact", "health", "architecture", "changed", "explore", "dependencies"],
+                "op": { "type": "string", "enum": ["search", "context", "impact", "health", "architecture", "changed", "explore", "dependencies"],
                         "description": "Code intelligence operation." },
                 "symbol": { "type": "string", "description": "Target symbol (context/impact modes)." },
                 "query": { "type": "string", "description": "Search query (explore mode)." },
@@ -1015,12 +1016,18 @@ fn consolidated_remember(app: &App, args: &Value) -> Result<Value, ToolError> {
 fn consolidated_recall(app: &App, args: &Value) -> Result<Value, ToolError> {
     let mode = args["mode"].as_str().unwrap_or("fused");
     match mode {
-        "keyword" => crate::codegraph::search(
-            app,
-            &json!({
-                "query": args["query"], "limit": args.get("limit").cloned().unwrap_or(json!(10))
-            }),
-        ),
+        "keyword" => {
+            // Phase 1.2: keyword mode was misrouting to code search (lexical
+            // code chunks) — now routes to memory recall with the memory lane
+            // so keyword queries find FACTS and MEMORIES, not code chunks.
+            crate::tools::recall(
+                app,
+                &json!({
+                    "mode": "hybrid", "query": args["query"],
+                    "limit": args.get("limit").cloned().unwrap_or(json!(10))
+                }),
+            )
+        }
         "context" => crate::codegraph::get_context(
             app,
             &json!({
@@ -1040,6 +1047,15 @@ fn consolidated_recall(app: &App, args: &Value) -> Result<Value, ToolError> {
 fn consolidated_code(app: &App, args: &Value) -> Result<Value, ToolError> {
     let op = args["op"].as_str().unwrap_or("context");
     match op {
+        "search" => crate::codegraph::search(
+            app,
+            &json!({
+                "query": args.get("query")
+                    .or_else(|| args.get("symbol").filter(|v| !v.is_null()))
+                    .unwrap_or(&json!("")),
+                "limit": args.get("limit").cloned().unwrap_or(json!(5))
+            }),
+        ),
         "impact" => crate::codegraph::change_impact(
             app,
             &json!({
@@ -1112,13 +1128,31 @@ fn consolidated_graph(app: &App, args: &Value) -> Result<Value, ToolError> {
 fn consolidated_forget(app: &App, args: &Value) -> Result<Value, ToolError> {
     let kind = args["kind"].as_str().unwrap_or("memory");
     match kind {
-        "belief" => crate::belief::belief_retract(app, &json!({"subject": args["subject"]})),
-        _ => crate::tools::forget(
-            app,
-            &json!({
-                "id": args["id"], "mode": args.get("mode").cloned().unwrap_or(json!("tombstone"))
-            }),
-        ),
+        "belief" => {
+            let subject = args["subject"].as_str();
+            if subject.is_none() || subject == Some("") {
+                return Ok(protocol::text_content(
+                    "forget: kind=belief requires a `subject` (the belief's subject key). \\
+n                     Use recall first to find the belief, then forget by subject.",
+                ));
+            }
+            crate::belief::belief_retract(app, &json!({"subject": args["subject"]}))
+        }
+        _ => {
+            let id = args["id"].as_str();
+            if id.is_none() || id == Some("") {
+                return Ok(protocol::text_content(
+                    "forget: kind=memory requires an `id` (the memory record ID). \\
+                     Use recall or graph to find the ID first, then forget by id. \\\n                     kind=belief requires a `subject` instead.",
+                ));
+            }
+            crate::tools::forget(
+                app,
+                &json!({
+                    "id": args["id"], "mode": args.get("mode").cloned().unwrap_or(json!("tombstone"))
+                }),
+            )
+        }
     }
 }
 

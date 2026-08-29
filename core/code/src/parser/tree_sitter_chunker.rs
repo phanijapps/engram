@@ -542,10 +542,6 @@ fn has_declaration_descendant(node: &tree_sitter::Node, kind_map: &HashMap<&str,
     false
 }
 
-/// Walks the AST collecting: (1) function declaration spans for scope tracking,
-/// and (2) call-expression sites with their callee names (not filtered — the
-/// caller decides which to keep).
-
 /// Reference name for a call site: the callee node's full dotted text with
 /// `self`/`Self` prefixes stripped (`self.store.save` → `store.save`);
 /// non-dotted calls return the bare callee name.

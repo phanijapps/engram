@@ -213,7 +213,7 @@ impl KnowledgeGraphRepository for SqlKnowledgeStore {
         status: UnresolvedReferenceStatus,
         scope: &Scope,
     ) -> CoreResult<()> {
-        let mut connection = self.lock()?;
+        let connection = self.lock()?;
         let existing = connection
             .query_row(
                 "SELECT record_json FROM knowledge_unresolved_refs WHERE id = ?1",

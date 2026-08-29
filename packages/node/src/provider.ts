@@ -81,6 +81,8 @@ export interface ScopeCounts {
   hierarchyRelations: number;
 }
 
+/** The typed transport over the native binding — every route in the TS MCP
+ *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;

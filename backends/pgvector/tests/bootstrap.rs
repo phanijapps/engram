@@ -481,8 +481,7 @@ fn pg_recipe_recall_fuses_vector_lane() {
 fn pg_recipe_sqlite_export_import_round_trip() {
     use engram_domain::*;
     use engram_integration::{
-        CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, EngramProvider, ExportImport as _,
-        MigrationMode, UnifiedRecall as _,
+        CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, EngramProvider, MigrationMode,
     };
 
     // ---- 1. Seed a SQLite provider with one memory (typed full request).

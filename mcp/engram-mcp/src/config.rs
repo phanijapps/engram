@@ -60,7 +60,9 @@ pub struct McpConfig {
     pub backend: McpBackend,
     /// Postgres connection string when `backend == pgvector`. Required for
     /// that backend; accepted from `--pg-connection-string` or the
-    /// `ENGRAM_PG_CONNECTION_STRING` env var.
+    /// `ENGRAM_PG_CONNECTION_STRING` env var. (Read only under the `pgvector`
+    /// cargo feature — hence the cfg_attr.)
+    #[cfg_attr(not(feature = "pgvector"), allow(dead_code))]
     pub pg_connection_string: Option<String>,
 }
 

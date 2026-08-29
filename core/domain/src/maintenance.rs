@@ -277,22 +277,17 @@ pub struct MaintenanceApplyResult {
 /// Whether a maintenance operation mutates. `Preview` (the default) stages and
 /// reports without committing; `Apply` commits inside one backend transaction
 /// where the backend supports it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApplyMode {
+    #[default]
     Preview,
     Apply,
 }
 
-impl Default for ApplyMode {
-    fn default() -> Self {
-        Self::Preview
-    }
-}
-
 /// Filter for listing entities. Active records only by default
 /// (`include_archived = false`), per ADR-0027.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EntityFilter {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -307,20 +302,8 @@ pub struct EntityFilter {
     pub include_archived: bool,
 }
 
-impl Default for EntityFilter {
-    fn default() -> Self {
-        Self {
-            graph_id: None,
-            kinds: Vec::new(),
-            source_id: None,
-            min_confidence: None,
-            include_archived: false,
-        }
-    }
-}
-
 /// Filter for listing relationships. Active records only by default.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RelationshipFilter {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -333,18 +316,6 @@ pub struct RelationshipFilter {
     pub min_confidence: Option<f32>,
     #[serde(default)]
     pub include_archived: bool,
-}
-
-impl Default for RelationshipFilter {
-    fn default() -> Self {
-        Self {
-            graph_id: None,
-            predicate: None,
-            source_id: None,
-            min_confidence: None,
-            include_archived: false,
-        }
-    }
 }
 
 /// Request to build a dry-run maintenance plan.

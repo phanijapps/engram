@@ -109,6 +109,7 @@ export function isNoiseConcept(name: string): boolean {
   return false;
 }
 
+/** Extraction outcome: documents read, entities/relationships written, skipped. */
 export interface ExtractKnowledgeResult {
   documentsRead: number;
   /** Concept entities upserted (count of putEntity calls — re-runs upsert the
@@ -121,6 +122,7 @@ export interface ExtractKnowledgeResult {
   skipped: number;
 }
 
+/** Options for LLM knowledge extraction over a scope's document graphs. */
 export interface ExtractKnowledgeOptions {
   transport: NativeProviderTransport;
   scope: Scope;

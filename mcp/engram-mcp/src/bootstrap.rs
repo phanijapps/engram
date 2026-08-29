@@ -29,8 +29,8 @@ pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
     }
 }
 
-/// PS1: open through the `backends/pgvector` recipe — Postgres holds the graph
-/// + chunks + memories + vectors. The recipe (ADR-0022) owns connection
+/// PS1: open through the `backends/pgvector` recipe — Postgres holds the
+/// graph, chunks, memories, and vectors. The recipe (ADR-0022) owns connection
 /// lifecycle, idempotent schema application, and cell composition; this
 /// function only builds the engine-neutral config. Requires the `pgvector`
 /// cargo feature at build time.
@@ -262,7 +262,7 @@ mod tests {
 
     /// A valid weighted `.engram/recall.json` is applied (the provider opens
     /// with the weighted config). The weighted-fusion-active half of the chain
-    /// (that `SqlUnifiedRecall` honors the weights) is covered by the
+    /// (that the engine's unified recall honors the weights) is covered by the
     /// integration-level recall tests; this test proves the MCP feeder.
     #[test]
     fn open_provider_loads_valid_recall_fusion_from_engram_dir() {

@@ -532,9 +532,11 @@ fn stage_mutation(
         } => stage_rewrite(
             conn,
             relationship,
-            new_predicate.as_ref(),
-            new_subject.as_ref(),
-            new_object.as_ref(),
+            &Rewrite {
+                predicate: new_predicate.as_ref(),
+                subject: new_subject.as_ref(),
+                object: new_object.as_ref(),
+            },
             scope,
             actor,
             ts,
@@ -627,13 +629,19 @@ fn stage_alias(
     Ok(StageOutcome::Changed)
 }
 
+/// A rewrite mutation's fields — grouping keeps `stage_rewrite`'s signature
+/// within clippy's argument budget.
+struct Rewrite<'a> {
+    predicate: Option<&'a String>,
+    subject: Option<&'a EntityId>,
+    object: Option<&'a EntityId>,
+}
+
 /// Rewrite a relationship's predicate/subject/object in place (idempotent).
 fn stage_rewrite(
     conn: &Connection,
     rel_id: &RelationshipId,
-    new_predicate: Option<&String>,
-    new_subject: Option<&EntityId>,
-    new_object: Option<&EntityId>,
+    rewrite: &Rewrite<'_>,
     scope: &Scope,
     actor: &Actor,
     ts: Timestamp,
@@ -645,19 +653,19 @@ fn stage_rewrite(
         return Ok(StageOutcome::Unchanged);
     }
     let mut changed = false;
-    if let Some(p) = new_predicate {
+    if let Some(p) = rewrite.predicate {
         if &rel.predicate != p {
             rel.predicate = p.clone();
             changed = true;
         }
     }
-    if let Some(s) = new_subject {
+    if let Some(s) = rewrite.subject {
         if rel.subject.id.as_ref() != Some(s) {
             rel.subject.id = Some(s.clone());
             changed = true;
         }
     }
-    if let Some(o) = new_object {
+    if let Some(o) = rewrite.object {
         if rel.object.id.as_ref() != Some(o) {
             rel.object.id = Some(o.clone());
             changed = true;
@@ -915,10 +923,8 @@ fn coalesce_survivor_relationships(
     let mut to_archive: Vec<(i64, KnowledgeRelationship)> = Vec::new();
     for (rowid, rel) in entries {
         let key = engram_knowledge::identity::compute_relationship_key(&rel);
-        if seen.contains_key(&key) {
+        if seen.insert(key, rowid).is_some() {
             to_archive.push((rowid, rel));
-        } else {
-            seen.insert(key, rowid);
         }
     }
     for (rowid, mut rel) in to_archive {
@@ -1059,15 +1065,20 @@ fn build_mutation_preview(
             new_subject,
             new_object,
         } => {
+            let rewrite = Rewrite {
+                predicate: new_predicate.as_ref(),
+                subject: new_subject.as_ref(),
+                object: new_object.as_ref(),
+            };
             let cur = load_relationship(conn, relationship, scope)?;
             let after = cur.clone().map(|mut r| {
-                if let Some(p) = new_predicate {
+                if let Some(p) = rewrite.predicate {
                     r.predicate = p.clone();
                 }
-                if let Some(s) = new_subject {
+                if let Some(s) = rewrite.subject {
                     r.subject.id = Some(s.clone());
                 }
-                if let Some(o) = new_object {
+                if let Some(o) = rewrite.object {
                     r.object.id = Some(o.clone());
                 }
                 r

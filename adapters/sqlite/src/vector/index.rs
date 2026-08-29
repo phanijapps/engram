@@ -673,8 +673,6 @@ mod tests {
 #[cfg(test)]
 mod durable_dedup_tests {
     use super::*;
-    use engram_domain::EmbeddingSpace;
-    use engram_retrieval::VectorIndex as _;
     use futures::executor::block_on;
 
     /// [durable-dedup] point read: insert a vector for a target, read it
@@ -702,8 +700,6 @@ mod durable_dedup_tests {
 #[cfg(test)]
 mod shadow_fast_path_tests {
     use super::*;
-    use engram_domain::EmbeddingSpace;
-    use engram_retrieval::VectorIndex as _;
     use futures::executor::block_on;
 
     /// The `vectors_rowids` shadow fast path and the virtual-table scan must

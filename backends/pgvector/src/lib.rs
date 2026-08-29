@@ -95,7 +95,7 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // The embedder is also exposed on the provider so the MCP scan path can
     // embed chunks into PgVectorIndex (scan_repo's incremental embed step
     // requires `embedding_provider()` + `require_vectors()`).
-    let mut embedding_provider: Option<Arc<dyn engram_integration::EmbeddingProvider>> = None;
+    let embedding_provider: Option<Arc<dyn engram_integration::EmbeddingProvider>> = None;
     #[cfg(feature = "fastembed")]
     {
         // Model-load failure DEGRADES (no embedder ⇒ facts+beliefs recall, the

@@ -285,7 +285,7 @@ fn embed_pending(
     let mut pending: Vec<&engram_integration::ChunkRef> = refs
         .iter()
         .filter(|r| {
-            r.has_text && !have.contains(&r.id) && source_filter.map_or(true, |src| r.source == src)
+            r.has_text && !have.contains(&r.id) && source_filter.is_none_or(|src| r.source == src)
         })
         .collect();
     pending.sort_by_key(|r| r.id.as_str().to_owned());
@@ -2111,6 +2111,7 @@ fn apply_lane_budgets<'a>(
 /// - The recall query is the items joined space-separated, so recall searches
 ///   for ALL terms in one fused pass.
 /// - The output header carries `(anchors: [sym1, sym2, sym3])`.
+///
 /// This lets an agent pass `focus: ["loginAnthropic", "resolveStoredOAuth",
 /// "createClient"]` in one call instead of 3 separate get_context calls.
 ///
@@ -2369,15 +2370,19 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     // there is no extra store/recall cost.
     let assessment = build_assessment(
         &recall_items,
-        recall_entity_count,
-        recall_chunk_count,
-        recall_memory_count,
-        &links,
+        &RecallCounts {
+            entities: recall_entity_count,
+            chunks: recall_chunk_count,
+            memories: recall_memory_count,
+        },
+        &AssessmentGraph {
+            links: &links,
+            unavailable: graph_unavailable,
+        },
         &code_ctx,
         &anchor_symbol,
         &primary_focus,
         &focus_list,
-        graph_unavailable,
     );
 
     Ok(protocol::text_content(format!(
@@ -2402,22 +2407,37 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
 ///   terms + anchor symbol (not generic placeholders): `search`, `symbol_context`
 ///   (depth+1 for a deeper call chain), `graph_neighbors` (all relationship
 ///   types, not just the call graph).
+///
+/// The recall-payload counts `build_assessment` narrates (grouped to keep the
+/// fn inside clippy's argument budget).
+struct RecallCounts {
+    entities: usize,
+    chunks: usize,
+    memories: usize,
+}
+
+/// The graph-side inputs (links + availability flag) — grouped with the counts.
+struct AssessmentGraph<'a> {
+    links: &'a [String],
+    unavailable: bool,
+}
+
 fn build_assessment(
     recall_items: &[engram_domain::RetrievalResult],
-    entity_count: usize,
-    chunk_count: usize,
-    memory_count: usize,
-    links: &[String],
+    counts: &RecallCounts,
+    graph: &AssessmentGraph<'_>,
     code_ctx: &engram_codegraph_queries::SymbolContext,
     anchor_symbol: &str,
     primary_focus: &str,
     focus_list: &[String],
-    graph_unavailable: bool,
 ) -> String {
     let total = recall_items.len();
+    let (entity_count, chunk_count, memory_count) =
+        (counts.entities, counts.chunks, counts.memories);
     let other_count = total.saturating_sub(entity_count + chunk_count + memory_count);
 
-    let graph_populated = !links.is_empty() && !graph_unavailable;
+    let links = graph.links;
+    let graph_populated = !links.is_empty() && !graph.unavailable;
     let code_populated = !code_ctx.callers.is_empty() || !code_ctx.callees.is_empty();
 
     // Anchor line: name when resolved, else a hint that NL focus did not
@@ -2433,7 +2453,7 @@ fn build_assessment(
 
     // Missing-evidence notes — only the gaps that actually fired.
     let mut missing: Vec<String> = Vec::new();
-    if links.is_empty() && !graph_unavailable {
+    if links.is_empty() && !graph.unavailable {
         missing.push(
             "No graph relationships found for the anchor. The symbol may not have indexed call edges, or the anchor may not be a code symbol."
                 .to_owned(),
@@ -2445,7 +2465,7 @@ fn build_assessment(
                 .to_owned(),
         );
     }
-    if entity_count == 0 {
+    if counts.entities == 0 {
         missing.push(
             "Recall found no code entities. The query may need more specific identifiers, or the code may not be indexed. Try scan_repo first."
                 .to_owned(),
@@ -2865,7 +2885,7 @@ mod tests {
         // Five memory items ranked ahead of an entity → only the top 2 memory
         // items survive; the rest are dropped with a cap note. The entity is
         // unaffected (entity cap = 14).
-        let items = vec![
+        let items = [
             recall_item(RetrievalTargetType::Memory, "m1"),
             recall_item(RetrievalTargetType::Memory, "m2"),
             recall_item(RetrievalTargetType::Memory, "m3"),
@@ -2894,7 +2914,7 @@ mod tests {
         // limit = 20, Doc shape → memory cap = floor(20 * 35 / 100) = 7.
         // Five memory items all survive under the Doc budget (under Code they
         // would cap at 2). No lanes trimmed → no notes.
-        let items = vec![
+        let items = [
             recall_item(RetrievalTargetType::Memory, "m1"),
             recall_item(RetrievalTargetType::Memory, "m2"),
             recall_item(RetrievalTargetType::Memory, "m3"),
@@ -2911,7 +2931,7 @@ mod tests {
     fn lane_budget_caps_other_lane_and_emits_note() {
         // limit = 10, Mixed → other cap = max(floor(10 * 10 / 100), 1) = 1.
         // Two beliefs (Other bucket) → one kept, one dropped, note for 'other'.
-        let items = vec![
+        let items = [
             recall_item(RetrievalTargetType::Belief, "b1"),
             recall_item(RetrievalTargetType::Belief, "b2"),
         ];
@@ -2966,7 +2986,7 @@ mod tests {
             concept_refs: Vec::new(),
             ontology_class_refs: Vec::new(),
             provenance: engram_domain::Provenance {
-                source: format!("engram-mcp-scan [git@github.com:phanijapps/zbot.git@main:abc]"),
+                source: "engram-mcp-scan [git@github.com:phanijapps/zbot.git@main:abc]".to_string(),
                 actor: Actor {
                     id: Id::from("tester"),
                     kind: ActorKind::Agent,
@@ -3899,15 +3919,19 @@ mod tests {
 
         let assessment = build_assessment(
             &items,
-            2, // entity
-            1, // chunk
-            0, // memory
-            &links,
+            &RecallCounts {
+                entities: 2,
+                chunks: 1,
+                memories: 0,
+            },
+            &AssessmentGraph {
+                links: &links,
+                unavailable: false,
+            },
             &code_ctx,
             "loginAnthropic",
             "loginAnthropic",
             &focus_list,
-            false, // graph available
         );
 
         assert!(
@@ -3953,15 +3977,19 @@ mod tests {
 
         let assessment = build_assessment(
             &items,
-            0,
-            0,
-            0,
-            &links,
+            &RecallCounts {
+                entities: 0,
+                chunks: 0,
+                memories: 0,
+            },
+            &AssessmentGraph {
+                links: &links,
+                unavailable: false,
+            },
             &code_ctx,
             "someConcept",
             "someConcept",
             &focus_list,
-            false,
         );
 
         assert!(
@@ -3999,15 +4027,19 @@ mod tests {
 
         let assessment = build_assessment(
             &items,
-            1,
-            0,
-            0,
-            &links,
+            &RecallCounts {
+                entities: 1,
+                chunks: 0,
+                memories: 0,
+            },
+            &AssessmentGraph {
+                links: &links,
+                unavailable: false,
+            },
             &code_ctx,
             "loginAnthropic",
             "loginAnthropic",
             &focus_list,
-            false,
         );
 
         assert!(

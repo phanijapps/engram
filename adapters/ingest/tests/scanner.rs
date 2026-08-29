@@ -878,7 +878,6 @@ fn minified_heuristic_does_not_trip_on_source() {
 
 #[test]
 fn ledger_rows_persist_through_the_fan_in_and_heal_on_next_scan() {
-    use engram_domain::UnresolvedReferenceStatus;
     use engram_ingest::KnowledgeRepoGraph;
     use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
 
@@ -941,8 +940,7 @@ fn ledger_rows_persist_through_the_fan_in_and_heal_on_next_scan() {
 async fn store_pending(
     store: &std::sync::Arc<SqlKnowledgeStore>,
 ) -> engram_knowledge::CoreResult<Vec<engram_domain::UnresolvedReference>> {
-    use engram_knowledge::KnowledgeGraphRepository as _;
-    let handle: std::sync::Arc<dyn KnowledgeGraphRepository> = store.clone();
+    let handle: std::sync::Arc<dyn engram_knowledge::KnowledgeGraphRepository> = store.clone();
     handle
         .list_unresolved_refs(&scope(), UnresolvedReferenceStatus::Pending)
         .await

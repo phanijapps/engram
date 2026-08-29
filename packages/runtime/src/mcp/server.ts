@@ -18,6 +18,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 
 import { registerTools } from "./tools.js";
 
+/** HTTP-MCP server options (transport + listen port). */
 export interface McpHttpOptions {
   /** Inject a transport (tests). If unset, one is built from `configJson`. */
   transport?: NativeProviderTransport;

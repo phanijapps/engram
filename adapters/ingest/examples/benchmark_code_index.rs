@@ -63,7 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // One-file-edit sync: touch a small source file, re-scan with the manifest.
     let mut edit_path = None;
-    let mut walker = |dir: &std::path::Path| -> Option<std::path::PathBuf> {
+    let walker = |dir: &std::path::Path| -> Option<std::path::PathBuf> {
         let mut stack = vec![dir.to_path_buf()];
         while let Some(d) = stack.pop() {
             for entry in std::fs::read_dir(&d).ok()? {

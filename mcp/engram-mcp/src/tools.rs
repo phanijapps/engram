@@ -342,7 +342,7 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
             format!("{}\n... [truncated]", &content[..end])
         };
         let would_be = joined.len() + excerpt.len() + 5; // +5 for "\n---\n"
-        if joined.len() > 0 && would_be > RECALL_TOTAL_CHAR_BUDGET {
+        if !joined.is_empty() && would_be > RECALL_TOTAL_CHAR_BUDGET {
             items_skipped += 1;
             continue;
         }

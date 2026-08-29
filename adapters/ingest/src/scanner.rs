@@ -550,7 +550,7 @@ where
                         let path = ingested.document.path.as_deref();
                         crate::extractor::register_entities(&mut idx, &g.entities, repo, path);
                         g.unresolved =
-                            engram_code::resolve_refs(&mut idx, &mut g.relationships, repo, path);
+                            engram_code::resolve_refs(&idx, &mut g.relationships, repo, path);
                     }
                     // Persist the graph + entities + relationships + ledger.
                     let _ = block_on(async {

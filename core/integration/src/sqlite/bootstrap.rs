@@ -759,9 +759,7 @@ fn select_reranker(
     rerank: Option<&engram_retrieval::RerankConfig>,
     embedding_provider: Option<&Arc<dyn crate::EmbeddingProvider>>,
 ) -> Option<Arc<dyn engram_retrieval::RetrievalReranker>> {
-    let Some(cfg) = rerank else {
-        return None;
-    };
+    let cfg = rerank?;
     match cfg.strategy {
         RerankStrategy::None => None,
         RerankStrategy::Mmr => select_mmr(embedding_provider, cfg.lambda),

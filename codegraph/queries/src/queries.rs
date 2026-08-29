@@ -45,6 +45,9 @@ pub fn call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(String, Strin
 /// `dead_code` mark every `new` live and `central_symbols` rank std/trait
 /// methods as the graph's hubs. Navigation queries keep [`call_edges`]
 /// (name-based) unchanged: suffix seed resolution depends on names.
+#[allow(dead_code)] // kept: the resolved-edge filter contract is unit-tested
+// (unresolved evidence must vanish) — the AnalyticsGraph inlines
+// the same predicate; these tests pin the semantics.
 pub fn resolved_call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(String, String)> {
     relationships
         .iter()
@@ -206,10 +209,7 @@ pub fn central_symbols(graph: &AnalyticsGraph, limit: usize) -> Vec<(String, f64
         engram_graph_analytics::pagerank(graph.edges(), 0.85, 100, 1e-6)
             .into_iter()
             .collect();
-    let mut ranked = ranked
-        .into_iter()
-        .map(|(id, score)| (id, score))
-        .collect::<Vec<_>>();
+    let mut ranked: Vec<(String, f64)> = ranked.into_iter().collect();
     ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
     ranked.truncate(limit);
     let labels = graph.display_all(ranked.iter().map(|(id, _)| id.as_str()));

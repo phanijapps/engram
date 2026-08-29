@@ -72,7 +72,7 @@ impl<C> ToolRegistry<C> {
     /// Remove tools whose names are NOT in `keep`. No-op if `keep` is None.
     pub fn retain(&mut self, keep: Option<&[&str]>) {
         if let Some(names) = keep {
-            self.tools.retain(|t| names.iter().any(|n| *n == t.name));
+            self.tools.retain(|t| names.contains(&t.name));
         }
     }
 

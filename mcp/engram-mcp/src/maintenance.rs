@@ -38,7 +38,7 @@ pub(crate) fn scope_from_args(app: &App, args: &Value) -> Result<Scope, ToolErro
 /// request struct (plan build/apply) rather than reading `scope` directly.
 fn args_with_default_scope(app: &App, args: &Value) -> Value {
     let mut v = args.clone();
-    if v.get("scope").map_or(true, |s| s.is_null()) {
+    if v.get("scope").is_none_or(|s| s.is_null()) {
         if let Ok(scope) = serde_json::to_value(&app.scope) {
             v["scope"] = scope;
         }

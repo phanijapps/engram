@@ -12,7 +12,7 @@ use chrono::Utc;
 
 use engram_domain::{KnowledgeRelationship, UnresolvedReference, UnresolvedReferenceStatus};
 
-use crate::identity::{Resolution, SymbolCandidate, SymbolIndex};
+use crate::identity::{Resolution, SymbolIndex};
 use engram_domain::Id;
 
 /// Pascal-case a receiver hint (`store` → `Store`) for the qualified-name
@@ -160,6 +160,7 @@ fn content_key(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::SymbolCandidate;
     use crate::identity::SymbolIndex;
     use engram_domain::*;
 

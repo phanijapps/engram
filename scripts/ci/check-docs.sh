@@ -42,6 +42,6 @@ fi
 scripts/ci/check-code-docs.sh
 python3 tools/scripts/check_architecture_guards.py
 python3 tools/scripts/check_ts_native_delegation.py
-.codex/hooks/check-research-parity-docs.sh
+scripts/ci/check-research-parity-docs.sh
 
 echo "documentation checks passed"

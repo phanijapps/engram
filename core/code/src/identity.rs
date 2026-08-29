@@ -126,7 +126,6 @@ impl SymbolIndex {
     }
 
     /// Number of distinct name keys (diagnostics/tests).
-
     /// Looks a candidate up by its entity id (the canonical-name source for
     /// healed sweep edges).
     pub fn lookup(&self, id: &str) -> Option<&SymbolCandidate> {

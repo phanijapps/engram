@@ -44,7 +44,7 @@ fn main() {
              [--org <name> --domain <name> [--subdomain <name>]] \
              [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
              [--db-file <name>] [--backend sqlite|pgvector] \
-             [--pg-connection-string <url>] [--tools <profile>] [--no-vector]"
+             [--pg-connection-string <url>] [--tools core|full|all] [--no-vector]"
         );
         std::process::exit(2);
     });
@@ -90,99 +90,48 @@ fn main() {
 /// stays focused. Pass via `--tools <profile>`.
 fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
     match profile {
-        "" | "all" => None, // None = register everything (backward compat).
-        "investigate" => Some(&[
-            "ping",
-            "recall",
-            "search",
-            "get_context",
-            "symbol_context",
-            "change_impact",
-            "file_dependencies",
-            "explore",
-            "resolve_entity",
-            "graph_neighbors",
-            "write_memory",
-            "store_knowledge",
-            "put_entity",
-            "put_relationship",
-            "capability_report",
-        ]),
-        "read" => Some(&[
-            "ping",
-            "recall",
-            "search",
-            "get_context",
-            "symbol_context",
-            "change_impact",
-            "resolve_entity",
-            "graph_neighbors",
-            "graph_subgraph",
-            "belief_get",
-            "contradiction_list",
-            "hierarchy_path",
-            "architecture",
-            "code_health",
-            "whats_changed",
-            "file_dependencies",
-            "explore",
-            "predict_context",
-            "capability_report",
-            "ontology_read",
-            "taxonomy_read",
-        ]),
-        "scan" => Some(&[
-            "ping",
-            "scan_repo",
-            "scan_protocols",
-            "scan_dependencies",
-            "scan_ownership",
-            "index_docs",
-            "search",
-            "capability_report",
-        ]),
-        "write" => Some(&[
-            "ping",
-            "write_memory",
-            "forget",
-            "put_entity",
-            "put_relationship",
-            "store_knowledge",
-            "index_docs",
-            "belief_put",
-            "belief_retract",
-            "procedure_put",
-            "procedure_increment",
-            "capability_report",
-        ]),
-        "maintain" => Some(&[
-            "ping",
-            "consolidate",
-            "belief_stale_list",
-            "contradiction_list",
-            "procedure_list",
-            "hierarchy_build",
-            "capability_report",
-        ]),
-        "core" => Some(&["remember", "recall", "code", "scan", "graph", "forget"]),
-        "full" => Some(&[
-            "remember",
-            "recall",
-            "code",
-            "scan",
-            "graph",
-            "forget",
-            "maintain",
-            "beliefs",
-            "procedures",
-            "hierarchy",
-        ]),
+        // Consolidated surface: 6 rich verbs. DEFAULT — the daily driver.
+        "core" | "" => Some(CORE_TOOLS),
+        // Consolidated + specialist: 10 tools for maintenance work.
+        "full" => Some(FULL_TOOLS),
+        // Legacy granular surface: all 44 tools. Superseded — kept for
+        // backward compatibility; new integrations should use core/full.
+        "all" => None,
+        // Legacy granular profiles — superseded by core/full. Still work
+        // for existing deployments but are deprecated.
+        "investigate" | "read" | "scan" | "write" | "maintain" => {
+            eprintln!(
+                "engram-mcp: --tools {profile} is superseded by --tools core or --tools full; \
+                 using the consolidated core surface"
+            );
+            Some(CORE_TOOLS)
+        }
         other => {
-            eprintln!("engram-mcp: unknown --tools profile '{other}', using all tools");
-            None
+            eprintln!(
+                "engram-mcp: unknown --tools profile '{other}'; using core (6 tools). \
+                 Options: core | full | all"
+            );
+            Some(CORE_TOOLS)
         }
     }
 }
+
+/// The 6 core consolidated tools — the 80/20 agent surface.
+pub static CORE_TOOLS: &[&str] = &["remember", "recall", "code", "scan", "graph", "forget"];
+
+/// The 10 full tools — core + specialist for maintenance/analysis work.
+pub static FULL_TOOLS: &[&str] = &[
+    "remember",
+    "recall",
+    "code",
+    "scan",
+    "graph",
+    "forget",
+    "maintain",
+    "beliefs",
+    "procedures",
+    "hierarchy",
+];
 
 /// Register every tool the server exposes, filtered by the active profile.
 fn register_all(registry: &mut ToolRegistry<App>, profile: &str) {

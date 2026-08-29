@@ -897,11 +897,12 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
                       op=candidates: list maintenance candidates. \
                       op=plan: build a dry-run maintenance plan. \
                       op=apply: apply a reviewed plan. \
-                      op=capabilities: report which capabilities are wired.",
+                      op=capabilities: report which capabilities are wired. \
+                      op=increment: bump a procedure counter (id + outcome=success|failure).",
         input_schema: json!({
             "type": "object",
             "properties": {
-                "op": { "type": "string", "enum": ["consolidate", "reindex", "health", "candidates", "plan", "apply", "capabilities"],
+                "op": { "type": "string", "enum": ["consolidate", "reindex", "health", "candidates", "plan", "apply", "capabilities", "increment"],
                         "description": "Maintenance operation." },
                 "limit": { "type": "number", "description": "Reindex chunk cap / candidate limit." },
                 "plan": { "type": "object", "description": "Maintenance plan JSON (op=apply)." },
@@ -1177,6 +1178,12 @@ fn consolidated_maintain(app: &App, args: &Value) -> Result<Value, ToolError> {
             }),
         ),
         "capabilities" => crate::codegraph::capability_report(app, args),
+        "increment" => crate::procedures::procedure_increment(
+            app,
+            &json!({
+                "id": args["id"], "outcome": args.get("outcome").cloned().unwrap_or(json!("success"))
+            }),
+        ),
         _ => crate::maintenance::graph_health(app, args),
     }
 }

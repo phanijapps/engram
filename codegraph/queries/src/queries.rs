@@ -81,6 +81,10 @@ pub fn resolved_call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(Stri
 /// [analytics-name-collision]). Display names are carried for output only.
 pub struct AnalyticsGraph {
     edges: Vec<(String, String)>,
+    /// Contains edges (Class → method) for liveness evidence in dead_code.
+    /// NOT in `edges()` — other analytics (centrality, betweenness) stays
+    /// calls-only so containers don't skew structural scores.
+    contains_edges: Vec<(String, String)>,
     names: HashMap<String, String>,
 }
 
@@ -90,10 +94,11 @@ impl AnalyticsGraph {
     pub fn from_relationships(relationships: &[KnowledgeRelationship]) -> Self {
         let mut names: HashMap<String, String> = HashMap::new();
         let mut edges: Vec<(String, String)> = Vec::new();
+        let mut contains_edges: Vec<(String, String)> = Vec::new();
         for r in relationships.iter().filter(|r| {
             matches!(
                 r.predicate.as_str(),
-                "calls" | "sends_request" | "handled_by"
+                "calls" | "sends_request" | "handled_by" | "contains"
             )
         }) {
             let (Some(subject_id), Some(object_id)) = (&r.subject.id, &r.object.id) else {
@@ -106,16 +111,30 @@ impl AnalyticsGraph {
             if let Some(name) = &r.object.name {
                 names.entry(o.clone()).or_insert_with(|| name.clone());
             }
-            if s != o {
+            if s == o {
+                continue;
+            }
+            if r.predicate == "contains" {
+                contains_edges.push((s, o));
+            } else {
                 edges.push((s, o));
             }
         }
-        Self { edges, names }
+        Self {
+            edges,
+            contains_edges,
+            names,
+        }
     }
 
     /// Raw id-keyed edges — the input shape `engram_graph_analytics` expects.
     pub fn edges(&self) -> &[(String, String)] {
         &self.edges
+    }
+
+    /// Contains edges (Class → method) — liveness evidence for dead_code only.
+    pub fn contains_edges(&self) -> &[(String, String)] {
+        &self.contains_edges
     }
 
     /// Display name for an id (the bare name; falls back to the id itself
@@ -172,6 +191,19 @@ pub fn dead_code(graph: &AnalyticsGraph) -> Vec<String> {
         .filter(|node| !in_degree.contains_key(*node))
         .map(|n| n.as_str())
         .collect();
+
+    // Phase 3.3: contains-edge liveness — a container (class/module) whose
+    // children (methods) are alive is NOT dead. Previously every class with
+    // called methods still reported dead because classes receive no incoming
+    // `calls` edges (methods do, not their containers).
+    let live_ids: HashSet<&str> = in_degree.keys().map(|k| k.as_str()).collect();
+    dead_ids.retain(|id| {
+        !graph
+            .contains_edges()
+            .iter()
+            .any(|(parent, child)| parent == id && live_ids.contains(child.as_str()))
+    });
+
     dead_ids.sort_unstable(); // deterministic #2/#3 disambiguation assignment
     let mut dead = graph.display_all(dead_ids);
     dead.sort();
@@ -1255,5 +1287,32 @@ mod tests {
         Utc.with_ymd_and_hms(2026, 7, 8, 12, 0, 0)
             .single()
             .expect("fixed timestamp")
+    }
+
+    #[test]
+    fn class_with_called_methods_is_not_dead() {
+        // rel() takes (caller, callee) and sets predicate="calls".
+        // For the contains edge, clone and override predicate + ids.
+        let calls_rel = rel("caller", "Engine::drive");
+        let graph1 = AnalyticsGraph::from_relationships(std::slice::from_ref(&calls_rel));
+        let dead1 = dead_code(&graph1);
+
+        let mut contains_rel = rel("Engine", "Engine::drive");
+        contains_rel.predicate = "contains".to_owned();
+        contains_rel.subject.id = Some(Id::from("Engine"));
+        contains_rel.object.id = Some(Id::from("Engine::drive"));
+        let rels2 = vec![calls_rel, contains_rel];
+        let graph2 = AnalyticsGraph::from_relationships(&rels2);
+        let dead2 = dead_code(&graph2);
+
+        assert!(
+            !dead2.iter().any(|d| d == "Engine"),
+            "container must not be dead when child is alive: {dead2:?}"
+        );
+        // The improvement: dead2 should have fewer entries than dead1
+        assert!(
+            dead2.len() < dead1.len() || !dead1.iter().any(|d| d == "Engine"),
+            "contains liveness should reduce dead list: dead1={dead1:?} dead2={dead2:?}"
+        );
     }
 }

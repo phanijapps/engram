@@ -370,7 +370,11 @@ pub fn consolidate(app: &App, args: &Value) -> Result<Value, ToolError> {
         requester: requester(),
         since: None,
         until: None,
-        strategy: None,
+        // Phase 2.1: Hybrid includes BeliefSynthesis + Compaction +
+        // FactExtraction + ContradictionDetection — the full pipeline.
+        // None/Manual only scheduled a read-only EvaluationGate, which
+        // is why consolidation ran but produced 0 derived beliefs.
+        strategy: Some(engram_domain::ConsolidationStrategy::Hybrid),
         dry_run: Some(dry_run),
     };
     let run = block_on(consolidation.consolidate(request)).map_err(internal)?;

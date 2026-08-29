@@ -117,7 +117,9 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
 }
 
 /// The 6 core consolidated tools — the 80/20 agent surface.
-pub static CORE_TOOLS: &[&str] = &["remember", "recall", "code", "scan", "graph", "forget"];
+pub static CORE_TOOLS: &[&str] = &[
+    "remember", "recall", "code", "scan", "graph", "forget", "maintain",
+];
 
 /// The 10 full tools — core + specialist for maintenance/analysis work.
 pub static FULL_TOOLS: &[&str] = &[
@@ -136,7 +138,7 @@ pub static FULL_TOOLS: &[&str] = &[
 /// Register every tool the server exposes, filtered by the active profile.
 fn register_all(registry: &mut ToolRegistry<App>, profile: &str) {
     match tool_profile_set(profile) {
-        Some(tools) if tools.contains(&"remember") && tools.len() <= 6 => {
+        Some(tools) if tools.contains(&"remember") && tools.len() <= 7 => {
             // Consolidated core surface: 6 rich verbs dispatching to
             // existing handlers. The granular tools are NOT registered —
             // the dispatch fns call the Rust handlers directly.
@@ -884,11 +886,6 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
         }),
         handler: consolidated_forget,
     });
-}
-
-/// Registers the 4 SPECIALIST consolidated tools (loaded via --tools full).
-pub fn register_specialist_tools(registry: &mut ToolRegistry<App>) {
-    register_core_tools(registry);
 
     // 7. maintain — ONE operations surface
     registry.register(ToolRecord {
@@ -914,6 +911,11 @@ pub fn register_specialist_tools(registry: &mut ToolRegistry<App>) {
         }),
         handler: consolidated_maintain,
     });
+}
+
+/// Registers the 4 SPECIALIST consolidated tools (loaded via --tools full).
+pub fn register_specialist_tools(registry: &mut ToolRegistry<App>) {
+    register_core_tools(registry);
 
     // 8. beliefs — belief queries
     registry.register(ToolRecord {

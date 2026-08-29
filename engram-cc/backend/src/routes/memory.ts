@@ -95,8 +95,20 @@ export function memoryRoute(cfg: VizConfig): Hono {
     }
   });
   app.get("/beliefs", (c) => list(c, "beliefs", projectBelief));
-  // Procedures are memories with kind=procedure (same table, filtered by kind).
-  app.get("/procedures", (c) => list(c, "memories", projectMemory, "procedure"));
+  // Procedures live in their OWN table (stored via procedure_put / the
+  // consolidated `remember kind=procedure`), not as memories with kind=procedure.
+  // The old route queried the memories table — silently empty.
+  app.get("/procedures", (c) =>
+    list(c, "procedures", (record: unknown) => {
+      const r = record as { id?: string; name?: string; steps?: string[]; successCount?: number; failureCount?: number };
+      return {
+        id: r.id ?? "",
+        name: r.name ?? "",
+        text: (r.steps ?? []).join(" "),  // procedures store content as steps
+        successCount: r.successCount ?? 0,
+        failureCount: r.failureCount ?? 0,
+      };
+    }));
   // Contradictions have no table — they are synthesized from beliefs. 0 beliefs
   // today → an honest empty page (no fabricated records).
   app.get("/contradictions", (c) => c.json({ items: [], nextCursor: null }));

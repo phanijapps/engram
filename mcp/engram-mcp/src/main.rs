@@ -998,7 +998,8 @@ fn consolidated_remember(app: &App, args: &Value) -> Result<Value, ToolError> {
         "procedure" => crate::procedures::procedure_put(
             app,
             &json!({
-                "name": args["name"], "text": args["content"], "steps": args.get("steps").cloned().unwrap_or(json!([]))
+                "name": args.get("name").and_then(|v| v.as_str()).unwrap_or("unnamed-procedure"),
+                "steps": args.get("steps").and_then(|v| v.as_array()).map(|a| json!(a)).unwrap_or_else(|| json!([args["content"].clone()]))
             }),
         ),
         "knowledge" => crate::tools::store_knowledge(app, args),

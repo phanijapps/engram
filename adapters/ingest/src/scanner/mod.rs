@@ -28,6 +28,16 @@ use crate::{
     stable_source_key,
 };
 
+mod contract_phase;
+mod workspace;
+
+pub use workspace::{detect_workspace, scan_workspace};
+
+/// `true` for Markdown extensions routed through the structure-aware chunker.
+fn is_markdown_ext(ext: &str) -> bool {
+    matches!(ext.to_ascii_lowercase().as_str(), "md" | "markdown")
+}
+
 pub use crate::classifier::FileKind;
 
 const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
@@ -35,7 +45,6 @@ const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
 /// which cannot appear in a file path on any OS, so a repo file named
 /// `contract:...` cannot collide with contract-op manifest entries.
 const CONTRACT_PREFIX: &str = "\u{1f}contract:";
-const WORKSPACE_MARKER: &str = ".engram-workspace";
 
 /// Summary returned by a scan.
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -600,7 +609,7 @@ where
             // Uses `text_for_ast` (a pre-move clone of the file text) so we do
             // not need to read the content a second time.
             let (contract_keys, contract_parse_failed, contract_had_write_error) =
-                extract_contract_entities(
+                contract_phase::extract_contract_entities(
                     repo,
                     &opts.scope,
                     &source_key,
@@ -1018,144 +1027,6 @@ where
 
     Ok((summary, new_manifest))
 }
-
-/// Detects workspace children: if `root` contains a `.engram-workspace` marker,
-/// returns child directories that are git repos. Returns `None` if no marker or
-/// no child repos. (B8 — workspace fusion, RFC-0008)
-pub fn detect_workspace(root: &Path) -> Option<Vec<PathBuf>> {
-    if !root.join(WORKSPACE_MARKER).exists() {
-        return None;
-    }
-    let children: Vec<PathBuf> = std::fs::read_dir(root)
-        .ok()?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.file_type().is_ok_and(|ft| ft.is_dir()))
-        .map(|e| e.path())
-        .filter(|p| p.join(".git").exists())
-        .collect();
-    if children.is_empty() {
-        None
-    } else {
-        Some(children)
-    }
-}
-
-/// Scans a workspace: detects child repos via `.engram-workspace` marker and
-/// scans each into the shared repository with the shared workspace scope. (B8)
-pub fn scan_workspace<R>(
-    root: &Path,
-    opts: &ScanOptions,
-    repo: &R,
-    progress: &(impl Fn(ScanProgress) + Send + Sync),
-) -> CoreResult<ScanSummary>
-where
-    R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,
-{
-    let children = detect_workspace(root).ok_or_else(|| CoreError::InvalidRequest {
-        reason: format!("no {WORKSPACE_MARKER} marker at {}", root.display()),
-    })?;
-    let mut summary = ScanSummary::default();
-    for child in &children {
-        let repo_name = child.file_name().and_then(|n| n.to_str()).unwrap_or("repo");
-        let child_opts = ScanOptions {
-            source_name: format!("{}:{repo_name}", opts.source_name),
-            ..opts.clone()
-        };
-        let (child_summary, _) = scan_repository(child, &child_opts, repo, progress)?;
-        summary.scanned += child_summary.scanned;
-        summary.ingested += child_summary.ingested;
-        summary.unchanged += child_summary.unchanged;
-        summary.skipped += child_summary.skipped;
-        summary.entities += child_summary.entities;
-        summary.relationships += child_summary.relationships;
-        summary.errors += child_summary.errors;
-    }
-    Ok(summary)
-}
-
-/// Attempts OpenAPI contract extraction for a single file during the parallel
-/// ingest phase (T4 entity emission, T5 source-ref union, T6 skip-and-warn).
-///
-/// Returns `(contract_keys, parse_failed, had_write_error)`:
-/// - `contract_keys`: normalized keys for operations whose entity AND edge were
-///   successfully persisted; empty for non-OpenAPI files or total-parse-failure.
-///   Keys for individual write failures are excluded so the manifest does not
-///   record unpersisted ops.
-/// - `parse_failed`: `true` when the file had an OpenAPI marker but could not
-///   be parsed; the caller increments `ScanSummary.skipped`.
-/// - `had_write_error`: `true` when at least one entity or edge persist failed;
-///   the caller increments `ScanSummary.skipped` and logs a warning.
-fn extract_contract_entities<R>(
-    repo: &R,
-    scope: &Scope,
-    stable_source_key: &str,
-    text: &str,
-    ext: &str,
-    provenance: &Provenance,
-) -> (Vec<String>, bool, bool)
-where
-    R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,
-{
-    use chrono::Utc;
-
-    match contract::detect_and_parse_openapi(text, ext) {
-        Ok(None) => (Vec::new(), false, false),
-        Err(_) => (Vec::new(), true, false), // malformed OpenAPI: caller increments skipped
-        Ok(Some(ops)) => {
-            let now = Utc::now();
-            let mut keys = Vec::with_capacity(ops.len());
-            let mut had_write_error = false;
-            for op in &ops {
-                let entity =
-                    contract::build_api_entity(scope, stable_source_key, op, provenance, now);
-                // Read-modify-write union for cross-repo merge (T5).
-                match block_on(contract::upsert_api_entity_with_source_ref(
-                    repo, scope, entity,
-                )) {
-                    Ok(()) => {
-                        let rel = contract::build_exposes_rel(
-                            scope,
-                            stable_source_key,
-                            op,
-                            provenance,
-                            now,
-                        );
-                        match block_on(repo.put_relationship(rel)) {
-                            Ok(_) => {
-                                // Both entity and edge persisted — record the key.
-                                keys.push(op.normalized_key.clone());
-                            }
-                            Err(e) => {
-                                eprintln!(
-                                    "[engram-ingest] warning: failed to persist exposes edge \
-                                     for '{}': {e}",
-                                    op.normalized_key
-                                );
-                                had_write_error = true;
-                                // Do NOT push key — manifest must not record an
-                                // unpersisted op.
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "[engram-ingest] warning: failed to persist Api entity for '{}': {e}",
-                            op.normalized_key
-                        );
-                        had_write_error = true;
-                    }
-                }
-            }
-            (keys, false, had_write_error)
-        }
-    }
-}
-
-/// `true` for Markdown extensions routed through the structure-aware chunker.
-fn is_markdown_ext(ext: &str) -> bool {
-    matches!(ext.to_ascii_lowercase().as_str(), "md" | "markdown")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

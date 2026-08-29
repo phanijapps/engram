@@ -11,24 +11,29 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { Type, type Context, type Model, type Tool } from "@earendil-works/pi-ai";
 
 export { Type };
+/** Tool schema shape for LLM tool-use (name + JSON-schema parameters). */
 export type { Tool };
 
+/** One tool invocation the model requested (name + JSON arguments). */
 export interface LlmToolCall {
   name: string;
   arguments: Record<string, unknown>;
 }
 
+/** Simple completion result: joined text + requested tool calls. */
 export interface LlmCompleteResult {
   toolCalls: LlmToolCall[];
   text: string;
 }
 
+/** Options for the simple complete() surface. */
 export interface LlmCompleteOptions {
   systemPrompt?: string;
   userText: string;
   tools?: Tool[];
 }
 
+/** Agent-loop message (user / assistant / toolResult) with content blocks. */
 export interface LlmAgentMessage {
   role: "user" | "assistant" | "toolResult";
   content?: unknown;
@@ -38,6 +43,7 @@ export interface LlmAgentMessage {
   timestamp: number;
 }
 
+/** One content block: text or toolCall. */
 export interface LlmAgentContent {
   type: string;
   text?: string;
@@ -46,12 +52,14 @@ export interface LlmAgentContent {
   id?: string;
 }
 
+/** Agent round-trip result: raw blocks + joined text + parsed tool calls. */
 export interface LlmAgentResult {
   content: LlmAgentContent[];
   text: string;
   toolCalls: LlmToolCall[];
 }
 
+/** The LLM abstraction: simple complete + agentic completeAgent surfaces. */
 export interface LlmProvider {
   readonly provider: string;
   readonly model: string;
@@ -66,6 +74,7 @@ export interface LlmProvider {
   }): Promise<LlmAgentResult>;
 }
 
+/** Resolved LLM provider configuration (provider/model + optional overrides). */
 export interface LlmProviderConfig {
   provider: string;
   model: string;
@@ -76,6 +85,7 @@ export interface LlmProviderConfig {
   completeOverride?: (opts: LlmCompleteOptions) => Promise<LlmCompleteResult>;
 }
 
+/** Resolves the provider config from PI_PROVIDER/PI_MODEL env (defaults anthropic). */
 export function llmConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LlmProviderConfig {
   const apiKey = env.ANTHROPIC_API_KEY ?? env.OPENAI_API_KEY;
   return {
@@ -86,6 +96,8 @@ export function llmConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LlmProvi
   };
 }
 
+/** Creates the LLM provider: env config by default, or an injected override
+ *  (tests) / PI_DRY_RUN fixture. Exposes complete + completeAgent surfaces. */
 export function createLlmProvider(
   config: LlmProviderConfig = llmConfigFromEnv(),
 ): LlmProvider {

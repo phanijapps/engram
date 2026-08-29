@@ -784,6 +784,7 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
             "type": "object",
             "properties": {
                 "query": { "type": "string", "description": "The search query or topic." },
+                "as_of": { "type": "string", "description": "Bi-temporal instant (RFC3339). Returns results valid at this time. Default: now." },
                 "mode": { "type": "string", "enum": ["fused", "keyword", "context", "predict"],
                           "description": "Retrieval mode (default: fused)." },
                 "limit": { "type": "number", "description": "Max results." },
@@ -930,7 +931,8 @@ pub fn register_specialist_tools(registry: &mut ToolRegistry<App>) {
             "properties": {
                 "op": { "type": "string", "enum": ["get", "stale", "contradictions"],
                         "description": "Belief query." },
-                "subject": { "type": "string", "description": "Belief subject (op=get)." }
+                "subject": { "type": "string", "description": "Belief subject (op=get)." },
+                "as_of": { "type": "string", "description": "Bi-temporal instant (RFC3339). Returns beliefs valid at this time. Default: now. Unique — no vector DB can do this." }
             },
             "required": ["op"]
         }),

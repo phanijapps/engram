@@ -48,8 +48,8 @@ use super::{
 };
 use engram_consolidation::{CompositeConsolidationExecutor, ConsolidationService};
 use engram_decay::DecayExecutor;
-use engram_reflection::ContradictionExecutor;
-use engram_reflection::{ReflectionExecutor, ReflectionSynthesizer};
+use engram_reflection::ReflectionExecutor;
+use engram_reflection::{ContradictionExecutor, PatternSynthesizer};
 
 /// Storage schema version reported by provider diagnostics.
 const SCHEMA_VERSION: &str = "2026.01";
@@ -490,7 +490,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         let memory_source = Arc::new(ActiveMemorySourceAdapter(mem.clone()));
         let decay_source = Arc::new(DecayMemorySourceAdapter(mem.clone()));
         let now = chrono::Utc::now();
-        let synthesizer = Arc::new(ReflectionSynthesizer::new(memory_source, now));
+        let synthesizer = Arc::new(PatternSynthesizer::new(memory_source, now));
         let reflection_executor = Arc::new(ReflectionExecutor::new(synthesizer, sink));
         let decay_executor = Arc::new(DecayExecutor::new(decay_source));
         // Phase 2.3: contradiction detection — detects conflicting beliefs

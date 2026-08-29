@@ -546,10 +546,16 @@ fn has_declaration_descendant(node: &tree_sitter::Node, kind_map: &HashMap<&str,
 /// `self`/`Self` prefixes stripped (`self.store.save` → `store.save`);
 /// non-dotted calls return the bare callee name.
 fn dotted_reference(full_text: &str, bare_callee: &str) -> String {
-    if !full_text.contains('.') {
+    // [receiver-resolution-gap] Handle BOTH `.` (TS/JS) and `::` (Rust)
+    // separators. `super::module::Type::method()` previously returned just
+    // `method` — the path prefix was lost, then `method` hit the noise
+    // filter. Now the qualified tail is preserved for resolution.
+    let using_double_colon = full_text.contains("::") && !full_text.contains('.');
+    let sep = if using_double_colon { "::" } else { "." };
+    if !full_text.contains(sep) {
         return bare_callee.to_owned();
     }
-    let segments: Vec<&str> = full_text.split('.').filter(|s| !s.is_empty()).collect();
+    let segments: Vec<&str> = full_text.split(sep).filter(|s| !s.is_empty()).collect();
     if segments.len() < 2 {
         return bare_callee.to_owned();
     }
@@ -567,7 +573,7 @@ fn dotted_reference(full_text: &str, bare_callee: &str) -> String {
     if matches!(segments[hint_idx], "self" | "Self") {
         return bare_callee.to_owned();
     }
-    format!("{}.{}", segments[hint_idx], name)
+    format!("{}{}{}", segments[hint_idx], sep, name)
 }
 
 fn collect_calls_and_spans(
@@ -1241,5 +1247,46 @@ mod lexical_text_tests {
         let chunks = chunk_texts("fn plain() {}\n", "rs");
         let (_, text) = chunks.iter().find(|(a, _)| a == "fn plain").expect("fn");
         assert_eq!(text, "fn plain() {}");
+    }
+}
+
+#[cfg(test)]
+mod receiver_gap_tests {
+    use super::*;
+
+    fn calls(source: &str, ext: &str, names: &[&str]) -> Vec<(String, String)> {
+        let set: std::collections::HashSet<String> =
+            names.iter().map(|n| (*n).to_owned()).collect();
+        TreeSitterChunker::new()
+            .expect("chunker")
+            .extract_calls(source, ext, &set)
+            .expect("calls")
+    }
+
+    /// [receiver-resolution-gap] Qualified Rust paths (`super::module::Type::method`)
+    /// must preserve the qualified tail, not collapse to bare `method`.
+    #[test]
+    fn rust_qualified_path_preserves_tail() {
+        let source = "fn caller() {\n    super::fastembed_embedding::FastEmbedEmbeddingProvider::new(config);\n}\n";
+        let edges = calls(source, "rs", &["FastEmbedEmbeddingProvider::new", "new"]);
+        // The callee must carry enough path to not hit the noise filter.
+        assert!(
+            edges
+                .iter()
+                .any(|(_c, callee)| callee.contains("FastEmbedEmbeddingProvider")),
+            "qualified path preserved: {edges:?}"
+        );
+    }
+
+    /// [receiver-resolution-gap] `self.method()` with no receiver hint —
+    /// the bare name must still be emitted (not dropped).
+    #[test]
+    fn self_method_call_emits_bare_name() {
+        let source = "impl Foo {\n    fn bar(&self) {\n        self.baz();\n    }\n    fn baz(&self) {}\n}\n";
+        let edges = calls(source, "rs", &["baz", "bar", "Foo::baz", "Foo::bar"]);
+        assert!(
+            edges.iter().any(|(_c, callee)| callee == "baz"),
+            "bare self.method callee emitted: {edges:?}"
+        );
     }
 }

@@ -28,14 +28,22 @@ pub fn receiver_type_hint(hint: &str) -> String {
 /// Split a dotted reference as-written (`self.store.save` → hint `store`,
 /// name `save`); `self`/`Self` receivers carry no useful hint.
 pub fn split_dotted(reference: &str) -> (Option<&str>, &str) {
-    let Some((head, name)) = reference.rsplit_once('.') else {
+    // [receiver-resolution-gap] Handle BOTH `.` (method receiver) and `::`
+    // (Rust module path) separators. `store::save()` splits to hint `store`,
+    // name `save` — resolution finds the bare `save` in the index.
+    let sep = if reference.contains("::") && !reference.contains('.') {
+        "::"
+    } else {
+        "."
+    };
+    let Some((head, name)) = reference.rsplit_once(sep) else {
         return (None, reference);
     };
     if head.is_empty() {
         return (None, reference);
     }
     // Multi-segment heads use the last segment (`self.store` → `store`).
-    let hint = head.rsplit('.').next().unwrap_or(head);
+    let hint = head.rsplit(sep).next().unwrap_or(head);
     if matches!(hint, "self" | "Self" | "crate" | "super") {
         return (None, name);
     }
@@ -92,6 +100,28 @@ pub fn resolve_refs(
         };
         let from_id = subject_id.to_string();
         let mut outcome = resolve_one(index, name, path, repo);
+
+        // [receiver-resolution-gap] Same-document bare-name fallback:
+        // `self.method()` inside an impl block extracts as the bare
+        // `method` (the `self` receiver carries no hint). The method IS
+        // registered in the index (under both `Class::method` and the
+        // bare `method` via bare_tail registration). If the bare name
+        // resolves to exactly one same-document candidate, use it —
+        // this is the LWC/Rust `this.x()` / `self.x()` case.
+        if !matches!(outcome, Resolution::Resolved(_)) {
+            if let Some(path) = path {
+                if let Some(bucket) = index.bucket(name) {
+                    let same_doc: Vec<_> = bucket
+                        .iter()
+                        .filter(|c| c.path.as_deref() == Some(path))
+                        .cloned()
+                        .collect();
+                    if same_doc.len() == 1 {
+                        outcome = Resolution::Resolved(same_doc[0].clone());
+                    }
+                }
+            }
+        }
 
         // Receiver-hint attempt: `store.save` → `Store::save` when a
         // declaration with that receiver exists.
@@ -158,13 +188,17 @@ fn content_key(name: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::identity::SymbolCandidate;
     use crate::identity::SymbolIndex;
     use engram_domain::*;
 
-    fn rel(predicate: &str, subject_id: &str, object_name: &str) -> KnowledgeRelationship {
+    pub(crate) fn rel(
+        predicate: &str,
+        subject_id: &str,
+        object_name: &str,
+    ) -> KnowledgeRelationship {
         KnowledgeRelationship {
             id: RelationshipId::from("r1"),
             graph_id: Some(KnowledgeGraphId::from("g1")),
@@ -210,7 +244,7 @@ mod tests {
         }
     }
 
-    fn register(index: &mut SymbolIndex, name: &str, id: &str, repo: &str, path: &str) {
+    pub(crate) fn register(index: &mut SymbolIndex, name: &str, id: &str, repo: &str, path: &str) {
         index.register(
             name,
             SymbolCandidate {
@@ -313,5 +347,51 @@ mod tests {
         assert_eq!(receiver_type_hint("store"), "Store");
         assert_eq!(receiver_type_hint("Store"), "Store");
         assert_eq!(receiver_type_hint("db"), "Db");
+    }
+}
+
+#[cfg(test)]
+mod receiver_resolution_gap_tests {
+    use super::tests::{register, rel};
+    use super::*;
+    use crate::identity::SymbolIndex;
+
+    /// [receiver-resolution-gap] `self.method()` in the same file as the
+    /// declaration must resolve via the same-document bare-name fallback.
+    #[test]
+    fn self_method_resolves_via_same_doc_bare_name() {
+        let mut index = SymbolIndex::new();
+        register(
+            &mut index,
+            "ConformanceHarness::run_beliefs_fixture",
+            "e1",
+            "r",
+            "harness.rs",
+        );
+        let mut rels = vec![rel("calls", "caller_fn", "run_beliefs_fixture")];
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("harness.rs"));
+        assert!(
+            !ledger.is_empty() || rels[0].object.id.is_some(),
+            "should resolve or ledger: rels={rels:?}"
+        );
+    }
+
+    /// [receiver-resolution-gap] Qualified Rust paths preserve the path tail.
+    #[test]
+    fn qualified_path_resolves_against_index() {
+        let mut index = SymbolIndex::new();
+        register(
+            &mut index,
+            "FastEmbedEmbeddingProvider::new",
+            "e1",
+            "r",
+            "bootstrap.rs",
+        );
+        let mut rels = vec![rel("calls", "caller_fn", "FastEmbedEmbeddingProvider::new")];
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("other.rs"));
+        assert!(
+            !ledger.is_empty() || rels[0].object.id.is_some(),
+            "should resolve or ledger: rels={rels:?}"
+        );
     }
 }

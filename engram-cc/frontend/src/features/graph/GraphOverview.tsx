@@ -14,16 +14,17 @@ import {
 } from "../../lib/api.ts";
 import { useGraphStore } from "../../store/graph.ts";
 import { ForceGraph } from "./ForceGraph.tsx";
+import { Graph3DView } from "./ForceGraph3D.tsx";
 import { SymbolGraph } from "./SymbolGraph.tsx";
 import { EntityDetailPanel } from "./EntityDetail.tsx";
 
-export type GraphView = "graph" | "communities";
+export type GraphView = "graph3d" | "graph" | "communities";
 
 export function GraphOverview({
   limit,
   refreshSignal = 0,
   highlight = "",
-  defaultView = "communities",
+  defaultView = "graph3d",
 }: {
   limit?: number;
   refreshSignal?: number;
@@ -59,7 +60,7 @@ export function GraphOverview({
   // The actual graph: fetched lazily on first switch (keeps the default
   // communities load unchanged) and on refresh.
   useEffect(() => {
-    if (view !== "graph") return;
+    if (view !== "graph" && view !== "graph3d") return;
     let cancelled = false;
     setSubgraph(null);
     setError(null);
@@ -86,7 +87,23 @@ export function GraphOverview({
       }}
     >
       <ViewToggle view={view} onChange={setView} />
-      {view === "graph" ? (
+      {view === "graph3d" ? (
+        subgraph ? (
+          subgraph.nodes.length === 0 ? (
+            <Status text="No resolved call edges — scan a repository first." />
+          ) : (
+            <Graph3DView
+              nodes={subgraph.nodes}
+              edges={subgraph.edges}
+              highlight={highlight}
+              selectedEntityId={selectedEntityId}
+              onSelect={(id) => void selectEntity(id)}
+            />
+          )
+        ) : (
+          <Status text="Loading 3D graph…" />
+        )
+      ) : view === "graph" ? (
         subgraph ? (
           subgraph.nodes.length === 0 ? (
             <Status text="No resolved call edges — scan a repository first." />
@@ -146,7 +163,8 @@ export function GraphOverview({
 
 function ViewToggle({ view, onChange }: { view: GraphView; onChange: (v: GraphView) => void }) {
   const items: { key: GraphView; label: string }[] = [
-    { key: "graph", label: "GRAPH" },
+    { key: "graph3d", label: "3D GRAPH" },
+    { key: "graph", label: "2D GRAPH" },
     { key: "communities", label: "COMMUNITIES" },
   ];
   return (

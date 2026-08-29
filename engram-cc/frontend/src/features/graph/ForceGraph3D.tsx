@@ -125,7 +125,6 @@ function Node({ node, selected, onSelect }: { node: PositionedNode; selected: bo
           {node.name}
         </Text>
       )}
-      <pointLight color={color} intensity={selected ? 2 : hovered ? 1 : 0} distance={30} />
     </group>
   );
 }

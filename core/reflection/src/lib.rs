@@ -15,10 +15,12 @@
 //! would skip 7).
 
 mod belief_build;
+mod contradiction_executor;
 mod executor;
 mod source;
 mod synthesizer;
 
+pub use contradiction_executor::ContradictionExecutor;
 pub use executor::ReflectionExecutor;
 pub use source::{ActiveMemorySource, BeliefSink};
 pub use synthesizer::ReflectionSynthesizer;

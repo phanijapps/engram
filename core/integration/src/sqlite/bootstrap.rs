@@ -48,6 +48,7 @@ use super::{
 };
 use engram_consolidation::{CompositeConsolidationExecutor, ConsolidationService};
 use engram_decay::DecayExecutor;
+use engram_reflection::ContradictionExecutor;
 use engram_reflection::{ReflectionExecutor, ReflectionSynthesizer};
 
 /// Storage schema version reported by provider diagnostics.
@@ -492,9 +493,17 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         let synthesizer = Arc::new(ReflectionSynthesizer::new(memory_source, now));
         let reflection_executor = Arc::new(ReflectionExecutor::new(synthesizer, sink));
         let decay_executor = Arc::new(DecayExecutor::new(decay_source));
+        // Phase 2.3: contradiction detection — detects conflicting beliefs
+        // during consolidation and persists Contradiction records for review.
+        // Uses the SqlBeliefStore directly (it implements both traits).
+        let contradiction_executor = Arc::new(ContradictionExecutor::new(
+            bel.clone() as Arc<dyn engram_belief::ContradictionDetector>,
+            bel.clone() as Arc<dyn engram_belief::BeliefRepository>,
+        ));
         let composite = Arc::new(CompositeConsolidationExecutor::new(vec![
             reflection_executor,
             decay_executor,
+            contradiction_executor,
         ]));
         consolidation = Some(Arc::new(ExecutorConsolidationService::new(composite)));
         consolidation_state = CapabilityState::Supported;

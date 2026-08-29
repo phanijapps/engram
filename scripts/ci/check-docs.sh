@@ -39,7 +39,7 @@ else
   echo "warning: skill validator not found: $validator" >&2
 fi
 
-.codex/hooks/check-code-docs.sh
+scripts/ci/check-code-docs.sh
 python3 tools/scripts/check_architecture_guards.py
 python3 tools/scripts/check_ts_native_delegation.py
 .codex/hooks/check-research-parity-docs.sh

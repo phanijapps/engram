@@ -32,6 +32,7 @@ core/                      Storage-neutral Rust crates.
   reflection/              Reflection synthesizer + consolidation executor (derived beliefs).
   retrieval/               Retrieval composition and fusion ports.
   orchestration/           Orchestration facade and compatibility re-exports.
+  procedures/              Procedural memory: runbook storage + success/failure counters.
   integration/             SDK facade: EngramProvider, EngramConfig, CapabilityReport.
   eval/                    Deterministic fixtures and regression harness.
   graph-analytics/         Pure graph algorithms (PageRank, betweenness, communities, reachability).
@@ -57,11 +58,9 @@ adapters/                  Replaceable infrastructure crates.
 
 backends/                  Backend recipe crates (ADR-0022). A *backend* is one
   sqlite/                  recipe that composes adapter cells + owns connection
-                           lifecycle, config validation, and per-engine
-                           conformance. SQLite is the only implemented backend
-                           today; `backends/` is created when a second engine
-                           arrives (YAGNI). The current SQLite wiring lives in
-                           `adapters/integration` until then.
+  pgvector/                lifecycle, config validation, and per-engine
+                           conformance. Both SQLite and pgvector recipes
+                           are implemented; hosts open a recipe directly.
 
 bindings/                  Native language bridges.
   node/                    N-API bridge for TypeScript.

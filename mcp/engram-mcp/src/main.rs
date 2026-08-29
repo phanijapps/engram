@@ -779,7 +779,7 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
                       mode=fused (default): multi-lane hybrid (vector+graph+lexical+temporal+beliefs). \
                       mode=keyword: BM25 lexical search. \
                       mode=context: task-aware context packet with graph/code neighborhoods. \
-                      mode=predict: proactive retrieval hints from recent context.",
+                      mode=predict: proactive retrieval hints — enriches with recent memories from the store (no explicit recent_queries needed).",
         input_schema: json!({
             "type": "object",
             "properties": {

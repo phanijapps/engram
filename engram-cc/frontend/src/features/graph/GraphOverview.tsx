@@ -95,7 +95,6 @@ export function GraphOverview({
             <Graph3DView
               nodes={subgraph.nodes}
               edges={subgraph.edges}
-              highlight={highlight}
               selectedEntityId={selectedEntityId}
               onSelect={(id) => void selectEntity(id)}
             />

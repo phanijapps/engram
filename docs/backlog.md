@@ -703,6 +703,45 @@ store is high-signal (449 resolved calls + 93 `routes_to`), 33% structural
 (~170 files/s Java, ~53 files/s mixed) and incremental manifests make
 re-scans ~0.
 
+## self-index-findings (2026-08-28, mem-alpha indexed into ~/.engram/mem-alpha-self)
+
+Dogfood run: mem-alpha scanned into a dedicated SQLite store (9,703 entities /
+27,000 rels / 0 errors) and the code-intel battery turned on itself.
+
+- **[scanner-god-module] scanner.rs is the codebase's dominant chokepoint.**
+  Betweenness: `scan_repository` = 3687 vs 739 for the next symbol (~5×).
+  1,193 lines mixing walk/classify, serial reconcile pre-pass, parallel
+  ingest orchestration, ledger sweep, manifest + embed coupling — a direct
+  violation of AGENTS.md's no-god-module rule (this session ADDED ~300 lines
+  to it). Blast radius is bounded and test-protected (N-API + ~15 scanner
+  tests), so a phase-split (walk / prepass / ingest-phase / sweep) is safe.
+  Blocked on nothing — the highest-value refactor the self-index names.
+- **[receiver-resolution-gap] VERIFIED: `self.`-method and qualified-path
+  calls under-resolve → dead-code false positives.** Concrete: 
+  `FastEmbedEmbeddingProvider` (called from BOTH the pg recipe and the
+  sqlite bootstrap — via `super::fastembed_embedding::…::new` and feature-
+  gated blocks) and `ConformanceHarness::run_beliefs_fixture` (called via
+  `self.run_beliefs_fixture()` at harness.rs:119) both report DEAD. The
+  qualified-path callee and the self-method callee fail the resolution
+  ladder. Extends [js-this-receiver] to Rust self-receivers + deep
+  qualified paths; fix belongs in `resolve_one`'s ladder + extraction's
+  dotted-reference handling. Measured impact: the 999-symbol dead list
+  contains an unknown fraction of such false positives.
+- **Dead-code triage (the honest bulk):** test doubles (Failing*/Fake*/
+  Stub*), prototype/frontend UI components, and public-API-only types
+  (DryRunConsolidationService, port re-exports) — correctly uncalled
+  in-repo; the tool's contract already says callers filter entry points,
+  but a `#[cfg(test)]`-aware + `pub`-aware annotation would make the list
+  actionable instead of 999 rows.
+- **`whats_changed` is flat on a single-scan baseline** (every symbol equal
+  recency) — temporal discrimination needs ≥2 scan baselines. The store is
+  RETAINED (~/.engram/mem-alpha-self) so future re-scans activate the
+  temporal lane for real churn analysis.
+- Central-symbol artifacts: `cn` (TS classnames helper) ranks #3 —
+  short-name centrality noise, known register item (per-repo/id-keyed
+  helps); `PgConnection::block_on` is by-design funneling (every PG call
+  shims sync→async) — central but correct.
+
 ## code-graph-perfection
 
 The "perfect code graph" register — every known gap between what indexing

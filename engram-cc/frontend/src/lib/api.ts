@@ -123,7 +123,11 @@ export interface BeliefView {
 
 export interface ProcedureView {
   id: string;
+  name?: string;
   text: string;
+  steps?: string[];
+  successCount?: number;
+  failureCount?: number;
 }
 
 export interface RecallItem {

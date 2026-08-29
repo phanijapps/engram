@@ -104,7 +104,8 @@ export function memoryRoute(cfg: VizConfig): Hono {
       return {
         id: r.id ?? "",
         name: r.name ?? "",
-        text: (r.steps ?? []).join(" "),  // procedures store content as steps
+        text: (r.steps ?? []).join(" "),  // joined for the row preview
+        steps: r.steps ?? [],               // array for the detail panel
         successCount: r.successCount ?? 0,
         failureCount: r.failureCount ?? 0,
       };

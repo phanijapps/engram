@@ -805,3 +805,26 @@ denylists), (b) every call/reference either resolves to an entity or lands in
 the healing ledger with a reason, (c) framework boundaries (JS↔Apex, JSX,
 routes) are edges, not node silos, and (d) navigation queries reach across
 file, module, and language boundaries.
+
+## next-session-odyssey
+
+Target: `~/projects/odyssey` — agentic learning platform built on pi-mono
+and engram (different branch). User will switch there and ask for
+self-improvement. Engram's memory layer carries the context.
+
+### Setup
+- [ ] Index `~/projects/odyssey` into `~/.engram/odyssey-self` (dedicated,
+      same pattern as `mem-alpha-self`)
+- [ ] Add `.mcp.json` in odyssey pointing at the engram server (built from
+      this repo's `target/release/engram-mcp`)
+- [ ] Understand odyssey's architecture (built on pi-mono + engram — likely
+      a different engram branch with learning-specific extensions)
+
+### Self-improvement loop (same as mem-alpha)
+- [ ] Run the code-intel battery (architecture, code_health, whats_changed)
+- [ ] Verify dead-code findings against source (grep-verify, never verdicts)
+- [ ] Register findings in odyssey's backlog
+- [ ] Apply the skills: engram-self-index, engram-live-verify,
+      engram-perf-audit, engram-store-ops
+- [ ] Store summary back to engram memory (workspace: agentzero for
+      cross-project continuity, or odyssey for odyssey-specific context)

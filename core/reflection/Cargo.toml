@@ -7,11 +7,12 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+chrono.workspace = true
 engram-domain = { path = "../domain" }
 engram-belief = { path = "../belief" }
 engram-consolidation = { path = "../consolidation" }
+engram-memory = { path = "../memory" }
 engram-runtime = { path = "../runtime" }
 
 [dev-dependencies]
 futures.workspace = true
-chrono.workspace = true

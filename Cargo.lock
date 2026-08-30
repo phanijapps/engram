@@ -1840,6 +1840,7 @@ dependencies = [
  "engram-belief",
  "engram-consolidation",
  "engram-domain",
+ "engram-memory",
  "engram-runtime",
  "futures",
 ]

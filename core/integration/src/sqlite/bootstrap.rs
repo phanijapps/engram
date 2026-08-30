@@ -49,7 +49,7 @@ use super::{
 use engram_consolidation::{CompositeConsolidationExecutor, ConsolidationService};
 use engram_decay::DecayExecutor;
 use engram_reflection::ReflectionExecutor;
-use engram_reflection::{ContradictionExecutor, PatternSynthesizer};
+use engram_reflection::{ContradictionExecutor, MemoryLifecycleExecutor, PatternSynthesizer};
 
 /// Storage schema version reported by provider diagnostics.
 const SCHEMA_VERSION: &str = "2026.01";
@@ -500,10 +500,14 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             bel.clone() as Arc<dyn engram_belief::ContradictionDetector>,
             bel.clone() as Arc<dyn engram_belief::BeliefRepository>,
         ));
+        // Phase 3.2: auto-archive memories not retrieved in 30 days
+        let lifecycle_executor =
+            Arc::new(MemoryLifecycleExecutor::with_default_threshold(mem.clone()));
         let composite = Arc::new(CompositeConsolidationExecutor::new(vec![
             reflection_executor,
             decay_executor,
             contradiction_executor,
+            lifecycle_executor,
         ]));
         consolidation = Some(Arc::new(ExecutorConsolidationService::new(composite)));
         consolidation_state = CapabilityState::Supported;

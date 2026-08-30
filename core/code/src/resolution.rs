@@ -58,11 +58,26 @@ fn resolve_one(
     from_path: Option<&str>,
     from_repo: Option<&str>,
 ) -> Resolution {
+    // [js-apex-boundary] Salesforce Apex import scope: an LWC component
+    // importing from '@salesforce/apex/Class.Method' creates a module entity
+    // named '@salesforce/apex/Class.Method'. When that same Class.Method is
+    // parsed from the .cls file, it's registered as 'Class::Method'. This
+    // rung strips the @salesforce/apex/ prefix and converts the dot to ::
+    // so the import resolves to the parsed Apex entity.
+    if let Some(stripped) = name.strip_prefix("@salesforce/apex/") {
+        if let Some((class, method)) = stripped.rsplit_once('.') {
+            let qualified = format!("{class}::{method}");
+            if let Resolution::Resolved(c) = index.resolve(&qualified, from_path, from_repo) {
+                return Resolution::Resolved(c);
+            }
+            if let Resolution::Resolved(c) = index.resolve(method, from_path, from_repo) {
+                return Resolution::Resolved(c);
+            }
+        }
+    }
+
     // Same document first, then the SymbolIndex ladder (same repo / unique
-    // survivor / ambiguity). The planned import-scope rung was removed: raw
-    // import strings (`./x`, `crate::x`, `.x`) never suffix-matched real
-    // file paths except as cross-directory false positives — recorded in
-    // the spec notes + plan changelog.
+    // survivor / ambiguity).
     if let Some(path) = from_path {
         if let Resolution::Resolved(c) = index.resolve(name, Some(path), from_repo) {
             return Resolution::Resolved(c);

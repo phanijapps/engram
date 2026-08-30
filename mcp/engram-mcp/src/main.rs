@@ -1186,6 +1186,35 @@ fn consolidated_maintain(app: &App, args: &Value) -> Result<Value, ToolError> {
                 "id": args["id"], "outcome": args.get("outcome").cloned().unwrap_or(json!("success"))
             }),
         ),
+        "shared" => {
+            let query = app
+                .provider
+                .require_knowledge_query()
+                .map_err(crate::tools::internal)?;
+            let entities = futures::executor::block_on(query.list_entities(&app.scope))
+                .map_err(crate::tools::internal)?;
+            let actors: std::collections::BTreeSet<String> = entities
+                .iter()
+                .filter_map(|e| e.provenance.actor.display_name.clone())
+                .collect();
+            let actors_list: Vec<String> = actors.into_iter().collect();
+            let display = if actors_list.is_empty() {
+                "(none yet — no entities in this workspace)".to_owned()
+            } else {
+                actors_list
+                    .iter()
+                    .map(|a| format!("  - {}", a))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            Ok(protocol::text_content(format!(
+                "Shared workspace '{}' (tenant '{}'): {} distinct agents/entities have written:\n{}\n\nAny agent in this workspace can read and write. Policy governs access paths.",
+                app.scope.workspace.as_deref().unwrap_or("(default)"),
+                app.scope.tenant,
+                actors_list.len(),
+                display
+            )))
+        }
         _ => crate::maintenance::graph_health(app, args),
     }
 }

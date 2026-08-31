@@ -1,6 +1,6 @@
 # Spec: pgvector-backend (RFC-0017 Phase A)
 
-Status: Draft
+Status: Shipped (production-switch ACs PS1-PS6 closed 2026-08-28)
 Mode: full (new engine — structural, multi-crate, conformance-gated)
 Shape: data
 Constrained by: ADR-0022 (engine neutrality, recipe = feature-gated submodule, one crate per backend), RFC-0017 (the 3-module + pgvector target), RFC-0005 (backend-agnostic retrieval composition)
@@ -74,7 +74,96 @@ Per the 2026-07-16 amendments:
 - **Integration**: a `PgUnifiedRecall` integration test (mirror of `SqlUnifiedRecall` tests) over a test Postgres instance (docker-compose or CI service).
 - **Migration**: `export_import` capability moves data SQLite → pgvector (a dry-run + apply round-trip test).
 
-## Acceptance Criteria (Phase A — P0 hot path)
+## Revision (2026-08-27): production-switch gap assessment
+
+Reality check against the codebase: the P0 hot path largely **shipped** —
+`adapters/pgvector/` (memory, knowledge+graph, vectors, schema) and the
+`backends/pgvector` recipe (connection lifecycle, idempotent schema, cell
+composition incl. belief/hierarchy/procedures cells, `PgUnifiedRecall`) exist,
+and `pgvector-recipe` is Shipped. Two of the original ACs are obsolete by the
+recipe's design (pgvector no longer routes through `EngramProvider::open` —
+hosts call `backends::pgvector::open` directly; that supersedes the
+"`EngramConfig` dispatch" AC and is *better* for neutrality).
+
+What actually blocks a production switch (verified 2026-08-27):
+
+1. **No agent surface.** `engram-mcp` is SQLite-only — no pgvector wiring, no
+   launch flag. The switch does not exist for the MCP/agent path.
+2. **Recall is degraded on Postgres.** `PgUnifiedRecall` composes facts +
+   beliefs lanes only — the vector lane (the `PgVectorIndex` cell exists but is
+   not fused into recall) and lexical lane (no tsvector implementation) are
+   missing. SQLite recall fuses 6 lanes; Postgres would fuse 2.
+3. **No CI safety net.** CI runs no Postgres service; conformance/
+   integration tests against Postgres are not in the gate.
+4. **No migration runbook.** SQLite → Postgres export/import round-trip is
+   specced but not demonstrated end-to-end.
+5. **Embed/reindex operations.** `scan_repo` embeds 256 chunks/call scoped to
+   the scan's source; there is no reindex op with progress for initial
+   backfill (needed on ANY backend switch — vectors start empty).
+
+These become the working ACs for promoting this spec; the original Phase-A
+ACs below stay as the (mostly met) historical record.
+
+## Acceptance Criteria (production switch — working set)
+
+- [x] PS1 — `engram-mcp --storage <dir> --backend pgvector` (or the
+  equivalent config env/flag) opens through `backends::pgvector::open` and
+  serves the full tool surface on Postgres; `capability_report` is honest
+  about lanes that are missing. **Shipped 2026-08-27** (feature `pgvector`):
+  `--backend sqlite|pgvector` + `--pg-connection-string` (or
+  `ENGRAM_PG_CONNECTION_STRING`), dispatch in `open_provider`; the recipe
+  gained a `PgKnowledgeQuery` (the read surface behind search /
+  symbol_context / architecture / the scan's lexical delta + embed listing —
+  previously `knowledge_query not wired` on Postgres). Verified live against
+  Docker Postgres: scan lands 6 entities + 5 relationships (3 resolved `calls`
+  edges confirmed via SQL), `symbol_context("alpha")` → `callers:
+  ["beta","gamma"]`, memory write→recall round-trips, capability report shows
+  `knowledge_query: supported` and honestly `unsupported` for lexical /
+  consolidation / ontology / taxonomy / identity / vector-lanes.
+- [x] PS2 — recall on Postgres fuses the vector lane (and documents the
+  lexical gap or ships a tsvector lane). **Shipped 2026-08-27:**
+  `PgUnifiedRecall` composes facts + beliefs + the vector lane (embed →
+  pgvector search → chunk rehydration) with per-lane `source_failures`
+  degradation; the recipe wires a FastEmbed `EmbeddingProvider` under its
+  `fastembed` feature (model-load failure degrades, never fails boot), also
+  enabling scan-side chunk embedding. Two latent bugs found + fixed: the
+  pgvector `$n::vector` param binding always failed client-side in
+  tokio-postgres (cast via text now — the lane had never actually run
+  against real Postgres), and `PgKnowledgeQuery::list_chunks` queried scope
+  columns that don't exist on `knowledge_chunks` (now joined through
+  `knowledge_sources`). Verified live: scan embeds chunks into pgvector;
+  recall returns the semantically-matching chunk first (no lexical lane
+  exists on pg — the hit could only arrive via the vector lane). Lexical
+  (tsvector) remains a documented gap.
+- [x] PS3 — CI runs a Postgres service (docs/how-to-pg compose shape) and the
+  pgvector conformance + integration tests are part of the gate.
+  **Shipped 2026-08-28:** pgvector/pgvector:pg17 service container
+  (health-gated) on the Rust job + the recipe's Docker-gated tests in the
+  gate; the ADR-0022 lints (engine neutrality, surface parity) are in CI at
+  last. Also fixed: CI had been calling the deleted `.codex/hooks/*`
+  scripts — all four gates recovered to `scripts/ci/`.
+- [x] PS4 — migration runbook demonstrated: SQLite export → Postgres import →
+  recall parity spot-check; documented under docs/guides/how-to/.
+  **Shipped 2026-08-28:** the executable demonstration is
+  `pg_recipe_sqlite_export_import_round_trip` (parity on both engines);
+  `docs/guides/how-to/migrate-sqlite-to-pg.md` walks the flow incl. the
+  empty-vector reindex drain and the SQLite rollback path.
+- [x] PS5 — a reindex op (MCP tool or CLI) drains the embed backlog with
+  progress, keyed on the vector index's embedded-set, not per-scan scope.
+  **Shipped 2026-08-27:** `reindex` MCP tool (both backends — it rides the
+  engine-neutral EmbeddingProvider + VectorIndex ports, so it works on
+  sqlite-vec and pgvector alike). Live first run on the agentzero store:
+  31,487 pending surfaced, 300/call deterministic drain with continue
+  reporting; scan_repo and reindex share the `embed_pending` helper.
+- [x] PS6 — ops hardening: schema versioning/migration strategy beyond
+  idempotent DDL, connection-string/TLS/pool validation errors surfaced at
+  `open`, and a backup/restore runbook page. **Shipped 2026-08-28:**
+  `schema_meta.schema_version` stamped at open; actionable connect errors
+  (scheme + URL + reachability/credentials/pgvector hints);
+  `docs/guides/how-to/backup-restore.md` (pg_dump + VACUUM INTO, restore
+  verification, sidecar-cost notes).
+
+## Acceptance Criteria (Phase A — P0 hot path, historical)
 
 - [ ] `adapters/pgvector/` crate exists with `PgMemoryService`, `PgKnowledgeStore`, `PgVectorIndex` implementing the P0 ports.
 - [ ] `core/integration/src/pgvector/bootstrap.rs` constructs an `EngramProvider` from a Postgres config (feature-gated `pgvector`).

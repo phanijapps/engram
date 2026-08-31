@@ -19,12 +19,9 @@ export function buildConfigJson(cfg: VizConfig): string {
     storage_path: cfg.storageDir,
     trusted_root: cfg.storageDir,
     scope_policy: "Strict",
-    embedding_provider: {
-      provider_type: "none",
-      model: "none",
-      dimensions: 384,
-      prompt_profile: "query",
-    },
+    embedding_provider: cfg.enableVector
+      ? { provider_type: "fastembed", model: "BAAI/bge-small-en-v1.5", dimensions: 384, prompt_profile: "query" }
+      : { provider_type: "none", model: "none", dimensions: 384, prompt_profile: "query" },
     migration_mode: cfg.migrationMode,
     capability_policy: "FailClosed",
     sqlite_storage_layout: { kind: "single_file", file_name: cfg.dbFile },

@@ -151,8 +151,8 @@ export function MaintainTab() {
 function JobMonitor({ job }: { job: MaintainJob }) {
   if (job.status === "running") {
     return (
-      <section style={{ ...card, borderColor: "var(--primary, #7df9ff)" }}>
-        <div style={{ ...formRow, color: "var(--primary, #7df9ff)" }}>
+      <section style={{ ...card, borderColor: "var(--primary)" }}>
+        <div style={{ ...formRow, color: "var(--primary)" }}>
           <Loader2 style={{ width: 14, height: 14, animation: "spin 1s linear infinite" }} aria-hidden />
           <span>Running — this may take a while…</span>
         </div>
@@ -161,8 +161,8 @@ function JobMonitor({ job }: { job: MaintainJob }) {
   }
   if (job.status === "error") {
     return (
-      <section style={{ ...card, borderColor: "var(--destructive, #f87171)" }}>
-        <div style={{ ...warnLine, color: "var(--destructive, #f87171)" }}>
+      <section style={{ ...card, borderColor: "var(--destructive)" }}>
+        <div style={{ ...warnLine, color: "var(--destructive)" }}>
           <AlertTriangle style={{ width: 14, height: 14 }} aria-hidden /> {job.op} failed
         </div>
         <div style={{ fontFamily: mono, fontSize: 12, marginTop: 6, color: "var(--muted-foreground)" }}>
@@ -180,8 +180,8 @@ function JobMonitor({ job }: { job: MaintainJob }) {
     ["skipped", r.skipped],
   ].filter(([, v]) => v !== undefined && v !== null);
   return (
-    <section style={{ ...card, borderColor: "var(--success, #34d399)" }}>
-      <div style={{ ...formRow, color: "var(--success, #34d399)" }}>
+    <section style={{ ...card, borderColor: "var(--success)" }}>
+      <div style={{ ...formRow, color: "var(--success)" }}>
         <CheckCircle2 style={{ width: 14, height: 14 }} aria-hidden /> {job.op} complete
       </div>
       {stats.length > 0 && (
@@ -279,8 +279,15 @@ const btnBase: CSSProperties = {
   borderRadius: "var(--radius-sm)", cursor: "pointer", fontFamily: mono, fontSize: 11, padding: "2px var(--spacing-2)",
 };
 const opBtn: CSSProperties = { ...btnBase };
-const opActive: CSSProperties = { ...btnBase, color: "var(--primary, #7df9ff)", borderColor: "var(--primary, #7df9ff)" };
-const runBtn: CSSProperties = { ...btnBase, marginLeft: "auto", color: "var(--foreground)", borderColor: "var(--primary, #7df9ff)" };
+const opActive: CSSProperties = { ...btnBase, color: "var(--primary)", borderColor: "var(--primary)" };
+const runBtn: CSSProperties = {
+  ...btnBase,
+  marginLeft: "auto",
+  background: "var(--primary)",
+  color: "var(--primary-foreground)",
+  borderColor: "var(--primary)",
+  fontWeight: 600,
+};
 const runDisabled: CSSProperties = { ...runBtn, opacity: 0.5, cursor: "not-allowed" };
 const kindLabel: CSSProperties = { color: "var(--muted-foreground)", fontSize: 10, letterSpacing: "0.08em" };
 const warnLine: CSSProperties = {

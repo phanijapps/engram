@@ -50,11 +50,25 @@ is a domain concept (delete / redact / tombstone / archive), not a DB delete.
 ### Source-grounded knowledge graph ✅
 `KnowledgeSource → SourceDocument → KnowledgeChunk → KnowledgeEntity /
 KnowledgeRelationship`, bounded by a named `KnowledgeGraph` — source-grounded,
-never free-floating. Ingest from filesystem/git; **tree-sitter AST** symbol
-extraction (10+ languages); deterministic graph extraction; opt-in
-**LLM** entity/relationship extraction. Re-ingest **converges** the graph
-(retraction). **Cross-repo linkage** via stable source keys + shared OpenAPI
-contract nodes. *Specs: knowledge-ingestion, knowledge-graph-extractor, ast-symbol-extraction, scale-repo-ingestion, background-repo-indexer, structured-repo-identity, contract-first-ingestion, knowledge-graph-retraction.*
+never free-floating. Ingest from filesystem/git via the dedicated
+**`engram-code` behavior crate** (ADR-0028): **tree-sitter AST** symbol
+extraction (10+ languages) with **receiver-qualified identities**
+(RFC-0020 Phase 2 — `Impl::method`, path/repo as disambiguators) resolved
+through a **scope-wide multi-candidate symbol table** (no silent collision
+overwrites); **typed structural edges** — `calls`, `imports`, `contains`,
+`extends`, `implements`, `routes_to` (the closed `CodeEdgeKind` set) — with
+**framework patterns** (Express/NestJS/FastAPI/Flask/Spring routes + React
+callbacks); cross-file references either resolve or land in the
+**unresolved-refs ledger** (re-attempted by the ingest **orphan sweep**
+when the defining file arrives later); code chunks carry **docstring +
+signature** for the lexical lane. Query surface: `file_dependencies` (the
+file-level import graph) and `explore` (natural-language seeded bounded
+subgraph) on every transport — facade, N-API, `@engram/node`, both MCP
+servers — reported as the `code_graph` capability. Deterministic
+throughout; opt-in **LLM** entity/relationship extraction stays TS-side.
+Re-ingest **converges** the graph (retraction, ledger rows included).
+**Cross-repo linkage** via stable source keys + shared OpenAPI
+contract nodes. *Specs: knowledge-ingestion, knowledge-graph-extractor, ast-symbol-extraction, scale-repo-ingestion, background-repo-indexer, structured-repo-identity, contract-first-ingestion, knowledge-graph-retraction, engram-code.*
 
 ### Taxonomy & ontology ✅
 A governed, evolving concept vocabulary (SKOS-aligned) and a typed ontology

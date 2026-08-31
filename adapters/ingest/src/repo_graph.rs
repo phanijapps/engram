@@ -12,8 +12,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use engram_domain::{
-    ChunkId, EntityId, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeGraphId,
+    ChunkId, EntityId, Id, KnowledgeChunk, KnowledgeEntity, KnowledgeGraph, KnowledgeGraphId,
     KnowledgeRelationship, KnowledgeSource, RelationshipId, Scope, SourceDocument,
+    UnresolvedReference, UnresolvedReferenceStatus,
 };
 use engram_knowledge::{CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
 
@@ -110,5 +111,32 @@ impl KnowledgeGraphRepository for KnowledgeRepoGraph {
         self.graph
             .list_graphs_by_source(scope, stable_source_key)
             .await
+    }
+
+    // code-graph-quality [ledger-not-capturing]: the unresolved-refs ledger
+    // methods (T6) were never forwarded here — every scan through the fan-in
+    // (the MCP path, the N-API path) silently failed `put_unresolved_refs is
+    // not supported` and the ledger stayed empty, so the cross-scan healing
+    // sweep had nothing to heal (observed: 0 rows despite ~2.9k name-only
+    // `calls` edges on the spring-boot-demo store).
+    async fn put_unresolved_refs(&self, refs: Vec<UnresolvedReference>) -> CoreResult<()> {
+        self.graph.put_unresolved_refs(refs).await
+    }
+
+    async fn list_unresolved_refs(
+        &self,
+        scope: &Scope,
+        status: UnresolvedReferenceStatus,
+    ) -> CoreResult<Vec<UnresolvedReference>> {
+        self.graph.list_unresolved_refs(scope, status).await
+    }
+
+    async fn update_unresolved_status(
+        &self,
+        id: &Id,
+        status: UnresolvedReferenceStatus,
+        scope: &Scope,
+    ) -> CoreResult<()> {
+        self.graph.update_unresolved_status(id, status, scope).await
     }
 }

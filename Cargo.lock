@@ -1517,11 +1517,16 @@ dependencies = [
  "engram-belief",
  "engram-domain",
  "engram-integration",
+ "engram-knowledge",
  "engram-memory",
  "engram-retrieval",
  "engram-runtime",
  "engram-store-pgvector",
+ "engram-store-sqlite",
  "futures",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -1544,10 +1549,38 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-code"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "engram-domain",
+ "engram-runtime",
+ "serde",
+ "tree-sitter",
+ "tree-sitter-bash",
+ "tree-sitter-c",
+ "tree-sitter-c-sharp",
+ "tree-sitter-cpp",
+ "tree-sitter-go",
+ "tree-sitter-java",
+ "tree-sitter-kotlin-ng",
+ "tree-sitter-perl",
+ "tree-sitter-php",
+ "tree-sitter-python",
+ "tree-sitter-ruby",
+ "tree-sitter-rust",
+ "tree-sitter-scala",
+ "tree-sitter-sfapex",
+ "tree-sitter-swift",
+ "tree-sitter-typescript",
+]
+
+[[package]]
 name = "engram-codegraph-queries"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "engram-code",
  "engram-domain",
  "engram-graph-analytics",
  "serde",
@@ -1650,6 +1683,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "engram-code",
  "engram-domain",
  "engram-knowledge",
  "engram-store-sqlite",
@@ -1661,23 +1695,6 @@ dependencies = [
  "serde_yml",
  "sha2 0.11.0",
  "tempfile",
- "tree-sitter",
- "tree-sitter-bash",
- "tree-sitter-c",
- "tree-sitter-c-sharp",
- "tree-sitter-cpp",
- "tree-sitter-go",
- "tree-sitter-java",
- "tree-sitter-kotlin-ng",
- "tree-sitter-perl",
- "tree-sitter-php",
- "tree-sitter-python",
- "tree-sitter-ruby",
- "tree-sitter-rust",
- "tree-sitter-scala",
- "tree-sitter-sfapex",
- "tree-sitter-swift",
- "tree-sitter-typescript",
 ]
 
 [[package]]
@@ -1687,6 +1704,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "engram-belief",
+ "engram-code",
  "engram-consolidation",
  "engram-decay",
  "engram-domain",
@@ -1737,6 +1755,7 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-runtime",
+ "tokio",
 ]
 
 [[package]]
@@ -1745,6 +1764,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "engram-backend-pgvector",
  "engram-belief",
  "engram-codegraph-queries",
  "engram-codegraph-temporal",
@@ -1820,6 +1840,7 @@ dependencies = [
  "engram-belief",
  "engram-consolidation",
  "engram-domain",
+ "engram-memory",
  "engram-runtime",
  "futures",
 ]

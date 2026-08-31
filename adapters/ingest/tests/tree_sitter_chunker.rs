@@ -74,8 +74,8 @@ fn chunks_java_methods_and_classes() {
         "missing class Main: {chunks:?}"
     );
     assert!(
-        chunks.iter().any(|(a, _, _, _)| a == "fn run"),
-        "missing fn run"
+        chunks.iter().any(|(a, _, _, _)| a == "fn Main::run"),
+        "missing fn Main::run"
     );
 }
 
@@ -126,8 +126,8 @@ fn chunks_apex_methods_and_classes() {
         "missing class Main: {chunks:?}"
     );
     assert!(
-        chunks.iter().any(|(a, _, _, _)| a == "fn run"),
-        "missing fn run"
+        chunks.iter().any(|(a, _, _, _)| a == "fn Main::run"),
+        "missing fn Main::run"
     );
 }
 
@@ -141,9 +141,10 @@ fn unsupported_extension_returns_error() {
 #[test]
 fn container_declarations_emit_empty_text_leaf_keeps_full_body() {
     // A class with method children is a CONTAINER: its whole-body chunk would
-    // bloat the vector index (thousands of lines), so it emits empty text while
-    // keeping the anchor (so the graph extractor still creates the class
-    // entity). The methods are leaf declarations and keep their full text.
+    // bloat the vector index (thousands of lines), so it emits signature-only
+    // text (T9: docstring + first line — small and lexically searchable, never
+    // the body) while keeping the anchor for the graph extractor. The methods
+    // are leaf declarations and keep their full text.
     let code = "class Main {\n  void run() { return 1; }\n  String getName() { return \"\"; }\n}\n";
     let chunks = chunk(code, "java");
     let class = chunks
@@ -151,13 +152,13 @@ fn container_declarations_emit_empty_text_leaf_keeps_full_body() {
         .find(|(a, _, _, _)| a == "class Main")
         .expect("class Main emitted");
     assert!(
-        class.1.is_empty(),
-        "container (class) must emit empty text to avoid embedding the whole body, got: {:?}",
+        class.1 == "class Main {",
+        "container (class) must emit signature-only text (no body), got: {:?}",
         class.1
     );
     let run = chunks
         .iter()
-        .find(|(a, _, _, _)| a == "fn run")
+        .find(|(a, _, _, _)| a == "fn Main::run")
         .expect("fn run emitted");
     assert!(
         !run.1.is_empty(),

@@ -69,8 +69,32 @@ fn hints_body(args: &Value) -> Result<String, ToolError> {
 
 /// `predict_context`: derive proactive retrieval hints from the agent's current
 /// state (task + recent activity).
-pub fn predict_context(_app: &App, args: &Value) -> Result<Value, ToolError> {
-    Ok(protocol::text_content(hints_body(args)?))
+pub fn predict_context(app: &App, args: &Value) -> Result<Value, ToolError> {
+    // Phase 2.4: enrich hints with recent memories from the store.
+    // If the agent provides a task, also surface recently-written memories
+    // that might be relevant (the store knows what the agent was doing).
+    let mut enriched = args.clone();
+    let state = state_from_args(args);
+
+    // If no recent_queries provided, pull from recent memories
+    if state.recent_queries.is_empty() {
+        if let Ok(memory) = app.provider.require_memory() {
+            let scope = app.scope.clone();
+            let recent = block_on(async { memory.list_memories_paged(&scope, None, 5).await });
+            if let Ok(records) = recent {
+                let queries: Vec<String> = records
+                    .items
+                    .iter()
+                    .map(|r| r.content.text.chars().take(60).collect::<String>())
+                    .collect();
+                if !queries.is_empty() {
+                    enriched["recent_queries"] = serde_json::json!(queries);
+                }
+            }
+        }
+    }
+
+    Ok(protocol::text_content(hints_body(&enriched)?))
 }
 
 #[cfg(test)]

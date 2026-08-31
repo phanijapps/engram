@@ -1,12 +1,13 @@
 //! viz-foundation S1 E2E. Guards the contract the plan's T9 fixes:
 //!  - the zbot-styled shell renders (brand + 3 nav tabs + live scope pill);
-//!  - the Graph overview paints from REAL data (legend + a mounted WebGL canvas);
+//!  - the Graph overview paints from REAL data (legend + a mounted canvas);
 //!  - the network is BOUNDED — /api/graph/communities within node/edge caps and
 //!    the overview never fires an unbounded entity/neighborhood dump; and
 //!  - the bounded set renders without an uncaught crash.
 //!
-//! Headless Chrome = software WebGL: this is render-without-crash + network
-//! shape, not FPS (manual gate on reference hardware, separate).
+//! The overview renders a d3-force layout on canvas 2D (ForceGraph.tsx); the
+//! drill clicks node positions exposed by its e2e hook (force layout moves
+//! nodes off their server-coord seeds).
 
 import { test, expect, type Response } from "@playwright/test";
 
@@ -46,16 +47,18 @@ test.describe("viz-foundation S1", () => {
     ).toBeVisible();
 
     // 2. Live scope pill — the BFF is reachable on the real agentzero store.
-    await expect(page.locator(".status-pill")).toContainText(/agentzero/i, {
-      timeout: 10_000,
-    });
+    // (Scoped by title: the shell now carries a second MCP status pill.)
+    await expect(page.locator('.status-pill[title="BFF health"]')).toContainText(
+      /agentzero/i,
+      { timeout: 10_000 },
+    );
 
     // 3. The overview legend renders — meta-nodes/edges arrived from real data.
     await expect(page.getByText(/\d[\d,]* communities · \d[\d,]* edges/i)).toBeVisible({
       timeout: 20_000,
     });
 
-    // 4. deck.gl WebGL canvas is mounted (the overview, not a raw-node dump).
+    // 4. The force-graph canvas is mounted (the overview, not a raw-node dump).
     await expect(page.locator("canvas")).toBeVisible();
 
     // 5. Network is bounded: within caps, and built (not the too-few empty-state).
@@ -94,20 +97,31 @@ test.describe("viz-foundation S1", () => {
     );
     await page.goto("/observatory");
     await expect(page.getByText(/communities · .* edges/i)).toBeVisible({ timeout: 20000 });
+    await communities;
 
-    const commBody = (await (await communities).json()) as {
-      communities: { id: string; memberCount: number; x?: number; y?: number }[];
-    };
+    // A force layout moves nodes off their server-coord seeds, so click targets
+    // come from the live screen positions exposed by the ForceGraph e2e hook.
     // Biggest community = largest on-screen footprint → a reliable click target.
-    const biggest = commBody.communities.reduce(
-      (a, b) => (b.memberCount > a.memberCount ? b : a),
-      commBody.communities[0],
-    );
+    await page.waitForTimeout(2500); // let the simulation settle
+    const nodes = await page.evaluate(() => {
+      const w = window as unknown as {
+        __engramForceGraphNodes?: () => {
+          kind: string;
+          memberCount: number;
+          x: number;
+          y: number;
+        }[];
+      };
+      return w.__engramForceGraphNodes?.() ?? [];
+    });
+    const communities2 = nodes.filter((n) => n.kind === "community");
+    expect(communities2.length).toBeGreaterThan(0);
+    const biggest = communities2.reduce((a, b) => (b.memberCount > a.memberCount ? b : a));
     const box = await page.locator("canvas").boundingBox();
     expect(box).toBeTruthy();
-    // Zoom 0 → 1 world unit ≈ 1 px; the view is centered on the centroid (~0,0).
-    const x = box!.width / 2 + (biggest.x ?? 0);
-    const y = box!.height / 2 + (biggest.y ?? 0);
+    // Hook positions are viewport-absolute; click positions are canvas-relative.
+    const x = biggest.x - box!.x;
+    const y = biggest.y - box!.y;
 
     const members = page.waitForResponse(
       (r) => r.url().includes("/api/graph/community/") && r.ok(),

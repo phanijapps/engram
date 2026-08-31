@@ -356,6 +356,9 @@ docs/                Architecture, ADRs, RFCs, research, specs, domain model.
 
 ## Quick start
 
+> **New here?** The [60-second quickstart](docs/guides/how-to/quickstart.md)
+> takes you from zero to a 3D knowledge graph of your codebase in 3 commands.
+
 ### Prerequisites
 
 - **Rust 1.85+** (edition 2024).

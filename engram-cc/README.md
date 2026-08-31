@@ -1,6 +1,6 @@
 # engram-cc
 
-A web-based, single-page **code-graph visualization workspace** that turns an indexed repository into an interactive knowledge graph. The graph is the hero — always visible, full-viewport — with community-colored nodes sized by centrality, calls-edges, and overlay panels for insights, taxonomy, ontology, node detail, search, and timeline.
+A web-based, single-page **code-graph visualization workspace** that turns an indexed repository into an interactive knowledge graph. The Graph tab renders the actual symbol graph — real entities + resolved call edges, degree-sized and kind-colored — with the community meta-graph one toggle away; overlay panels cover node detail, search, and maintenance.
 
 ## Architecture
 

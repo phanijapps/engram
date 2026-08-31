@@ -1,42 +1,39 @@
-//! Graph tab — community-overview (T8/T0) + drill (S2 T3). Renders the
-//! server-pre-aggregated community meta-graph (/api/graph/communities) in deck.gl
-//! (ScatterplotLayer meta-nodes + ArcLayer meta-edges, concentric-ring layout).
-//! Clicking a community meta-node drills into its member entities (a bounded
-//! sample, rendered as a violet cluster around the community's coordinate);
-//! selecting a member opens the entity-detail panel.
+//! Graph viewport — two views over the same scope:
+//!  - "graph": the ACTUAL graph — real symbol nodes + resolved call edges
+//!    (/api/graph/subgraph, degree-ranked + bounded), rendered by SymbolGraph.
+//!  - "communities": the community meta-graph (/api/graph/communities) with
+//!    d3-force communities + drill (the original overview).
+//! Clicking a symbol selects it into the entity-detail panel.
 
-import { useEffect, useMemo, useState } from "react";
-import { DeckGL } from "@deck.gl/react";
-import {
-  COORDINATE_SYSTEM,
-  OrthographicView,
-  type Layer,
-  type PickingInfo,
-} from "@deck.gl/core";
-import { LineLayer, ScatterplotLayer } from "@deck.gl/layers";
+import { useEffect, useState, type CSSProperties } from "react";
 
 import {
   api,
-  type CommunityMetaEdge,
-  type CommunityMetaNode,
   type CommunitiesResponse,
+  type SubgraphResponse,
 } from "../../lib/api.ts";
 import { useGraphStore } from "../../store/graph.ts";
-import { makeDrillLayer } from "./DrillLayer.ts";
+import { ForceGraph } from "./ForceGraph.tsx";
+import { Graph3DView } from "./ForceGraph3D.tsx";
+import { SymbolGraph } from "./SymbolGraph.tsx";
 import { EntityDetailPanel } from "./EntityDetail.tsx";
 
-const ACCENT: [number, number, number] = [125, 249, 255]; // #7df9ff (cyan)
+export type GraphView = "graph3d" | "graph" | "communities";
 
 export function GraphOverview({
   limit,
   refreshSignal = 0,
   highlight = "",
+  defaultView = "graph3d",
 }: {
   limit?: number;
   refreshSignal?: number;
   highlight?: string;
+  defaultView?: GraphView;
 } = {}) {
+  const [view, setView] = useState<GraphView>(defaultView);
   const [data, setData] = useState<CommunitiesResponse | null>(null);
+  const [subgraph, setSubgraph] = useState<SubgraphResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // drill store
@@ -60,84 +57,24 @@ export function GraphOverview({
     };
   }, [limit, refreshSignal]);
 
-  // community id -> [x, y]; centroid for the initial view target.
-  const { nodePos, target } = useMemo(() => {
-    const nodes = data?.communities ?? [];
-    const m = new Map<string, [number, number]>();
-    let sx = 0;
-    let sy = 0;
-    for (const n of nodes) {
-      const p: [number, number] = [n.x ?? 0, n.y ?? 0];
-      m.set(n.id, p);
-      sx += p[0];
-      sy += p[1];
-    }
-    const t: [number, number, number] = nodes.length
-      ? [sx / nodes.length, sy / nodes.length, 0]
-      : [0, 0, 0];
-    return { nodePos: m, target: t };
-  }, [data]);
-
-  const layers = useMemo(() => {
-    if (!data) return [];
-    const list: Layer[] = [
-      // LineLayer (not ArcLayer): ArcLayer is a geographic great-circle layer and
-      // renders nothing in COORDINATE_SYSTEM.CARTESIAN. Straight lines connect the
-      // community meta-nodes correctly.
-      new LineLayer<CommunityMetaEdge>({
-        id: "community-edges",
-        data: data.edges,
-        coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-        getSourcePosition: (d) => nodePos.get(d.source) ?? [0, 0],
-        getTargetPosition: (d) => nodePos.get(d.target) ?? [0, 0],
-        getColor: [...ACCENT, 85],
-        getWidth: 1,
-        widthUnits: "pixels",
-        widthMinPixels: 0.8,
-      }),
-      new ScatterplotLayer<CommunityMetaNode>({
-        id: "community-nodes",
-        data: data.communities,
-        coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
-        getPosition: (d) => [d.x ?? 0, d.y ?? 0],
-        getRadius: (d) => Math.sqrt(d.memberCount) * 0.8,
-        radiusMinPixels: 2,
-        radiusMaxPixels: 16,
-        getFillColor: (d) => {
-          if (!highlight) return [...ACCENT, 130];
-          const term = highlight.toLowerCase();
-          const hit =
-            d.id.toLowerCase().includes(term) || d.name.toLowerCase().includes(term);
-          return hit ? [...ACCENT, 210] : [...ACCENT, 18];
-        },
-        stroked: true,
-        getLineColor: [...ACCENT, 230],
-        getLineWidth: 1,
-        pickable: true,
-      }),
-    ];
-    if (drill && members.length > 0) {
-      const center = nodePos.get(drill.id) ?? [0, 0];
-      list.push(...makeDrillLayer(center, members, memberEdges, selectedEntityId));
-    }
-    return list;
-  }, [data, nodePos, drill, members, memberEdges, selectedEntityId, highlight]);
-
-  // One click handler discriminates overview-node vs drill-member by shape.
-  const onPick = (info: PickingInfo) => {
-    const o = info.object as Record<string, unknown> | undefined;
-    if (!o) return;
-    if ("memberCount" in o) {
-      void drillCommunity(o as unknown as CommunityMetaNode);
-    } else if ("kind" in o && typeof o.id === "string") {
-      void selectEntity(o.id);
-    }
-  };
+  // The actual graph: fetched lazily on first switch (keeps the default
+  // communities load unchanged) and on refresh.
+  useEffect(() => {
+    if (view !== "graph" && view !== "graph3d") return;
+    let cancelled = false;
+    setSubgraph(null);
+    setError(null);
+    api
+      .subgraph(limit)
+      .then((d) => !cancelled && setSubgraph(d))
+      .catch((e) => !cancelled && setError(e instanceof Error ? e.message : String(e)));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, refreshSignal]);
 
   if (error) return <Status text={`Error: ${error}`} />;
-  if (!data) return <Status text="Loading community overview…" />;
-  if (!data.built || data.communities.length === 0)
-    return <Status text="No communities — too few relationships to cluster." />;
 
   return (
     <div
@@ -145,43 +82,136 @@ export function GraphOverview({
         position: "relative",
         width: "100%",
         height: "100%",
-        background: "var(--background)",
+        /* dark viewport — the force-graph scene colors are tuned for a dark canvas */
+        background: "#07080d",
       }}
     >
-      <DeckGL
-        views={[new OrthographicView({ id: "ortho", controller: true })]}
-        initialViewState={{ ortho: { target, zoom: 0, minZoom: -6, maxZoom: 14 } }}
-        layers={layers}
-        onClick={onPick}
-        getTooltip={({ object }: PickingInfo) => {
-          if (!object) return null;
-          const o = object as Record<string, unknown>;
-          return "memberCount" in o
-            ? `${o.name}\n${o.memberCount} members`
-            : String(o.name ?? o.id);
-        }}
-      />
-      <Legend
-        count={data.communities.length}
-        total={data.totalCommunities}
-        edges={data.edges.length}
-      />
+      <ViewToggle view={view} onChange={setView} />
+      {view === "graph3d" ? (
+        subgraph ? (
+          subgraph.nodes.length === 0 ? (
+            <Status text="No resolved call edges — scan a repository first." />
+          ) : (
+            <Graph3DView
+              nodes={subgraph.nodes}
+              edges={subgraph.edges}
+              selectedEntityId={selectedEntityId}
+              onSelect={(id) => void selectEntity(id)}
+            />
+          )
+        ) : (
+          <Status text="Loading 3D graph…" />
+        )
+      ) : view === "graph" ? (
+        subgraph ? (
+          subgraph.nodes.length === 0 ? (
+            <Status text="No resolved call edges — scan a repository first." />
+          ) : (
+            <SymbolGraph
+              nodes={subgraph.nodes}
+              edges={subgraph.edges}
+              highlight={highlight}
+              selectedEntityId={selectedEntityId}
+              onSelect={(id) => void selectEntity(id)}
+            />
+          )
+        ) : (
+          <Status text="Loading graph…" />
+        )
+      ) : data ? (
+        !data.built || data.communities.length === 0 ? (
+          <Status text="No communities — too few relationships to cluster." />
+        ) : (
+          <ForceGraph
+            communities={data.communities}
+            edges={data.edges}
+            highlight={highlight}
+            drill={drill}
+            members={members}
+            memberEdges={memberEdges}
+            selectedEntityId={selectedEntityId}
+            onCommunityClick={(node) => void drillCommunity(node)}
+            onMemberClick={(id) => void selectEntity(id)}
+          />
+        )
+      ) : (
+        <Status text="Loading community overview…" />
+      )}
+      {view === "graph" && subgraph && subgraph.nodes.length > 0 && (
+        <Legend
+          label={`${subgraph.nodes.length} symbols · ${subgraph.edges.length} edges`}
+          sub={subgraph.totalNodes > subgraph.nodes.length
+            ? `top ${subgraph.nodes.length} of ${subgraph.totalNodes} by degree · resolved ${subgraph.predicates.join("/")} only`
+            : `resolved ${subgraph.predicates.join("/")} only`}
+        />
+      )}
+      {view === "communities" && data && data.built && data.communities.length > 0 && (
+        <Legend
+          label={
+            data.totalCommunities && data.totalCommunities > data.communities.length
+              ? `${data.communities.length} of ${data.totalCommunities} communities`
+              : `${data.communities.length} communities`
+          }
+          sub={`${data.edges.length} meta-edges`}
+        />
+      )}
       <EntityDetailPanel />
     </div>
   );
 }
 
-function Legend({
-  count,
-  total,
-  edges,
-}: {
-  count: number;
-  total?: number;
-  edges: number;
-}) {
-  const label =
-    total && total > count ? `${count} of ${total} communities` : `${count} communities`;
+function ViewToggle({ view, onChange }: { view: GraphView; onChange: (v: GraphView) => void }) {
+  const items: { key: GraphView; label: string }[] = [
+    { key: "graph3d", label: "3D GRAPH" },
+    { key: "graph", label: "2D GRAPH" },
+    { key: "communities", label: "COMMUNITIES" },
+  ];
+  return (
+    <div style={toggleWrap}>
+      {items.map((it) => (
+        <button
+          key={it.key}
+          type="button"
+          style={view === it.key ? toggleBtnActive : toggleBtn}
+          onClick={() => onChange(it.key)}
+          data-viewtoggle={it.key}
+        >
+          {it.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const toggleWrap: CSSProperties = {
+  position: "absolute",
+  top: "var(--spacing-3)",
+  right: "var(--spacing-3)",
+  display: "flex",
+  gap: 4,
+  zIndex: 20,
+};
+const toggleBtn: CSSProperties = {
+  fontFamily: "var(--font-mono)",
+  fontSize: 10,
+  letterSpacing: "0.08em",
+  color: "var(--muted-foreground)",
+  background: "var(--sidebar)",
+  borderWidth: "1px",
+  borderStyle: "solid",
+  borderColor: "var(--border)",
+  borderRadius: "var(--radius-sm)",
+  padding: "4px 10px",
+  cursor: "pointer",
+};
+const toggleBtnActive: CSSProperties = {
+  ...toggleBtn,
+  color: "var(--primary)",
+  borderColor: "var(--primary)",
+  fontWeight: 600,
+};
+
+function Legend({ label, sub }: { label: string; sub: string }) {
   return (
     <div
       style={{
@@ -199,7 +229,7 @@ function Legend({
         pointerEvents: "none",
       }}
     >
-      {label} · {edges} edges
+      {label} <span style={{ opacity: 0.7 }}>· {sub}</span>
     </div>
   );
 }

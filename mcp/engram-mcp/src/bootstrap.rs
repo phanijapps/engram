@@ -6,11 +6,70 @@
 
 use engram_integration::{EngramConfig, EngramProvider, SqliteStorageLayout};
 
-use crate::config::{McpConfig, McpSqliteLayout};
+use crate::config::{McpBackend, McpConfig, McpSqliteLayout};
 
 /// Open the provider described by `config`. Errors are surfaced as a string
 /// for the caller (`main`) to report.
 pub fn open_provider(config: &McpConfig) -> Result<EngramProvider, String> {
+    // storage-dir-fix: the server owns its storage lifecycle — create the
+    // `--storage` directory tree up front. Previously a path with a missing
+    // PARENT failed validation with the confusing "trusted_root does not
+    // exist" (the trusted root is the storage path's parent), and the failure
+    // surfaced only on stderr of a stdio server — invisible to MCP clients.
+    // Creating the tree makes `--storage /any/deep/path` boot zero-config.
+    if let Err(e) = std::fs::create_dir_all(&config.storage_path) {
+        return Err(format!(
+            "cannot create storage directory {}: {e}",
+            config.storage_path.display()
+        ));
+    }
+    match config.backend {
+        McpBackend::Pgvector => open_pgvector(config),
+        McpBackend::Sqlite => open_sqlite(config),
+    }
+}
+
+/// PS1: open through the `backends/pgvector` recipe — Postgres holds the
+/// graph, chunks, memories, and vectors. The recipe (ADR-0022) owns connection
+/// lifecycle, idempotent schema application, and cell composition; this
+/// function only builds the engine-neutral config. Requires the `pgvector`
+/// cargo feature at build time.
+fn open_pgvector(config: &McpConfig) -> Result<EngramProvider, String> {
+    #[cfg(feature = "pgvector")]
+    {
+        let trusted_root = config
+            .storage_path
+            .parent()
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        let conn_str = config
+            .pg_connection_string
+            .clone()
+            .expect("config validation guarantees a pg connection string");
+        let engram_config = EngramConfig::new(
+            config.storage_path.clone(),
+            trusted_root,
+            config.scope_strategy,
+            config.embedding.clone(),
+            config.migration_mode,
+            config.capability_policy,
+        )
+        .with_pgvector(conn_str);
+        engram_backend_pgvector::open(&engram_config)
+            .map_err(|e| format!("failed to open pgvector provider: {e}"))
+    }
+    #[cfg(not(feature = "pgvector"))]
+    {
+        let _ = config;
+        Err(
+            "--backend pgvector requires a build with the `pgvector` feature: \
+             cargo build -p engram-mcp --features pgvector"
+                .to_string(),
+        )
+    }
+}
+
+fn open_sqlite(config: &McpConfig) -> Result<EngramProvider, String> {
     // `EngramProvider::open` validates that `storage_path` is inside
     // `trusted_root`, so default the trusted root to the storage path's parent
     // (mirroring `EngramConfig::from_profile_file`) instead of a hardcoded
@@ -105,6 +164,8 @@ mod tests {
             // tests directly.
             enable_vector: false,
             tool_profile: String::new(),
+            backend: McpBackend::Sqlite,
+            pg_connection_string: None,
         }
     }
 
@@ -201,7 +262,7 @@ mod tests {
 
     /// A valid weighted `.engram/recall.json` is applied (the provider opens
     /// with the weighted config). The weighted-fusion-active half of the chain
-    /// (that `SqlUnifiedRecall` honors the weights) is covered by the
+    /// (that the engine's unified recall honors the weights) is covered by the
     /// integration-level recall tests; this test proves the MCP feeder.
     #[test]
     fn open_provider_loads_valid_recall_fusion_from_engram_dir() {
@@ -247,5 +308,24 @@ mod tests {
                 "malformed recall.json must boot-error, but provider opened (config was ignored — Blocker 1 regression)"
             ),
         }
+    }
+
+    /// storage-dir-fix: a `--storage` path whose PARENT directories do not
+    /// exist boots zero-config — the server creates the tree instead of
+    /// failing validation with "trusted_root does not exist".
+    #[test]
+    fn open_provider_creates_missing_storage_tree() {
+        let base = tempfile::tempdir().expect("tempdir");
+        // Two levels that do not exist yet.
+        let storage = base.path().join("deep").join("nested").join("store");
+        let config = test_config(&storage);
+        let provider =
+            open_provider(&config).expect("boots with a missing storage tree (creates it)");
+        let _ = provider.capabilities();
+        assert!(
+            storage.is_dir(),
+            "storage tree created: {}",
+            storage.display()
+        );
     }
 }

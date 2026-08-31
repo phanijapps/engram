@@ -35,34 +35,45 @@ describe.skipIf(!ready)("engram-mcp-http (real addon)", () => {
     const port = 5000 + Math.floor(Math.random() * 1000);
     const transport = createNativeProviderTransport({ configJson });
     const server = await startMcpHttpServer({ transport, port });
+    const client = new Client(
+      { name: "smoke", version: "1.0.0" },
+      { versionNegotiation: { mode: "auto" } }
+    );
     try {
-      const client = new Client(
-        { name: "smoke", version: "1.0.0" },
-        { versionNegotiation: { mode: "auto" } }
-      );
       await client.connect(
         new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
       );
       const { tools } = await client.listTools();
+      // test-hygiene fix: the surface is 42 tools now (maintenance trio +
+      // graph_health + explore/file_dependencies). The stale list previously
+      // threw, skipped client.close(), and left server.close() waiting on the
+      // open connection — surfacing as a confusing 15s TIMEOUT instead of the
+      // assertion failure.
       expect(tools.map((t) => t.name).sort()).toEqual([
+        "apply_maintenance_plan",
         "architecture",
         "belief_get",
         "belief_list",
         "belief_put",
         "belief_retract",
         "belief_stale_list",
+        "build_maintenance_plan",
         "capability_report",
         "change_impact",
         "code_health",
         "consolidate",
         "contradiction_detect",
         "contradiction_list",
+        "explore",
+        "file_dependencies",
         "forget",
         "get_context",
+        "graph_health",
         "graph_neighbors",
         "graph_overview",
         "graph_subgraph",
         "hierarchy_path",
+        "list_maintenance_candidates",
         "list_memories",
         "maintenance_run",
         "ontology_read",
@@ -93,7 +104,22 @@ describe.skipIf(!ready)("engram-mcp-http (real addon)", () => {
 
       await client.close();
     } finally {
-      await new Promise<void>((r) => server.close(() => r()));
+      // test-hygiene fix: close the client defensively (an assertion throw
+      // used to skip it, leaving server.close() waiting on the open
+      // connection forever — a 15s timeout masking the real failure) and
+      // bound the server-close wait so no failure mode hangs the suite.
+      try {
+        await client.close();
+      } catch {
+        /* already closed */
+      }
+      await new Promise<void>((r) => {
+        const bail = setTimeout(r, 2000);
+        server.close(() => {
+          clearTimeout(bail);
+          r();
+        });
+      });
     }
   }, 15000);
 });

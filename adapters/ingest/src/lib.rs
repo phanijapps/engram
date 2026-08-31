@@ -6,7 +6,6 @@
 
 mod chunker;
 mod classifier;
-mod code_symbol;
 mod contract;
 mod contract_entities;
 mod extractor;
@@ -23,15 +22,18 @@ mod request;
 mod scan_filter;
 mod scanner;
 mod source_key;
-mod tree_sitter_chunker;
 mod yaml_safety;
 
 pub use chunker::{ChunkCandidate, Chunker, PlainTextChunker, PlainTextChunkerOptions};
-pub use classifier::{FileKind, classify_file, is_denylisted, is_secret_file, is_within_root};
-pub use code_symbol::CodeSymbolChunker;
+pub use classifier::{
+    FileKind, classify_file, is_denylisted, is_secret_file, is_within_root, looks_minified_bytes,
+    looks_minified_name,
+};
 pub use contract::{detect_and_parse_openapi, normalize_contract_key};
 pub use contract_entities::ParsedOperation;
-pub use extractor::{ExtractedGraph, GraphExtractor};
+pub use engram_code::CodeSymbolChunker;
+pub use engram_code::TreeSitterChunker;
+pub use extractor::{ExtractedGraph, GraphExtractor, register_entities, resolve_call_refs};
 pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
 pub use git::GitSourceReader;
 pub use git_detect::detect_git;
@@ -45,4 +47,3 @@ pub use scanner::{
     ScanOptions, ScanProgress, ScanSummary, detect_workspace, scan_repository, scan_workspace,
 };
 pub use source_key::{SOURCE_PATH_KEY, STABLE_SOURCE_KEY, stable_source_key};
-pub use tree_sitter_chunker::TreeSitterChunker;

@@ -81,6 +81,8 @@ export interface ScopeCounts {
   hierarchyRelations: number;
 }
 
+/** The typed transport over the native binding — every route in the TS MCP
+ *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
@@ -97,6 +99,17 @@ export interface NativeProviderTransport {
     dryRun?: boolean;
     since?: string;
     until?: string;
+  }): Promise<unknown>;
+  /** File-level import graph with module→file resolution (RFC-0020 Phase 2).
+   *  One implementation (the Rust facade) — the binding is a transport. */
+  fileDependencies(scope: unknown): Promise<unknown>;
+  /** Natural-language explore: seeded bounded subgraph (RFC-0020 Phase 2). */
+  explore(request: {
+    scope: unknown;
+    query: string;
+    depth?: number;
+    maxNodes?: number;
+    maxEdges?: number;
   }): Promise<unknown>;
   /** Upsert a knowledge entity. */
   putEntity(entity: unknown): Promise<unknown>;
@@ -230,6 +243,23 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
       ...(request.until ? { until: request.until } : {})
     };
     return decode(this.provider.consolidateJson(encode(full)));
+  }
+
+  /** File-level import graph with module→file resolution (RFC-0020 Phase 2).
+   *  One implementation (the Rust facade) — the binding is a transport. */
+  async fileDependencies(scope: unknown): Promise<unknown> {
+    return decode(this.provider.fileDependenciesJson(encode(scope)));
+  }
+
+  /** Natural-language explore: seeded bounded subgraph (RFC-0020 Phase 2). */
+  async explore(request: {
+    scope: unknown;
+    query: string;
+    depth?: number;
+    maxNodes?: number;
+    maxEdges?: number;
+  }): Promise<unknown> {
+    return decode(this.provider.exploreJson(encode(request)));
   }
 
   async putEntity(entity: unknown): Promise<unknown> {

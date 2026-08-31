@@ -42,6 +42,28 @@ export interface CommunitiesResponse {
   totalCommunities?: number;
 }
 
+export interface SymbolGraphNode {
+  id: string;
+  name: string;
+  kind: string;
+  degree: number;
+}
+
+export interface SymbolGraphEdge {
+  source: string;
+  target: string;
+  predicate: string;
+}
+
+export interface SubgraphResponse {
+  nodes: SymbolGraphNode[];
+  edges: SymbolGraphEdge[];
+  totalNodes: number;
+  totalEdges: number;
+  resolvedOnly: boolean;
+  predicates: string[];
+}
+
 export interface GraphEntityView {
   id: string;
   name: string;
@@ -101,7 +123,20 @@ export interface BeliefView {
 
 export interface ProcedureView {
   id: string;
+  name?: string;
   text: string;
+  steps?: string[];
+  successCount?: number;
+  failureCount?: number;
+}
+
+export interface RecallItem {
+  id: string;
+  targetType: string;
+  targetId?: string;
+  content: string;
+  score?: { total?: number; relevance?: number; policyFit?: number };
+  provenance?: { source?: string };
 }
 
 export interface ScanSummary {
@@ -187,6 +222,10 @@ export const api = {
   communities: (limit?: number) =>
     getJson<CommunitiesResponse>(`/graph/communities${limit ? `?limit=${limit}` : ""}`),
 
+  // The actual graph — real symbols + call edges, degree-ranked + bounded.
+  subgraph: (limit?: number) =>
+    getJson<SubgraphResponse>(`/graph/subgraph${limit ? `?limit=${limit}` : ""}`),
+
   // Drill — entity ids contain slashes (e.g. "endpoint-post-/api/..."), so they
   // MUST be URL-encoded in the path or Hono's single-segment :id won't match.
   communityMembers: (communityId: string, cursor?: string | null, limit?: number) =>
@@ -200,14 +239,31 @@ export const api = {
       `/graph/node/${encodeURIComponent(id)}/neighbors${pageQs(cursor, limit)}`,
     ),
 
-  // Memory tab — keyset lists over the read-only secondary path.
-  memory: (cursor?: string | null, limit?: number) =>
-    getJson<Page<MemoryView>>(`/memory${pageQs(cursor, limit)}`),
+  // Memory tab — keyset lists over the Rust facade. ?q= triggers a server-side
+  // SQL LIKE search on content.text (node:sqlite path).
+  memory: (cursor?: string | null, limit?: number, q?: string) => {
+    const qs = pageQs(cursor, limit);
+    const qParam = q ? `${qs ? "&" : "?"}q=${encodeURIComponent(q)}` : "";
+    return getJson<Page<MemoryView>>(`/memory${qs}${qParam}`);
+  },
   beliefs: (cursor?: string | null, limit?: number) =>
     getJson<Page<BeliefView>>(`/beliefs${pageQs(cursor, limit)}`),
   procedures: (cursor?: string | null, limit?: number) =>
     getJson<Page<ProcedureView>>(`/procedures${pageQs(cursor, limit)}`),
   contradictions: () => getJson<Page<unknown>>("/contradictions"),
+
+  // Hybrid recall search (vector + graph + associative + temporal fusion).
+  recall: (query: string) => getJson<{ items: RecallItem[]; createdAt?: string }>(
+    `/recall?q=${encodeURIComponent(query)}`,
+  ),
+
+  // Ask — agentic RAG (LLM calls tools autonomously, returns answer + trace).
+  ask: (query: string) => getJson<{
+    answer: string;
+    trace: Array<{ tool: string; args: Record<string, unknown>; result: unknown; error?: string }>;
+    rounds: number;
+    maxedOut?: boolean;
+  }>(`/ask?q=${encodeURIComponent(query)}`),
 
   // Ingest tab — scan runs in a child process (the `engram-ingest` CLI) via the BFF.
   startScan: (root: string, kind: "code" | "doc" | "auto") =>

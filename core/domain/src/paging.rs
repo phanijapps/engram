@@ -55,7 +55,10 @@ impl<T> Page<T> {
 
     /// A terminal page (no further results).
     pub fn last(items: Vec<T>) -> Self {
-        Self { items, next_cursor: None }
+        Self {
+            items,
+            next_cursor: None,
+        }
     }
 
     /// Map the items, preserving the cursor (e.g. record → view projection).

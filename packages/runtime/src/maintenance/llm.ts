@@ -11,30 +11,70 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { Type, type Context, type Model, type Tool } from "@earendil-works/pi-ai";
 
 export { Type };
+/** Tool schema shape for LLM tool-use (name + JSON-schema parameters). */
 export type { Tool };
 
+/** One tool invocation the model requested (name + JSON arguments). */
 export interface LlmToolCall {
   name: string;
   arguments: Record<string, unknown>;
 }
 
+/** Simple completion result: joined text + requested tool calls. */
 export interface LlmCompleteResult {
   toolCalls: LlmToolCall[];
   text: string;
 }
 
+/** Options for the simple complete() surface. */
 export interface LlmCompleteOptions {
   systemPrompt?: string;
   userText: string;
   tools?: Tool[];
 }
 
+/** Agent-loop message (user / assistant / toolResult) with content blocks. */
+export interface LlmAgentMessage {
+  role: "user" | "assistant" | "toolResult";
+  content?: unknown;
+  toolCallId?: string;
+  toolName?: string;
+  isError?: boolean;
+  timestamp: number;
+}
+
+/** One content block: text or toolCall. */
+export interface LlmAgentContent {
+  type: string;
+  text?: string;
+  name?: string;
+  arguments?: unknown;
+  id?: string;
+}
+
+/** Agent round-trip result: raw blocks + joined text + parsed tool calls. */
+export interface LlmAgentResult {
+  content: LlmAgentContent[];
+  text: string;
+  toolCalls: LlmToolCall[];
+}
+
+/** The LLM abstraction: simple complete + agentic completeAgent surfaces. */
 export interface LlmProvider {
   readonly provider: string;
   readonly model: string;
   complete(opts: LlmCompleteOptions): Promise<LlmCompleteResult>;
+  /** Agentic round-trip: takes a full message history + tools, returns the
+   *  raw model response (content blocks: text + toolCall). The caller
+   *  executes tool calls + pushes toolResult messages for the next round. */
+  completeAgent(opts: {
+    systemPrompt?: string;
+    messages: LlmAgentMessage[];
+    tools?: Tool[];
+  }): Promise<LlmAgentResult>;
 }
 
+/** Resolved LLM provider configuration (provider/model + optional overrides). */
 export interface LlmProviderConfig {
   provider: string;
   model: string;
@@ -45,6 +85,7 @@ export interface LlmProviderConfig {
   completeOverride?: (opts: LlmCompleteOptions) => Promise<LlmCompleteResult>;
 }
 
+/** Resolves the provider config from PI_PROVIDER/PI_MODEL env (defaults anthropic). */
 export function llmConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LlmProviderConfig {
   const apiKey = env.ANTHROPIC_API_KEY ?? env.OPENAI_API_KEY;
   return {
@@ -55,6 +96,8 @@ export function llmConfigFromEnv(env: NodeJS.ProcessEnv = process.env): LlmProvi
   };
 }
 
+/** Creates the LLM provider: env config by default, or an injected override
+ *  (tests) / PI_DRY_RUN fixture. Exposes complete + completeAgent surfaces. */
 export function createLlmProvider(
   config: LlmProviderConfig = llmConfigFromEnv(),
 ): LlmProvider {
@@ -63,6 +106,13 @@ export function createLlmProvider(
       provider: config.provider,
       model: config.model,
       complete: config.completeOverride,
+      completeAgent: async ({ systemPrompt, messages, tools }) => {
+        // For overrides (tests), delegate to the simple complete in a loop.
+        const lastUser = [...messages].reverse().find((m) => m.role === "user");
+        const userText = typeof lastUser?.content === "string" ? lastUser.content : JSON.stringify(lastUser?.content ?? "");
+        const r = await config.completeOverride!({ ...(systemPrompt !== undefined ? { systemPrompt } : {}), userText, ...(tools !== undefined ? { tools } : {}) });
+        return { content: [{ type: "text", text: r.text }, ...r.toolCalls.map((tc) => ({ type: "toolCall", name: tc.name, arguments: tc.arguments }))], text: r.text, toolCalls: r.toolCalls };
+      },
     };
   }
   if (process.env.PI_DRY_RUN === "1") {
@@ -127,6 +177,29 @@ function piMonoProvider(config: LlmProviderConfig): LlmProvider {
         .join("");
       return { toolCalls, text };
     },
+    completeAgent: async ({ systemPrompt, messages, tools }) => {
+      const context: Context = {
+        messages: messages as Context["messages"],
+        ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+        ...(tools && tools.length > 0 ? { tools } : {}),
+      };
+      const resp = await models.complete(model, context, auth);
+      const errMsg2 = (resp as { errorMessage?: unknown }).errorMessage;
+      if (typeof errMsg2 === "string" && errMsg2.length > 0) {
+        throw new Error(`LLM agent call failed (${config.provider}/${config.model}): ${errMsg2}`);
+      }
+      const ablocks = (resp.content ?? []) as LlmAgentContent[];
+      return {
+        content: ablocks,
+        text: ablocks.filter((b) => b.type === "text").map((b) => b.text ?? "").join(""),
+        toolCalls: ablocks
+          .filter((b) => b.type === "toolCall" && typeof b.name === "string")
+          .map((b) => ({
+            name: b.name as string,
+            arguments: (b.arguments as Record<string, unknown> | undefined) ?? {},
+          })),
+      };
+    },
   };
 }
 
@@ -157,13 +230,22 @@ function dryRunProvider(config: LlmProviderConfig): LlmProvider {
     provider: config.provider,
     model: config.model,
     complete: async ({ tools }) => {
-      // One toolCall per provided tool with empty args — exercises the maintenance
-      // op wiring (the op writes a record per toolCall) without tokens/network.
       const toolCalls: LlmToolCall[] = (tools ?? []).map((t) => ({
         name: t.name,
         arguments: {},
       }));
       return { toolCalls, text: "" };
+    },
+    completeAgent: async ({ tools }) => {
+      const toolCalls: LlmToolCall[] = (tools ?? []).map((t) => ({
+        name: t.name,
+        arguments: {},
+      }));
+      return {
+        content: [{ type: "text", text: "" }, ...toolCalls.map((tc) => ({ type: "toolCall", name: tc.name, arguments: tc.arguments }))],
+        text: "",
+        toolCalls,
+      };
     },
   };
 }

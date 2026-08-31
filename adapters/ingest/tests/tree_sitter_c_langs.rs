@@ -35,16 +35,16 @@ fn chunks_cpp_classes_and_methods() {
         "missing class Engine: {chunks:?}"
     );
     assert!(
-        chunks.iter().any(|(a, _)| a == "fn start"),
-        "missing fn start"
+        chunks.iter().any(|(a, _)| a == "fn Engine::start"),
+        "missing fn Engine::start"
     );
     assert!(
-        chunks.iter().any(|(a, _)| a == "fn stop"),
-        "missing fn stop"
+        chunks.iter().any(|(a, _)| a == "fn Engine::stop"),
+        "missing fn Engine::stop"
     );
     assert!(
-        chunks.iter().any(|(a, _)| a == "fn init"),
-        "missing fn init (namespace)"
+        chunks.iter().any(|(a, _)| a == "fn Core::init"),
+        "missing fn Core::init (namespace receiver)"
     );
 }
 
@@ -57,10 +57,13 @@ fn chunks_csharp_classes_and_methods() {
         "missing class Program: {chunks:?}"
     );
     assert!(
-        chunks.iter().any(|(a, _)| a == "fn Main"),
-        "missing fn Main"
+        chunks.iter().any(|(a, _)| a == "fn Program::Main"),
+        "missing fn Program::Main"
     );
-    assert!(chunks.iter().any(|(a, _)| a == "fn Run"), "missing fn Run");
+    assert!(
+        chunks.iter().any(|(a, _)| a == "fn Program::Run"),
+        "missing fn Program::Run"
+    );
     assert!(
         chunks.iter().any(|(a, _)| a == "interface IPlugin"),
         "missing interface IPlugin"

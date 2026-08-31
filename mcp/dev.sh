@@ -44,16 +44,22 @@ port_taken() { lsof -ti :"$1" >/dev/null 2>&1; }
 # skipping the FastEmbed load keeps boot fast). Regenerated each start so env
 # changes (ENGRAM_STORAGE / ENGRAM_DB_FILE) take effect without a committed file.
 write_config() {
+  local vec="${ENGRAM_ENABLE_VECTOR:-false}"
+  local emb_provider="none" emb_model="none"
+  if [ "$vec" = "true" ]; then
+    emb_provider="fastembed"
+    emb_model="BAAI/bge-small-en-v1.5"
+  fi
   cat >"$CFGFILE" <<JSON
 {
   "storage_path": "$ENGRAM_STORAGE",
   "trusted_root": "$ENGRAM_STORAGE",
   "scope_policy": "Strict",
-  "embedding_provider": { "provider_type": "none", "model": "none", "dimensions": 384, "prompt_profile": "query" },
+  "embedding_provider": { "provider_type": "$emb_provider", "model": "$emb_model", "dimensions": 384, "prompt_profile": "query" },
   "migration_mode": "DryRun",
   "capability_policy": "FailClosed",
   "sqlite_storage_layout": { "kind": "single_file", "file_name": "$ENGRAM_DB_FILE" },
-  "enable_vector": false
+  "enable_vector": $vec
 }
 JSON
 }

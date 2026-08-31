@@ -62,6 +62,18 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 record_json TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS knowledge_unresolved_refs (
+                id TEXT PRIMARY KEY,
+                graph_id TEXT,
+                tenant TEXT NOT NULL,
+                subject TEXT,
+                workspace TEXT,
+                session TEXT,
+                environment TEXT,
+                status TEXT NOT NULL,
+                record_json TEXT NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS knowledge_graphs (
                 id TEXT PRIMARY KEY,
                 tenant TEXT NOT NULL,

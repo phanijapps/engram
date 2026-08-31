@@ -37,6 +37,71 @@ fn actor() -> Actor {
 }
 
 #[test]
+fn empty_files_skip_cleanly_and_are_manifest_unchanged() {
+    // Empty-file-fix: 0-byte and whitespace-only files count as `skipped`
+    // (never `errors`) — the chunker rejects empty text by contract. Their
+    // hashes land in the manifest so a re-scan treats them as unchanged,
+    // and a file that BECOMES empty retracts its prior graph.
+    let root = std::env::temp_dir().join(format!("engram-scan-empty-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).expect("create root");
+    std::fs::write(root.join("main.rs"), "pub fn one() {}\n").expect("write main.rs");
+    std::fs::write(root.join("empty.properties"), "").expect("write empty");
+    std::fs::write(root.join("blank.md"), "   \n\t ").expect("write blank");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "fixture".to_owned(),
+        max_bytes: 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (summary, manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    assert_eq!(summary.errors, 0, "empty files are not errors: {summary:?}");
+    assert_eq!(summary.skipped, 2, "empty + blank skipped: {summary:?}");
+    assert_eq!(summary.ingested, 1, "only main.rs ingested: {summary:?}");
+    assert!(
+        manifest.contains_key("empty.properties"),
+        "empty hash recorded"
+    );
+    assert!(manifest.contains_key("blank.md"), "blank hash recorded");
+
+    // Re-scan: both empty files are now unchanged — no re-skip, no errors.
+    let opts2 = ScanOptions {
+        manifest,
+        ..opts.clone()
+    };
+    let (summary2, _m2) = scan_repository(&root, &opts2, &store, |_| {}).expect("rescan");
+    assert_eq!(summary2.errors, 0, "rescan errors: {summary2:?}");
+    assert_eq!(
+        summary2.skipped, 0,
+        "empties now unchanged, not skipped: {summary2:?}"
+    );
+    assert_eq!(summary2.unchanged, 3, "all three unchanged: {summary2:?}");
+
+    // A file that becomes empty retracts its graph: scan once with content,
+    // then empty it and re-scan.
+    std::fs::write(root.join("main.rs"), "").expect("empty main.rs");
+    let (summary3, _m3) = scan_repository(&root, &opts2, &store, |_| {}).expect("rescan3");
+    assert_eq!(
+        summary3.errors, 0,
+        "became-empty not an error: {summary3:?}"
+    );
+    assert_eq!(summary3.skipped, 1, "became-empty skipped: {summary3:?}");
+    assert_eq!(summary3.ingested, 0, "nothing ingested: {summary3:?}");
+    let entities = block_on(store.list_entities(&scope())).expect("list");
+    assert!(
+        entities.iter().all(|e| e.name != "one"),
+        "prior graph retracted: {entities:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
 fn scans_fixture_skipping_secrets_oversized_and_denylist() {
     let root =
         std::env::temp_dir().join(format!("engram-scan-{}-{}", std::process::id(), "fixture"));
@@ -291,4 +356,592 @@ fn scan_honors_custom_deny_filter() {
     );
 
     let _ = fs::remove_dir_all(&root);
+}
+
+/// RFC-0020 Phase 2 typed structural edges: scans yield `imports`
+/// (file→module), `contains` (receiver-qualified containment), `extends` /
+/// `implements` (inheritance) relationships beside `calls`. One code file per
+/// scan: a known store-side upsert bug (NULL `archived_at` read on the shared
+/// repository entity, pre-existing — see notes.md) aborts the second file's
+/// persistence in multi-file scans.
+#[test]
+fn scan_yields_typed_structural_edges_typescript() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-struct-ts", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    fs::write(
+        root.join("repo.ts"),
+        "import { helper } from './utils';\nclass Repo extends Base implements Store {\n    find(): void {}\n}\n",
+    )
+    .expect("write repo.ts");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "structural-fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    let rels = block_on(store.list_relationships(&scope())).expect("list rels");
+    let has = |predicate: &str, subject: &str, object: &str| {
+        rels.iter().any(|r| {
+            r.predicate == predicate
+                && r.subject.name.as_deref() == Some(subject)
+                && r.object.name.as_deref() == Some(object)
+        })
+    };
+    assert!(has("imports", "repo.ts", "./utils"), "imports: {rels:?}");
+    assert!(has("contains", "Repo", "Repo::find"), "contains: {rels:?}");
+    assert!(has("extends", "Repo", "Base"), "extends: {rels:?}");
+    assert!(has("implements", "Repo", "Store"), "implements: {rels:?}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn scan_yields_typed_structural_edges_rust() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-struct-rs", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    fs::write(
+        root.join("main.rs"),
+        "use std::fmt;\nstruct Cache;\nimpl Store for Cache {\n    fn get(&self) -> u8 { 0 }\n}\ntrait Store {}\n",
+    )
+    .expect("write main.rs");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "structural-fixture-rs".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    let rels = block_on(store.list_relationships(&scope())).expect("list rels");
+    let has = |predicate: &str, subject: &str, object: &str| {
+        rels.iter().any(|r| {
+            r.predicate == predicate
+                && r.subject.name.as_deref() == Some(subject)
+                && r.object.name.as_deref() == Some(object)
+        })
+    };
+    assert!(has("imports", "main.rs", "std::fmt"), "imports: {rels:?}");
+    assert!(has("contains", "Cache", "Cache::get"), "contains: {rels:?}");
+    assert!(has("implements", "Cache", "Store"), "implements: {rels:?}");
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// RFC-0020 Phase 2 orphan sweep: a reference to a symbol nothing defines is
+/// ledgered as pending; when a LATER scan ingests the defining file, the
+/// sweep heals the row (→ resolved) and writes the calls edge without
+/// re-ingesting the referring file.
+#[test]
+fn orphan_sweep_heals_pending_references_on_later_scans() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-sweep", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    fs::write(
+        root.join("caller.rs"),
+        "fn orchestrate() {\n    ghost_fn();\n}\n",
+    )
+    .expect("write caller.rs");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "sweep-fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (_summary, manifest1) = scan_repository(&root, &opts, &store, |_| {}).expect("scan 1");
+
+    let pending = block_on(
+        store.list_unresolved_refs(&scope(), engram_domain::UnresolvedReferenceStatus::Pending),
+    )
+    .expect("list pending");
+    assert_eq!(
+        pending.len(),
+        1,
+        "ghost reference must be ledgered: {pending:?}"
+    );
+    assert_eq!(pending[0].reference_name, "ghost_fn");
+
+    // Later scan: the defining file lands; caller.rs is unchanged (manifest
+    // carries its hash so it is skipped — no re-ingest).
+    fs::write(root.join("defs.rs"), "fn ghost_fn() {}\n").expect("write defs.rs");
+    let opts2 = ScanOptions {
+        manifest: manifest1,
+        ..opts
+    };
+    scan_repository(&root, &opts2, &store, |_| {}).expect("scan 2");
+
+    let still_pending = block_on(
+        store.list_unresolved_refs(&scope(), engram_domain::UnresolvedReferenceStatus::Pending),
+    )
+    .expect("list pending 2");
+    assert!(
+        still_pending.is_empty(),
+        "sweep must heal the row: {still_pending:?}"
+    );
+    let resolved = block_on(
+        store.list_unresolved_refs(&scope(), engram_domain::UnresolvedReferenceStatus::Resolved),
+    )
+    .expect("list resolved");
+    assert_eq!(
+        resolved.len(),
+        1,
+        "healed row flips to resolved: {resolved:?}"
+    );
+
+    let rels = block_on(store.list_relationships(&scope())).expect("rels");
+    let ents = block_on(store.list_entities(&scope())).expect("entities");
+    let orchestrate_id = ents
+        .iter()
+        .find(|e| e.name == "orchestrate")
+        .expect("orchestrate entity")
+        .id
+        .clone();
+    assert!(
+        rels.iter().any(|r| r.predicate == "calls"
+            && r.subject.id.as_ref() == Some(&orchestrate_id)
+            && r.object.name.as_deref() == Some("ghost_fn")
+            && r.object.id.is_some()),
+        "sweep must write the healed calls edge: {rels:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// Re-ingesting a file retracts its prior ledger rows (regenerated by the
+/// fresh extraction pass).
+#[test]
+fn reingest_retracts_prior_ledger_rows() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-ledretract", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    fs::write(
+        root.join("caller.rs"),
+        "fn orchestrate() {\n    ghost_fn();\n}\n",
+    )
+    .expect("write caller.rs");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "ledretract-fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    scan_repository(&root, &opts, &store, |_| {}).expect("scan 1");
+    let pending = block_on(
+        store.list_unresolved_refs(&scope(), engram_domain::UnresolvedReferenceStatus::Pending),
+    )
+    .expect("list pending");
+    assert_eq!(pending.len(), 1);
+
+    // Change the referring file — re-ingest retracts the old graph (and its
+    // ledger rows) and regenerates extraction for the new content.
+    fs::write(
+        root.join("caller.rs"),
+        "fn orchestrate() {\n    other_ghost();\n}\n",
+    )
+    .expect("rewrite caller.rs");
+    scan_repository(&root, &opts, &store, |_| {}).expect("scan 2");
+    let pending2 = block_on(
+        store.list_unresolved_refs(&scope(), engram_domain::UnresolvedReferenceStatus::Pending),
+    )
+    .expect("list pending 2");
+    assert!(
+        pending2.iter().all(|r| r.reference_name != "ghost_fn"),
+        "the old row must be retracted with its graph: {pending2:?}"
+    );
+    assert!(
+        pending2.iter().any(|r| r.reference_name == "other_ghost"),
+        "the new extraction regenerates its own row: {pending2:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// RFC-0020 Phase 2 framework resolvers: an Express route yields an
+/// `Endpoint` entity wired to its handler via `routes_to`; a React
+/// `onClick={handler}` prop yields a `calls` edge from the component.
+#[test]
+fn scan_extracts_framework_routes_and_callbacks() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-frameworks", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    fs::write(
+        root.join("server.ts"),
+        "const app = {} as any;\nfunction listUsers() {}\nfunction createUser() {}\napp.get('/users', listUsers);\napp.post('/users', createUser);\n",
+    )
+    .expect("write server.ts");
+    fs::write(
+        root.join("button.tsx"),
+        "function handleClick() {}\nfunction UserButton() {\n  return <button onClick={handleClick}>go</button>;\n}\n",
+    )
+    .expect("write button.tsx");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "frameworks-fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (summary, _) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    assert_eq!(summary.ingested, 2, "both files: {summary:?}");
+
+    let rels = block_on(store.list_relationships(&scope())).expect("rels");
+    assert!(
+        rels.iter().any(|r| r.predicate == "routes_to"
+            && r.subject.name.as_deref() == Some("GET /users")
+            && r.object.name.as_deref() == Some("listUsers")),
+        "express route edge missing: {rels:?}"
+    );
+    assert!(
+        rels.iter().any(|r| r.predicate == "routes_to"
+            && r.subject.name.as_deref() == Some("POST /users")
+            && r.object.name.as_deref() == Some("createUser")),
+        "second route edge missing: {rels:?}"
+    );
+    let ents = block_on(store.list_entities(&scope())).expect("entities");
+    assert!(
+        ents.iter().any(|e| e.name == "GET /users"),
+        "endpoint entity missing: {ents:?}"
+    );
+    // React callback: UserButton --calls--> handleClick (T7/AC6).
+    assert!(
+        rels.iter().any(|r| r.predicate == "calls"
+            && r.subject.name.as_deref() == Some("UserButton")
+            && r.object.name.as_deref() == Some("handleClick")),
+        "react callback edge missing: {rels:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// RFC-0020 Phase 2 end-to-end (T8): a multi-file polyglot scan produces
+/// receiver-qualified identities, all six edge kinds, cross-file resolution
+/// with the ledger, and converges on re-scan.
+#[test]
+fn polyglot_scan_end_to_end_phase2() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-polyglot", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(root.join("src")).expect("create src");
+    // Rust: impl receiver + cross-file call + a use import.
+    fs::write(
+        root.join("src/engine.rs"),
+        "use crate::store;\nstruct Engine;\nimpl Engine {\n    fn drive(&self) {\n        store::save();\n        helper();\n    }\n}\n",
+    )
+    .expect("write engine.rs");
+    // Rust: same-named symbol in a second file (bare-name collision →
+    // same-doc disambiguation or ledgered ambiguity) + the helper + save.
+    fs::write(
+        root.join("src/store.rs"),
+        "mod inner { pub fn helper() {} }\nstruct Engine;\nimpl Engine {\n    fn idle(&self) {}\n}\npub fn save() {}\n",
+    )
+    .expect("write store.rs");
+    // TS: extends/implements/contains/imports + an Express route.
+    fs::write(
+        root.join("src/api.ts"),
+        "import { helper } from './store';\nclass Repo extends Base implements Store {\n    find(): void {}\n}\nconst app = {} as any;\napp.get('/items', helper);\n",
+    )
+    .expect("write api.ts");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "polyglot".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (summary, manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+    assert_eq!(summary.ingested, 3, "all three files: {summary:?}");
+
+    let rels = block_on(store.list_relationships(&scope())).expect("rels");
+    let has = |predicate: &str, subject: &str, object: &str| {
+        rels.iter().any(|r| {
+            r.predicate == predicate
+                && r.subject.name.as_deref() == Some(subject)
+                && r.object.name.as_deref() == Some(object)
+        })
+    };
+    // All six edge kinds.
+    assert!(has("calls", "Engine::drive", "save"), "calls: {rels:?}");
+    assert!(
+        has("contains", "Engine", "Engine::drive"),
+        "contains: {rels:?}"
+    );
+    assert!(
+        has("contains", "inner", "inner::helper"),
+        "mod contains: {rels:?}"
+    );
+    assert!(has("extends", "Repo", "Base"), "extends: {rels:?}");
+    assert!(has("implements", "Repo", "Store"), "implements: {rels:?}");
+    assert!(
+        has("routes_to", "GET /items", "helper"),
+        "routes_to: {rels:?}"
+    );
+    assert!(
+        rels.iter()
+            .any(|r| r.predicate == "imports" && r.subject.name.as_deref() == Some("src/api.ts")),
+        "imports: {rels:?}"
+    );
+    // Receiver-qualified identities coexist for the same bare name across
+    // files (Engine in engine.rs and store.rs are distinct entities).
+    let ents = block_on(store.list_entities(&scope())).expect("entities");
+    let engines: Vec<_> = ents.iter().filter(|e| e.name == "Engine").collect();
+    assert!(
+        engines.len() >= 2
+            && engines
+                .iter()
+                .map(|e| e.id.to_string())
+                .collect::<std::collections::HashSet<_>>()
+                .len()
+                == engines.len(),
+        "same-named Engine entities must be distinct: {ents:?}"
+    );
+    // Convergence: an identical re-scan changes nothing (manifest skip).
+    let (summary2, _) =
+        scan_repository(&root, &opts2_with(manifest), &store, |_| {}).expect("rescan");
+    assert_eq!(
+        summary2.ingested, 0,
+        "unchanged files are skipped: {summary2:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+fn opts2_with(manifest: std::collections::HashMap<String, String>) -> ScanOptions {
+    ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "polyglot".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest,
+        scan_filter: engram_ingest::ScanFilter::default(),
+    }
+}
+
+/// The sweep heals a pending `routes_to` handler as `routes_to` (not
+/// `calls`): a route whose handler lands in a LATER scan keeps its edge
+/// shape (final-review Concern 1 pin).
+#[test]
+fn sweep_heals_route_handlers_as_routes_to() {
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-sweeproute", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    // Scan 1: the route exists; the handler does not (pending ledger row).
+    fs::write(
+        root.join("routes.ts"),
+        "const app = {} as any;\napp.get('/health', healthHandler);\n",
+    )
+    .expect("write routes.ts");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "sweeproute-fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (_summary, manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan 1");
+    let pending = block_on(
+        store.list_unresolved_refs(&scope(), engram_domain::UnresolvedReferenceStatus::Pending),
+    )
+    .expect("pending");
+    assert!(
+        pending.iter().any(|r| r.reference_name == "healthHandler"),
+        "route handler must be ledgered: {pending:?}"
+    );
+
+    // Scan 2: the handler lands — the sweep heals the row.
+    fs::write(root.join("handlers.ts"), "function healthHandler() {}\n").expect("write handlers");
+    let opts2 = ScanOptions { manifest, ..opts };
+    scan_repository(&root, &opts2, &store, |_| {}).expect("scan 2");
+
+    let rels = block_on(store.list_relationships(&scope())).expect("rels");
+    let ents = block_on(store.list_entities(&scope())).expect("entities");
+    let endpoint_id = ents
+        .iter()
+        .find(|e| e.name == "GET /health")
+        .expect("endpoint entity")
+        .id
+        .clone();
+    assert!(
+        rels.iter().any(|r| r.predicate == "routes_to"
+            && r.subject.id.as_ref() == Some(&endpoint_id)
+            && r.object.name.as_deref() == Some("healthHandler")
+            && r.object.id.is_some()),
+        "the healed edge must be routes_to from the endpoint: {rels:?}"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+// --- code-graph-quality [minified-vendor-noise] ------------------------------
+
+#[test]
+fn minified_assets_skip_and_previously_ingested_ones_retract() {
+    let root = std::env::temp_dir().join(format!("engram-scan-min-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("static")).expect("create static");
+    // Regular source — must be indexed.
+    std::fs::write(root.join("main.rs"), "pub fn one() {}\n").expect("write main.rs");
+    // Minified by NAME.
+    std::fs::write(root.join("static/vue.min.js"), "function a(){}\n").expect("write min.js");
+    // Minified by CONTENT: 8 KiB on one line (avg line length 8 KiB >> 400).
+    let bundled = format!("var x=1;{}//padding\n", "y".repeat(8 * 1024));
+    std::fs::write(root.join("static/app.js"), bundled).expect("write app.js");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+
+    // Seed the manifest as if a PRE-fix scan had ingested the minified files —
+    // the retraction path only fires for previously-ingested paths.
+    let mut prior = std::collections::HashMap::new();
+    prior.insert("static/app.js".to_owned(), "stale-hash".to_owned());
+
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: prior,
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (summary, manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan");
+
+    // Both minified files skipped; main.rs ingested; nothing errored.
+    assert_eq!(summary.errors, 0, "{summary:?}");
+    assert_eq!(
+        summary.skipped, 2,
+        "min.js by name + app.js by content: {summary:?}"
+    );
+    assert_eq!(summary.ingested, 1, "only main.rs: {summary:?}");
+    // The previously-ingested app.js is NOT carried into the new manifest —
+    // its retraction dropped it (the stale hash is gone).
+    assert!(!manifest.contains_key("static/app.js"), "{manifest:?}");
+    assert!(manifest.contains_key("main.rs"));
+
+    // A never-ingested minified file (vue.min.js) is just skipped — no
+    // retraction, no manifest entry.
+    assert!(!manifest.contains_key("static/vue.min.js"), "{manifest:?}");
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn minified_heuristic_does_not_trip_on_source() {
+    // Real code averages 10-35 bytes/line; the threshold is 400.
+    let source = "pub fn alpha() {\n    let value = compute(input) + 1;\n    value\n}\n".repeat(50);
+    assert!(!engram_ingest::looks_minified_bytes(source.as_bytes()));
+    // Small one-liner files are exempt regardless.
+    assert!(!engram_ingest::looks_minified_bytes(
+        &b"var x=1;".repeat(100)
+    ));
+    // A webpack bundle: 100 KiB on one line.
+    let bundle = "var a=1;".repeat(16 * 1024);
+    assert!(engram_ingest::looks_minified_bytes(bundle.as_bytes()));
+    assert!(engram_ingest::looks_minified_name(
+        "static/js/chunk-vendors.min.js"
+    ));
+    assert!(engram_ingest::looks_minified_name("assets/app.js.map"));
+    assert!(!engram_ingest::looks_minified_name("src/App.tsx"));
+    assert!(!engram_ingest::looks_minified_name("src/main.js"));
+}
+
+// --- code-graph-quality [ledger-not-capturing] --------------------------------
+// Regression: scans through the KnowledgeRepoGraph FAN-IN (the MCP/N-API path)
+// silently dropped ledger rows — the fan-in never forwarded the T6 ledger
+// methods, so `put_unresolved_refs` hit the default-erroring trait method and
+// the cross-scan healing sweep had nothing to heal (observed live: 0 ledger
+// rows despite ~2.9k name-only call edges).
+
+#[test]
+fn ledger_rows_persist_through_the_fan_in_and_heal_on_next_scan() {
+    use engram_ingest::KnowledgeRepoGraph;
+    use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
+
+    let root = std::env::temp_dir().join(format!("engram-scan-ledger-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("src")).expect("create src");
+    // Round 1: caller references a target that does not exist YET — the edge
+    // stays name-only and the ledger captures it.
+    std::fs::write(
+        root.join("src/caller.rs"),
+        "pub fn caller() {\n    later_target();\n}\n",
+    )
+    .expect("write caller");
+
+    let store = std::sync::Arc::new(SqlKnowledgeStore::open_in_memory().expect("store"));
+    // THE FAN-IN — exactly what the MCP handler builds.
+    let repo = KnowledgeRepoGraph::new(
+        store.clone() as std::sync::Arc<dyn KnowledgeRepository>,
+        store.clone() as std::sync::Arc<dyn KnowledgeGraphRepository>,
+    );
+    let opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "fixture".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (s1, manifest) = scan_repository(&root, &opts, &repo, |_| {}).expect("scan 1");
+    assert_eq!(s1.errors, 0, "{s1:?}");
+
+    let pending = block_on(store_pending(&store)).expect("ledger list");
+    assert!(
+        pending.iter().any(|r| r.reference_name == "later_target"),
+        "ledger row must persist through the fan-in: {pending:?}"
+    );
+
+    // Round 2: the target lands — the sweep heals the reference (row flips to
+    // resolved, the edge gains its object id).
+    std::fs::write(root.join("src/target.rs"), "pub fn later_target() {}\n").expect("write target");
+    let opts2 = ScanOptions {
+        manifest,
+        ..opts.clone()
+    };
+    let (s2, _m2) = scan_repository(&root, &opts2, &repo, |_| {}).expect("scan 2");
+    assert_eq!(s2.errors, 0, "{s2:?}");
+
+    let still_pending = block_on(store_pending(&store)).expect("ledger list 2");
+    assert!(
+        !still_pending
+            .iter()
+            .any(|r| r.reference_name == "later_target"),
+        "healed reference must leave the pending ledger: {still_pending:?}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+async fn store_pending(
+    store: &std::sync::Arc<SqlKnowledgeStore>,
+) -> engram_knowledge::CoreResult<Vec<engram_domain::UnresolvedReference>> {
+    let handle: std::sync::Arc<dyn engram_knowledge::KnowledgeGraphRepository> = store.clone();
+    handle
+        .list_unresolved_refs(&scope(), UnresolvedReferenceStatus::Pending)
+        .await
 }

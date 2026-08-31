@@ -46,6 +46,8 @@ class FakeNativeMemoryEngine {
  *  The transport tests do not exercise the provider; this only satisfies the
  *  NativeBinding shape now that NativeProvider is a required member. */
 class StubNativeProvider {
+  fileDependenciesJson(): string { return "[]"; }
+  exploreJson(): string { return "[]"; }
   constructor(_configJson?: string) {}
   capabilitiesJson(): string {
     return "{}";
@@ -174,6 +176,12 @@ class StubNativeProvider {
   }
   requireKnowledgeQueryApi() {
     return {
+      fileDependenciesJson(): string {
+        return "[]";
+      },
+      exploreJson(): string {
+        return "[]";
+      },
       listEntitiesJson(): string {
         return "[]";
       },
@@ -237,6 +245,8 @@ describe("@engram/node", () => {
         }
       },
       NativeKnowledgeEngine: class {
+        fileDependenciesJson(): string { return "[]"; }
+        exploreJson(): string { return "[]"; }
         putEntityJson(): string { return "null"; }
         putRelationshipJson(): string { return "null"; }
         getEntityJson(): string { return "null"; }
@@ -322,6 +332,8 @@ describe("@engram/node", () => {
       NativeProvider: StubNativeProvider,
       NativeMemoryEngine: class extends FakeNativeMemoryEngine {},
       NativeKnowledgeEngine: class {
+        fileDependenciesJson(): string { return "[]"; }
+        exploreJson(): string { return "[]"; }
         putEntityJson(): string { return "null"; }
         putRelationshipJson(): string { return "null"; }
         getEntityJson(): string { return "null"; }

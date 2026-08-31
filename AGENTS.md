@@ -11,7 +11,7 @@ The implementation stack is accepted (`docs/adr/0003-implementation-stack.md`,
 Status: Accepted). Before implementation work, run:
 
 ```bash
-.codex/hooks/pre-implementation-check.sh
+scripts/ci/check-contracts.sh && scripts/ci/check-engine-neutrality.sh
 ```
 
 ## Target Repository Shape
@@ -32,9 +32,15 @@ core/                      Storage-neutral Rust crates.
   reflection/              Reflection synthesizer + consolidation executor (derived beliefs).
   retrieval/               Retrieval composition and fusion ports.
   orchestration/           Orchestration facade and compatibility re-exports.
+  procedures/              Procedural memory: runbook storage + success/failure counters.
   integration/             SDK facade: EngramProvider, EngramConfig, CapabilityReport.
   eval/                    Deterministic fixtures and regression harness.
   graph-analytics/         Pure graph algorithms (PageRank, betweenness, communities, reachability).
+  code/                    Deterministic code-indexing behavior crate (engram-code, ADR-0028):
+                           tree-sitter parsing, symbol identity, typed code edges,
+                           cross-file resolution + unresolved-refs ledger, framework
+                           patterns. Pure (no I/O/git/storage/LLM); adapters/ingest
+                           consumes it to build the code graph.
 
 adapters/                  Replaceable infrastructure crates.
   ingest/                  Filesystem/Git ingestion adapter until split.
@@ -52,11 +58,9 @@ adapters/                  Replaceable infrastructure crates.
 
 backends/                  Backend recipe crates (ADR-0022). A *backend* is one
   sqlite/                  recipe that composes adapter cells + owns connection
-                           lifecycle, config validation, and per-engine
-                           conformance. SQLite is the only implemented backend
-                           today; `backends/` is created when a second engine
-                           arrives (YAGNI). The current SQLite wiring lives in
-                           `adapters/integration` until then.
+  pgvector/                lifecycle, config validation, and per-engine
+                           conformance. Both SQLite and pgvector recipes
+                           are implemented; hosts open a recipe directly.
 
 bindings/                  Native language bridges.
   node/                    N-API bridge for TypeScript.
@@ -231,27 +235,21 @@ cargo check --workspace
 pnpm run contracts:generate
 pnpm run typecheck
 pnpm run test
-.codex/hooks/check-contracts.sh
-.codex/hooks/check-docs.sh
-.codex/hooks/check-engine-neutrality.sh   # ADR-0022 rule-1 gate (engine neutrality)
-.codex/hooks/check-surface-parity.sh      # ADR-0022 surface-parity gate (Rust facade ↔ N-API binding)
+scripts/ci/check-contracts.sh
+scripts/ci/check-docs.sh
+scripts/ci/check-engine-neutrality.sh     # ADR-0022 rule-1 gate (engine neutrality)
+scripts/ci/check-surface-parity.sh        # ADR-0022 surface-parity gate (Rust facade ↔ N-API binding)
 ```
 
 Run `pnpm run build` after TypeScript package surface changes.
 
 ## Local Codex Assets
 
-- Use `.codex/skills/engram-contract` for changes to
-  `docs/domain-data-model.md`, JSON schemas, generated contracts, or
-  compatibility policy.
-- Use `.codex/skills/engram-plan` when sequencing crates, packages, adapters,
-  bindings, or milestones.
-- Use `.codex/skills/engram-eval` when designing recall, leakage, policy,
-  ranking, belief, hierarchy, or ingestion evaluations.
-- Use `.codex/skills/engram-code-docs` when adding or reviewing Rust,
-  TypeScript, SDK, binding, adapter, example, or public API documentation.
-- Use `.codex/agents/` as role briefs for contract, Rust-core, evaluation, and
-  integration-boundary reviews.
+- The project-specific `.codex/skills/engram-*` and `.codex/agents/*` briefs
+  were superseded by the agent-bundle refresh (2026-08-26). The generic
+  workflow skills now present under `.codex/skills/` (`new-spec`, `new-adr`,
+  `new-rcf`, `work-loop`, `new-guide`) cover the same loop; the CI gates under
+  `scripts/ci/` carry the enforcement the old hooks owned.
 - Install local Git hooks with `git config core.hooksPath .githooks` when this
   workspace should enforce checks on commit.
 

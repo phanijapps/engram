@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CI runs a live Postgres+pgvector service** and the pgvector recipe's
+  conformance tests in the gate; the engine-neutrality and surface-parity
+  lints are enforced in CI (they had been referenced but never wired, and the
+  contract/docs jobs had been calling deleted hook scripts since the
+  agent-bundle refresh — all four gates now live under `scripts/ci/`).
+- **SQLite → Postgres migration runbook**, executable as a Docker-gated test
+  (export → import → recall parity on both engines) plus
+  `docs/guides/how-to/migrate-sqlite-to-pg.md`.
+- **Ops hardening (pgvector)**: `schema_meta.schema_version` stamped at open,
+  actionable connection errors, and `docs/guides/how-to/backup-restore.md`.
+- **Postgres/pgvector backend for the MCP server** (feature `pgvector`):
+  `engram-mcp --backend pgvector --pg-connection-string <url>` opens through
+  the `backends/pgvector` recipe — scan, code-intel tools (`symbol_context`,
+  `architecture`, …), memory writes, and recall all run on Postgres, with the
+  capability report honestly marking the lanes not yet wired on that engine.
+  The recipe now wires a Postgres `KnowledgeQuery` (the code-intel read
+  surface) in addition to the storage cells.
+- **Actual-graph view in engram-cc**: the Graph tab now renders the real
+  symbol graph (entities + resolved call edges via `/api/graph/subgraph`,
+  degree-ranked + bounded, minified-name noise deprioritized) instead of the
+  3D community globe; the Observatory keeps the community meta-graph, and both
+  offer a view toggle. Clicking a symbol opens the entity-detail panel.
 - Lazy query-time embeddings (BGE-small) generated on demand, cached, and
   persisted to a durable sqlite-vec store; per-query warm-up (hit-rate climbs
   across passes).
@@ -48,6 +70,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `enum`, `endpoint` (ADR-0020).
 - On-top codegraph layer begun: `engram-codegraph-queries` (the first `codegraph/`
   crate) — dead-code, blast-radius, and dependency-path over `calls` edges.
+- Agentic **Ask tab** in engram-cc: an LLM agent loop over the BFF
+  (`/api/ask`) whose model autonomously calls `recall`, `list_memories`,
+  `graph_overview`, and `write_memory` tools, iterating until it can answer —
+  with the full tool-call trace rendered in the UI.
+- Runtime `createLlmProvider` gains a `completeAgent` surface (full message
+  history + tools → content blocks incl. tool calls) for agent loops, wired
+  through pi-mono, the dry-run fixture, and test overrides.
+- Hybrid recall search in engram-cc: `/api/recall` BFF endpoint + Memory-tab
+  debounced two-phase search (instant content match, then recall-fusion
+  upgrade). The vector lane is opt-in via `ENGRAM_ENABLE_VECTOR=true`
+  (FastEmbed BGE-small, also wired through `mcp/dev.sh`).
+- ForceGraph: a d3-force 2D canvas overview replaces the deck.gl viewport in
+  engram-cc (smaller bundle, no WebGL dependency); e2e drill clicks use live
+  node positions exposed by an e2e hook.
 
 ### Changed
 
@@ -65,7 +101,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- (nothing yet)
+- `engram-mcp` creates a missing `--storage` directory tree at boot instead
+  of failing validation with a confusing "trusted_root does not exist"
+  (zero-config boot for any path depth).
+- Repo scans no longer count empty files (0-byte or whitespace-only) as
+  errors: they are skipped, their prior graph is retracted when a file becomes
+  empty, and their hash is manifest-recorded so later scans treat them as
+  unchanged. Verified against spring-boot-demo: 6 errors → 0.
+- `scan_repo` is now incremental across calls: a per-root manifest is persisted
+  under `<storage>/scan-manifests/` and re-scans skip unchanged files
+  (`force=true` re-ingests everything). Consecutive scans of a ~1,200-file
+  repository drop from ~53s to ~18s.
+- `scan_repo` now returns within client timeouts on a populated store: the
+  lexical feed is scoped to the scan's own entities (was: every entity in the
+  scope re-fed per scan) and the vector-embed step is scoped + capped per call
+  with the remainder reported (was: an unbounded cross-source backlog ground
+  through the shared model mutex inside the tool response). Chunk text sent to
+  the embedder is bounded to 8 KiB.
+- Maintenance tools (`graph_health`, `list_maintenance_candidates`,
+  `build_maintenance_plan`, `apply_maintenance_plan`) default a missing/null
+  `scope` argument to the launch scope instead of erroring.
+- `code_health` and `architecture` responses are capped (dead list truncated
+  to 100 + count; community map to top 10) — previously up to 255 KB of
+  inlined output.
+- Code-graph analytics (`dead_code`, `central_symbols`, `bridge_symbols`,
+  `call_communities`, `repository_stats`) count only relationships with both
+  endpoints resolved to entity ids — legacy name-only edges no longer fake
+  caller evidence or centrality.
+- JSX element usage (`<Button …>` in tsx/jsx) now counts as a reference from
+  the enclosing component, so JSX-referenced components are no longer flagged
+  as dead code; lowercase DOM intrinsics do not emit edges.
 
 ### Security
 

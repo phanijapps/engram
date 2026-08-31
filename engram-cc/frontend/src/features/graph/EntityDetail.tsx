@@ -15,6 +15,11 @@ interface Prov {
   confidence?: number;
   actor?: { displayName?: string };
 }
+interface Git {
+  repository?: string | null;
+  branch?: string | null;
+  revision?: string | null;
+}
 
 export function EntityDetailPanel() {
   const community = useGraphStore((s) => s.community);
@@ -90,22 +95,21 @@ function topKinds(members: GraphEntityView[]): Array<[string, number]> {
 
 function DetailBody({ d }: { d: EntityDetailType }) {
   const p = (d.provenance ?? null) as Prov | null;
+  const git = (d as { git?: Git | null }).git ?? null;
+  // Derive the file path from the provenance source (the scanner stamps
+  // "tool [remote@branch:sha]" — the FILE path is in the entity's source_refs
+  // or metadata, but the simplest useful display is the git info + source).
+  const sourceFile = p?.source?.replace(/^\S+\s+\[/, "").replace(/\]$/, "") || p?.source;
   return (
     <div style={bodyStyle}>
       <Row label="kind" value={d.kind} />
       <Row label="name" value={d.name} />
       <Row label="community" value={d.community === null ? "—" : `c${d.community}`} />
       <Row label="degree" value={String(d.degree)} />
-      {p && (
-        <>
-          {p.source && <Row label="source" value={p.source} />}
-          {p.method && <Row label="method" value={p.method} />}
-          {p.observedAt && <Row label="observed" value={p.observedAt.slice(0, 10)} />}
-          {p.confidence !== undefined && (
-            <Row label="confidence" value={d.provenance && typeof p.confidence === "number" ? p.confidence.toFixed(2) : ""} />
-          )}
-        </>
-      )}
+      {git?.branch && <Row label="branch" value={git.branch} />}
+      {git?.revision && <Row label="revision" value={git.revision.slice(0, 12)} />}
+      {sourceFile && <Row label="origin" value={sourceFile} />}
+      {p?.observedAt && <Row label="indexed" value={p.observedAt.slice(0, 10)} />}
     </div>
   );
 }
@@ -168,7 +172,7 @@ const kindChipStyle: CSSProperties = {
   borderRadius: "var(--radius-sm)",
   padding: "1px 6px",
 };
-const kindCountStyle: CSSProperties = { color: "var(--primary, #7df9ff)" };
+const kindCountStyle: CSSProperties = { color: "var(--primary)" };
 const listHeadStyle: CSSProperties = { fontSize: 10, letterSpacing: "0.1em", color: "var(--muted-foreground)" };
 const listStyle: CSSProperties = {
   display: "flex",
@@ -196,11 +200,11 @@ const memberBase: CSSProperties = {
 const memberStyle: CSSProperties = { ...memberBase };
 const memberActiveStyle: CSSProperties = {
   ...memberBase,
-  background: "rgba(192,139,255,0.14)",
-  borderLeft: "2px solid #c08bff",
+  background: "var(--purple-muted)",
+  borderLeft: "2px solid var(--purple)",
 };
 const memberKindStyle: CSSProperties = {
-  color: "var(--primary, #7df9ff)",
+  color: "var(--primary)",
   fontSize: 9,
   textTransform: "uppercase",
   minWidth: 52,

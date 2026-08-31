@@ -30,6 +30,18 @@ export const engramV1Schema = {
       ],
       "type": "object"
     },
+    "CodeEdgeKind": {
+      "description": "Closed predicate vocabulary emitted by the engram-code extractor (RFC-0020 Phase 2, ADR-0028). KnowledgeRelationship.predicate stays an open string; this is the contracted code set.",
+      "enum": [
+        "calls",
+        "imports",
+        "contains",
+        "extends",
+        "implements",
+        "routes_to"
+      ],
+      "type": "string"
+    },
     "ConceptRef": {
       "additionalProperties": false,
       "properties": {
@@ -1472,6 +1484,70 @@ export const engramV1Schema = {
     },
     "Timestamp": {
       "format": "date-time",
+      "type": "string"
+    },
+    "UnresolvedReference": {
+      "additionalProperties": false,
+      "description": "Recorded best-effort-failed cross-file code reference (the code-resolution honesty ledger). Same lifecycle as relationships: retracted with the referring document on re-ingest, re-attempted by the orphan sweep.",
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "type": "array"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "fromEntityId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "graphId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "line": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "path": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "referenceName": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "status": {
+          "$ref": "#/$defs/UnresolvedReferenceStatus"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "fromEntityId",
+        "referenceName",
+        "status",
+        "path",
+        "scope",
+        "createdAt"
+      ],
+      "type": "object"
+    },
+    "UnresolvedReferenceStatus": {
+      "description": "Lifecycle of a recorded unresolved cross-file code reference. pending -> resolved (orphan sweep); pending -> failed (operator only); terminal states never change.",
+      "enum": [
+        "pending",
+        "resolved",
+        "failed"
+      ],
       "type": "string"
     },
     "WriteMemoryRequest": {

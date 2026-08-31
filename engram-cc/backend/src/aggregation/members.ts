@@ -104,7 +104,6 @@ export async function communityMembers(
   }
   const all = ids.get(label) ?? [];
   const pageIds = all.slice(offset, offset + limit);
-  const idSet = new Set(pageIds);
   const ws = scope.workspace ?? "";
   const db = openReader(cfg);
   const items: GraphEntityView[] = [];
@@ -117,9 +116,13 @@ export async function communityMembers(
       const row = entStmt.get(id, scope.tenant, ws) as { record_json?: string } | undefined;
       if (row?.record_json) items.push(projectEntity(JSON.parse(row.record_json)));
     }
-    // Intra-community relationships among this page's members: relationships whose
-    // subject is in the page, kept when the object is also in the page (a bounded
-    // subgraph so the drill shows how the members connect). `subject_id` is indexed.
+    // Intra-community relationships among this page's RETURNED members
+    // (test-hygiene fix): the edge filter previously used the full pageIds
+    // set, but hydration above silently drops ids with no entity row — an
+    // edge could then reference a member that never reached `items`,
+    // breaking the page's edges⊆items invariant (drill UI + route contract).
+    const idSet = new Set(items.map((i) => i.id));
+    // `subject_id` is the indexed endpoint column.
     if (pageIds.length > 0) {
       const placeholders = pageIds.map(() => "?").join(",");
       const relStmt = db.prepare(

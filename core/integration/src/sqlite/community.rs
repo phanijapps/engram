@@ -97,14 +97,21 @@ impl CommunityQuery for SqlKnowledgeStore {
         let name_to_label = communities(&edges, 2);
 
         let mut label_to_ids: HashMap<usize, Vec<String>> = HashMap::new();
+        // Container IDs (graph-*, repo-*) are structural nodes, not code
+        // symbols — including them in the member index means communities
+        // hydrate to nothing (no matching entity rows). Only symbol entities
+        // (entity-*) are community members.
+        let is_symbol = |id: &str| !id.starts_with("graph-") && !id.starts_with("repo-");
         for (sn, si, on, oi) in &rels {
             // subject endpoint — push entity id if not already in the community
             if let Some(key) = endpoint_key(sn, si) {
                 if let Some(&label) = name_to_label.get(&key) {
                     if let Some(eid) = si {
-                        let b = label_to_ids.entry(label).or_default();
-                        if b.len() < MEMBER_CAP && !b.contains(eid) {
-                            b.push(eid.clone());
+                        if is_symbol(eid) {
+                            let b = label_to_ids.entry(label).or_default();
+                            if b.len() < MEMBER_CAP && !b.contains(eid) {
+                                b.push(eid.clone());
+                            }
                         }
                     }
                 }
@@ -113,9 +120,11 @@ impl CommunityQuery for SqlKnowledgeStore {
             if let Some(key) = endpoint_key(on, oi) {
                 if let Some(&label) = name_to_label.get(&key) {
                     if let Some(eid) = oi {
-                        let b = label_to_ids.entry(label).or_default();
-                        if b.len() < MEMBER_CAP && !b.contains(eid) {
-                            b.push(eid.clone());
+                        if is_symbol(eid) {
+                            let b = label_to_ids.entry(label).or_default();
+                            if b.len() < MEMBER_CAP && !b.contains(eid) {
+                                b.push(eid.clone());
+                            }
                         }
                     }
                 }

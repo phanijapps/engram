@@ -136,8 +136,8 @@ impl Default for ReciprocalFusionConfig {
 // ---- External recall-fusion configuration (RFC-0019) ---------------------
 // Operator-facing, serializable config loaded from a `[recall_fusion]` profile
 // section or `.engram/recall.json`. Validated on load via `to_reciprocal_config`,
-// which builds the internal `ReciprocalFusionConfig` (weighted RRF) that
-// `SqlUnifiedRecall` fuses with.
+// which builds the internal `ReciprocalFusionConfig` (weighted RRF) that the
+// engine's unified-recall implementation fuses with.
 
 /// The documented lane-source vocabulary — the set of `source_weights` keys
 /// that actually match a lane's stamped `fusion_trace.source`. A key outside
@@ -178,7 +178,7 @@ pub fn unknown_lane_keys(weights: &BTreeMap<String, f32>) -> Vec<&str> {
 /// graceful degrade), surfaced as a typed `InvalidRequest` for symmetry with
 /// weight validation.
 fn validate_lambda(lambda: f32) -> CoreResult<()> {
-    if !lambda.is_finite() || lambda < 0.0 || lambda > 1.0 {
+    if !lambda.is_finite() || !(0.0..=1.0).contains(&lambda) {
         return Err(CoreError::InvalidRequest {
             reason: format!("rerank.lambda must be in [0, 1], got {lambda}"),
         });

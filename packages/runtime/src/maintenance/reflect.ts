@@ -27,6 +27,7 @@ const RECORD_BELIEF: Tool = {
   }),
 };
 
+/** Reflection outcome: memories read and beliefs synthesized from them. */
 export interface ReflectionResult {
   memoriesRead: number;
   /** Beliefs emitted by the LLM that passed validation. Note: the store upserts by
@@ -36,6 +37,7 @@ export interface ReflectionResult {
   skipped: number;
 }
 
+/** Options for the LLM reflection sweep (memories → derived beliefs). */
 export interface ReflectOptions {
   transport: NativeProviderTransport;
   scope: Scope;

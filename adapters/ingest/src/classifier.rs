@@ -51,6 +51,12 @@ const CODE_EXTENSIONS: &[&str] = &[
     "cljs", "ex", "exs", "erl", "hs", "ml", "mli", "lua", "php", "pl", "pm", "r", "rb", "sh",
     "bash", "zsh", "fish", "ps1", "c", "h", "cpp", "cc", "cxx", "hpp", "hxx", "cs", "swift",
     "dart", "vue", "svelte", "sql", "proto", "graphql", "gradle", "groovy", "vim",
+    // Salesforce: Apex classes (`.cls`) + triggers (`.trigger`) — the sfapex
+    // grammar is registered in the tree-sitter chunker but these were never
+    // routed to the code path, so Apex source was silently un-indexed
+    // (dreamhouse-lwc: 0 `.cls` documents; the Apex surface only appeared via
+    // LWC `@salesforce/apex` imports).
+    "cls", "apex", "trigger",
 ];
 const TEXT_EXTENSIONS: &[&str] = &[
     "md",
@@ -129,6 +135,34 @@ pub fn classify_file(name: &str) -> Option<FileKind> {
 /// True if `target` is `root` or inside it (callers canonicalize both first).
 pub fn is_within_root(target: &Path, root: &Path) -> bool {
     target.starts_with(root)
+}
+
+/// code-graph-quality [minified-vendor-noise]: minified/bundled asset NAME
+/// patterns — stable, non-transient filter signals. Measured motivation: 9
+/// vendored bundles injected 372 single/double-char entities and 37% of all
+/// `calls` edges in the spring-boot-demo store.
+pub fn looks_minified_name(rel_path: &str) -> bool {
+    let base = file_base(rel_path).to_lowercase();
+    if base.ends_with(".min.js") || base.ends_with(".min.css") || base.ends_with(".bundle.js") {
+        return true;
+    }
+    // Source maps are pure build output — never source.
+    base.ends_with(".js.map") || base.ends_with(".css.map") || base == "bundle.js"
+}
+
+/// code-graph-quality [minified-vendor-noise]: minified/bundled asset CONTENT
+/// heuristic — bundles with innocuous names are caught by shape: few, very
+/// long lines. A source file with 40+ average bytes per line across its whole
+/// body is not human-written (real code averages 10-35). Small files (< 4 KiB)
+/// are exempt so one-liner configs never trip it.
+pub fn looks_minified_bytes(bytes: &[u8]) -> bool {
+    const MIN_SIZE: usize = 4 * 1024;
+    const AVG_LINE_BYTES: usize = 400;
+    if bytes.len() < MIN_SIZE {
+        return false;
+    }
+    let lines = bytes.iter().filter(|b| **b == b'\n').count().max(1);
+    bytes.len() / lines > AVG_LINE_BYTES
 }
 
 #[cfg(test)]

@@ -10,6 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::Utc;
+use engram_code::{SymbolCandidate, SymbolIndex};
 use engram_domain::*;
 use engram_knowledge::{CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
 use serde_json::Value as JsonValue;
@@ -32,6 +33,10 @@ pub struct ExtractedGraph {
     /// chunk. Used by `extract_into` to stamp entity refs back onto chunks so
     /// Q&A can find the actual code that defines an entity.
     pub chunk_entities: Vec<(usize, Vec<EntityRef>)>,
+    /// Unresolved-reference ledger (RFC-0020 Phase 2): every cross-file
+    /// reference that did not settle, with its candidates. Persistence +
+    /// the orphan sweep land in T6; extraction carries it.
+    pub unresolved: Vec<engram_domain::UnresolvedReference>,
 }
 
 /// Deterministic extractor that turns ingested chunks into a scoped graph.
@@ -52,7 +57,7 @@ impl GraphExtractor {
         document: &SourceDocument,
         chunks: &[KnowledgeChunk],
     ) -> CoreResult<ExtractedGraph> {
-        self.extract_with_calls(source, document, chunks, None)
+        self.extract_with_calls(source, document, chunks, None, None, None)
     }
 
     /// Extracts a graph, optionally using pre-computed AST call edges instead of
@@ -64,6 +69,8 @@ impl GraphExtractor {
         document: &SourceDocument,
         chunks: &[KnowledgeChunk],
         ast_calls: Option<&[(String, String)]>,
+        structural: Option<&engram_code::StructuralEdges>,
+        frameworks: Option<&engram_code::FrameworkFacts>,
     ) -> CoreResult<ExtractedGraph> {
         let now = Utc::now();
         let graph_id = graph_id_for(document);
@@ -135,13 +142,17 @@ impl GraphExtractor {
                 else {
                     continue;
                 };
-                let Some((kind, bare)) = parse_symbol(anchor) else {
+                let Some((kind, name)) = parse_symbol(anchor) else {
                     continue;
                 };
-                if bare.is_empty() || is_noise_symbol(&bare) {
+                // RFC-0020 Phase 2: `name` is the receiver-qualified logical
+                // name (`Foo::bar`) when the declaration is nested, bare at
+                // top level. Noise filtering applies to the bare tail.
+                let bare = engram_code::bare_tail(&name).unwrap_or(&name).to_owned();
+                if bare.is_empty() || engram_code::is_noise_symbol(&bare) {
                     continue;
                 }
-                symbols.push((bare.clone(), bare, kind, chunk.text.clone(), chunk_idx));
+                symbols.push((name, bare, kind, chunk.text.clone(), chunk_idx));
             }
         } else {
             // RFC-0020 T3: non-code documents emit NO graph entities — the naive
@@ -151,13 +162,16 @@ impl GraphExtractor {
             // still discover documents (the extract-knowledge op relies on this).
         }
 
-        // Bare→qualified map (first wins) for resolving AST callers/callees,
-        // which treesitter emits as bare names, against the qualified entities.
-        let mut bare_to_qualified: HashMap<String, String> = HashMap::new();
+        // Document symbol table (RFC-0020 Phase 2): bare tail → ALL local
+        // qualified candidates. A unique candidate qualifies the reference;
+        // an ambiguous one stays bare for cross-file resolution (never an
+        // arbitrary pick — the Phase-1 first-wins map is gone).
+        let mut bare_to_qualified: HashMap<String, Vec<String>> = HashMap::new();
         for (qualified, bare, _, _, _) in &symbols {
             bare_to_qualified
                 .entry(bare.clone())
-                .or_insert_with(|| qualified.clone());
+                .or_default()
+                .push(qualified.clone());
         }
 
         // RFC-0020 rev: git provenance (repository/branch/revision) is metadata,
@@ -234,13 +248,13 @@ impl GraphExtractor {
                 if caller == callee {
                     continue;
                 }
-                let Some(caller_qual) = bare_to_qualified.get(caller) else {
+                let Some(caller_qual) = local_qualify(&bare_to_qualified, caller) else {
                     continue;
                 };
-                let Some(&subject_index) = index.get(caller_qual) else {
+                let Some(&subject_index) = index.get(caller_qual.as_str()) else {
                     continue;
                 };
-                let object_qual = bare_to_qualified.get(callee).cloned();
+                let object_qual = local_qualify(&bare_to_qualified, callee);
                 let object_key = object_qual.clone().unwrap_or_else(|| callee.clone());
                 if !seen.insert((caller_qual.clone(), object_key.clone())) {
                     continue;
@@ -256,7 +270,7 @@ impl GraphExtractor {
                     }
                 };
                 relationships.push(KnowledgeRelationship {
-                    id: relationship_id(&graph_id, caller_qual, &object_key),
+                    id: relationship_id(&graph_id, &caller_qual, &object_key),
                     graph_id: Some(graph_id.clone()),
                     subject: entity_ref(&entities[subject_index]),
                     predicate: "calls".to_owned(),
@@ -388,11 +402,210 @@ impl GraphExtractor {
             });
         }
 
+        // RFC-0020 Phase 2 typed structural edges. Containment is
+        // intra-document (both endpoints are local entities); inheritance
+        // targets may be external (name-only, resolved cross-file in
+        // `extract_into`); imports form a File entity → Module entity edge
+        // per import path (graph-only entities, like the Repository entity).
+        if let Some(edges) = structural {
+            let file_name = document
+                .path
+                .clone()
+                .unwrap_or_else(|| document.id.to_string());
+            let file_id = entity_id(&graph_id, &file_name);
+            let file_ref = EntityRef {
+                id: Some(file_id.clone()),
+                kind: Some("file".to_owned()),
+                name: Some(file_name.clone()),
+                aliases: Vec::new(),
+            };
+            // Every code document gets its File entity (resolution needs
+            // importer and non-importer files alike), not just importers.
+            entities.push(KnowledgeEntity {
+                id: file_id.clone(),
+                graph_id: Some(graph_id.clone()),
+                kind: EntityKind::File,
+                name: file_name.clone(),
+                aliases: Vec::new(),
+                scope: source.scope.clone(),
+                source_refs: Vec::new(),
+                concept_refs: Vec::new(),
+                ontology_class_refs: Vec::new(),
+                provenance: source.provenance.clone(),
+                created_at: now,
+                updated_at: None,
+                valid_from: Some(now),
+                valid_until: None,
+                metadata: entity_git_meta.clone(),
+                archived_at: None,
+            });
+            for path in &edges.imports {
+                let module_id = entity_id(&graph_id, &format!("module:{path}"));
+                let module_ref = EntityRef {
+                    id: Some(module_id.clone()),
+                    kind: Some("module".to_owned()),
+                    name: Some(path.clone()),
+                    aliases: Vec::new(),
+                };
+                entities.push(KnowledgeEntity {
+                    id: module_id,
+                    graph_id: Some(graph_id.clone()),
+                    kind: EntityKind::Module,
+                    name: path.clone(),
+                    aliases: Vec::new(),
+                    scope: source.scope.clone(),
+                    source_refs: Vec::new(),
+                    concept_refs: Vec::new(),
+                    ontology_class_refs: Vec::new(),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    valid_from: Some(now),
+                    valid_until: None,
+                    metadata: entity_git_meta.clone(),
+                    archived_at: None,
+                });
+                relationships.push(KnowledgeRelationship {
+                    id: relationship_id(&graph_id, &file_name, path),
+                    graph_id: Some(graph_id.clone()),
+                    subject: file_ref.clone(),
+                    predicate: "imports".to_owned(),
+                    object: module_ref,
+                    scope: source.scope.clone(),
+                    evidence: Vec::new(),
+                    confidence: Some(1.0),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    archived_at: None,
+                });
+            }
+            let mut structural_edge = |predicate: &str, from: &str, to: &str| {
+                let subject = index.get(from).map(|&i| entity_ref(&entities[i]));
+                let Some(subject) = subject else { return };
+                // Containment targets are same-document by construction —
+                // resolve the id directly; inheritance targets may be
+                // external and stay name-only for cross-file resolution.
+                let object = match predicate {
+                    "contains" => index.get(to).map(|&i| entity_ref(&entities[i])),
+                    _ => None,
+                }
+                .unwrap_or(EntityRef {
+                    id: None,
+                    kind: None,
+                    name: Some(to.to_owned()),
+                    aliases: Vec::new(),
+                });
+                relationships.push(KnowledgeRelationship {
+                    id: relationship_id(&graph_id, from, &format!("{predicate}:{to}")),
+                    graph_id: Some(graph_id.clone()),
+                    subject,
+                    predicate: predicate.to_owned(),
+                    object,
+                    scope: source.scope.clone(),
+                    evidence: Vec::new(),
+                    confidence: Some(1.0),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    archived_at: None,
+                });
+            };
+            for (parent, member) in &edges.contains {
+                structural_edge("contains", parent, member);
+            }
+            for (child, base) in &edges.extends {
+                structural_edge("extends", child, base);
+            }
+            for (child, iface) in &edges.implements {
+                structural_edge("implements", child, iface);
+            }
+        }
+
+        // RFC-0020 Phase 2 framework patterns: routes become Endpoint
+        // entities (`GET /users`) wired to their handlers via `routes_to`;
+        // React callbacks become `calls` edges from the component. Handlers
+        // resolve against the document symbol table; handlers declared in
+        // other files stay name-only for cross-file resolution.
+        if let Some(facts) = frameworks {
+            for route in &facts.routes {
+                let endpoint_name = format!("{} {}", route.method, route.path);
+                let endpoint_id = entity_id(&graph_id, &endpoint_name);
+                entities.push(KnowledgeEntity {
+                    id: endpoint_id.clone(),
+                    graph_id: Some(graph_id.clone()),
+                    kind: EntityKind::Endpoint,
+                    name: endpoint_name.clone(),
+                    aliases: Vec::new(),
+                    scope: source.scope.clone(),
+                    source_refs: Vec::new(),
+                    concept_refs: Vec::new(),
+                    ontology_class_refs: Vec::new(),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    valid_from: Some(now),
+                    valid_until: None,
+                    metadata: entity_git_meta.clone(),
+                    archived_at: None,
+                });
+                relationships.push(KnowledgeRelationship {
+                    id: relationship_id(&graph_id, &endpoint_name, &route.handler),
+                    graph_id: Some(graph_id.clone()),
+                    subject: EntityRef {
+                        id: Some(endpoint_id),
+                        kind: Some("endpoint".to_owned()),
+                        name: Some(endpoint_name),
+                        aliases: Vec::new(),
+                    },
+                    predicate: "routes_to".to_owned(),
+                    object: EntityRef {
+                        id: None,
+                        kind: None,
+                        name: Some(route.handler.clone()),
+                        aliases: Vec::new(),
+                    },
+                    scope: source.scope.clone(),
+                    evidence: Vec::new(),
+                    confidence: Some(1.0),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    archived_at: None,
+                });
+            }
+            for (component, handler) in &facts.callbacks {
+                let Some(&component_index) = index.get(component) else {
+                    continue;
+                };
+                relationships.push(KnowledgeRelationship {
+                    id: relationship_id(&graph_id, component, &format!("jsx:{handler}")),
+                    graph_id: Some(graph_id.clone()),
+                    subject: entity_ref(&entities[component_index]),
+                    predicate: "calls".to_owned(),
+                    object: EntityRef {
+                        id: None,
+                        kind: None,
+                        name: Some(handler.clone()),
+                        aliases: Vec::new(),
+                    },
+                    scope: source.scope.clone(),
+                    evidence: Vec::new(),
+                    confidence: Some(0.9),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    archived_at: None,
+                });
+            }
+        }
+
         Ok(ExtractedGraph {
             graph,
             entities,
             relationships,
             chunk_entities,
+            unresolved: Vec::new(),
         })
     }
 
@@ -404,7 +617,7 @@ impl GraphExtractor {
         source: &KnowledgeSource,
         document: &SourceDocument,
         chunks: &[KnowledgeChunk],
-        name_index: Option<&mut HashMap<String, String>>,
+        name_index: Option<&mut SymbolIndex>,
     ) -> CoreResult<ExtractedGraph>
     where
         R: KnowledgeRepository + KnowledgeGraphRepository + ?Sized,
@@ -412,22 +625,22 @@ impl GraphExtractor {
         let mut extracted = Self.extract(source, document, chunks)?;
 
         // Cross-file edge resolution (C1): fill name-only calls object refs
-        // against the caller-maintained global name→id index. Each entity is
-        // registered under both its qualified name and its bare tail so AST
-        // callees (bare) resolve (RFC-0020 T2).
+        // against the caller-maintained scope-wide symbol table. Each entity
+        // is registered under both its qualified name and its bare tail with
+        // repo/path discriminators; resolution prefers same-document then
+        // same-repo candidates (RFC-0020 Phase 2).
         if let Some(index) = name_index {
-            for entity in &extracted.entities {
-                register_in_name_index(index, entity);
-            }
-            for rel in &mut extracted.relationships {
-                if rel.predicate == "calls" && rel.object.id.is_none() {
-                    if let Some(name) = &rel.object.name {
-                        if let Some(id) = index.get(name) {
-                            rel.object.id = Some(Id::from(id.clone()));
-                        }
-                    }
-                }
-            }
+            let repo = source
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get(REPOSITORY_KEY))
+                .and_then(|v| v.as_str());
+            let path = document.path.as_deref();
+            register_entities(index, &extracted.entities, repo, path);
+            // Resolution runs the same-doc / same-repo / unique / ledger
+            // ladder (the scanner path adds cross-file context the same way).
+            extracted.unresolved =
+                engram_code::resolve_refs(index, &mut extracted.relationships, repo, path);
         }
 
         repository.put_graph(extracted.graph.clone()).await?;
@@ -466,175 +679,75 @@ fn parse_symbol(anchor: &str) -> Option<(EntityKind, String)> {
         "interface" => EntityKind::Interface,
         "type" => EntityKind::TypeAlias,
         "class" | "impl" => EntityKind::Class,
+        // Namespaces/modules (C++/C# `namespace`, Rust `mod`) carry the
+        // receiver chain for their members.
+        "module" | "namespace" | "mod" => EntityKind::Module,
         _ => return None,
     };
     Some((kind, name.to_owned()))
 }
 
-/// Registers an entity in the cross-file name index under BOTH its qualified
-/// name (primary) and its bare tail (secondary), so AST callees — which
-/// treesitter emits as bare names — resolve against qualified entities
-/// (RFC-0020 T2). Bare collisions are last-write-wins (a documented Phase-1
-/// degradation: a colliding bare callee may resolve to the wrong target;
-/// removed by a Phase 2 scope-wide symbol table).
-pub(crate) fn register_in_name_index(
-    index: &mut HashMap<String, String>,
-    entity: &KnowledgeEntity,
+/// Unique local qualified candidate for a bare name, if exactly one exists.
+/// Ambiguous bare names (two receivers defining the same tail in one file)
+/// intentionally return None — the reference stays bare for cross-file
+/// resolution instead of an arbitrary pick.
+fn local_qualify(bare_to_qualified: &HashMap<String, Vec<String>>, bare: &str) -> Option<String> {
+    let candidates = bare_to_qualified.get(bare)?;
+    match candidates.as_slice() {
+        [only] => Some(only.clone()),
+        _ => None,
+    }
+}
+
+/// Registers entities in the scope-wide symbol table under BOTH their
+/// qualified name (primary) and bare tail (secondary), so AST callees —
+/// which treesitter emits as bare names — resolve against qualified
+/// entities. Appends per key: collisions coexist as candidates with their
+/// repo/path discriminators (RFC-0020 Phase 2 multi-candidate table — the
+/// Phase-1 last-write-wins degradation is gone).
+pub fn register_entities(
+    index: &mut SymbolIndex,
+    entities: &[KnowledgeEntity],
+    repo: Option<&str>,
+    path: Option<&str>,
 ) {
-    index.insert(entity.name.clone(), entity.id.to_string());
-    if let Some(bare) = entity.name.rsplit("::").next() {
-        if bare != entity.name {
-            index.insert(bare.to_owned(), entity.id.to_string());
+    for entity in entities {
+        // File/Module/Repository entities are not call targets — registering
+        // their path-shaped names would pollute bare-name resolution (an
+        // import path like `fmt` colliding with a `fmt` fn; the repository
+        // key likewise). This also covers namespace Module entities.
+        if matches!(
+            entity.kind,
+            EntityKind::File | EntityKind::Module | EntityKind::Repository
+        ) {
+            continue;
         }
+        index.register(
+            &entity.name,
+            SymbolCandidate {
+                id: entity.id.to_string(),
+                name: entity.name.clone(),
+                repo: repo.map(str::to_owned),
+                path: path.map(str::to_owned),
+            },
+        );
     }
 }
 
-/// Reject entities that aren't real concepts — punctuation tokens, single-char
-/// symbols, code-block delimiters, common type annotations, YAML keys.
-/// Returns true = "this is noise, skip it."
-///
-/// Reference implementation for the TS `extract-knowledge` noise filter
-/// (RFC-0020 T5): no longer called from the Rust extractor after T3 removed
-/// document→Concept emission, but kept as the canonical logic the TS op ports
-/// (plus a doc-heading-generic blocklist).
-#[allow(dead_code)]
-fn is_noise_concept(name: &str) -> bool {
-    if name.len() < 3 {
-        return true;
-    }
-    // Must contain at least one alphanumeric char (reject punctuation-only).
-    if !name.chars().any(|c| c.is_alphanumeric()) {
-        return true;
-    }
-    let lower = name.to_lowercase();
-    // Common type annotations / system words that aren't real concepts.
-    const TYPE_NOISE: &[&str] = &[
-        "str",
-        "string",
-        "int",
-        "float",
-        "bool",
-        "void",
-        "null",
-        "none",
-        "nil",
-        "true",
-        "false",
-        "self",
-        "super",
-        "this",
-        "type",
-        "kind",
-        "value",
-        "name",
-        "pub",
-        "var",
-        "let",
-        "const",
-        "fn",
-        "def",
-        "class",
-        "struct",
-        "enum",
-        "import",
-        "export",
-        "return",
-        "async",
-        "await",
-        "yield",
-        "static",
-        "u8",
-        "u16",
-        "u32",
-        "u64",
-        "i8",
-        "i16",
-        "i32",
-        "i64",
-        "f32",
-        "f64",
-        "usize",
-        "isize",
-        "vec",
-        "option",
-        "result",
-        "box",
-        "rc",
-        "arc",
-        "object",
-        "array",
-        "map",
-        "set",
-        "list",
-        "dict",
-        "tuple",
-        "models",
-        "description",
-        "available",
-        "contents",
-        "approach",
-        "append",
-        "clone",
-        "print",
-        "join",
-        "exists",
-        "encode",
-    ];
-    if TYPE_NOISE.contains(&lower.as_str()) {
-        return true;
-    }
-    // Reject "key: value" patterns (YAML/TOML keys like "type: string").
-    if name.contains(':') && name.split(':').count() == 2 {
-        return true;
-    }
-    // Reject if it starts with a non-alpha char (likely code noise).
-    if !name.starts_with(|c: char| c.is_alphabetic()) {
-        return true;
-    }
-    false
-}
-
-/// Rejects code-symbol names that are too generic to be useful graph nodes —
-/// language primitives and ubiquitous one-word methods (`new`, `clone`, `len`,
-/// `fmt`, …) that, as bare names, collide across every crate and become massive
-/// cross-cutting hubs with no stable identity (RFC-0020 Phase 1).
-///
-/// Tuned for CODE, so unlike [`is_noise_concept`] it does NOT reject short
-/// names — `tx`, `db`, `id`, `kv` are meaningful identifiers in code. Only the
-/// bare-generic set is blocked. This is the pre-qualified-identity filter: once
-/// `parse_symbol` emits qualified identities (`{repo}/{path}::{module}::{name}`,
-/// RFC-0020 Phase 1), the generic-method portion of this list can be relaxed and
-/// only the true type primitives (`str`, `vec`, `option`, …) kept.
-///
-/// Returns true = "this symbol is noise, skip it."
-fn is_noise_symbol(name: &str) -> bool {
-    let lower = name.trim().to_lowercase();
-    if lower.is_empty() {
-        return true;
-    }
-    // Punctuation-only / non-alphanumeric / non-alpha-leading sanity.
-    if !lower.chars().any(|c| c.is_alphanumeric()) {
-        return true;
-    }
-    if !lower.starts_with(|c: char| c.is_alphabetic()) {
-        return true;
-    }
-    // Bare-generic names. Primitives/type words first, then the ubiquitous
-    // one-word methods named in RFC-0020 Phase 1 and the AgentZero indexing
-    // guidance (`get`, `str`, `append`, `new`, `clone`, `read`, `write`, …).
-    const SYMBOL_NOISE: &[&str] = &[
-        // Language primitives & type words.
-        "str", "string", "int", "integer", "float", "double", "bool", "boolean", "void", "null",
-        "none", "nil", "true", "false", "self", "super", "this", "type", "kind", "value", "pub",
-        "var", "let", "const", "static", "object", "array", "map", "set", "list", "dict", "tuple",
-        "vector", "vec", "option", "result", "box", "rc", "arc", "ref", "u8", "u16", "u32", "u64",
-        "i8", "i16", "i32", "i64", "f32", "f64", "usize", "isize",
-        // Generic ubiquitous one-word symbols — bare, they collide across every
-        // crate and dominate centrality without a stable identity.
-        "new", "clone", "copy", "len", "fmt", "format", "print", "log", "get", "set", "run", "init",
-        "send", "recv", "read", "write", "open", "close", "append", "name", "main",
-    ];
-    SYMBOL_NOISE.contains(&lower.as_str())
+/// Fills name-only object refs (`calls`, `extends`, `implements`) against the
+/// scope-wide symbol table, preferring same-document then same-repo
+/// candidates. Ambiguous or unknown references stay name-only (recorded by
+/// the Phase-2 ledger, T5).
+pub fn resolve_call_refs(
+    index: &SymbolIndex,
+    relationships: &mut [KnowledgeRelationship],
+    repo: Option<&str>,
+    path: Option<&str>,
+) -> Vec<engram_domain::UnresolvedReference> {
+    // Delegates to engram-code's Phase-2 resolver (receiver hints, the
+    // same-doc/same-repo/unique/ledger ladder); returns the ledger records
+    // for callers that persist them (T6).
+    engram_code::resolve_refs(index, relationships, repo, path)
 }
 
 /// Word-boundary occurrence check so `File` does not match inside `Filesystem`.
@@ -745,7 +858,8 @@ fn belongs_to_rel_id(graph_id: &KnowledgeGraphId, repo_entity_id: &EntityId) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::{is_noise_symbol, mentions};
+    use super::mentions;
+    use engram_code::is_noise_symbol;
 
     #[test]
     fn mentions_is_multibyte_safe() {

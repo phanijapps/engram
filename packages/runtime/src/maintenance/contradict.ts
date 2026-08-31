@@ -30,6 +30,8 @@ const FIND_CONTRADICTION: Tool = {
 
 const KINDS = new Set(["logical", "temporal", "tension", "duplicate", "policy"]);
 
+/** Contradiction-detection outcome: counts of beliefs read / contradictions
+ *  written / skipped records. */
 export interface ContradictionResult {
   beliefsRead: number;
   /** Contradictions emitted by the LLM that passed validation. The store dedupes
@@ -39,6 +41,7 @@ export interface ContradictionResult {
   skipped: number;
 }
 
+/** Options for the LLM contradiction sweep over a scope's beliefs. */
 export interface ContradictOptions {
   transport: NativeProviderTransport;
   scope: Scope;

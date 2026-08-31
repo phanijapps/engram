@@ -8,8 +8,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ChunkId, ConceptRef, DocumentId, EntityId, EntityRef, EvidenceRef, KnowledgeGraphId, Metadata,
-    OntologyClassId, OntologyRef, Policy, Provenance, RelationshipId, Scope, SourceId, Timestamp,
+    ChunkId, ConceptRef, DocumentId, EntityId, EntityRef, EvidenceRef, Id, KnowledgeGraphId,
+    Metadata, OntologyClassId, OntologyRef, Policy, Provenance, RelationshipId, Scope, SourceId,
+    Timestamp,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -253,6 +254,115 @@ pub struct KnowledgeRelationship {
     pub archived_at: Option<Timestamp>,
 }
 
+// ── Code indexing vocabulary (RFC-0020 Phase 2, ADR-0028) ───────────────────
+
+/// Closed predicate vocabulary for code-extraction edges. The relationship
+/// `predicate` stays an open string; this enum is the set the code extractor
+/// (`engram-code`) is contracted to emit (`docs/domain-data-model.md`
+/// §Code indexing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodeEdgeKind {
+    Calls,
+    Imports,
+    Contains,
+    Extends,
+    Implements,
+    RoutesTo,
+}
+
+impl CodeEdgeKind {
+    /// The closed set, in canonical order.
+    pub const ALL: [CodeEdgeKind; 6] = [
+        CodeEdgeKind::Calls,
+        CodeEdgeKind::Imports,
+        CodeEdgeKind::Contains,
+        CodeEdgeKind::Extends,
+        CodeEdgeKind::Implements,
+        CodeEdgeKind::RoutesTo,
+    ];
+
+    /// Predicate string as persisted on `KnowledgeRelationship.predicate`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CodeEdgeKind::Calls => "calls",
+            CodeEdgeKind::Imports => "imports",
+            CodeEdgeKind::Contains => "contains",
+            CodeEdgeKind::Extends => "extends",
+            CodeEdgeKind::Implements => "implements",
+            CodeEdgeKind::RoutesTo => "routes_to",
+        }
+    }
+}
+
+impl std::fmt::Display for CodeEdgeKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl std::str::FromStr for CodeEdgeKind {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        CodeEdgeKind::ALL
+            .iter()
+            .copied()
+            .find(|k| k.as_str() == s)
+            .ok_or(())
+    }
+}
+
+/// Lifecycle of a recorded unresolved cross-file reference. `pending →
+/// resolved` happens when a later ingest defines a unique target (the orphan
+/// sweep); `pending → failed` only by explicit operator action, never
+/// automatically.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UnresolvedReferenceStatus {
+    Pending,
+    Resolved,
+    Failed,
+}
+
+impl UnresolvedReferenceStatus {
+    /// The only legal transitions: pending → resolved (sweep) and pending →
+    /// failed (operator). Terminal states never change.
+    pub fn can_transition_to(self, next: UnresolvedReferenceStatus) -> bool {
+        use UnresolvedReferenceStatus::*;
+        matches!((self, next), (Pending, Resolved) | (Pending, Failed))
+    }
+}
+
+/// A recorded, best-effort-failed cross-file code reference — the honesty
+/// ledger for code resolution (`docs/domain-data-model.md` §Code indexing).
+/// Rows persist in the knowledge store with the same lifecycle as
+/// relationships: retracted with their referring document on re-ingest,
+/// re-attempted by the orphan sweep whenever new symbols land.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnresolvedReference {
+    pub id: Id,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graph_id: Option<KnowledgeGraphId>,
+    /// Referring entity.
+    pub from_entity_id: EntityId,
+    /// Name as written at the reference site.
+    pub reference_name: String,
+    /// Candidate target ids known at record time.
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub candidates: Vec<EntityId>,
+    pub status: UnresolvedReferenceStatus,
+    /// Referring file path (disambiguator).
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+    pub scope: Scope,
+    pub created_at: Timestamp,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<Timestamp>,
+}
+
 // ── Knowledge-graph identity and consolidation (RFC-0014) ───────────────────
 
 /// Current normalization scheme version.
@@ -390,4 +500,90 @@ pub struct EmbeddingRef {
     pub target_id: String,
     pub content_hash: String,
     pub created_at: Timestamp,
+}
+
+#[cfg(test)]
+mod code_indexing_tests {
+    use super::*;
+
+    #[test]
+    fn code_edge_kind_serde_round_trips_every_variant() {
+        for kind in CodeEdgeKind::ALL {
+            let json = serde_json::to_string(&kind).expect("serialize");
+            let back: CodeEdgeKind = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, kind, "round-trip failed for {json}");
+        }
+    }
+
+    #[test]
+    fn code_edge_kind_str_round_trip_is_closed() {
+        for kind in CodeEdgeKind::ALL {
+            let s = kind.as_str();
+            assert_eq!(
+                s.parse::<CodeEdgeKind>(),
+                Ok(kind),
+                "from_str failed for {s}"
+            );
+        }
+        assert_eq!("".parse::<CodeEdgeKind>(), Err(()));
+        assert_eq!("describes".parse::<CodeEdgeKind>(), Err(()));
+        assert_eq!("CALLS".parse::<CodeEdgeKind>(), Err(()));
+    }
+
+    #[test]
+    fn code_edge_kind_predicate_strings_are_snake_case() {
+        for kind in CodeEdgeKind::ALL {
+            let s = kind.as_str();
+            assert!(
+                s.chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit()),
+                "predicate {s} is not snake_case"
+            );
+        }
+        assert_eq!(CodeEdgeKind::RoutesTo.as_str(), "routes_to");
+    }
+
+    #[test]
+    fn unresolved_status_allows_only_pending_exits() {
+        use UnresolvedReferenceStatus::*;
+        assert!(Pending.can_transition_to(Resolved));
+        assert!(Pending.can_transition_to(Failed));
+        assert!(!Pending.can_transition_to(Pending));
+        assert!(!Resolved.can_transition_to(Pending));
+        assert!(!Resolved.can_transition_to(Failed));
+        assert!(!Resolved.can_transition_to(Resolved));
+        assert!(!Failed.can_transition_to(Pending));
+        assert!(!Failed.can_transition_to(Resolved));
+        assert!(!Failed.can_transition_to(Failed));
+    }
+
+    #[test]
+    fn unresolved_reference_serde_camel_case_round_trip() {
+        let record = UnresolvedReference {
+            id: Id::from("unref-1"),
+            graph_id: Some(KnowledgeGraphId::from("graph-1")),
+            from_entity_id: EntityId::from("ent-1"),
+            reference_name: "parse_config".to_string(),
+            candidates: vec![EntityId::from("ent-2"), EntityId::from("ent-3")],
+            status: UnresolvedReferenceStatus::Pending,
+            path: "src/main.rs".to_string(),
+            line: Some(42),
+            scope: Scope {
+                tenant: "t".to_string(),
+                subject: None,
+                workspace: None,
+                session: None,
+                environment: None,
+            },
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+        };
+        let json = serde_json::to_string(&record).expect("serialize");
+        assert!(
+            json.contains("\"fromEntityId\""),
+            "camelCase field missing: {json}"
+        );
+        let back: UnresolvedReference = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, record);
+    }
 }

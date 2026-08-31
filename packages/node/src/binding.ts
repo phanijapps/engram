@@ -223,6 +223,8 @@ export interface NativeProceduresApiBinding {
  */
 export interface NativeProviderBinding {
   capabilitiesJson(): string;
+  fileDependenciesJson(requestJson: string): string;
+  exploreJson(requestJson: string): string;
   consolidateJson(requestJson: string): string;
   scanRepositoryJson(requestJson: string): string;
   requireMemoryApi(): NativeMemoryApiBinding;

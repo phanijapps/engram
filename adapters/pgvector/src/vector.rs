@@ -59,7 +59,7 @@ impl VectorIndex for PgVectorIndex {
         self.conn.block_on(async {
             self.conn.client.execute(
                 "INSERT INTO vectors (id, embedding, target_type, target_id, model, dimensions, content_hash) \
-                 VALUES ($1, $2::vector, 'chunk', $1, $3, $4, $5) \
+                 VALUES ($1, $2::text::vector, 'chunk', $1, $3, $4, $5) \
                  ON CONFLICT (id) DO UPDATE SET embedding=EXCLUDED.embedding, content_hash=EXCLUDED.content_hash, last_updated_at=now()",
                 &[&target_id.to_string(), &vec_text, &space.model, &(space.dimensions as i32), &content_hash],
             ).await.map_err(|e| Self::pg_err(e.to_string()))?;
@@ -84,8 +84,8 @@ impl VectorIndex for PgVectorIndex {
                 .conn
                 .client
                 .query(
-                    "SELECT id, 1 - (embedding <=> $1::vector) AS score FROM vectors \
-                 ORDER BY embedding <=> $1::vector LIMIT $2",
+                    "SELECT id, 1 - (embedding <=> $1::text::vector) AS score FROM vectors \
+                 ORDER BY embedding <=> $1::text::vector LIMIT $2",
                     &[&q_text, &(limit as i64)],
                 )
                 .await
@@ -99,6 +99,28 @@ impl VectorIndex for PgVectorIndex {
                 })
                 .collect())
         })
+    }
+
+    /// Durable content dedup point read: the stored embedding for one target
+    /// id. pgvector returns `[f32, f32, ...]` text; parsed back to Vec<f32>.
+    /// ([durable-dedup])
+    async fn vector_for_target(&self, target_id: &Id) -> CoreResult<Option<Vec<f32>>> {
+        let id = target_id.to_string();
+        let row = self.conn.block_on(async {
+            self.conn
+                .client
+                .query_opt("SELECT embedding::text FROM vectors WHERE id = $1", &[&id])
+                .await
+                .map_err(|e| Self::pg_err(e.to_string()))
+        })?;
+        Ok(row.map(|r| {
+            let text: String = r.get(0);
+            text.trim_start_matches('[')
+                .trim_end_matches(']')
+                .split(',')
+                .filter_map(|part| part.trim().parse::<f32>().ok())
+                .collect()
+        }))
     }
 
     async fn delete_target(&self, target_id: &Id) -> CoreResult<()> {

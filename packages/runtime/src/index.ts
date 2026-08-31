@@ -12,3 +12,4 @@ export { buildEngramConfig, buildScope, type ScanSummary } from "./shared/config
 export { runIngest } from "./ingest/cli.js";
 export { createMcpServer, startMcpHttpServer } from "./mcp/server.js";
 export { runMaintain, type ConsolidationRun } from "./maintenance/cli.js";
+export { createLlmProvider, type LlmProvider, type LlmAgentMessage, type Tool } from "./maintenance/llm.js";

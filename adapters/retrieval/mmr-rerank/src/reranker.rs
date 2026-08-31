@@ -269,13 +269,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
 
 /// Clamps `x` to `[0, 1]`.
 fn clamp01(x: f64) -> f64 {
-    if x < 0.0 {
-        0.0
-    } else if x > 1.0 {
-        1.0
-    } else {
-        x
-    }
+    x.clamp(0.0, 1.0)
 }
 
 /// Stamps a result's `FusionTrace` with the MMR rerank strategy + the MMR score

@@ -43,7 +43,8 @@ fn main() {
             "usage: engram-mcp --storage <path> [--project <name>] \
              [--org <name> --domain <name> [--subdomain <name>]] \
              [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
-             [--db-file <name>]"
+             [--db-file <name>] [--backend sqlite|pgvector] \
+             [--pg-connection-string <url>] [--tools core|full|all] [--no-vector]"
         );
         std::process::exit(2);
     });
@@ -76,6 +77,7 @@ fn main() {
         ),
         ontology,
         taxonomy,
+        storage_dir: std::path::PathBuf::from(&config.storage_path),
     };
 
     let mut registry: ToolRegistry<App> = ToolRegistry::new();
@@ -88,88 +90,71 @@ fn main() {
 /// stays focused. Pass via `--tools <profile>`.
 fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
     match profile {
-        "" | "all" => None, // None = register everything (backward compat).
-        "investigate" => Some(&[
-            "ping",
-            "recall",
-            "search",
-            "get_context",
-            "symbol_context",
-            "change_impact",
-            "resolve_entity",
-            "graph_neighbors",
-            "write_memory",
-            "store_knowledge",
-            "put_entity",
-            "put_relationship",
-            "capability_report",
-        ]),
-        "read" => Some(&[
-            "ping",
-            "recall",
-            "search",
-            "get_context",
-            "symbol_context",
-            "change_impact",
-            "resolve_entity",
-            "graph_neighbors",
-            "graph_subgraph",
-            "belief_get",
-            "contradiction_list",
-            "hierarchy_path",
-            "architecture",
-            "code_health",
-            "whats_changed",
-            "predict_context",
-            "capability_report",
-            "ontology_read",
-            "taxonomy_read",
-        ]),
-        "scan" => Some(&[
-            "ping",
-            "scan_repo",
-            "scan_protocols",
-            "scan_dependencies",
-            "scan_ownership",
-            "index_docs",
-            "search",
-            "capability_report",
-        ]),
-        "write" => Some(&[
-            "ping",
-            "write_memory",
-            "forget",
-            "put_entity",
-            "put_relationship",
-            "store_knowledge",
-            "index_docs",
-            "belief_put",
-            "belief_retract",
-            "procedure_put",
-            "procedure_increment",
-            "capability_report",
-        ]),
-        "maintain" => Some(&[
-            "ping",
-            "consolidate",
-            "belief_stale_list",
-            "contradiction_list",
-            "procedure_list",
-            "hierarchy_build",
-            "capability_report",
-        ]),
+        // Consolidated surface: 6 rich verbs. DEFAULT — the daily driver.
+        "core" | "" => Some(CORE_TOOLS),
+        // Consolidated + specialist: 10 tools for maintenance work.
+        "full" => Some(FULL_TOOLS),
+        // Legacy granular surface: all 44 tools. Superseded — kept for
+        // backward compatibility; new integrations should use core/full.
+        "all" => None,
+        // Legacy granular profiles — superseded by core/full. Still work
+        // for existing deployments but are deprecated.
+        "investigate" | "read" | "scan" | "write" | "maintain" => {
+            eprintln!(
+                "engram-mcp: --tools {profile} is superseded by --tools core or --tools full; \
+                 using the consolidated core surface"
+            );
+            Some(CORE_TOOLS)
+        }
         other => {
-            eprintln!("engram-mcp: unknown --tools profile '{other}', using all tools");
-            None
+            eprintln!(
+                "engram-mcp: unknown --tools profile '{other}'; using core (6 tools). \
+                 Options: core | full | all"
+            );
+            Some(CORE_TOOLS)
         }
     }
 }
 
+/// The 6 core consolidated tools — the 80/20 agent surface.
+pub static CORE_TOOLS: &[&str] = &[
+    "remember", "recall", "code", "scan", "graph", "forget", "maintain",
+];
+
+/// The 10 full tools — core + specialist for maintenance/analysis work.
+pub static FULL_TOOLS: &[&str] = &[
+    "remember",
+    "recall",
+    "code",
+    "scan",
+    "graph",
+    "forget",
+    "maintain",
+    "beliefs",
+    "procedures",
+    "hierarchy",
+];
+
 /// Register every tool the server exposes, filtered by the active profile.
 fn register_all(registry: &mut ToolRegistry<App>, profile: &str) {
-    let allowed = tool_profile_set(profile);
-    register_all_tools(registry);
-    registry.retain(allowed);
+    match tool_profile_set(profile) {
+        Some(tools) if tools.contains(&"remember") && tools.len() <= 7 => {
+            // Consolidated core surface: 6 rich verbs dispatching to
+            // existing handlers. The granular tools are NOT registered —
+            // the dispatch fns call the Rust handlers directly.
+            register_core_tools(registry);
+        }
+        Some(tools) if tools.contains(&"remember") => {
+            // Consolidated full surface: core + specialist.
+            register_specialist_tools(registry);
+        }
+        allowed => {
+            // Granular surface (all/investigate/read/scan/write/maintain):
+            // register everything, filter by the allowed list.
+            register_all_tools(registry);
+            registry.retain(allowed);
+        }
+    }
 }
 
 /// Register ALL tools unconditionally (internal — called by register_all).
@@ -326,6 +311,8 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
     registry.register(ToolRecord {
         name: "scan_repo",
         description: "Treesitter-index a code repository into the project workspace (code lane). \
+                      Incremental: a per-root manifest is persisted under <storage>/scan-manifests/ \
+                      so re-scans skip unchanged files; pass force=true to re-ingest everything. \
                       Honors an optional scan config: pass `scan_config` (path to a JSON file) or \
                       drop one at `<repo>/.engram/scan.json` to tune the concept-link filter \
                       (blocklist/allowlist/min_name_length) and the file denylist (dirs/extensions). \
@@ -334,11 +321,30 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
             "type": "object",
             "properties": {
                 "path": { "type": "string", "description": "Repository root path." },
+                "force": { "type": "boolean", "description": "Skip the incremental manifest and re-ingest every file (default false)." },
                 "scan_config": { "type": "string", "description": "Optional path to a scan-filter JSON config (overrides <repo>/.engram/scan.json)." }
             },
             "required": ["path"]
         }),
         handler: codegraph::scan_repo,
+    });
+    registry.register(ToolRecord {
+        name: "reindex",
+        description: "Drain the vector-embed backlog (PS5): embeds un-embedded chunks in the \\
+                      scope regardless of source — the backfill path for old-source leftovers \\
+                      and fresh stores after a backend switch (vectors start empty). Keyed on \\
+                      the vector index's embedded-set. Capped per call (`limit`, default 256, \\
+                      max 1024) in deterministic chunk-id order; re-run to continue. Reports \\
+                      embedded count + remaining. Requires the vector lane (fastembed feature, \\
+                      no --no-vector).",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "limit": { "type": "number", "description": "Max chunks to embed this call (default 256, max 1024)." },
+                "scope": { "type": "object", "description": "Optional scope override; defaults to the launch scope." }
+            }
+        }),
+        handler: codegraph::reindex,
     });
     registry.register(ToolRecord {
         name: "scan_protocols",
@@ -647,6 +653,18 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
         handler: codegraph::change_impact,
     });
     registry.register(ToolRecord {
+        name: "file_dependencies",
+        description: "File-level import graph from `imports` edges (RFC-0020 Phase 2): each scanned file → the module paths it imports, resolved to defining files by stem suffix where the scanned source contains them.",
+        input_schema: json!({ "type": "object", "properties": {} }),
+        handler: codegraph::file_dependencies,
+    });
+    registry.register(ToolRecord {
+        name: "explore",
+        description: "Natural-language entry point (RFC-0020 Phase 2): identifier-shaped tokens in the query seed entity matches; matched seeds expand over calls/contains edges into a bounded, relevance-ordered subgraph (defaults: depth 2, 24 nodes, 64 edges).",
+        input_schema: json!({ "type": "object", "properties": { "query": { "type": "string", "description": "Natural-language question, e.g. 'how does parse_config flow into validate?'" }, "depth": { "type": "integer" }, "max_nodes": { "type": "integer" }, "max_edges": { "type": "integer" } }, "required": ["query"] }),
+        handler: codegraph::explore,
+    });
+    registry.register(ToolRecord {
         name: "code_health",
         description: "Dead code + repository stats.",
         input_schema: json!({ "type": "object", "properties": {} }),
@@ -714,4 +732,559 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
 
 fn ping(_app: &App, _args: &Value) -> Result<Value, ToolError> {
     Ok(protocol::text_content("pong"))
+}
+
+// ===== CONSOLIDATED TOOL SURFACE (research: agent-memory-and-tool-consolidation.md) =====
+// 10 rich verbs with discriminators replacing 44 granular tools.
+// Each dispatches to the existing handler — zero behavior change, backward compat preserved.
+
+/// Registers the 6 CORE consolidated tools (the 80/20 agent surface).
+/// These are aliases over existing handlers — the granular tools still exist
+/// under `--tools all` for backward compatibility.
+pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
+    // 1. remember — ONE write surface for all durable records
+    registry.register(ToolRecord {
+        name: "remember",
+        description: "Store what you learned. ONE write surface for every record type. \
+                      kind=memory: persist an observation/episode/fact. \
+                      kind=entity: add a knowledge-graph entity. \
+                      kind=relationship: add a graph edge. \
+                      kind=belief: assert a derived stance. \
+                      kind=procedure: store a replayable runbook. \
+                      kind=knowledge: bulk distill-write (facts + entities + edges).",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "kind": { "type": "string", "enum": ["memory", "entity", "relationship", "belief", "procedure", "knowledge"],
+                          "description": "What kind of record to store (default: memory)." },
+                "content": { "type": "string", "description": "The text/content to store (memory, belief statement, procedure text)." },
+                "name": { "type": "string", "description": "Entity/procedure/belief subject name." },
+                "kind_detail": { "type": "string", "description": "Memory kind: observation|fact|preference|episode|procedure. Entity kind: function|class|module|…" },
+                "confidence": { "type": "number", "description": "Belief confidence 0-1." },
+                "subject": { "type": "string", "description": "Belief subject key." },
+                "predicate": { "type": "string", "description": "Relationship predicate (calls|extends|…)." },
+                "object": { "type": "string", "description": "Relationship object entity name." },
+                "steps": { "type": "array", "items": { "type": "string" }, "description": "Procedure steps." },
+                "data": { "type": "object", "description": "Bulk knowledge payload (kind=knowledge)." }
+            },
+            "required": ["kind"]
+        }),
+        handler: consolidated_remember,
+    });
+
+    // 2. recall — ONE retrieval surface for everything
+    registry.register(ToolRecord {
+        name: "recall",
+        description: "What do I know about X? ONE retrieval surface. \
+                      mode=fused (default): multi-lane hybrid (vector+graph+lexical+temporal+beliefs). \
+                      mode=keyword: BM25 lexical search. \
+                      mode=context: task-aware context packet with graph/code neighborhoods. \
+                      mode=predict: proactive retrieval hints — enriches with recent memories from the store (no explicit recent_queries needed).",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string", "description": "The search query or topic." },
+                "as_of": { "type": "string", "description": "Bi-temporal instant (RFC3339). Returns results valid at this time. Default: now." },
+                "mode": { "type": "string", "enum": ["fused", "keyword", "context", "predict"],
+                          "description": "Retrieval mode (default: fused)." },
+                "limit": { "type": "number", "description": "Max results." },
+                "focus": { "type": "array", "items": { "type": "string" }, "description": "Symbol anchors for context mode." }
+            },
+            "required": ["query"]
+        }),
+        handler: consolidated_recall,
+    });
+
+    // 3. code — ONE code intelligence surface
+    registry.register(ToolRecord {
+        name: "code",
+        description: "Understand this codebase. ONE code-intel surface. \
+                      op=search: ranked code search by query text. \
+                      op=context: callers/callees/community for a symbol. \
+                      op=impact: blast radius + dependency path from a change. \
+                      op=health: dead code + repository stats. \
+                      op=architecture: central symbols, bridges, communities. \
+                      op=changed: temporal recency + impact scoring. \
+                      op=explore: identifier-seeded neighborhood expansion. \
+                      op=dependencies: file-level import graph.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "op": { "type": "string", "enum": ["search", "context", "impact", "health", "architecture", "changed", "explore", "dependencies"],
+                        "description": "Code intelligence operation." },
+                "symbol": { "type": "string", "description": "Target symbol (context/impact modes)." },
+                "query": { "type": "string", "description": "Search query (explore mode)." },
+                "depth": { "type": "number", "description": "Traversal depth (default 1-2)." },
+                "limit": { "type": "number", "description": "Result cap." },
+                "to": { "type": "string", "description": "Dependency path endpoint (impact mode)." }
+            },
+            "required": ["op"]
+        }),
+        handler: consolidated_code,
+    });
+
+    // 4. scan — ONE ingestion surface
+    registry.register(ToolRecord {
+        name: "scan",
+        description: "Learn from a source. ONE ingestion surface. \
+                      target=repo: tree-sitter index a code repository (13 languages). \
+                      target=protocols: extract HTTP API boundaries. \
+                      target=dependencies: extract package/crate dependencies. \
+                      target=ownership: extract CODEOWNERS. \
+                      target=docs: chunk a Markdown/text document.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "target": { "type": "string", "enum": ["repo", "protocols", "dependencies", "ownership", "docs"],
+                            "description": "What to scan (default: repo)." },
+                "path": { "type": "string", "description": "Repository or file path." },
+                "content": { "type": "string", "description": "Document content (target=docs)." },
+                "force": { "type": "boolean", "description": "Bypass incremental manifest (default false)." }
+            },
+            "required": ["path"]
+        }),
+        handler: consolidated_scan,
+    });
+
+    // 5. graph — ONE graph query surface
+    registry.register(ToolRecord {
+        name: "graph",
+        description: "Explore the knowledge graph. ONE graph query surface. \
+                      op=neighbors: directly connected entities. \
+                      op=subgraph: breadth-first subgraph around a node. \
+                      op=resolve: resolve a name to its entity.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "op": { "type": "string", "enum": ["neighbors", "subgraph", "resolve"],
+                        "description": "Graph operation." },
+                "name": { "type": "string", "description": "Entity name or ID." },
+                "depth": { "type": "number", "description": "Subgraph depth (default 2)." },
+                "limit": { "type": "number", "description": "Result cap." }
+            },
+            "required": ["op", "name"]
+        }),
+        handler: consolidated_graph,
+    });
+
+    // 6. forget — ONE deletion surface
+    registry.register(ToolRecord {
+        name: "forget",
+        description: "Remove what's wrong or outdated. ONE deletion surface. \
+                      kind=memory: delete/redact/tombstone/archive a memory. \
+                      kind=belief: retract a belief by subject.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "kind": { "type": "string", "enum": ["memory", "belief"],
+                          "description": "What to forget (default: memory)." },
+                "id": { "type": "string", "description": "Memory ID to forget." },
+                "mode": { "type": "string", "enum": ["delete", "redact", "tombstone", "archive"],
+                          "description": "Deletion mode (default: tombstone)." },
+                "subject": { "type": "string", "description": "Belief subject to retract." }
+            },
+            "required": []
+        }),
+        handler: consolidated_forget,
+    });
+
+    // 7. maintain — ONE operations surface
+    registry.register(ToolRecord {
+        name: "maintain",
+        description: "Keep the store healthy. ONE operations surface. \
+                      op=consolidate: run reflection + decay → derived beliefs. \
+                      op=reindex: drain the vector-embed backlog (content-hash dedup). \
+                      op=health: graph-health aggregates (orphans, duplicates). \
+                      op=candidates: list maintenance candidates. \
+                      op=plan: build a dry-run maintenance plan. \
+                      op=apply: apply a reviewed plan. \
+                      op=capabilities: report which capabilities are wired. \
+                      op=increment: bump a procedure counter (id + outcome=success|failure).",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "op": { "type": "string", "enum": ["consolidate", "reindex", "health", "candidates", "plan", "apply", "capabilities", "increment"],
+                        "description": "Maintenance operation." },
+                "limit": { "type": "number", "description": "Reindex chunk cap / candidate limit." },
+                "plan": { "type": "object", "description": "Maintenance plan JSON (op=apply)." },
+                "mode": { "type": "string", "enum": ["preview", "apply"], "description": "Plan mode." }
+            },
+            "required": ["op"]
+        }),
+        handler: consolidated_maintain,
+    });
+}
+
+/// Registers the 4 SPECIALIST consolidated tools (loaded via --tools full).
+pub fn register_specialist_tools(registry: &mut ToolRegistry<App>) {
+    register_core_tools(registry);
+
+    // 8. beliefs — belief queries
+    registry.register(ToolRecord {
+        name: "beliefs",
+        description: "Query beliefs and contradictions. \
+                      op=get: the live belief for a subject. \
+                      op=stale: beliefs flagged stale. \
+                      op=contradictions: open contradiction review records.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "op": { "type": "string", "enum": ["get", "stale", "contradictions"],
+                        "description": "Belief query." },
+                "subject": { "type": "string", "description": "Belief subject (op=get)." },
+                "as_of": { "type": "string", "description": "Bi-temporal instant (RFC3339). Returns beliefs valid at this time. Default: now. Unique — no vector DB can do this." }
+            },
+            "required": ["op"]
+        }),
+        handler: consolidated_beliefs,
+    });
+
+    // 9. procedures — procedure queries
+    registry.register(ToolRecord {
+        name: "procedures",
+        description: "Query and update procedures (runbooks). \
+                      op=list: all procedures in scope. \
+                      op=increment: bump success or failure counter.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "op": { "type": "string", "enum": ["list", "increment"],
+                        "description": "Procedure operation." },
+                "id": { "type": "string", "description": "Procedure ID (op=increment)." },
+                "outcome": { "type": "string", "enum": ["success", "failure"], "description": "Counter to bump." }
+            },
+            "required": ["op"]
+        }),
+        handler: consolidated_procedures,
+    });
+
+    // 10. hierarchy — hierarchy operations
+    registry.register(ToolRecord {
+        name: "hierarchy",
+        description: "Build and navigate the hierarchy (Louvain communities + layers). \
+                      op=build: cluster the knowledge graph via Louvain + persist nodes. \
+                      op=path: navigation path (LCA + nodes + relations) between two symbols.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "op": { "type": "string", "enum": ["build", "path"],
+                        "description": "Hierarchy operation." },
+                "from": { "type": "string", "description": "Path start (op=path)." },
+                "to": { "type": "string", "description": "Path end (op=path)." }
+            },
+            "required": ["op"]
+        }),
+        handler: consolidated_hierarchy,
+    });
+}
+
+// ===== Dispatch handlers (thin routers over existing handlers) =====
+
+fn consolidated_remember(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let kind = args["kind"].as_str().unwrap_or("memory");
+    match kind {
+        "entity" => crate::tools::put_entity(
+            app,
+            &json!({
+                "name": args["name"], "kind": args.get("kind_detail").cloned().unwrap_or(json!("concept"))
+            }),
+        ),
+        "relationship" => crate::tools::put_relationship(
+            app,
+            &json!({
+                "subject": args["name"], "predicate": args["predicate"], "object": args["object"]
+            }),
+        ),
+        "belief" => crate::belief::belief_put(
+            app,
+            &json!({
+                "subject": args["subject"], "statement": args["content"], "confidence": args["confidence"]
+            }),
+        ),
+        "procedure" => crate::procedures::procedure_put(
+            app,
+            &json!({
+                "name": args.get("name").and_then(|v| v.as_str()).unwrap_or("unnamed-procedure"),
+                "steps": args.get("steps").and_then(|v| v.as_array()).map(|a| json!(a)).unwrap_or_else(|| json!([args["content"].clone()]))
+            }),
+        ),
+        "knowledge" => crate::tools::store_knowledge(app, args),
+        _ => crate::tools::write_memory(
+            app,
+            &json!({
+                "content": args["content"], "kind": args.get("kind_detail").cloned().unwrap_or(json!("observation"))
+            }),
+        ),
+    }
+}
+
+fn consolidated_recall(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let mode = args["mode"].as_str().unwrap_or("fused");
+    match mode {
+        "keyword" => {
+            // Phase 1.2: keyword mode was misrouting to code search (lexical
+            // code chunks) — now routes to memory recall with the memory lane
+            // so keyword queries find FACTS and MEMORIES, not code chunks.
+            crate::tools::recall(
+                app,
+                &json!({
+                    "mode": "hybrid", "query": args["query"],
+                    "limit": args.get("limit").cloned().unwrap_or(json!(10))
+                }),
+            )
+        }
+        "context" => crate::codegraph::get_context(
+            app,
+            &json!({
+                "query": args["query"], "focus": args.get("focus").cloned().unwrap_or(json!([]))
+            }),
+        ),
+        "predict" => crate::predict::predict_context(app, &json!({"query": args["query"]})),
+        _ => crate::tools::recall(
+            app,
+            &json!({
+                "mode": "hybrid", "query": args["query"], "limit": args.get("limit").cloned().unwrap_or(json!(10))
+            }),
+        ),
+    }
+}
+
+fn consolidated_code(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let op = args["op"].as_str().unwrap_or("context");
+    match op {
+        "search" => crate::codegraph::search(
+            app,
+            &json!({
+                "query": args.get("query")
+                    .or_else(|| args.get("symbol").filter(|v| !v.is_null()))
+                    .unwrap_or(&json!("")),
+                "limit": args.get("limit").cloned().unwrap_or(json!(5))
+            }),
+        ),
+        "impact" => crate::codegraph::change_impact(
+            app,
+            &json!({
+                "target": args["symbol"], "depth": args.get("depth").cloned().unwrap_or(json!(2)),
+                "to": args.get("to").cloned().unwrap_or(json!(null))
+            }),
+        ),
+        "health" => crate::codegraph::code_health(app, args),
+        "architecture" => crate::codegraph::architecture(
+            app,
+            &json!({
+                "limit": args.get("limit").cloned().unwrap_or(json!(10))
+            }),
+        ),
+        "changed" => crate::codegraph::whats_changed(app, args),
+        "explore" => crate::codegraph::explore(
+            app,
+            &json!({
+                "query": args["query"], "maxNodes": args.get("limit").cloned().unwrap_or(json!(25))
+            }),
+        ),
+        "dependencies" => crate::codegraph::file_dependencies(app, args),
+        _ => crate::codegraph::symbol_context(
+            app,
+            &json!({
+                "symbol": args["symbol"], "depth": args.get("depth").cloned().unwrap_or(json!(1))
+            }),
+        ),
+    }
+}
+
+fn consolidated_scan(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let target = args["target"].as_str().unwrap_or("repo");
+    match target {
+        "protocols" => crate::protocols::scan_protocols(app, &json!({"path": args["path"]})),
+        "dependencies" => {
+            crate::dependencies::scan_dependencies(app, &json!({"path": args["path"]}))
+        }
+        "ownership" => crate::ownership::scan_ownership(app, &json!({"path": args["path"]})),
+        "docs" => crate::tools::index_docs(
+            app,
+            &json!({
+                "content": args.get("content").cloned().unwrap_or(json!(""))
+            }),
+        ),
+        _ => crate::codegraph::scan_repo(app, &json!({"path": args["path"]})),
+    }
+}
+
+fn consolidated_graph(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let op = args["op"].as_str().unwrap_or("neighbors");
+    match op {
+        "subgraph" => crate::graph::graph_subgraph(
+            app,
+            &json!({
+                "name": args["name"], "depth": args.get("depth").cloned().unwrap_or(json!(2)),
+                "limit": args.get("limit").cloned().unwrap_or(json!(100))
+            }),
+        ),
+        "resolve" => crate::graph::resolve_entity(app, &json!({"name": args["name"]})),
+        _ => crate::graph::graph_neighbors(
+            app,
+            &json!({
+                "name": args["name"], "limit": args.get("limit").cloned().unwrap_or(json!(20))
+            }),
+        ),
+    }
+}
+
+fn consolidated_forget(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let kind = args["kind"].as_str().unwrap_or("memory");
+    match kind {
+        "belief" => {
+            let subject = args["subject"].as_str();
+            if subject.is_none() || subject == Some("") {
+                return Ok(protocol::text_content(
+                    "forget: kind=belief requires a `subject` (the belief's subject key). \\
+n                     Use recall first to find the belief, then forget by subject.",
+                ));
+            }
+            crate::belief::belief_retract(app, &json!({"subject": args["subject"]}))
+        }
+        _ => {
+            let id = args["id"].as_str();
+            if id.is_none() || id == Some("") {
+                return Ok(protocol::text_content(
+                    "forget: kind=memory requires an `id` (the memory record ID). \\
+                     Use recall or graph to find the ID first, then forget by id. \\\n                     kind=belief requires a `subject` instead.",
+                ));
+            }
+            crate::tools::forget(
+                app,
+                &json!({
+                    "id": args["id"], "mode": args.get("mode").cloned().unwrap_or(json!("tombstone"))
+                }),
+            )
+        }
+    }
+}
+
+fn consolidated_maintain(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let op = args["op"].as_str().unwrap_or("health");
+    match op {
+        "consolidate" => crate::tools::consolidate(app, args),
+        "reindex" => crate::codegraph::reindex(
+            app,
+            &json!({
+                "limit": args.get("limit").cloned().unwrap_or(json!(256))
+            }),
+        ),
+        "candidates" => crate::maintenance::list_maintenance_candidates(app, args),
+        "plan" => crate::maintenance::build_maintenance_plan(app, args),
+        "apply" => crate::maintenance::apply_maintenance_plan(
+            app,
+            &json!({
+                "plan": args["plan"], "mode": args.get("mode").cloned().unwrap_or(json!("preview"))
+            }),
+        ),
+        "capabilities" => crate::codegraph::capability_report(app, args),
+        "increment" => crate::procedures::procedure_increment(
+            app,
+            &json!({
+                "id": args["id"], "outcome": args.get("outcome").cloned().unwrap_or(json!("success"))
+            }),
+        ),
+        "shared" => {
+            let query = app
+                .provider
+                .require_knowledge_query()
+                .map_err(crate::tools::internal)?;
+            let entities = futures::executor::block_on(query.list_entities(&app.scope))
+                .map_err(crate::tools::internal)?;
+            let actors: std::collections::BTreeSet<String> = entities
+                .iter()
+                .filter_map(|e| e.provenance.actor.display_name.clone())
+                .collect();
+            let actors_list: Vec<String> = actors.into_iter().collect();
+            let display = if actors_list.is_empty() {
+                "(none yet — no entities in this workspace)".to_owned()
+            } else {
+                actors_list
+                    .iter()
+                    .map(|a| format!("  - {}", a))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            };
+            Ok(protocol::text_content(format!(
+                "Shared workspace '{}' (tenant '{}'): {} distinct agents/entities have written:\n{}\n\nAny agent in this workspace can read and write. Policy governs access paths.",
+                app.scope.workspace.as_deref().unwrap_or("(default)"),
+                app.scope.tenant,
+                actors_list.len(),
+                display
+            )))
+        }
+        _ => crate::maintenance::graph_health(app, args),
+    }
+}
+
+fn consolidated_beliefs(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let op = args["op"].as_str().unwrap_or("get");
+    match op {
+        "stale" => crate::belief::belief_stale_list(app, args),
+        "contradictions" => crate::belief::contradiction_list(app, args),
+        _ => crate::belief::belief_get(app, &json!({"subject": args["subject"]})),
+    }
+}
+
+fn consolidated_procedures(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let op = args["op"].as_str().unwrap_or("list");
+    match op {
+        "increment" => crate::procedures::procedure_increment(
+            app,
+            &json!({
+                "id": args["id"], "outcome": args.get("outcome").cloned().unwrap_or(json!("success"))
+            }),
+        ),
+        _ => crate::procedures::procedure_list(app, args),
+    }
+}
+
+fn consolidated_hierarchy(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let op = args["op"].as_str().unwrap_or("path");
+    match op {
+        "build" => crate::hierarchy::hierarchy_build(app, args),
+        _ => crate::hierarchy::hierarchy_path(
+            app,
+            &json!({
+                "from": args["from"], "to": args["to"]
+            }),
+        ),
+    }
+}
+
+#[cfg(test)]
+mod parity_tests {
+    use super::*;
+
+    /// Cross-server tool-list parity (engram-code spec, ADR-0022): the
+    /// shared fixture `tests/tool_names.txt` is asserted against BOTH this
+    /// server's registry and the TS HTTP server's tool table — the two
+    /// transports must never drift apart.
+    #[test]
+    fn registry_matches_shared_tool_name_fixture() {
+        let fixture = std::fs::read_to_string("tests/tool_names.txt").expect("fixture");
+        let expected: Vec<String> = fixture
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_owned)
+            .collect();
+        let mut registry: ToolRegistry<App> = ToolRegistry::new();
+        register_all_tools(&mut registry);
+        let mut actual: Vec<String> = registry
+            .list()
+            .iter()
+            .filter_map(|t| t["name"].as_str().map(str::to_owned))
+            .collect();
+        actual.sort();
+        let mut expected = expected;
+        expected.sort();
+        assert_eq!(
+            actual, expected,
+            "Rust stdio registry drifted from the shared fixture — update \
+             tests/tool_names.txt (and the TS HTTP tool table) together"
+        );
+    }
 }

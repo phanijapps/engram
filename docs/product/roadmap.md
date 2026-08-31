@@ -14,17 +14,18 @@ file as stale and ask before relying on it.
 What we're actively working on. Each item should reference its capability in
 `docs/product/engram.md`.
 
-- **Backend-agnostic retrieval composition.** RRF-fused graph + vector hybrid
-  over the `RetrievalIndex` seam, durable sqlite-vec, configurable RRF — shipped
-  SQLite-only. [spec: `backend-agnostic-retrieval`; RFC-0005; ADR-0009]
-- **Demo polish.** Friendlier graph (meaningful labels, source files, neighbors),
-  MCP server, benchmark harness. [spec: `benchmark-lazy-embeddings`]
+- **Production readiness for the Postgres switch.** Backend-independent
+  hardening + closing the pgvector switch gaps: MCP pgvector surface, recall
+  vector lane on Postgres, CI Postgres conformance, SQLite→Postgres migration
+  runbook, reindex op. [spec: `pgvector-backend` (production-switch ACs);
+  backlog: `scan-reliability-followups`]
+- **Scan pipeline reliability.** Shipped: O(store) costs removed, output caps,
+  resolved-edge analytics, JSX references, incremental manifests. Remaining:
+  embed-backlog drain op, O(store) chunk-listing overhead, scan job model.
+  [specs: `scan-reliability`, `scan-incremental-manifest`]
 - **Codegraph parity (on top of engram).** BM25 lexical retrieval, cross-encoder
-  rerank, graph analytics (PageRank / betweenness / communities / reachability),
-  and bi-temporal knowledge entities — building the codegraph layer on top of
-  engram rather than into core. Adapters shipped behind ports; live-pipeline
-  wiring in progress. [RFC-0012; `codegraph-parity-roadmap`; specs:
-  `lexical-keyword-retrieval`, `cross-encoder-rerank`, `graph-analytics`]
+  rerank, graph analytics, bi-temporal knowledge entities — shipped; temporal
+  `novel` + remaining D-surface items continue. [RFC-0012; `codegraph-parity-roadmap`]
 
 ## Next (following 1-2 quarters)
 

@@ -146,22 +146,21 @@ impl MemoryRepository for SqlMemoryService {
         limit: usize,
     ) -> CoreResult<Page<MemoryRecord>> {
         let after_rowid = match after {
-            Some(cursor) => cursor
-                .as_str()
-                .parse::<i64>()
-                .map_err(|_| CoreError::InvalidRequest {
-                    reason: format!("invalid memory cursor: {}", cursor.as_str()),
-                })?,
+            Some(cursor) => {
+                cursor
+                    .as_str()
+                    .parse::<i64>()
+                    .map_err(|_| CoreError::InvalidRequest {
+                        reason: format!("invalid memory cursor: {}", cursor.as_str()),
+                    })?
+            }
             None => 0,
         };
         let page_limit = limit.clamp(1, 500) as i64;
         let workspace = scope.workspace.as_deref().unwrap_or("");
-        let rows = self.store.list_memories_paged(
-            &scope.tenant,
-            workspace,
-            after_rowid,
-            page_limit,
-        )?;
+        let rows =
+            self.store
+                .list_memories_paged(&scope.tenant, workspace, after_rowid, page_limit)?;
         // A full page may have more following → emit a cursor at the last rowid.
         let next_cursor = (page_limit > 0 && rows.len() as i64 >= page_limit)
             .then(|| rows.last().map(|(rowid, _)| Cursor::new(rowid.to_string())))

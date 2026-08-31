@@ -8,23 +8,9 @@
 use engram_domain::{KnowledgeChunkKind, SourceLocation};
 use engram_knowledge::{CoreError, CoreResult};
 
-/// Candidate chunk produced before domain IDs and provenance are attached.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ChunkCandidate {
-    pub kind: KnowledgeChunkKind,
-    pub text: String,
-    pub location: Option<SourceLocation>,
-}
-
-/// Splits source text into stable chunks without attaching domain identity.
-///
-/// Implementations should preserve enough source location detail for retrieval
-/// explanations. Stable IDs, provenance, policy, and repository writes are
-/// attached by the ingestor after chunk candidates are produced.
-pub trait Chunker: Send + Sync {
-    /// Returns candidate chunks with local source locations for one document.
-    fn chunk(&self, text: &str) -> CoreResult<Vec<ChunkCandidate>>;
-}
+// Parsing contract moved to the engram-code crate (ADR-0028); re-exported
+// here so text/markdown chunkers and external consumers keep one import path.
+pub use engram_code::parser::chunking::{ChunkCandidate, Chunker};
 
 /// Configuration for deterministic plain-text line chunking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

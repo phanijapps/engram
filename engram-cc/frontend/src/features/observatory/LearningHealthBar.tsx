@@ -126,7 +126,7 @@ const brandStyle: CSSProperties = {
 };
 const itemStyle: CSSProperties = { display: "flex", alignItems: "center", gap: "var(--spacing-1)" };
 const dotBase: CSSProperties = { width: 6, height: 6, borderRadius: "50%" };
-const dotOkStyle: CSSProperties = { ...dotBase, background: "var(--primary, #7df9ff)" };
+const dotOkStyle: CSSProperties = { ...dotBase, background: "var(--primary)" };
 const dotEmptyStyle: CSSProperties = { ...dotBase, background: "transparent", border: "1px solid var(--border)" };
 const labelStyle: CSSProperties = { color: "var(--muted-foreground)" };
 const valueStyle: CSSProperties = { color: "var(--foreground)" };

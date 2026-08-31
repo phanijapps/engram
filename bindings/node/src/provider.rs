@@ -197,6 +197,43 @@ impl NativeProvider {
         encode(&run)
     }
 
+    /// File-level import graph (RFC-0020 Phase 2): takes `{scope}`, returns
+    /// `[{fromPath, importPath, resolvedTo?}, …]` via the facade's single
+    /// implementation.
+    #[napi(js_name = "fileDependenciesJson")]
+    pub fn file_dependencies_json(&self, request_json: String) -> Result<String> {
+        let request: Scope = decode(&request_json)?;
+        let deps =
+            block_on(self.inner.code_graph_file_dependencies(&request)).map_err(to_napi_error)?;
+        encode(&deps)
+    }
+
+    /// Natural-language explore (RFC-0020 Phase 2): takes
+    /// `{scope, query, depth?, maxNodes?, maxEdges?}`, returns seeded
+    /// bounded-subgraph nodes.
+    #[napi(js_name = "exploreJson")]
+    pub fn explore_json(&self, request_json: String) -> Result<String> {
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ExploreRequest {
+            scope: Scope,
+            query: String,
+            depth: Option<u32>,
+            max_nodes: Option<usize>,
+            max_edges: Option<usize>,
+        }
+        let request: ExploreRequest = decode(&request_json)?;
+        let nodes = block_on(self.inner.code_graph_explore(
+            &request.scope,
+            &request.query,
+            request.depth,
+            request.max_nodes,
+            request.max_edges,
+        ))
+        .map_err(to_napi_error)?;
+        encode(&nodes)
+    }
+
     /// Treesitter-indexes a code repository into the project workspace through
     /// the provider's knowledge + graph handles (no engine-store bypass). Takes a
     /// `{ path, scope, scanFilter? }` JSON, returns the serialized `ScanSummary`.

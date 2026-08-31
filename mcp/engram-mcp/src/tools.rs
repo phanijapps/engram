@@ -342,7 +342,7 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
             format!("{}\n... [truncated]", &content[..end])
         };
         let would_be = joined.len() + excerpt.len() + 5; // +5 for "\n---\n"
-        if joined.len() > 0 && would_be > RECALL_TOTAL_CHAR_BUDGET {
+        if !joined.is_empty() && would_be > RECALL_TOTAL_CHAR_BUDGET {
             items_skipped += 1;
             continue;
         }
@@ -370,7 +370,11 @@ pub fn consolidate(app: &App, args: &Value) -> Result<Value, ToolError> {
         requester: requester(),
         since: None,
         until: None,
-        strategy: None,
+        // Phase 2.1: Hybrid includes BeliefSynthesis + Compaction +
+        // FactExtraction + ContradictionDetection — the full pipeline.
+        // None/Manual only scheduled a read-only EvaluationGate, which
+        // is why consolidation ran but produced 0 derived beliefs.
+        strategy: Some(engram_domain::ConsolidationStrategy::Hybrid),
         dry_run: Some(dry_run),
     };
     let run = block_on(consolidation.consolidate(request)).map_err(internal)?;
@@ -697,7 +701,7 @@ pub fn index_docs(app: &App, args: &Value) -> Result<Value, ToolError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::ontology::{OntologyConfig, TaxonomyConfig};
     use crate::scope::project_scope;
@@ -707,7 +711,7 @@ mod tests {
     };
     use serde_json::json;
 
-    fn test_app(dir: &std::path::Path) -> App {
+    pub(crate) fn test_app(dir: &std::path::Path) -> App {
         let config = EngramConfig::new(
             dir.join("engram_data.db"),
             dir.to_path_buf(),
@@ -728,6 +732,7 @@ mod tests {
             scope: project_scope("test-project", "default"),
             ontology: OntologyConfig::default(),
             taxonomy: TaxonomyConfig::default(),
+            storage_dir: dir.to_path_buf(),
         }
     }
 
@@ -1604,7 +1609,9 @@ mod tests {
 
     /// Regression: receiver-method calls (self.store.save(), self.process())
     /// are extracted as call edges. Before the fix, `extract_name` returned the
-    /// receiver ("self") instead of the method name.
+    /// receiver ("self") instead of the method name. RFC-0020 Phase 2: nested
+    /// methods carry their receiver in the entity name (`Engine::drive`), so
+    /// the edge endpoints are receiver-qualified.
     #[test]
     fn scan_repo_extracts_receiver_method_calls() {
         let dir = tempfile::tempdir().unwrap();
@@ -1632,17 +1639,23 @@ impl Store {
             .unwrap();
         let q = app.provider.require_knowledge_query().expect("handle");
         let rels = block_on(q.list_relationships(&app.scope)).unwrap();
+        // Phase 2 + canonicalization: resolution stamps the object's id AND
+        // its CANONICAL entity name — the edge reads `Engine::drive calls
+        // Store::save`, not the as-written receiver hint `store.save`, so
+        // name-keyed navigation (symbol_context invoked BY name) walks the
+        // resolved topology.
         assert!(
             rels.iter().any(|r| r.predicate == "calls"
-                && r.subject.name.as_deref() == Some("drive")
-                && r.object.name.as_deref() == Some("save")),
-            "receiver call drive->save should be extracted: {rels:?}"
+                && r.subject.name.as_deref() == Some("Engine::drive")
+                && r.object.name.as_deref() == Some("Store::save")
+                && r.object.id.is_some()),
+            "receiver call Engine::drive -> Store::save (resolved + canonicalized) should be extracted: {rels:?}"
         );
         assert!(
             rels.iter().any(|r| r.predicate == "calls"
-                && r.subject.name.as_deref() == Some("drive")
-                && r.object.name.as_deref() == Some("process")),
-            "receiver call drive->process should be extracted: {rels:?}"
+                && r.subject.name.as_deref() == Some("Engine::drive")
+                && r.object.name.as_deref() == Some("Engine::process")),
+            "receiver call Engine::drive -> Engine::process should be extracted: {rels:?}"
         );
     }
 

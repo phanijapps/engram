@@ -18,11 +18,29 @@ jobs:
       - name: Install Python dev dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Validate contracts
-        run: .codex/hooks/check-contracts.sh
+        run: scripts/ci/check-contracts.sh
 
   rust:
     name: Rust
     runs-on: ubuntu-latest
+    # PS3 (pgvector-backend): a live Postgres+pgvector service so the recipe's
+    # Docker-gated conformance tests run in the gate. The fastembed-gated
+    # vector-lane test stays local/Docker (CI has no model cache; the recipe
+    # degrades without it by design).
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: engram
+          POSTGRES_PASSWORD: engram
+          POSTGRES_DB: engram
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U engram"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -37,6 +55,12 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test
         run: cargo test --workspace
+      - name: pgvector recipe conformance (live Postgres service)
+        run: cargo test -p engram-backend-pgvector -- --ignored --test-threads=1
+      - name: Engine-neutrality lint (ADR-0022 rule 1)
+        run: scripts/ci/check-engine-neutrality.sh
+      - name: Surface-parity lint (Rust facade <-> N-API binding)
+        run: scripts/ci/check-surface-parity.sh
       - name: Check vector FastEmbed feature tests
         run: cargo check -p engram-store-vector --features fastembed-tests --tests
       - name: Clippy vector FastEmbed feature tests
@@ -54,7 +78,7 @@ jobs:
       - name: Install Python dev dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Check docs
-        run: .codex/hooks/check-docs.sh
+        run: scripts/ci/check-docs.sh
 
   typescript:
     name: TypeScript

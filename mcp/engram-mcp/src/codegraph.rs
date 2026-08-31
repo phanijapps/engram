@@ -197,6 +197,291 @@ fn format_no_results_diag(
     parts.join("; ")
 }
 
+/// Deterministic manifest path for a scan root: `<storage>/scan-manifests/<hash>.json`
+/// where `hash` is derived from the canonicalized root path. Canonicalizing
+/// makes `/repo` and `/repo/` (and symlinked spellings that resolve to the
+/// same target) share one manifest — the identity the scanner itself uses.
+fn manifest_path_for(storage: &std::path::Path, root: &std::path::Path) -> std::path::PathBuf {
+    use std::hash::{Hash, Hasher};
+    let canonical = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    canonical.hash(&mut hasher);
+    let key = format!(
+        "{:016x}-{}",
+        hasher.finish(),
+        canonical
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| "root".to_owned())
+    );
+    storage.join("scan-manifests").join(format!("{key}.json"))
+}
+
+/// Loads a persisted scan manifest. Any read/parse failure degrades to an
+/// empty manifest — a stale or corrupt sidecar must never break the scan,
+/// only cost one full re-ingest.
+fn load_manifest(path: &std::path::Path) -> HashMap<String, String> {
+    std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Persists a scan manifest atomically (tmp + rename) so a crash mid-write
+/// leaves either the old or the new file, never a truncated one. Write
+/// failures are non-fatal (next scan degrades to full) but surfaced.
+fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>) {
+    if let Some(parent) = path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            eprintln!("engram-mcp: scan manifest dir warning: {e}");
+            return;
+        }
+    }
+    let tmp = path.with_extension("json.tmp");
+    match serde_json::to_string(manifest) {
+        Ok(text) => {
+            if let Err(e) = std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, path)) {
+                eprintln!("engram-mcp: scan manifest write warning: {e}");
+            }
+        }
+        Err(e) => eprintln!("engram-mcp: scan manifest serialize warning: {e}"),
+    }
+}
+
+/// Embeds pending chunks into the vector index (scan-reliability AC1 + PS5).
+///
+/// Shared by `scan_repo` (delta scope: only `source_filter`-matching chunks —
+/// embedding costs O(this scan), never O(store)) and the `reindex` tool
+/// (no filter: drains EVERY un-embedded chunk in scope — old-source leftovers
+/// and fresh stores after a backend switch). Deterministic order (sorted by
+/// chunk id), capped per call, batched through the model, chunk text bounded
+/// (BGE truncates at 512 tokens; longer text only fed the tokenizer).
+/// Returns (embedded this call, remaining after the cap).
+fn embed_pending(
+    app: &App,
+    scope: &engram_domain::Scope,
+    source_filter: Option<&str>,
+    cap: usize,
+) -> (usize, usize) {
+    const EMBED_TEXT_CAP: usize = 8 * 1024;
+    const EMBED_BATCH_SIZE: usize = 64;
+    let (Ok(query), Some(embedder), Ok(vector_index)) = (
+        app.provider.require_knowledge_query(),
+        app.provider.embedding_provider(),
+        app.provider.require_vectors(),
+    ) else {
+        // No embedder wired (fastembed off / --no-vector): nothing to do.
+        // Callers surface the honest "0 embedded" count.
+        return (0, 0);
+    };
+    // Perf (perf pass 2026-08-28): the LEAN refs listing (id + source +
+    // text-nonemptiness — no record deserialization, no text transfer) cut
+    // the per-call listing from ~1.4s/hundreds-of-MB on a 90k-chunk store to
+    // ~0.1s. Text is fetched lazily per SELECTED chunk (indexed pk lookups).
+    let refs = block_on(query.list_chunk_refs(scope)).unwrap_or_default();
+    let space = embedder.embedding_space();
+    let have: std::collections::HashSet<engram_domain::Id> =
+        block_on(vector_index.embedded_ids()).unwrap_or_default();
+    let mut pending: Vec<&engram_integration::ChunkRef> = refs
+        .iter()
+        .filter(|r| {
+            r.has_text && !have.contains(&r.id) && source_filter.is_none_or(|src| r.source == src)
+        })
+        .collect();
+    pending.sort_by_key(|r| r.id.as_str().to_owned());
+    let remaining = pending.len().saturating_sub(cap);
+    let selected: Vec<&engram_integration::ChunkRef> = pending.into_iter().take(cap).collect();
+
+    // Content dedup (perf pass 2026-08-28): the eval store holds 92,859
+    // chunks over 31,223 distinct texts (3× duplication — forked repos,
+    // re-scans under new SHAs). The model runs once per DISTINCT text and
+    // the vector is inserted for every chunk id sharing it — inference is
+    // the dominant cost (~62ms/chunk); inserts are indexed upserts.
+    // Durable dedup ([durable-dedup]): the text-hash → already-embedded
+    // chunk map, built from the refs x embedded-ids intersection (in-memory,
+    // no new port surface). A pending chunk whose hash is present reuses the
+    // twin's vector (point-read via VectorIndex::vector_for_target) instead
+    // of re-running inference — the measured prize is 3x on the eval store
+    // (92,859 chunks over 31,223 distinct texts; dups are re-scans of the
+    // same content under new SHAs). Falls back to the model whenever the
+    // point read is unsupported or the twin is gone.
+    let mut embedded_twin_by_hash: std::collections::HashMap<&str, &engram_domain::Id> =
+        std::collections::HashMap::new();
+    for r in &refs {
+        if have.contains(&r.id) && !r.content_hash.is_empty() {
+            embedded_twin_by_hash
+                .entry(r.content_hash.as_str())
+                .or_insert_with(|| &r.id);
+        }
+    }
+
+    let knowledge = app.provider.require_knowledge().ok();
+    // Per-call grouping by the SAME content-hash domain (scanner-stamped,
+    // full text) — consistent with the durable map (previously the in-call
+    // dedup hashed the 8-KiB-capped text: a slightly different domain).
+    let mut by_hash: std::collections::HashMap<&str, Vec<engram_domain::Id>> =
+        std::collections::HashMap::new();
+    let mut text_by_hash: std::collections::HashMap<&str, String> =
+        std::collections::HashMap::new();
+    for r in &selected {
+        if r.content_hash.is_empty() {
+            continue; // pre-hash chunks always go to the model
+        }
+        by_hash
+            .entry(r.content_hash.as_str())
+            .or_default()
+            .push(r.id.clone());
+        // Text is fetched lazily — ONLY for hashes with no embedded twin
+        // (the model path); reuse paths never need the text.
+        if !embedded_twin_by_hash.contains_key(r.content_hash.as_str()) {
+            let text = knowledge
+                .as_ref()
+                .and_then(|k| block_on(k.get_chunk(&r.id, scope)).ok().flatten())
+                .map(|c| {
+                    let t = c.text.trim();
+                    t.chars().take(EMBED_TEXT_CAP).collect::<String>()
+                })
+                .unwrap_or_default();
+            if !text.is_empty() {
+                text_by_hash.entry(r.content_hash.as_str()).or_insert(text);
+            }
+        }
+    }
+
+    let mut embedded = 0usize;
+    let mut distinct_embedded = 0usize;
+    let mut reused = 0usize;
+    let mut model_batches: Vec<(String, Vec<engram_domain::Id>)> = Vec::new();
+    for (hash, ids) in by_hash {
+        // Reuse path: an already-embedded twin with identical text exists —
+        // point-read its vector, insert for every id in this group. Falls to
+        // the model when the twin is gone or the read is unsupported.
+        if let Some(twin) = embedded_twin_by_hash.get(hash) {
+            if let Ok(Some(vector)) = block_on(vector_index.vector_for_target(twin)) {
+                if !vector.is_empty() {
+                    for id in &ids {
+                        if let Err(e) = block_on(vector_index.insert(id, &space, vector.clone())) {
+                            eprintln!("engram-mcp: embed reuse warning for {id}: {e}");
+                        } else {
+                            embedded += 1;
+                        }
+                    }
+                    reused += ids.len();
+                    continue;
+                }
+            }
+        }
+        if let Some(text) = text_by_hash.get(hash) {
+            model_batches.push((text.clone(), ids));
+        }
+    }
+    model_batches.sort_by(|a, b| a.1[0].as_str().cmp(b.1[0].as_str()));
+    for batch in model_batches.chunks(EMBED_BATCH_SIZE) {
+        embedded += flush_batch(
+            embedder.as_ref(),
+            vector_index.as_ref(),
+            &space,
+            batch,
+            &mut distinct_embedded,
+        );
+    }
+    let _ = &refs;
+    LAST_DEDUP_REPORT.with(|c| c.set((embedded, distinct_embedded, reused)));
+    (embedded, remaining)
+}
+
+thread_local! {
+    /// (chunks covered, distinct texts embedded, reused-from-twins) from the
+    /// last embed_pending call — surfaced by reindex/scan summaries for
+    /// honest dedup reporting.
+    static LAST_DEDUP_REPORT: std::cell::Cell<(usize, usize, usize)> =
+        const { std::cell::Cell::new((0, 0, 0)) };
+}
+
+/// Embeds one deduped batch and inserts the vector for every chunk id sharing
+/// each text. Batch errors degrade (warn + skip) — never abort the caller.
+fn flush_batch(
+    embedder: &dyn engram_integration::EmbeddingProvider,
+    vector_index: &dyn engram_retrieval::VectorIndex,
+    space: &engram_domain::EmbeddingSpace,
+    batch: &[(String, Vec<engram_domain::Id>)],
+    distinct_embedded: &mut usize,
+) -> usize {
+    if batch.is_empty() {
+        return 0;
+    }
+    let texts: Vec<String> = batch.iter().map(|(t, _)| t.clone()).collect();
+    match embedder.embed_batch(&texts) {
+        Ok(vectors) => {
+            let mut inserted = 0usize;
+            for ((_text, ids), vector) in batch.iter().zip(vectors.into_iter()) {
+                if vector.is_empty() {
+                    continue;
+                }
+                *distinct_embedded += 1;
+                for id in ids {
+                    if let Err(e) =
+                        futures::executor::block_on(vector_index.insert(id, space, vector.clone()))
+                    {
+                        eprintln!("engram-mcp: embed warning for {id}: {e}");
+                    } else {
+                        inserted += 1;
+                    }
+                }
+            }
+            inserted
+        }
+        Err(e) => {
+            for (_text, ids) in batch.iter() {
+                for id in ids {
+                    eprintln!("engram-mcp: embed error for {id}: {e}");
+                }
+            }
+            0
+        }
+    }
+}
+
+/// `reindex` (PS5): drains the vector-embed backlog with progress. Unlike
+/// scan_repo's delta embed (this-scan chunks only), reindex embeds EVERY
+/// un-embedded chunk in scope regardless of source — the backfill path for
+/// old-source leftovers (pre-manifest scans whose source name no longer
+/// matches) and for fresh stores after a backend switch (vectors start
+/// empty). Keyed on the vector index's embedded-set, not per-scan scope.
+/// Capped per call (`limit`, default 256, max 1024); re-run to continue.
+pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
+    // scope defaults to the launch scope when absent (same contract as the
+    // maintenance tools — the AC2 fix).
+    let scope = crate::maintenance::scope_from_args(app, args)?;
+    let limit = std::cmp::min(args["limit"].as_u64().unwrap_or(256) as usize, 1024);
+    if app.provider.embedding_provider().is_none() {
+        return Ok(protocol::text_content(
+            "reindex: no embedding provider wired (build with the fastembed feature and run \
+             without --no-vector) — nothing embedded, 0 pending reported as 0.",
+        ));
+    }
+    let t0 = std::time::Instant::now();
+    let (embedded, remaining) = embed_pending(app, &scope, None, limit);
+    eprintln!(
+        "engram-mcp: reindex done ({embedded} embedded, {remaining} pending) in {:.1}s",
+        t0.elapsed().as_secs_f32()
+    );
+    let note = if remaining > 0 {
+        format!("\n{remaining} more pending — call reindex again to continue (deterministic order)")
+    } else {
+        "\nbacklog drained".to_owned()
+    };
+    let (_covered, distinct, reused) = LAST_DEDUP_REPORT.with(|c| c.get());
+    let dedup_note = if reused > 0 || distinct > 0 {
+        format!(" ({distinct} new + {reused} reused from existing vectors)")
+    } else {
+        String::new()
+    };
+    Ok(protocol::text_content(format!(
+        "reindex: embedded {embedded} chunks (limit {limit}){dedup_note}{note}"
+    )))
+}
+
 /// `scan_repo`: treesitter-index a code repository into the project workspace,
 /// routed through the provider via the fan-in adapter. Feeds code-symbol names
 /// to the lexical lane so `search`/`recall` find them.
@@ -206,6 +491,23 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     let graph = app.provider.require_graph().map_err(internal)?.clone();
     let repo = KnowledgeRepoGraph::new(knowledge, graph);
 
+    // scan-manifest-persistence: load the prior manifest for this root so the
+    // scanner skips unchanged files (the N-API `manifestPath` pattern — the
+    // MCP path previously passed an empty manifest every call, re-ingesting
+    // the whole repo (~18s on this repo) per scan). Keyed by the canonical
+    // root path so re-scanning the same root resumes; stored under
+    // `<storage>/scan-manifests/`. Missing/corrupt file → empty manifest
+    // (full scan), never an error. A `force=true` arg skips the prior
+    // manifest (full re-ingest) but still persists the fresh one.
+    let force = args["force"].as_bool().unwrap_or(false);
+    let root = std::path::Path::new(path);
+    let manifest_path = manifest_path_for(&app.storage_dir, root);
+    let prior: HashMap<String, String> = if force {
+        HashMap::new()
+    } else {
+        load_manifest(&manifest_path)
+    };
+
     let (scan_filter, filter_note) = resolve_scan_filter(path, args);
     let opts = ScanOptions {
         scope: app.scope.clone(),
@@ -213,11 +515,12 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         actor: system_actor(),
         source_name: "engram-mcp-scan".to_owned(),
         max_bytes: 0,
-        manifest: HashMap::new(),
+        manifest: prior,
         scan_filter,
     };
-    let (summary, _manifest) =
-        scan_repository(std::path::Path::new(path), &opts, &repo, |_| ()).map_err(internal)?;
+    let (summary, new_manifest) = scan_repository(root, &opts, &repo, |_| ()).map_err(internal)?;
+    save_manifest(&manifest_path, &new_manifest);
+    eprintln!("engram-mcp: scan_repository done: {summary:?}");
 
     // The scan just wrote entities + relationships for this scope. Invalidate
     // the graph snapshot cache for this scope so the next `search`/`recall`
@@ -228,6 +531,18 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     }
 
     // Feed code-symbol names to the lexical lane so keyword search finds them.
+    // scan-reliability AC1: DELTA feed — only entities whose provenance source
+    // is this scan (the git-enriched source name `scan_repository` stamps on
+    // every record). Feeding the whole scope made every scan O(store): a
+    // populated store re-upserted ~17.7k lexical docs per scan and blew past
+    // client timeouts even for a two-file probe. Batched so a large fresh scan
+    // commits incrementally instead of one giant commit.
+    let scan_source = match (&summary.git_remote, &summary.git_branch, &summary.git_sha) {
+        (Some(remote), Some(branch), Some(sha)) => {
+            format!("{} [{}@{}:{}]", opts.source_name, remote, branch, sha)
+        }
+        _ => opts.source_name.clone(),
+    };
     if let (Ok(query), Ok(feed)) = (
         app.provider.require_knowledge_query(),
         app.provider.require_lexical_feed(),
@@ -235,14 +550,19 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         let entries: Vec<(String, String)> = block_on(query.list_entities(&app.scope))
             .unwrap_or_default()
             .into_iter()
+            .filter(|e| e.provenance.source == scan_source)
             .map(|e| (e.id.to_string(), format!("{} {:?}", e.name, e.kind)))
             .collect();
-        if !entries.is_empty() {
-            if let Err(e) = block_on(feed.upsert_batch(&entries)) {
+        for chunk in entries.chunks(1000) {
+            if let Err(e) = block_on(feed.upsert_batch(chunk)) {
                 // Non-fatal: search may return no code symbols, but the scan itself succeeded.
                 eprintln!("engram-mcp: lexical feed warning: {e}");
             }
         }
+        eprintln!(
+            "engram-mcp: lexical delta feed done ({} entries)",
+            entries.len()
+        );
     }
 
     // Embed chunks into the vector index (when fastembed is wired).
@@ -250,59 +570,22 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     // Incremental + batched (indexing-embed-performance): only chunks whose id
     // is NOT already in the vector index are embedded, and the embedding work
     // runs in batches through `embed_batch` (one FastEmbed model call per batch
-    // instead of one per chunk). Re-scanning an unchanged repo embeds ~0 chunks;
-    // adding a repo to a populated DB embeds only the new repo's chunks.
-    let mut embedded = 0usize;
-    if let (Ok(query), Some(embedder), Ok(vector_index)) = (
-        app.provider.require_knowledge_query(),
-        app.provider.embedding_provider(),
-        app.provider.require_vectors(),
-    ) {
-        let chunks = block_on(query.list_chunks(&app.scope)).unwrap_or_default();
-        let space = embedder.embedding_space();
-
-        // Skip chunks that already have a vector — the incremental win. A
-        // failed listing degrades to "embed everything" (current behavior).
-        let have: std::collections::HashSet<engram_domain::Id> =
-            block_on(vector_index.embedded_ids()).unwrap_or_default();
-        let pending: Vec<&engram_domain::KnowledgeChunk> = chunks
-            .iter()
-            .filter(|c| !c.text.is_empty() && !have.contains(&c.id))
-            .collect();
-
-        const EMBED_BATCH_SIZE: usize = 64;
-        for batch in pending.chunks(EMBED_BATCH_SIZE) {
-            let texts: Vec<String> = batch.iter().map(|c| c.text.clone()).collect();
-            // Skip empty-text chunks defensively (the filter above already
-            // dropped them) and warn per-chunk on insert errors, as before.
-            match embedder.embed_batch(&texts) {
-                Ok(vectors) => {
-                    for (chunk, vector) in batch.iter().zip(vectors.into_iter()) {
-                        if vector.is_empty() {
-                            // Mirrors the skip-empty-text behavior for slots
-                            // the batch path left empty.
-                            continue;
-                        }
-                        if let Err(e) = block_on(vector_index.insert(&chunk.id, &space, vector)) {
-                            eprintln!("engram-mcp: embed warning for {}: {e}", chunk.id);
-                        } else {
-                            embedded += 1;
-                        }
-                    }
-                }
-                Err(e) => {
-                    // Whole batch failed — do not abort the scan; warn and move
-                    // on so a single bad batch never blocks indexing.
-                    for chunk in batch {
-                        eprintln!("engram-mcp: embed error for {}: {e}", chunk.id);
-                    }
-                }
-            }
-        }
-    }
-
+    // instead of one per chunk). Re-scanning an unchanged repo embeds ~0 chunks.
+    //
+    // scan-reliability AC1 (embed side) + PS5: the scan embeds only THIS
+    // scan's source chunks (delta); the `reindex` tool drains the rest
+    // (old-source + backend-switch backlogs) — both share embed_pending.
+    let (embedded, pending_after_cap) = embed_pending(app, &app.scope, Some(&scan_source), 256);
+    let embed_note = if pending_after_cap > 0 {
+        format!(
+            "\nembedded {embedded} chunks ({pending_after_cap} more pending from this source — re-run scan_repo to continue)"
+        )
+    } else {
+        format!("\nembedded {embedded} chunks")
+    };
+    eprintln!("engram-mcp: embed done ({embedded} embedded, {pending_after_cap} pending)");
     Ok(protocol::text_content(format!(
-        "{summary:?}\n{filter_note}\nembedded {embedded} chunks"
+        "{summary:?}\n{filter_note}{embed_note}"
     )))
 }
 
@@ -1530,26 +1813,51 @@ fn names_first_match(entity_names: &[String], query: &str, fallback: &str) -> St
 }
 
 /// `code_health`: dead code (zero-caller symbols) + repository stats.
+/// scan-reliability AC3: the dead list is truncated (first 100 + `… and N
+/// more`) — the full list once inlined 3.4k symbols / 138 KB into an agent
+/// context. Analytics count only resolved-endpoint edges (AC4), so bare
+/// generics from pre-resolution scans (`new` ×4.5k on the eval store) no
+/// longer masquerade as caller evidence.
 pub fn code_health(app: &App, _args: &Value) -> Result<Value, ToolError> {
     let rels = fetch_rels(app)?;
-    let dead = engram_codegraph_queries::dead_code(&rels);
-    let stats = engram_codegraph_queries::repository_stats(&rels);
+    // code-graph-quality [analytics-name-collision]: id-keyed graph — same-name
+    // symbols across modules stay distinct (display names carry `#2` suffixes
+    // when they collide).
+    let graph = engram_codegraph_queries::AnalyticsGraph::from_relationships(&rels);
+    let dead = engram_codegraph_queries::dead_code(&graph);
+    let stats = engram_codegraph_queries::repository_stats(&graph);
+    const DEAD_LIST_CAP: usize = 100;
+    let shown: Vec<&String> = dead.iter().take(DEAD_LIST_CAP).collect();
+    let more = dead.len().saturating_sub(DEAD_LIST_CAP);
+    let tail = if more > 0 {
+        format!("\n… and {more} more (pass a smaller repo scope or raise the cap in codegraph.rs)")
+    } else {
+        String::new()
+    };
     Ok(protocol::text_content(format!(
-        "Dead code ({} symbols): {dead:?}\nStats: {stats:?}",
+        "Dead code ({} symbols, showing first {DEAD_LIST_CAP}): {shown:?}{tail}\nStats: {stats:?}",
         dead.len()
     )))
 }
 
 /// `architecture`: central symbols, bridges, communities, stats — one map.
+/// scan-reliability AC3: the community map is truncated to the top 10 by
+/// member count (the full map once serialized to 255 KB).
 pub fn architecture(app: &App, args: &Value) -> Result<Value, ToolError> {
     let limit = args["limit"].as_u64().unwrap_or(10) as usize;
     let rels = fetch_rels(app)?;
-    let central = engram_codegraph_queries::central_symbols(&rels, limit);
-    let bridges = engram_codegraph_queries::bridge_symbols(&rels, limit);
-    let communities = engram_codegraph_queries::call_communities(&rels, 3);
-    let stats = engram_codegraph_queries::repository_stats(&rels);
+    let graph = engram_codegraph_queries::AnalyticsGraph::from_relationships(&rels);
+    let central = engram_codegraph_queries::central_symbols(&graph, limit);
+    let bridges = engram_codegraph_queries::bridge_symbols(&graph, limit);
+    let mut communities: Vec<(String, usize)> =
+        engram_codegraph_queries::call_communities(&graph, 3)
+            .into_iter()
+            .collect();
+    communities.sort_by(|a, b| b.1.cmp(&a.1));
+    communities.truncate(10);
+    let stats = engram_codegraph_queries::repository_stats(&graph);
     Ok(protocol::text_content(format!(
-        "Central: {central:?}\nBridges: {bridges:?}\nCommunities: {communities:?}\nStats: {stats:?}"
+        "Central: {central:?}\nBridges: {bridges:?}\nCommunities (top 10): {communities:?}\nStats: {stats:?}"
     )))
 }
 
@@ -1582,7 +1890,8 @@ pub fn whats_changed(app: &App, _args: &Value) -> Result<Value, ToolError> {
     let recent = engram_codegraph_temporal::recent(&versions, now, 14.0);
     let impact = engram_codegraph_temporal::impact(&versions);
     let compound = engram_codegraph_temporal::compound(&versions, now, 14.0);
-    let communities = engram_codegraph_queries::call_communities(&rels, 3);
+    let graph = engram_codegraph_queries::AnalyticsGraph::from_relationships(&rels);
+    let communities = engram_codegraph_queries::call_communities(&graph, 3);
     let overview = engram_codegraph_temporal::overview(&communities);
     Ok(protocol::text_content(format!(
         "Recent: {recent:?}\nImpact: {impact:?}\nCompound: {compound:?}\nOverview: {overview:?}"
@@ -1802,6 +2111,7 @@ fn apply_lane_budgets<'a>(
 /// - The recall query is the items joined space-separated, so recall searches
 ///   for ALL terms in one fused pass.
 /// - The output header carries `(anchors: [sym1, sym2, sym3])`.
+///
 /// This lets an agent pass `focus: ["loginAnthropic", "resolveStoredOAuth",
 /// "createClient"]` in one call instead of 3 separate get_context calls.
 ///
@@ -2060,15 +2370,19 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     // there is no extra store/recall cost.
     let assessment = build_assessment(
         &recall_items,
-        recall_entity_count,
-        recall_chunk_count,
-        recall_memory_count,
-        &links,
+        &RecallCounts {
+            entities: recall_entity_count,
+            chunks: recall_chunk_count,
+            memories: recall_memory_count,
+        },
+        &AssessmentGraph {
+            links: &links,
+            unavailable: graph_unavailable,
+        },
         &code_ctx,
         &anchor_symbol,
         &primary_focus,
         &focus_list,
-        graph_unavailable,
     );
 
     Ok(protocol::text_content(format!(
@@ -2093,22 +2407,37 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
 ///   terms + anchor symbol (not generic placeholders): `search`, `symbol_context`
 ///   (depth+1 for a deeper call chain), `graph_neighbors` (all relationship
 ///   types, not just the call graph).
+///
+/// The recall-payload counts `build_assessment` narrates (grouped to keep the
+/// fn inside clippy's argument budget).
+struct RecallCounts {
+    entities: usize,
+    chunks: usize,
+    memories: usize,
+}
+
+/// The graph-side inputs (links + availability flag) — grouped with the counts.
+struct AssessmentGraph<'a> {
+    links: &'a [String],
+    unavailable: bool,
+}
+
 fn build_assessment(
     recall_items: &[engram_domain::RetrievalResult],
-    entity_count: usize,
-    chunk_count: usize,
-    memory_count: usize,
-    links: &[String],
+    counts: &RecallCounts,
+    graph: &AssessmentGraph<'_>,
     code_ctx: &engram_codegraph_queries::SymbolContext,
     anchor_symbol: &str,
     primary_focus: &str,
     focus_list: &[String],
-    graph_unavailable: bool,
 ) -> String {
     let total = recall_items.len();
+    let (entity_count, chunk_count, memory_count) =
+        (counts.entities, counts.chunks, counts.memories);
     let other_count = total.saturating_sub(entity_count + chunk_count + memory_count);
 
-    let graph_populated = !links.is_empty() && !graph_unavailable;
+    let links = graph.links;
+    let graph_populated = !links.is_empty() && !graph.unavailable;
     let code_populated = !code_ctx.callers.is_empty() || !code_ctx.callees.is_empty();
 
     // Anchor line: name when resolved, else a hint that NL focus did not
@@ -2124,7 +2453,7 @@ fn build_assessment(
 
     // Missing-evidence notes — only the gaps that actually fired.
     let mut missing: Vec<String> = Vec::new();
-    if links.is_empty() && !graph_unavailable {
+    if links.is_empty() && !graph.unavailable {
         missing.push(
             "No graph relationships found for the anchor. The symbol may not have indexed call edges, or the anchor may not be a code symbol."
                 .to_owned(),
@@ -2136,7 +2465,7 @@ fn build_assessment(
                 .to_owned(),
         );
     }
-    if entity_count == 0 {
+    if counts.entities == 0 {
         missing.push(
             "Recall found no code entities. The query may need more specific identifiers, or the code may not be indexed. Try scan_repo first."
                 .to_owned(),
@@ -2556,7 +2885,7 @@ mod tests {
         // Five memory items ranked ahead of an entity → only the top 2 memory
         // items survive; the rest are dropped with a cap note. The entity is
         // unaffected (entity cap = 14).
-        let items = vec![
+        let items = [
             recall_item(RetrievalTargetType::Memory, "m1"),
             recall_item(RetrievalTargetType::Memory, "m2"),
             recall_item(RetrievalTargetType::Memory, "m3"),
@@ -2585,7 +2914,7 @@ mod tests {
         // limit = 20, Doc shape → memory cap = floor(20 * 35 / 100) = 7.
         // Five memory items all survive under the Doc budget (under Code they
         // would cap at 2). No lanes trimmed → no notes.
-        let items = vec![
+        let items = [
             recall_item(RetrievalTargetType::Memory, "m1"),
             recall_item(RetrievalTargetType::Memory, "m2"),
             recall_item(RetrievalTargetType::Memory, "m3"),
@@ -2602,7 +2931,7 @@ mod tests {
     fn lane_budget_caps_other_lane_and_emits_note() {
         // limit = 10, Mixed → other cap = max(floor(10 * 10 / 100), 1) = 1.
         // Two beliefs (Other bucket) → one kept, one dropped, note for 'other'.
-        let items = vec![
+        let items = [
             recall_item(RetrievalTargetType::Belief, "b1"),
             recall_item(RetrievalTargetType::Belief, "b2"),
         ];
@@ -2657,7 +2986,7 @@ mod tests {
             concept_refs: Vec::new(),
             ontology_class_refs: Vec::new(),
             provenance: engram_domain::Provenance {
-                source: format!("engram-mcp-scan [git@github.com:phanijapps/zbot.git@main:abc]"),
+                source: "engram-mcp-scan [git@github.com:phanijapps/zbot.git@main:abc]".to_string(),
                 actor: Actor {
                     id: Id::from("tester"),
                     kind: ActorKind::Agent,
@@ -3590,15 +3919,19 @@ mod tests {
 
         let assessment = build_assessment(
             &items,
-            2, // entity
-            1, // chunk
-            0, // memory
-            &links,
+            &RecallCounts {
+                entities: 2,
+                chunks: 1,
+                memories: 0,
+            },
+            &AssessmentGraph {
+                links: &links,
+                unavailable: false,
+            },
             &code_ctx,
             "loginAnthropic",
             "loginAnthropic",
             &focus_list,
-            false, // graph available
         );
 
         assert!(
@@ -3644,15 +3977,19 @@ mod tests {
 
         let assessment = build_assessment(
             &items,
-            0,
-            0,
-            0,
-            &links,
+            &RecallCounts {
+                entities: 0,
+                chunks: 0,
+                memories: 0,
+            },
+            &AssessmentGraph {
+                links: &links,
+                unavailable: false,
+            },
             &code_ctx,
             "someConcept",
             "someConcept",
             &focus_list,
-            false,
         );
 
         assert!(
@@ -3690,15 +4027,19 @@ mod tests {
 
         let assessment = build_assessment(
             &items,
-            1,
-            0,
-            0,
-            &links,
+            &RecallCounts {
+                entities: 1,
+                chunks: 0,
+                memories: 0,
+            },
+            &AssessmentGraph {
+                links: &links,
+                unavailable: false,
+            },
             &code_ctx,
             "loginAnthropic",
             "loginAnthropic",
             &focus_list,
-            false,
         );
 
         assert!(
@@ -3901,6 +4242,209 @@ mod tests {
         assert!(
             bare.ctx.callees.is_empty(),
             "bare symbol does not seed the name-keyed BFS (the T7 bug)"
+        );
+    }
+}
+
+/// `file_dependencies` (RFC-0020 Phase 2): the file-level import graph.
+/// File-entity names double as the scanned-path set for module resolution.
+pub fn file_dependencies(app: &App, _args: &Value) -> Result<Value, ToolError> {
+    let rels = fetch_rels(app)?;
+    // Resolution needs EVERY scanned file (importers and non-importers
+    // alike) — source paths from File-kind entities, not just edge subjects.
+    let query_handle = app
+        .provider
+        .require_knowledge_query()
+        .map_err(|e| crate::tools::internal(e.to_string()))?;
+    let paths: Vec<String> = block_on(async { query_handle.list_entities(&app.scope).await })
+        .map_err(|e| crate::tools::internal(e.to_string()))?
+        .into_iter()
+        .filter(|e| matches!(e.kind, engram_domain::EntityKind::File))
+        .map(|e| e.name)
+        .collect();
+    let deps = engram_codegraph_queries::file_dependencies(&rels, &paths);
+    let lines: Vec<String> = deps
+        .iter()
+        .map(|d| {
+            format!(
+                "{} -> {}{}",
+                d.from_path,
+                d.import_path,
+                d.resolved_to
+                    .as_deref()
+                    .map(|r| format!(" (=> {r})"))
+                    .unwrap_or_default()
+            )
+        })
+        .collect();
+    Ok(protocol::text_content(if lines.is_empty() {
+        "No import edges — scan a repository first (scan_repo).".to_owned()
+    } else {
+        lines.join("\n")
+    }))
+}
+
+/// `explore` (RFC-0020 Phase 2): NL query → seeded bounded subgraph.
+pub fn explore(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let query = args["query"]
+        .as_str()
+        .ok_or_else(|| crate::tools::invalid("explore: query must be a string"))?;
+    // Clamps mirror the TS HTTP tool's contract so the pair behaves
+    // identically for the same-named tool.
+    let depth = args["depth"].as_u64().unwrap_or(2).clamp(0, 4) as u32;
+    let max_nodes = args["max_nodes"].as_u64().unwrap_or(24).clamp(1, 64) as usize;
+    let max_edges = args["max_edges"].as_u64().unwrap_or(64).clamp(1, 256) as usize;
+    let rels = fetch_rels(app)?;
+    let query_handle = app
+        .provider
+        .require_knowledge_query()
+        .map_err(|e| crate::tools::internal(e.to_string()))?;
+    let entries: Vec<(String, Option<String>)> =
+        block_on(async { query_handle.list_entities(&app.scope).await })
+            .map_err(|e| crate::tools::internal(e.to_string()))?
+            .into_iter()
+            .map(|e| (e.name, Some(format!("{:?}", e.kind).to_lowercase())))
+            .collect();
+    let nodes =
+        engram_codegraph_queries::explore(&rels, &entries, query, depth, max_nodes, max_edges);
+    if nodes.is_empty() {
+        return Ok(protocol::text_content(format!(
+            "No entities matched the query's identifier tokens: {query:?}"
+        )));
+    }
+    let mut out = format!("=== explore: {query:?} (depth={depth}) ===");
+    for node in &nodes {
+        let kind = node.kind.as_deref().unwrap_or("?");
+        out.push_str(&format!("\n[{kind}] {} (hop {})", node.name, node.hop));
+    }
+    Ok(protocol::text_content(out))
+}
+
+#[cfg(test)]
+mod phase2_tool_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn scan_repo_is_incremental_across_calls_and_persists_manifest() {
+        // scan-manifest-persistence: second scan of the same root skips
+        // unchanged files (summary.unchanged > 0, ingested == 0), and the
+        // manifest sidecar exists under <storage>/scan-manifests/.
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/lib.rs"),
+            "pub fn alpha() {}\npub fn beta() { alpha(); }\n",
+        )
+        .unwrap();
+        let app = crate::tools::tests::test_app(dir.path());
+        let path_arg = json!({ "path": repo_dir.path().to_str().unwrap() });
+
+        let first = crate::codegraph::scan_repo(&app, &path_arg).unwrap();
+        let first_text = first["content"][0]["text"].as_str().unwrap();
+        assert!(first_text.contains("ingested: 1"), "first: {first_text}");
+
+        // Manifest sidecar persisted under the storage dir.
+        let manifests_dir = dir.path().join("scan-manifests");
+        let persisted: Vec<_> = std::fs::read_dir(&manifests_dir)
+            .expect("scan-manifests dir")
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().extension().is_some_and(|x| x == "json"))
+            .collect();
+        assert_eq!(persisted.len(), 1, "one manifest per root");
+
+        // Second scan: unchanged files skipped, nothing re-ingested.
+        let second = crate::codegraph::scan_repo(&app, &path_arg).unwrap();
+        let second_text = second["content"][0]["text"].as_str().unwrap();
+        assert!(
+            second_text.contains("ingested: 0"),
+            "re-scan re-ingested: {second_text}"
+        );
+        assert!(
+            second_text.contains("unchanged: 1"),
+            "re-scan did not skip: {second_text}"
+        );
+
+        // force=true bypasses the manifest: everything re-ingested.
+        let forced = crate::codegraph::scan_repo(
+            &app,
+            &json!({ "path": repo_dir.path().to_str().unwrap(), "force": true }),
+        )
+        .unwrap();
+        let forced_text = forced["content"][0]["text"].as_str().unwrap();
+        assert!(forced_text.contains("ingested: 1"), "forced: {forced_text}");
+    }
+
+    #[test]
+    fn explore_and_file_dependencies_answer_over_a_scanned_fixture() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/api.ts"),
+            "import { helper } from './utils';\nclass Repo extends Base {\n    find(): void { helper(); }\n}\nconst app = {} as any;\nfunction helper2() {}\napp.get('/items', helper2);\n",
+        )
+        .unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/utils.ts"),
+            "export function helper() {}\n",
+        )
+        .unwrap();
+        let app = crate::tools::tests::test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+
+        // explore: the query's identifier token seeds `helper` and expands.
+        let out = explore(&app, &json!({ "query": "how does helper work?" })).unwrap();
+        let text = out["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("helper"), "explore output: {text}");
+        assert!(text.contains("hop 0"), "explore output: {text}");
+
+        // file_dependencies: api.ts imports ./utils, resolved by stem.
+        let deps = file_dependencies(&app, &json!({})).unwrap();
+        let dep_text = deps["content"][0]["text"].as_str().unwrap();
+        assert!(
+            dep_text.contains("src/api.ts -> ./utils"),
+            "deps output: {dep_text}"
+        );
+        assert!(
+            dep_text.contains("=> src/utils.ts"),
+            "deps output: {dep_text}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod reindex_tests {
+    use super::*;
+    use serde_json::json;
+
+    /// PS5: `reindex` over an empty store answers with the progress-report
+    /// shape (never errors, never pretends to embed) and its scope defaults
+    /// to the launch scope when omitted (same contract as the maintenance
+    /// tools' AC2 fix).
+    #[test]
+    fn reindex_answers_with_progress_shape_and_default_scope() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = crate::tools::tests::test_app(dir.path());
+        let res = reindex(&app, &json!({})).unwrap();
+        let text = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            text.starts_with("reindex:") && text.contains("embedded 0 chunks"),
+            "progress-report shape: {text}"
+        );
+        // The runtime no-embedder path (--no-vector) returns the honest
+        // unavailable message — exercised live; here the stub provider
+        // reports the same never-error contract.
+        let res2 = reindex(&app, &json!({ "limit": 5 })).unwrap();
+        assert!(
+            res2["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .contains("limit 5"),
+            "limit threads through: {}",
+            res2["content"][0]["text"].as_str().unwrap()
         );
     }
 }

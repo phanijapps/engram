@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Engram — Agentic Memory Architecture</title>
+<style>
+  :root {
+    --bg: #07080d;
+    --surface: #0d0f17;
+    --card: #111420;
+    --border: rgba(125, 249, 255, 0.12);
+    --cyan: #7df9ff;
+    --violet: #c9a8ff;
+    --amber: #f5d28d;
+    --green: #8ee5b8;
+    --text: #e0e0e0;
+    --muted: #8892b0;
+    --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --font-sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+  .deck { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+  /* ===== SLIDE ===== */
+  .slide {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px 0;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  .slide-num {
+    position: absolute;
+    top: 24px;
+    right: 24px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    opacity: 0.5;
+  }
+
+  /* ===== TYPOGRAPHY ===== */
+  h1 {
+    font-size: clamp(3rem, 8vw, 5.5rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, var(--cyan) 0%, var(--violet) 50%, var(--amber) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 12px;
+  }
+  h2 {
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+    color: var(--cyan);
+  }
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--violet);
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+    color: var(--muted);
+    max-width: 700px;
+    line-height: 1.5;
+  }
+  .tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--cyan);
+    margin-bottom: 20px;
+    background: rgba(125, 249, 255, 0.05);
+  }
+
+  /* ===== CARDS ===== */
+  .grid { display: grid; gap: 16px; margin-top: 32px; }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .grid-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(125, 249, 255, 0.08);
+    border-color: rgba(125, 249, 255, 0.3);
+  }
+  .card-icon { font-size: 2rem; margin-bottom: 12px; }
+  .card-title {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  .card-body {
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* ===== KPI ===== */
+  .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-top: 32px; }
+  .kpi {
+    background: linear-gradient(145deg, var(--card), var(--surface));
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+  }
+  .kpi-value {
+    font-family: var(--font-mono);
+    font-size: 2.4rem;
+    font-weight: 700;
+    color: var(--cyan);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .kpi-value.violet { color: var(--violet); }
+  .kpi-value.amber { color: var(--amber); }
+  .kpi-value.green { color: var(--green); }
+  .kpi-label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .kpi-sub {
+    font-size: 0.75rem;
+    color: var(--muted);
+    opacity: 0.6;
+    margin-top: 4px;
+  }
+
+  /* ===== DIAGRAM ===== */
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    margin-top: 24px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    line-height: 1.8;
+    overflow-x: auto;
+  }
+  .diagram .layer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+  }
+  .diagram .layer-label {
+    min-width: 140px;
+    text-align: right;
+    color: var(--violet);
+    font-weight: 600;
+  }
+  .diagram .layer-content {
+    flex: 1;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .diagram .node {
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--cyan);
+    background: rgba(125, 249, 255, 0.04);
+    white-space: nowrap;
+  }
+  .diagram .arrow {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.7rem;
+    padding: 2px 0;
+  }
+
+  /* ===== FLOW ===== */
+  .flow { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+  .flow-step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: var(--cyan);
+  }
+  .flow-arrow { color: var(--muted); font-size: 1.2rem; }
+
+  /* ===== TABLE ===== */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 24px;
+    font-size: 0.85rem;
+  }
+  th {
+    text-align: left;
+    padding: 12px 16px;
+    color: var(--violet);
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  td:first-child { color: var(--cyan); font-family: var(--font-mono); }
+
+  /* ===== COLUMNS ===== */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 24px; }
+  @media (max-width: 768px) { .cols { grid-template-columns: 1fr; } }
+
+  /* ===== LIST ===== */
+  .feature-list { list-style: none; margin-top: 16px; }
+  .feature-list li {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .feature-list li:last-child { border-bottom: none; }
+  .feature-list .bullet {
+    color: var(--cyan);
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .feature-list .text { font-size: 0.9rem; color: var(--text); }
+  .feature-list .text strong { color: var(--cyan); }
+
+  /* ===== FOOTER ===== */
+  .footer {
+    text-align: center;
+    padding: 40px 0;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--muted);
+    opacity: 0.5;
+  }
+
+  /* ===== ANIMATION ===== */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .slide > * { animation: fadeUp 0.6s ease-out; }
+  .slide > *:nth-child(2) { animation-delay: 0.1s; }
+  .slide > *:nth-child(3) { animation-delay: 0.2s; }
+  .slide > *:nth-child(4) { animation-delay: 0.3s; }
+
+  /* ===== BADGE ===== */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin-right: 6px;
+  }
+  .badge-green { background: rgba(142, 229, 184, 0.1); color: var(--green); border: 1px solid rgba(142, 229, 184, 0.2); }
+  .badge-cyan { background: rgba(125, 249, 255, 0.1); color: var(--cyan); border: 1px solid rgba(125, 249, 255, 0.2); }
+  .badge-violet { background: rgba(201, 168, 255, 0.1); color: var(--violet); border: 1px solid rgba(201, 168, 255, 0.2); }
+  .badge-amber { background: rgba(245, 210, 141, 0.1); color: var(--amber); border: 1px solid rgba(245, 210, 141, 0.2); }
+</style>
+</head>
+<body>
+<div class="deck">
+
+<!-- ============ SLIDE 1: HERO ============ -->
+<section class="slide" id="s1">
+  <div class="slide-num">01</div>
+  <span class="tag">Contract-First Agentic Memory</span>
+  <h1>engram</h1>
+  <p class="subtitle">
+    Structured, durable recall for AI agents that need more than a context window.
+    A Rust core that owns deterministic memory, knowledge-graph, belief, and
+    retrieval behavior — with TypeScript bindings, 3D visualization, and a
+    Postgres-ready backend.
+  </p>
+  <div style="margin-top: 24px; display: flex; gap: 8px; flex-wrap: wrap;">
+    <span class="badge badge-green">✓ 7 Core Tools</span>
+    <span class="badge badge-cyan">✓ 15+ Languages</span>
+    <span class="badge badge-violet">✓ SQLite + Postgres</span>
+    <span class="badge badge-amber">✓ 3D Knowledge Graph</span>
+    <span class="badge badge-green">✓ Pre-1.0 · Active Development</span>
+  </div>
+</section>
+
+<!-- ============ SLIDE 2: OBJECTIVE ============ -->
+<section class="slide" id="s2">
+  <div class="slide-num">02</div>
+  <span class="tag">Objective</span>
+  <h2>Why engram exists</h2>
+  <p class="subtitle">
+    AI agents lose everything when the session ends. Vector databases return
+    similar text without understanding <em>why</em>. LLM context windows forget.
+    Engram is the layer where raw observations become <strong>durable beliefs</strong>,
+    where retrieval is <strong>composed</strong>, and where policy, provenance,
+    and scope govern every read and write.
+  </p>
+  <div class="grid grid-3">
+    <div class="card">
+      <div class="card-icon">🧠</div>
+      <div class="card-title">Not a vector database</div>
+      <div class="card-body">Vectors are one retrieval mode among six. The graph, the beliefs, the lifecycle — that's the product.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔗</div>
+      <div class="card-title">Not a knowledge store</div>
+      <div class="card-body">Knowledge is source-grounded. Every fact traces to a chunk, every chunk to a document, every document to a source.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">⚖️</div>
+      <div class="card-title">Not a cache</div>
+      <div class="card-body">Memory has a lifecycle: active → archived → redacted → forgotten. Redaction never leaks through retrieval.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 3: GOALS ============ -->
+<section class="slide" id="s3">
+  <div class="slide-num">03</div>
+  <span class="tag">Goals</span>
+  <h2>What engram delivers</h2>
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>🎯 Durable Memory</h3>
+      <p class="card-body">
+        Typed records with kind, scope, provenance, and policy on every write.
+        Memory survives session boundaries. Forgetting is a domain concept
+        (delete/redact/tombstone/archive), not a DB delete.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🔍 Composed Retrieval</h3>
+      <p class="card-body">
+        Six modes fused via Reciprocal Rank Fusion: temporal, cue, hierarchical,
+        semantic (vector), graph, and keyword (BM25). Never single-mode.
+        Full FusionTrace for explainability.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🧬 Belief Synthesis</h3>
+      <p class="card-body">
+        Derived, recomputable stances over evidence — bi-temporal
+        (valid_from/until ≠ recorded_at). Contradictions are reviewable signals,
+        never automatic truth changes.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🛡️ Governed Access</h3>
+      <p class="card-body">
+        Policy, provenance, and scope are required fields checked at runtime on
+        write, retrieve, ingest, consolidate, and forget. Redacted records
+        cannot leak through any path.
+      </p>
+    </div>
+    <div class="card">
+      <h3>🏗️ Engine-Neutral</h3>
+      <p class="card-body">
+        Contract-first domain types outrank SQL. Swap SQLite → Postgres →
+        SurrealDB by config string. An engine-neutrality lint enforces it.
+      </p>
+    </div>
+    <div class="card">
+      <h3>📊 Self-Improving</h3>
+      <p class="card-body">
+        The code-intel tools index engram's own codebase, find bugs in
+        themselves, and the fixes become the next improvement. The dogfood loop.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 4: KPIs ============ -->
+<section class="slide" id="s4">
+  <div class="slide-num">04</div>
+  <span class="tag">Key Performance Indicators · Measured 2026-08-28</span>
+  <h2>By the numbers</h2>
+  <div class="kpi-grid">
+    <div class="kpi">
+      <span class="kpi-value">0.1s</span>
+      <span class="kpi-label">Incremental re-scan</span>
+      <div class="kpi-sub">unchanged repo, manifest-based</div>
+    </div>
+    <div class="kpi">
+      <span class="kpi-value violet">69%</span>
+      <span class="kpi-label">Embed inference skipped</span>
+      <div class="kpi-sub">durable content-hash dedup</div>
+    </div>
+    <div class="kpi">
+      <span class="kpi-value green">−40%</span>
+      <span class="kpi-label">Store size after cleanup</span>
+      <div class="kpi-sub">noise filtered, signal held</div>
+    </div>
+    <div class="kpi">
+      <span class="kpi-value amber">15</span>
+      <span class="kpi-label">Beliefs auto-synthesized</span>
+      <div class="kpi-sub">from observations via consolidation</div>
+    </div>
+    <div class="kpi">
+      <span class="kpi-value">6.1s</span>
+      <span class="kpi-label">Full reindex (256 chunks)</span>
+      <div class="kpi-sub">was impossible → 17.4s → 6.1s</div>
+    </div>
+    <div class="kpi">
+      <span class="kpi-value violet">111</span>
+      <span class="kpi-label">Test suites green</span>
+      <div class="kpi-sub">incl. clippy -D warnings</div>
+    </div>
+    <div class="kpi">
+      <span class="kpi-value green">44</span>
+      <span class="kpi-label">MCP tools exposed</span>
+      <div class="kpi-sub">scan, search, recall, beliefs, maintenance</div>
+    </div>
+    <div class="kpi">
+      <span class="kpi-value amber">3×</span>
+      <span class="kpi-label">Cross-engine parity</span>
+      <div class="kpi-sub">SQLite · Postgres · SurrealDB</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 5: CONCEPTUAL ARCHITECTURE ============ -->
+<section class="slide" id="s5">
+  <div class="slide-num">05</div>
+  <span class="tag">Conceptual Architecture</span>
+  <h2>Eight domain concepts</h2>
+  <p class="subtitle">Each is a distinct axis with its own port, lifecycle, and contract.</p>
+  <div class="grid grid-4">
+    <div class="card">
+      <div class="card-icon">📦</div>
+      <div class="card-title">Memory</div>
+      <div class="card-body">Typed records with lifecycle: active → archived → redacted → forgotten. Append-only events.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🕸️</div>
+      <div class="card-title">Knowledge Graph</div>
+      <div class="card-body">Source → Document → Chunk → Entity → Relationship. Every fact traces to a source.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">💡</div>
+      <div class="card-title">Beliefs</div>
+      <div class="card-body">Bi-temporal derived stances. Recomputable. Contradictions are reviewable signals.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🌳</div>
+      <div class="card-title">Hierarchy</div>
+      <div class="card-body">Louvain communities + aggregate layers for context compression. Navigation ≠ storage.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔀</div>
+      <div class="card-title">Retrieval</div>
+      <div class="card-body">Six modes fused (RRF) + cross-encoder rerank → ContextPayload with FusionTrace.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">♻️</div>
+      <div class="card-title">Consolidation</div>
+      <div class="card-body">Reflection (memories → beliefs) + decay (Ebbinghaus). Explicit, auditable pipeline.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🛡️</div>
+      <div class="card-title">Governance</div>
+      <div class="card-body">Policy + provenance + scope on every record. Checked at runtime on every path.</div>
+    </div>
+    <div class="card">
+      <div class="card-icon">📜</div>
+      <div class="card-title">Contracts</div>
+      <div class="card-body">Domain types outrank SQL. TypeScript generated from Rust. Portable across engines.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 6: LOGICAL ARCHITECTURE ============ -->
+<section class="slide" id="s6">
+  <div class="slide-num">06</div>
+  <span class="tag">Logical Architecture</span>
+  <h2>The layer stack</h2>
+  <div class="diagram">
+    <div class="layer">
+      <div class="layer-label">Contracts</div>
+      <div class="layer-content">
+        <span class="node">domain-data-model.md</span>
+        <span class="node">contracts/v1/ (JSON Schema)</span>
+        <span class="node">Generated TypeScript</span>
+      </div>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="layer">
+      <div class="layer-label">Core Ports</div>
+      <div class="layer-content">
+        <span class="node">engram-domain</span>
+        <span class="node">engram-memory</span>
+        <span class="node">engram-knowledge</span>
+        <span class="node">engram-belief</span>
+        <span class="node">engram-hierarchy</span>
+        <span class="node">engram-retrieval</span>
+        <span class="node">engram-consolidation</span>
+        <span class="node">engram-runtime</span>
+      </div>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="layer">
+      <div class="layer-label">SDK Facade</div>
+      <div class="layer-content">
+        <span class="node">engram-integration</span>
+        <span class="node">EngramProvider</span>
+        <span class="node">EngramConfig</span>
+        <span class="node">CapabilityReport</span>
+      </div>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="layer">
+      <div class="layer-label">Adapters</div>
+      <div class="layer-content">
+        <span class="node">store-sqlite</span>
+        <span class="node">store-pgvector</span>
+        <span class="node">store-surreal</span>
+        <span class="node">store-lexical (BM25)</span>
+        <span class="node">store-associative (PPR)</span>
+        <span class="node">rerank-cross-encoder</span>
+        <span class="node">ingest (tree-sitter)</span>
+      </div>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="layer">
+      <div class="layer-label">Backends</div>
+      <div class="layer-content">
+        <span class="node">backends/sqlite</span>
+        <span class="node">backends/pgvector</span>
+      </div>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="layer">
+      <div class="layer-label">Transports</div>
+      <div class="layer-content">
+        <span class="node">bindings/node (N-API)</span>
+        <span class="node">mcp/engram-mcp (7 tools)</span>
+      </div>
+    </div>
+    <div class="arrow">▼</div>
+    <div class="layer">
+      <div class="layer-label">Surfaces</div>
+      <div class="layer-content">
+        <span class="node">engram-cc (3D Web UI)</span>
+        <span class="node">packages/client (TS SDK)</span>
+        <span class="node">packages/adapters</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 7: TECHNICAL ARCHITECTURE ============ -->
+<section class="slide" id="s7">
+  <div class="slide-num">07</div>
+  <span class="tag">Technical Architecture</span>
+  <h2>How it's built</h2>
+  <div class="cols">
+    <div>
+      <h3>Rust Core (15 crates)</h3>
+      <ul class="feature-list">
+        <li><span class="bullet">▸</span><span class="text"><strong>engram-domain</strong> — portable types, invariants, serde. No SQL, no engine names.</span></li>
+        <li><span class="bullet">▸</span><span class="text"><strong>engram-retrieval</strong> — RRF fusion, reranker port, FusionTrace, VectorIndex port</span></li>
+        <li><span class="bullet">▸</span><span class="text"><strong>engram-code</strong> — tree-sitter parsing for 13 languages, cross-file resolution, framework patterns</span></li>
+        <li><span class="bullet">▸</span><span class="text"><strong>engram-graph-analytics</strong> — PageRank, betweenness, Louvain (std-only, zero deps)</span></li>
+        <li><span class="bullet">▸</span><span class="text"><strong>engram-integration</strong> — EngramProvider facade, engine-neutrality enforced by lint</span></li>
+      </ul>
+    </div>
+    <div>
+      <h3>TypeScript Layer</h3>
+      <ul class="feature-list">
+        <li><span class="bullet">▸</span><span class="text"><strong>@engram/node</strong> — N-API binding over the full Rust facade (transport, not implementation)</span></li>
+        <li><span class="bullet">▸</span><span class="text"><strong>@engram/client</strong> — ergonomic application SDK</span></li>
+        <li><span class="bullet">▸</span><span class="text"><strong>@engram/runtime</strong> — CLI wrappers, MCP HTTP server, LLM provider abstraction</span></li>
+        <li><span class="bullet">▸</span><span class="text"><strong>engram-cc</strong> — React + three.js 3D knowledge graph explorer</span></li>
+        <li><span class="bullet">▸</span><span class="text"><strong>Generated contracts</strong> — TypeScript types from Rust, never hand-written</span></li>
+      </ul>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Storage</th><th>Status</th><th>Capabilities</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>SQLite</td><td><span class="badge badge-green">Complete</span></td><td>Memory, knowledge, belief, hierarchy, vector (sqlite-vec), lexical (Tantivy)</td></tr>
+      <tr><td>Postgres + pgvector</td><td><span class="badge badge-cyan">Production-ready</span></td><td>Memory, knowledge, belief, hierarchy, procedures, vector (HNSW), unified recall</td></tr>
+      <tr><td>SurrealDB</td><td><span class="badge badge-violet">All 5 caps</span></td><td>Memory, knowledge, belief, hierarchy, vector (MTREE)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ SLIDE 8: ENHANCING CODING ============ -->
+<section class="slide" id="s8">
+  <div class="slide-num">08</div>
+  <span class="tag">Enhancing Coding</span>
+  <h2>Code intelligence on your own terms</h2>
+  <div class="grid grid-2">
+    <div class="card">
+      <h3>🔍 Search & Discovery</h3>
+      <ul class="feature-list">
+        <li><span class="bullet">→</span><span class="text"><strong>Multi-lane search</strong> — BM25 lexical + graph traversal + vector similarity, fused with RRF</span></li>
+        <li><span class="bullet">→</span><span class="text"><strong>Symbol context</strong> — "who calls this, what does it call, which community is it in?"</span></li>
+        <li><span class="bullet">→</span><span class="text"><strong>Source citations</strong> — every hit names its file, line, and git revision</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>💥 Impact Analysis</h3>
+      <ul class="feature-list">
+        <li><span class="bullet">→</span><span class="text"><strong>Blast radius</strong> — transitive callers of any symbol, bounded by depth</span></li>
+        <li><span class="bullet">→</span><span class="text"><strong>Dependency paths</strong> — shortest call chain from A to B</span></li>
+        <li><span class="bullet">→</span><span class="text"><strong>Architecture map</strong> — central symbols (PageRank), bridges (betweenness), communities (Louvain)</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>📊 Health & Temporal</h3>
+      <ul class="feature-list">
+        <li><span class="bullet">→</span><span class="text"><strong>Dead code</strong> — zero-caller symbols (noise-filtered, verified)</span></li>
+        <li><span class="bullet">→</span><span class="text"><strong>What changed</strong> — recent churn × impact compound scoring</span></li>
+        <li><span class="bullet">→</span><span class="text"><strong>Framework-aware</strong> — React JSX references, Spring routes, Salesforce Apex classes</span></li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>🔄 Incremental</h3>
+      <ul class="feature-list">
+        <li><span class="bullet">→</span><span class="text"><strong>0.1s re-scans</strong> — manifest-based, only changed files re-ingested</span></li>
+        <li><span class="bullet">→</span><span class="text"><strong>Cross-file resolution</strong> — the healing ledger settles references across scans</span></li>
+        <li><span class="bullet">→</span><span class="text"><strong>Content dedup</strong> — identical texts share embeddings (69% inference skipped)</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 9: ENHANCING AI AGENTS ============ -->
+<section class="slide" id="s9">
+  <div class="slide-num">09</div>
+  <span class="tag">Enhancing AI Agents</span>
+  <h2>Memory that makes agents smarter</h2>
+  <div class="flow">
+    <div class="flow-step">Agent observes</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">engram writes memory</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">consolidation reflects</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">beliefs synthesized</div>
+    <span class="flow-arrow">→</span>
+    <div class="flow-step">agent recalls fused context</div>
+  </div>
+  <div class="grid grid-3" style="margin-top: 32px;">
+    <div class="card">
+      <div class="card-icon">🧠</div>
+      <div class="card-title">Persistent Recall</div>
+      <div class="card-body">
+        Memories written in session 1 are retrievable in session 100. The agent
+        remembers decisions, constraints, stakeholder preferences — without
+        re-reading its entire history every turn.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🎯</div>
+      <div class="card-title">Grounded Answers</div>
+      <div class="card-body">
+        Every recall result carries provenance: which chunk, which source,
+        which git revision. Agents cite their sources. Hallucinated "facts"
+        can't masquerade as grounded knowledge.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🛡️</div>
+      <div class="card-title">Governed Access</div>
+      <div class="card-body">
+        Policy checks on every path: scope isolation, retention, sensitivity,
+        allowed-uses. Redacted memories don't leak through retrieval, links,
+        or explanations. Multi-tenant by design.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">💡</div>
+      <div class="card-title">Belief Lifecycle</div>
+      <div class="card-body">
+        Agents form beliefs from evidence, mark them stale when sources
+        change, retract when invalidated. "True as of T" retrieval — the
+        whitespace no competitor owns.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🔄</div>
+      <div class="card-title">Self-Improvement</div>
+      <div class="card-body">
+        Agents store their own findings, learnings, and gotchas in engram.
+        The next session starts from accumulated context, not from zero.
+        The dogfood loop: tools → find bugs in tools → fix tools → better tools.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-icon">🤖</div>
+      <div class="card-title">Agentic R&D</div>
+      <div class="card-body">
+        The Ask pattern: an LLM autonomously calls recall, list_memories,
+        graph_overview to answer questions — the agent orchestrates its own
+        tool calls with full trace visibility.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 10: THE FLYWHEEL ============ -->
+<section class="slide" id="s10">
+  <div class="slide-num">10</div>
+  <span class="tag">The Flywheel</span>
+  <h2>How engram improves itself</h2>
+  <div class="diagram" style="text-align: center; padding: 40px;">
+    <div style="font-size: 1.1rem; color: var(--cyan); margin-bottom: 20px;">The self-improvement loop</div>
+    <div class="flow" style="justify-content: center;">
+      <div class="flow-step" style="border-color: var(--cyan);">Index codebase</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step" style="border-color: var(--violet);">Run code-intel on itself</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step" style="border-color: var(--amber);">Verify findings vs source</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step" style="border-color: var(--green);">Fix bugs</div>
+      <span class="flow-arrow">→</span>
+      <div class="flow-step" style="border-color: var(--cyan);">Store learnings</div>
+      <span class="flow-arrow" style="font-size: 0.8rem; color: var(--muted);">↺ repeat</span>
+    </div>
+    <div style="margin-top: 32px; font-size: 0.85rem; color: var(--muted); max-width: 600px; margin-left: auto; margin-right: auto;">
+      <p style="margin-bottom: 12px;">
+        <strong style="color: var(--cyan);">Found by the loop:</strong>
+        dead-code false positives (receiver resolution gap), the scanner
+        god-module (betweenness 3687), minified vendor noise (37% of edges),
+        the silent ledger failure (fan-in forwarding bug).
+      </p>
+      <p>
+        <strong style="color: var(--green);">Fixed by the loop:</strong>
+        the noise filter, ledger forwarding, tool consolidation,
+        belief synthesis, and dead-code honesty — with tests, live
+        verification, and learnings stored back into engram's memory.
+        (The scanner phase-split is OPEN — the backlog honestly tracks it.)
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 11: CLOSING ============ -->
+<section class="slide" id="s11" style="text-align: center;">
+  <div class="slide-num">11</div>
+  <span class="tag" style="display: inline-block;">Get Started</span>
+  <h2 style="font-size: clamp(2rem, 5vw, 3.5rem);">Zero to 3D knowledge graph<br>in 3 commands</h2>
+  <div class="diagram" style="max-width: 600px; margin: 32px auto; text-align: left; font-size: 0.9rem;">
+    <div style="color: var(--muted); margin-bottom: 8px;"># 1. Build</div>
+    <div style="color: var(--green);">cargo build --release -p engram-mcp</div>
+    <div style="height: 12px;"></div>
+    <div style="color: var(--muted); margin-bottom: 8px;"># 2. Index any repository</div>
+    <div style="color: var(--green);">./target/release/engram-mcp --storage ~/.engram/myproject \</div>
+    <div style="color: var(--green);">  --project myproject --no-vector</div>
+    <div style="height: 12px;"></div>
+    <div style="color: var(--muted); margin-bottom: 8px;"># 3. Explore in 3D</div>
+    <div style="color: var(--green);">cd engram-cc && pnpm cc</div>
+    <div style="color: var(--cyan); margin-top: 8px;">→ open http://localhost:5173</div>
+  </div>
+  <p class="subtitle" style="margin: 24px auto 0; text-align: center;">
+    <a href="docs/guides/how-to/quickstart.md" style="color: var(--cyan);">Full quickstart guide</a>
+    ·
+    <a href="README.md" style="color: var(--violet);">Product story</a>
+    ·
+    <a href="docs/architecture/overview.md" style="color: var(--amber);">Architecture deep dive</a>
+  </p>
+</section>
+
+<div class="footer">
+  engram · contract-first agentic memory · MIT License · pre-1.0 active development
+</div>
+
+</div>
+</body>
+</html>

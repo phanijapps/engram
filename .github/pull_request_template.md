@@ -12,8 +12,8 @@ Describe the change.
 ## Validation
 
 - [ ] `python3 scripts/validate_contracts.py`
-- [ ] `.codex/hooks/check-contracts.sh`
-- [ ] `.codex/hooks/check-docs.sh`
+- [ ] `scripts/ci/check-contracts.sh`
+- [ ] `scripts/ci/check-docs.sh`
 - [ ] `cargo fmt --all --check`
 - [ ] `cargo check --workspace`
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings`

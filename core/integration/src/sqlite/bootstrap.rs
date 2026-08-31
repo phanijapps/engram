@@ -48,7 +48,8 @@ use super::{
 };
 use engram_consolidation::{CompositeConsolidationExecutor, ConsolidationService};
 use engram_decay::DecayExecutor;
-use engram_reflection::{ReflectionExecutor, ReflectionSynthesizer};
+use engram_reflection::ReflectionExecutor;
+use engram_reflection::{ContradictionExecutor, MemoryLifecycleExecutor, PatternSynthesizer};
 
 /// Storage schema version reported by provider diagnostics.
 const SCHEMA_VERSION: &str = "2026.01";
@@ -169,6 +170,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut memory: Option<Arc<dyn MemoryService>> = None;
     let mut knowledge: Option<Arc<dyn KnowledgeRepository>> = None;
     let mut knowledge_query: Option<Arc<dyn crate::KnowledgeQuery>> = None;
+    let mut code_graph_state = CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    };
     let mut community_query: Option<Arc<dyn crate::CommunityQuery>> = None;
     let mut lexical_feed: Option<Arc<dyn crate::LexicalFeed>> = None;
     #[allow(unused_mut)]
@@ -236,6 +240,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             let store: Arc<SqlKnowledgeStore> = Arc::new(store);
             knowledge_store = Some(store.clone());
             knowledge_query = Some(store.clone());
+            code_graph_state = CapabilityState::Supported;
             community_query = Some(store.clone());
             if knowledge_ok {
                 knowledge = Some(store.clone());
@@ -485,12 +490,24 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         let memory_source = Arc::new(ActiveMemorySourceAdapter(mem.clone()));
         let decay_source = Arc::new(DecayMemorySourceAdapter(mem.clone()));
         let now = chrono::Utc::now();
-        let synthesizer = Arc::new(ReflectionSynthesizer::new(memory_source, now));
+        let synthesizer = Arc::new(PatternSynthesizer::new(memory_source, now));
         let reflection_executor = Arc::new(ReflectionExecutor::new(synthesizer, sink));
         let decay_executor = Arc::new(DecayExecutor::new(decay_source));
+        // Phase 2.3: contradiction detection — detects conflicting beliefs
+        // during consolidation and persists Contradiction records for review.
+        // Uses the SqlBeliefStore directly (it implements both traits).
+        let contradiction_executor = Arc::new(ContradictionExecutor::new(
+            bel.clone() as Arc<dyn engram_belief::ContradictionDetector>,
+            bel.clone() as Arc<dyn engram_belief::BeliefRepository>,
+        ));
+        // Phase 3.2: auto-archive memories not retrieved in 30 days
+        let lifecycle_executor =
+            Arc::new(MemoryLifecycleExecutor::with_default_threshold(mem.clone()));
         let composite = Arc::new(CompositeConsolidationExecutor::new(vec![
             reflection_executor,
             decay_executor,
+            contradiction_executor,
+            lifecycle_executor,
         ]));
         consolidation = Some(Arc::new(ExecutorConsolidationService::new(composite)));
         consolidation_state = CapabilityState::Supported;
@@ -616,6 +633,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         .vectors(vectors_state)
         .migration(migration_state)
         .episodes_evidence(episodes_evidence_state)
+        .code_graph(code_graph_state)
         .atomic_batch(atomic_batch_state)
         .unified_recall(unified_recall_state)
         .export_import(export_import_state)
@@ -754,9 +772,7 @@ fn select_reranker(
     rerank: Option<&engram_retrieval::RerankConfig>,
     embedding_provider: Option<&Arc<dyn crate::EmbeddingProvider>>,
 ) -> Option<Arc<dyn engram_retrieval::RetrievalReranker>> {
-    let Some(cfg) = rerank else {
-        return None;
-    };
+    let cfg = rerank?;
     match cfg.strategy {
         RerankStrategy::None => None,
         RerankStrategy::Mmr => select_mmr(embedding_provider, cfg.lambda),

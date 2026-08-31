@@ -197,6 +197,8 @@ class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
     return decode(this.engine.listEntitiesJson(encode({ scope })));
   }
 
+
+
   async listEntitiesBySource(stableSourceKey: string, scope: unknown): Promise<unknown> {
     return decode(this.engine.listEntitiesBySourceJson(encode({ stableSourceKey, scope })));
   }

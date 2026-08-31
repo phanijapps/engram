@@ -8,6 +8,8 @@ rust-version.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 engram-domain = { path = "../../core/domain" }
 engram-runtime = { path = "../../core/runtime" }
 engram-integration = { path = "../../core/integration" }
@@ -15,8 +17,20 @@ engram-store-pgvector = { path = "../../adapters/pgvector" }
 engram-belief = { path = "../../core/belief" }
 engram-memory = { path = "../../core/memory" }
 engram-retrieval = { path = "../../core/retrieval" }
+engram-knowledge = { path = "../../core/knowledge" }
+# PS2 (fastembed lane only): pulled solely for the FastEmbed model wrapper the
+# facade's EmbeddingProvider delegates to — NEVER for storage.
+engram-store-sqlite = { path = "../../adapters/sqlite", optional = true }
+
+[features]
+# PS2: the vector recall lane (query embedding via FastEmbed + pgvector
+# search + scan-side chunk embedding). Forwards to the facade's fastembed
+# feature, which owns the provider impl.
+fastembed = ["engram-integration/fastembed", "dep:engram-store-sqlite"]
 
 [dev-dependencies]
 engram-domain = { path = "../../core/domain" }
-engram-integration = { path = "../../core/integration" }
+# sqlite feature: the PS4 migration round-trip exports FROM a SQLite provider.
+engram-integration = { path = "../../core/integration", features = ["sqlite"] }
 futures.workspace = true
+tempfile = "3"

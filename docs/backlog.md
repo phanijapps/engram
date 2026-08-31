@@ -41,12 +41,15 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 ## viz-memory-search
 
 - **Memory hybrid search (deferred: viz-memory-search):** the Memory tab's hybrid
-  recall search (debounced; returns the recall `ContextPayload`, not a keyset page)
-  is deferred — the `agentzero` store's retrieval is `Unsupported` (`UnsupportedStoreFamily`)
-  and vectors are `RequiresReindex` (`EmbeddingSpaceMismatch`), so recall returns no
-  usable results today. Ships when retrieval is supported on this store (or vectors
-  are reindexed). The browse lists (Facts/Beliefs/Procedures) + empty-states are
-  shipped without it. Blocked on retrieval support. [spec viz-memory AC3]
+  recall search is now **wired** — debounced two-phase (instant `content.text`
+  match, then a recall-fusion upgrade via `/api/recall` returning the recall
+  `ContextPayload`, not a keyset page), with the vector lane opt-in through
+  `ENGRAM_ENABLE_VECTOR=true`. AC3 stays open because recall still returns no
+  usable results on the `agentzero` store: retrieval is `Unsupported`
+  (`UnsupportedStoreFamily`), vectors are `RequiresReindex`
+  (`EmbeddingSpaceMismatch`) until a reindex runs with vectors enabled, and the
+  store is currently empty in this scope. Closes when retrieval returns usable
+  results on a populated store. [spec viz-memory AC3]
 
 ## viz-community-friendly-names
 
@@ -545,3 +548,283 @@ Deferred items from the M2 adversarial review (tracked, not blocking the slice):
   `PartialExtractionError` carrying `{documentsRead, entitiesWritten,
   relationshipsWritten}` would let the CLI/MCP report progress before a retry
   (the current per-document error message already includes the counts inline).
+
+## Cross-server MCP tool drift (surfaced by engram-code T10)
+
+The shared fixture (`mcp/engram-mcp/tests/tool_names.txt`, 43 tools) exposed
+a pre-existing 11-tool asymmetry between the two MCP transports: the Rust
+stdio server is missing `belief_list`, `contradiction_detect`,
+`graph_overview`, `list_memories`, `maintenance_run`; the TS HTTP server is
+missing `hierarchy_build`, `index_docs`, `predict_context`,
+`scan_dependencies`, `scan_ownership`, `scan_protocols` (plus the
+maintenance trio it now has). Also: `prototype/frontend` typecheck/build
+fails on React JSX typing (pre-existing, no engram deps); `@engram/runtime`
+has one real-addon boot-timeout test (mcp.smoke). Source:
+`docs/specs/engram-code/notes.md` T8/T10.
+- **Kernel-scale benchmark (engram-code AC10 gap):** the recorded benchmark covers two ~900-file repos; Linux/Swift-scale (codegraph's comparison target) not yet run (docs/perf/engram-code-benchmark.md).
+
+## scan-reliability-followups
+
+Follow-ups opened by `scan-reliability` (Shipped — see
+`docs/specs/scan-reliability/spec.md`). All blocked on nothing unless noted.
+
+> **Closed:** manifest persistence shipped (`scan-incremental-manifest`) —
+> per-root sidecar under `<storage>/scan-manifests/`, `force=true` bypass;
+> verified live 53s → 18s with `unchanged: 933`.
+- **Per-repo analytics partitioning:** legacy scans that *resolved* bare
+  generics (`as_str`, `lock`, `is_empty`) still dominate cross-repo centrality
+  because those edges carry ids. Partition `architecture`/`code_health` by
+  source repository, or re-scan the legacy repositories under the post-T5
+  noise filter. [spec scan-reliability non-goals]
+> **Closed:** PS5 shipped 2026-08-27 — `reindex` MCP tool drains the
+> vector-embed backlog keyed on the embedded-set (no source filter): live
+> first run against agentzero reported **31,487 pending**, drained 300/call
+> deterministically (31,487 → 31,187 → 30,887), capped per call with a
+> continue note. scan_repo's delta embed and reindex now share one
+> `embed_pending` helper. TS-side reindex joins the documented tool-table
+> drift. The O(store) `list_chunks`+`embedded_ids` listing per call remains
+> the follow-up (store-side un-embedded query).
+- **Embed backlog drain (reindex op):** `scan_repo` embeds 256 chunks per call
+  scoped to the scan's sha-stamped source — fine for changed files, but it
+  cannot drain chunks whose source name no longer matches (old SHAs from
+  pre-manifest scans; fresh vector stores on a backend switch). Need a reindex
+  op keyed on the vector index's embedded-set with progress. Also: the per-call
+  `list_chunks` + `embedded_ids` full-list overhead is O(store) (~12s of the
+  18s incremental scan) — needs a store-side un-embedded query. [spec
+  pgvector-backend PS5; scan-reliability AC1]
+- **Scan cancellation / job model:** a timed-out scan still completes
+  server-side (bounded now, but invisible to the caller). A job handle with
+  progress + cancel is the durable fix. [spec scan-reliability non-goals]
+
+## pgvector-production-switch
+
+Working set for production readiness on the Postgres switch (spec
+`pgvector-backend`, ACs PS1–PS6; assessment dated 2026-08-27). Ordered by
+leverage; PS1/PS2 are the switch-enablers, the rest harden it.
+
+> **Closed:** PS1 shipped 2026-08-27 — `--backend pgvector` +
+> `--pg-connection-string` (feature `pgvector`), recipe gained `PgKnowledgeQuery`
+> (the code-intel read surface). Live-verified on Docker Postgres: resolved
+> `calls` edges, `symbol_context` callers/callees, memory write→recall.
+> Known degradations recorded for PS2: no knowledge lane in recall, no lexical
+> lane, no embedding provider in the recipe (scan embed is a no-op), and the
+> unresolved-refs ledger is default-unsupported on the pg cells (cross-scan
+> healing lost; same-scan resolution unaffected).
+> **Closed:** PS2 shipped 2026-08-27 — vector lane fused into PgUnifiedRecall
+> (facts + beliefs + vector, per-lane degradation), FastEmbed wired under the
+> recipe's `fastembed` feature (degrades on missing model), scan-side chunk
+> embedding live (`embedded 5 chunks` on Docker Postgres; recall surfaced the
+> semantic chunk first). Fixed en route: tokio-postgres `$n::vector` param
+> binding (never worked — cast via text), `list_chunks` scope-column bug
+> (joined through sources), mcp `pgvector` feature now forwards `fastembed`.
+> Lexical (tsvector) lane remains the documented gap.
+- **PS2 — recall vector lane on Postgres:** `PgUnifiedRecall` fuses facts +
+  beliefs only; the `PgVectorIndex` cell exists but is not composed into
+  recall. Fuse it (query-vector provider port already exists); document or
+  ship the lexical (tsvector) lane. Blocked on nothing.
+> **Closed:** PS3+PS4+PS6 shipped 2026-08-28 — see the spec. PS3 also fixed
+> CI having been broken since the hook deletion (contract/docs jobs called
+> `.codex/hooks/*` from beyond the grave); all four gates live in `scripts/ci/`
+> and run in CI, Postgres service included.
+- **PS3 — CI Postgres service:** add a Postgres+pgvector service container
+  (shape of `docs/how-to-pg/docker-compose.yaml`) to CI and run the pgvector
+  conformance + integration tests in the gate. Blocked on nothing.
+- **PS4 — migration runbook:** demonstrate SQLite export → Postgres import →
+  recall parity spot-check; write `docs/guides/how-to/migrate-sqlite-to-pg.md`.
+  Blocked on nothing (export/import capability exists).
+- **PS5 — reindex op:** see `scan-reliability-followups` (embed backlog drain,
+  keyed on embedded-set, with progress). Blocked on nothing.
+- **PS6 — ops hardening:** schema versioning beyond idempotent DDL, pool/TLS
+  validation errors at `open`, backup/restore runbook. Blocked on nothing.
+> **Closed:** test hygiene shipped 2026-08-27 (6d277e6) — all four
+> pre-existing failures root-caused and fixed: lazy LLM-provider
+> construction (ambient-env-hermetic extract-knowledge), the smoke
+> "timeout" unmasked as a stale tool list + fragile teardown, the
+> live-store tests' era-dependent thresholds relaxed PLUS a real
+> drill-edges⊆items route bug fixed, and prototype/frontend on
+> @types/react 19. Full gate: typecheck exit 0, 8/8 test suites.
+- **Test hygiene (gate trustworthiness):** fix the pre-existing failures so
+  the gates are green going into the switch — `mcp.test` extract-knowledge
+  dispatch (spy 0 calls + afterEach hook timeout), `mcp.smoke` boot timeout,
+  engram-cc `graph.routes` live-store tests (empty agentzero scope),
+  `prototype/frontend` React JSX typecheck. Blocked on nothing.
+
+## code-graph-quality
+
+Debt register from the 2026-08-27 tree-sitter performance + noise audit
+(measured against the spring-boot-demo store: 3,149 entities / 5,219
+relationships from 781 ingested files; see the audit memory in engram for raw
+numbers). Ordered by leverage; each item links its fix commit as it lands.
+
+> **Fixed 2026-08-27:** filename + content-shape filter, previously-ingested bundles retract via the manifest. Fresh-store verified: 9 `.min.js` docs → 0; short-name entities 372 → 4.
+- **[minified-vendor-noise] Minified/bundled assets are indexed as symbols.**
+  9 vendored `.js` bundles under `static/`/`resources/` (1.2% of documents)
+  injected 372 minified entities (12% of the store: `M`, `s`, `tn`, `R`, `A`,
+  `ucs2decode`, …) and 1,237 of 3,324 `calls` edges (37%) touch them. Fix:
+  filename deny (`.min.js`/`.min.css`/`.map`) + content heuristic (avg line
+  length), plus retraction when a previously-ingested file becomes
+  filtered — otherwise filter upgrades never clean existing stores.
+> **Fixed 2026-08-27:** `TreeSitterChunker::parse` + `*_tree` variants; the scanner parses once per file in the main phase (4 parses/file → 2 incl. the pre-pass). All suites green through the shared-tree path.
+- **[parse-multiplicity] Every code file is tree-sitter-parsed 4× per scan.**
+  Pre-pass name collection (1) + main-pass chunk (2) + extract_calls (3) +
+  extract_structural (4) each call `parser.parse` independently. 4× the
+  dominant CPU for 1× the information; kernel-scale scans pay 4× needlessly.
+  Fix: parse once in the main phase and share the `&Tree`.
+> **Fixed 2026-08-27:** the `KnowledgeRepoGraph` fan-in never forwarded the T6 ledger methods — every MCP/N-API scan hit the default-erroring trait impl (`put_unresolved_refs is not supported`) and the ledger stayed empty. Forwarded + regression test through the fan-in; live store now holds 1,734 pending refs for cross-scan healing.
+- **[ledger-not-capturing] The unresolved-refs ledger stays empty.**
+  `knowledge_unresolved_refs` = 0 rows despite 2,875 name-only `calls` edges —
+  cross-scan healing (the Phase-2 sweep) has nothing to heal, so name-only
+  edges stay unresolved forever by construction. Fix: ledger every name-only
+  edge `resolve_refs` fails to settle.
+> **Partially fixed 2026-08-27:** JDK/stdlib/chained idioms added to the noise filter (declared symbols still resolve). The package-import ladder + receiver-hint qualification remain open.
+- **[java-resolution] Java cross-file resolution barely resolves.**
+  89% of real-named Java call edges are unresolved; top offenders (`run`×65,
+  `info`×44, `build`×25, `get`×24) split into (a) JDK/stdlib/chained calls
+  that belong in the noise filter, and (b) genuine local-util calls
+  (`toJsonStr`, `newArrayList`) that need a Java package-import resolution
+  ladder + receiver-hint qualification.
+> **Fixed 2026-08-27:** `AnalyticsGraph` — the five analytics fns
+> (`dead_code`, `central_symbols`, `bridge_symbols`, `call_communities`,
+> `repository_stats`) now operate on an id-keyed graph built from resolved
+> edges, with display names (disambiguated `#2`, `#3`…) for output only.
+> Navigation queries stay name-keyed (they are invoked by name). Verified
+> live: dead code now reports `GlobalExceptionHandler` and
+> `GlobalExceptionHandler#2` separately. N-API call sites updated
+> (parity held by the compiler).
+- **[analytics-name-collision] Analytics merge same-name classes across
+  modules.** `User`×17, `UserController`×8 are distinct entities (distinct
+  ids) but `dead_code`/`central_symbols` key by bare name, merging them.
+  Fix: id-keyed analytics graph with names only for display. (Related to the
+  per-repo-partitioning item in scan-reliability-followups.)
+
+Structural context from the same audit (no action item): ~10% of the edge
+store is high-signal (449 resolved calls + 93 `routes_to`), 33% structural
+(`contains`/`belongs_to`), 12% `file` entities; throughput is fine
+(~170 files/s Java, ~53 files/s mixed) and incremental manifests make
+re-scans ~0.
+
+## self-index-findings (2026-08-28, mem-alpha indexed into ~/.engram/mem-alpha-self)
+
+Dogfood run: mem-alpha scanned into a dedicated SQLite store (9,703 entities /
+27,000 rels / 0 errors) and the code-intel battery turned on itself.
+
+- **[scanner-god-module] scanner.rs is the codebase's dominant chokepoint.**
+  Betweenness: `scan_repository` = 3687 vs 739 for the next symbol (~5×).
+  1,193 lines mixing walk/classify, serial reconcile pre-pass, parallel
+  ingest orchestration, ledger sweep, manifest + embed coupling — a direct
+  violation of AGENTS.md's no-god-module rule (this session ADDED ~300 lines
+  to it). Blast radius is bounded and test-protected (N-API + ~15 scanner
+  tests), so a phase-split (walk / prepass / ingest-phase / sweep) is safe.
+  Blocked on nothing — the highest-value refactor the self-index names.
+- **[receiver-resolution-gap] VERIFIED: `self.`-method and qualified-path
+  calls under-resolve → dead-code false positives.** Concrete: 
+  `FastEmbedEmbeddingProvider` (called from BOTH the pg recipe and the
+  sqlite bootstrap — via `super::fastembed_embedding::…::new` and feature-
+  gated blocks) and `ConformanceHarness::run_beliefs_fixture` (called via
+  `self.run_beliefs_fixture()` at harness.rs:119) both report DEAD. The
+  qualified-path callee and the self-method callee fail the resolution
+  ladder. Extends [js-this-receiver] to Rust self-receivers + deep
+  qualified paths; fix belongs in `resolve_one`'s ladder + extraction's
+  dotted-reference handling. Measured impact: the 999-symbol dead list
+  contains an unknown fraction of such false positives.
+- **Dead-code triage (the honest bulk):** test doubles (Failing*/Fake*/
+  Stub*), prototype/frontend UI components, and public-API-only types
+  (DryRunConsolidationService, port re-exports) — correctly uncalled
+  in-repo; the tool's contract already says callers filter entry points,
+  but a `#[cfg(test)]`-aware + `pub`-aware annotation would make the list
+  actionable instead of 999 rows.
+- **`whats_changed` is flat on a single-scan baseline** (every symbol equal
+  recency) — temporal discrimination needs ≥2 scan baselines. The store is
+  RETAINED (~/.engram/mem-alpha-self) so future re-scans activate the
+  temporal lane for real churn analysis.
+- Central-symbol artifacts: `cn` (TS classnames helper) ranks #3 —
+  short-name centrality noise, known register item (per-repo/id-keyed
+  helps); `PgConnection::block_on` is by-design funneling (every PG call
+  shims sync→async) — central but correct.
+
+## code-graph-perfection
+
+The "perfect code graph" register — every known gap between what indexing
+produces today and a graph where **every meaningful relationship in a repo is
+captured, resolved, and navigable**. Seeded from the dreamhouse-lwc findings
+(2026-08-28); items land here as new repos expose new gaps. Ordered by
+leverage.
+
+- **[js-apex-boundary] Unify LWC `@salesforce/apex` imports with parsed Apex
+  entities.** `import getPagedPropertyList from
+  '@salesforce/apex/PropertyController.getPagedPropertyList'` creates a module
+  entity; the Apex parser creates the real
+  `PropertyController::getPagedPropertyList` entity — TWO nodes for one symbol,
+  so `change_impact`/`blast_radius` stop at the JS↔Apex boundary. Fix: teach
+  the import resolver the `@salesforce/apex/<Class>.<method>` shape — resolve
+  the import-module entity's target to the parsed Apex entity (a
+  framework-aware resolution rule, sibling to the T7 framework resolvers).
+  Unblocks: full-stack impact analysis on Salesforce repos (the exact query
+  you want there). Blocked on nothing.
+- **[js-this-receiver] Resolve LWC/JS `this.method` receivers.** Class-method
+  calls written `this.fireChangeEvent()` carry the `this` receiver, which gives
+  no type hint, so most intra-component JS edges stay name-only (dreamhouse:
+  resolved graph ≈ 25 nodes out of 126 `calls`). Fix options, in order of
+  preference: (a) same-file class-scope resolution — `this.x` inside class
+  `C` resolves against `C::x` when declared in the same file (the declaration
+  is visible at extract time); (b) import-scope for constructor-injected
+  receivers (`this.svc = new Service()` field-inference). (a) alone should
+  resolve the bulk of LWC intra-component edges. Blocked on nothing.
+- **[java-package-imports] Java package-import resolution ladder** (carried
+  from the audit): `import com.xkcoding.x.…` should qualify bare calls so
+  cross-module Java edges resolve (89% unresolved today on spring-boot-demo;
+  the ledger now captures them — resolution would let the sweep heal them).
+  Blocked on nothing.
+- **[community-key-fallback] Community map keys fall back to raw
+  `entity-…` ids** when a relationship endpoint carries no name (cosmetic
+  from the id-keyed analytics work; join-able against entities at the
+  handler). Blocked on nothing.
+> **Closed:** [unembedded-query] shipped 2026-08-28 (376cc3f + e953dc6 +
+> 8ca4242): lean refs listing with SQL-pushed scope visibility (the cost was
+> never json_extract — it was deserializing every source/document record for
+> in-memory visibility checks), vec0 `vectors_rowids` shadow-table id reads
+> (12ms vs 1.0s; virtual-table fallback), and durable content-hash dedup.
+> Measured: reindex-256 17.4s → 6.1s; listing-only 1.20s → ~0.2s steady.
+> Residual: ~0.3-0.5s first-call overhead (suspect rusqlite row
+> materialization + lazy init) — re-open if it matters. Lesson recorded:
+> SQLite cannot ALTER-ADD a STORED generated column; and `IS NULL OR =` is
+> NOT scope_allows semantics (NULL is not a wildcard).
+> **Closed:** [durable-dedup] shipped 2026-08-28 (e953dc6) — text-hash →
+> embedded-twin reuse via `VectorIndex::vector_for_target` point reads (no
+> schema changes; ChunkRef carries the scanner-stamped content hash).
+> Measured: reindex-256 17.4s → 7.0s, 176/256 reused (69% inference
+> skipped); reindex reports the new/reused split.
+- **[parse-floor] The pre-pass still parses every to-ingest file once** for
+  global names (2 parses/file total). The 1× floor needs a persisted
+  name-index keyed by content hash — only worth it at kernel scale. Blocked
+  on a scale target actually being exercised.
+
+Definition of done for this register: indexing any repo yields a graph where
+(a) every source file is classified and parsed (no silent skips beyond
+denylists), (b) every call/reference either resolves to an entity or lands in
+the healing ledger with a reason, (c) framework boundaries (JS↔Apex, JSX,
+routes) are edges, not node silos, and (d) navigation queries reach across
+file, module, and language boundaries.
+
+## next-session-odyssey
+
+Target: `~/projects/odyssey` — agentic learning platform built on pi-mono
+and engram (different branch). User will switch there and ask for
+self-improvement. Engram's memory layer carries the context.
+
+### Setup
+- [ ] Index `~/projects/odyssey` into `~/.engram/odyssey-self` (dedicated,
+      same pattern as `mem-alpha-self`)
+- [ ] Add `.mcp.json` in odyssey pointing at the engram server (built from
+      this repo's `target/release/engram-mcp`)
+- [ ] Understand odyssey's architecture (built on pi-mono + engram — likely
+      a different engram branch with learning-specific extensions)
+
+### Self-improvement loop (same as mem-alpha)
+- [ ] Run the code-intel battery (architecture, code_health, whats_changed)
+- [ ] Verify dead-code findings against source (grep-verify, never verdicts)
+- [ ] Register findings in odyssey's backlog
+- [ ] Apply the skills: engram-self-index, engram-live-verify,
+      engram-perf-audit, engram-store-ops
+- [ ] Store summary back to engram memory (workspace: agentzero for
+      cross-project continuity, or odyssey for odyssey-specific context)

@@ -80,7 +80,13 @@ def main() -> int:
         except json.JSONDecodeError:
             continue
         if d.get("id") in set(range(1, len(requests) + 1)):
-            got[d["id"]] = (d.get("result", {}).get("content") or [{}])[0].get("text", "")
+            if "error" in d:
+                # Surface JSON-RPC errors (e.g. "tool not found") instead of
+                # silently rendering them as empty output (2026-09-03 scar:
+                # a stale tool name printed as a blank result).
+                got[d["id"]] = f"ERROR: {d['error'].get('message', d['error'])}"
+            else:
+                got[d["id"]] = (d.get("result", {}).get("content") or [{}])[0].get("text", "")
 
     marks = [t0] * (len(requests) + 1)
     for i in sorted(got):

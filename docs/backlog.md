@@ -742,6 +742,51 @@ Dogfood run: mem-alpha scanned into a dedicated SQLite store (9,703 entities /
   helps); `PgConnection::block_on` is by-design funneling (every PG call
   shims sync→async) — central but correct.
 
+### 2026-09-03 re-run (post skill-reconciliation + Phase 3.x merges)
+
+Scan: 1,213 files, 20 ingested incrementally, `errors: 0`. Graph 2,984
+nodes / 5,653 edges. Dead-code list 960 (was 999) — bulk still test
+doubles / public-API / UI per the triage below.
+
+- **[scanner-god-module] persists and grew**: `scan_repository` betweenness
+  3737 (was 3687) vs 699 for the next symbol — still ~5.3×, still the named
+  refactor target, still unshipped. Blast radius verified again: 2 production
+  callers (`IngestOps::start_scan_job_json`, `NativeProvider::scan_repository_json`)
+  + ~36 scanner tests — the phase-split remains safe and test-protected.
+- **[receiver-resolution-gap] EXTENDED — trait-object dispatch subclass.**
+  `MemoryLifecycleExecutor::execute` and `CompositeConsolidationExecutor`
+  report dead while both are constructed and registered into the consolidation
+  composite at `core/integration/src/sqlite/bootstrap.rs:505-506`; dispatch
+  through `Arc<dyn ConsolidationMutationExecutor>` leaves no static call edge.
+  `KnowledgeIngestor::ingest` same class (dyn dispatch at
+  `core/integration/src/sqlite/conformance.rs:303`).
+  `FastEmbedEmbeddingProvider::embed_batch` STILL in the dead list — the
+  2026-08-28 qualified-path fix has not landed. The fix ladder needs a third
+  rung: instance-constructed-and-registered (registration-path analysis for
+  `Arc<dyn Trait>` composites), on top of self-receivers and qualified paths.
+- **`whats_changed` flat-score expectation FALSIFIED + schema drift.** After
+  ≥4 scan baselines every Recent score is still identical (0.069 — implying a
+  uniform `valid_from` ≈ 54 days ago for all symbols, which cannot be right).
+  AND the handler `whats_changed(app, _args)` in `mcp/engram-mcp/src/codegraph.rs:1866`
+  ignores ALL arguments while the unified `code` schema advertises `limit`.
+  Fix both: honor `limit`; investigate entity `valid_from` population on
+  re-scan (unchanged entities may be re-versioned, flattening recency).
+- **[driver-error-swallowing] FIXED this session**: `mcp_driver.py` rendered
+  JSON-RPC errors (e.g. `tool not found`) as empty output — errors now print.
+- **[skill-tool-name-drift] FIXED this session**: `engram-self-index` still
+  taught the retired 44-tool names (`scan_repo`/`architecture`/`code_health`/
+  `whats_changed`/`change_impact`); updated to the unified `scan`/`code`
+  surface. Lesson for the 44→7 class: skills referencing tool names must be
+  swept on tool consolidation.
+- **AGENTS.md shape drift FIXED**: `adapters/surreal/` (workspace member since
+  2026-07-30, feature-gated `surreal` recipe in `core/integration`) was
+  missing from the target repository shape. ADR-0022 and
+  `docs/architecture/overview.md` already cover it.
+- Minor: `architecture` Communities top-10 reports sizes ~721-725 while
+  `changed` Overview reports `largest_community_size: 88` — two different
+  community metrics in one battery, unlabeled; make the display name its
+  metric.
+
 ## code-graph-perfection
 
 The "perfect code graph" register — every known gap between what indexing

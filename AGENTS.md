@@ -53,6 +53,7 @@ adapters/                  Replaceable infrastructure crates.
   retrieval/cross-encoder-rerank/  Cross-encoder reranker adapter.
   retrieval/associative-graph/     Associative (Personalized PageRank) retrieval index adapter.
   retrieval/community-summary/     Community-summary (GraphRAG) retrieval index adapter.
+  surreal/                  SurrealDB engine cells (memory, knowledge, belief, hierarchy, vector).
   consolidation/decay/      Decay consolidation executor (policy-expiry, Ebbinghaus curve).
   integration/             Backend recipe / conformance composition (SQLite wiring until backends/ split).
 

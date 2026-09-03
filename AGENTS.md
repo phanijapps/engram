@@ -250,6 +250,16 @@ Run `pnpm run build` after TypeScript package surface changes.
   workflow skills now present under `.codex/skills/` (`new-spec`, `new-adr`,
   `new-rcf`, `work-loop`, `new-guide`) cover the same loop; the CI gates under
   `scripts/ci/` carry the enforcement the old hooks owned.
+- Skill-tree reconciliation (2026-09-03): the superseded
+  `.claude/skills/engram-{contract,plan,eval,code-docs}` copies were removed;
+  `engram-{index,find,distill}` are symlinks into `mcp/engram-mcp/extensions/`
+  (their canonical home); `.codex/skills/` is a mirror of `.claude/skills/`
+  (minus `*.upstream.*` companions) — re-mirror in the same commit when a
+  canonical skill changes. `.pi/settings.json` points pi at
+  `.claude/skills/` so all three harnesses see the same workflow set. The
+  engram ops skills (`engram-live-verify`, `engram-perf-audit`,
+  `engram-self-index`, `engram-store-ops`) live canonically under
+  `.agents/skills/`.
 - Install local Git hooks with `git config core.hooksPath .githooks` when this
   workspace should enforce checks on commit.
 

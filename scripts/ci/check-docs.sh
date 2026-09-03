@@ -14,6 +14,22 @@ mapfile -t marker_paths < <(
       done
 )
 
+# Teaching-text exceptions: these skill references INSTRUCT on placeholder
+# markers (TDD stub discipline, placeholder links) — their TODO mentions are
+# content, not unfinished work. Kept in lockstep with the .claude/skills
+# canonical copies (see .claude/skills/README.md § Skill trees).
+marker_exclusions=(
+  ".codex/skills/work-loop/references/tdd-stubs.md"
+  ".codex/skills/new-guide/SKILL.md"
+)
+mapfile -t marker_paths < <(
+  printf '%s\n' "${marker_paths[@]}" \
+    | while IFS= read -r path; do
+        [[ " ${marker_exclusions[*]} " == *" $path "* ]] && continue
+        printf '%s\n' "$path"
+      done
+)
+
 # Only tracked repository docs and tracked repository skills are validated here.
 # Developer-local untracked skills may contain examples or placeholders that are
 # outside this repository's release surface.

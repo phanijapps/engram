@@ -1,6 +1,6 @@
 ---
 name: new-guide
-description: Use this skill to draft a new user-facing guide under `docs/guides/<quadrant>/<slug>.md` (or `docs/guides/<pack>/<quadrant>/<slug>.md` when guides are organized by pack) following the Diátaxis framework. Triggers on "write a guide for X", "new tutorial", "new how-to", "new reference page", "new explanation". Settles the audience contract before any body is written, then scaffolds from the matching per-quadrant template. Do NOT use for feature contracts (use `new-spec`), cross-cutting proposals (use `new-rfc`), or recording decisions (use `new-adr`).
+description: Use this skill to draft a new user-facing guide under `docs/guides/{quadrant}/{slug}.md` (or `docs/guides/{pack}/{quadrant}/{slug}.md` when guides are organized by pack) following the Diátaxis framework. Triggers on "write a guide for X", "new tutorial", "new how-to", "new reference page", "new explanation". Settles the audience contract before any body is written, then scaffolds from the matching per-quadrant template. Do NOT use for feature contracts (use `new-spec`), cross-cutting proposals (use `new-rfc`), or recording decisions (use `new-adr`).
 ---
 
 # Skill: new-guide

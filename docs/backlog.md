@@ -873,3 +873,27 @@ self-improvement. Engram's memory layer carries the context.
       engram-perf-audit, engram-store-ops
 - [ ] Store summary back to engram memory (workspace: agentzero for
       cross-project continuity, or odyssey for odyssey-specific context)
+
+## code-liveness-followups
+
+Deferred from the code-liveness spec (2026-09-03) + follow-ups surfaced
+during live verification:
+
+- **[self-ctor-attribution]** `Self::new(...)` / `Self { .. }` calls extract
+  as bare `new` (self receivers carry no hint) → the constructor stays
+  unresolved → force re-scan dead lists inflate with never-called-looking
+  `X::new` symbols (mem-alpha: 960 → 2198 raw, of which confirmed-unused
+  1273). Same-document impl-block candidate (`Self::new` inside
+  `impl X` → `X::new`) is the fix shape.
+- **[outer-span-attribution]** call-site attribution breaks on the FIRST
+  containing declaration span in walk order — an `impl`/struct span can
+  shadow the inner method (observed: `DelegateToZbotTool` → `::new` edge
+  attributed to the struct, not the enclosing method in executor.rs).
+  Prefer the INNERMOST containing function span.
+- **[dead-code-provenance]** per-symbol provenance fields (`#[cfg(test)]`,
+  `pub`, generated-file paths) don't exist in extraction; the classifier
+  currently buckets test-only by name-shape + `tests`-module containment.
+  Provenance fields would unlock the deferred `generated` and
+  `inconclusive` buckets and harden `test-only`.
+- **[whats_changed-defects]** (separate spec, unchanged): handler ignores
+  all args (`limit` advertised); recency scores uniform across cohorts.

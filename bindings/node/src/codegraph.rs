@@ -33,6 +33,9 @@ fn relationships_for(
 }
 
 /// `{scope}` -> dead-code symbol keys (sorted). Mirrors memtrace `find_dead_code`.
+/// Default shape byte-identical to the pre-classification array —
+/// code-liveness ADR-0022 parity: the classified view ships as the
+/// SIBLING binding `dead_code_classified_json`, never a shape change here.
 pub fn dead_code_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
@@ -40,6 +43,25 @@ pub fn dead_code_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> R
     encode(&cgq::dead_code(&cgq::AnalyticsGraph::from_relationships(
         &relationships,
     )))
+}
+
+/// `{scope}` -> `{bucket: [name, ...]}` dead-code classification
+/// (confirmed-unused / dynamic / test-only / external) — the N-API
+/// surface of `code op=health classify=true` (code-liveness T5).
+pub fn dead_code_classified_json(
+    store: &Arc<SqlKnowledgeStore>,
+    request_json: String,
+) -> Result<String> {
+    let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
+    let scope = scope_of(&value)?;
+    let relationships = relationships_for(store, &scope)?;
+    let report = cgq::classify_dead(&cgq::AnalyticsGraph::from_relationships(&relationships));
+    encode(&serde_json::json!({
+        "confirmed_unused": report.confirmed_unused,
+        "dynamic": report.dynamic,
+        "test_only": report.test_only,
+        "external": report.external,
+    }))
 }
 
 /// `{scope, target, depth?}` -> transitive caller keys (blast radius).

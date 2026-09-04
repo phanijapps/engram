@@ -6,9 +6,12 @@
 //! `engram-graph-analytics`. Depends only on `engram-domain` +
 //! `engram-graph-analytics`; no storage or infrastructure.
 
+mod liveness;
 mod queries;
 
 pub use engram_code::{ExploreNode, FileDependency, explore, file_dependencies};
+
+pub use liveness::{ClassifiedSymbol, DeadCodeBucket, DeadCodeReport, classify_dead};
 
 pub use queries::{
     AnalyticsGraph, BlastRadiusBounded, HttpEndpoint, SymbolContext, SymbolContextBounded,

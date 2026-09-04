@@ -157,6 +157,12 @@ impl TreeSitterChunker {
             &[],
             &mut edges,
         );
+        collect_registers(
+            &tree.root_node(),
+            text.as_bytes(),
+            &entry.kind_map,
+            &mut edges.registers,
+        );
         Ok(edges)
     }
 
@@ -178,6 +184,12 @@ impl TreeSitterChunker {
             ext,
             &[],
             &mut edges,
+        );
+        collect_registers(
+            &tree.root_node(),
+            text.as_bytes(),
+            &entry.kind_map,
+            &mut edges.registers,
         );
         Ok(edges)
     }
@@ -824,6 +836,168 @@ fn php_kinds() -> HashMap<&'static str, &'static str> {
 
 /// Receiver-aware structural walk: collects containment pairs from
 /// declaration nesting, inheritance clauses, and import statements.
+/// Wrapper/stdlib constructor containers that never denote a registered
+/// domain type — `Arc::new(T::new(..))` must attribute to `T`, not `Arc`.
+const WRAPPER_CTORS: &[&str] = &["Arc", "Rc", "Box", "Weak", "Some", "Ok", "Err", "Into"];
+
+/// Collects registration facts: a register-flavored call site
+/// (`registry.register(..)`, `builder.with_plugin(..)`) whose arguments
+/// construct a type (`T::new(..)`, `T::default()`, `T::new()` in dotted
+/// form, `new T(..)` in new-expression languages) yields
+/// (enclosing-declaration, `T`). The ingest adapter persists these as
+/// `registers` edges — registration is liveness evidence the static call
+/// graph cannot see (dynamic dispatch, plugin registries).
+fn collect_registers(
+    node: &tree_sitter::Node,
+    source: &[u8],
+    kind_map: &HashMap<&str, &str>,
+    out: &mut Vec<(String, String)>,
+) {
+    let mut site = String::new();
+    collect_registers_walk(node, source, kind_map, &mut site, out);
+}
+
+fn collect_registers_walk(
+    node: &tree_sitter::Node,
+    source: &[u8],
+    kind_map: &HashMap<&str, &str>,
+    site: &mut String,
+    out: &mut Vec<(String, String)>,
+) {
+    let kind = node.kind();
+
+    // Track the innermost enclosing declaration as the registration site.
+    let mut pushed_site = false;
+    if kind_map.contains_key(kind) {
+        if let Some(name_node) = node
+            .child_by_field_name("name")
+            .or_else(|| node.child_by_field_name("declarator"))
+        {
+            let name = extract_name(&name_node, source);
+            if !name.is_empty() {
+                *site = name;
+                pushed_site = true;
+            }
+        }
+    }
+
+    let is_call = kind.contains("call_expression")
+        || kind.contains("method_invocation")
+        || kind.contains("function_call")
+        || kind == "call";
+    if is_call && !site.is_empty() {
+        if let Some(callee_node) = node
+            .child_by_field_name("function")
+            .or_else(|| node.child_by_field_name("name"))
+            .or_else(|| node.named_child(0))
+        {
+            let callee_text = callee_node.utf8_text(source).unwrap_or("");
+            if is_register_flavored(callee_text) {
+                if let Some(ty) = constructed_type_in_arguments(node, source) {
+                    let fact = (site.clone(), ty);
+                    if !out.contains(&fact) {
+                        out.push(fact);
+                    }
+                }
+            }
+        }
+    }
+
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        collect_registers_walk(&child, source, kind_map, site, out);
+    }
+    if pushed_site {
+        site.clear();
+    }
+}
+
+/// `registry.register(..)`, `self.register_tool(..)`, `builder.with_x(..)` —
+/// the METHOD segment decides, so receivers are irrelevant.
+fn is_register_flavored(callee_text: &str) -> bool {
+    let method = callee_text
+        .rsplit(['.', ':'])
+        .find(|s| !s.is_empty())
+        .unwrap_or(callee_text);
+    method.starts_with("register") || method.starts_with("with_")
+}
+
+/// Finds the deepest non-wrapper constructed type among the arguments of a
+/// call node: `Arc::new(T::new(..))` attributes to `T`.
+fn constructed_type_in_arguments(node: &tree_sitter::Node, source: &[u8]) -> Option<String> {
+    let mut found: Option<String> = None;
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        scan_for_constructor(&child, source, &mut found);
+    }
+    found
+}
+
+fn scan_for_constructor(node: &tree_sitter::Node, source: &[u8], found: &mut Option<String>) {
+    let kind = node.kind();
+    // `new T(..)` new-expression languages (JS/TS/Java).
+    if kind == "new_expression" {
+        if let Some(ctor) = node.child_by_field_name("constructor") {
+            let text = ctor.utf8_text(source).unwrap_or("");
+            if let Some(ty) = last_type_segment(text) {
+                *found = Some(ty);
+            }
+        }
+    }
+    let is_call = kind.contains("call_expression")
+        || kind.contains("method_invocation")
+        || kind.contains("function_call")
+        || kind == "call";
+    if is_call {
+        if let Some(callee_node) = node
+            .child_by_field_name("function")
+            .or_else(|| node.child_by_field_name("name"))
+            .or_else(|| node.named_child(0))
+        {
+            let text = callee_node.utf8_text(source).unwrap_or("");
+            // Qualified constructor forms: `T::new`, `T::default` (Rust),
+            // `T.new` (Java), `T.create`? — keep v1 to new/default.
+            for sep in ["::", "."] {
+                if let Some((head, tail)) = text.rsplit_once(sep) {
+                    if tail == "new" || tail == "default" {
+                        if let Some(ty) = last_type_segment(head) {
+                            if !WRAPPER_CTORS.contains(&ty.as_str()) {
+                                // Prefer the deepest: keep overwriting, the
+                                // innermost constructor wins.
+                                *found = Some(ty);
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        scan_for_constructor(&child, source, found);
+    }
+}
+
+/// Last `::`-separated segment of a path, capitalized-check applied by the
+/// caller — returns the candidate type segment.
+fn last_type_segment(path: &str) -> Option<String> {
+    let seg = path
+        .rsplit("::")
+        .find(|s| !s.is_empty())
+        .unwrap_or(path)
+        .trim();
+    if seg.is_empty() {
+        return None;
+    }
+    // Registered types are UpperCamel by convention everywhere we extract.
+    let first = seg.chars().next()?;
+    if !first.is_uppercase() {
+        return None;
+    }
+    Some(seg.to_owned())
+}
+
 fn walk_structural(
     node: &tree_sitter::Node,
     source: &[u8],

@@ -37,7 +37,8 @@
         "contains",
         "extends",
         "implements",
-        "routes_to"
+        "routes_to",
+        "registers"
       ],
       "type": "string"
     },

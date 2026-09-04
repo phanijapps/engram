@@ -903,6 +903,15 @@ Enum (closed; RFC-0020 Phase 2):
 - `implements` — class-implements-interface edge
 - `routes_to` — framework route (an `Endpoint`-kind entity) wired to its
   handler
+- `registers` — registration-site declaration → registered type: emitted
+  for register-flavored call sites (`registry.register(..)`, builder
+  `with_*(..)`) whose arguments construct a type (`T::new`, `T::default`,
+  `new T(..)`). Registration is liveness evidence for the type and —
+  because dispatch through registries and `Arc<dyn Trait>` leaves no static
+  call edge — for the type's `impl` methods (classified `dynamic`, never
+  `confirmed-unused`, by the dead-code classifier). Kept OUT of the
+  calls-analytics edge set (PageRank/betweenness stay calls-only, like
+  `contains`).
 
 Code entities use existing `EntityKind` values (`Function`, `Method`, `Class`,
 `Struct`, `Interface`, `Trait`, `Enum`, `TypeAlias`, `Module`, `File`,

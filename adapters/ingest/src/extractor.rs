@@ -147,9 +147,15 @@ impl GraphExtractor {
                 };
                 // RFC-0020 Phase 2: `name` is the receiver-qualified logical
                 // name (`Foo::bar`) when the declaration is nested, bare at
-                // top level. Noise filtering applies to the bare tail.
+                // top level. Noise filtering applies to the bare tail — but a
+                // QUALIFIED name is never bare-generic noise: `Foo::new` is a
+                // specific, resolvable constructor, not the ubiquitous bare
+                // `new` (code-liveness T2: dropping qualified constructors
+                // starved resolution and reported live tools dead — the
+                // agentzero DelegateToZbotTool false negative).
                 let bare = engram_code::bare_tail(&name).unwrap_or(&name).to_owned();
-                if bare.is_empty() || engram_code::is_noise_symbol(&bare) {
+                let unqualified_generic = name == bare && engram_code::is_noise_symbol(&bare);
+                if bare.is_empty() || unqualified_generic {
                     continue;
                 }
                 symbols.push((name, bare, kind, chunk.text.clone(), chunk_idx));
@@ -513,6 +519,9 @@ impl GraphExtractor {
             };
             for (parent, member) in &edges.contains {
                 structural_edge("contains", parent, member);
+            }
+            for (site, ty) in &edges.registers {
+                structural_edge("registers", site, ty);
             }
             for (child, base) in &edges.extends {
                 structural_edge("extends", child, base);

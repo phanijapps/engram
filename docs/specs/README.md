@@ -12,6 +12,13 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
 
 ## Active
 
+- [`code-liveness`](code-liveness/spec.md): trustworthy dead-code verdicts —
+  qualified-suffix resolution rung, typed `registers` edges, constructed-impl
+  dispatch liveness, and a six-bucket classification surfaced at MCP + N-API
+  with parity. Born of the 2026-09-03 dogfood run: engram's own dead-code
+  output produced false verdicts that fed an agentzero planning doc
+  (`DelegateToZbotTool` "no callers" while registered live). Constrained by
+  ADR-0028, ADR-0022, RFC-0020.
 - [`viz-foundation`](viz-foundation/spec.md): the foundation slice of the
   engram-cc overhaul — a greenfield 3-tab shell (Memory/Observatory/Graph) with
   ported zbot styling (React 19 + Tailwind v4), a Hono Backend-for-Frontend that

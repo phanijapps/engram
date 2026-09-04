@@ -22,6 +22,12 @@ pub struct StructuralEdges {
     /// (child, interface) conformance: TS `implements`, Rust
     /// `impl Trait for Type` (Type implements Trait).
     pub implements: Vec<(String, String)>,
+    /// (registration site, constructed type): `registry.register(
+    /// Arc::new(T::new(..)))` and builder `with_x(T::new(..))` sites yield
+    /// (site, `T`). The ingest adapter persists these as `registers` edges —
+    /// registration is liveness evidence for the type and its `impl Trait`
+    /// methods (dynamic dispatch leaves no static call edge).
+    pub registers: Vec<(String, String)>,
 }
 
 impl StructuralEdges {
@@ -30,6 +36,7 @@ impl StructuralEdges {
             && self.contains.is_empty()
             && self.extends.is_empty()
             && self.implements.is_empty()
+            && self.registers.is_empty()
     }
 }
 

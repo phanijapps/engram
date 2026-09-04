@@ -1818,7 +1818,7 @@ fn names_first_match(entity_names: &[String], query: &str, fallback: &str) -> St
 /// context. Analytics count only resolved-endpoint edges (AC4), so bare
 /// generics from pre-resolution scans (`new` ×4.5k on the eval store) no
 /// longer masquerade as caller evidence.
-pub fn code_health(app: &App, _args: &Value) -> Result<Value, ToolError> {
+pub fn code_health(app: &App, args: &Value) -> Result<Value, ToolError> {
     let rels = fetch_rels(app)?;
     // code-graph-quality [analytics-name-collision]: id-keyed graph — same-name
     // symbols across modules stay distinct (display names carry `#2` suffixes
@@ -1827,15 +1827,42 @@ pub fn code_health(app: &App, _args: &Value) -> Result<Value, ToolError> {
     let dead = engram_codegraph_queries::dead_code(&graph);
     let stats = engram_codegraph_queries::repository_stats(&graph);
     const DEAD_LIST_CAP: usize = 100;
-    let shown: Vec<&String> = dead.iter().take(DEAD_LIST_CAP).collect();
-    let more = dead.len().saturating_sub(DEAD_LIST_CAP);
+    let cap = args["limit"]
+        .as_u64()
+        .map(|l| (l as usize).clamp(1, DEAD_LIST_CAP))
+        .unwrap_or(DEAD_LIST_CAP);
+    let shown: Vec<&String> = dead.iter().take(cap).collect();
+    let more = dead.len().saturating_sub(cap);
     let tail = if more > 0 {
-        format!("\n… and {more} more (pass a smaller repo scope or raise the cap in codegraph.rs)")
+        format!("\n… and {more} more (pass limit or a smaller repo scope)")
     } else {
         String::new()
     };
+    // code-liveness: the classified view is additive — every raw symbol
+    // lands in an evidence-backed bucket (dynamic / test-only / external /
+    // confirmed-unused). `generated` + `inconclusive` buckets are deferred
+    // (docs/backlog.md code-liveness-followups).
+    let mut classification = String::new();
+    if args["classify"].as_bool().unwrap_or(false) {
+        let report = engram_codegraph_queries::classify_dead(&graph);
+        classification = format!(
+            "\nClassified: confirmed-unused={} dynamic={} test-only={} external={} \
+             (dynamic = dispatch/registry-reachable; test-only = test doubles + #[cfg(test)] shapes)",
+            report.confirmed_unused.len(),
+            report.dynamic.len(),
+            report.test_only.len(),
+            report.external.len(),
+        );
+        let shown_cls: Vec<String> = report
+            .flat()
+            .iter()
+            .take(cap)
+            .map(|s| format!("{} [{}]", s.name, s.bucket.as_str()))
+            .collect();
+        classification.push_str(&format!("\nFirst {}: {:?}", shown_cls.len(), shown_cls));
+    }
     Ok(protocol::text_content(format!(
-        "Dead code ({} symbols, showing first {DEAD_LIST_CAP}): {shown:?}{tail}\nStats: {stats:?}",
+        "Dead code ({} symbols, showing first {cap}): {shown:?}{tail}{classification}\nStats: {stats:?}",
         dead.len()
     )))
 }

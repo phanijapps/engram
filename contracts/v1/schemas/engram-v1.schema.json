@@ -1546,7 +1546,8 @@
         "contains",
         "extends",
         "implements",
-        "routes_to"
+        "routes_to",
+        "registers"
       ]
     },
     "UnresolvedReferenceStatus": {

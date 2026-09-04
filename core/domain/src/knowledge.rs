@@ -269,17 +269,19 @@ pub enum CodeEdgeKind {
     Extends,
     Implements,
     RoutesTo,
+    Registers,
 }
 
 impl CodeEdgeKind {
     /// The closed set, in canonical order.
-    pub const ALL: [CodeEdgeKind; 6] = [
+    pub const ALL: [CodeEdgeKind; 7] = [
         CodeEdgeKind::Calls,
         CodeEdgeKind::Imports,
         CodeEdgeKind::Contains,
         CodeEdgeKind::Extends,
         CodeEdgeKind::Implements,
         CodeEdgeKind::RoutesTo,
+        CodeEdgeKind::Registers,
     ];
 
     /// Predicate string as persisted on `KnowledgeRelationship.predicate`.
@@ -291,6 +293,7 @@ impl CodeEdgeKind {
             CodeEdgeKind::Extends => "extends",
             CodeEdgeKind::Implements => "implements",
             CodeEdgeKind::RoutesTo => "routes_to",
+            CodeEdgeKind::Registers => "registers",
         }
     }
 }

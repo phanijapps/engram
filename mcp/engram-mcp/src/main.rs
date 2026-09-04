@@ -816,6 +816,7 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
                 "query": { "type": "string", "description": "Search query (explore mode)." },
                 "depth": { "type": "number", "description": "Traversal depth (default 1-2)." },
                 "limit": { "type": "number", "description": "Result cap." },
+                "classify": { "type": "boolean", "description": "health mode: add the evidence-backed dead-code classification (confirmed-unused / dynamic / test-only / external)." },
                 "to": { "type": "string", "description": "Dependency path endpoint (impact mode)." }
             },
             "required": ["op"]
@@ -1106,7 +1107,19 @@ fn consolidated_scan(app: &App, args: &Value) -> Result<Value, ToolError> {
                 "content": args.get("content").cloned().unwrap_or(json!(""))
             }),
         ),
-        _ => crate::codegraph::scan_repo(app, &json!({"path": args["path"]})),
+        _ => crate::codegraph::scan_repo(app, &{
+            // Forward the full repo-scan surface: dropping `force` here
+            // silently broke force re-ingestion on the consolidated `scan`
+            // tool (the schema advertises it — code-liveness T6 caught it).
+            let mut forwarded = json!({"path": args["path"]});
+            if let Some(force) = args.get("force") {
+                forwarded["force"] = force.clone();
+            }
+            if let Some(cfg) = args.get("scan_config") {
+                forwarded["scan_config"] = cfg.clone();
+            }
+            forwarded
+        }),
     }
 }
 

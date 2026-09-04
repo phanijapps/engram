@@ -38,7 +38,8 @@ export const engramV1Schema = {
         "contains",
         "extends",
         "implements",
-        "routes_to"
+        "routes_to",
+        "registers"
       ],
       "type": "string"
     },

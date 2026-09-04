@@ -15,9 +15,9 @@ use std::sync::{Arc, Mutex};
 // Import plain functions from operation modules
 use crate::codegraph::{
     blast_radius_json, bridge_symbols_json, call_communities_json, central_symbols_json,
-    cyclomatic_complexity_json, dead_code_json, dependency_path_json, explore_json,
-    file_dependencies_json, find_api_calls_json, find_endpoints_json, find_entry_points_json,
-    match_api_topology_json, process_flow_json,
+    cyclomatic_complexity_json, dead_code_classified_json, dead_code_json, dependency_path_json,
+    explore_json, file_dependencies_json, find_api_calls_json, find_endpoints_json,
+    find_entry_points_json, match_api_topology_json, process_flow_json,
 };
 use crate::knowledge_chunks::{
     get_chunk_json, list_chunks_by_document_json, list_chunks_json, put_chunk_json,
@@ -99,6 +99,13 @@ impl NativeKnowledgeEngine {
     #[napi(js_name = "deadCodeJson")]
     pub fn dead_code_json(&self, request_json: String) -> Result<String> {
         dead_code_json(&self.store, request_json)
+    }
+
+    /// `{scope}` -> `{bucket: [name, ...]}` dead-code classification
+    /// (code-liveness; mirrors MCP `code op=health classify=true`).
+    #[napi(js_name = "deadCodeClassifiedJson")]
+    pub fn dead_code_classified_json(&self, request_json: String) -> Result<String> {
+        dead_code_classified_json(&self.store, request_json)
     }
 
     /// `{scope}` -> file-level import graph with module→file resolution

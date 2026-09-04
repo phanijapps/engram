@@ -4,7 +4,7 @@ export type Identifier = string;
 /**
  * Closed predicate vocabulary emitted by the engram-code extractor (RFC-0020 Phase 2, ADR-0028). KnowledgeRelationship.predicate stays an open string; this is the contracted code set.
  */
-export type CodeEdgeKind = "calls" | "imports" | "contains" | "extends" | "implements" | "routes_to";
+export type CodeEdgeKind = "calls" | "imports" | "contains" | "extends" | "implements" | "routes_to" | "registers";
 export type Timestamp = string;
 export type DeleteMode = "delete" | "redact" | "tombstone" | "archive";
 export type EvidenceRef = EvidenceRef1 & {

@@ -86,21 +86,22 @@ pub fn classify_dead(graph: &AnalyticsGraph) -> DeadCodeReport {
         .iter()
         .map(|(_, ty)| ty.as_str())
         .collect();
-    // Live-or-registered containers keep their contained members out of the
-    // confirmed bucket — dispatch/registry reachable.
-    let live_containers: HashSet<String> = registered
+    // A container is "live" for member-classification when it survives the
+    // not-dead test by ANY input: registered, calls-live itself, or
+    // contains-live (a struct whose ctor/method is called — structs never
+    // carry calls in-degree directly, so the contains path is the usual one:
+    // `FastEmbedEmbeddingProvider` is alive because `::new` is called, and
+    // its trait methods reached only through `Arc<dyn EmbeddingProvider>`
+    // must classify `dynamic`, never `confirmed-unused`).
+    let live_containers: HashSet<String> = graph
+        .contains_edges()
         .iter()
-        .map(|s| s.to_string())
-        .chain(
-            live.iter()
-                .filter(|id| {
-                    graph
-                        .contains_edges()
-                        .iter()
-                        .any(|(parent, _)| parent.as_str() == **id)
-                })
-                .map(|s| s.to_string()),
-        )
+        .filter_map(|(parent, child)| {
+            let parent_live = registered.contains(parent.as_str())
+                || live.contains(parent.as_str())
+                || live.contains(child.as_str());
+            parent_live.then(|| parent.clone())
+        })
         .collect();
 
     let mut report = DeadCodeReport::default();
@@ -313,6 +314,41 @@ mod tests {
         let graph = AnalyticsGraph::from_relationships(&rels);
         let report = classify_dead(&graph);
         assert_eq!(report.confirmed_unused, vec!["a".to_owned()]);
+    }
+
+    /// code-liveness: a type kept alive only through its called constructor
+    /// (contains-liveness — structs carry no calls in-degree) has its
+    /// dispatch-only trait methods classified `dynamic` (the
+    /// `FastEmbedEmbeddingProvider::embed_batch` shape).
+    #[test]
+    fn contains_live_type_methods_are_dynamic() {
+        let rels = vec![
+            rel("calls", "main", "bootstrap_sqlite"),
+            rel(
+                "calls",
+                "bootstrap_sqlite",
+                "FastEmbedEmbeddingProvider::new",
+            ),
+            rel(
+                "contains",
+                "FastEmbedEmbeddingProvider",
+                "FastEmbedEmbeddingProvider::new",
+            ),
+            rel(
+                "contains",
+                "FastEmbedEmbeddingProvider",
+                "FastEmbedEmbeddingProvider::embed_batch",
+            ),
+        ];
+        let graph = AnalyticsGraph::from_relationships(&rels);
+        let report = classify_dead(&graph);
+        assert!(
+            report
+                .dynamic
+                .contains(&"FastEmbedEmbeddingProvider::embed_batch".to_owned()),
+            "dispatch-only method of a contains-live type must be dynamic: {report:?}"
+        );
+        assert!(report.confirmed_unused.is_empty());
     }
 
     #[test]

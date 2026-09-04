@@ -42,6 +42,11 @@ export interface NativeKnowledgeEngineBinding {
   validateTaxonomyProposalJson(requestJson: string): string;
   graphCandidatesJson(requestJson: string): string;
   associativeGraphCandidatesJson(requestJson: string): string;
+  /** Raw dead-code symbol keys (zero liveness) — default array shape. */
+  deadCodeJson(requestJson: string): string;
+  /** Classified dead code: `{confirmedUnused, dynamic, testOnly, external}`
+   * arrays — code-liveness; mirrors MCP `code op=health classify=true`. */
+  deadCodeClassifiedJson(requestJson: string): string;
   fuseRrfJson(requestJson: string): string;
   fuseRrfIdsJson(requestJson: string): string;
 }

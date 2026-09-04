@@ -106,6 +106,10 @@ export interface NativeKnowledgeTransport {
   }): Promise<unknown>;
   /** Retrieval-composition seam: graph-ranked candidates for a request. */
   graphCandidates(request: unknown): Promise<unknown[]>;
+  /** Raw dead-code symbol keys (zero liveness) — default array shape. */
+  deadCode(request: unknown): Promise<string[]>;
+  /** Classified dead code — code-liveness buckets. */
+  deadCodeClassified(request: unknown): Promise<Record<string, string[]>>;
   /** Retrieval-composition seam: associative (Personalized PageRank) graph-ranked candidates. */
   associativeGraphCandidates(request: unknown): Promise<unknown[]>;
   /** Retrieval-composition seam: RRF-fuse candidate lists (configurable). */
@@ -257,6 +261,17 @@ class JsonNativeKnowledgeTransport implements NativeKnowledgeTransport {
 
   async graphCandidates(request: unknown): Promise<unknown[]> {
     return decode(this.engine.graphCandidatesJson(encode(request))) as unknown[];
+  }
+
+  /** Raw dead-code symbol keys (zero liveness) — default array shape. */
+  async deadCode(request: unknown): Promise<string[]> {
+    return decode(this.engine.deadCodeJson(encode(request))) as string[];
+  }
+
+  /** Classified dead code — code-liveness; mirrors MCP
+   * `code op=health classify=true`. */
+  async deadCodeClassified(request: unknown): Promise<Record<string, string[]>> {
+    return decode(this.engine.deadCodeClassifiedJson(encode(request)));
   }
 
   async associativeGraphCandidates(request: unknown): Promise<unknown[]> {

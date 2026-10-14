@@ -712,7 +712,34 @@ re-scans ~0.
 
 ## self-index-findings (2026-08-28, mem-alpha indexed into ~/.engram/mem-alpha-self)
 
-### 2026-10-14 AST chunking audit
+### 2026-10-14 adversarial code-intelligence evaluation
+
+Evidence: [self-evaluation](research/code-intelligence-self-evaluation.md) and
+[frozen prompts/responses](research/code-intelligence-self-evaluation-2026-10-14.json).
+Fresh safety regressions: 19/19; live forged scope rejected; nine exact source
+reads across self and disposable stores. Quality findings remain open:
+
+- **[code-discovery-relevance] Broad queries miss implementation:** only two
+  of ten difficult questions located their required implementation anchors in
+  the requested top ten; broad `recall` missed three representative questions.
+  Both exact-symbol controls succeeded at rank one. Unrelated `Page::map`
+  appeared in every primary probe. Investigate code-evidence ranking, generic
+  graph-hub noise and source hydration, then repeat the frozen set. This is a
+  small diagnostic, not a vector-only or answer-accuracy benchmark.
+- **[document-current-version-selection] Obsolete docs remain candidates:**
+  a normal self search returned an old `docs/backlog.md` chunk saying the
+  fixed AST outer-body loss remained present. Four versions of its audit
+  heading coexist. Current incremental scan and idle reindex did not exclude
+  the obsolete document text. Preserve deliberate historical retrieval while
+  selecting current versions for current-code questions.
+- **[code-embedding-coverage] Tail loss now reproduced with real vectors:**
+  complete 13,090/13,083-character functions with different final behavior but
+  matching first 8,192 characters produced identical 384-dimensional vectors
+  (maximum difference zero). Add linked, token-budgeted AST segments; retain
+  complete source and current-generation authorization. Existing coverage work
+  below remains open.
+
+### 2026-10-14 AST chunking audit evidence
 
 Evidence and proposed sequencing:
 [`AST-aware code chunking audit`](research/ast-aware-code-chunking-audit.md).

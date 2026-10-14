@@ -2630,3 +2630,58 @@ inventories. Import ensures the root atomically without overwriting an existing
 identity-equivalent root; collisions are denied. A failed import may retain a
 new root under BestEffort, and retry reuses it. File retraction preserves roots
 while independent graphs still refer to them.
+
+## Draft: reliable code-intelligence contracts
+
+This section is a **proposal**, governed by
+[`reliable-code-intelligence`](specs/reliable-code-intelligence/spec.md), not
+accepted v1 behavior. Its authored schema is
+[`reliable-code-intelligence.draft.schema.json`](../contracts/jsonschema/reliable-code-intelligence.draft.schema.json).
+Accepted schemas/generated types remain unchanged until implementation promotes
+the reviewed definitions through the normal contract-generation path.
+
+`CodeIntelligenceConfig` is an optional, typed code-specific configuration on
+`EngramConfig`. It separates index representation, candidate retrieval, local
+reranking and evidence presentation. Its fusion member reuses
+`RecallFusionConfig`; generic memory recall keeps its existing defaults.
+Versioned profiles and field defaults have one Rust-owned definition. Hosts
+resolve file/environment/explicit overrides once and report configuration
+origin and hash. Query callers cannot override authorization or index/model
+identity. Transport casing is snake_case for configuration and camelCase for
+operation DTOs, as fixed by the draft schema.
+
+`CodeEvidenceQuery` contains query text, optional repository restriction and
+bounded query-time result/candidate/evidence limits. Scope and requester come
+from a trusted host context. `CodeEvidencePacket` contains ranked parent units,
+supporting source ranges, indexed revision/hash/generation, relevance/fusion
+traces, evidence status and diagnostics. `candidates_available` indicates
+retrieval candidates, not proof of a complete answer or a feature's existence.
+`insufficient_evidence` indicates absent or rejected evidence. There is no
+portable confidence probability derived from normalized RRF.
+
+Primary items carry normalized per-unit `sourceCategory=implementation`;
+tests/generated/unknown/documentation units are supporting context. Structured
+excerpts map text to exact byte ranges. Bounded segment evidence carries
+contributing `FusionTrace`s, source ranges and embedding/rerank token coverage.
+Context/unresolved-import facts have independently authorized sources.
+Diagnostics distinguish strategy score spaces, scored pairs, omitted segments/
+parents, calibration identity/status and effective settings. Unvalidated or
+fallback packets are insufficient even when candidates remain for inspection.
+Calibration/model manifests are pinned derived artifacts, not probabilities.
+
+`CodeEmbeddingSegment` is derived from a canonical unit with typed parent,
+source ranges, source generation/attempt and representation fingerprint.
+Complete methods and snapshots remain canonical source. Segment identities
+include representation identity; different tokenizer/context/model settings
+cannot reuse incompatible vectors merely because raw source hashes match.
+Segments are knowledge-owned derived records, never memory records, and are
+subject to the same source-ownership checks before model use and retrieval.
+
+`DocumentHead` identifies the current indexed document for a stable source
+within exact scope/repository, with generation, attempt, state and content hash.
+Publication uses a guarded compare-and-swap after verifying the canonical
+inventory; vector/lexical records are projections, not current-version
+authority. Old document versions remain explicitly historical. Unverified
+legacy heads and updating/incomplete sources are excluded from current
+discovery. Historical requests require trusted-host authorization and do not
+weaken source policy. This proposal introduces no cross-store ACID guarantee.

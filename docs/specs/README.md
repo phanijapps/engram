@@ -12,6 +12,12 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
 
 ## Active
 
+- [`reliable-code-intelligence`](reliable-code-intelligence/spec.md): current
+  source/document evidence, complete token-aware derivative segments, shared
+  profiles/file/environment defaults, a real local cross-encoder and frozen
+  retrieval-quality gates across Rust/native/stdio/HTTP.
+  [Plan](reliable-code-intelligence/plan.md). **Draft.**
+
 - [`local-code-embeddings`](local-code-embeddings/spec.md): shared local semantic
   code vector backfill, source-generation/policy guards and snapshot exclusion.
   [Plan](local-code-embeddings/plan.md). **Shipped.**

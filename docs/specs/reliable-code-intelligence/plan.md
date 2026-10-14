@@ -1,0 +1,374 @@
+# Plan: Reliable natural-language code intelligence
+
+- **Spec:** [spec.md](spec.md)
+- **Status:** Executing
+
+## Approach
+
+Freeze the evaluation first, promote the reviewed portable contracts, then build
+configuration and current-document authority. Add derivative AST/token coverage
+without replacing canonical methods. Separate candidate retrieval from output,
+wire a real local scorer, hydrate evidence and expose one operation through all
+transports. Calibrate on development data and run untouched held-out/live-store
+gates. A failed quality gate blocks shipping; it is not resolved by relabeling
+queries or claiming that any vector hit is sufficient.
+
+## Constraints
+
+Follow [reference architecture](../../architecture/reference.md): Behavior
+crates own deterministic algorithms/ports; Adapter crates own persistence/model
+lifecycle; Binding/Package layers transport generated Rust-owned contracts.
+ADR-0009 owns composition, ADR-0022 neutrality/parity, ADR-0026 fusion configuration,
+ADR-0028/0029 code/parser boundaries, ADR-0030 derived knowledge. Use
+[research](../../research/reliable-code-intelligence-survey.md) and
+[frozen original evaluation](../../research/code-intelligence-self-evaluation-2026-10-14.json)
+as evidence, not alternative behavior contracts.
+
+## Declined patterns
+
+Reuse existing fusion and source authorization rather than adding alternate
+scoring services or authorization caches. Keep model/tokenizer integrations in
+adapters; do not introduce remote summaries, a service locator, or core env reads.
+
+## Construction tests
+
+All task tests map to spec ACs. Cross-cutting tests run the same minimal/overridden
+configuration and corpus through Rust/native/stdio/HTTP, including unauthorized
+and stale candidates, model fallback and actual scored results. Network
+instrumentation proves that normal model inference performs no asset download
+or source upload. Model-backed tests use explicitly provisioned, pinned assets;
+missing-cache tests run with networking unavailable. Legacy public-contract and
+memory/recall fixtures remain the regression boundary.
+
+## Design (LLD)
+
+### Data and representation
+
+Promote reviewed definitions from the [draft schema](../../../contracts/jsonschema/reliable-code-intelligence.draft.schema.json)
+through `docs/domain-data-model.md`, accepted `contracts/v1/` and reproducible
+generation. Configuration overlays are distinct from complete effective config;
+JSON Schema defaults are annotations, not a merge implementation.
+
+Keep canonical `CodeChunkRole`/source-inventory meanings unchanged.
+`CodeEmbeddingSegment` is a separate knowledge-owned derived record with typed
+parent, ranges, source generation/attempt and representation ID. A neutral port
+resolves segment IDs to canonical parents; vector resolvers use that port before
+existing source authorization. No synthetic method fragment is called a complete
+canonical symbol, and no new role enum is required merely to store segments.
+Retraction and failed activation invalidate segment ownership through their
+canonical parent. Hash reuse includes compatible representation identity.
+
+`DocumentHead` has a knowledge-owned port with exact source identity, CAS and
+inventory-verified activation. Secondary indexes consult that authority. Legacy
+head adoption requires fresh verified input; scanner's unchanged path recognizes
+missing authority and schedules verification rather than skipping it forever.
+Failed source/import attempts keep the head unavailable without rolling back
+already written canonical records. Migration is additive and reversible by
+selecting existing retrieval behavior; canonical/history data is never wiped.
+
+### Decomposition and interfaces
+
+- `core/retrieval`: reuse fusion/composer/config validation; portable candidate
+  budgets and stable parent aggregation, without SQL/model/environment I/O.
+- `core/code`: pure normalized structural range segmentation; injected token
+  boundary/count data keeps tokenizer/model integrations outside pure code.
+- `core/knowledge`: segment/document-head ports and source-grounded validation.
+- `core/integration`: thin provider operation/config API; focused modules for
+  code-evidence orchestration, eligibility, context selection and diagnostics.
+  Each stage consumes existing ports; no duplicated monolithic recall pipeline.
+- Knowledge adapter cells: head/segment persistence and canonical resolution.
+  Model adapter: local ONNX assets/tokenization/batched scorer under a feature.
+- Recipes compose handles; `bindings/node`, packages/runtime/native and MCP
+  wrappers call the shared operation. Supported backend recipes implement or
+  explicitly report missing new ports; no transport-only capability is shipped.
+
+Candidate selection scores segments, aggregates by canonical parent, caps output
+and resolves supporting source. Disabled lanes are not called. Context and
+supporting facts have independent ownership checks; cached source maps are
+request-bound and source-revision checked, never reusable authorization grants.
+A bounded final recheck drops changed units or retries once; unstable sources
+produce explicit insufficiency rather than an unbounded retry loop.
+
+The scorer pool selects one best segment per parent, then round-robin additional
+segments. Only scored parents enter successful cross-encoder ordering; none/
+fallback uses full bounded RRF with partial model scores discarded. Code profiles
+reject MMR/other unsupported strategies without changing generic recall.
+Normalize source categories per unit, including test attributes/ancestry in mixed
+files. Nonimplementation/unknown units are supporting evidence only.
+
+### Scorer construction and failures
+
+Use installed FastEmbed 5.17.2's `TextRerank` / `JINARerankerV1TurboEn` behind
+`RerankScorer`; inspect the real API before integration. Add a backwards-compatible
+batch-scoring default method to the scorer trait if necessary; existing single-pair
+implementations still work. The local override remaps sorted model indices to
+input order and validates uniqueness, count and finite outputs. Stable reranking
+retains provenance/policy and actual scorer traces.
+
+Add a backwards-compatible locality declaration defaulting to nonlocal; code
+evidence rejects unknown/external scorer implementations before input processing,
+even if an SDK caller injects one under an admitted model label. Deterministic
+local stubs explicitly opt in; actual-model gates still require ONNX inference.
+
+A model-registry manifest pins the official ONNX/tokenizer assets, revision,
+hashes, Apache-2.0 license, token/window and score transformation. It is local
+adapter configuration, not a core model dependency. Provisioning reads only
+allowlisted artifact sources; arbitrary URL/env model loading and remote Python
+code are absent. Actual artifact compatibility and code-ranking quality are
+construction gates, not inferred from the model card.
+
+Missing/corrupt/failed scorer uses the spec's degrade/error policy. No silent
+cross-encoder fallback, fabricated scores, unbounded batches or hard-cancellation
+promise. Calibration belongs to a model/query/representation/config identity;
+overrides that invalidate it report unvalidated status. Fast mode avoids scorer
+loading/calls and shares the same index representation.
+
+Unvalidated calibration or effective-strategy fallback always returns insufficient
+status, even if authorized inspection candidates remain. Thresholds use the
+recorded strategy score space after parent aggregation and before output caps.
+Fast needs separate calibration. Structured excerpts, segment traces/token
+coverage, context and unresolved facts follow the draft packet definitions and
+256 KiB serialized limit.
+
+## Tasks
+
+### T0: Freeze corpora, labels and reference machine
+
+**Depends on:** none
+**Mode:** goal-based check plus recorded blind label review.
+**Spec mapping:** AC10–AC12.
+**Tests:** Manifest has immutable corpus commits/hashes, hardware/runtime settings,
+query order, expected path/qualified-unit/range labels and metric definitions;
+labels and queries are outside every indexed corpus. Original 10+2 probes and
+identifier controls are reproduced before tuning. At least 40 answerable and
+20 negative queries are held out, with >=10 answerable queries per repo, across
+Engram plus two structurally different TypeScript/Python repos. A separate
+>=30 answerable/15 negative development set supports tuning/calibration. Negative
+labels distinguish absent feature, irrelevant question and authorization denial.
+**Approach:** Add `core/eval` fixtures and a real-MCP evaluation runner with
+sequential response timing; capture per-lane candidate recall, ranking, evidence
+coverage and baseline phase costs. Freeze local CPU machine/runtime before any
+optimization. No expected-answer artifacts enter scan inputs.
+**Done when:** Baseline manifest/results and independent label review are saved;
+held-out expected labels remain inaccessible to tuning/scoring code.
+
+### T1: Promote reviewed contracts and defaults
+
+**Depends on:** T0
+**Mode:** TDD plus goal-based contract generation.
+**Spec mapping:** AC1, AC7–AC8.
+**Tests:** Draft examples and invalid cases validate; portable DTO round-trips,
+profile defaults, query bounds and semantic cross-field checks match schemas;
+existing v1 payloads/types remain compatible. Query/repository UTF-8 byte
+admission rejects oversized input before any tokenizer/scorer call.
+Complete balanced/fast examples and a two-segment scored packet exercise all
+diagnostics, accepted failure references and source-range mapping.
+**Approach:** After spec approval, finalize the draft domain extension, schema
+references, model-manifest/calibration descriptors and accepted v1 artifacts.
+Generate Rust/TS surfaces through the established pipeline. Record source-level
+updates for explicit struct literals/custom transports. Do not hand-edit generated
+outputs or promote a draft merely to satisfy a linker/lint.
+**Done when:** Contracts/defaults are reproducible, classified compatible and
+reviewed; no newly accepted enum silently breaks legacy source-role semantics.
+
+### T2: Shared config resolution and host loading
+
+**Depends on:** T1
+**Mode:** TDD and transport integration.
+**Spec mapping:** AC1, AC8.
+**Tests:** File/env/explicit/profile precedence, omitted vs falsy fields, profile
+selection before expansion, bad suffixes/unknown keys, legacy-file isolation,
+model-dependent budgets and cross-surface effective hashes. Scanned repo config
+cannot become trusted launch configuration.
+Unsupported strategies fail before initialization. Independent graph lanes versus
+anchored expansion and model/token/query inequalities have explicit tests.
+**Approach:** Extend `core/integration/src/config.rs` using focused modules and
+existing serde loading; hosts collect explicit file/env inputs. Add MCP config
+path selection and native/HTTP host adapters. Reuse fusion validation rather
+than creating conflicting strategy/weight fields.
+**Done when:** Rust and TS launch paths resolve the same snapshot and origin map.
+
+### T3: Current document authority and legacy adoption
+
+**Depends on:** T1
+**Mode:** TDD adapter/ingestion integration.
+**Spec mapping:** AC2, AC9.
+**Tests:** Four versions/same heading; same path across repos/scopes; updating,
+failed/CAS-losing attempts; stale cached lexical/vector hits; private/expiry
+changes; successful retry; preserved history/canonical digests. Unknown heads
+are not selected by latest timestamp; unchanged scans verify missing heads.
+**Approach:** Add neutral knowledge head ports, adapter-cell migrations and
+source-read/ingestion activation around existing document writes. Update normal
+candidate selection and embedding eligibility to consult current heads. Keep
+explicit canonical/history access separate from candidate views. Cover imports
+and scanner paths that create documents.
+**Done when:** The obsolete backlog-body-loss chunk cannot be current evidence
+on the retained store; sibling/independent owners and historical rows survive.
+
+### T4: Token-aware structural segments and parent resolution
+
+**Depends on:** T1
+**Mode:** TDD pure and model-tokenizer integration.
+**Spec mapping:** AC3–AC4, AC9.
+**Tests:** Complete Unicode byte ranges; nested/large callables; context/residual
+units; oversized literals/continuations; special-token budgets; parser variants;
+representation-keyed identity; source transition and excluded snapshot donors.
+**Approach:** Extend normalized range output from the current Tree-sitter provider
+and add focused segmentation behavior in `core/code`. Model adapters supply exact
+token boundary/count information. Persist knowledge-derived segments through
+neutral ports; adapt vector canonical resolution to parent ownership. Reindex
+uses guarded current representation inventories and bounded existing backfill.
+**Done when:** Canonical methods are unchanged and every eligible range is covered
+or explicitly unsupported; stale/incompatible segment IDs resolve to no candidate.
+
+### T5: Authorized context and representation compatibility
+
+**Depends on:** T2, T4
+**Mode:** TDD and live embedding ablation.
+**Spec mapping:** AC3–AC4.
+**Tests:** Parent/import facts with mixed visibility, unresolved edges, context
+budget exhaustion, source changes during inference, changed tokenizer/context
+hashes, unchanged retry and all three BGE query-prefix variants.
+**Approach:** Build bounded deterministic context from current normalized units
+and authorized graph facts. Add passage/query representation identities and
+model-token checks; keep code processing local. Preserve existing source
+authorization helpers, not backend flags as permission.
+**Done when:** Real tail vectors differ and query representation is selected from
+development evidence with reproducible model/tokenizer identity.
+
+### T6: Candidate depth, fusion and bounded graph expansion
+
+**Depends on:** T2, T3, T4
+**Mode:** TDD plus real-store candidate traces.
+**Spec mapping:** AC2, AC5.
+**Tests:** Final limit 10 still retrieves configured per-lane depth; disabled
+lanes perform no calls; zero weights are not falsely considered disabled;
+anchor-only graph bounds, segment/parent dedup, stable ties and unchanged generic
+memory behavior. No unauthorized candidate reaches the scorer pool.
+More parents than scoring slots, multiple segments per parent, scorer cutoff,
+no-scorer and failed-partial-scoring orderings have distinct tests.
+**Approach:** Use existing indexes, weighted RRF/composer and canonical resolvers
+in focused shared provider operation stages. Cap before model scoring, aggregate
+parents afterwards. Instrument phase costs before performance changes.
+**Done when:** Candidate recall and final output have independent typed budgets
+and packet provenance remains attached to the actual contributing units.
+
+### T7: Real local ONNX scorer and asset lifecycle
+
+**Depends on:** T1, T2
+**Mode:** TDD stubs plus actual-model integration.
+**Spec mapping:** AC6.
+**Tests:** Asset hash/revision checks, offline missing cache, pair-token/model
+bounds, batch result remapping, NaN/count/index errors, local-only execution,
+corrupt/load/inference failures and stable trace preservation. A realistic
+multi-candidate code fixture changes ranking with actual inference.
+An externally declared/injected scorer receives zero code inputs; a model-name
+alias does not confer locality or source authorization.
+**Approach:** Add feature-gated focused model/asset/tokenization modules in
+`adapters/retrieval/cross-encoder-rerank`; reuse FastEmbed/ONNX and injected scorer
+interfaces. Pin the official model before fetching for live tests. Wire real
+scorer construction through supported recipe composition instead of the current
+`select_cross_encoder` no-scorer placeholder.
+**Done when:** Recorded local scores come from real ONNX pairs, not word-overlap
+stubs, and normal invocation performs no network access.
+
+### T8: Shared evidence operation and diagnostics
+
+**Depends on:** T5, T6, T7
+**Mode:** TDD and source-grounded integration.
+**Spec mapping:** AC5–AC7.
+**Tests:** Scored segment-to-parent aggregation, tail/guard excerpts, supporting
+unit selection, exact references, total token budget, final source recheck,
+retry/drop on source change, requested/effective scorer state and both failure
+policies. Metadata from denied sources is not exposed in failure details.
+Missing/stale calibration, overrides, calibrated fast and fallback test status/
+threshold rules; serialized token/byte/array limits and excerpt correspondence
+are checked together.
+**Approach:** Add a thin `EngramProvider` operation backed by focused eligibility,
+retrieval, ranking, evidence and diagnostic modules. Source evidence is current
+and bounded. Use existing failure/provenance contracts; retain full source-read.
+**Done when:** Valid packets contain inspectable current evidence and truthful
+insufficiency/fallback/representation status rather than only symbol headers.
+
+### T9: Rust/native/HTTP/stdio parity and capability readiness
+
+**Depends on:** T8
+**Mode:** goal-based end-to-end integration.
+**Spec mapping:** AC1, AC6–AC8.
+**Tests:** Same corpus/config across all four surfaces; actual scorer use,
+capability readiness from handles/assets, strict wire override denial, malformed
+query limits and equivalent config diagnostics. Compile features propagate through
+N-API and recipes. Unsupported backends degrade explicitly, not silent empty.
+**Approach:** Add generated native DTO calls and typed TS wrappers, stdio
+`code op=evidence` and the HTTP operation; transport adapters remain thin.
+**Done when:** Both embedded Rust and native TS callers exercise the actual
+operation and all supported recipes honestly describe available prerequisites.
+
+### T10: Calibration and profile validation
+
+**Depends on:** T0, T9
+**Mode:** goal-based scored retrieval evaluation.
+**Spec mapping:** AC10–AC11.
+**Tests:** Development calibration selects thresholds without reading held-out
+labels. Original and held-out queries run paired baseline/segmented/scored
+configurations. Scores are not probabilities; negative packets do not assert
+absolute absence. Candidate/final recall denominators and required-anchor
+coverage follow the frozen manifest.
+The manifest instantiates the spec's fixed parent/range counting stages, macro/
+per-repo means, graded gains, unjudged handling and separate negatives; freezing
+cannot redefine the formulas. Unvalidated/fallback packets fail positive gates.
+**Approach:** Run controlled parameter/representation/scorer ablations on dev
+only. Pin calibration/model/config hashes, then perform one frozen held-out
+assessment. Publish raw per-query ranks/citations, aggregate metrics and failures.
+**Done when:** All positive/negative/nonregression targets pass. Unmet quality
+leaves the profile/feature unshipped; any target change requires user sign-off.
+
+### T11: Retained-store rollout, operational proof and gates
+
+**Depends on:** T10
+**Mode:** goal-based live verification and repository gates.
+**Spec mapping:** AC9, AC12.
+**Tests:** Consistent backup/table digests, derivative activation/retry/idle
+reindex, byte-exact self reads and zero unauthorized/snapshot/obsolete current
+hits. Warm >=60 predeclared requests on frozen CPU setup yield p95 <=30 seconds;
+cold load/phase/index growth are separately reported. Profile before optimizing.
+**Approach:** Stage adapter migrations, verify source/representation inventories,
+provision pinned model explicitly and switch only code-evidence reads to the new
+profile. Retain canonical data and temporal baseline. Run mandatory gates below
+and `engram-live-verify`; repeat independent reviews after fixes.
+**Done when:** All ACs have evidence and the spec can truthfully change to Shipped.
+
+## Rollout and verification
+
+Before production implementation: `scripts/ci/check-contracts.sh` and
+`scripts/ci/check-engine-neutrality.sh`. Implement each task as a reviewable
+slice; an intermediate task is not the completed feature. Adapter migrations
+precede consumers; model provisioning precedes actual-model tests. Missing
+prerequisites are reported, never hidden by a completed status.
+
+Required handoff: `cargo fmt --all`, `cargo check --workspace`, focused and
+workspace tests, `pnpm run contracts:generate`, `pnpm run typecheck`,
+`pnpm run test`, `pnpm run build`, contracts/docs/neutrality/surface-parity gates
+and real model/source/store verification. Reports distinguish pre-existing
+advisory/lint baselines from introduced regressions.
+
+Rollback selects fast/no-scorer or existing generic retrieval, with explicit
+unvalidated/degraded state; it does not delete source/history or represent
+rollback as passing the reliable-profile quality gate. New schemas/default
+profiles/calibration identity are versioned and retained for reproduction.
+
+## Risks
+
+Actual code relevance of the chosen English scorer is unverified; failed gains
+block shipment or require reviewed model/profile changes. More segment targets
+increase index/model work; per-request canonical authorization can dominate
+latency, so measure phase costs before optimizing. Document-head migration may
+make legacy docs temporarily unavailable until verified rescan. Calibration does
+not generalize to arbitrary operator overrides; those report unvalidated status.
+The architecture reference contains historical runtime statements; actual
+checkout/accepted ADRs govern construction, not stale descriptive paragraphs.
+
+## Changelog
+
+- 2026-10-14: Draft authored from measured self-evaluation and primary-source
+  research; real local scorer and configurable defaults explicitly in scope.

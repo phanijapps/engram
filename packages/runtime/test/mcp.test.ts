@@ -17,6 +17,7 @@ function mockTransport(): NativeProviderTransport {
     recall: vi.fn(async () => ({ items: [], createdAt: "now" })),
     write: vi.fn(async () => ({ record: { id: "m1" } })),
     scan: vi.fn(async () => ({})),
+    backfillEmbeddings: vi.fn(async () => ({embedded:3,newEmbeddings:2,reused:1,codeEmbedded:2,remaining:4})),
     consolidate: vi.fn(async () => ({ status: "completed", tasks: [] })),
     putEntity: vi.fn(async () => ({})),
     putRelationship: vi.fn(async () => ({})),
@@ -367,15 +368,16 @@ describe("engram-mcp-http codegraph suffix resolver (RFC-0020 T7)", () => {
 
 describe("engram-mcp-http auth (non-loopback)", () => {
   it("rejects a request without a Bearer token (401)", async () => {
-    const port = 6000 + Math.floor(Math.random() * 1000);
-    servers.push(
-      await startMcpHttpServer({
+    const server = await startMcpHttpServer({
         transport: mockTransport(),
-        port,
+        port: 0,
         host: "0.0.0.0",
         authToken: "secret"
-      })
-    );
+      });
+    servers.push(server);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing HTTP address");
+    const port = address.port;
     const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -385,15 +387,16 @@ describe("engram-mcp-http auth (non-loopback)", () => {
   });
 
   it("accepts a request with the correct Bearer token (not 401)", async () => {
-    const port = 6100 + Math.floor(Math.random() * 1000);
-    servers.push(
-      await startMcpHttpServer({
+    const server = await startMcpHttpServer({
         transport: mockTransport(),
-        port,
+        port: 0,
         host: "0.0.0.0",
         authToken: "secret"
-      })
-    );
+      });
+    servers.push(server);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing HTTP address");
+    const port = address.port;
     const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
       method: "POST",
       headers: {
@@ -420,4 +423,68 @@ describe("trusted source tools",()=>{
    expect(denied.isError).toBe(true);expect(transport.readCodeSource).toHaveBeenCalledTimes(1);
   } finally {await client.close();}
  });
+});
+
+
+describe("trusted embedding reindex", () => {
+  const sourceContext = {
+    readerVersion: 1 as const,
+    scope: { tenant: "t", workspace: "repo", session: "trusted-session" },
+    requester: { actor: { id: "owner", kind: "agent" as const } }
+  };
+
+  async function connectReindex(trusted: boolean) {
+    const transport = mockTransport();
+    const server = await startMcpHttpServer({ transport, port: 0, ...(trusted ? {sourceContext} : {}) });
+    servers.push(server);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing HTTP address");
+    const client = new Client({ name: "reindex-test", version: "1" });
+    await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${address.port}/mcp`)));
+    return { transport, client };
+  }
+
+  it("delegates bounded reindex using the full trusted launch scope and requester", async () => {
+    const {transport, client} = await connectReindex(true);
+    try {
+      const result = await client.callTool({name: "maintenance_run", arguments: {op: "reindex", limit: 64, sourceFilter: "source-1"}});
+      expect(result.isError).not.toBe(true);
+      expect(transport.backfillEmbeddings).toHaveBeenCalledExactlyOnceWith({
+        scope: sourceContext.scope, requester: sourceContext.requester, limit: 64, sourceFilter: "source-1"
+      });
+      expect(result.content).toEqual([{type:"text",text:JSON.stringify({embedded:3,newEmbeddings:2,reused:1,codeEmbedded:2,remaining:4})}]);
+    } finally { await client.close(); }
+  });
+
+  it("rejects missing launch context before invoking backfill", async () => {
+    const {transport, client} = await connectReindex(false);
+    vi.mocked(transport.capabilities).mockResolvedValue({code_embeddings: "Supported"});
+    try {
+      const capability = await client.callTool({name:"capability_report",arguments:{}});
+      expect(capability.content).toEqual([{type:"text",text:JSON.stringify({
+        code_embeddings:{Unsupported:{reason:"ProviderUnavailable"}},
+        code_source_preservation:{Unsupported:{reason:"ProviderUnavailable"}}
+      })}]);
+      const result = await client.callTool({name:"maintenance_run",arguments:{op:"reindex"}});
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain("trusted source context");
+      expect(transport.backfillEmbeddings).not.toHaveBeenCalled();
+    } finally { await client.close(); }
+  });
+
+  it("rejects caller identity overrides and invalid batch bounds before backfill", async () => {
+    const {transport, client} = await connectReindex(true);
+    try {
+      for (const fields of [
+        {scope: {tenant:"other"}},
+        {scope: sourceContext.scope},
+        {requester: {actor: {id:"other",kind:"agent"}}},
+        {limit:0}, {limit:1025}, {limit:1.5}
+      ]) {
+        const result = await client.callTool({name:"maintenance_run",arguments:{op:"reindex",...fields}});
+        expect(result.isError).toBe(true);
+      }
+      expect(transport.backfillEmbeddings).not.toHaveBeenCalled();
+    } finally { await client.close(); }
+  });
 });

@@ -134,6 +134,8 @@ export interface EngramV1Types {
   Cue: Cue;
   DeleteMode: DeleteMode;
   DerivationRef: DerivationRef;
+  EmbeddingBackfillReport: EmbeddingBackfillReport;
+  EmbeddingBackfillRequest: EmbeddingBackfillRequest;
   EmbeddingRef: EmbeddingRef;
   EntityKind: EntityKind;
   EntityRef: EntityRef;
@@ -522,6 +524,19 @@ export interface RetrievalSourceFailure {
   reason: string;
   severity: "info" | "warning" | "error";
   source: string;
+}
+export interface EmbeddingBackfillReport {
+  codeEmbedded: number;
+  embedded: number;
+  newEmbeddings: number;
+  remaining: number;
+  reused: number;
+}
+export interface EmbeddingBackfillRequest {
+  limit?: number;
+  requester: Requester;
+  scope: Scope;
+  sourceFilter?: string;
 }
 export interface EvaluationCase {
   expect: EvaluationExpectation;

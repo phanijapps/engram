@@ -249,206 +249,29 @@ fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>, sco
     }
 }
 
-/// Embeds pending chunks into the vector index (scan-reliability AC1 + PS5).
-///
-/// Shared by `scan_repo` (delta scope: only `source_filter`-matching chunks —
-/// embedding costs O(this scan), never O(store)) and the `reindex` tool
-/// (no filter: drains EVERY un-embedded chunk in scope — old-source leftovers
-/// and fresh stores after a backend switch). Deterministic order (sorted by
-/// chunk id), capped per call, batched through the model, chunk text bounded
-/// (BGE truncates at 512 tokens; longer text only fed the tokenizer).
-/// Returns (embedded this call, remaining after the cap).
+/// Delegates scan-delta and operator backfill to shared Rust SDK behavior.
 fn embed_pending(
     app: &App,
     scope: &engram_domain::Scope,
     source_filter: Option<&str>,
     cap: usize,
-) -> (usize, usize) {
-    const EMBED_TEXT_CAP: usize = 8 * 1024;
-    const EMBED_BATCH_SIZE: usize = 64;
-    let (Ok(query), Some(embedder), Ok(vector_index)) = (
-        app.provider.require_knowledge_query(),
-        app.provider.embedding_provider(),
-        app.provider.require_vectors(),
-    ) else {
-        // No embedder wired (fastembed off / --no-vector): nothing to do.
-        // Callers surface the honest "0 embedded" count.
-        return (0, 0);
-    };
-    // Perf (perf pass 2026-08-28): the LEAN refs listing (id + source +
-    // text-nonemptiness — no record deserialization, no text transfer) cut
-    // the per-call listing from ~1.4s/hundreds-of-MB on a 90k-chunk store to
-    // ~0.1s. Text is fetched lazily per SELECTED chunk (indexed pk lookups).
-    let refs = block_on(query.list_chunk_refs(scope)).unwrap_or_default();
-    let space = embedder.embedding_space();
-    let have: std::collections::HashSet<engram_domain::Id> =
-        block_on(vector_index.embedded_ids()).unwrap_or_default();
-    let mut pending: Vec<&engram_integration::ChunkRef> = refs
-        .iter()
-        .filter(|r| {
-            r.semantic_eligible
-                && r.model_eligible
-                && r.has_text
-                && !have.contains(&r.id)
-                && source_filter.is_none_or(|src| r.source == src)
-        })
-        .collect();
-    pending.sort_by_key(|r| r.id.as_str().to_owned());
-    let remaining = pending.len().saturating_sub(cap);
-    let selected: Vec<&engram_integration::ChunkRef> = pending.into_iter().take(cap).collect();
-
-    // Content dedup (perf pass 2026-08-28): the eval store holds 92,859
-    // chunks over 31,223 distinct texts (3× duplication — forked repos,
-    // re-scans under new SHAs). The model runs once per DISTINCT text and
-    // the vector is inserted for every chunk id sharing it — inference is
-    // the dominant cost (~62ms/chunk); inserts are indexed upserts.
-    // Durable dedup ([durable-dedup]): the text-hash → already-embedded
-    // chunk map, built from the refs x embedded-ids intersection (in-memory,
-    // no new port surface). A pending chunk whose hash is present reuses the
-    // twin's vector (point-read via VectorIndex::vector_for_target) instead
-    // of re-running inference — the measured prize is 3x on the eval store
-    // (92,859 chunks over 31,223 distinct texts; dups are re-scans of the
-    // same content under new SHAs). Falls back to the model whenever the
-    // point read is unsupported or the twin is gone.
-    let mut embedded_twin_by_hash: std::collections::HashMap<&str, &engram_domain::Id> =
-        std::collections::HashMap::new();
-    for r in &refs {
-        if r.semantic_eligible
-            && r.model_eligible
-            && have.contains(&r.id)
-            && !r.content_hash.is_empty()
-        {
-            embedded_twin_by_hash
-                .entry(r.content_hash.as_str())
-                .or_insert_with(|| &r.id);
-        }
+) -> Result<engram_domain::EmbeddingBackfillReport, ToolError> {
+    if app.provider.embedding_provider().is_none()
+        || app.provider.require_vectors().is_err()
+        || app.provider.require_knowledge_query().is_err()
+    {
+        return Ok(Default::default());
     }
-
-    let knowledge = app.provider.require_knowledge().ok();
-    // Per-call grouping by the SAME content-hash domain (scanner-stamped,
-    // full text) — consistent with the durable map (previously the in-call
-    // dedup hashed the 8-KiB-capped text: a slightly different domain).
-    let mut by_hash: std::collections::HashMap<&str, Vec<engram_domain::Id>> =
-        std::collections::HashMap::new();
-    let mut text_by_hash: std::collections::HashMap<&str, String> =
-        std::collections::HashMap::new();
-    for r in &selected {
-        if r.content_hash.is_empty() {
-            continue; // pre-hash chunks always go to the model
-        }
-        by_hash
-            .entry(r.content_hash.as_str())
-            .or_default()
-            .push(r.id.clone());
-        // Text is fetched lazily — ONLY for hashes with no embedded twin
-        // (the model path); reuse paths never need the text.
-        if !embedded_twin_by_hash.contains_key(r.content_hash.as_str()) {
-            let text = knowledge
-                .as_ref()
-                .and_then(|k| block_on(k.get_chunk(&r.id, scope)).ok().flatten())
-                .map(|c| {
-                    let t = c.text.trim();
-                    t.chars().take(EMBED_TEXT_CAP).collect::<String>()
-                })
-                .unwrap_or_default();
-            if !text.is_empty() {
-                text_by_hash.entry(r.content_hash.as_str()).or_insert(text);
-            }
-        }
-    }
-
-    let mut embedded = 0usize;
-    let mut distinct_embedded = 0usize;
-    let mut reused = 0usize;
-    let mut model_batches: Vec<(String, Vec<engram_domain::Id>)> = Vec::new();
-    for (hash, ids) in by_hash {
-        // Reuse path: an already-embedded twin with identical text exists —
-        // point-read its vector, insert for every id in this group. Falls to
-        // the model when the twin is gone or the read is unsupported.
-        if let Some(twin) = embedded_twin_by_hash.get(hash) {
-            if let Ok(Some(vector)) = block_on(vector_index.vector_for_target(twin)) {
-                if !vector.is_empty() {
-                    for id in &ids {
-                        if let Err(e) = block_on(vector_index.insert(id, &space, vector.clone())) {
-                            eprintln!("engram-mcp: embed reuse warning for {id}: {e}");
-                        } else {
-                            embedded += 1;
-                        }
-                    }
-                    reused += ids.len();
-                    continue;
-                }
-            }
-        }
-        if let Some(text) = text_by_hash.get(hash) {
-            model_batches.push((text.clone(), ids));
-        }
-    }
-    model_batches.sort_by(|a, b| a.1[0].as_str().cmp(b.1[0].as_str()));
-    for batch in model_batches.chunks(EMBED_BATCH_SIZE) {
-        embedded += flush_batch(
-            embedder.as_ref(),
-            vector_index.as_ref(),
-            &space,
-            batch,
-            &mut distinct_embedded,
-        );
-    }
-    let _ = &refs;
-    LAST_DEDUP_REPORT.with(|c| c.set((embedded, distinct_embedded, reused)));
-    (embedded, remaining)
-}
-
-thread_local! {
-    /// (chunks covered, distinct texts embedded, reused-from-twins) from the
-    /// last embed_pending call — surfaced by reindex/scan summaries for
-    /// honest dedup reporting.
-    static LAST_DEDUP_REPORT: std::cell::Cell<(usize, usize, usize)> =
-        const { std::cell::Cell::new((0, 0, 0)) };
-}
-
-/// Embeds one deduped batch and inserts the vector for every chunk id sharing
-/// each text. Batch errors degrade (warn + skip) — never abort the caller.
-fn flush_batch(
-    embedder: &dyn engram_integration::EmbeddingProvider,
-    vector_index: &dyn engram_retrieval::VectorIndex,
-    space: &engram_domain::EmbeddingSpace,
-    batch: &[(String, Vec<engram_domain::Id>)],
-    distinct_embedded: &mut usize,
-) -> usize {
-    if batch.is_empty() {
-        return 0;
-    }
-    let texts: Vec<String> = batch.iter().map(|(t, _)| t.clone()).collect();
-    match embedder.embed_batch(&texts) {
-        Ok(vectors) => {
-            let mut inserted = 0usize;
-            for ((_text, ids), vector) in batch.iter().zip(vectors.into_iter()) {
-                if vector.is_empty() {
-                    continue;
-                }
-                *distinct_embedded += 1;
-                for id in ids {
-                    if let Err(e) =
-                        futures::executor::block_on(vector_index.insert(id, space, vector.clone()))
-                    {
-                        eprintln!("engram-mcp: embed warning for {id}: {e}");
-                    } else {
-                        inserted += 1;
-                    }
-                }
-            }
-            inserted
-        }
-        Err(e) => {
-            for (_text, ids) in batch.iter() {
-                for id in ids {
-                    eprintln!("engram-mcp: embed error for {id}: {e}");
-                }
-            }
-            0
-        }
-    }
+    block_on(
+        app.provider
+            .backfill_embeddings(&engram_domain::EmbeddingBackfillRequest {
+                scope: scope.clone(),
+                requester: crate::tools::requester(),
+                limit: cap,
+                source_filter: source_filter.map(str::to_owned),
+            }),
+    )
+    .map_err(internal)
 }
 
 /// `reindex` (PS5): drains the vector-embed backlog with progress. Unlike
@@ -462,6 +285,12 @@ pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
     // scope defaults to the launch scope when absent (same contract as the
     // maintenance tools — the AC2 fix).
     let scope = crate::maintenance::scope_from_args(app, args)?;
+    if scope != app.scope {
+        return Err(ToolError::new(
+            -32602,
+            "reindex scope must match the trusted launch scope",
+        ));
+    }
     let limit = std::cmp::min(args["limit"].as_u64().unwrap_or(256) as usize, 1024);
     if app.provider.embedding_provider().is_none() {
         return Ok(protocol::text_content(
@@ -470,7 +299,9 @@ pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
         ));
     }
     let t0 = std::time::Instant::now();
-    let (embedded, remaining) = embed_pending(app, &scope, None, limit);
+    let report = embed_pending(app, &scope, None, limit)?;
+    let embedded = report.embedded;
+    let remaining = report.remaining;
     eprintln!(
         "engram-mcp: reindex done ({embedded} embedded, {remaining} pending) in {:.1}s",
         t0.elapsed().as_secs_f32()
@@ -480,14 +311,16 @@ pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
     } else {
         "\nbacklog drained".to_owned()
     };
-    let (_covered, distinct, reused) = LAST_DEDUP_REPORT.with(|c| c.get());
+    let distinct = report.new_embeddings;
+    let reused = report.reused;
+    let code_embedded = report.code_embedded;
     let dedup_note = if reused > 0 || distinct > 0 {
         format!(" ({distinct} new + {reused} reused from existing vectors)")
     } else {
         String::new()
     };
     Ok(protocol::text_content(format!(
-        "reindex: embedded {embedded} chunks (limit {limit}){dedup_note}{note}"
+        "reindex: embedded {embedded} chunks (limit {limit}){dedup_note} ({code_embedded} code chunks){note}"
     )))
 }
 
@@ -584,7 +417,9 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     // scan-reliability AC1 (embed side) + PS5: the scan embeds only THIS
     // scan's source chunks (delta); the `reindex` tool drains the rest
     // (old-source + backend-switch backlogs) — both share embed_pending.
-    let (embedded, pending_after_cap) = embed_pending(app, &app.scope, Some(&scan_source), 256);
+    let embeddings = embed_pending(app, &app.scope, Some(&scan_source), 256)?;
+    let embedded = embeddings.embedded;
+    let pending_after_cap = embeddings.remaining;
     let embed_note = if pending_after_cap > 0 {
         format!(
             "\nembedded {embedded} chunks ({pending_after_cap} more pending from this source — re-run scan_repo to continue)"
@@ -2562,6 +2397,10 @@ fn build_assessment(
 pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
     let caps: Vec<String> = [
         ("memory", app.provider.memory().is_some()),
+        (
+            "code_embeddings",
+            app.provider.capabilities().code_embeddings.is_supported(),
+        ),
         ("knowledge", app.provider.knowledge().is_some()),
         (
             "code_source_preservation",
@@ -4459,6 +4298,14 @@ mod phase2_tool_tests {
 mod reindex_tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn reindex_rejects_wire_scope_widening_before_processing() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = crate::tools::tests::test_app(dir.path());
+        let error = reindex(&app, &json!({"scope":{"tenant":"other"}})).unwrap_err();
+        assert!(error.message.contains("trusted launch scope"));
+    }
 
     /// PS5: `reindex` over an empty store answers with the progress-report
     /// shape (never errors, never pretends to embed) and its scope defaults

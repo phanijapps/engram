@@ -292,9 +292,12 @@ export function registerTools(
     "maintenance_run",
     {
       description:
-        "Run a maintenance op over scope. PRIVACY: reflect-llm / contradict-llm / extract-knowledge route the scope's memories/beliefs/documents to a third-party LLM (Anthropic by default; set PI_PROVIDER=ollama for local) and incur token cost — only call with consent. Ops: reflect-llm (synthesize beliefs), contradict-llm (detect contradictions), extract-knowledge (derive Concept entities + typed edges from documents), consolidate (deterministic consolidation, no LLM), hierarchy-build (cluster the KG via Louvain + persist hierarchy nodes, no LLM). Default reflect-llm.",
+        "Run a maintenance op over scope. PRIVACY: reflect-llm / contradict-llm / extract-knowledge route the scope's memories/beliefs/documents to a third-party LLM (Anthropic by default; set PI_PROVIDER=ollama for local) and incur token cost — only call with consent. Ops: reflect-llm (synthesize beliefs), contradict-llm (detect contradictions), extract-knowledge (derive Concept entities + typed edges from documents), consolidate (deterministic consolidation, no LLM), hierarchy-build (cluster the KG via Louvain + persist hierarchy nodes, no LLM), reindex (bounded vector backfill using the trusted launch scope and requester; returns embedded/newEmbeddings/reused/codeEmbedded/remaining). Default reflect-llm.",
       inputSchema: z.object({
-        scope: scopeSchema,
+        scope: scopeSchema.optional(),
+        requester: z.unknown().optional(),
+        limit: z.number().int().min(1).max(1024).optional(),
+        sourceFilter: z.string().optional(),
         op: z
           .enum([
             "reflect-llm",
@@ -302,13 +305,29 @@ export function registerTools(
             "extract-knowledge",
             "consolidate",
             "hierarchy-build",
+            "reindex",
           ])
           .optional(),
       }),
     },
-    async ({ scope, op }) => {
-      const theScope = buildScope(scope);
+    async ({ scope, requester, op, limit, sourceFilter }) => {
       const theOp = op ?? "reflect-llm";
+      if (theOp === "reindex") {
+        if (scope !== undefined || requester !== undefined) {
+          throw new Error("reindex scope and requester come from trusted source context; caller overrides are forbidden");
+        }
+        if (!opts?.sourceContext) {
+          throw new Error("code_embeddings unsupported: trusted source context is not configured");
+        }
+        return textResult(await transport.backfillEmbeddings({
+          scope: opts.sourceContext.scope,
+          requester: opts.sourceContext.requester,
+          ...(limit === undefined ? {} : {limit}),
+          ...(sourceFilter === undefined ? {} : {sourceFilter})
+        }));
+      }
+      if (!scope) throw new Error("scope is required for this maintenance operation");
+      const theScope = buildScope(scope);
       if (theOp === "consolidate") {
         return textResult(await transport.consolidate({ scope: theScope }));
       }
@@ -417,7 +436,7 @@ export function registerTools(
     },
     async () => {
       const report=await transport.capabilities();
-      return textResult(opts?.sourceContext ? report : {...(report as Record<string,unknown>),code_source_preservation:{Unsupported:{reason:"ProviderUnavailable"}}});
+      return textResult(opts?.sourceContext ? report : {...(report as Record<string,unknown>),code_source_preservation:{Unsupported:{reason:"ProviderUnavailable"}},code_embeddings:{Unsupported:{reason:"ProviderUnavailable"}}});
     },
   );
 

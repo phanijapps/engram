@@ -12,6 +12,10 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
 
 ## Active
 
+- [`local-code-embeddings`](local-code-embeddings/spec.md): shared local semantic
+  code vector backfill, source-generation/policy guards and snapshot exclusion.
+  [Plan](local-code-embeddings/plan.md). **Shipped.**
+
 - [`code-source-preservation`](code-source-preservation/spec.md): first slice of
   accepted RFC-0021 — complete nested callable bodies, exact code snapshots,
   recoverable context ranges, role-aware candidate exclusions and per-file

@@ -721,13 +721,10 @@ Direction: [RFC-0021: Structural code context](rfcs/0021-structural-code-context
 Live self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /
 7,192 edges. A separate live fixture verified method source and graph links.
 
-- **[ast-outer-body-loss] VERIFIED:** `checkout` containing nested `validate`
-  persisted only its outer signature and the inner function. Fee assignment,
-  validation error and outer return were absent from every stored chunk.
-  `has_declaration_descendant` applies signature-only treatment to executable
-  functions as well as class containers. Preserve outer behavior and class
-  member/initialization context before adding code summaries. Tracked by
-  `code-source-preservation` AC2/AC3 and plan T1; runtime fix remains open.
+Source preservation and outer-function body loss are now fixed on
+`codex/code-source-preservation` (`22013a1`); the real self-index verified
+620 exact file reads and a complete nested Rust callable. See
+[live verification](research/code-source-preservation-self-verification.md).
 - **[code-context-and-summary] Context enrichment is incomplete:** method
   anchors carry class names, and `contains`/`imports` exist in the graph, but
   method chunks do not carry hydrated field/constructor/import bindings and
@@ -735,11 +732,23 @@ Live self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /
   seam for evidence-linked behavior summaries. Needs a context/derived-output
   contract and specs; preserve Rust/N-API/MCP surface parity.
 - **[code-embedding-coverage] Source coverage differs from vector coverage:**
-  MCP `embed_pending` sends only the first 8,192 characters per new embedding.
-  A complete stored method can therefore have an incomplete vector input.
-  Needs model-aware token budgets and linked AST segments, plus live semantic
-  retrieval of behavior near a large method's end. Parse recovery quality and
-  legacy fallback status also need explicit coverage reporting.
+  source-aware local code embeddings are implemented by
+  [local-code-embeddings](specs/local-code-embeddings/spec.md), including
+  code-only native/HTTP/stdio vector recall. Snapshots and unknown-generation
+  legacy code remain excluded; external code model feeds still need separate
+  enrichment authorization. Remaining work is model-aware token budgeting
+  and linked AST segments, with semantic retrieval of behavior near a large
+  method's end. The 8,192-character input cap and the model's token window do
+  not guarantee complete-code vector coverage; source remains complete.
+- **[source-generation-reconciliation-cost] Full source-format refresh is slow:**
+  the retained self store's first refresh took 861.75 seconds for 992 files;
+  an unchanged second scan took 6.19 seconds (zero errors in both). Source
+  files activated before the long reference-healing tail completed. The sweep
+  lists all manifests and refreshes a guarded file attempt per healed
+  reference; 2,072 references were resolved at completion. Profile Rust phases
+  before changing this path, then consider batching per-file healing while
+  preserving ownership, CAS fencing and failure visibility. No optimization
+  or definitive phase-cost attribution was made in this verification.
 
 Dogfood run: mem-alpha scanned into a dedicated SQLite store (9,703 entities /
 27,000 rels / 0 errors) and the code-intel battery turned on itself.
@@ -752,6 +761,9 @@ Dogfood run: mem-alpha scanned into a dedicated SQLite store (9,703 entities /
   to it). Blast radius is bounded and test-protected (N-API + ~15 scanner
   tests), so a phase-split (walk / prepass / ingest-phase / sweep) is safe.
   Blocked on nothing — the highest-value refactor the self-index names.
+  **2026-10-14 refresh:** scanner orchestration is 1,336 lines; bridge score
+  8,878.13 versus 3,678.81 for `bootstrap_sqlite` (2.41×). Two-hop impact
+  includes both MCP and native scan entry points, confirmed against source.
 - **[receiver-resolution-gap] VERIFIED: `self.`-method and qualified-path
   calls under-resolve → dead-code false positives.** Concrete: 
   `FastEmbedEmbeddingProvider` (called from BOTH the pg recipe and the
@@ -944,3 +956,11 @@ during live verification:
   a separate workspace upgrade: update affected transitive chains and rerun
   feature/backend regression suites; this source feature does not waive the
   baseline findings or claim a green security-audit gate.
+
+## legacy-spec-metadata-lint
+
+The work-loop status linter reports 15 pre-existing hard violations in legacy
+spec redirects lacking Status headers. A clean HEAD archive reproduces the
+same 15; local-code-embeddings and code-source-preservation introduce none.
+Align the linter with consolidated spec redirects or normalize their metadata
+in a separate documentation change. Evidence: /tmp/engram-code-embedding-spec-lint-baseline.json.

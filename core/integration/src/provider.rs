@@ -85,6 +85,15 @@ pub struct EngramProvider {
 }
 
 impl EngramProvider {
+    /// Backfills bounded retrieval embeddings; local code source guards are
+    /// shared by Rust embedders and every transport.
+    pub async fn backfill_embeddings(
+        &self,
+        request: &engram_domain::EmbeddingBackfillRequest,
+    ) -> CoreResult<engram_domain::EmbeddingBackfillReport> {
+        crate::embedding_backfill::backfill(self, request).await
+    }
+
     /// Validates configuration and returns a provider with no handles.
     ///
     /// This is the config-validation entry point. Every family is reported
@@ -873,7 +882,17 @@ impl EngramProviderBuilder {
     }
 
     /// Builds the provider.
-    pub fn build(self) -> EngramProvider {
+    pub fn build(mut self) -> EngramProvider {
+        // Derive runtime readiness from held handles for custom compositions as
+        // well as backend recipes. Vector storage alone is not code embedding.
+        self.capabilities.code_embeddings = crate::embedding_backfill::capability(
+            self.embedding_provider.as_deref(),
+            self.vectors.as_deref(),
+            self.knowledge_query.is_some(),
+            self.knowledge
+                .as_ref()
+                .is_some_and(|k| k.code_sources().is_some()),
+        );
         EngramProvider {
             capabilities: self.capabilities,
             memory: self.memory,

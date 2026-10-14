@@ -794,13 +794,22 @@ apply before mutation. Policy/source restriction removes current eligibility
 before cleanup. Failed cleanup remains retryable; writes across cells are
 BestEffort, with no cross-store rollback guarantee.
 
-Source-read permission does not authorize model egress. Code document kinds,
-including legacy code, remain excluded from model feeds until separate
-per-source/destination enrichment authorization exists. Optional fields are
+Source-read permission does not authorize external model egress. Validated
+semantic code chunks can enter an explicitly in-process local embedding
+provider for retrieval under exact source scope, policy, expiry and current
+generation checks. Snapshots and legacy code without validated generations
+remain excluded. External code model feeds require separate per-source/
+destination enrichment authorization. Optional fields are
 additive for negotiated wire readers; strict old schemas and Rust literals
 require updated projections/callers. New byte ranges leave `SourceLocation`
 meaning unchanged. Source-generation storage and exact source reads belong to
 knowledge ports/adapters. SQL and providers do not enter portable types.
+
+`EmbeddingBackfillRequest` carries `scope`, `requester`, `limit` (default 256,
+1–1024) and optional `sourceFilter`. `EmbeddingBackfillReport` carries integer
+counts `embedded`, `newEmbeddings`, `reused`, `codeEmbedded` and `remaining`.
+These additive retrieval-maintenance DTOs do not grant external processing.
+Finite model input windows are independent of complete stored source coverage.
 
 ### KnowledgeChunkKind
 

@@ -2,7 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://engram.local/contracts/v1/schemas/engram-v1.schema.json",
   "title": "Engram v1 contract definitions",
-  "x-spec": ["docs/specs/code-source-preservation/spec.md"],
+  "x-spec": [
+    "docs/specs/code-source-preservation/spec.md",
+    "docs/specs/local-code-embeddings/spec.md"
+  ],
   "type": "object",
   "$defs": {
     "Identifier": {
@@ -2241,6 +2244,64 @@
         "requester",
         "readerVersion"
       ]
+    },
+    "EmbeddingBackfillRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "requester"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "requester": {
+          "$ref": "#/$defs/Requester"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 256
+        },
+        "sourceFilter": {
+          "type": "string"
+        }
+      }
+    },
+    "EmbeddingBackfillReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "embedded",
+        "newEmbeddings",
+        "reused",
+        "codeEmbedded",
+        "remaining"
+      ],
+      "properties": {
+        "embedded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "newEmbeddings": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reused": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "codeEmbedded": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "remaining": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
     }
   }
 }

@@ -21,7 +21,7 @@ import { registerTools } from "./tools.js";
 
 /** HTTP-MCP server options (transport + listen port). */
 export interface McpHttpOptions {
-  /** Trusted launch context for exact source tools; tool input cannot set it. */
+  /** Trusted launch context for source tools and embedding reindex; tool input cannot set it. */
   sourceContext?:CodeSourceContext;
   /** Inject a transport (tests). If unset, one is built from `configJson`. */
   transport?: NativeProviderTransport;

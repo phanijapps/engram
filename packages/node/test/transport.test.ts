@@ -55,6 +55,9 @@ class StubNativeProvider {
   capabilitiesJson(): string {
     return "{}";
   }
+  backfillEmbeddingsJson(): string {
+    return '{"embedded":0,"newEmbeddings":0,"reused":0,"codeEmbedded":0,"remaining":0}';
+  }
   consolidateJson(): string {
     return '{"status":"Complete","tasks":[]}';
   }

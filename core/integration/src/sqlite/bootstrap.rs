@@ -652,6 +652,14 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         failed()
     };
     let report = CapabilityReport::builder()
+        .code_embeddings(crate::embedding_backfill::capability(
+            embedding_provider.as_deref(),
+            vectors.as_deref(),
+            knowledge_query.is_some(),
+            knowledge
+                .as_ref()
+                .is_some_and(|k| k.code_sources().is_some()),
+        ))
         .code_source_preservation(code_source_state)
         .memory(memory_state)
         .knowledge(knowledge_state)

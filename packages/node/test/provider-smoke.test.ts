@@ -26,6 +26,7 @@ describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (re
       storage_path: store,
       trusted_root: base,
       scope_policy: "Strict",
+      enable_vector: false,
       embedding_provider: {
         provider_type: "none",
         model: "none",
@@ -45,6 +46,12 @@ describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (re
 
       // 2. Scan writes entities through the facade + napi boundary.
       const scope = { tenant: "smoke", workspace: "smoke" };
+      // The real no-model provider must surface the shared operation's typed
+      // unsupported failure, rather than silently reporting an empty backfill.
+      await expect(transport.backfillEmbeddings({
+        scope,
+        requester: {actor: {id: "engram-node", kind: "agent"}}
+      })).rejects.toThrow(/unsupported/i);
       const summary = (await transport.scan({ path: repo, scope })) as {
         scanned?: number;
         entities?: number;
@@ -93,6 +100,7 @@ describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (re
       storage_path,
       trusted_root: base,
       scope_policy: "Strict",
+      enable_vector: false,
       embedding_provider: {
         provider_type: "none",
         model: "none",
@@ -195,4 +203,43 @@ describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (re
       rmSync(base, { recursive: true, force: true });
     }
   }, 60_000);
+
+  // Live model QA is explicit: default tests remain usable offline without a
+  // cached model. ENGRAM_LIVE_FASTEMBED=1 enables the existing local model proof.
+  it.skipIf(process.env.ENGRAM_LIVE_FASTEMBED !== "1")("embeds actual code locally and retrieves it through the native semantic lane", async () => {
+    const base = mkdtempSync(join(tmpdir(), "engram-code-vectors-"));
+    const repo = join(base, "repo");
+    mkdirSync(repo);
+    const text = "pub fn reconcile_invoice_total(subtotal: i64, tax: i64) -> i64 { subtotal + tax }\n";
+    writeFileSync(join(repo, "billing.rs"), text);
+    const scope = {tenant: "native-code", workspace: "billing"};
+    const requester = {actor: {id: "engram-node", kind: "agent" as const}};
+    try {
+      const transport = createNativeProviderTransport({configJson: JSON.stringify({
+        storage_path: join(base, "store"), trusted_root: base, scope_policy: "Strict",
+        embedding_provider: {provider_type:"fastembed",model:"BAAI/bge-small-en-v1.5",dimensions:384,prompt_profile:"query"},
+        enable_vector: true, migration_mode:"Apply", capability_policy:"FailClosed"
+      })});
+      expect(await transport.capabilities()).toMatchObject({code_embeddings:"Supported"});
+      await transport.scan({path: repo, scope});
+      const report = await transport.backfillEmbeddings({scope, requester, limit:64});
+      expect(report.codeEmbedded).toBeGreaterThan(0);
+      expect(report.embedded).toBeGreaterThan(0);
+      expect(report.remaining).toBe(0);
+      const again = await transport.backfillEmbeddings({scope, requester, limit:64});
+      expect(again).toMatchObject({embedded:0,newEmbeddings:0,reused:0,codeEmbedded:0,remaining:0});
+      const recall = await transport.recall({query:"calculate an invoice total with tax",scope,requester,modes:["semantic"],limit:5});
+      expect(recall.sourceFailures ?? []).toHaveLength(0);
+      expect(recall.items.some(item => item.content.includes("reconcile_invoice_total") && item.fusionTrace?.source.split("+").includes("vector"))).toBe(true);
+      console.log("[code-vectors] native:", JSON.stringify({report,vectorHits:recall.items.filter(item => item.fusionTrace?.source.split("+").includes("vector")).map(item => item.targetId)}));
+      const context = {readerVersion:1 as const,scope,requester};
+      const manifests = await transport.listCodeSources(context);
+      expect(manifests).toHaveLength(1);
+      const source = await transport.readCodeSource({repository:manifests[0]!.file.repository,path:"billing.rs"},context);
+      expect(source.text).toBe(text);
+    } finally {
+      rmSync(base, {recursive:true,force:true});
+    }
+  }, 60_000);
+
 });

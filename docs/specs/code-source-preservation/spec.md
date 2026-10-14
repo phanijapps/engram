@@ -133,12 +133,16 @@ authorized for that requester; it cannot turn that record into a recall hit.
 Extraction routines that enumerate document chunks for a model are also
 role-aware and do not automatically feed the raw snapshot copy.
 
-Explicit source read and normal retrieval authorize access, not model egress.
+Explicit source read and normal retrieval do not authorize external model egress.
 Any code-source role, including legacy code with unknown coverage, requires
 RFC-0021's separate per-source enrichment/destination authorization before
 entering a model-document feed. Until that authorization contract is available,
-automatic model feeds exclude code sources entirely; existing non-code document
-processing is unchanged. This slice creates no model calls or egress grants.
+automatic external model feeds exclude code sources entirely; existing non-code
+document processing is unchanged. The subsequent
+[local-code-embeddings](../local-code-embeddings/spec.md) slice permits current,
+authorized semantic code chunks through an explicitly in-process embedder.
+Snapshots and legacy-unknown code remain excluded. This source-preservation
+slice creates no external model calls or egress grants.
 
 Source reads resolve an effective scope from trusted host/requester context
 and use exact tuple matching plus policy authorization. Omitted request fields

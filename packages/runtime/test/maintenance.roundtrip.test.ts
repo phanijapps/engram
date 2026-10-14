@@ -37,6 +37,7 @@ function freshProvider(): { transport: ReturnType<typeof createNativeProviderTra
     storage_path: join(store, "db"),
     trusted_root: store,
     scope_policy: "Strict",
+    enable_vector: false,
     embedding_provider: {
       provider_type: "none",
       model: "none",

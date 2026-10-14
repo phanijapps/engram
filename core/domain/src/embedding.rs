@@ -8,6 +8,33 @@
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
+/// Bounded retrieval-index maintenance in the trusted host's effective scope.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EmbeddingBackfillRequest {
+    pub scope: crate::Scope,
+    pub requester: crate::Requester,
+    #[serde(default = "default_backfill_limit")]
+    pub limit: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_filter: Option<String>,
+}
+
+fn default_backfill_limit() -> usize {
+    256
+}
+
+/// Counts from one completed bounded backfill, including eligible hash reuse.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EmbeddingBackfillReport {
+    pub embedded: usize,
+    pub new_embeddings: usize,
+    pub reused: usize,
+    pub code_embedded: usize,
+    pub remaining: usize,
+}
+
 /// Embedding space identity that defines vector compatibility.
 ///
 /// Embeddings are compatible only if they share the same embedding space,

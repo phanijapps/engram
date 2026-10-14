@@ -1,6 +1,6 @@
 import type {
   CodeSourceContext, CodeSourceQuery, CodeSourceReadResult, CodeSourceGeneration,
-  ContextPayload,
+  ContextPayload, EmbeddingBackfillRequest, EmbeddingBackfillReport,
   RetrievalRequest,
   WriteMemoryRequest,
   WriteMemoryResponse
@@ -96,6 +96,8 @@ export interface NativeProviderTransport {
   recall(request: RetrievalRequest): Promise<ContextPayload>;
   /** Write a memory + lifecycle event. */
   write(request: WriteMemoryRequest): Promise<WriteMemoryResponse>;
+  /** Index eligible chunks through the shared Rust embedding operation. */
+  backfillEmbeddings(request: EmbeddingBackfillRequest): Promise<EmbeddingBackfillReport>;
   /** Treesitter-index a repository into the project workspace. */
   scan(request: { path: string; scope: unknown; scanFilter?: unknown }): Promise<unknown>;
   /** Run a consolidation cycle (reflection + decay). A system requester is
@@ -229,6 +231,10 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async scan(request: { path: string; scope: unknown; scanFilter?: unknown }): Promise<unknown> {
     return decode(this.provider.scanRepositoryJson(encode(request)));
+  }
+
+  async backfillEmbeddings(request: EmbeddingBackfillRequest): Promise<EmbeddingBackfillReport> {
+    return decode<EmbeddingBackfillReport>(this.provider.backfillEmbeddingsJson(encode(request)));
   }
 
   async consolidate(request: {

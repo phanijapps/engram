@@ -583,6 +583,64 @@ export const engramV1Schema = {
       ],
       "type": "object"
     },
+    "EmbeddingBackfillReport": {
+      "additionalProperties": false,
+      "properties": {
+        "codeEmbedded": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "embedded": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "newEmbeddings": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "remaining": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reused": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "embedded",
+        "newEmbeddings",
+        "reused",
+        "codeEmbedded",
+        "remaining"
+      ],
+      "type": "object"
+    },
+    "EmbeddingBackfillRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 256,
+          "maximum": 1024,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "requester": {
+          "$ref": "#/$defs/Requester"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "sourceFilter": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope",
+        "requester"
+      ],
+      "type": "object"
+    },
     "EmbeddingRef": {
       "additionalProperties": false,
       "properties": {
@@ -2244,7 +2302,8 @@ export const engramV1Schema = {
   "title": "Engram v1 contract definitions",
   "type": "object",
   "x-spec": [
-    "docs/specs/code-source-preservation/spec.md"
+    "docs/specs/code-source-preservation/spec.md",
+    "docs/specs/local-code-embeddings/spec.md"
   ]
 } as const;
 export const engramV1Definitions = engramV1Schema.$defs;

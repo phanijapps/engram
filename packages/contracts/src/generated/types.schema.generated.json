@@ -582,6 +582,64 @@
       ],
       "type": "object"
     },
+    "EmbeddingBackfillReport": {
+      "additionalProperties": false,
+      "properties": {
+        "codeEmbedded": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "embedded": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "newEmbeddings": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "remaining": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reused": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "embedded",
+        "newEmbeddings",
+        "reused",
+        "codeEmbedded",
+        "remaining"
+      ],
+      "type": "object"
+    },
+    "EmbeddingBackfillRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 256,
+          "maximum": 1024,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "requester": {
+          "$ref": "#/$defs/Requester"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "sourceFilter": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope",
+        "requester"
+      ],
+      "type": "object"
+    },
     "EmbeddingRef": {
       "additionalProperties": false,
       "properties": {
@@ -2307,6 +2365,12 @@
     "DerivationRef": {
       "$ref": "#/$defs/DerivationRef"
     },
+    "EmbeddingBackfillReport": {
+      "$ref": "#/$defs/EmbeddingBackfillReport"
+    },
+    "EmbeddingBackfillRequest": {
+      "$ref": "#/$defs/EmbeddingBackfillRequest"
+    },
     "EmbeddingRef": {
       "$ref": "#/$defs/EmbeddingRef"
     },
@@ -2530,7 +2594,9 @@
     "KnowledgeRelationship",
     "CodeSourceBundle",
     "CodeSourceQuery",
-    "CodeSourceContext"
+    "CodeSourceContext",
+    "EmbeddingBackfillRequest",
+    "EmbeddingBackfillReport"
   ],
   "title": "EngramV1Types",
   "type": "object"

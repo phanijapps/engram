@@ -29,6 +29,10 @@ impl FastEmbedEmbeddingProvider {
 
 #[cfg(feature = "fastembed")]
 impl EmbeddingProvider for FastEmbedEmbeddingProvider {
+    fn is_local(&self) -> bool {
+        true
+    }
+
     fn provider_id(&self) -> &str {
         self.space.provider.as_str()
     }

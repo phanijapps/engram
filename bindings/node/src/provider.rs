@@ -22,10 +22,11 @@
 use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
     Actor, ActorKind, AllowedUse, ApplyMode, Belief, ConsolidationRequest, ContextPayload,
-    Contradiction, DeleteMode, EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id,
-    KnowledgeEntity, KnowledgeRelationship, MaintenancePlan, MaintenancePlanRequest,
-    MaintenancePolicy, MemoryRecord, Page, Policy, Procedure, Provenance, Retention,
-    RetrievalRequest, Scope, Sensitivity, Visibility, WriteMemoryRequest, WriteMemoryResponse,
+    Contradiction, DeleteMode, EmbeddingBackfillRequest, EvidenceRef, EvidenceTargetType,
+    ForgetRequest, ForgetResult, Id, KnowledgeEntity, KnowledgeRelationship, MaintenancePlan,
+    MaintenancePlanRequest, MaintenancePolicy, MemoryRecord, Page, Policy, Procedure, Provenance,
+    Retention, RetrievalRequest, Scope, Sensitivity, Visibility, WriteMemoryRequest,
+    WriteMemoryResponse,
 };
 use engram_hierarchy::HierarchyRepository;
 use engram_ingest::{
@@ -119,6 +120,14 @@ impl NativeProvider {
     #[napi(js_name = "capabilitiesJson")]
     pub fn capabilities_json(&self) -> Result<String> {
         encode(self.inner.capabilities())
+    }
+
+    /// Backfills eligible retrieval vectors through the shared SDK operation.
+    #[napi(js_name = "backfillEmbeddingsJson")]
+    pub fn backfill_embeddings_json(&self, request_json: String) -> Result<String> {
+        let request: EmbeddingBackfillRequest = decode(&request_json)?;
+        let report = block_on(self.inner.backfill_embeddings(&request)).map_err(to_napi_error)?;
+        encode(&report)
     }
 
     // ---- require_*: one per handle proxy. Each clones the Arc<dyn Trait>

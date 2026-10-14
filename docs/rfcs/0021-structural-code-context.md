@@ -315,7 +315,16 @@ parent/dependency context as well as the primary method. Source deletion or
 policy restriction cascades to summary visibility, chunks and index entries;
 no derived artifact remains more accessible or longer retained than its inputs.
 
-Enrichment defaults off. An explicit job config selects the provider and
+In-process local retrieval embeddings are distinct from external enrichment:
+an explicitly local adapter may process current, policy-authorized semantic
+code chunks under vector enablement. Snapshots and legacy code without a
+validated generation remain excluded. Locality is an adapter contract, never
+inferred from a provider-name string. Scope, policy, expiry and generation are
+checked before inference and vector insertion. This clarification follows the
+user's explicit local-code-embedding instruction of 2026-10-14; it grants no
+external source transmission or summary generation.
+
+External enrichment defaults off. An explicit job config selects the provider and
 finite input/output tokens, units, concurrency, wall time, retry and spend
 limits. A neutral policy authorizer must approve enrichment and destination
 for every included source; retrieval permission alone is not consent to send

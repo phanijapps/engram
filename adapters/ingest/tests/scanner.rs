@@ -694,9 +694,18 @@ fn polyglot_scan_end_to_end_phase2() {
     );
     assert!(has("extends", "Repo", "Base"), "extends: {rels:?}");
     assert!(has("implements", "Repo", "Store"), "implements: {rels:?}");
+    // Parallel resolution and the serial healing pass may render an imported
+    // alias differently; both must point at the canonical qualified symbol.
+    let entities = block_on(store.list_entities(&scope())).expect("entities");
+    let helper = entities
+        .iter()
+        .find(|e| e.name == "inner::helper")
+        .expect("qualified helper");
     assert!(
-        has("routes_to", "GET /items", "helper"),
-        "routes_to: {rels:?}"
+        rels.iter().any(|r| r.predicate == "routes_to"
+            && r.subject.name.as_deref() == Some("GET /items")
+            && r.object.id.as_ref() == Some(&helper.id)),
+        "route must resolve to qualified helper: {rels:?}"
     );
     assert!(
         rels.iter()

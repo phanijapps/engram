@@ -63,6 +63,7 @@ const FACTS_LANE: &str = "facts";
 /// [`SqlUnifiedRecall::with_reranker`] to inject an externally-configured
 /// weighted-RRF fusion (RFC-0019) and/or a reranker.
 pub struct SqlUnifiedRecall {
+    code_sources: Option<Arc<dyn engram_knowledge::KnowledgeRepository>>,
     memory: Arc<dyn MemoryService>,
     retrieval_lanes: Vec<Arc<dyn RetrievalIndex>>,
     beliefs: Arc<dyn BeliefRepository>,
@@ -74,6 +75,15 @@ pub struct SqlUnifiedRecall {
 }
 
 impl SqlUnifiedRecall {
+    /// Attach source availability reporting without failing healthy lanes.
+    pub fn with_code_sources(
+        mut self,
+        knowledge: Arc<dyn engram_knowledge::KnowledgeRepository>,
+    ) -> Self {
+        self.code_sources = Some(knowledge);
+        self
+    }
+
     /// Wraps the memory + retrieval-lane + beliefs handles to expose unified recall.
     ///
     /// Fuses with equal-weight RRF ([`ReciprocalFusionConfig::default`]); pass a
@@ -105,6 +115,7 @@ impl SqlUnifiedRecall {
         reranker: Option<Arc<dyn engram_retrieval::RetrievalReranker>>,
     ) -> Self {
         Self {
+            code_sources: None,
             memory,
             retrieval_lanes,
             beliefs,
@@ -121,6 +132,31 @@ impl UnifiedRecall for SqlUnifiedRecall {
         let mut candidates: Vec<RetrievalResult> = Vec::new();
         let mut source_failures: Vec<RetrievalSourceFailure> = Vec::new();
         let mut omitted = Vec::new();
+        if let Some(port) = self.code_sources.as_ref().and_then(|k| k.code_sources()) {
+            match port.list_code_sources(&request.scope).await {
+                Ok(sources) => {
+                    for m in sources.into_iter().filter(|m| {
+                        m.state != engram_domain::CodeSourceState::Active
+                            && engram_knowledge::code_source_retrieval_authorized(
+                                m,
+                                &request.requester,
+                                &request.scope,
+                                now,
+                            )
+                    }) {
+                        source_failures.push(RetrievalSourceFailure {
+                            source: format!("{}:{}", m.file.repository, m.file.path),
+                            mode: None,
+                            severity: SourceFailureSeverity::Warning,
+                            reason: format!("code_source_{:?}", m.state).to_lowercase(),
+                            message: Some("file source view unavailable".into()),
+                            degraded: true,
+                        });
+                    }
+                }
+                Err(error) => source_failures.push(lane_failure("code_sources", &error)),
+            }
+        }
 
         // ---- Facts lane: memory.retrieve (already-composed ContextPayload) ----
         // Its items feed the outer fusion; its source_failures + omitted merge

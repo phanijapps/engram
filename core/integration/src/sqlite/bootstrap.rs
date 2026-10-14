@@ -357,6 +357,21 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         // unified recall.
         let lexical_dir = storage.join("lexical");
         if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::open(&lexical_dir) {
+            if lexical_index.needs_source_rebuild() {
+                let entries = knowledge_handle.all_semantic_lexical_entries()?;
+                lexical_index
+                    .upsert_batch(&entries)
+                    .map_err(|e| CoreError::Adapter {
+                        adapter: "lexical".into(),
+                        message: format!("durable source-aware reindex failed: {e}"),
+                    })?;
+                lexical_index
+                    .mark_source_rebuild_complete()
+                    .map_err(|e| CoreError::Adapter {
+                        adapter: "lexical".into(),
+                        message: format!("durable reindex completion failed: {e}"),
+                    })?;
+            }
             let lexical_index = Arc::new(lexical_index);
             retrieval_lanes.push(recall_lanes::lexical_recall_lane(
                 knowledge_handle.clone(),
@@ -364,6 +379,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             ));
             lexical_feed = Some(Arc::new(crate::sqlite::lexical_feed::SqlLexicalFeed::new(
                 lexical_index,
+                knowledge_handle.clone(),
             )));
         }
     }
@@ -473,13 +489,16 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
                 .and_then(|c| c.rerank.as_ref()),
             embedding_provider.as_ref(),
         );
-        let unified = SqlUnifiedRecall::with_reranker(
+        let mut unified = SqlUnifiedRecall::with_reranker(
             memory_handle.clone(),
             retrieval_lanes,
             belief_handle.clone(),
             fusion,
             reranker,
         );
+        if let Some(handle) = knowledge.clone() {
+            unified = unified.with_code_sources(handle);
+        }
         recall = Some(Arc::new(unified));
         unified_recall_state = CapabilityState::Supported;
     }
@@ -574,7 +593,10 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // Migration: the fingerprint contract is verified by the check, and a real
     // SqlMigrationService handle is attached.
     let migration_state = if conformance::migration_ok() {
-        let svc = SqlMigrationService::new(config.embedding_provider.dimensions);
+        let mut svc = SqlMigrationService::new(config.embedding_provider.dimensions);
+        if let Some(target) = knowledge.clone() {
+            svc = svc.with_code_source_target(target);
+        }
         migration = Some(Arc::new(svc));
         CapabilityState::Supported
     } else {
@@ -620,7 +642,17 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let contradiction_state = beliefs_state.clone();
     let maintenance_state = consolidation_state.clone();
 
+    let code_source_state = if knowledge
+        .as_ref()
+        .is_some_and(|k| k.code_sources().is_some())
+        && super::code_source_conformance::passes()
+    {
+        CapabilityState::Supported
+    } else {
+        failed()
+    };
     let report = CapabilityReport::builder()
+        .code_source_preservation(code_source_state)
         .memory(memory_state)
         .knowledge(knowledge_state)
         .graph(graph_state)

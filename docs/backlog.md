@@ -30,6 +30,13 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ---
 
+## code-source-preservation
+
+- **Subsequent accepted direction:** parser registry/context hydration,
+  model-budgeted segmentation/retrieval and Silver generation need separate
+  specs after the shipped [source-preservation foundation](specs/code-source-preservation/spec.md). ADR-0029 and ADR-0030 record the architectural
+  decisions; they do not install parsers or select an LLM.
+
 ## viz-non-graph-view-types
 
 - **Non-graph view-types (deferred: viz-non-graph-view-types):** `BeliefView`,
@@ -705,6 +712,35 @@ re-scans ~0.
 
 ## self-index-findings (2026-08-28, mem-alpha indexed into ~/.engram/mem-alpha-self)
 
+### 2026-10-14 AST chunking audit
+
+Evidence and proposed sequencing:
+[`AST-aware code chunking audit`](research/ast-aware-code-chunking-audit.md).
+Direction: [RFC-0021: Structural code context](rfcs/0021-structural-code-context.md)
+(Accepted; includes additive language/parser registration and polyglot validation).
+Live self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /
+7,192 edges. A separate live fixture verified method source and graph links.
+
+- **[ast-outer-body-loss] VERIFIED:** `checkout` containing nested `validate`
+  persisted only its outer signature and the inner function. Fee assignment,
+  validation error and outer return were absent from every stored chunk.
+  `has_declaration_descendant` applies signature-only treatment to executable
+  functions as well as class containers. Preserve outer behavior and class
+  member/initialization context before adding code summaries. Tracked by
+  `code-source-preservation` AC2/AC3 and plan T1; runtime fix remains open.
+- **[code-context-and-summary] Context enrichment is incomplete:** method
+  anchors carry class names, and `contains`/`imports` exist in the graph, but
+  method chunks do not carry hydrated field/constructor/import bindings and
+  scan leaves `summary` unset. Reuse graph facts and the TS maintenance LLM
+  seam for evidence-linked behavior summaries. Needs a context/derived-output
+  contract and specs; preserve Rust/N-API/MCP surface parity.
+- **[code-embedding-coverage] Source coverage differs from vector coverage:**
+  MCP `embed_pending` sends only the first 8,192 characters per new embedding.
+  A complete stored method can therefore have an incomplete vector input.
+  Needs model-aware token budgets and linked AST segments, plus live semantic
+  retrieval of behavior near a large method's end. Parse recovery quality and
+  legacy fallback status also need explicit coverage reporting.
+
 Dogfood run: mem-alpha scanned into a dedicated SQLite store (9,703 entities /
 27,000 rels / 0 errors) and the code-intel battery turned on itself.
 
@@ -897,3 +933,14 @@ during live verification:
   `inconclusive` buckets and harden `test-only`.
 - **[whats_changed-defects]** (separate spec, unchanged): handler ignores
   all args (`limit` advertised); recency scores uniform across cohorts.
+
+## dependency-security-baseline
+
+- `cargo audit` on 2026-10-14 reports 16 vulnerable locked packages on both
+  the pre-source-preservation baseline and this branch, plus existing warning
+  classes. The pinned `cap-std` addition introduces no additional advisory ID /
+  package / version tuple. Audit used a fresh temporary RustSec checkout because
+  the user-level advisory cache could not initialize. Dependency remediation is
+  a separate workspace upgrade: update affected transitive chains and rerun
+  feature/backend regression suites; this source feature does not waive the
+  baseline findings or claim a green security-audit gate.

@@ -145,6 +145,10 @@ pub struct SourceLocation {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KnowledgeChunk {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<crate::CodeChunkDescriptor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_kind: Option<SourceDocumentKind>,
     pub id: ChunkId,
     pub document_id: DocumentId,
     pub source_id: SourceId,

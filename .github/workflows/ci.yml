@@ -7,6 +7,16 @@ on:
       - main
 
 jobs:
+  source-portability:
+    name: Source preservation (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Scan and read portable nested source paths
+        run: cargo test -p engram-ingest --test source_preservation
+
   contract:
     name: Contract validation
     runs-on: ubuntu-latest
@@ -62,9 +72,9 @@ jobs:
       - name: Surface-parity lint (Rust facade <-> N-API binding)
         run: scripts/ci/check-surface-parity.sh
       - name: Check vector FastEmbed feature tests
-        run: cargo check -p engram-store-vector --features fastembed-tests --tests
+        run: cargo check -p engram-store-sqlite --features fastembed-tests --tests
       - name: Clippy vector FastEmbed feature tests
-        run: cargo clippy -p engram-store-vector --features fastembed-tests --tests -- -D warnings
+        run: cargo clippy -p engram-store-sqlite --features fastembed-tests --tests -- -D warnings
 
   docs:
     name: Documentation

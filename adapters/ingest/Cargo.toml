@@ -8,6 +8,7 @@ rust-version.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
+cap-std = "=4.0.3"
 engram-code = { path = "../../core/code" }
 engram-domain = { path = "../../core/domain" }
 engram-knowledge = { path = "../../core/knowledge" }

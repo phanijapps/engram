@@ -72,14 +72,16 @@ impl RetrievalIndex for CommunitySummaryIndex {
             .or_else(|| request.budget.as_ref().and_then(|b| b.max_items))
             .unwrap_or(self.default_limit);
         let scope = &request.scope;
+        let source_revision = self.source.source_revision(scope).await?;
 
         // Cache hit: serve the in-scope entities + relationships from the
         // materialized snapshot, skipping the per-query store reload. A miss
         // (or no cache) loads from the source as before and populates the cache
         // (this lane reads BOTH entities and relationships, so it always stores
         // a full snapshot).
-        let (entities, relationships) = if let Some(cache) = &self.cache
+        let (mut entities, mut relationships) = if let Some(cache) = &self.cache
             && let Some(snap) = cache.get(scope).await
+            && snap.source_revision == source_revision
         {
             (snap.entities.clone(), snap.relationships.clone())
         } else {
@@ -93,6 +95,7 @@ impl RetrievalIndex for CommunitySummaryIndex {
                     .put(
                         scope,
                         Arc::new(GraphSnapshot {
+                            source_revision,
                             entities: ents.clone(),
                             relationships: rels.clone(),
                             community_labels: None,
@@ -102,6 +105,33 @@ impl RetrievalIndex for CommunitySummaryIndex {
             }
             (ents, rels)
         };
+
+        let access = self.source.access_for_request(request).await?;
+        let original_counts = (entities.len(), relationships.len());
+        entities
+            .retain(|e| access.allows(engram_domain::RetrievalTargetType::Entity, e.id.as_str()));
+        let visible_ids: std::collections::HashSet<_> =
+            entities.iter().map(|e| e.id.as_str()).collect();
+        relationships.retain(|r| {
+            access.allows(
+                engram_domain::RetrievalTargetType::Relationship,
+                r.id.as_str(),
+            ) && r
+                .subject
+                .id
+                .as_ref()
+                .is_some_and(|id| visible_ids.contains(id.as_str()))
+                && r.object
+                    .id
+                    .as_ref()
+                    .is_some_and(|id| visible_ids.contains(id.as_str()))
+        });
+        let cache_labels_safe = original_counts == (entities.len(), relationships.len());
+        if self.source.source_revision(scope).await? != source_revision {
+            return Err(engram_runtime::CoreError::ProviderUnavailable {
+                provider: "code source changed during retrieval".into(),
+            });
+        }
 
         let by_key: HashMap<&str, &KnowledgeEntity> =
             entities.iter().map(|e| (e.id.as_str(), e)).collect();
@@ -130,18 +160,21 @@ impl RetrievalIndex for CommunitySummaryIndex {
         // subsequent query reuses them until the graph changes. Entities and
         // relationships are already cached (above), so this only adds the label
         // map to the snapshot on the warm-up query.
-        let labels = if let Some(cache) = &self.cache
+        let labels = if cache_labels_safe
+            && let Some(cache) = &self.cache
             && let Some(snap) = cache.get(scope).await
+            && snap.source_revision == source_revision
             && let Some(cached) = &snap.community_labels
         {
             cached.clone()
         } else {
             let computed = communities(&edges, 20);
-            if let Some(cache) = &self.cache {
+            if cache_labels_safe && let Some(cache) = &self.cache {
                 cache
                     .put(
                         scope,
                         Arc::new(GraphSnapshot {
+                            source_revision,
                             entities: entities.clone(),
                             relationships: relationships.clone(),
                             community_labels: Some(computed.clone()),
@@ -231,8 +264,24 @@ impl RetrievalIndex for CommunitySummaryIndex {
         let results = top_members
             .iter()
             .take(limit.max(1) as usize)
-            .filter_map(|key| by_key.get(key.as_str()).map(|e| build_result(key, e)))
+            .filter_map(|key| {
+                by_key.get(key.as_str()).map(|e| {
+                    let mut result = build_result(key, e);
+                    if let Some(policy) =
+                        access.policy(engram_domain::RetrievalTargetType::Entity, key)
+                    {
+                        result.policy = policy.clone();
+                    }
+                    result
+                })
+            })
             .collect();
+        if self.source.source_revision(scope).await? != source_revision {
+            return Err(engram_runtime::CoreError::ProviderUnavailable {
+                provider: "code source changed during retrieval".into(),
+            });
+        }
+
         Ok(results)
     }
 }

@@ -183,3 +183,30 @@ fn leaf_function_keeps_full_text() {
     assert!(!alpha.1.is_empty(), "leaf function keeps full text");
     assert!(alpha.1.contains("beta()"), "leaf body preserved");
 }
+
+#[test]
+fn nested_checkout_outer_chunk_retains_behavior() {
+    let code = "export function checkout(total: number) {\n  const fee = 5;\n  function validate(value: number) { return value > 0; }\n  if (!validate(total)) throw new Error('invalid');\n  return total + fee;\n}\n";
+    let chunks = chunk(code, "ts");
+    let outer = chunks
+        .iter()
+        .find(|(a, _, _, _)| a == "function checkout")
+        .expect("checkout");
+    for required in [
+        "const fee = 5",
+        "throw new Error('invalid')",
+        "return total + fee",
+    ] {
+        assert!(
+            outer.1.contains(required),
+            "outer callable lost {required:?}: {:?}",
+            outer.1
+        );
+    }
+    assert!(
+        chunks
+            .iter()
+            .any(|(a, _, _, _)| a == "function checkout::validate"),
+        "nested callable anchor missing: {chunks:?}"
+    );
+}

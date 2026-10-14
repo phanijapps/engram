@@ -622,7 +622,7 @@ fn stage_alias(
     );
     let json = serde_json::to_string(&entity).map_err(json_error)?;
     conn.execute(
-        "UPDATE knowledge_entities SET record_json = ?1 WHERE id = ?2",
+        "UPDATE knowledge_entities_records SET record_json = ?1 WHERE id = ?2",
         params![json, entity_id.to_string()],
     )
     .map_err(sql_error)?;
@@ -684,7 +684,7 @@ fn stage_rewrite(
         .map(ToString::to_string)
         .unwrap_or_default();
     conn.execute(
-        "UPDATE knowledge_relationships SET subject_id = ?1, record_json = ?2 WHERE id = ?3",
+        "UPDATE knowledge_relationships_records SET subject_id = ?1, record_json = ?2 WHERE id = ?3",
         params![subject_id, json, rel_id.to_string()],
     )
     .map_err(sql_error)?;
@@ -751,7 +751,7 @@ fn stage_merge(
         survivor.provenance = stamp_provenance(&survivor.provenance, actor, "merge", ts);
         let sjson = serde_json::to_string(&survivor).map_err(json_error)?;
         conn.execute(
-            "UPDATE knowledge_entities SET record_json = ?1 WHERE id = ?2",
+            "UPDATE knowledge_entities_records SET record_json = ?1 WHERE id = ?2",
             params![sjson, survivor_str],
         )
         .map_err(sql_error)?;
@@ -807,7 +807,7 @@ fn redirect_relationships_to(
             .unwrap_or_default();
         let rkey = engram_knowledge::identity::compute_relationship_key(rel);
         conn.execute(
-            "UPDATE knowledge_relationships SET subject_id = ?1, record_json = ?2, relationship_key = ?3 WHERE id = ?4",
+            "UPDATE knowledge_relationships_records SET subject_id = ?1, record_json = ?2, relationship_key = ?3 WHERE id = ?4",
             params![subject_id, json, rkey, id],
         )
         .map_err(sql_error)?;
@@ -933,7 +933,7 @@ fn coalesce_survivor_relationships(
         rel.provenance = stamp_provenance(&rel.provenance, actor, "merge_coalesce", ts);
         let new_json = serde_json::to_string(&rel).map_err(json_error)?;
         conn.execute(
-            "UPDATE knowledge_relationships SET archived_at = ?1, record_json = ?2 WHERE rowid = ?3",
+            "UPDATE knowledge_relationships_records SET archived_at = ?1, record_json = ?2 WHERE rowid = ?3",
             params![ts.to_rfc3339(), new_json, rowid],
         )
         .map_err(sql_error)?;
@@ -950,7 +950,7 @@ fn hard_delete_entity(conn: &Connection, id: &EntityId, scope: &Scope) -> CoreRe
         return Ok(false);
     }
     conn.execute(
-        "DELETE FROM knowledge_entities WHERE id = ?1",
+        "DELETE FROM knowledge_entities_records WHERE id = ?1",
         params![id.to_string()],
     )
     .map_err(sql_error)?;
@@ -970,7 +970,7 @@ fn hard_delete_relationship(
         return Ok(false);
     }
     conn.execute(
-        "DELETE FROM knowledge_relationships WHERE id = ?1",
+        "DELETE FROM knowledge_relationships_records WHERE id = ?1",
         params![id.to_string()],
     )
     .map_err(sql_error)?;
@@ -1264,7 +1264,7 @@ pub fn archive_entity(
     e.provenance = stamp_provenance(&e.provenance, actor, "archive", ts);
     let new_json = serde_json::to_string(&e).map_err(json_error)?;
     conn.execute(
-        "UPDATE knowledge_entities SET archived_at = ?1, record_json = ?2 WHERE id = ?3",
+        "UPDATE knowledge_entities_records SET archived_at = ?1, record_json = ?2 WHERE id = ?3",
         params![ts.to_rfc3339(), new_json, id_str],
     )
     .map_err(sql_error)?;
@@ -1304,7 +1304,7 @@ pub fn restore_entity(
     e.provenance = stamp_provenance(&e.provenance, actor, "restore", ts);
     let new_json = serde_json::to_string(&e).map_err(json_error)?;
     conn.execute(
-        "UPDATE knowledge_entities SET archived_at = NULL, record_json = ?1 WHERE id = ?2",
+        "UPDATE knowledge_entities_records SET archived_at = NULL, record_json = ?1 WHERE id = ?2",
         params![new_json, id_str],
     )
     .map_err(sql_error)?;
@@ -1373,13 +1373,13 @@ fn set_relationship_archived(
     let new_json = serde_json::to_string(&r).map_err(json_error)?;
     if let Some(archived_ts) = archived_at {
         conn.execute(
-            "UPDATE knowledge_relationships SET archived_at = ?1, record_json = ?2 WHERE id = ?3",
+            "UPDATE knowledge_relationships_records SET archived_at = ?1, record_json = ?2 WHERE id = ?3",
             params![archived_ts.to_rfc3339(), new_json, id_str],
         )
         .map_err(sql_error)?;
     } else {
         conn.execute(
-            "UPDATE knowledge_relationships SET archived_at = NULL, record_json = ?1 WHERE id = ?2",
+            "UPDATE knowledge_relationships_records SET archived_at = NULL, record_json = ?1 WHERE id = ?2",
             params![new_json, id_str],
         )
         .map_err(sql_error)?;
@@ -1419,13 +1419,13 @@ fn cascade_set_incident_archived(
         let new_json = serde_json::to_string(&rel).map_err(json_error)?;
         if let Some(a) = archived_at {
             conn.execute(
-                "UPDATE knowledge_relationships SET archived_at = ?1, record_json = ?2 WHERE id = ?3",
+                "UPDATE knowledge_relationships_records SET archived_at = ?1, record_json = ?2 WHERE id = ?3",
                 params![a.to_rfc3339(), new_json, id],
             )
             .map_err(sql_error)?;
         } else {
             conn.execute(
-                "UPDATE knowledge_relationships SET archived_at = NULL, record_json = ?1 WHERE id = ?2",
+                "UPDATE knowledge_relationships_records SET archived_at = NULL, record_json = ?1 WHERE id = ?2",
                 params![new_json, id],
             )
             .map_err(sql_error)?;

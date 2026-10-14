@@ -12,6 +12,13 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
 
 ## Active
 
+- [`code-source-preservation`](code-source-preservation/spec.md): first slice of
+  accepted RFC-0021 — complete nested callable bodies, exact code snapshots,
+  recoverable context ranges, role-aware candidate exclusions and per-file
+  generation/re-scan/retraction controls. [Plan](code-source-preservation/plan.md).
+  **Shipped** (source-preservation foundation; parser registry and Silver remain
+  future slices). Constrained by ADR-0029, ADR-0030 and
+  ADR-0022, with ADR-0028's remaining pure-code ownership rules.
 - [`code-liveness`](code-liveness/spec.md): trustworthy dead-code verdicts —
   qualified-suffix resolution rung, typed `registers` edges, constructed-impl
   dispatch liveness, and a six-bucket classification surfaced at MCP + N-API

@@ -7,7 +7,10 @@
 
 use std::collections::HashMap;
 
-use engram_domain::{KnowledgeChunkKind, SourceLocation};
+use super::source_coverage::{CoveredCodeCandidate, source_residual_ranges};
+use engram_domain::{
+    CodeByteRange, CodeChunkRole, CodeParseQuality, KnowledgeChunkKind, SourceLocation,
+};
 use engram_runtime::{CoreError, CoreResult};
 
 use crate::edges::{StructuralEdges, contains_pairs};
@@ -325,6 +328,111 @@ impl TreeSitterChunker {
     }
 }
 
+impl TreeSitterChunker {
+    /// Exact source slices for mapped declarations. Synthesized doc prefixes
+    /// stay out of these slices; unmatched comments/imports become residuals.
+    pub fn covered_chunks_with_tree(
+        &self,
+        tree: &tree_sitter::Tree,
+        text: &str,
+        ext: &str,
+    ) -> CoreResult<Vec<CoveredCodeCandidate>> {
+        if text.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let entry = self
+            .entries
+            .get(ext)
+            .ok_or_else(|| CoreError::InvalidRequest {
+                reason: format!("no tree-sitter grammar for .{ext}"),
+            })?;
+        let mut legacy = Vec::new();
+        let mut coverage = Vec::new();
+        walk_declarations_with_receivers(
+            &tree.root_node(),
+            text.as_bytes(),
+            &entry.kind_map,
+            &[],
+            &mut legacy,
+            Some(&mut coverage),
+        );
+        let quality = if tree.root_node().has_error() {
+            CodeParseQuality::Recovered
+        } else {
+            CodeParseQuality::Clean
+        };
+        if coverage.is_empty() {
+            coverage.push(CoveredCodeCandidate {
+                candidate: ChunkCandidate {
+                    kind: KnowledgeChunkKind::CodeBlock,
+                    text: text.to_owned(),
+                    location: None,
+                },
+                role: CodeChunkRole::Residual,
+                ranges: vec![CodeByteRange {
+                    start: 0,
+                    end: text.len() as u64,
+                }],
+                declaration_range: None,
+                parse_quality: quality,
+                complete: false,
+                unsupported_features: vec!["unmapped_syntax".into()],
+            });
+        } else {
+            let covered: Vec<_> = coverage
+                .iter()
+                .flat_map(|unit| unit.ranges.iter().copied())
+                .collect();
+            for range in source_residual_ranges(text.len() as u64, &covered)? {
+                let slice = &text[range.start as usize..range.end as usize];
+                if slice.trim().is_empty() {
+                    continue;
+                }
+                coverage.push(CoveredCodeCandidate {
+                    candidate: ChunkCandidate {
+                        kind: KnowledgeChunkKind::CodeBlock,
+                        text: slice.to_owned(),
+                        location: Some(SourceLocation {
+                            path: None,
+                            start_line: Some(
+                                (text[..range.start as usize]
+                                    .bytes()
+                                    .filter(|b| *b == b'\n')
+                                    .count()
+                                    + 1) as u32,
+                            ),
+                            end_line: Some(
+                                (text[..range.end as usize]
+                                    .bytes()
+                                    .filter(|b| *b == b'\n')
+                                    .count()
+                                    + 1) as u32,
+                            ),
+                            start_offset: None,
+                            end_offset: None,
+                            anchor: Some(format!("residual:{}-{}", range.start, range.end)),
+                        }),
+                    },
+                    role: CodeChunkRole::Residual,
+                    ranges: vec![range],
+                    declaration_range: None,
+                    parse_quality: quality,
+                    complete: false,
+                    unsupported_features: vec!["unmapped_syntax".into()],
+                });
+            }
+        }
+        for unit in &mut coverage {
+            unit.parse_quality = quality;
+            if quality == CodeParseQuality::Recovered {
+                unit.complete = false;
+                unit.unsupported_features.push("syntax_recovery".into());
+            }
+        }
+        Ok(coverage)
+    }
+}
+
 impl Chunker for TreeSitterChunker {
     fn chunk(&self, text: &str) -> CoreResult<Vec<ChunkCandidate>> {
         // Direct call without extension — return a file-level chunk.
@@ -369,7 +477,7 @@ fn walk_declarations(
     kind_map: &HashMap<&str, &str>,
     chunks: &mut Vec<ChunkCandidate>,
 ) {
-    walk_declarations_with_receivers(node, source, kind_map, &[], chunks);
+    walk_declarations_with_receivers(node, source, kind_map, &[], chunks, None);
 }
 
 /// Receiver-aware walk (RFC-0020 Phase 2): a declaration nested inside other
@@ -382,6 +490,7 @@ fn walk_declarations_with_receivers(
     kind_map: &HashMap<&str, &str>,
     receivers: &[String],
     chunks: &mut Vec<ChunkCandidate>,
+    mut coverage: Option<&mut Vec<CoveredCodeCandidate>>,
 ) {
     let kind = node.kind();
     if let Some(keyword) = kind_map.get(kind) {
@@ -408,7 +517,8 @@ fn walk_declarations_with_receivers(
                 // comment to their full body.
                 let doc = leading_doc_comment(node, source);
                 let signature = signature_line(node, source);
-                let text = if has_declaration_descendant(node, kind_map) {
+                let is_callable = matches!(*keyword, "fn" | "def" | "function");
+                let text = if !is_callable && has_declaration_descendant(node, kind_map) {
                     match (&doc, signature.is_empty()) {
                         (Some(d), _) => format!("{d}\n{signature}"),
                         (None, true) => String::new(),
@@ -439,6 +549,49 @@ fn walk_declarations_with_receivers(
                         anchor: Some(format!("{keyword} {qualified}")),
                     }),
                 });
+                if let Some(output) = coverage.as_deref_mut() {
+                    let declaration = CodeByteRange {
+                        start: node.start_byte() as u64,
+                        end: node.end_byte() as u64,
+                    };
+                    let ranges = if is_callable {
+                        vec![declaration]
+                    } else {
+                        let mut excluded = Vec::new();
+                        let mut cursor = node.walk();
+                        for child in node.named_children(&mut cursor) {
+                            collect_declaration_ranges(&child, kind_map, &mut excluded);
+                        }
+                        source_residual_ranges(declaration.end, &excluded)
+                            .expect("AST ranges are within source")
+                            .into_iter()
+                            .filter_map(|r| {
+                                let start = r.start.max(declaration.start);
+                                (r.end > start).then_some(CodeByteRange { start, end: r.end })
+                            })
+                            .collect()
+                    };
+                    let mut candidate = chunks.last().expect("declaration emitted").clone();
+                    candidate.text = ranges
+                        .iter()
+                        .map(|r| &source[r.start as usize..r.end as usize])
+                        .map(|bytes| std::str::from_utf8(bytes).expect("AST byte boundaries"))
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    output.push(CoveredCodeCandidate {
+                        candidate,
+                        role: if is_callable {
+                            CodeChunkRole::Symbol
+                        } else {
+                            CodeChunkRole::ContainerContext
+                        },
+                        ranges,
+                        declaration_range: Some(declaration),
+                        parse_quality: CodeParseQuality::Clean,
+                        complete: true,
+                        unsupported_features: Vec::new(),
+                    });
+                }
                 // Children of this declaration descend with it on the
                 // receiver chain (its bare name, not the qualified form).
                 let mut child_receivers = receivers.to_vec();
@@ -451,6 +604,7 @@ fn walk_declarations_with_receivers(
                         kind_map,
                         &child_receivers,
                         chunks,
+                        coverage.as_deref_mut(),
                     );
                 }
                 return;
@@ -460,7 +614,32 @@ fn walk_declarations_with_receivers(
     // Not a recognized declaration — recurse with the unchanged chain.
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
-        walk_declarations_with_receivers(&child, source, kind_map, receivers, chunks);
+        walk_declarations_with_receivers(
+            &child,
+            source,
+            kind_map,
+            receivers,
+            chunks,
+            coverage.as_deref_mut(),
+        );
+    }
+}
+
+fn collect_declaration_ranges(
+    node: &tree_sitter::Node,
+    kind_map: &HashMap<&str, &str>,
+    ranges: &mut Vec<CodeByteRange>,
+) {
+    if kind_map.contains_key(node.kind()) {
+        ranges.push(CodeByteRange {
+            start: node.start_byte() as u64,
+            end: node.end_byte() as u64,
+        });
+        return;
+    }
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        collect_declaration_ranges(&child, kind_map, ranges);
     }
 }
 
@@ -1421,6 +1600,83 @@ mod lexical_text_tests {
         let chunks = chunk_texts("fn plain() {}\n", "rs");
         let (_, text) = chunks.iter().find(|(a, _)| a == "fn plain").expect("fn");
         assert_eq!(text, "fn plain() {}");
+    }
+
+    #[test]
+    fn callable_with_nested_declaration_keeps_complete_body() {
+        let source = "export function checkout(total: number) {\n  const fee = 5;\n  function validate(value: number) { return value > 0; }\n  if (!validate(total)) throw new Error('invalid');\n  return total + fee;\n}\n";
+        let chunks = chunk_texts(source, "ts");
+        let outer = &chunks
+            .iter()
+            .find(|(a, _)| a == "function checkout")
+            .expect("checkout")
+            .1;
+        for required in [
+            "const fee = 5",
+            "throw new Error('invalid')",
+            "return total + fee",
+        ] {
+            assert!(
+                outer.contains(required),
+                "outer callable lost {required:?}: {outer:?}"
+            );
+        }
+        assert!(
+            chunks
+                .iter()
+                .any(|(a, text)| a == "function checkout::validate"
+                    && text.contains("return value > 0")),
+            "qualified child missing: {chunks:?}"
+        );
+    }
+
+    #[test]
+    fn multiline_nested_callables_keep_signatures_and_bodies() {
+        let cases = [
+            (
+                "rs",
+                "fn outer(\n    value: i32,\n) -> i32 {\n    let before = value;\n    fn inner(x: i32) -> i32 { x + 1 }\n    before + inner(1)\n}\n",
+                "fn outer",
+                "value: i32",
+                "let before",
+                "before + inner",
+                "fn outer::inner",
+            ),
+            (
+                "py",
+                "def outer(\n    value,\n):\n    before = value\n    def inner(x):\n        return x + 1\n    return before + inner(1)\n",
+                "def outer",
+                "value,",
+                "before = value",
+                "return before + inner",
+                "def outer::inner",
+            ),
+            (
+                "ts",
+                "function outer(\n  value: number,\n): number {\n  const before = value;\n  function inner(x: number) { return x + 1; }\n  return before + inner(1);\n}\n",
+                "function outer",
+                "value: number",
+                "const before",
+                "return before + inner",
+                "function outer::inner",
+            ),
+        ];
+        for (ext, source, anchor, signature, before, after, child_anchor) in cases {
+            let chunks = chunk_texts(source, ext);
+            let outer = &chunks
+                .iter()
+                .find(|(a, _)| a == anchor)
+                .unwrap_or_else(|| panic!("missing {anchor}: {chunks:?}"))
+                .1;
+            assert!(
+                outer.contains(signature) && outer.contains(before) && outer.contains(after),
+                "incomplete {ext} callable: {outer:?}"
+            );
+            assert!(
+                chunks.iter().any(|(a, _)| a == child_anchor),
+                "missing qualified child {child_anchor}: {chunks:?}"
+            );
+        }
     }
 }
 

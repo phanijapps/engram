@@ -46,7 +46,7 @@ use engram_domain::{
     Belief, Concept, ConceptScheme, HierarchyNode, KnowledgeChunk, KnowledgeEntity,
     KnowledgeRelationship, KnowledgeSource, MemoryRecord, Scope, SourceDocument,
 };
-use engram_knowledge::TaxonomyRepository as _;
+use engram_knowledge::{CodeSourceRepository, TaxonomyRepository as _};
 use engram_runtime::CoreResult;
 use engram_store_sqlite::SqlBeliefStore;
 use engram_store_sqlite::SqlHierarchyStore;
@@ -110,13 +110,85 @@ impl SqlExportImport {
 
 #[async_trait]
 impl ExportImport for SqlExportImport {
+    async fn export_authorized(
+        &self,
+        requester: &engram_domain::Requester,
+        scope: &Scope,
+    ) -> CoreResult<ImportData> {
+        if !requester
+            .permissions
+            .iter()
+            .any(|p| p == "code:source:export")
+        {
+            return Err(engram_runtime::CoreError::PolicyDenied {
+                reason: "source-export authority required".into(),
+            });
+        }
+        let mut data = self.export(scope).await?;
+        for m in self.knowledge.list_code_sources(scope).await? {
+            if m.state != engram_domain::CodeSourceState::Active {
+                return Err(engram_runtime::CoreError::ProviderUnavailable {
+                    provider: format!("source {} unavailable", m.file.path),
+                });
+            }
+            let bundle = self
+                .knowledge
+                .export_code_source(
+                    engram_domain::CodeSourceReadRequest {
+                        file: m.file,
+                        generation: Some(m.generation),
+                        requester: requester.clone(),
+                        max_bytes: 1024 * 1024,
+                    },
+                    scope,
+                )
+                .await?;
+            data.code_sources.push(bundle);
+        }
+        Ok(data)
+    }
     async fn export(&self, scope: &Scope) -> CoreResult<ImportData> {
         // ---- Knowledge family: read via the concrete listing methods --------
-        let sources = self.knowledge.list_sources(scope).await?;
-        let documents = self.knowledge.list_documents(scope).await?;
-        let chunks = self.knowledge.list_chunks(scope).await?;
-        let entities = self.knowledge.list_entities(scope).await?;
-        let relationships = self.knowledge.list_relationships(scope).await?;
+        let mut sources = self.knowledge.list_sources(scope).await?;
+        let mut kept = Vec::new();
+        for row in sources {
+            if !self.knowledge.has_any_code_contribution(row.id.as_str())? {
+                kept.push(row);
+            }
+        }
+        sources = kept;
+        let mut documents = self.knowledge.list_documents(scope).await?;
+        let mut kept = Vec::new();
+        for row in documents {
+            if !self.knowledge.has_any_code_contribution(row.id.as_str())? {
+                kept.push(row);
+            }
+        }
+        documents = kept;
+        let mut chunks = self.knowledge.list_chunks(scope).await?;
+        let mut kept = Vec::new();
+        for row in chunks {
+            if !self.knowledge.has_any_code_contribution(row.id.as_str())? {
+                kept.push(row);
+            }
+        }
+        chunks = kept;
+        let mut entities = self.knowledge.list_entities(scope).await?;
+        let mut kept = Vec::new();
+        for row in entities {
+            if !self.knowledge.has_any_code_contribution(row.id.as_str())? {
+                kept.push(row);
+            }
+        }
+        entities = kept;
+        let mut relationships = self.knowledge.list_relationships(scope).await?;
+        let mut kept = Vec::new();
+        for row in relationships {
+            if !self.knowledge.has_any_code_contribution(row.id.as_str())? {
+                kept.push(row);
+            }
+        }
+        relationships = kept;
 
         // Documents and chunks carry no `scope` field of their own; their scope
         // is inherited from their owning source. Build a source-id -> scope map
@@ -164,6 +236,7 @@ impl ExportImport for SqlExportImport {
         };
 
         Ok(ImportData {
+            code_sources: Vec::new(),
             memories: memories.iter().map(memory_record).collect(),
             knowledge_sources: sources.iter().map(source_record).collect(),
             knowledge_documents: documents

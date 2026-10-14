@@ -53,6 +53,16 @@ pub(crate) struct KnowledgeRelationshipSource(pub(crate) Arc<SqlKnowledgeStore>)
 
 #[async_trait]
 impl GraphRelationshipSource for KnowledgeRelationshipSource {
+    async fn access_for_request(
+        &self,
+        request: &RetrievalRequest,
+    ) -> CoreResult<engram_retrieval::RecordAccess> {
+        self.0.source_record_access(request)
+    }
+
+    async fn source_revision(&self, _scope: &Scope) -> CoreResult<u64> {
+        self.0.code_source_revision()
+    }
     async fn entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>> {
         self.0.list_entities(scope).await
     }
@@ -141,6 +151,29 @@ impl KnowledgeLexicalResolver {
 
 #[async_trait]
 impl LexicalTargetResolver for KnowledgeLexicalResolver {
+    async fn source_revision(&self, _request: &RetrievalRequest) -> CoreResult<u64> {
+        self.store.code_source_revision()
+    }
+    async fn projection_is_current(
+        &self,
+        target_id: &str,
+        indexed_text: Option<&str>,
+        _request: &RetrievalRequest,
+    ) -> CoreResult<bool> {
+        if !self.store.has_code_contribution(target_id)? {
+            return Ok(true);
+        }
+        let Some(canonical) = self.store.semantic_lexical_text(target_id)? else {
+            return Ok(false);
+        };
+        let Some(indexed) = indexed_text else {
+            return Err(engram_runtime::CoreError::ProviderUnavailable {
+                provider: "code lexical index needs source-aware reindexing".into(),
+            });
+        };
+        Ok(indexed == engram_store_lexical::normalize_identifier_text(&canonical))
+    }
+
     async fn resolve(
         &self,
         target_id: &str,
@@ -149,8 +182,14 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
         // (1) Chunk resolution — the common case for docs/memories. Preserves
         // the prior behavior exactly: a chunk-id hit rehydrates its canonical
         // `KnowledgeChunk`.
+        let access = self.store.source_record_access(request)?;
         let chunk_id = ChunkId::from(target_id);
-        if let Some(chunk) = self.store.get_chunk(&chunk_id, &request.scope).await? {
+        if access.allows(RetrievalTargetType::Chunk, target_id)
+            && let Some(mut chunk) = self.store.get_chunk(&chunk_id, &request.scope).await?
+        {
+            if let Some(policy) = access.policy(RetrievalTargetType::Chunk, target_id) {
+                chunk.policy = policy.clone();
+            }
             return Ok(Some(chunk_to_lexical(chunk)));
         }
         // (2) Entity resolution — code symbols. `scan_repo` feeds the lexical
@@ -162,8 +201,14 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
         // chunk resolution unchanged; the entity branch is purely additive —
         // entity ids that previously dropped now resolve instead.
         let entity_id = EntityId::from(target_id);
-        if let Some(entity) = self.store.get_entity(&entity_id, &request.scope).await? {
-            return Ok(Some(entity_to_lexical(entity)));
+        if access.allows(RetrievalTargetType::Entity, target_id)
+            && let Some(entity) = self.store.get_entity(&entity_id, &request.scope).await?
+        {
+            let mut result = entity_to_lexical(entity);
+            if let Some(policy) = access.policy(RetrievalTargetType::Entity, target_id) {
+                result.policy = policy.clone();
+            }
+            return Ok(Some(result));
         }
         Ok(None)
     }
@@ -187,13 +232,25 @@ impl KnowledgeVectorResolver {
 #[cfg(feature = "fastembed")]
 #[async_trait]
 impl VectorTargetResolver for KnowledgeVectorResolver {
+    async fn source_revision(&self, _request: &RetrievalRequest) -> CoreResult<u64> {
+        self.store.code_source_revision()
+    }
     async fn resolve(
         &self,
         hit: &VectorSearchResult,
         request: &RetrievalRequest,
     ) -> CoreResult<Option<VectorResolvedTarget>> {
+        let access = self.store.source_record_access(request)?;
+        if !access.allows(RetrievalTargetType::Chunk, &hit.target_id) {
+            return Ok(None);
+        }
         let chunk = resolve_chunk(&self.store, &hit.target_id, &request.scope).await?;
-        Ok(chunk.map(chunk_to_vector))
+        Ok(chunk.map(|mut chunk| {
+            if let Some(policy) = access.policy(RetrievalTargetType::Chunk, &hit.target_id) {
+                chunk.policy = policy.clone();
+            }
+            chunk_to_vector(chunk)
+        }))
     }
 }
 

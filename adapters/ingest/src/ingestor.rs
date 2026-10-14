@@ -70,10 +70,59 @@ where
     where
         R: KnowledgeRepository + ?Sized,
     {
-        validate_request(&request)?;
+        let prepared = self.prepare_candidates(request, candidates, false)?;
+        persist_prepared(repository, prepared).await
+    }
 
+    /// Assembly-only seam used by the source generation coordinator, which
+    /// stages inventory before any repository write.
+    pub(crate) fn prepare_code_candidates(
+        &self,
+        request: DocumentIngestRequest,
+        candidates: Vec<crate::ChunkCandidate>,
+    ) -> CoreResult<IngestedKnowledge> {
+        if request.document_kind != SourceDocumentKind::Code {
+            return Err(CoreError::InvalidRequest {
+                reason: "code preparation requires a code document".into(),
+            });
+        }
+        self.prepare_candidates(request, candidates, true)
+    }
+
+    fn prepare_candidates(
+        &self,
+        request: DocumentIngestRequest,
+        candidates: Vec<crate::ChunkCandidate>,
+        code_source: bool,
+    ) -> CoreResult<IngestedKnowledge> {
+        if code_source {
+            let mut checked = request.clone();
+            if checked.text.trim().is_empty() {
+                checked.text = "source-snapshot".into();
+            }
+            validate_request(&checked)?;
+        } else {
+            validate_request(&request)?;
+        }
+        let owning_document_kind = request.document_kind.clone();
         let document_hash = content_hash(&request.text);
-        let source_id = source_id(&request);
+        let source_id = if code_source {
+            Id::from(format!(
+                "source-{}",
+                content_hash(
+                    serde_json::to_vec(&(
+                        source_id(&request),
+                        &request.scope,
+                        &request.document.path
+                    ))
+                    .map_err(|e| CoreError::InvalidRequest {
+                        reason: e.to_string()
+                    })?
+                )
+            ))
+        } else {
+            source_id(&request)
+        };
         let document_id = document_id(&source_id, &request.document, &document_hash);
         let now = Utc::now();
         let provenance = Provenance {
@@ -142,6 +191,8 @@ where
             .map(|(index, candidate)| {
                 let chunk_hash = content_hash(&candidate.text);
                 KnowledgeChunk {
+                    code: None,
+                    document_kind: Some(owning_document_kind.clone()),
                     id: chunk_id(&document_id, index, &chunk_hash),
                     document_id: document_id.clone(),
                     source_id: source_id.clone(),
@@ -165,19 +216,29 @@ where
             })
             .collect::<Vec<_>>();
 
-        let source = repository.put_source(source).await?;
-        let document = repository.put_document(document).await?;
-        let mut persisted_chunks = Vec::with_capacity(chunks.len());
-        for chunk in chunks {
-            persisted_chunks.push(repository.put_chunk(chunk).await?);
-        }
-
         Ok(IngestedKnowledge {
             source,
             document,
-            chunks: persisted_chunks,
+            chunks,
         })
     }
+}
+
+pub(crate) async fn persist_prepared<R: KnowledgeRepository + ?Sized>(
+    repository: &R,
+    prepared: IngestedKnowledge,
+) -> CoreResult<IngestedKnowledge> {
+    let source = repository.put_source(prepared.source).await?;
+    let document = repository.put_document(prepared.document).await?;
+    let mut chunks = Vec::with_capacity(prepared.chunks.len());
+    for chunk in prepared.chunks {
+        chunks.push(repository.put_chunk(chunk).await?);
+    }
+    Ok(IngestedKnowledge {
+        source,
+        document,
+        chunks,
+    })
 }
 
 fn validate_request(request: &DocumentIngestRequest) -> CoreResult<()> {

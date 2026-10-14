@@ -91,9 +91,7 @@ impl IngestOps {
             manifest_path
                 .as_ref()
                 .and_then(|p| std::fs::read_to_string(p).ok())
-                .and_then(|s| {
-                    serde_json::from_str::<std::collections::HashMap<String, String>>(&s).ok()
-                })
+                .map(|s| engram_ingest::decode_scan_manifest(&s, &scope))
                 .unwrap_or_default()
         };
 
@@ -138,13 +136,20 @@ impl IngestOps {
                     }
                 }
             };
-            let result = scan_repository(PathBuf::from(&root).as_path(), &opts, &store, progress);
+            let mut result =
+                scan_repository(PathBuf::from(&root).as_path(), &opts, &store, progress);
             // Cross-file resolution: after the parallel scan, connect entities
             // that share a name across different graphs so the Q&A + explorer
             // see cross-file/cross-repo edges.
-            if let Ok((ref summary, _)) = result {
+            if let Ok((summary, _)) = &mut result {
                 if summary.ingested > 0 {
-                    resolve_cross_file_edges(&store, &opts.scope);
+                    if let Err(error) = resolve_cross_file_edges(&store, &opts.scope) {
+                        eprintln!(
+                            "[engram-node-scan] cross-file resolution failed: {}",
+                            error.to_redacted()
+                        );
+                        summary.errors += 1;
+                    }
                 }
             }
             let final_state = match result {
@@ -152,7 +157,8 @@ impl IngestOps {
                     if let Some(path) = manifest_path {
                         let _ = std::fs::write(
                             &path,
-                            serde_json::to_string(&new_manifest).unwrap_or_default(),
+                            engram_ingest::encode_scan_manifest(&new_manifest, &opts.scope)
+                                .unwrap_or_default(),
                         );
                     }
                     ScanJobState {

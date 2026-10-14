@@ -212,6 +212,8 @@ fn chunk_inherits_source_scope() {
     }))
     .expect("put document");
     block_on(store.put_chunk(KnowledgeChunk {
+        code: None,
+        document_kind: None,
         id: chunk_id.clone(),
         document_id: document_id.clone(),
         source_id: source_id.clone(),

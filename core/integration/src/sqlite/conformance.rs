@@ -410,6 +410,7 @@ pub(crate) fn observability_ok() -> bool {
 /// Migration: manifest fingerprint is deterministic and sensitive to changes.
 pub(crate) fn migration_ok() -> bool {
     let counts = crate::RowCounts {
+        code_sources: 0,
         memory: 2,
         knowledge_sources: 1,
         knowledge_documents: 1,
@@ -678,6 +679,8 @@ fn document(id: Id, source_id: Id) -> SourceDocument {
 
 fn chunk(id: Id, document_id: Id, source_id: Id) -> KnowledgeChunk {
     KnowledgeChunk {
+        code: None,
+        document_kind: None,
         id,
         document_id,
         source_id,

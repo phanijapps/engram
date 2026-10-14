@@ -3,3 +3,5 @@
 pub mod chunking;
 pub mod code_symbol;
 pub mod tree_sitter_chunker;
+
+pub mod source_coverage;

@@ -36,9 +36,13 @@ describe("@engram/client native transport", () => {
           }
         },
         NativeKnowledgeEngine: class {
+          requireCodeSourceApi() {return {readSourceJson:()=>"{}",listSourcesJson:()=>"[]"};}
+          deadCodeJson():string {return "[]";}
+          deadCodeClassifiedJson():string {return "[]";}
           putEntityJson(): string { return "null"; }
           putRelationshipJson(): string { return "null"; }
           getEntityJson(): string { return "null"; }
+        getChunkJson(): string { return "null"; }
           putGraphJson(): string { return "null"; }
           getGraphJson(): string { return "null"; }
           neighborsJson(): string { return "[]"; }

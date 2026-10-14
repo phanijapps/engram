@@ -39,6 +39,9 @@ impl KnowledgeQuery for SqlKnowledgeStore {
             .await?
             .into_iter()
             .map(|r| ChunkRef {
+                code: r.code,
+                semantic_eligible: true,
+                model_eligible: r.model_eligible,
                 id: r.id,
                 source: r.source,
                 has_text: r.has_text,
@@ -56,6 +59,11 @@ impl KnowledgeQuery for SqlKnowledgeStore {
         document_id: &DocumentId,
         scope: &Scope,
     ) -> CoreResult<Vec<KnowledgeChunk>> {
-        SqlKnowledgeStore::list_chunks_by_document(self, document_id, scope).await
+        <SqlKnowledgeStore as engram_knowledge::KnowledgeRepository>::list_chunks_by_document(
+            self,
+            document_id,
+            scope,
+        )
+        .await
     }
 }

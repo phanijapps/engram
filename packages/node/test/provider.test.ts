@@ -17,6 +17,10 @@ function mockProvider(): {
   };
   const recorded = (key: string): unknown[] => calls[key] ?? [];
   const provider = {
+    requireCodeSourceApi:(context:string)=>{
+      capture("sourceContext")(context);
+      return {readSourceJson:capture("sourceQuery"),listSourcesJson:()=>"[]"};
+    },
     capabilitiesJson: () => {
       (calls.capabilities ??= []).push(null);
       return '{"families":[]}';
@@ -117,4 +121,13 @@ describe("NativeProviderTransport", () => {
     expect(recorded("capabilities")).toHaveLength(1);
     expect(report).toMatchObject({ families: [] });
   });
+});
+
+it("binds source reads to host context separately from query",async ()=>{
+ const {provider,recorded}=mockProvider();const transport=createNativeProviderTransport({provider});
+ const context={readerVersion:1 as const,scope:{tenant:"t",session:"session"},requester:{actor:{id:"owner",kind:"agent" as const}}};
+ await transport.readCodeSource({repository:"repo",path:"src/a.ts"},context);
+ expect(recorded("sourceContext")[0]).toEqual(context);
+ expect(recorded("sourceQuery")[0]).toEqual({repository:"repo",path:"src/a.ts"});
+ expect(await transport.listCodeSources(context)).toEqual([]);
 });

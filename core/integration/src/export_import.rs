@@ -50,6 +50,19 @@ use crate::migration::ImportData;
 /// [`MigrationService`]: crate::migration::MigrationService
 #[async_trait]
 pub trait ExportImport: Send + Sync {
+    /// Trusted host scope and principal authorize full source bundles separately.
+    async fn export_authorized(
+        &self,
+        requester: &engram_domain::Requester,
+        scope: &Scope,
+    ) -> CoreResult<ImportData> {
+        let _ = (requester, scope);
+        Err(engram_runtime::CoreError::CapabilityUnsupported {
+            capability: "code_source_export".into(),
+            reason: "authorized export not supported".into(),
+        })
+    }
+
     /// Exports the semantic state visible to `scope` into one [`ImportData`]
     /// payload.
     ///

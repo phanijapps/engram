@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://engram.local/contracts/v1/schemas/engram-v1.schema.json",
   "title": "Engram v1 contract definitions",
+  "x-spec": ["docs/specs/code-source-preservation/spec.md"],
   "type": "object",
   "$defs": {
     "Identifier": {
@@ -830,6 +831,12 @@
         },
         "metadata": {
           "$ref": "#/$defs/Metadata"
+        },
+        "code": {
+          "$ref": "#/$defs/CodeChunkDescriptor"
+        },
+        "documentKind": {
+          "$ref": "#/$defs/SourceDocumentKind"
         }
       }
     },
@@ -1612,6 +1619,627 @@
         "path",
         "scope",
         "createdAt"
+      ]
+    },
+    "CodeFileKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "scope",
+        "repository",
+        "path"
+      ]
+    },
+    "CodeByteRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "CodeChunkRole": {
+      "type": "string",
+      "enum": [
+        "source_snapshot",
+        "symbol",
+        "container_context",
+        "residual"
+      ]
+    },
+    "CodeParseQuality": {
+      "type": "string",
+      "enum": [
+        "clean",
+        "recovered",
+        "fallback",
+        "failed"
+      ]
+    },
+    "CodeSourceState": {
+      "type": "string",
+      "enum": [
+        "updating",
+        "incomplete",
+        "active"
+      ]
+    },
+    "CodeSourceRecordKind": {
+      "type": "string",
+      "enum": [
+        "unresolved_reference",
+        "source",
+        "chunk",
+        "entity",
+        "relationship",
+        "graph",
+        "document"
+      ]
+    },
+    "CodeSourceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CodeSourceRecordKind"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ]
+    },
+    "CodeChunkDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/CodeChunkRole"
+        },
+        "file": {
+          "$ref": "#/$defs/CodeFileKey"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeByteRange"
+          },
+          "minItems": 1
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "parseQuality": {
+          "$ref": "#/$defs/CodeParseQuality"
+        },
+        "unsupportedFeatures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parentUnit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "declarationRange": {
+          "$ref": "#/$defs/CodeByteRange"
+        },
+        "sliceSeparator": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "required": [
+        "role",
+        "file",
+        "generation",
+        "sourceHash",
+        "fingerprint",
+        "ranges",
+        "complete",
+        "parseQuality"
+      ]
+    },
+    "CodeSourceGeneration": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/CodeFileKey"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attemptId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "$ref": "#/$defs/CodeSourceState"
+        },
+        "byteLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "documentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snapshotIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "records": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeSourceRecord"
+          }
+        },
+        "policy": {
+          "$ref": "#/$defs/Policy"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        }
+      },
+      "required": [
+        "file",
+        "generation",
+        "attemptId",
+        "sourceHash",
+        "fingerprint",
+        "state",
+        "byteLength",
+        "policy",
+        "provenance"
+      ]
+    },
+    "CodeSourceReadRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/CodeFileKey"
+        },
+        "requester": {
+          "$ref": "#/$defs/Requester"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1048576
+        }
+      },
+      "required": [
+        "file",
+        "requester"
+      ]
+    },
+    "CodeSourceReadResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "manifest": {
+          "$ref": "#/$defs/CodeSourceGeneration"
+        },
+        "text": {
+          "type": "string"
+        },
+        "coverage": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeChunkDescriptor"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "manifest",
+        "text"
+      ]
+    },
+    "OntologyRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "uri": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": []
+    },
+    "EntityKind": {
+      "type": "string",
+      "enum": [
+        "person",
+        "organization",
+        "project",
+        "repository",
+        "file",
+        "module",
+        "class",
+        "function",
+        "method",
+        "variable",
+        "struct",
+        "interface",
+        "trait",
+        "type_alias",
+        "enum",
+        "endpoint",
+        "api",
+        "concept",
+        "value_stream",
+        "requirement",
+        "task",
+        "tool",
+        "artifact",
+        "unknown"
+      ]
+    },
+    "KnowledgeGraph": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "name": {
+          "type": "string"
+        },
+        "uri": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "ontologyRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OntologyRef"
+          }
+        },
+        "policy": {
+          "$ref": "#/$defs/Policy"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Metadata"
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "name",
+        "policy",
+        "provenance",
+        "createdAt"
+      ]
+    },
+    "KnowledgeEntity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "graphId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "kind": {
+          "$ref": "#/$defs/EntityKind"
+        },
+        "name": {
+          "type": "string"
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sourceRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          }
+        },
+        "conceptRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConceptRef"
+          }
+        },
+        "ontologyClassRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        },
+        "validFrom": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "validUntil": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "archivedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Metadata"
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "kind",
+        "name",
+        "provenance",
+        "createdAt"
+      ]
+    },
+    "KnowledgeRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "graphId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "subject": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "predicate": {
+          "type": "string"
+        },
+        "object": {
+          "$ref": "#/$defs/EntityRef"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          }
+        },
+        "confidence": {
+          "type": "number"
+        },
+        "archivedAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "subject",
+        "predicate",
+        "object",
+        "provenance",
+        "createdAt"
+      ]
+    },
+    "CodeSourceBundle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "integer",
+          "const": 1
+        },
+        "manifest": {
+          "$ref": "#/$defs/CodeSourceGeneration"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KnowledgeSource"
+          }
+        },
+        "documents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceDocument"
+          }
+        },
+        "chunks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KnowledgeChunk"
+          }
+        },
+        "graphs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KnowledgeGraph"
+          }
+        },
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KnowledgeEntity"
+          }
+        },
+        "relationships": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KnowledgeRelationship"
+          }
+        },
+        "unresolvedReferences": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/UnresolvedReference"
+          }
+        },
+        "contextEntities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KnowledgeEntity"
+          },
+          "default": []
+        }
+      },
+      "required": [
+        "version",
+        "manifest",
+        "sources",
+        "documents",
+        "chunks",
+        "graphs",
+        "entities",
+        "relationships",
+        "unresolvedReferences"
+      ]
+    },
+    "CodeSourceQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generation": {
+          "type": "string"
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1048576
+        }
+      },
+      "required": [
+        "repository",
+        "path"
+      ]
+    },
+    "CodeSourceContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "requester": {
+          "$ref": "#/$defs/Requester"
+        },
+        "readerVersion": {
+          "type": "integer",
+          "const": 1
+        }
+      },
+      "required": [
+        "scope",
+        "requester",
+        "readerVersion"
       ]
     }
   }

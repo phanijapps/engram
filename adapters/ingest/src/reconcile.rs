@@ -65,12 +65,11 @@ where
             .and_then(|v| v.as_str())
         {
             let doc_id = DocumentId::from(doc_id.to_owned());
-            if let Ok(chunks) = repo.list_chunks_by_document(&doc_id, scope).await {
-                for chunk in &chunks {
-                    let _ = repo.delete_chunk(&chunk.id, scope).await;
-                }
+            let chunks = repo.list_chunks_by_document(&doc_id, scope).await?;
+            for chunk in &chunks {
+                repo.delete_chunk(&chunk.id, scope).await?;
             }
-            let _ = repo.delete_document(&doc_id, scope).await;
+            repo.delete_document(&doc_id, scope).await?;
         }
         // Hard-delete: entities and relationships cascade inside delete_graph.
         repo.delete_graph(&graph.id, scope).await?;
@@ -102,6 +101,15 @@ where
     R: KnowledgeRepository + KnowledgeGraphRepository + ?Sized,
 {
     if stable_source_key.is_empty() {
+        return Ok(());
+    }
+    if let Some(port) = repo.code_sources() {
+        port.prune_repository_context(
+            scope,
+            stable_source_key,
+            &repo_entity_id(scope, stable_source_key),
+        )
+        .await?;
         return Ok(());
     }
     let remaining = repo.list_graphs_by_source(scope, stable_source_key).await?;

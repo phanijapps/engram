@@ -27,6 +27,18 @@ use crate::knowledge::SqlKnowledgeStore;
 /// implementing the same two reads.
 #[async_trait]
 pub trait GraphCandidateSource: Send + Sync {
+    async fn access_for_request(
+        &self,
+        _request: &RetrievalRequest,
+    ) -> CoreResult<engram_retrieval::RecordAccess> {
+        Ok(Default::default())
+    }
+
+    /// Changes whenever code-source eligibility changes. Zero denotes a source
+    /// that does not support source generations.
+    async fn source_revision(&self, _scope: &Scope) -> CoreResult<u64> {
+        Ok(0)
+    }
     async fn entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>>;
     async fn chunks(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeChunk>>;
 }
@@ -94,6 +106,7 @@ impl RetrievalIndex for GraphRetrievalIndex {
             .or_else(|| request.budget.as_ref().and_then(|budget| budget.max_items))
             .unwrap_or(self.default_limit);
         let scope = &request.scope;
+        let source_revision = self.source.source_revision(scope).await?;
 
         // Cache hit: serve in-scope ENTITIES from the materialized snapshot
         // (populated by a sibling graph lane) and load only chunks from the
@@ -104,23 +117,40 @@ impl RetrievalIndex for GraphRetrievalIndex {
         // associative/community lane hit.
         let (entities, chunks) = if let Some(cache) = &self.cache
             && let Some(snap) = cache.get(scope).await
+            && snap.source_revision == source_revision
         {
             (snap.entities.clone(), self.source.chunks(scope).await?)
         } else {
             try_join(self.source.entities(scope), self.source.chunks(scope)).await?
         };
 
+        if self.source.source_revision(scope).await? != source_revision {
+            return Err(engram_runtime::CoreError::ProviderUnavailable {
+                provider: "code source changed during retrieval".into(),
+            });
+        }
+
+        let access = self.source.access_for_request(request).await?;
         let mut views = Vec::with_capacity(entities.len() + chunks.len());
         for e in &entities {
+            if !access.allows(RetrievalTargetType::Entity, e.id.as_str()) {
+                continue;
+            }
             views.push(GraphCandidateView {
                 target_type: RetrievalTargetType::Entity,
                 target_id: e.id.as_str().to_owned(),
                 text: e.name.clone(),
                 provenance: e.provenance.clone(),
-                policy: graph_default_policy(),
+                policy: access
+                    .policy(RetrievalTargetType::Entity, e.id.as_str())
+                    .cloned()
+                    .unwrap_or_else(graph_default_policy),
             });
         }
         for c in &chunks {
+            if !access.allows(RetrievalTargetType::Chunk, c.id.as_str()) {
+                continue;
+            }
             views.push(GraphCandidateView {
                 target_type: RetrievalTargetType::Chunk,
                 target_id: c.id.as_str().to_owned(),
@@ -129,7 +159,13 @@ impl RetrievalIndex for GraphRetrievalIndex {
                 policy: c.policy.clone(),
             });
         }
-        Ok(rank_graph_candidates(&request.query, views, limit))
+        let results = rank_graph_candidates(&request.query, views, limit);
+        if self.source.source_revision(scope).await? != source_revision {
+            return Err(engram_runtime::CoreError::ProviderUnavailable {
+                provider: "code source changed during retrieval".into(),
+            });
+        }
+        Ok(results)
     }
 }
 
@@ -265,6 +301,16 @@ fn graph_default_policy() -> Policy {
 /// The SQLite knowledge store is a graph candidate source.
 #[async_trait]
 impl GraphCandidateSource for SqlKnowledgeStore {
+    async fn access_for_request(
+        &self,
+        request: &RetrievalRequest,
+    ) -> CoreResult<engram_retrieval::RecordAccess> {
+        self.source_record_access(request)
+    }
+
+    async fn source_revision(&self, _scope: &Scope) -> CoreResult<u64> {
+        self.code_source_revision()
+    }
     async fn entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>> {
         SqlKnowledgeStore::list_entities(self, scope).await
     }

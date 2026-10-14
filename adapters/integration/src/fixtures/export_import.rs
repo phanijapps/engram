@@ -57,6 +57,7 @@ pub fn run_export_import_fixture() -> CoreResult<()> {
     // hierarchy — the families whose concrete stores expose scope-wide listing
     // methods. Vectors remain deferred (no scope-wide list method).
     let expected = RowCounts {
+        code_sources: 0,
         memory: 2,
         knowledge_sources: 1,
         knowledge_documents: 1,
@@ -71,6 +72,7 @@ pub fn run_export_import_fixture() -> CoreResult<()> {
         vectors: 0,
     };
     let actual = RowCounts {
+        code_sources: 0,
         memory: data.memories.len(),
         knowledge_sources: data.knowledge_sources.len(),
         knowledge_documents: data.knowledge_documents.len(),
@@ -207,6 +209,8 @@ fn seed_scope(
     .map_err(err("put_document"))?;
 
     block_on(knowledge.put_chunk(KnowledgeChunk {
+        code: None,
+        document_kind: None,
         id: Id::from("fx-chunk"),
         document_id: Id::from("fx-doc"),
         source_id: Id::from("fx-source"),

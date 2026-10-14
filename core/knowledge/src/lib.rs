@@ -8,6 +8,8 @@
 //! re-exports the public surface so downstream crates depend on the names, not
 //! the internal module layout.
 
+mod code_source;
+mod code_source_write;
 mod graph;
 pub mod identity;
 mod ingest;
@@ -19,6 +21,10 @@ mod taxonomy_validation;
 
 pub use engram_runtime::{CoreError, CoreResult};
 
+pub use code_source::{
+    CodeSourceRepository, authorize_code_source_access, authorize_code_source_read,
+    authorize_code_source_scope, code_source_retrieval_authorized, validate_code_unit_hierarchy,
+};
 pub use graph::KnowledgeGraphRepository;
 pub use identity::EntityIdentityRepository;
 pub use ingest::{Chunker, IngestionService, SourceReader};
@@ -30,3 +36,5 @@ pub use ontology::OntologyRepository;
 pub use repository::KnowledgeRepository;
 pub use taxonomy::TaxonomyRepository;
 pub use taxonomy_validation::validate_taxonomy_proposal;
+
+pub use code_source_write::CodeSourceWrite;

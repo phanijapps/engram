@@ -22,6 +22,12 @@ use engram_runtime::CoreResult;
 /// [`KnowledgeQuery::list_chunk_refs`]).
 #[derive(Debug, Clone)]
 pub struct ChunkRef {
+    /// Typed coverage without loading source text.
+    pub code: Option<engram_domain::CodeChunkDescriptor>,
+    /// Eligibility must be checked before embedding/hash reuse.
+    pub semantic_eligible: bool,
+    /// Model egress requires separate code-source/destination authorization.
+    pub model_eligible: bool,
     pub id: ChunkId,
     /// The chunk's provenance source string (scan delta filtering).
     pub source: String,
@@ -59,6 +65,13 @@ pub trait KnowledgeQuery: Send + Sync {
             .await?
             .into_iter()
             .map(|c| ChunkRef {
+                model_eligible: c.code.is_none()
+                    && c.document_kind != Some(engram_domain::SourceDocumentKind::Code)
+                    && c.kind != engram_domain::KnowledgeChunkKind::CodeSymbol
+                    && (c.kind != engram_domain::KnowledgeChunkKind::CodeBlock
+                        || c.document_kind.is_some()),
+                semantic_eligible: c.code.is_none(),
+                code: c.code,
                 id: c.id,
                 source: c.provenance.source,
                 has_text: !c.text.is_empty(),

@@ -28,6 +28,18 @@ use engram_runtime::CoreResult;
 /// construction — there is no second scope gate inside the walk.
 #[async_trait]
 pub trait GraphRelationshipSource: Send + Sync {
+    async fn access_for_request(
+        &self,
+        _request: &engram_domain::RetrievalRequest,
+    ) -> CoreResult<engram_retrieval::RecordAccess> {
+        Ok(Default::default())
+    }
+
+    /// Changes whenever code-source eligibility changes. Zero denotes a source
+    /// that does not support source generations.
+    async fn source_revision(&self, _scope: &Scope) -> CoreResult<u64> {
+        Ok(0)
+    }
     /// All knowledge-graph entities visible to `scope`.
     async fn entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>>;
 

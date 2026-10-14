@@ -11,16 +11,24 @@
 //! storage concern stays behind its own crate boundary so a durable knowledge
 //! backend can evolve (or move to Postgres / a graph store) without coupling.
 
+mod candidate_text;
+mod code_source;
 mod graph;
+mod guarded_source_write;
 mod identity;
 #[allow(clippy::module_inception)]
 mod knowledge;
 mod maintenance;
 mod ontology;
+mod record_writes;
 mod retrieval;
 mod schema;
 mod scope;
 mod service;
+mod source_access;
+mod source_inventory;
+mod source_legacy;
+mod source_schema;
 mod taxonomy;
 
 pub use identity::SqlIdentityStore;

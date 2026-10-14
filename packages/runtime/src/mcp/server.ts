@@ -1,3 +1,4 @@
+import type { CodeSourceContext } from "@engram/contracts";
 import { readFileSync } from "node:fs";
 import {
   createServer as createHttpServer,
@@ -20,6 +21,8 @@ import { registerTools } from "./tools.js";
 
 /** HTTP-MCP server options (transport + listen port). */
 export interface McpHttpOptions {
+  /** Trusted launch context for exact source tools; tool input cannot set it. */
+  sourceContext?:CodeSourceContext;
   /** Inject a transport (tests). If unset, one is built from `configJson`. */
   transport?: NativeProviderTransport;
   configJson?: string;
@@ -41,7 +44,7 @@ export interface McpHttpOptions {
 /** Builds the McpServer with the Module-2 tools registered against the facade. */
 export function createMcpServer(
   transport: NativeProviderTransport,
-  opts?: { ontology?: unknown; taxonomy?: unknown },
+  opts?: { ontology?: unknown; taxonomy?: unknown;sourceContext?:CodeSourceContext },
 ): McpServer {
   const server = new McpServer({ name: "engram", version: "0.1.0" });
   registerTools(server, transport, opts);
@@ -70,6 +73,9 @@ export async function startMcpHttpServer(opts: McpHttpOptions): Promise<Server> 
       return createNativeProviderTransport({ configJson: opts.configJson });
     })();
 
+  // Resolve the native source handle before advertising an operator-provided
+  // context; this validates the accepted reader/scope/principal contract.
+  if (opts.sourceContext) await transport.listCodeSources(opts.sourceContext);
   const loopback = isLoopbackHost(opts.host);
   if (!loopback && !opts.authToken) {
     throw new Error(
@@ -106,6 +112,7 @@ export async function startMcpHttpServer(opts: McpHttpOptions): Promise<Server> 
       await createMcpServer(transport, {
         ontology: opts.ontologyConfig,
         taxonomy: opts.taxonomyConfig,
+        ...(opts.sourceContext===undefined?{}:{sourceContext:opts.sourceContext}),
       }).connect(t);
       await t.handleRequest(req, res);
     } catch (err) {

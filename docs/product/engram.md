@@ -60,8 +60,8 @@ overwrites); **typed structural edges** — `calls`, `imports`, `contains`,
 **framework patterns** (Express/NestJS/FastAPI/Flask/Spring routes + React
 callbacks); cross-file references either resolve or land in the
 **unresolved-refs ledger** (re-attempted by the ingest **orphan sweep**
-when the defining file arrives later); code chunks carry **docstring +
-signature** for the lexical lane. Query surface: `file_dependencies` (the
+when the defining file arrives later); code chunks retain **complete callable bodies** and source coverage for
+semantic retrieval. Query surface: `file_dependencies` (the
 file-level import graph) and `explore` (natural-language seeded bounded
 subgraph) on every transport — facade, N-API, `@engram/node`, both MCP
 servers — reported as the `code_graph` capability. Deterministic
@@ -69,6 +69,17 @@ throughout; opt-in **LLM** entity/relationship extraction stays TS-side.
 Re-ingest **converges** the graph (retraction, ledger rows included).
 **Cross-repo linkage** via stable source keys + shared OpenAPI
 contract nodes. *Specs: knowledge-ingestion, knowledge-graph-extractor, ast-symbol-extraction, scale-repo-ingestion, background-repo-indexer, structured-repo-identity, contract-first-ingestion, knowledge-graph-retraction, engram-code.*
+
+### Code source preservation ✅
+Accepted UTF-8 code retains exact snapshots and typed byte coverage for callable,
+container and residual chunks, with per-file fenced activation and retryable
+incomplete state. Snapshot-only records stay out of normal candidate/model feeds;
+source reads use trusted exact scope and policy. Rust, Node and both MCP surfaces
+expose source/coverage reads; authorized export/import preserves source policy and
+provenance. SQLite conforms; other cells report Unsupported for this capability.
+Automatic code model feeds remain disabled pending separate enrichment grants.
+*Spec: [code-source-preservation](../specs/code-source-preservation/spec.md).
+Parser registry/context hydration, segmentation and Silver summaries are later slices.*
 
 ### Taxonomy & ontology ✅
 A governed, evolving concept vocabulary (SKOS-aligned) and a typed ontology

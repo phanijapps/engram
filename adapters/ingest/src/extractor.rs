@@ -841,18 +841,7 @@ fn relationship_id(graph_id: &KnowledgeGraphId, subject: &str, object: &str) -> 
 /// Exposed as `pub(crate)` so the ingest reconciler can compute the same id
 /// when deciding whether to delete the per-source Repository node.
 pub(crate) fn repo_entity_id(scope: &Scope, key: &str) -> EntityId {
-    Id::from(format!(
-        "repo-{}",
-        content_hash(format!(
-            "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{key}",
-            scope.tenant,
-            scope.subject.as_deref().unwrap_or(""),
-            scope.workspace.as_deref().unwrap_or(""),
-            scope.session.as_deref().unwrap_or(""),
-            scope.environment.as_deref().unwrap_or(""),
-        ))
-        .trim_start_matches("sha256:")
-    ))
+    engram_code::repository_entity_id(scope, key)
 }
 
 /// Derives a stable `RelationshipId` for the `belongs_to` edge from a document

@@ -4,6 +4,7 @@
 //! `scan_repo` uses a fan-in adapter so treesitter ingestion routes through
 //! the provider's handles (no engine-store bypass).
 
+use engram_domain::Scope;
 use engram_domain::{
     KnowledgeChunk, KnowledgeEntity, KnowledgeRelationship, RetrievalRequest, RetrievalResult,
     RetrievalSourceFailure, RetrievalTargetType,
@@ -220,17 +221,17 @@ fn manifest_path_for(storage: &std::path::Path, root: &std::path::Path) -> std::
 /// Loads a persisted scan manifest. Any read/parse failure degrades to an
 /// empty manifest — a stale or corrupt sidecar must never break the scan,
 /// only cost one full re-ingest.
-fn load_manifest(path: &std::path::Path) -> HashMap<String, String> {
+fn load_manifest(path: &std::path::Path, scope: &Scope) -> HashMap<String, String> {
     std::fs::read_to_string(path)
         .ok()
-        .and_then(|text| serde_json::from_str(&text).ok())
+        .map(|text| engram_ingest::decode_scan_manifest(&text, scope))
         .unwrap_or_default()
 }
 
 /// Persists a scan manifest atomically (tmp + rename) so a crash mid-write
 /// leaves either the old or the new file, never a truncated one. Write
 /// failures are non-fatal (next scan degrades to full) but surfaced.
-fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>) {
+fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>, scope: &Scope) {
     if let Some(parent) = path.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
             eprintln!("engram-mcp: scan manifest dir warning: {e}");
@@ -238,7 +239,7 @@ fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>) {
         }
     }
     let tmp = path.with_extension("json.tmp");
-    match serde_json::to_string(manifest) {
+    match engram_ingest::encode_scan_manifest(manifest, scope) {
         Ok(text) => {
             if let Err(e) = std::fs::write(&tmp, text).and_then(|_| std::fs::rename(&tmp, path)) {
                 eprintln!("engram-mcp: scan manifest write warning: {e}");
@@ -285,7 +286,11 @@ fn embed_pending(
     let mut pending: Vec<&engram_integration::ChunkRef> = refs
         .iter()
         .filter(|r| {
-            r.has_text && !have.contains(&r.id) && source_filter.is_none_or(|src| r.source == src)
+            r.semantic_eligible
+                && r.model_eligible
+                && r.has_text
+                && !have.contains(&r.id)
+                && source_filter.is_none_or(|src| r.source == src)
         })
         .collect();
     pending.sort_by_key(|r| r.id.as_str().to_owned());
@@ -308,7 +313,11 @@ fn embed_pending(
     let mut embedded_twin_by_hash: std::collections::HashMap<&str, &engram_domain::Id> =
         std::collections::HashMap::new();
     for r in &refs {
-        if have.contains(&r.id) && !r.content_hash.is_empty() {
+        if r.semantic_eligible
+            && r.model_eligible
+            && have.contains(&r.id)
+            && !r.content_hash.is_empty()
+        {
             embedded_twin_by_hash
                 .entry(r.content_hash.as_str())
                 .or_insert_with(|| &r.id);
@@ -505,7 +514,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     let prior: HashMap<String, String> = if force {
         HashMap::new()
     } else {
-        load_manifest(&manifest_path)
+        load_manifest(&manifest_path, &app.scope)
     };
 
     let (scan_filter, filter_note) = resolve_scan_filter(path, args);
@@ -519,7 +528,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         scan_filter,
     };
     let (summary, new_manifest) = scan_repository(root, &opts, &repo, |_| ()).map_err(internal)?;
-    save_manifest(&manifest_path, &new_manifest);
+    save_manifest(&manifest_path, &new_manifest, &app.scope);
     eprintln!("engram-mcp: scan_repository done: {summary:?}");
 
     // The scan just wrote entities + relationships for this scope. Invalidate
@@ -2554,6 +2563,10 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
     let caps: Vec<String> = [
         ("memory", app.provider.memory().is_some()),
         ("knowledge", app.provider.knowledge().is_some()),
+        (
+            "code_source_preservation",
+            app.provider.code_sources().is_some(),
+        ),
         ("graph", app.provider.graph().is_some()),
         ("knowledge_query", app.provider.knowledge_query().is_some()),
         ("lexical_feed", app.provider.lexical_feed().is_some()),
@@ -4473,5 +4486,100 @@ mod reindex_tests {
             "limit threads through: {}",
             res2["content"][0]["text"].as_str().unwrap()
         );
+    }
+}
+
+/// Exact source access is a separate purpose from recall and model processing.
+pub fn source_read(app: &App, args: &Value) -> Result<Value, ToolError> {
+    let mut query = args.clone();
+    if let Some(object) = query.as_object_mut() {
+        object.remove("op");
+    }
+    let query: engram_domain::CodeSourceQuery =
+        serde_json::from_value(query).map_err(|e| invalid(e.to_string()))?;
+    let request = engram_domain::CodeSourceContext {
+        scope: app.scope.clone(),
+        requester: source_requester(),
+        reader_version: 1,
+    }
+    .request(query);
+    let result = block_on(
+        app.provider
+            .require_code_source()
+            .map_err(internal)?
+            .read_code_source(request, &app.scope),
+    )
+    .map_err(internal)?;
+    Ok(protocol::text_content(
+        serde_json::to_string(&result).map_err(internal)?,
+    ))
+}
+pub fn code_sources(app: &App, args: &Value) -> Result<Value, ToolError> {
+    if args.as_object().is_none_or(|m| m.keys().any(|k| k != "op")) {
+        return Err(invalid("code_sources accepts no scope or principal input"));
+    }
+    let port = app.provider.require_code_source().map_err(internal)?;
+    let mut visible = Vec::new();
+    for m in block_on(port.list_code_sources(&app.scope)).map_err(internal)? {
+        let request = engram_domain::CodeSourceReadRequest {
+            file: m.file.clone(),
+            requester: source_requester(),
+            generation: None,
+            max_bytes: u64::MAX,
+        };
+        if engram_knowledge::authorize_code_source_access(
+            &request,
+            &app.scope,
+            &m,
+            chrono::Utc::now(),
+        )
+        .is_ok()
+        {
+            visible.push(m);
+        }
+    }
+    Ok(protocol::text_content(
+        serde_json::to_string(&visible).map_err(internal)?,
+    ))
+}
+
+fn source_requester() -> engram_domain::Requester {
+    // An explicit source tool invocation supplies the read-purpose grant in
+    // the launch-bound scope. Private ownership and model-egress remain separate.
+    let mut principal = requester();
+    principal.permissions.push("code:source:read".into());
+    principal
+}
+
+#[cfg(test)]
+mod source_tool_tests {
+    use super::*;
+    use serde_json::json;
+    #[test]
+    fn source_tools_use_mcp_content_and_launch_scope() {
+        let store = tempfile::tempdir().unwrap();
+        let root = tempfile::tempdir().unwrap();
+        let text =
+            "\u{feff}function checkout() { const fee=1; function nested() {} return fee; }\r\n";
+        std::fs::write(root.path().join("a.ts"), text).unwrap();
+        let app = crate::tools::tests::test_app(store.path());
+        scan_repo(&app, &json!({"path":root.path().to_str().unwrap()})).unwrap();
+        let result =
+            source_read(&app, &json!({"repository":"engram-mcp-scan","path":"a.ts"})).unwrap();
+        let read: engram_domain::CodeSourceReadResult =
+            serde_json::from_str(result["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(read.text.as_bytes(), text.as_bytes());
+        assert!(!read.coverage.is_empty());
+        assert!(
+            source_read(
+                &app,
+                &json!({"repository":"engram-mcp-scan","path":"a.ts","scope":{"tenant":"other"}})
+            )
+            .is_err()
+        );
+        let sources = code_sources(&app, &json!({})).unwrap();
+        let sources: Vec<engram_domain::CodeSourceGeneration> =
+            serde_json::from_str(sources["content"][0]["text"].as_str().unwrap()).unwrap();
+        assert_eq!(sources.len(), 1);
     }
 }

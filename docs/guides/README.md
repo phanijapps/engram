@@ -17,6 +17,9 @@ This directory contains user-facing guides organized by the [Diátaxis framework
 ### How-to Guides
 - [Use SurrealDB as the Engram store](how-to/build-a-surrealdb-store.md) — Build a new storage backend by implementing the port traits the SQLite adapter does
 
+### Reference Guides
+- [Code source preservation](reference/code-source-preservation.md) — Exact source reads, trusted host context, generation/version behavior, and source transfer
+
 ### Explanations
 - [How repos get indexed](explanation/how-repos-get-indexed.md) — Understanding Engram's code repository indexing
 

@@ -1,4 +1,5 @@
 import type {
+  CodeSourceContext, CodeSourceQuery, CodeSourceReadResult, CodeSourceGeneration,
   ContextPayload,
   RetrievalRequest,
   WriteMemoryRequest,
@@ -84,6 +85,11 @@ export interface ScopeCounts {
 /** The typed transport over the native binding — every route in the TS MCP
  *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
+  exportAuthorized(context:CodeSourceContext):Promise<unknown>;
+  dryRunImportAuthorized(data:unknown,context:CodeSourceContext):Promise<unknown>;
+  applyImportAuthorized(manifest:unknown,context:CodeSourceContext):Promise<void>;
+  readCodeSource(query:CodeSourceQuery,context:CodeSourceContext):Promise<CodeSourceReadResult>;
+  listCodeSources(context:CodeSourceContext):Promise<CodeSourceGeneration[]>;
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
   /** Unified recall (fused across lanes) → `ContextPayload`. */
@@ -386,6 +392,17 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
     return decode<unknown[]>(
       this.provider.requireKnowledgeQueryApi().listGraphsJson(encode(scope)),
     );
+  }
+
+  async exportAuthorized(context:CodeSourceContext):Promise<unknown> {return decode(this.provider.requireExportImportApi().exportAuthorizedJson(encode(context)));}
+  async dryRunImportAuthorized(data:unknown,context:CodeSourceContext):Promise<unknown> {return decode(this.provider.requireMigrationApi().dryRunImportAuthorizedJson(encode(data),encode(context)));}
+  async applyImportAuthorized(manifest:unknown,context:CodeSourceContext):Promise<void> {this.provider.requireMigrationApi().applyImportAuthorizedJson(encode(manifest),encode(context));}
+
+  async readCodeSource(query:CodeSourceQuery,context:CodeSourceContext):Promise<CodeSourceReadResult> {
+    return decode(this.provider.requireCodeSourceApi(encode(context)).readSourceJson(encode(query))) as CodeSourceReadResult;
+  }
+  async listCodeSources(context:CodeSourceContext):Promise<CodeSourceGeneration[]> {
+    return decode(this.provider.requireCodeSourceApi(encode(context)).listSourcesJson()) as CodeSourceGeneration[];
   }
 
   async listChunksByDocument(documentId: string, scope: unknown): Promise<unknown[]> {

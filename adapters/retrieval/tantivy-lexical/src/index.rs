@@ -30,6 +30,8 @@ pub struct LexicalIndex {
     reader: IndexReader,
     text_field: Field,
     target_id_field: Field,
+    needs_source_rebuild: bool,
+    source_rebuild_directory: Option<std::path::PathBuf>,
 }
 
 impl LexicalIndex {
@@ -44,7 +46,7 @@ impl LexicalIndex {
         let mut builder = Schema::builder();
         // TEXT: tokenized + indexed (BM25 ranking). The identifier-aware split
         // is applied before indexing via `normalize_identifier_text`.
-        let text_field = builder.add_text_field("text", TEXT);
+        let text_field = builder.add_text_field("text", TEXT | STORED);
         // STRING: indexed but untokenized, so a delete Term matches the whole id;
         // STORED so the id survives into ranked results for rehydration.
         let target_id_field = builder.add_text_field("target_id", STRING | STORED);
@@ -65,6 +67,8 @@ impl LexicalIndex {
             reader,
             text_field,
             target_id_field,
+            needs_source_rebuild: false,
+            source_rebuild_directory: None,
         })
     }
 
@@ -82,49 +86,56 @@ impl LexicalIndex {
     /// (e.g. `search` / `recall` on a fresh MCP), which fixes the cross-process
     /// lexical-lane gap where an in-RAM index was empty on every fresh process.
     ///
-    /// Behavior:
-    /// - The directory is created if missing.
-    /// - If the directory already holds a Tantivy index whose schema matches
-    ///   [`build_schema`](Self::build_schema), it is loaded (segments + all
-    ///   prior writes).
-    /// - If it holds no index, a fresh one is created on disk.
-    /// - On any failure to open/create the on-disk index (missing dir, IO error,
-    ///   schema mismatch, corruption), this logs a warning and **falls back to an
-    ///   in-RAM index** rather than crashing — recall then degrades to
-    ///   "no lexical lane until the next scan", never an abort.
+    /// The stored-projection schema lives in `source-projections-v1`; older
+    /// index files remain intact. Bootstrap rebuilds eligible canonical entries
+    /// before marking this version complete. IO or corruption failures return
+    /// an error so hosts report the lane unavailable instead of claiming durable
+    /// success with an ephemeral index.
     ///
     /// The same `Arc<LexicalIndex>` is shared between the write-side
     /// [`LexicalFeed`](crate::LexicalFeed) and the read-side
     /// [`LexicalRetrievalIndex`](crate::LexicalRetrievalIndex), so writes commit
     /// to disk and reads reload from disk through the one handle.
     pub fn open(directory: &Path) -> tantivy::Result<Self> {
+        // Retain old index files. The stored projection schema has its own
+        // durable directory and is rebuilt from canonical eligible knowledge.
+        let versioned_directory = directory.join("source-projections-v1");
+        let needs_source_rebuild = !versioned_directory
+            .join("source-rebuild-complete")
+            .is_file();
+        let directory = versioned_directory.as_path();
         let (schema, text_field, target_id_field) = Self::build_schema();
 
-        if let Err(e) = std::fs::create_dir_all(directory) {
-            eprintln!(
-                "engram-lexical: create lexical dir failed ({e}); falling back to in-RAM index"
-            );
-            return Self::new();
-        }
+        std::fs::create_dir_all(directory).map_err(tantivy::TantivyError::from)?;
 
         let open_result = (|| {
             let mmap_dir = MmapDirectory::open(directory)?;
             IndexBuilder::new().schema(schema).open_or_create(mmap_dir)
         })();
         match open_result {
-            Ok(index) => Self::attach_io(index, text_field, target_id_field),
-            Err(e) => {
-                // Corrupted index, schema mismatch, or an unreadable directory.
-                // Degrade to ephemeral rather than aborting bootstrap: the lexical
-                // lane will be empty until a `scan_repo` repopulates it, and the
-                // operator can wipe `directory` to reset.
-                eprintln!(
-                    "engram-lexical: open_or_create lexical index at {} failed ({e}); falling back to in-RAM index",
-                    directory.display()
-                );
-                Self::new()
+            Ok(index) => {
+                let mut index = Self::attach_io(index, text_field, target_id_field)?;
+                index.needs_source_rebuild = needs_source_rebuild;
+                index.source_rebuild_directory = Some(versioned_directory.clone());
+                Ok(index)
             }
+            Err(e) => Err(e),
         }
+    }
+
+    pub fn needs_source_rebuild(&self) -> bool {
+        self.needs_source_rebuild
+    }
+
+    /// Mark only after canonical eligible entries commit successfully. A crash
+    /// before this marker causes a safe repeat of the durable rebuild.
+    pub fn mark_source_rebuild_complete(&self) -> std::io::Result<()> {
+        if let Some(directory) = &self.source_rebuild_directory {
+            let temporary = directory.join("source-rebuild-complete.tmp");
+            std::fs::write(&temporary, b"source-projections-v1\n")?;
+            std::fs::rename(temporary, directory.join("source-rebuild-complete"))?;
+        }
+        Ok(())
     }
 
     /// Inserts or replaces the document for `target_id` with normalized `text`.
@@ -183,6 +194,18 @@ impl LexicalIndex {
     /// queries (`parseError`) match indexed identifiers. The reader is reloaded
     /// before each search so prior commits are visible (deterministic reads).
     pub fn search(&self, query: &str, limit: usize) -> tantivy::Result<Vec<(String, f32)>> {
+        Ok(self
+            .search_projections(query, limit)?
+            .into_iter()
+            .map(|(id, score, _)| (id, score))
+            .collect())
+    }
+
+    pub(crate) fn search_projections(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> tantivy::Result<Vec<(String, f32, Option<String>)>> {
         if limit == 0 {
             return Ok(Vec::new());
         }
@@ -201,7 +224,11 @@ impl LexicalIndex {
                 .and_then(|v| v.as_str())
                 .map(str::to_owned)
                 .unwrap_or_default();
-            out.push((id, score));
+            let text = doc
+                .get_first(self.text_field)
+                .and_then(|v| v.as_str())
+                .map(str::to_owned);
+            out.push((id, score, text));
         }
         Ok(out)
     }
@@ -350,11 +377,9 @@ mod tests {
         );
     }
 
-    /// Schema mismatch (e.g. an index from an incompatible older build) must
-    /// not crash bootstrap — it falls back to an empty in-RAM index and the
-    /// caller keeps working (degraded, no lexical lane until re-scan).
+    /// Unrelated and legacy files are retained beside the versioned index.
     #[test]
-    fn open_falls_back_to_ram_on_unrelated_directory() {
+    fn open_preserves_unrelated_files_and_uses_durable_version() {
         let dir = tempfile::tempdir().expect("tempdir");
         // A directory that exists but is NOT a valid Tantivy index (no meta.json,
         // just stray files). `open_or_create` treats a bare directory as "no
@@ -369,5 +394,28 @@ mod tests {
         index.upsert("t", "parse error").unwrap();
         let hits = index.search("parse", 10).unwrap();
         assert!(hits.iter().any(|(id, _)| id == "t"));
+    }
+    #[test]
+    fn durable_open_reports_io_failure_instead_of_ephemeral_success() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("not-a-directory");
+        std::fs::write(&file, b"occupied").unwrap();
+        assert!(LexicalIndex::open(&file).is_err());
+    }
+
+    #[test]
+    fn rebuild_marker_survives_reopen_and_incomplete_rebuild_retries() {
+        let dir = tempfile::tempdir().unwrap();
+        let index = LexicalIndex::open(dir.path()).unwrap();
+        assert!(index.needs_source_rebuild());
+        index.upsert("eligible", "canonical source").unwrap();
+        drop(index); // interrupted before marking the rebuild complete
+        let index = LexicalIndex::open(dir.path()).unwrap();
+        assert!(index.needs_source_rebuild());
+        index.mark_source_rebuild_complete().unwrap();
+        drop(index);
+        let index = LexicalIndex::open(dir.path()).unwrap();
+        assert!(!index.needs_source_rebuild());
+        assert_eq!(index.search("canonical", 10).unwrap()[0].0, "eligible");
     }
 }

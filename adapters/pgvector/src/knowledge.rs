@@ -105,6 +105,13 @@ impl KnowledgeRepository for PgKnowledgeStore {
     }
 
     async fn put_chunk(&self, chunk: KnowledgeChunk) -> CoreResult<KnowledgeChunk> {
+        if chunk.code.is_some() {
+            return Err(CoreError::CapabilityUnsupported {
+                capability: "code_source_preservation".into(),
+                reason: "source-generation reader/writer is not available in this knowledge cell"
+                    .into(),
+            });
+        }
         let json = serde_json::to_value(&chunk).map_err(|e| Self::pg_err(e.to_string()))?;
         self.conn.block_on(async {
             self.conn.client.execute(

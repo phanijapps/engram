@@ -59,6 +59,9 @@ where
         summary.entities += child_summary.entities;
         summary.relationships += child_summary.relationships;
         summary.errors += child_summary.errors;
+        summary
+            .admission_failures
+            .extend(child_summary.admission_failures);
     }
     Ok(summary)
 }

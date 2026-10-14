@@ -1,3 +1,4 @@
+import type {CodeSourceContext} from "@engram/contracts";
 import { z } from "zod";
 
 import type { NativeProviderTransport } from "@engram/node";
@@ -92,7 +93,7 @@ const DEFAULT_TAXONOMY = {
 export function registerTools(
   server: McpServer,
   transport: NativeProviderTransport,
-  opts?: { ontology?: unknown; taxonomy?: unknown },
+  opts?: { ontology?: unknown; taxonomy?: unknown; sourceContext?:CodeSourceContext },
 ): void {
   server.registerTool(
     "recall",
@@ -393,6 +394,20 @@ export function registerTools(
     async () => textResult({ pong: true, server: "engram-mcp-http" }),
   );
 
+  server.registerTool("source_read",{
+    description:"Read exact accepted source with typed coverage in the trusted project scope.",
+    inputSchema:z.object({repository:z.string().min(1),path:z.string().min(1),generation:z.string().optional(),maxBytes:z.number().int().positive().max(1048576).optional()}).strict(),
+  },async (query)=> {
+    if (!opts?.sourceContext) throw new Error("code_source_preservation unsupported: trusted source context is not configured");
+    return textResult(await transport.readCodeSource({repository:query.repository,path:query.path,maxBytes:query.maxBytes??1048576,...(query.generation===undefined?{}:{generation:query.generation})},opts.sourceContext));
+  });
+  server.registerTool("code_sources",{
+    description:"List authorized file source generations and availability in the trusted project scope.",inputSchema:z.object({}).strict(),
+  },async ()=>{
+    if (!opts?.sourceContext) throw new Error("code_source_preservation unsupported: trusted source context is not configured");
+    return textResult(await transport.listCodeSources(opts.sourceContext));
+  });
+
   server.registerTool(
     "capability_report",
     {
@@ -400,7 +415,10 @@ export function registerTools(
         "The serialized CapabilityReport for the open provider — which capabilities are supported vs. unsupported, and per-engine conformance.",
       inputSchema: z.object({}),
     },
-    async () => textResult(await transport.capabilities()),
+    async () => {
+      const report=await transport.capabilities();
+      return textResult(opts?.sourceContext ? report : {...(report as Record<string,unknown>),code_source_preservation:{Unsupported:{reason:"ProviderUnavailable"}}});
+    },
   );
 
   server.registerTool(

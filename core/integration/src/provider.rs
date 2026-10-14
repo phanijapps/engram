@@ -237,6 +237,21 @@ impl EngramProvider {
         self.knowledge.as_ref()
     }
 
+    /// Exact source behavior is capability-gated independently of generic knowledge.
+    pub fn code_sources(&self) -> Option<&dyn engram_knowledge::CodeSourceRepository> {
+        if !self.capabilities.code_source_preservation.is_supported() {
+            return None;
+        }
+        self.knowledge.as_ref().and_then(|k| k.code_sources())
+    }
+    pub fn require_code_source(&self) -> CoreResult<&dyn engram_knowledge::CodeSourceRepository> {
+        self.code_sources()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "code_source_preservation".into(),
+                reason: "source-preserving cell is not wired".into(),
+            })
+    }
+
     /// Returns the knowledge-graph repository handle if supported.
     pub fn graph(&self) -> Option<&Arc<dyn KnowledgeGraphRepository>> {
         self.graph.as_ref()
@@ -1109,6 +1124,7 @@ mod tests {
         impl ExportImport for StubExportImport {
             async fn export(&self, _scope: &Scope) -> engram_runtime::CoreResult<ImportData> {
                 Ok(ImportData {
+                    code_sources: Vec::new(),
                     memories: Vec::new(),
                     knowledge_sources: Vec::new(),
                     knowledge_documents: Vec::new(),

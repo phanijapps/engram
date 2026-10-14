@@ -58,6 +58,7 @@ pub fn run_migration_fixture() -> CoreResult<()> {
 
     // Sanity: the ImportData type is constructible (the migration data surface).
     let _data = ImportData {
+        code_sources: Vec::new(),
         memories: Vec::new(),
         knowledge_sources: Vec::new(),
         knowledge_documents: Vec::new(),
@@ -75,6 +76,7 @@ pub fn run_migration_fixture() -> CoreResult<()> {
 
 fn sample_counts() -> RowCounts {
     RowCounts {
+        code_sources: 0,
         memory: 2,
         knowledge_sources: 1,
         knowledge_documents: 1,

@@ -8,6 +8,7 @@ build_maintenance_plan
 capability_report
 change_impact
 code_health
+code_sources
 consolidate
 contradiction_list
 explore
@@ -37,6 +38,7 @@ scan_ownership
 scan_protocols
 scan_repo
 search
+source_read
 store_knowledge
 symbol_context
 taxonomy_read

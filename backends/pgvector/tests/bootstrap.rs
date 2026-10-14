@@ -344,6 +344,8 @@ fn pg_recipe_recall_fuses_vector_lane() {
 
     // A chunk whose text shares vocabulary with the query but no exact match.
     let chunk = KnowledgeChunk {
+        code: None,
+        document_kind: None,
         id: Id::from("pg-vec-chunk-1"),
         document_id: Id::from("pg-vec-doc-1"),
         source_id: Id::from("pg-vec-src-1"),

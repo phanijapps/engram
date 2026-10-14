@@ -14,6 +14,7 @@ export interface NativeMemoryEngineConstructor {
 
 /** Native class shape for the Rust-backed knowledge + taxonomy engine. */
 export interface NativeKnowledgeEngineBinding {
+  requireCodeSourceApi(contextJson:string):NativeCodeSourceApiBinding;
   putEntityJson(entityJson: string): string;
   putRelationshipJson(relationshipJson: string): string;
   getEntityJson(requestJson: string): string;
@@ -30,6 +31,7 @@ export interface NativeKnowledgeEngineBinding {
   listEntitiesBySourceJson(requestJson: string): string;
   listRelationshipsJson(requestJson: string): string;
   listRelationshipsBySourceJson(requestJson: string): string;
+  getChunkJson(requestJson: string): string;
   listChunksJson(requestJson: string): string;
   listChunksByDocumentJson(requestJson: string): string;
   listSourcesJson(requestJson: string): string;
@@ -226,7 +228,20 @@ export interface NativeProceduresApiBinding {
  * knowledge_query, retrieval, vectors, migration, embedding_provider,
  * export_import, observability) are typed on demand when a module needs them.
  */
+export interface NativeCodeSourceApiBinding {
+  readSourceJson(queryJson:string):string;
+  listSourcesJson():string;
+}
+
+/** Authorized source export through the existing export API. */
+export interface NativeSourceExportBinding {exportAuthorizedJson(contextJson:string):string;}
+/** Validated source preview and fenced import through the existing migration API. */
+export interface NativeSourceMigrationBinding {dryRunImportAuthorizedJson(dataJson:string,contextJson:string):string;applyImportAuthorizedJson(manifestJson:string,contextJson:string):string;}
+/** Held Rust provider capability handles and operations. */
 export interface NativeProviderBinding {
+  requireExportImportApi():NativeSourceExportBinding;
+  requireMigrationApi():NativeSourceMigrationBinding;
+  requireCodeSourceApi(contextJson:string):NativeCodeSourceApiBinding;
   capabilitiesJson(): string;
   fileDependenciesJson(requestJson: string): string;
   exploreJson(requestJson: string): string;

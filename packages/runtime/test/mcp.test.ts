@@ -11,6 +11,8 @@ import { resolve } from "node:path";
 
 function mockTransport(): NativeProviderTransport {
   return {
+    readCodeSource:vi.fn(async ()=>({text:"π\r\n",manifest:{state:"active"},coverage:[]})),
+    listCodeSources:vi.fn(async ()=>[]),
     capabilities: vi.fn(async () => ({})),
     recall: vi.fn(async () => ({ items: [], createdAt: "now" })),
     write: vi.fn(async () => ({ record: { id: "m1" } })),
@@ -149,6 +151,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
       "capability_report",
       "change_impact",
       "code_health",
+      "code_sources",
       "consolidate",
       "contradiction_detect",
       "contradiction_list",
@@ -175,6 +178,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
       "resolve_entity",
       "scan_repo",
       "search",
+      "source_read",
       "store_knowledge",
       "symbol_context",
       "taxonomy_read",
@@ -220,7 +224,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     // The tool surface gained file_dependencies + explore (Phase 2) — 38.
     // is a new op value on maintenance_run, NOT a new tool).
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(42);
+    expect(tools.length).toBe(44);
       // Cross-server tool-list parity (engram-code spec, ADR-0022): the TS
       // HTTP tool table must match the shared fixture asserted by the Rust
       // registry test. PRE-EXISTING drift: 11 tools differ (6 Rust-only, 5
@@ -273,7 +277,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     // Still exactly 36 tools — hierarchy-build is a new op value on
     // maintenance_run, NOT a new tool.
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(42);
+    expect(tools.length).toBe(44);
 
     // maintenance_run op=hierarchy-build dispatches to transport.buildHierarchy
     // (deterministic Louvain cluster→persist, no LLM — so no provider/key needed).
@@ -400,4 +404,20 @@ describe("engram-mcp-http auth (non-loopback)", () => {
     });
     expect(res.status).not.toBe(401);
   });
+});
+
+describe("trusted source tools",()=>{
+ it("injects launch context and rejects scope claims from tool input",async ()=>{
+  const transport=mockTransport();const sourceContext={readerVersion:1 as const,scope:{tenant:"t",session:"session"},requester:{actor:{id:"owner",kind:"agent" as const}}};
+  const server=await startMcpHttpServer({transport,sourceContext,port:0});servers.push(server);
+  const address=server.address();if (!address || typeof address==="string") throw new Error("missing HTTP address");
+  const client=new Client({name:"source-test",version:"1"});
+  await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${address.port}/mcp`)));
+  try {
+   const result=await client.callTool({name:"source_read",arguments:{repository:"repo",path:"a.ts"}});
+   expect(result.isError).not.toBe(true);expect(transport.readCodeSource).toHaveBeenCalledWith({repository:"repo",path:"a.ts",maxBytes:1048576},sourceContext);
+   const denied=await client.callTool({name:"source_read",arguments:{repository:"repo",path:"a.ts",scope:{tenant:"other"}}});
+   expect(denied.isError).toBe(true);expect(transport.readCodeSource).toHaveBeenCalledTimes(1);
+  } finally {await client.close();}
+ });
 });

@@ -261,6 +261,8 @@ fn document(id: Id, source_id: Id) -> SourceDocument {
 
 fn chunk(id: Id, document_id: Id, source_id: Id) -> KnowledgeChunk {
     KnowledgeChunk {
+        code: None,
+        document_kind: None,
         id,
         document_id,
         source_id,

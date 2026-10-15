@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "purpose": "Separate controlled authorization-negative battery; not an absent-feature denominator.",
+  "trustedScope": {"tenant": "default", "workspace": "code-eval-denial"},
+  "sourceOwner": "eval-private-owner",
+  "launchRequester": "engram-mcp",
+  "forbiddenSourceSentinels": ["privateLaunchSequence", "private-orbital-confirmation", "expiredLaunchSequence", "expired-orbital-confirmation"],
+  "sourceReadControls": [
+    {"id": "private-read", "repository": "code-eval-private", "path": "launch.ts", "expected": "policy_denied"},
+    {"id": "expired-read", "repository": "code-eval-expired", "path": "launch.ts", "expected": "policy_denied"}
+  ],
+  "retrievalControls": [
+    {"id": "private-query", "negativeKind": "authorization_denial", "query": "How is the private orbital launch confirmation phrase decoded?", "forbidden": ["privateLaunchSequence", "private-orbital-confirmation"]},
+    {"id": "expired-query", "negativeKind": "authorization_denial", "query": "How is the expired orbital launch confirmation phrase decoded?", "forbidden": ["expiredLaunchSequence", "expired-orbital-confirmation"]}
+  ],
+  "presenceControl": "Seeder verifies canonical ownership and exact private-source bytes under the authorized owner before the outsider MCP launch. Expired data denies even its owner. No query can override the launch principal."
+}

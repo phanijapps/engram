@@ -134,6 +134,10 @@ coverage, context and unresolved facts follow the draft packet definitions and
 
 ### T0: Freeze corpora, labels and reference machine
 
+**Execution:** Freeze checkpoint complete; serialized baseline collection is
+running. [Independent review](reviews/t0-2026-10-14.md). T10 must verify collection
+completion before tuning.
+
 **Depends on:** none
 **Mode:** goal-based check plus recorded blind label review.
 **Spec mapping:** AC10–AC12.
@@ -149,8 +153,14 @@ labels distinguish absent feature, irrelevant question and authorization denial.
 sequential response timing; capture per-lane candidate recall, ranking, evidence
 coverage and baseline phase costs. Freeze local CPU machine/runtime before any
 optimization. No expected-answer artifacts enter scan inputs.
-**Done when:** Baseline manifest/results and independent label review are saved;
-held-out expected labels remain inaccessible to tuning/scoring code.
+**Done when:** Corpus/label/query-order hashes and the baseline executable are
+frozen, independent blind label review and runner construction gates pass, and
+serialized baseline collection is running against those immutable inputs.
+Completed baseline results (original controls and all three development corpora)
+remain a hard prerequisite of T10; collect them before any tuning or held-out
+scored evaluation. This separates measurement duration from contract work without
+changing a quality target or the frozen corpus. Held-out expected labels remain
+inaccessible to tuning/scoring code.
 
 ### T1: Promote reviewed contracts and defaults
 
@@ -309,7 +319,9 @@ operation and all supported recipes honestly describe available prerequisites.
 **Depends on:** T0, T9
 **Mode:** goal-based scored retrieval evaluation.
 **Spec mapping:** AC10–AC11.
-**Tests:** Development calibration selects thresholds without reading held-out
+**Tests:** First require completed, manifest-bound original/identifier and
+three-corpus development baselines from T0; no tuning starts on partial results.
+Development calibration selects thresholds without reading held-out
 labels. Original and held-out queries run paired baseline/segmented/scored
 configurations. Scores are not probabilities; negative packets do not assert
 absolute absence. Candidate/final recall denominators and required-anchor

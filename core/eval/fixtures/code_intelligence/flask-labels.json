@@ -1,0 +1,878 @@
+[
+  {
+    "id": "flask-h01",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "What happens to a browser session when its signed cookie has been tampered with?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/sessions.py",
+        "qualifiedAnchor": "SecureCookieSessionInterface.open_session",
+        "startByte": 12728,
+        "endByte": 13268,
+        "requiredRanges": [
+          {
+            "startByte": 13024,
+            "endByte": 13268
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "26fa7cc311b841f8409ad93933d3a3a52b068150c6f15fc3cd0c107e7a9aaf9d"
+      }
+    ],
+    "rationale": "Invalid signatures return an empty session.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h02",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "Where is the browser cookie removed when all session data is cleared, and where is caching told that the response varies by cookie?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/sessions.py",
+        "qualifiedAnchor": "SecureCookieSessionInterface.save_session",
+        "startByte": 13274,
+        "endByte": 14954,
+        "requiredRanges": [
+          {
+            "startByte": 13775,
+            "endByte": 14413
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "26fa7cc311b841f8409ad93933d3a3a52b068150c6f15fc3cd0c107e7a9aaf9d"
+      }
+    ],
+    "rationale": "Access adds Vary; modified empty sessions delete the cookie and add Vary.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h03",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "When is an unchanged permanent browser session renewed on a response?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/sessions.py",
+        "qualifiedAnchor": "SessionInterface.should_set_cookie",
+        "startByte": 9286,
+        "endByte": 9922,
+        "requiredRanges": [
+          {
+            "startByte": 9786,
+            "endByte": 9922
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "26fa7cc311b841f8409ad93933d3a3a52b068150c6f15fc3cd0c107e7a9aaf9d"
+      }
+    ],
+    "rationale": "Modified sessions or permanent sessions with configured per-request refresh qualify.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h04",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How are older secret keys retained while a new key is used for signing browser session cookies?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/sessions.py",
+        "qualifiedAnchor": "SecureCookieSessionInterface.get_signing_serializer",
+        "startByte": 12063,
+        "endByte": 12722,
+        "requiredRanges": [
+          {
+            "startByte": 12142,
+            "endByte": 12722
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "26fa7cc311b841f8409ad93933d3a3a52b068150c6f15fc3cd0c107e7a9aaf9d"
+      }
+    ],
+    "rationale": "Fallback keys are followed by the current key in the timed serializer.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h05",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "Where does an unhandled request failure get re-raised in debug or testing mode, but become a logged server-error response otherwise?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/app.py",
+        "qualifiedAnchor": "Flask.handle_exception",
+        "startByte": 35864,
+        "endByte": 38072,
+        "requiredRanges": [
+          {
+            "startByte": 37163,
+            "endByte": 38072
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+      }
+    ],
+    "rationale": "Propagation derives from testing/debug by default; otherwise it logs and finalizes an error response.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h06",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How are routing redirects kept out of ordinary HTTP error handlers?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/app.py",
+        "qualifiedAnchor": "Flask.handle_http_exception",
+        "startByte": 33294,
+        "endByte": 34655,
+        "requiredRanges": [
+          {
+            "startByte": 34121,
+            "endByte": 34655
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+      }
+    ],
+    "rationale": "Routing exceptions return before registered error-handler lookup.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h07",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does the framework answer an automatic HTTP OPTIONS request without running the route handler, including the advertised allowed methods?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/app.py",
+        "qualifiedAnchor": "Flask.dispatch_request",
+        "startByte": 38653,
+        "endByte": 39928,
+        "requiredRanges": [
+          {
+            "startByte": 39205,
+            "endByte": 39928
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+      },
+      {
+        "path": "src/flask/app.py",
+        "qualifiedAnchor": "Flask.make_default_options_response",
+        "startByte": 42219,
+        "endByte": 42687,
+        "requiredRanges": [
+          {
+            "startByte": 42522,
+            "endByte": 42687
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+      }
+    ],
+    "rationale": "Dispatch bypasses the view for automatic OPTIONS; the response builder populates Allow.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h08",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How are a nested route group's URL prefix, subdomain and dotted registration name combined with its parent?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/sansio/blueprints.py",
+        "qualifiedAnchor": "Blueprint.register",
+        "startByte": 10928,
+        "endByte": 15259,
+        "requiredRanges": [
+          {
+            "startByte": 13989,
+            "endByte": 15259
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+      }
+    ],
+    "rationale": "Nested groups combine URL prefixes/subdomains and inherit dotted registration names.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h09",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "Where are route-group setup changes rejected after the group has already been registered?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/sansio/blueprints.py",
+        "qualifiedAnchor": "Blueprint._check_setup_finished",
+        "startByte": 8299,
+        "endByte": 8825,
+        "requiredRanges": [
+          {
+            "startByte": 8353,
+            "endByte": 8825
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+      }
+    ],
+    "rationale": "The registered-once flag rejects later setup changes.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h10",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How do prefixed environment settings become typed values and nested configuration dictionaries?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/config.py",
+        "qualifiedAnchor": "Config.from_prefixed_env",
+        "startByte": 4172,
+        "endByte": 6289,
+        "requiredRanges": [
+          {
+            "startByte": 5410,
+            "endByte": 6289
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "3e2a85d033da9ba1d6d051f8087d61a574c17b7d0d4b38cf10ec2bcf56fa92dd"
+      }
+    ],
+    "rationale": "Loads sorted prefixed settings, attempts typed conversion and traverses double-underscore nesting.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h11",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does a streamed response retain the active request context and close the underlying iterator when streaming ends?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/helpers.py",
+        "qualifiedAnchor": "stream_with_context",
+        "startByte": 1675,
+        "endByte": 4764,
+        "requiredRanges": [
+          {
+            "startByte": 3958,
+            "endByte": 4764
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "4e2b647be02a93f655ddd058105c5ed8e9ffe3daef398ef3dd21e3a3817623fb"
+      }
+    ],
+    "rationale": "The wrapper captures context, yields from the source iterator and closes it in finally.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h12",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How can a background callable receive an independent copy of the request context that was active when it was decorated?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/ctx.py",
+        "qualifiedAnchor": "copy_current_request_context",
+        "startByte": 4392,
+        "endByte": 6551,
+        "requiredRanges": [
+          {
+            "startByte": 5943,
+            "endByte": 6551
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "e21952d044159438765eb27848b0fe4c75f83faee8645181a09a1eccb1d5cab7"
+      }
+    ],
+    "rationale": "Captures the original context and copies it for each wrapped invocation.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h13",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "Where can a before-request callback return a response that stops subsequent callbacks and the route handler?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/app.py",
+        "qualifiedAnchor": "Flask.preprocess_request",
+        "startByte": 54901,
+        "endByte": 56057,
+        "requiredRanges": [
+          {
+            "startByte": 55472,
+            "endByte": 56057
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+      },
+      {
+        "path": "src/flask/app.py",
+        "qualifiedAnchor": "Flask.full_dispatch_request",
+        "startByte": 39934,
+        "endByte": 40987,
+        "requiredRanges": [
+          {
+            "startByte": 40613,
+            "endByte": 40987
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+      }
+    ],
+    "rationale": "Returns the first callback response; full dispatch invokes the route only for a None result.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h14",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does the command-line application selector safely interpret a factory call with literal arguments and reject invalid application results?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/cli.py",
+        "qualifiedAnchor": "find_app_by_string",
+        "startByte": 3429,
+        "endByte": 6072,
+        "requiredRanges": [
+          {
+            "startByte": 3675,
+            "endByte": 6072
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "1f476f816464b4250caaf6cc6fdf3f5fc956456a7da61cb7d0a1e03e3e7e5f3b"
+      }
+    ],
+    "rationale": "Parses a simple name or simple-name call, literal-evaluates arguments, calls the factory and verifies its result.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-h15",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does leaving the final nested context run request cleanup and application cleanup even if individual teardown steps raise errors?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/ctx.py",
+        "qualifiedAnchor": "AppContext.pop",
+        "startByte": 15235,
+        "endByte": 17292,
+        "requiredRanges": [
+          {
+            "startByte": 16633,
+            "endByte": 17292
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "e21952d044159438765eb27848b0fe4c75f83faee8645181a09a1eccb1d5cab7"
+      }
+    ],
+    "rationale": "The final pop collects individual teardown errors and raises them after remaining cleanup.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-d01",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "Where are JSON responses made readable in debug mode but compact otherwise, with the JSON media type and a final newline?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/json/provider.py",
+        "qualifiedAnchor": "DefaultJSONProvider.response",
+        "startByte": 6505,
+        "endByte": 7643,
+        "requiredRanges": [
+          {
+            "startByte": 7224,
+            "endByte": 7643
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "cefdd0dfdde6bb6f73e7b853aa789de432e2af52a8c920c1c2af17228235b72c"
+      }
+    ],
+    "rationale": "Chooses indentation or compact separators and constructs a newline-terminated JSON response.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-d02",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How is a two-value route result distinguished as body plus headers versus body plus status, then applied to the response?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/app.py",
+        "qualifiedAnchor": "Flask.make_response",
+        "startByte": 49069,
+        "endByte": 54895,
+        "requiredRanges": [
+          {
+            "startByte": 51354,
+            "endByte": 52219
+          },
+          {
+            "startByte": 54496,
+            "endByte": 54895
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+      }
+    ],
+    "rationale": "Tuple interpretation checks header-like types; explicit status and headers are then applied.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-d03",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "Where is an asynchronous route adapted for synchronous serving, and what error is produced when the optional async dependency is missing?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/app.py",
+        "qualifiedAnchor": "Flask.ensure_sync",
+        "startByte": 42693,
+        "endByte": 43186,
+        "requiredRanges": [
+          {
+            "startByte": 43084,
+            "endByte": 43186
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+      },
+      {
+        "path": "src/flask/app.py",
+        "qualifiedAnchor": "Flask.async_to_sync",
+        "startByte": 43192,
+        "endByte": 43934,
+        "requiredRanges": [
+          {
+            "startByte": 43622,
+            "endByte": 43934
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+      }
+    ],
+    "rationale": "Coroutine functions use the async adapter, which diagnoses missing optional asgiref support.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-d04",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How does a method-based view answer an HTTP HEAD request when it only defines a handler for GET?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/views.py",
+        "qualifiedAnchor": "MethodView.dispatch_request",
+        "startByte": 6476,
+        "endByte": 6970,
+        "requiredRanges": [
+          {
+            "startByte": 6547,
+            "endByte": 6970
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "d0d5ceecd117533169c924cdbb01ea5bb0ee74b7b1c4b22855f73f0e4dea0ee7"
+      }
+    ],
+    "rationale": "A missing HEAD implementation falls back to GET.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-d05",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "Where are one-time user messages cached for repeated reads during a request and optionally filtered by message category?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/helpers.py",
+        "qualifiedAnchor": "get_flashed_messages",
+        "startByte": 12384,
+        "endByte": 14153,
+        "requiredRanges": [
+          {
+            "startByte": 13727,
+            "endByte": 14153
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "4e2b647be02a93f655ddd058105c5ed8e9ffe3daef398ef3dd21e3a3817623fb"
+      }
+    ],
+    "rationale": "Caches popped session messages per request and applies category filtering.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-d06",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How can a configuration file use a caller-supplied parser while only uppercase settings are applied?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/config.py",
+        "qualifiedAnchor": "Config.from_file",
+        "startByte": 9243,
+        "endByte": 10945,
+        "requiredRanges": [
+          {
+            "startByte": 10481,
+            "endByte": 10945
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "3e2a85d033da9ba1d6d051f8087d61a574c17b7d0d4b38cf10ec2bcf56fa92dd"
+      },
+      {
+        "path": "src/flask/config.py",
+        "qualifiedAnchor": "Config.from_mapping",
+        "startByte": 10951,
+        "endByte": 11509,
+        "requiredRanges": [
+          {
+            "startByte": 11229,
+            "endByte": 11509
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "3e2a85d033da9ba1d6d051f8087d61a574c17b7d0d4b38cf10ec2bcf56fa92dd"
+      }
+    ],
+    "rationale": "The supplied parser creates a mapping passed to the uppercase-only mapping loader.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-d07",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How is a deferred route-group setup callback prevented from running again when the same group is registered a second time?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/sansio/blueprints.py",
+        "qualifiedAnchor": "Blueprint.record_once",
+        "startByte": 9210,
+        "endByte": 9716,
+        "requiredRanges": [
+          {
+            "startByte": 9539,
+            "endByte": 9716
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+      }
+    ],
+    "rationale": "The wrapper guards the callback on first_registration.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-d08",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "Where is browser session loading performed before URL matching so that custom URL converters can use the session?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/ctx.py",
+        "qualifiedAnchor": "AppContext.push",
+        "startByte": 14047,
+        "endByte": 15229,
+        "requiredRanges": [
+          {
+            "startByte": 14812,
+            "endByte": 15229
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "e21952d044159438765eb27848b0fe4c75f83faee8645181a09a1eccb1d5cab7"
+      }
+    ],
+    "rationale": "Session opening precedes route matching in the active request context.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-d09",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How are explicit values passed to template rendering protected from being overwritten by context processors?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/app.py",
+        "qualifiedAnchor": "Flask.update_template_context",
+        "startByte": 23492,
+        "endByte": 24756,
+        "requiredRanges": [
+          {
+            "startByte": 24348,
+            "endByte": 24756
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+      }
+    ],
+    "rationale": "Explicit rendering values are copied before processors and reapplied afterward.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-d10",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How are command-line environment files layered while preserving settings already present in the process environment?",
+    "requiredUnits": [
+      {
+        "path": "src/flask/cli.py",
+        "qualifiedAnchor": "load_dotenv",
+        "startByte": 23871,
+        "endByte": 26075,
+        "requiredRanges": [
+          {
+            "startByte": 25465,
+            "endByte": 26075
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "1f476f816464b4250caaf6cc6fdf3f5fc956456a7da61cb7d0a1e03e3e7e5f3b"
+      }
+    ],
+    "rationale": "Default files merge, explicit file overrides them, and existing process values remain.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-hn01",
+    "split": "heldout",
+    "polarity": "negative",
+    "query": "Where does the built-in framework execute database schema migrations from its command-line interface?",
+    "requiredUnits": [],
+    "rationale": "The built-in CLI defines serving, shell and route listing. No migration implementation or migration imports exist in src/flask; application/extension commands are outside this corpus.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "alembic|migration",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-hn02",
+    "split": "heldout",
+    "polarity": "negative",
+    "query": "Where does the built-in framework verify a time-based one-time password for two-factor login?",
+    "requiredUnits": [],
+    "rationale": "No OTP verification code/imports appear in src/flask; request dispatch and cookie sessions do not implement a two-factor login policy.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "totp|one.time.password",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-hn03",
+    "split": "heldout",
+    "polarity": "negative",
+    "query": "Where does the built-in framework validate JWT bearer access tokens on incoming API requests?",
+    "requiredUnits": [],
+    "rationale": "No JWT verifier or JWT imports occur in src/flask. Its default signed session cookies use itsdangerous, not bearer token validation.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "jwt|json.web.token",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-hn04",
+    "split": "heldout",
+    "polarity": "negative",
+    "query": "Where does the built-in session implementation connect to Redis to persist session data across workers?",
+    "requiredUnits": [],
+    "rationale": "No Redis client or Redis references occur in src/flask; the default session interface serializes data into signed cookies.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "redis",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-hn05",
+    "split": "heldout",
+    "polarity": "negative",
+    "query": "Where does the built-in framework register GraphQL resolvers and serve schema introspection requests?",
+    "requiredUnits": [],
+    "rationale": "No GraphQL code/imports appear in src/flask; generic routing can host user applications but is not an implementation of resolvers/introspection.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "graphql",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-hn06",
+    "split": "heldout",
+    "polarity": "negative",
+    "query": "Where does the built-in framework perform a WebSocket protocol upgrade and dispatch incoming message frames?",
+    "requiredUnits": [],
+    "rationale": "No WebSocket upgrade/frame implementation exists in src/flask; the application serving path is WSGI request/response.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "websocket",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-hn07",
+    "split": "heldout",
+    "polarity": "negative",
+    "query": "Where does the built-in framework generate and verify CSRF tokens for submitted forms?",
+    "requiredUnits": [],
+    "rationale": "No CSRF token generator/verifier appears in src/flask; exposing request data and cookie sessions does not implement CSRF protection.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "csrf",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-dn01",
+    "split": "development",
+    "polarity": "negative",
+    "query": "Where does the built-in framework submit background jobs to Celery and retry failed queued jobs?",
+    "requiredUnits": [],
+    "rationale": "No Celery integration, task queue imports or retry worker implementation appears in src/flask; copying request contexts does not queue jobs.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "celery|task.queue",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-dn02",
+    "split": "development",
+    "polarity": "negative",
+    "query": "Where does the built-in framework execute parameterized SQL queries through its own database ORM?",
+    "requiredUnits": [],
+    "rationale": "The four matches are two adjacent extension-documentation lines each in app.py and sansio/app.py. No ORM/query executor imports or implementations exist in src/flask.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "sqlalchemy|sql.query",
+        "matchCount": 4
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-dn03",
+    "split": "development",
+    "polarity": "negative",
+    "query": "Where does the built-in framework resize uploaded images into thumbnails and convert them to WebP?",
+    "requiredUnits": [],
+    "rationale": "No imaging library imports or image transformation implementation appear in src/flask; serving files does not resize or transcode images.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "pillow|thumbnail|webp",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-dn04",
+    "split": "development",
+    "polarity": "negative",
+    "query": "Where does the built-in framework collect request-duration metrics and expose a Prometheus scrape endpoint?",
+    "requiredUnits": [],
+    "rationale": "No Prometheus library, metric registry, duration collector or scrape handler appears in src/flask; logging and lifecycle signals only provide hooks.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "prometheus",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  },
+  {
+    "id": "flask-dn05",
+    "split": "development",
+    "polarity": "negative",
+    "query": "Where does the built-in framework open an SMTP connection and send notification email?",
+    "requiredUnits": [],
+    "rationale": "No SMTP imports or mail-sending implementation appear in src/flask; errors are logged and passed to registered handlers.",
+    "absenceChecks": [
+      {
+        "scope": "src/flask",
+        "searchTool": "rg -n -i",
+        "pattern": "smtp|smtplib",
+        "matchCount": 0
+      }
+    ],
+    "absenceScope": "Built-in implementation in pinned src/flask only; does not claim absence from extensions or user applications.",
+    "corpus": "flask"
+  }
+]

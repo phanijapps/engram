@@ -14,5 +14,6 @@ serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
+engram-code = { path = "../code" }
 engram-store-sqlite = { path = "../../adapters/sqlite" }
 futures.workspace = true

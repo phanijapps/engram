@@ -16,7 +16,7 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
   source/document evidence, complete token-aware derivative segments, shared
   profiles/file/environment defaults, a real local cross-encoder and frozen
   retrieval-quality gates across Rust/native/stdio/HTTP.
-  [Plan](reliable-code-intelligence/plan.md). **Draft.**
+  [Plan](reliable-code-intelligence/plan.md). **Implementing.**
 
 - [`local-code-embeddings`](local-code-embeddings/spec.md): shared local semantic
   code vector backfill, source-generation/policy guards and snapshot exclusion.

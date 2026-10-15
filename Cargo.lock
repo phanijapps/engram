@@ -1692,6 +1692,7 @@ name = "engram-eval"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "engram-code",
  "engram-domain",
  "engram-memory",
  "engram-runtime",

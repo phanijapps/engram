@@ -32,6 +32,7 @@ mod observability;
 mod provenance;
 mod recall;
 mod recall_lanes;
+mod reranking;
 
 pub(crate) use bootstrap::bootstrap_sqlite;
 

@@ -45,3 +45,4 @@ mod taxonomy;
 pub use identity::SqlIdentityStore;
 pub use retrieval::{GraphCandidateSource, GraphRetrievalIndex};
 pub use service::SqlKnowledgeStore;
+pub use source_access::SourceTargetAccess;

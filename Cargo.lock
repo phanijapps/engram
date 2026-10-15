@@ -1798,6 +1798,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "engram-local-model-assets"
+version = "0.1.0"
+dependencies = [
+ "engram-runtime",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+]
+
+[[package]]
 name = "engram-mcp"
 version = "0.1.0"
 dependencies = [
@@ -1890,8 +1902,14 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "engram-domain",
+ "engram-local-model-assets",
  "engram-retrieval",
  "engram-runtime",
+ "fastembed",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "tokenizers",
 ]
 
 [[package]]
@@ -2002,6 +2020,7 @@ dependencies = [
  "engram-eval",
  "engram-hierarchy",
  "engram-knowledge",
+ "engram-local-model-assets",
  "engram-memory",
  "engram-procedures",
  "engram-retrieval",

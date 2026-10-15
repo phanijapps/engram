@@ -29,6 +29,9 @@ impl FastEmbedEmbeddingProvider {
 
 #[cfg(feature = "fastembed")]
 impl EmbeddingProvider for FastEmbedEmbeddingProvider {
+    fn asset_identity(&self) -> Option<&str> {
+        Some(self.inner.model_manifest_id())
+    }
     fn tokenize_untruncated(
         &self,
         text: &str,
@@ -61,7 +64,15 @@ impl EmbeddingProvider for FastEmbedEmbeddingProvider {
     }
 
     fn is_local(&self) -> bool {
-        true
+        self.space.provider == "fastembed"
+            && matches!(
+                self.space.model.as_str(),
+                "BAAI/bge-small-en-v1.5"
+                    | "Xenova/bge-small-en-v1.5"
+                    | "fastembed/bge-small-en-v1.5"
+                    | "bge-small-en-v1.5"
+            )
+            && self.space.dimensions == self.inner.dimensions()
     }
 
     fn provider_id(&self) -> &str {

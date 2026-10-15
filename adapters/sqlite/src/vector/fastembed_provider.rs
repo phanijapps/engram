@@ -1,36 +1,37 @@
 //! FastEmbed-backed query-vector provider.
 //!
 //! This module is feature-gated so local model initialization and asset
-//! downloads remain opt-in. It produces query vectors only; vector storage,
+//! loading remains opt-in. Assets are explicitly provisioned; normal runtime
+//! performs no downloads. It produces query vectors only; vector storage,
 //! target rehydration, and policy checks stay in their existing collaborators.
 //!
 //! The provider defaults to BGE-small-en-v1.5 but is configurable via
-//! [`FastEmbedBgeSmallQueryProvider::with_model`] — callers can pass any
-//! FastEmbed model (e.g., a code-specialised model) with its own label and
-//! optional query prefix.
+//! [`FastEmbedBgeSmallQueryProvider::with_model`] selects admitted offline models
+//! with their own label and optional query prefix.
 
 use std::sync::Mutex;
 
 use engram_domain::RetrievalRequest;
 use engram_runtime::{CoreError, CoreResult};
-use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use fastembed::{EmbeddingModel, TextEmbedding};
 
 use crate::vector::VectorQueryProvider;
 
 const ADAPTER_NAME: &str = "engram-store-vector.fastembed";
 
 /// Query-vector provider backed by FastEmbed. Defaults to BGE-small-en-v1.5;
-/// configurable to any FastEmbed model via [`Self::with_model`].
+/// configurable to admitted offline models via [`Self::with_model`].
 pub struct FastEmbedBgeSmallQueryProvider {
     model: Mutex<TextEmbedding>,
     model_label: &'static str,
     query_prefix: Option<&'static str>,
     dimensions: u32,
     tokenization: super::fastembed_tokenization::LocalTokenizer,
+    manifest_id: String,
 }
 
 impl FastEmbedBgeSmallQueryProvider {
-    /// Initializes the BGE-small provider with download progress disabled.
+    /// Loads explicitly provisioned, verified BGE-small assets without downloads.
     pub fn new() -> CoreResult<Self> {
         Self::with_model(
             EmbeddingModel::BGESmallENV15,
@@ -39,8 +40,8 @@ impl FastEmbedBgeSmallQueryProvider {
         )
     }
 
-    /// Creates a provider with a custom FastEmbed model (e.g., a code-specialised
-    /// model for codegraph embedding parity). `model_label` is the stable name
+    /// Selects an admitted offline model. Unsupported models need a manifest
+    /// and matching adapter construction before use. `model_label` is the stable name
     /// callers store with generated vectors; `query_prefix` is prepended to query
     /// text (BGE models use `"query: "`; most code models use `None`).
     pub fn with_model(
@@ -51,15 +52,14 @@ impl FastEmbedBgeSmallQueryProvider {
         let dimensions = TextEmbedding::get_model_info(&model)
             .map_err(adapter_error)?
             .dim as u32;
-        let text_embedding =
-            TextEmbedding::try_new(InitOptions::new(model).with_show_download_progress(false))
-                .map_err(adapter_error)?;
+        let (text_embedding, manifest_id) = super::fastembed_assets::open(model)?;
         Ok(Self {
             tokenization: super::fastembed_tokenization::LocalTokenizer::new(&text_embedding)?,
             model: Mutex::new(text_embedding),
             model_label,
             query_prefix,
             dimensions,
+            manifest_id,
         })
     }
 
@@ -69,6 +69,9 @@ impl FastEmbedBgeSmallQueryProvider {
     }
     pub fn dimensions(&self) -> u32 {
         self.dimensions
+    }
+    pub fn model_manifest_id(&self) -> &str {
+        &self.manifest_id
     }
 
     pub fn tokenize_untruncated(

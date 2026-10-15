@@ -11,7 +11,11 @@
 //! to the `RetrievalReranker` port, enabling wiring into `compose_context`.
 
 mod adapter;
+#[cfg(feature = "local-onnx")]
+mod local;
 mod rerank;
+#[cfg(feature = "local-onnx")]
+pub use local::LocalOnnxScorer;
 
 pub use adapter::CrossEncoderRerankerAdapter;
 pub use rerank::{CrossEncoderReranker, RerankScorer};

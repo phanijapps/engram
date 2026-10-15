@@ -9,6 +9,15 @@ rust-version.workspace = true
 engram-domain = { path = "../../../core/domain" }
 engram-retrieval = { path = "../../../core/retrieval" }
 engram-runtime = { path = "../../../core/runtime" }
+engram-local-model-assets = { path = "../../models/local-assets", optional = true }
+fastembed = { version = "=5.17.2", optional = true, default-features = false, features = ["ort-download-binaries-native-tls"] }
+tokenizers = { version = "=0.22.2", optional = true, default-features = false, features = ["onig"] }
+serde_json = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+
+[features]
+local-onnx = ["dep:engram-local-model-assets", "dep:fastembed", "dep:tokenizers", "dep:serde_json", "dep:sha2"]
 
 [dev-dependencies]
 chrono.workspace = true
+tempfile = "3"

@@ -15,6 +15,7 @@ members = [
     "core/integration",
     "core/graph-analytics",
     "adapters/ingest",
+    "adapters/models/local-assets",
     "adapters/integration",
     "adapters/retrieval/tantivy-lexical",
     "adapters/retrieval/cross-encoder-rerank",

@@ -24,6 +24,7 @@ sha2.workspace = true
 # Vector cell — folded in from engram-store-vector (T5):
 sqlite-vec.workspace = true
 fastembed = { version = "=5.17.2", optional = true }
+engram-local-model-assets = { path = "../models/local-assets", optional = true }
 tokenizers = { version = "=0.22.2", default-features = false, features = ["onig"], optional = true }
 
 [dev-dependencies]
@@ -36,5 +37,5 @@ default = []
 # `fastembed` is the public alias used by forwarders (core/integration,
 # bindings/node); the folded vector code cfg-gates on `fastembed-provider`.
 fastembed = ["fastembed-provider"]
-fastembed-provider = ["dep:fastembed", "dep:tokenizers"]
+fastembed-provider = ["dep:fastembed", "dep:tokenizers", "dep:engram-local-model-assets"]
 fastembed-tests = ["fastembed-provider"]

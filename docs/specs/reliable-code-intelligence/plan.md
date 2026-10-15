@@ -315,6 +315,23 @@ development evidence with reproducible model/tokenizer identity.
 
 ### T6: Candidate depth, fusion and bounded graph expansion
 
+**Execution:** Complete. Pure ranking/pool tests and nine real-authority candidate
+fixtures pass. The real offline BGE candidate probe admits 50 hits per initial
+lane despite final limit ten, deduplicates sources/segments and reconstructs RRF
+traces; 85 parents remain before scoring. A measured per-hit whole-store ownership
+scan was replaced by equivalent target-bound checks. Full indexed calls take
+1.27/0.95 seconds at lane caps 50/20; final evidence/p95/quality remain later gates.
+See `docs/perf/reliable-code-candidate-2026-10-15.md` and the raw live artifact.
+
+**Construction:** Named recipe lane clones feed a neutral, request-bound code
+candidate stage. Vector hits retain segment identities; entity/chunk hits resolve
+through current source/head inventories and canonical segments. Existing weighted
+RRF fuses the bounded lanes; expansion keeps a separate trace using the configured
+graph weight. Its neighbor and adjacency-call budgets are global, including empty
+lists. Pure scorer-pool/parent aggregation helpers preserve first-parent order,
+round-robin spare slots, maximum segment score and full RRF fallback. Scoring,
+evidence assembly and transport wiring remain their later tasks.
+
 **Depends on:** T2, T3, T4
 **Mode:** TDD plus real-store candidate traces.
 **Spec mapping:** AC2, AC5.
@@ -332,6 +349,28 @@ and packet provenance remains attached to the actual contributing units.
 
 ### T7: Real local ONNX scorer and asset lifecycle
 
+**Execution:** Component complete. Pinned BGE/Jina assets were explicitly
+provisioned; actual offline encoder and scorer tests pass without observed
+internet socket/connect attempts. Jina changes ranking, preserves batch alignment
+and scores an untruncated 622-token pair. Both independent implementation reviews
+are clean after preserving the generic recall fallback contract. The real BGE
+namespace reindex preserves canonical/history digests. Code evidence invocation,
+transport readiness, calibration and final quality remain T8–T11 work.
+
+**Construction design:** Share exact asset-byte verification between embedding
+and scorer adapters in a focused `adapters/models/local-assets` crate. It owns
+admitted manifests and cache-confined offline reads only; an explicit provisioning
+script handles verified cache import or allowlisted downloads/redirects. Inference
+receives verified bytes, including any declared external-data files. Move the
+existing scorer port to `core/retrieval` with an old-path re-export, adding
+fail-closed locality/identity/token inspection and compatible batch defaults.
+Installed FastEmbed 5.17.2 exposes the scorer tokenizer: disable truncation,
+correct Jina padding from its actual tokenizer pad ID and count complete pairs
+before inference. The library returns sorted raw logits with original indices;
+the adapter remaps and validates them. Independent structural/security placement
+review is clean. Official pinned metadata and a Rust compile/runtime probe remain
+the library contract oracle; configured names alone never confer readiness.
+
 **Depends on:** T1, T2
 **Mode:** TDD stubs plus actual-model integration.
 **Spec mapping:** AC6.
@@ -344,8 +383,9 @@ alias does not confer locality or source authorization.
 **Approach:** Add feature-gated focused model/asset/tokenization modules in
 `adapters/retrieval/cross-encoder-rerank`; reuse FastEmbed/ONNX and injected scorer
 interfaces. Pin the official model before fetching for live tests. Wire real
-scorer construction through supported recipe composition instead of the current
-`select_cross_encoder` no-scorer placeholder.
+scorer construction through supported recipe composition into the code scorer
+handle. Generic recall retains its previous RRF fallback: its potentially long,
+unbounded inputs do not inherit this code-specific scorer admission contract.
 **Done when:** Recorded local scores come from real ONNX pairs, not word-overlap
 stubs, and normal invocation performs no network access.
 

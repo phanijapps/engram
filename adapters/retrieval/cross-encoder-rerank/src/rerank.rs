@@ -3,17 +3,14 @@
 use std::sync::Arc;
 
 use engram_domain::{FusionStrategy, FusionTrace, RerankStrategy, RetrievalResult};
-use engram_runtime::CoreResult;
+use engram_runtime::{CoreError, CoreResult};
 
 /// Scores one (query, candidate) pair by query-aware relevance.
 ///
 /// Implementations may be deterministic fixtures, cached scorers, or
-/// model-backed cross-encoders (feature-gated). Model lifecycle stays out of the
-/// reranker adapter.
-pub trait RerankScorer: Send + Sync {
-    /// Returns the cross-encoder relevance score for `query` vs `candidate_text`.
-    fn score(&self, query: &str, candidate_text: &str) -> CoreResult<f32>;
-}
+/// model-backed cross-encoders (feature-gated). The core port is re-exported
+/// here to preserve existing callers.
+pub use engram_retrieval::RerankScorer;
 
 /// Reranks retrieval candidates by an injected cross-encoder scorer.
 pub struct CrossEncoderReranker {
@@ -36,14 +33,23 @@ impl CrossEncoderReranker {
         candidates: Vec<RetrievalResult>,
         limit: Option<usize>,
     ) -> CoreResult<Vec<RetrievalResult>> {
+        if candidates.is_empty() {
+            return Ok(vec![]);
+        }
+        let documents: Vec<_> = candidates.iter().map(|r| r.content.clone()).collect();
+        let scores = self.scorer.score_batch(query, &documents, 32)?;
+        if scores.len() != candidates.len() || scores.iter().any(|s| !s.is_finite()) {
+            return Err(CoreError::ValidationFailed {
+                reason: "rerank batch returned invalid scores".into(),
+            });
+        }
         let mut scored: Vec<(f32, RetrievalResult)> = Vec::with_capacity(candidates.len());
-        for mut result in candidates {
-            let score = self.scorer.score(query, &result.content)?;
+        for (mut result, score) in candidates.into_iter().zip(scores) {
             stamp_rerank(&mut result, score);
             scored.push((score, result));
         }
         // Stable sort by score descending: equal scores keep their input order.
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| b.0.total_cmp(&a.0));
         let mut out: Vec<RetrievalResult> = scored.into_iter().map(|(_, r)| r).collect();
         if let Some(limit) = limit {
             out.truncate(limit);
@@ -154,6 +160,27 @@ mod tests {
         let out = reranker.rerank("apple", candidates, Some(1)).unwrap();
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].target_id, "best");
+    }
+
+    #[test]
+    fn malformed_batch_results_never_produce_partial_rankings() {
+        struct Bad(Vec<f32>);
+        impl RerankScorer for Bad {
+            fn score(&self, _: &str, _: &str) -> CoreResult<f32> {
+                panic!("batch override must be used")
+            }
+            fn score_batch(&self, _: &str, _: &[String], _: usize) -> CoreResult<Vec<f32>> {
+                Ok(self.0.clone())
+            }
+        }
+        for scores in [vec![0.5], vec![0.5, f32::NAN]] {
+            let reranker = CrossEncoderReranker::new(Arc::new(Bad(scores)));
+            assert!(
+                reranker
+                    .rerank("q", vec![candidate("a", "a"), candidate("b", "b")], None)
+                    .is_err()
+            );
+        }
     }
 
     fn candidate(id: &str, content: &str) -> RetrievalResult {

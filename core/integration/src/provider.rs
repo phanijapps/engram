@@ -20,8 +20,9 @@ use engram_knowledge::{
 };
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
-use engram_retrieval::{RetrievalIndex, VectorIndex};
+use engram_retrieval::{RerankScorer, RetrievalIndex, VectorIndex};
 use engram_runtime::{CoreError, CoreResult};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::knowledge_query::KnowledgeQuery;
@@ -68,6 +69,7 @@ pub struct EngramProvider {
     retrieval: Option<Arc<dyn RetrievalIndex>>,
     vectors: Option<Arc<dyn VectorIndex>>,
     code_vectors: Option<Arc<dyn VectorIndex>>,
+    code_scorer: Option<Arc<dyn RerankScorer>>,
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
@@ -84,9 +86,16 @@ pub struct EngramProvider {
     schema_version: String,
     adapter_version: String,
     code_configuration: Option<crate::code_configuration::ResolvedCodeConfig>,
+    code_retrieval_lanes: BTreeMap<String, Arc<dyn RetrievalIndex>>,
 }
 
 impl EngramProvider {
+    pub(crate) fn code_retrieval_lane(
+        &self,
+        lane: engram_retrieval::CodeRetrievalLane,
+    ) -> Option<Arc<dyn RetrievalIndex>> {
+        self.code_retrieval_lanes.get(lane.as_str()).cloned()
+    }
     /// Backfills bounded retrieval embeddings; local code source guards are
     /// shared by Rust embedders and every transport.
     pub async fn backfill_embeddings(
@@ -318,6 +327,9 @@ impl EngramProvider {
     /// cannot satisfy readiness or donate prefix-limited legacy embeddings.
     pub fn code_vectors(&self) -> Option<&Arc<dyn VectorIndex>> {
         self.code_vectors.as_ref()
+    }
+    pub fn code_scorer(&self) -> Option<&Arc<dyn RerankScorer>> {
+        self.code_scorer.as_ref()
     }
     pub fn code_segments(&self) -> Option<&dyn engram_knowledge::CodeSegmentRepository> {
         self.knowledge.as_ref().and_then(|k| k.code_segments())
@@ -650,6 +662,7 @@ impl EngramProvider {
             retrieval: None,
             vectors: None,
             code_vectors: None,
+            code_scorer: None,
             migration: None,
             embedding_provider: None,
             provenance: None,
@@ -666,6 +679,7 @@ impl EngramProvider {
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
             code_configuration: None,
+            code_retrieval_lanes: BTreeMap::new(),
         }
     }
 }
@@ -691,6 +705,7 @@ pub struct EngramProviderBuilder {
     retrieval: Option<Arc<dyn RetrievalIndex>>,
     vectors: Option<Arc<dyn VectorIndex>>,
     code_vectors: Option<Arc<dyn VectorIndex>>,
+    code_scorer: Option<Arc<dyn RerankScorer>>,
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
@@ -707,6 +722,7 @@ pub struct EngramProviderBuilder {
     schema_version: String,
     adapter_version: String,
     code_configuration: Option<crate::code_configuration::ResolvedCodeConfig>,
+    code_retrieval_lanes: BTreeMap<String, Arc<dyn RetrievalIndex>>,
 }
 
 impl EngramProviderBuilder {
@@ -726,6 +742,7 @@ impl EngramProviderBuilder {
             retrieval: None,
             vectors: None,
             code_vectors: None,
+            code_scorer: None,
             migration: None,
             embedding_provider: None,
             provenance: None,
@@ -742,6 +759,7 @@ impl EngramProviderBuilder {
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
             code_configuration: None,
+            code_retrieval_lanes: BTreeMap::new(),
         }
     }
 
@@ -750,6 +768,17 @@ impl EngramProviderBuilder {
         config: crate::code_configuration::ResolvedCodeConfig,
     ) -> Self {
         self.code_configuration = Some(config);
+        self
+    }
+
+    /// Retains an existing named lane for independently bounded code retrieval.
+    pub fn code_retrieval_lane(
+        mut self,
+        lane: engram_retrieval::CodeRetrievalLane,
+        index: Arc<dyn RetrievalIndex>,
+    ) -> Self {
+        self.code_retrieval_lanes
+            .insert(lane.as_str().into(), index);
         self
     }
 
@@ -820,6 +849,10 @@ impl EngramProviderBuilder {
     }
     pub fn code_vectors(mut self, handle: Arc<dyn VectorIndex>) -> Self {
         self.code_vectors = Some(handle);
+        self
+    }
+    pub fn code_scorer(mut self, handle: Arc<dyn RerankScorer>) -> Self {
+        self.code_scorer = Some(handle);
         self
     }
 
@@ -953,6 +986,7 @@ impl EngramProviderBuilder {
             retrieval: self.retrieval,
             vectors: self.vectors,
             code_vectors: self.code_vectors,
+            code_scorer: self.code_scorer,
             migration: self.migration,
             embedding_provider: self.embedding_provider,
             provenance: self.provenance,
@@ -969,6 +1003,7 @@ impl EngramProviderBuilder {
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
             code_configuration: self.code_configuration,
+            code_retrieval_lanes: self.code_retrieval_lanes,
         }
     }
 }

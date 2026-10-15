@@ -1,0 +1,4597 @@
+{
+  "checkpoint": "T6 unscored candidate stage",
+  "featureShipped": false,
+  "runState": "complete",
+  "calls": [
+    {
+      "request": {
+        "query": "register a URL rule and endpoint on the Flask application",
+        "resultLimit": 10
+      },
+      "result": {
+        "candidateCounts": {
+          "fused_parents": 85,
+          "fused_segments": 93,
+          "graph_expansion": 8,
+          "lexical": 50,
+          "unavailable_sources": 0,
+          "vector": 50
+        },
+        "candidates": [
+          {
+            "anchor": "def Blueprint::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:8e4fe2fb06bda801bc7a359d66daab74ef883b923b7359881498814c6472c5d2",
+            "declarationRange": {
+              "end": 17742,
+              "start": 16671
+            },
+            "fusionScore": 0.032522473484277725,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.032522473484277725,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 1,
+                "source": "lexical",
+                "sourceRank": 1,
+                "sourceScore": 9.466032981872559
+              },
+              {
+                "fusionScore": 0.032522473484277725,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 1,
+                "source": "vector",
+                "sourceRank": 2,
+                "sourceScore": 0.6132436990737915
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:efdd07ce006ee4e19fe0f6f826c71e1dec4212d646bbf642532f30b17735425f",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 17742,
+                "start": 16671
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-82117d6d3f9265b42df5ebf34ea248feafadec27f0d28757a1b62ad2f781d5b0",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def BlueprintSetupState::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:2085779a80499aee8e2bf6977a8cadcba086c43f5ed76d55f489406930182e98",
+            "declarationRange": {
+              "end": 4394,
+              "start": 3319
+            },
+            "fusionScore": 0.03077651560306549,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.03077651560306549,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 2,
+                "source": "lexical",
+                "sourceRank": 4,
+                "sourceScore": 8.11285400390625
+              },
+              {
+                "fusionScore": 0.03077651560306549,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 2,
+                "source": "vector",
+                "sourceRank": 6,
+                "sourceScore": 0.6368786096572876
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:494b1879e8b8cb22ea8d8e3e92234d8eb87ba7a354c8a7d13ea14432eb390d7f",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 4394,
+                "start": 3319
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-906e7f0269fd7358291ded6faf66bf808fde2b1ac0163be512c1e9a508e1c143",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def App::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:2423c77adc023e91dd9ac83c05a8a78140cff7828ad4441837e0bb656271a21d",
+            "declarationRange": {
+              "end": 27245,
+              "start": 24980
+            },
+            "fusionScore": 0.03057890012860298,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.03057890012860298,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 3,
+                "source": "lexical",
+                "sourceRank": 3,
+                "sourceScore": 9.466032981872559
+              },
+              {
+                "fusionScore": 0.03057890012860298,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 3,
+                "source": "vector",
+                "sourceRank": 8,
+                "sourceScore": 0.6466631889343262
+              }
+            ],
+            "generation": "sha256:14f707b9c27d1827ab02af07fc75f0ed392940d085805a1afc6c6d5f7edd7a1f",
+            "parentUnitId": "sha256:72386e0e1b6c945a3cd2d27b796ef1bde5707662e5e1e562cbde891a91325aa1",
+            "path": "src/flask/sansio/app.py",
+            "ranges": [
+              {
+                "end": 26568,
+                "start": 24980
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-c7bbc652731bb6ff77df5b736551c100febc588a452b960d712f60adbb325a7b",
+            "sourceHash": "sha256:cf5df9f2972be7cad9878df7ea321804617d769f47823984abbe0a9b1cbc460b"
+          },
+          {
+            "anchor": "def Flask::create_url_adapter",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:1ef6ecbb093ee476593824fad255b0aacee1e86302328a154989a6f1633c27e9",
+            "declarationRange": {
+              "end": 22510,
+              "start": 20236
+            },
+            "fusionScore": 0.027799228206276894,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.027799228206276894,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 4,
+                "source": "lexical",
+                "sourceRank": 10,
+                "sourceScore": 5.921300888061523
+              },
+              {
+                "fusionScore": 0.027799228206276894,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 4,
+                "source": "vector",
+                "sourceRank": 14,
+                "sourceScore": 0.6667788624763489
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:e6f66ff858cb689dd8165779080ecf889d3de7b0fd397ce8e68c3c855584c445",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 21695,
+                "start": 20236
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-2eb3a73c8dc2dfaae043d63a8df8a589429fbfcec4beb14f7f213318c935cbd7",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def register",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:84cc1f1d6f932ee9b7d934bb37c8eb268aa61c78f1a13945c6b2074c1604b5f3",
+            "declarationRange": {
+              "end": 2260,
+              "start": 1128
+            },
+            "fusionScore": 0.02649572677910328,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.02649572677910328,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 5,
+                "source": "lexical",
+                "sourceRank": 5,
+                "sourceScore": 6.9417243003845215
+              },
+              {
+                "fusionScore": 0.02649572677910328,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 5,
+                "source": "vector",
+                "sourceRank": 30,
+                "sourceScore": 0.696727454662323
+              }
+            ],
+            "generation": "sha256:992bd51b69b41bd4381a7dfe2d1664bf4e0c1ced69d2fe2a08b60c9eced59783",
+            "parentUnitId": "sha256:98a07889b3539e57df02b18dc950bc0651ea25e2b3d76b00d3aef891e8849ac3",
+            "path": "examples/tutorial/flaskr/auth.py",
+            "ranges": [
+              {
+                "end": 2260,
+                "start": 1128
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-56dfa3c30e439728035525b209de72a334bf00e6270c6022c1d5dc35b9b66c58",
+            "sourceHash": "sha256:a5ed5eaa05c6f6ee3e5bdb07b9e657a6e9320a115a68fd74b1cb4ac646680167"
+          },
+          {
+            "anchor": "def Flask::url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:4c399600af588bd2773c5b4a02acc370f70188ea8678531377b154f7924a4b0a",
+            "declarationRange": {
+              "end": 49063,
+              "start": 43940
+            },
+            "fusionScore": 0.025567753240466118,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.025567753240466118,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 6,
+                "source": "lexical",
+                "sourceRank": 49,
+                "sourceScore": 6.460050582885742
+              },
+              {
+                "fusionScore": 0.025567753240466118,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 6,
+                "source": "vector",
+                "sourceRank": 1,
+                "sourceScore": 0.578529953956604
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:f7ed4f221085645d97db21fc2c1ed1426a4ac89010b86da57c14b28dca256a14",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 45756,
+                "start": 44206
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-2f699e2028ca6b2a77505cc1b5174ec4d886d38ab7c59ae272d4d4f56acc76aa",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def TestUrlFor::test_url_with_method",
+            "category": "test",
+            "chunkId": "chunk-sha256:dc3e42aa84a2dfd8c2bc9ae52970e745529beba30b39e57f51f808ca9080358a",
+            "declarationRange": {
+              "end": 4871,
+              "start": 4054
+            },
+            "fusionScore": 0.024877900257706642,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.024877900257706642,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 7,
+                "source": "lexical",
+                "sourceRank": 31,
+                "sourceScore": 3.9270124435424805
+              },
+              {
+                "fusionScore": 0.024877900257706642,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 7,
+                "source": "vector",
+                "sourceRank": 12,
+                "sourceScore": 0.6575980186462402
+              }
+            ],
+            "generation": "sha256:d24aa3b2d1ae7d4dbdc2eae0ceb12ffb44db4af7dcbafa31b1e6725c786827d1",
+            "parentUnitId": "sha256:bb4c9882f483dc09ee2f2c8675899e0392a468103ab3e7fc83d00c28c16a128b",
+            "path": "tests/test_helpers.py",
+            "ranges": [
+              {
+                "end": 4871,
+                "start": 4054
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-af06a3199ba6e0c6e56ea4d191982c837651195bd2a7d115561798ad59bc7b48",
+            "sourceHash": "sha256:04d700b48f3d5e3139ebe1e162df30bf9a223213c82c50b4f77b3692b111c011"
+          },
+          {
+            "anchor": "def Scaffold::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:d3e5bbce87d8c380387aa0fa851aa74f6c56275f753e0ae683db2d0ff5c9cf46",
+            "declarationRange": {
+              "end": 16358,
+              "start": 13968
+            },
+            "fusionScore": 0.024730410426855087,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.024730410426855087,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 8,
+                "source": "lexical",
+                "sourceRank": 47,
+                "sourceScore": 9.466032981872559
+              },
+              {
+                "fusionScore": 0.024730410426855087,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 8,
+                "source": "vector",
+                "sourceRank": 5,
+                "sourceScore": 0.6298329830169678
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:24d6c7e4b201e9da1248fbb343d089c9dec2968cddff7757fda4b58a6197481a",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 15821,
+                "start": 14211
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-1fc657d0498cc63db1bca7cef3fff9e73e99810aa0e5604d68c297af552d65af",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def App::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:2423c77adc023e91dd9ac83c05a8a78140cff7828ad4441837e0bb656271a21d",
+            "declarationRange": {
+              "end": 27245,
+              "start": 24980
+            },
+            "fusionScore": 0.023752013221383095,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.023752013221383095,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 9,
+                "source": "lexical",
+                "sourceRank": 48,
+                "sourceScore": 9.466032981872559
+              },
+              {
+                "fusionScore": 0.023752013221383095,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 9,
+                "source": "vector",
+                "sourceRank": 9,
+                "sourceScore": 0.6556956768035889
+              }
+            ],
+            "generation": "sha256:14f707b9c27d1827ab02af07fc75f0ed392940d085805a1afc6c6d5f7edd7a1f",
+            "parentUnitId": "sha256:72386e0e1b6c945a3cd2d27b796ef1bde5707662e5e1e562cbde891a91325aa1",
+            "path": "src/flask/sansio/app.py",
+            "ranges": [
+              {
+                "end": 27245,
+                "start": 26568
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-914646339f75d24dbe3d49bcdafea5fbeb5db505a1d9a391f0683e916b33a624",
+            "sourceHash": "sha256:cf5df9f2972be7cad9878df7ea321804617d769f47823984abbe0a9b1cbc460b"
+          },
+          {
+            "anchor": "def TestUrlFor::test_url_for_with_scheme",
+            "category": "test",
+            "chunkId": "chunk-sha256:1e82fb0a2980b1b16f544b9779745aa63c3045ba4c49f840ae69b29679490be4",
+            "declarationRange": {
+              "end": 3212,
+              "start": 2962
+            },
+            "fusionScore": 0.022181373089551926,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.022181373089551926,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 10,
+                "source": "lexical",
+                "sourceRank": 36,
+                "sourceScore": 3.7432355880737305
+              },
+              {
+                "fusionScore": 0.022181373089551926,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 10,
+                "source": "vector",
+                "sourceRank": 25,
+                "sourceScore": 0.6897485256195068
+              }
+            ],
+            "generation": "sha256:d24aa3b2d1ae7d4dbdc2eae0ceb12ffb44db4af7dcbafa31b1e6725c786827d1",
+            "parentUnitId": "sha256:21fb8cf066154e586be5d77179cbbc747c164ab9ddb883fb1847f92f0cc46e83",
+            "path": "tests/test_helpers.py",
+            "ranges": [
+              {
+                "end": 3212,
+                "start": 2962
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-657dce88f0157a51a10b60abd895ab19484327e6407d24624e5496a717983806",
+            "sourceHash": "sha256:04d700b48f3d5e3139ebe1e162df30bf9a223213c82c50b4f77b3692b111c011"
+          },
+          {
+            "anchor": "def test_url_mapping",
+            "category": "test",
+            "chunkId": "chunk-sha256:5b49674d17be54760de548c47922a60b62f431a4e4125c2b7dfc435a5ea822ab",
+            "declarationRange": {
+              "end": 5479,
+              "start": 4307
+            },
+            "fusionScore": 0.021999042481184006,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.021999042481184006,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 11,
+                "source": "lexical",
+                "sourceRank": 42,
+                "sourceScore": 3.638803243637085
+              },
+              {
+                "fusionScore": 0.021999042481184006,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 11,
+                "source": "vector",
+                "sourceRank": 22,
+                "sourceScore": 0.6865089535713196
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:8a5dd2a82e887327a5ac44f7821f6e5b78338bcba83e87c49c219f4665aa91c7",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 5433,
+                "start": 4307
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-e693e97bdfe320669a95b93c735ee8f1854d3fd11fab053cbfedd27b95a34f49",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_url_processors",
+            "category": "test",
+            "chunkId": "chunk-sha256:27af040f25ec8beb6e3908052c7dffba96fb8fdf149cf354db19ed811f446dbd",
+            "declarationRange": {
+              "end": 45596,
+              "start": 44724
+            },
+            "fusionScore": 0.021235954016447067,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.021235954016447067,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 12,
+                "source": "lexical",
+                "sourceRank": 40,
+                "sourceScore": 3.638803243637085
+              },
+              {
+                "fusionScore": 0.021235954016447067,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 12,
+                "source": "vector",
+                "sourceRank": 29,
+                "sourceScore": 0.6964738965034485
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:d40c595e1685be2ef1a49c462634bf70331306634726d10ba68e73377214e722",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 45596,
+                "start": 44724
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-b9da79bcb49ef55a46d8f1d70bfcdf2ab8f0c02de605d45712fbe1e09e083890",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def TestUrlFor::test_url_for_with_self",
+            "category": "test",
+            "chunkId": "chunk-sha256:76d4fb798e3544c9a74234afeb6cc3c64ad36e8afa4c2610a40c0bcedff0522d",
+            "declarationRange": {
+              "end": 5060,
+              "start": 4877
+            },
+            "fusionScore": 0.021178843453526497,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.021178843453526497,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 13,
+                "source": "lexical",
+                "sourceRank": 37,
+                "sourceScore": 3.7432355880737305
+              },
+              {
+                "fusionScore": 0.021178843453526497,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 13,
+                "source": "vector",
+                "sourceRank": 32,
+                "sourceScore": 0.6977339386940002
+              }
+            ],
+            "generation": "sha256:d24aa3b2d1ae7d4dbdc2eae0ceb12ffb44db4af7dcbafa31b1e6725c786827d1",
+            "parentUnitId": "sha256:a8e4f02d84f035263f31c0e4366d07cc30e1da9681786be3a6d725eb309ab0e4",
+            "path": "tests/test_helpers.py",
+            "ranges": [
+              {
+                "end": 5060,
+                "start": 4877
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-7bf75eb33d88755d5cee75607c4d9c6373f4f26201431e1f5362e4baa27fc9fa",
+            "sourceHash": "sha256:04d700b48f3d5e3139ebe1e162df30bf9a223213c82c50b4f77b3692b111c011"
+          },
+          {
+            "anchor": "def TestUrlFor::test_url_for_with_anchor",
+            "category": "test",
+            "chunkId": "chunk-sha256:885eea237a836611d27411434fe523039c5e8c42511070bb6d772491bf72e84a",
+            "declarationRange": {
+              "end": 2956,
+              "start": 2771
+            },
+            "fusionScore": 0.02030509151518345,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.02030509151518345,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 14,
+                "source": "lexical",
+                "sourceRank": 38,
+                "sourceScore": 3.7432355880737305
+              },
+              {
+                "fusionScore": 0.02030509151518345,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 14,
+                "source": "vector",
+                "sourceRank": 39,
+                "sourceScore": 0.7050802111625671
+              }
+            ],
+            "generation": "sha256:d24aa3b2d1ae7d4dbdc2eae0ceb12ffb44db4af7dcbafa31b1e6725c786827d1",
+            "parentUnitId": "sha256:19fb79a76f6dea541910072744fad366cdbf02234510f73f70687fdf8da0e093",
+            "path": "tests/test_helpers.py",
+            "ranges": [
+              {
+                "end": 2956,
+                "start": 2771
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-5544b6569fa0ac580a462f45870cc1f89b2aea7c867052906262e9c0a3a1a2d0",
+            "sourceHash": "sha256:04d700b48f3d5e3139ebe1e162df30bf9a223213c82c50b4f77b3692b111c011"
+          },
+          {
+            "anchor": "def test_url_generation",
+            "category": "test",
+            "chunkId": "chunk-sha256:d93a8878434dab77d28c0957012f01d3078a10d1ccae60dcc4b7701b3ce62079",
+            "declarationRange": {
+              "end": 36399,
+              "start": 36084
+            },
+            "fusionScore": 0.02010101079940796,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.02010101079940796,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 15,
+                "source": "lexical",
+                "sourceRank": 39,
+                "sourceScore": 3.638803243637085
+              },
+              {
+                "fusionScore": 0.02010101079940796,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 15,
+                "source": "vector",
+                "sourceRank": 40,
+                "sourceScore": 0.7058781385421753
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:bc681816b241e17e304e291f42eac01ce45d123fde95261232157ac8897e34b0",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 36399,
+                "start": 36084
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-394586b702c6f36b62edd0cf1347fa41d5d7bc45293e892e8546819cce4741b2",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def get_db",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:7e8f06da4b801f6a7017db2fa2e4eb8da85c443fefc6aec502c4ed1baf54928b",
+            "declarationRange": {
+              "end": 484,
+              "start": 111
+            },
+            "fusionScore": 0.016393441706895828,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.016393441706895828,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 16,
+                "source": "graph_expansion",
+                "sourceRank": 1,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:18289540782cd1e5714b7cf8ca6de91e50f35bfb5c29eaf256ae01080f6ffa14",
+            "parentUnitId": "sha256:b7d1a421773c9c5dfb4d5ede0b9a83064eec2bc70ed921b9740edaccb21c694d",
+            "path": "examples/tutorial/flaskr/db.py",
+            "ranges": [
+              {
+                "end": 484,
+                "start": 111
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ba6c5ba57fbdbeb6ad893f6d6d9bfef8c784bfa0909fc4f32adcf239f704ce9e",
+            "sourceHash": "sha256:700f9d0a455bf79c9bf6de4f2784f13b96256faea19c15ddee71fb7957e14c31"
+          },
+          {
+            "anchor": "def Scaffold::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:d3e5bbce87d8c380387aa0fa851aa74f6c56275f753e0ae683db2d0ff5c9cf46",
+            "declarationRange": {
+              "end": 16358,
+              "start": 13968
+            },
+            "fusionScore": 0.016129031777381897,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.016129031777381897,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 17,
+                "source": "lexical",
+                "sourceRank": 2,
+                "sourceScore": 9.466032981872559
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:24d6c7e4b201e9da1248fbb343d089c9dec2968cddff7757fda4b58a6197481a",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 14211,
+                "start": 13968
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-b086f7af0588a9f8553cfa6dc297ded9e36a6ea2f4fecd7cf1eec25f749237af",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def render_template",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:195cb28877a78edd9c2f9d9aed04d9f6d4b1d747ee3acba8aa218a6ee06628ea",
+            "declarationRange": {
+              "end": 5084,
+              "start": 4529
+            },
+            "fusionScore": 0.016129031777381897,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.016129031777381897,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 18,
+                "source": "graph_expansion",
+                "sourceRank": 2,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:5bde105ac061c6a5b5045db5e8eace131a2997d463dfcd47b1d558fff8231a30",
+            "parentUnitId": "sha256:1df33a96686be2b531f4471199280afd69a9037a4fb18380e7917e74880d6be0",
+            "path": "src/flask/templating.py",
+            "ranges": [
+              {
+                "end": 5084,
+                "start": 4529
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-cc89e70447cf3f615830166324d794c6ed9caaeb134201906efdb02f862821ce",
+            "sourceHash": "sha256:3ed7a044a96c911267e855b7359d9f159f06321f75fbe678a6656923d5e0989e"
+          },
+          {
+            "anchor": "def flash",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:abfff458a11e33b99341b3fbf418882f28d6011de13cae0eab4aa106165fc844",
+            "declarationRange": {
+              "end": 12381,
+              "start": 11001
+            },
+            "fusionScore": 0.01587301678955555,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01587301678955555,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 19,
+                "source": "graph_expansion",
+                "sourceRank": 3,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:9d801ba25a5dda0a349ac8ca3cde0460ab1bc4caa128f7bd3469f8bfd2030394",
+            "parentUnitId": "sha256:ea1dc4b8589c373c8ad725a568e3006603a5c294c1c3d26ad8a7dfe13f575c4d",
+            "path": "src/flask/helpers.py",
+            "ranges": [
+              {
+                "end": 12381,
+                "start": 11001
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-20cbd4550a2313f9bc647d208c4cf9d3a20d934b1f887fa2af59be835c4f27b4",
+            "sourceHash": "sha256:4e2b647be02a93f655ddd058105c5ed8e9ffe3daef398ef3dd21e3a3817623fb"
+          },
+          {
+            "anchor": "def Request::endpoint",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:aacd3769e94f9e62026cc49bb9c2d6d402755c49dc3e2c5f68b4e5a3b102b39a",
+            "declarationRange": {
+              "end": 6310,
+              "start": 5871
+            },
+            "fusionScore": 0.01587301678955555,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01587301678955555,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 20,
+                "source": "vector",
+                "sourceRank": 3,
+                "sourceScore": 0.6183964610099792
+              }
+            ],
+            "generation": "sha256:d318c4dfbab0f5c082b274b8b2c4b9279e57d5455e35133b128fd98e237f96e1",
+            "parentUnitId": "sha256:ef4fdbbfcaab14831c205315da2c14ad4e9cb04b77b029fc0abca5f0ac3b8beb",
+            "path": "src/flask/wrappers.py",
+            "ranges": [
+              {
+                "end": 6310,
+                "start": 5871
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-7fd4b28b53797b32e5656e689bf5a365a0840bdf6e7a4dc46821e5bbe5b8a242",
+            "sourceHash": "sha256:8d492fe2655e93622ae21c3177846faab20c6faf41bf43c49438162e6779391a"
+          },
+          {
+            "anchor": "class TestUrlFor::test_url_with_method::MyView",
+            "category": "test",
+            "chunkId": "chunk-sha256:72fce2bcc7c06edc06abbe24e0e4773a19cb67c2a0e845c33d693595928fdac6",
+            "declarationRange": {
+              "end": 4376,
+              "start": 4152
+            },
+            "fusionScore": 0.015625,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.015625,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 21,
+                "source": "graph_expansion",
+                "sourceRank": 4,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:d24aa3b2d1ae7d4dbdc2eae0ceb12ffb44db4af7dcbafa31b1e6725c786827d1",
+            "parentUnitId": "sha256:9e25574470930d2864509398cf897d8408c8b27ca91a3e90c8aec4f6a9b05062",
+            "path": "tests/test_helpers.py",
+            "ranges": [
+              {
+                "end": 4190,
+                "start": 4152
+              },
+              {
+                "end": 4329,
+                "start": 4315
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-03f689b2a7b520375a19bb7f949ba3683e0cd913d213f872079570fb943c2fe9",
+            "sourceHash": "sha256:04d700b48f3d5e3139ebe1e162df30bf9a223213c82c50b4f77b3692b111c011"
+          },
+          {
+            "anchor": "def url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:b04321083c3275c007e1ddb22e15c5fd63de76ebf52ffa156d7535e38606c0b6",
+            "declarationRange": {
+              "end": 8457,
+              "start": 6632
+            },
+            "fusionScore": 0.015625,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.015625,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 22,
+                "source": "vector",
+                "sourceRank": 4,
+                "sourceScore": 0.6296883225440979
+              }
+            ],
+            "generation": "sha256:9d801ba25a5dda0a349ac8ca3cde0460ab1bc4caa128f7bd3469f8bfd2030394",
+            "parentUnitId": "sha256:d510ec9ed26e7e2228e1bcac897f23f24ddb24c022883e9aae6598fb822eb8ce",
+            "path": "src/flask/helpers.py",
+            "ranges": [
+              {
+                "end": 8284,
+                "start": 6837
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-a2f4d602d29f4cd74d86c2c5cf7b3b8d63880ae990bbb6351172a201f24e5161",
+            "sourceHash": "sha256:4e2b647be02a93f655ddd058105c5ed8e9ffe3daef398ef3dd21e3a3817623fb"
+          },
+          {
+            "anchor": "def TestUrlFor::test_url_for_with_scheme::index",
+            "category": "test",
+            "chunkId": "chunk-sha256:a5cb61c575a813dee31d286395e245faab06c08fbc206a10a5d5b1f009649bb0",
+            "declarationRange": {
+              "end": 3080,
+              "start": 3044
+            },
+            "fusionScore": 0.015384615398943424,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.015384615398943424,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 23,
+                "source": "graph_expansion",
+                "sourceRank": 5,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:d24aa3b2d1ae7d4dbdc2eae0ceb12ffb44db4af7dcbafa31b1e6725c786827d1",
+            "parentUnitId": "sha256:189be84598f95e180ba89363bae905b1c287cb22240abeab2ea584b14e18ac05",
+            "path": "tests/test_helpers.py",
+            "ranges": [
+              {
+                "end": 3080,
+                "start": 3044
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-4779c9b7d3c7f28e4f9e2b55d8faeb473368a17fa89826e4e0ed7dbbf3c94dde",
+            "sourceHash": "sha256:04d700b48f3d5e3139ebe1e162df30bf9a223213c82c50b4f77b3692b111c011"
+          },
+          {
+            "anchor": "def test_url_mapping::more",
+            "category": "test",
+            "chunkId": "chunk-sha256:36c33d62441a3c3b8b35c5fc39722b8c57f40dc6bfb5e7b9eea43a3d902ebafe",
+            "declarationRange": {
+              "end": 4506,
+              "start": 4459
+            },
+            "fusionScore": 0.01515151560306549,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01515151560306549,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 24,
+                "source": "graph_expansion",
+                "sourceRank": 6,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:c715be42a2d1981f8d8fe76602a8a636e0aca81c189b2319d0079f77939b4be5",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 4506,
+                "start": 4459
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-3539f0641f3d6dfd9d9a51182c7ec4190044ca7d05e959d6d42aa65b83758739",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_nested_callback_order::a",
+            "category": "test",
+            "chunkId": "chunk-sha256:f6988d440f699eca3e64a086570a698ef5f21206ec69f96e0624130f796c604b",
+            "declarationRange": {
+              "end": 27253,
+              "start": 27206
+            },
+            "fusionScore": 0.01515151560306549,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01515151560306549,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 25,
+                "source": "lexical",
+                "sourceRank": 6,
+                "sourceScore": 6.659264087677002
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:031eca213ae43f5f06de3fe0ecf4722ac01999b18a58066a58b0f4903d813478",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 27253,
+                "start": 27206
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-f69ad470b2d5bbd01be6a2150e6364d514f759eca9799b07c57cef74e265dcf1",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def test_explicit_head::Index::head",
+            "category": "test",
+            "chunkId": "chunk-sha256:4bbc9791aed71a41e29f9fbc52d523bfcb5360c54622015e9a4fa525d0e8301b",
+            "declarationRange": {
+              "end": 4476,
+              "start": 4393
+            },
+            "fusionScore": 0.014925372786819935,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014925372786819935,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 26,
+                "source": "graph_expansion",
+                "sourceRank": 7,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:0d1ef85c690a16b7f55a39b47cc849401fb534b187f59a152ef29c3ed0bcdb3c",
+            "parentUnitId": "sha256:c1740a1e8202056025bca6be49eb431760ab6c391a4f3ca4a116079eeffa7b72",
+            "path": "tests/test_views.py",
+            "ranges": [
+              {
+                "end": 4476,
+                "start": 4393
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-489f6bc676be8b45c77b2b32dd73b7b710a40bf32b57b2d9c0629ce2b0f1055c",
+            "sourceHash": "sha256:1fb41b3d4d3228624c9ec60ca66ac8ad7614626d78497c9f057d6aca312cd0e0"
+          },
+          {
+            "anchor": "def Flask::url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:4c399600af588bd2773c5b4a02acc370f70188ea8678531377b154f7924a4b0a",
+            "declarationRange": {
+              "end": 49063,
+              "start": 43940
+            },
+            "fusionScore": 0.014925372786819935,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014925372786819935,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 27,
+                "source": "vector",
+                "sourceRank": 7,
+                "sourceScore": 0.6426984667778015
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:f7ed4f221085645d97db21fc2c1ed1426a4ac89010b86da57c14b28dca256a14",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 47260,
+                "start": 45756
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-8b0e0bbac840f78614c484c021aeb54b633b4d4204f81526b3c48c9ab17daefc",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def Flask::url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:4c399600af588bd2773c5b4a02acc370f70188ea8678531377b154f7924a4b0a",
+            "declarationRange": {
+              "end": 49063,
+              "start": 43940
+            },
+            "fusionScore": 0.014925372786819935,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014925372786819935,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 28,
+                "source": "lexical",
+                "sourceRank": 7,
+                "sourceScore": 6.460050582885742
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:f7ed4f221085645d97db21fc2c1ed1426a4ac89010b86da57c14b28dca256a14",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 44206,
+                "start": 43940
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ad9010f73a0115b4983470b45f3aa684b5bb844637768ab54efe2895fd2198d0",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def Blueprint::register",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:0d0a8bea5d483da5a4da1354239ee2949aacf17e881183aa48463bd6eece6e8f",
+            "declarationRange": {
+              "end": 15259,
+              "start": 10928
+            },
+            "fusionScore": 0.014705882407724857,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014705882407724857,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 29,
+                "source": "lexical",
+                "sourceRank": 8,
+                "sourceScore": 6.246913433074951
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:676d63faaaf2cf1b2ea2616bba826bd8892993358fe9b1dec400e632f169c5f9",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 12465,
+                "start": 10928
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-56fef4321cfe6ec8e637412b26dda271add423a66b8b76124cbcf02fe79585a3",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def test_url_mapping::index",
+            "category": "test",
+            "chunkId": "chunk-sha256:5d4055f60e4f37a911390496ae06101729069899501fe18d86d6eddf94a19f64",
+            "declarationRange": {
+              "end": 4453,
+              "start": 4405
+            },
+            "fusionScore": 0.014705882407724857,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014705882407724857,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 30,
+                "source": "graph_expansion",
+                "sourceRank": 8,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:2965a70da64f187658ac852a336c4671cb68e456baf82b09e70f998bc346755f",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 4453,
+                "start": 4405
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-d73d7d93cc971523847e408b0bc83953e054a4dbf59e17a2265267f499b3c4e8",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_register",
+            "category": "test",
+            "chunkId": "chunk-sha256:01429274fa76ec6224e929d024d816d6bb34da3d74a1dc8d0c37f1e6ef17c82a",
+            "declarationRange": {
+              "end": 678,
+              "start": 92
+            },
+            "fusionScore": 0.014492753893136978,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014492753893136978,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 31,
+                "source": "lexical",
+                "sourceRank": 9,
+                "sourceScore": 6.246913433074951
+              }
+            ],
+            "generation": "sha256:0d9d583e0aee1f72ebd121462dc9ec030456fcce3920af46c45ba29e9d802a07",
+            "parentUnitId": "sha256:7c51ba997aa011edfde03d64880ade8c3a78bc1c88849989553a6be2585ec4d1",
+            "path": "examples/tutorial/tests/test_auth.py",
+            "ranges": [
+              {
+                "end": 678,
+                "start": 92
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-bc6a8ca0e1b5f42564a8c745f50804013f0b6453c3e6f404011b627fd8e9ee6c",
+            "sourceHash": "sha256:cbbe178c9980d8499561d8eae72f01b8abeead2fa10c9d5f71427da4af38a938"
+          },
+          {
+            "anchor": "def test_endpoint_decorator",
+            "category": "test",
+            "chunkId": "chunk-sha256:9f7663b0ecf12e3979101a88dc11034564fc24c65b73e69b651269e1490c1982",
+            "declarationRange": {
+              "end": 9552,
+              "start": 9137
+            },
+            "fusionScore": 0.014285714365541935,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014285714365541935,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 32,
+                "source": "vector",
+                "sourceRank": 10,
+                "sourceScore": 0.6564203500747681
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:7125c285606e50d383bcfee89ce1f344ca76c9491da757fa49b30d0aa021dd60",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 9552,
+                "start": 9137
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-1af96fd84de38f3796660a533883236ae97ab7361cb664309818e552741741ce",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def Scaffold::route",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:eaecd47fbc50b2aa6752f817d344e154ce5302176347f89b91efcc45be0530f3",
+            "declarationRange": {
+              "end": 13945,
+              "start": 12896
+            },
+            "fusionScore": 0.014084506779909134,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014084506779909134,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 33,
+                "source": "vector",
+                "sourceRank": 11,
+                "sourceScore": 0.6570865511894226
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:ca04686fafbfa4d21c9a7ab9247d86c23b46ab8b20da223dd89aacaf14fe9c65",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 13945,
+                "start": 12896
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-48f249b47fcceb693dd4ebb3ae9a1b56a1b6ec6c8c4c5532de5d413e7f4b5423",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def App::register_blueprint",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:ce7ee3a666542ab58c4bfb470fd44a2563570aedf90d0acbd0e4a4c263f16b2b",
+            "declarationRange": {
+              "end": 24739,
+              "start": 23461
+            },
+            "fusionScore": 0.014084506779909134,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014084506779909134,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 34,
+                "source": "lexical",
+                "sourceRank": 11,
+                "sourceScore": 5.678535461425781
+              }
+            ],
+            "generation": "sha256:14f707b9c27d1827ab02af07fc75f0ed392940d085805a1afc6c6d5f7edd7a1f",
+            "parentUnitId": "sha256:d9d40bbb3df1a7d0ca93097d385575bd0d02a9e81fd8d39b2e0e84336f15d693",
+            "path": "src/flask/sansio/app.py",
+            "ranges": [
+              {
+                "end": 24739,
+                "start": 23461
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-5a03c1c085814184da30d1d5922f27b5549faa553aa1e3a19e830fab43db1d7c",
+            "sourceHash": "sha256:cf5df9f2972be7cad9878df7ea321804617d769f47823984abbe0a9b1cbc460b"
+          },
+          {
+            "anchor": "def TaggedJSONSerializer::register",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:babd09c229876f796e2dc8064c33678f3b6288e4786927e18dc7469d03765971",
+            "declarationRange": {
+              "end": 7937,
+              "start": 6848
+            },
+            "fusionScore": 0.013888888992369175,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013888888992369175,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 35,
+                "source": "lexical",
+                "sourceRank": 12,
+                "sourceScore": 5.678535461425781
+              }
+            ],
+            "generation": "sha256:7c08d0f9abd1439edcc3ff716bdaade1cffe957d20c22992826f323ba7b88592",
+            "parentUnitId": "sha256:eb50660d761d33f74242f41c75449d2fa16bf0f1c221a6f176bea7e8dc55b97b",
+            "path": "src/flask/json/tag.py",
+            "ranges": [
+              {
+                "end": 7937,
+                "start": 6848
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-abdf6e8c2e76920e5180c8065b8d8e3bd5ae31456fd22cf41419fd53703f9240",
+            "sourceHash": "sha256:0e168dc2e20e85db7647be28382f58e19f19a6bc4562245be5d50fe5bcb220dc"
+          },
+          {
+            "anchor": "def AppContext::match_request",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:617586beff19fd15c9631da9d5c1a6f37eab9ef9936a767199b764772738b303",
+            "declarationRange": {
+              "end": 14041,
+              "start": 13545
+            },
+            "fusionScore": 0.013698630034923553,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013698630034923553,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 36,
+                "source": "vector",
+                "sourceRank": 13,
+                "sourceScore": 0.6584190726280212
+              }
+            ],
+            "generation": "sha256:38ef0ff1a734515d638d04e4448a9881031ca80f243b096aa3b74e8ef03bab36",
+            "parentUnitId": "sha256:039ffd74d095ea5cbc07b2bb6bd8877567a988e52a07c9b54a8e920bf217a302",
+            "path": "src/flask/ctx.py",
+            "ranges": [
+              {
+                "end": 14041,
+                "start": 13545
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-59b66324575f182bd070f496380b97fffff88e6973cb3f3317b3d91476738e1f",
+            "sourceHash": "sha256:e21952d044159438765eb27848b0fe4c75f83faee8645181a09a1eccb1d5cab7"
+          },
+          {
+            "anchor": "def Blueprint::register_blueprint",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:54e9e63b3d78b696a539b2e3b18b16ba7d80703bc2086e11a41f94e0ad2805e1",
+            "declarationRange": {
+              "end": 10922,
+              "start": 10197
+            },
+            "fusionScore": 0.013698630034923553,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013698630034923553,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 37,
+                "source": "lexical",
+                "sourceRank": 13,
+                "sourceScore": 5.678535461425781
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:33f3698a26b542ecd30aafe3a2afa846e60ce06eebdee30c5a2eb698c87eb5a3",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 10922,
+                "start": 10197
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-a7448e6aa7e8c9a6fb3100ed4e759009f0ce26e417f67a92bcf1357b4803da55",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def test_session_using_application_root",
+            "category": "test",
+            "chunkId": "chunk-sha256:ab6effb7088ff34df14e6ae7cd2047d41157238720a490a2638d230aa4fdb625",
+            "declarationRange": {
+              "end": 8585,
+              "start": 7915
+            },
+            "fusionScore": 0.013513513840734959,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013513513840734959,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 38,
+                "source": "lexical",
+                "sourceRank": 14,
+                "sourceScore": 5.476020336151123
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:d24f6ed30457ea14a6c03b7487bee2ef761509a3bdc77c8c6366401363fe9f49",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 8585,
+                "start": 7915
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ebef573f46a91c317c4a941db363801d07f40aab9df38942a77ccd9d33ecd7e1",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint",
+            "category": "test",
+            "chunkId": "chunk-sha256:d6288ba20711ea47c2d703722e59dcb434e1928e9b7440e6c0682c77bbc1f898",
+            "declarationRange": {
+              "end": 48079,
+              "start": 47399
+            },
+            "fusionScore": 0.013333333656191826,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013333333656191826,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 39,
+                "source": "vector",
+                "sourceRank": 15,
+                "sourceScore": 0.6702483296394348
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:9482aaca4eaf81785df639c968dee1cb00f7fe8094f0db93434d914c5ad86625",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 48079,
+                "start": 47399
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-4823815e238de30bd0b736c5cac68ea9eaec7ea13e8a2755d1d98b0b57660c01",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_teardown_on_pop",
+            "category": "test",
+            "chunkId": "chunk-sha256:34ec7d67c953b4a52889c04ff4f3f055fba2dec03b5e07f558378618c787ca68",
+            "declarationRange": {
+              "end": 543,
+              "start": 283
+            },
+            "fusionScore": 0.013333333656191826,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013333333656191826,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 40,
+                "source": "lexical",
+                "sourceRank": 15,
+                "sourceScore": 5.3934645652771
+              }
+            ],
+            "generation": "sha256:0afb97b69e67d3cc2f9d142919b56103cd33976d3243dc603e3a25752f5118cc",
+            "parentUnitId": "sha256:da6d335ab6da28a4b1392d729036764bbd1310c6601b531920f83f4f7170e065",
+            "path": "tests/test_reqctx.py",
+            "ranges": [
+              {
+                "end": 543,
+                "start": 283
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-87a342861d441202624243a1109ca1d2713ad261538420cfba97b5d4373e2d40",
+            "sourceHash": "sha256:93d7f891096b037099b4770fb3498019436c4fa16062a0b99ea610af3ce32c5a"
+          },
+          {
+            "anchor": "def Flask::create_url_adapter",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:1ef6ecbb093ee476593824fad255b0aacee1e86302328a154989a6f1633c27e9",
+            "declarationRange": {
+              "end": 22510,
+              "start": 20236
+            },
+            "fusionScore": 0.01315789483487606,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01315789483487606,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 41,
+                "source": "vector",
+                "sourceRank": 16,
+                "sourceScore": 0.6761077046394348
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:e6f66ff858cb689dd8165779080ecf889d3de7b0fd397ce8e68c3c855584c445",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 22510,
+                "start": 21695
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-b4b6b3cab74845413bae2e4b3bbd8dd682e32db18823380b4a436586853db936",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def test_register_validate_input",
+            "category": "test",
+            "chunkId": "chunk-sha256:54444d337f9c5748d51545b4b309abd8bd6dda62d0d54fca70e0bf45b43c3bdf",
+            "declarationRange": {
+              "end": 1117,
+              "start": 901
+            },
+            "fusionScore": 0.01315789483487606,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01315789483487606,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 42,
+                "source": "lexical",
+                "sourceRank": 16,
+                "sourceScore": 5.204962253570557
+              }
+            ],
+            "generation": "sha256:0d9d583e0aee1f72ebd121462dc9ec030456fcce3920af46c45ba29e9d802a07",
+            "parentUnitId": "sha256:d40b282d9371912093e4b45d848f97b98103097638b6725a1157bab53c833ecb",
+            "path": "examples/tutorial/tests/test_auth.py",
+            "ranges": [
+              {
+                "end": 1117,
+                "start": 901
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-c35cd29daf539b25dd2ff5b0b72f475a5c6854162cd138fbea6b079b3940942c",
+            "sourceHash": "sha256:cbbe178c9980d8499561d8eae72f01b8abeead2fa10c9d5f71427da4af38a938"
+          },
+          {
+            "anchor": "def App::inject_url_defaults",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:0f62a32e7e769a7da2c5033bfaa4ca5fe2fdee4018de218f3e6a55dff5278992",
+            "declarationRange": {
+              "end": 38220,
+              "start": 37394
+            },
+            "fusionScore": 0.012987012974917889,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012987012974917889,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 43,
+                "source": "vector",
+                "sourceRank": 17,
+                "sourceScore": 0.6774646639823914
+              }
+            ],
+            "generation": "sha256:14f707b9c27d1827ab02af07fc75f0ed392940d085805a1afc6c6d5f7edd7a1f",
+            "parentUnitId": "sha256:08bf5a94f639dfdbceaef9fc69789ebfc31808a32d60d6ad98b6decc2ec7d7fe",
+            "path": "src/flask/sansio/app.py",
+            "ranges": [
+              {
+                "end": 38220,
+                "start": 37394
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-27aaec0497cca6d8908355d4a64591d3e17060ed302461ae65f6fd3fb6fddb89",
+            "sourceHash": "sha256:cf5df9f2972be7cad9878df7ea321804617d769f47823984abbe0a9b1cbc460b"
+          },
+          {
+            "anchor": "def Scaffold::register_error_handler",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:5cdc7edf2eb0d44edc62e486e2f284d759351fdc5e4e62b5a2e3cf6c168e410d",
+            "declarationRange": {
+              "end": 25463,
+              "start": 24985
+            },
+            "fusionScore": 0.012987012974917889,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012987012974917889,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 44,
+                "source": "lexical",
+                "sourceRank": 17,
+                "sourceScore": 5.204962253570557
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:87a658ba81d4ae0a60cf6407b9533c572536bf8dbe4a0d6d7540ebb2583a4a54",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 25463,
+                "start": 24985
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-74be2716a841fe2b58a4ee0843c4629d73a4350960b364383693a98751930fb0",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def Scaffold::endpoint",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:512c68e37c402702eccdd0c983e329a7e787896d5b08a3cdefa6045217a2ce87",
+            "declarationRange": {
+              "end": 17010,
+              "start": 16381
+            },
+            "fusionScore": 0.012820512987673283,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012820512987673283,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 45,
+                "source": "vector",
+                "sourceRank": 18,
+                "sourceScore": 0.6821545362472534
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:f24c682f2a0aa78ea5d8b01b076bf79e6cede407d4aa70f01a7b158b3c84f51e",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 17010,
+                "start": 16381
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-5481d0d46a1df2db806a6b971a00da0836f9d48cdae3f55bc15c0056e3a9f4c3",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def test_session_using_application_root::index",
+            "category": "test",
+            "chunkId": "chunk-sha256:d28e8231f68fbca8fd5007a1f439256b526f4597c4615f3a482df102652091c1",
+            "declarationRange": {
+              "end": 8472,
+              "start": 8393
+            },
+            "fusionScore": 0.012820512987673283,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012820512987673283,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 46,
+                "source": "lexical",
+                "sourceRank": 18,
+                "sourceScore": 5.084619522094727
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:5d0fad4664432cade00e1a3964a8e211194df2f634acd977ee55d23213faf366",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 8472,
+                "start": 8393
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-c318b608234fc6f6ea601ffd5686dbb4dd5f0c8a48b50c10c9f3921c00b6c15f",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_url_for_passes_special_values_to_build_error_handler",
+            "category": "test",
+            "chunkId": "chunk-sha256:762bfd2da39509c77d97c9635d0f61b48b71474607960c71fc549b738aed952c",
+            "declarationRange": {
+              "end": 38004,
+              "start": 37608
+            },
+            "fusionScore": 0.012658228166401386,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012658228166401386,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 47,
+                "source": "vector",
+                "sourceRank": 19,
+                "sourceScore": 0.6826339960098267
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:a237d6da2aa923c93decfa45ffe3a56cdc2e933ef4988c444be806ec492c7c2c",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 38004,
+                "start": 37608
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-3bf27d5703fd1036b02f8284ad840330ba3b6ce1468e91ed23ec485e80b72df8",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_options_on_multiple_rules",
+            "category": "test",
+            "chunkId": "chunk-sha256:8c095e18a99648f38f3648edda128a3e00a789a68e9f9ef1a00d1a75c9326e0b",
+            "declarationRange": {
+              "end": 1393,
+              "start": 1055
+            },
+            "fusionScore": 0.012658228166401386,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012658228166401386,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 48,
+                "source": "lexical",
+                "sourceRank": 19,
+                "sourceScore": 4.978288650512695
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:9966827338d672d9972e68afac5c84bbd46750cd94f77cc2cca518e1a4167591",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 1393,
+                "start": 1055
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ad8bd7bac2d66951fadfbdf5ea65426da4755c36c99e6c7f25488fd156fe2449",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint",
+            "category": "test",
+            "chunkId": "chunk-sha256:3f94de75bafd7e054f75560352aacb7486de173150c18a502bc8f79f86403a05",
+            "declarationRange": {
+              "end": 8713,
+              "start": 7871
+            },
+            "fusionScore": 0.012500000186264515,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012500000186264515,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 49,
+                "source": "vector",
+                "sourceRank": 20,
+                "sourceScore": 0.6829713582992554
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:30eeb744f4ff49c597d8ca1a9c600be89bcc33806e42eaf6fddf76c68a793759",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 8713,
+                "start": 7871
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-88acd0645cf17978c284084e12c0281d1f1ca72fe1e9e70a2daec51afdfe7628",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def Request::on_json_loading_failed",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:a7224248fd58f79b0f2475073bd7643a5f79872f9e8921ccef3f6667c7d6d915",
+            "declarationRange": {
+              "end": 8107,
+              "start": 7830
+            },
+            "fusionScore": 0.012500000186264515,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012500000186264515,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 50,
+                "source": "lexical",
+                "sourceRank": 20,
+                "sourceScore": 4.978288650512695
+              }
+            ],
+            "generation": "sha256:d318c4dfbab0f5c082b274b8b2c4b9279e57d5455e35133b128fd98e237f96e1",
+            "parentUnitId": "sha256:2ab3683cbb2b22a28154871040ca5a15892007908b6e5f8642436b17c15c5591",
+            "path": "src/flask/wrappers.py",
+            "ranges": [
+              {
+                "end": 8107,
+                "start": 7830
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ab8b61230dd96c17358bdc515df113d237e557435b191c70c2e3e2dde24cf5d1",
+            "sourceHash": "sha256:8d492fe2655e93622ae21c3177846faab20c6faf41bf43c49438162e6779391a"
+          },
+          {
+            "anchor": "def test_get_method_on_g",
+            "category": "test",
+            "chunkId": "chunk-sha256:48ea99990fd704ec8b3798d40a0565f1b7ce10617879b4c8593a9f8adca2b2f8",
+            "declarationRange": {
+              "end": 48270,
+              "start": 48082
+            },
+            "fusionScore": 0.012345679104328156,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012345679104328156,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 51,
+                "source": "lexical",
+                "sourceRank": 21,
+                "sourceScore": 4.978288650512695
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:63bf095ef9015c72b6645b1ff575f77c5310437f7bc0bc9aae0a84487d4c5a0d",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 48270,
+                "start": 48082
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-8c084f2066ab69885ee19a5b3472b211b6228567f72e268106a613405bb8f882",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def create_app",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:975162bdc679ffada33c83620afc0da62c46516db5c9d9d05206afe10b75365e",
+            "declarationRange": {
+              "end": 1405,
+              "start": 37
+            },
+            "fusionScore": 0.012345679104328156,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012345679104328156,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 52,
+                "source": "vector",
+                "sourceRank": 21,
+                "sourceScore": 0.6835605502128601
+              }
+            ],
+            "generation": "sha256:cbdb420f15dad20f62e9bcbebef8e7f59538399297d8331d35ffa039afde1e5b",
+            "parentUnitId": "sha256:db6097ef3b6d3c922461022e6f342108e206ea63e4e30db30b910a8115e920aa",
+            "path": "examples/tutorial/flaskr/__init__.py",
+            "ranges": [
+              {
+                "end": 1405,
+                "start": 1350
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-bfcfdf460472b0551a145a5030b2445c10fd3cfde06fa0a2f501cf366b7bb0bd",
+            "sourceHash": "sha256:cc44165ea4444bc114aedba76cf2f15451f182df97629317589d46902742f118"
+          },
+          {
+            "anchor": "def test_options_on_multiple_rules::index",
+            "category": "test",
+            "chunkId": "chunk-sha256:4ba32cfad288268099810952dfbc08c142a5c8826bbde384d7689ed60f5e80a0",
+            "declarationRange": {
+              "end": 1194,
+              "start": 1153
+            },
+            "fusionScore": 0.012195121496915817,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012195121496915817,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 53,
+                "source": "lexical",
+                "sourceRank": 22,
+                "sourceScore": 4.622463226318359
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:9bcf8ae91cbe93a5688549be3c72f9b04ea3f9429b73caee8d34fe3697bb133a",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 1194,
+                "start": 1153
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-183926ce11a954cc3412a24ca69dc4158c5022fbb44199ac4799d8402bebf774",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_app_freed_on_zero_refcount",
+            "category": "test",
+            "chunkId": "chunk-sha256:4cbedf879da3463ae3abc78f380979188701d8a9587378825571d8ae6b21a994",
+            "declarationRange": {
+              "end": 54249,
+              "start": 53796
+            },
+            "fusionScore": 0.012048192322254181,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012048192322254181,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 54,
+                "source": "lexical",
+                "sourceRank": 23,
+                "sourceScore": 4.622463226318359
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:35cda84e7f92a7f6c8c0646774e6a66542aeae17db4ca43f293e1c76047c7c4b",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 54249,
+                "start": 53796
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-0f612b70ef4924ef6875812ba81bb16737fce1ad277b0497c33f115cbf25fc68",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def routes_command",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:0b809f6b359916996df40ece6c080603ac09eccdfc033a2c1c56d1d9da50f963",
+            "declarationRange": {
+              "end": 36410,
+              "start": 34989
+            },
+            "fusionScore": 0.012048192322254181,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012048192322254181,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 55,
+                "source": "vector",
+                "sourceRank": 23,
+                "sourceScore": 0.6873003840446472
+              }
+            ],
+            "generation": "sha256:1dc6f5d5fc945ac3cc0475246e69c964d7f2e08bf081de4450a90ce6ef6c3d15",
+            "parentUnitId": "sha256:23e026f45eb89413303d4354cd270fbd976ec43f20cb2b146a24a92ee30c2736",
+            "path": "src/flask/cli.py",
+            "ranges": [
+              {
+                "end": 36279,
+                "start": 34989
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-e25c89816c10a26e050d66013c334084937ad170947e4f278923f200c84af511",
+            "sourceHash": "sha256:1f476f816464b4250caaf6cc6fdf3f5fc956456a7da61cb7d0a1e03e3e7e5f3b"
+          },
+          {
+            "anchor": "def SecureCookieSession::__init__::on_update",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:8ffeda0c99d14799e51358eceff0811dde369543ed10619104994c958fa8ffa4",
+            "declarationRange": {
+              "end": 2595,
+              "start": 2525
+            },
+            "fusionScore": 0.011904762126505375,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.011904762126505375,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 56,
+                "source": "lexical",
+                "sourceRank": 24,
+                "sourceScore": 4.622463226318359
+              }
+            ],
+            "generation": "sha256:92b6afc8135714a053f777aa54790fa6e8512343bd37015ae6a30d9d2bd094c4",
+            "parentUnitId": "sha256:6a17e2d7c46756ba31583a6d27909af328abc19bc8da8fc0d8002fae5c960de0",
+            "path": "src/flask/sessions.py",
+            "ranges": [
+              {
+                "end": 2595,
+                "start": 2525
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-0d274b2a30e3cabe5436ab93228482d3323a1f2a3b794bb3e2b0b574396f4f74",
+            "sourceHash": "sha256:26fa7cc311b841f8409ad93933d3a3a52b068150c6f15fc3cd0c107e7a9aaf9d"
+          },
+          {
+            "anchor": "def Scaffold::route::decorator",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:9435273434fbccf176bc72d725e29121c4ab01d32aa2ffcda845b487af2a710c",
+            "declarationRange": {
+              "end": 13919,
+              "start": 13748
+            },
+            "fusionScore": 0.011904762126505375,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.011904762126505375,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 57,
+                "source": "vector",
+                "sourceRank": 24,
+                "sourceScore": 0.6893701553344727
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:e3462d40a15f1260bd1f4ea6fc20ec2ce7a3fdfdb9ebc4fbb7b05d7e7819b97f",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 13919,
+                "start": 13748
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-a990655d2364fa00e611214a50637b46fddd7408deed33f3d5f1805ba2557a78",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "class test_session_using_application_root::PrefixPathMiddleware",
+            "category": "test",
+            "chunkId": "chunk-sha256:133318ff62099ea3e27a40d0b09723d153aed01b01974f3cbe560b6c216a4911",
+            "declarationRange": {
+              "end": 8257,
+              "start": 7973
+            },
+            "fusionScore": 0.0117647061124444,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.0117647061124444,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 58,
+                "source": "lexical",
+                "sourceRank": 25,
+                "sourceScore": 4.448676109313965
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:1f4f317084b06e5b7c6f9eff96b42d70b6ef0873b6902d36b1b24dc578ea3f3f",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 8009,
+                "start": 7973
+              },
+              {
+                "end": 8111,
+                "start": 8101
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-3ad5e5a94ad14ea02c30f4b95c4be4de6deb669439c8ccbeab51d17b7a1cf0c0",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_options_on_multiple_rules::index_put",
+            "category": "test",
+            "chunkId": "chunk-sha256:e14756fd534475a10d70fc9a4d9fa6f89b7aceca673a0891d2f93a6a82f747be",
+            "declarationRange": {
+              "end": 1275,
+              "start": 1237
+            },
+            "fusionScore": 0.011627906933426857,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.011627906933426857,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 59,
+                "source": "lexical",
+                "sourceRank": 26,
+                "sourceScore": 4.3141093254089355
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:d423d7587069e4f12e13983f5c02ef4af6a75ec035d9c05985842cf46f8e8abf",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 1275,
+                "start": 1237
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-a6567c319112ccddf5da71d66bf8cc24f618c648843aff35d4a6dfdbb5e25aa0",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_open_session_with_endpoint",
+            "category": "test",
+            "chunkId": "chunk-sha256:91ce719799aa22c0da184176fa016b28e779c71fc94dc031e7eb0c0e1565b91f",
+            "declarationRange": {
+              "end": 783,
+              "start": 93
+            },
+            "fusionScore": 0.011627906933426857,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.011627906933426857,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 60,
+                "source": "vector",
+                "sourceRank": 26,
+                "sourceScore": 0.6899771094322205
+              }
+            ],
+            "generation": "sha256:33e84f701ee6c06f38991b3ac1706153433f735df30505ca10e9f24b4242c81e",
+            "parentUnitId": "sha256:5d7e04d1a70f11944424fb5e2adfbcfa72f83c92226f3ccfed64ad8794f8f141",
+            "path": "tests/test_session_interface.py",
+            "ranges": [
+              {
+                "end": 783,
+                "start": 93
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-c17742f36d52e807b3b86fef30d26b6b43052fcf631865e5ae56dc3863f5a995",
+            "sourceHash": "sha256:e898a1d162e524d36325f474e353a748ddeb3c2d5ac7b863c32c78ca219b25c3"
+          },
+          {
+            "anchor": "def Flask::test_request_context",
+            "category": "test",
+            "chunkId": "chunk-sha256:71a04e517d5a294e9ab1660afdc9c31f1a6e198892affb0230216f17be049949",
+            "declarationRange": {
+              "end": 63053,
+              "start": 60965
+            },
+            "fusionScore": 0.01149425283074379,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01149425283074379,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 61,
+                "source": "vector",
+                "sourceRank": 27,
+                "sourceScore": 0.6903929114341736
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:20a4c1830625aa260ceba64f16bb48c65f017f9eddf5da453ebfe3b4d9b34e5f",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 62521,
+                "start": 61050
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-547244e6ea3d93e11fcd0faa52f92b7213a3bac25c4bc6c35cbb794520327154",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def test_teardown_on_pop::end_of_request",
+            "category": "test",
+            "chunkId": "chunk-sha256:536f1cd97b8e29b3d782d1791af2acfce545c5194a0a7066ea21a8a71131d914",
+            "declarationRange": {
+              "end": 424,
+              "start": 361
+            },
+            "fusionScore": 0.01149425283074379,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01149425283074379,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 62,
+                "source": "lexical",
+                "sourceRank": 27,
+                "sourceScore": 4.3141093254089355
+              }
+            ],
+            "generation": "sha256:0afb97b69e67d3cc2f9d142919b56103cd33976d3243dc603e3a25752f5118cc",
+            "parentUnitId": "sha256:72429cc645b04ce591872339ca63b0a9b81adf5886d009e8288c8d4601284076",
+            "path": "tests/test_reqctx.py",
+            "ranges": [
+              {
+                "end": 424,
+                "start": 361
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-c08c97e73ccdec0a52715d68c2a7e978f9fba8752529ba22e4cdc39cac9da6e9",
+            "sourceHash": "sha256:93d7f891096b037099b4770fb3498019436c4fa16062a0b99ea610af3ce32c5a"
+          },
+          {
+            "anchor": "class Request",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:ee739ddccb6e59ec4f7d05f12878e9ed683b84460cc2102b79a61efec640ae03",
+            "declarationRange": {
+              "end": 8107,
+              "start": 430
+            },
+            "fusionScore": 0.011363636702299118,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.011363636702299118,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 63,
+                "source": "vector",
+                "sourceRank": 28,
+                "sourceScore": 0.6963900327682495
+              }
+            ],
+            "generation": "sha256:d318c4dfbab0f5c082b274b8b2c4b9279e57d5455e35133b128fd98e237f96e1",
+            "parentUnitId": "sha256:6d0355916731dd64256eaa9be8151cb77d33dab7b973dd0162d2946fcebc72bb",
+            "path": "src/flask/wrappers.py",
+            "ranges": [
+              {
+                "end": 1714,
+                "start": 430
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-02fa3a87faa84c417d7963d2236ad459184afdfd5cf83930f4736890750db46f",
+            "sourceHash": "sha256:8d492fe2655e93622ae21c3177846faab20c6faf41bf43c49438162e6779391a"
+          },
+          {
+            "anchor": "def test_session_using_application_root::PrefixPathMiddleware::__init__",
+            "category": "test",
+            "chunkId": "chunk-sha256:895eeac90175b1fade8351456b14158e5868e61a1800ae1fe989443e646feef6",
+            "declarationRange": {
+              "end": 8101,
+              "start": 8009
+            },
+            "fusionScore": 0.011363636702299118,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.011363636702299118,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 64,
+                "source": "lexical",
+                "sourceRank": 28,
+                "sourceScore": 4.186847686767578
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:fb08385e8a63698e7319b165f9f902810a9df6066b05c951514bd0ff8815e889",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 8101,
+                "start": 8009
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-d7580ab91aca96909c4fe27412176e5769f810d53cddc02703169f28004dd009",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_session_using_application_root::PrefixPathMiddleware::__call__",
+            "category": "test",
+            "chunkId": "chunk-sha256:3248ae2fcbabb39709f9a5247895eb5a1899f11749ea153b0c784fe1bba8dc93",
+            "declarationRange": {
+              "end": 8257,
+              "start": 8111
+            },
+            "fusionScore": 0.01123595517128706,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01123595517128706,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 65,
+                "source": "lexical",
+                "sourceRank": 29,
+                "sourceScore": 4.186847686767578
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:d96a409c1b1462182c97002fc9cb38d7bbc3f5f21ee1ca0a05e5fdf75afb6bed",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 8257,
+                "start": 8111
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-4b2f71c649d6fd8d91a3d629b56d27cfa26111a2dab2dba4260e4f6d87c838b1",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:b04321083c3275c007e1ddb22e15c5fd63de76ebf52ffa156d7535e38606c0b6",
+            "declarationRange": {
+              "end": 8457,
+              "start": 6632
+            },
+            "fusionScore": 0.011111111380159855,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.011111111380159855,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 66,
+                "source": "lexical",
+                "sourceRank": 30,
+                "sourceScore": 4.003019332885742
+              }
+            ],
+            "generation": "sha256:9d801ba25a5dda0a349ac8ca3cde0460ab1bc4caa128f7bd3469f8bfd2030394",
+            "parentUnitId": "sha256:d510ec9ed26e7e2228e1bcac897f23f24ddb24c022883e9aae6598fb822eb8ce",
+            "path": "src/flask/helpers.py",
+            "ranges": [
+              {
+                "end": 6837,
+                "start": 6632
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-50c8cd78afd3c0c1b2ea0ce51c9533d6e661554306602c76b45f9b9164ec32bf",
+            "sourceHash": "sha256:4e2b647be02a93f655ddd058105c5ed8e9ffe3daef398ef3dd21e3a3817623fb"
+          },
+          {
+            "anchor": "def test_basic_url_generation",
+            "category": "test",
+            "chunkId": "chunk-sha256:31bbb7eeb457f4fecaf3111da2952a35fe6e651b8d8b270aaaf502f5810d398b",
+            "declarationRange": {
+              "end": 388,
+              "start": 102
+            },
+            "fusionScore": 0.010989011265337467,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.010989011265337467,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 67,
+                "source": "vector",
+                "sourceRank": 31,
+                "sourceScore": 0.6976395845413208
+              }
+            ],
+            "generation": "sha256:a1a499dc396abbf4f545de1305b242d65407e65a3c5ba1fd4955fdde07245b45",
+            "parentUnitId": "sha256:124d69d95ebe39d2bbfb021bb4fd74209250ad5de8aa8cd40be3ed11ec275dc5",
+            "path": "tests/test_appctx.py",
+            "ranges": [
+              {
+                "end": 388,
+                "start": 102
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-9c09b3cfff5db5bd4601313a234670a4423230b59db9f72f40ca22def19d3b17",
+            "sourceHash": "sha256:0cef6858e010be5ae233f622972ce04d90efb0a8cc2a57eab1a80afc12e87fe2"
+          },
+          {
+            "anchor": "def test_templates_and_static",
+            "category": "test",
+            "chunkId": "chunk-sha256:f76b534d2875ed4483f4705fa46c60ca895a0c5f4873ffa6f176436065ea1b64",
+            "declarationRange": {
+              "end": 6283,
+              "start": 4687
+            },
+            "fusionScore": 0.010869565419852734,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.010869565419852734,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 68,
+                "source": "lexical",
+                "sourceRank": 32,
+                "sourceScore": 3.9152703285217285
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:b26c464dd1c985af3432e7eca8c097cf8e53a9e6684f6b8cd33967913955d7f8",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 5847,
+                "start": 4687
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ddb28faa904e994c267d4c7e7328a8d3fbba6ca5f7451fd18088f459b5ef3604",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def test_endpoint_override",
+            "category": "test",
+            "chunkId": "chunk-sha256:9486ac02db25768ba7e8226eeb094ccb4fbf92d14a63b007e58a8fcfb94f1d40",
+            "declarationRange": {
+              "end": 5147,
+              "start": 4690
+            },
+            "fusionScore": 0.01075268816202879,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01075268816202879,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 69,
+                "source": "vector",
+                "sourceRank": 33,
+                "sourceScore": 0.6991933584213257
+              }
+            ],
+            "generation": "sha256:0d1ef85c690a16b7f55a39b47cc849401fb534b187f59a152ef29c3ed0bcdb3c",
+            "parentUnitId": "sha256:9c8f50c8de11db590cbd16ec23447e6de1b293c0af5a3e84cf32247cfb52be2b",
+            "path": "tests/test_views.py",
+            "ranges": [
+              {
+                "end": 5147,
+                "start": 4690
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-44dec15b89a585c13cf1dcd03ab8f76b950bcf446ef89e68f0091950c6e79f5b",
+            "sourceHash": "sha256:1fb41b3d4d3228624c9ec60ca66ac8ad7614626d78497c9f057d6aca312cd0e0"
+          },
+          {
+            "anchor": "def Blueprint::add_app_template_filter::register_template_filter",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:b20f2fbae75faa0d50dfe580718b251ad9681083d00382324544d0587d30b277",
+            "declarationRange": {
+              "end": 19740,
+              "start": 19619
+            },
+            "fusionScore": 0.01075268816202879,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01075268816202879,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 70,
+                "source": "lexical",
+                "sourceRank": 33,
+                "sourceScore": 3.902972936630249
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:be471adaa2c6079203eba4492fa2d6f314e3a618051a3c3887711a60be3e3f5e",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 19740,
+                "start": 19619
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-bf9b6dcb14465453698bd90516bad28c89abd599cc59c85b06b0277da79125ac",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def Blueprint::add_app_template_test::register_template_test",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:020af0c1613e72482fcadfe381250e83b20bb7c1fb2910ebc969d1bc9675d419",
+            "declarationRange": {
+              "end": 21798,
+              "start": 21681
+            },
+            "fusionScore": 0.010638297535479069,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.010638297535479069,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 71,
+                "source": "lexical",
+                "sourceRank": 34,
+                "sourceScore": 3.902972936630249
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:1ce658658a064ba83f72303fd121df2552f0b31a0286cabd432e8e18cac644ba",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 21798,
+                "start": 21681
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-0b86b4b4b7167378b8f57a3f8e636cb3c3adadd9b27daf3fa1d6e3b74447b72d",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "residual:1077-1128",
+            "category": "unknown",
+            "chunkId": "chunk-sha256:59f7c544da61606176a881c4f06ae74515e8d84f33bc3bd0b6318c557a51caa1",
+            "declarationRange": null,
+            "fusionScore": 0.010638297535479069,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.010638297535479069,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 72,
+                "source": "vector",
+                "sourceRank": 34,
+                "sourceScore": 0.7002482414245605
+              }
+            ],
+            "generation": "sha256:992bd51b69b41bd4381a7dfe2d1664bf4e0c1ced69d2fe2a08b60c9eced59783",
+            "parentUnitId": "sha256:79bd2a86f4914746dfe2d0d878150c37bf87b041af0b546cdcb4aab549fb536d",
+            "path": "examples/tutorial/flaskr/auth.py",
+            "ranges": [
+              {
+                "end": 1128,
+                "start": 1077
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-79b5c1d451c52aaf7c6727b5b1e3be6fbc7afc705ec6795afb713ee9c6998339",
+            "sourceHash": "sha256:a5ed5eaa05c6f6ee3e5bdb07b9e657a6e9320a115a68fd74b1cb4ac646680167"
+          },
+          {
+            "anchor": "def Blueprint::add_app_template_global::register_template_global",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:330ea26618ab629b2b8ce3c8d68a0732b47708c13ec33fedc59e28312dcfc431",
+            "declarationRange": {
+              "end": 23910,
+              "start": 23789
+            },
+            "fusionScore": 0.010526316240429878,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.010526316240429878,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 73,
+                "source": "lexical",
+                "sourceRank": 35,
+                "sourceScore": 3.902972936630249
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:6082972a6cd1599ef4f5e66e9be02ea70757dd909388c093e093056f28579aef",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 23910,
+                "start": 23789
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-a104f678ff3a6e48219c11d4625fa0ac37ec1169467e2e846cac73b378e4318e",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint::for_bar_foo",
+            "category": "test",
+            "chunkId": "chunk-sha256:3b34bad3283d6ebf93b8d2bce12968bcc86ba203389055ca98eebeaf6cfc694b",
+            "declarationRange": {
+              "end": 47755,
+              "start": 47699
+            },
+            "fusionScore": 0.010526316240429878,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.010526316240429878,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 74,
+                "source": "vector",
+                "sourceRank": 35,
+                "sourceScore": 0.7014918923377991
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:05e41f213c10dfdda8b6c5de84bb51645b413175742bfd5cbad69c30a07d4e2d",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 47755,
+                "start": 47699
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-faed9f8d2c481529bc6b7ed1b1fb54ab1cbe787ae7f9298fba3ac6f0443217db",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def Flask::url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:4c399600af588bd2773c5b4a02acc370f70188ea8678531377b154f7924a4b0a",
+            "declarationRange": {
+              "end": 49063,
+              "start": 43940
+            },
+            "fusionScore": 0.010416666977107525,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.010416666977107525,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 75,
+                "source": "vector",
+                "sourceRank": 36,
+                "sourceScore": 0.7019132375717163
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:f7ed4f221085645d97db21fc2c1ed1426a4ac89010b86da57c14b28dca256a14",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 48954,
+                "start": 47260
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-4148a9251fb9bcb7d3991c67b906361ee1d8ec810f9859ff771c9b06ae8bc67e",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint::for_bar",
+            "category": "test",
+            "chunkId": "chunk-sha256:09d86d10ae9240416ee53106b5fca4970234b2dbb43dcd6c7661f16e71854f73",
+            "declarationRange": {
+              "end": 47650,
+              "start": 47598
+            },
+            "fusionScore": 0.010309278033673763,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.010309278033673763,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 76,
+                "source": "vector",
+                "sourceRank": 37,
+                "sourceScore": 0.7030068635940552
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:d1d37b7e3bca8f23858649b3f0a01b5ca460b63984c8cdb3284dad069dbd776f",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 47650,
+                "start": 47598
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-b4e252d2bde1b1edcd3e51f6c2ea6cafffcf2d79d0762600e142be728eadf336",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint::foo_bar_foo",
+            "category": "test",
+            "chunkId": "chunk-sha256:c9814b63ff7809114442fa8278d6b7911f1621322f4ece0e89839aa900d1dd19",
+            "declarationRange": {
+              "end": 8242,
+              "start": 8186
+            },
+            "fusionScore": 0.010204081423580647,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.010204081423580647,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 77,
+                "source": "vector",
+                "sourceRank": 38,
+                "sourceScore": 0.7030388712882996
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:e43e34e41962b53ae6854b11827927d56634a677e0cd1702935e1cd94f226773",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 8242,
+                "start": 8186
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-432265976e5f0be1699e1557acddde6583924a95eab5492cedb6cfd42ad83126",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint_with_dots",
+            "category": "test",
+            "chunkId": "chunk-sha256:4074b481f9ba971c602729c98c68293a7c73797d01c82b1d78ec8502267aefac",
+            "declarationRange": {
+              "end": 9134,
+              "start": 8716
+            },
+            "fusionScore": 0.009900989942252636,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009900989942252636,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 78,
+                "source": "vector",
+                "sourceRank": 41,
+                "sourceScore": 0.7066588997840881
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:57e2e7abfc6401cb9900b5f01f4e0713efc5ee75e371d792efe9fb3cfb05f3a8",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 9134,
+                "start": 8716
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-3ab4dfc738fe1a5d1a26db340c3ccdeed9927858909ad3bcae0e2db836ca77b8",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "class TestUrlFor",
+            "category": "test",
+            "chunkId": "chunk-sha256:02060c7602b889e5c48115196c5ae6f41b207b967af6c1d97b5fcb76820d6f6c",
+            "declarationRange": {
+              "end": 5060,
+              "start": 2749
+            },
+            "fusionScore": 0.009900989942252636,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009900989942252636,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 79,
+                "source": "lexical",
+                "sourceRank": 41,
+                "sourceScore": 3.638803243637085
+              }
+            ],
+            "generation": "sha256:d24aa3b2d1ae7d4dbdc2eae0ceb12ffb44db4af7dcbafa31b1e6725c786827d1",
+            "parentUnitId": "sha256:39a1771c572e5deb2655fc762b2f8ce802947706b567638e884fea194a797838",
+            "path": "tests/test_helpers.py",
+            "ranges": [
+              {
+                "end": 2771,
+                "start": 2749
+              },
+              {
+                "end": 2962,
+                "start": 2956
+              },
+              {
+                "end": 3218,
+                "start": 3212
+              },
+              {
+                "end": 3631,
+                "start": 3625
+              },
+              {
+                "end": 4054,
+                "start": 4048
+              },
+              {
+                "end": 4877,
+                "start": 4871
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-c3976478f7c55099e6a5510097174526e0a981ea579796909084eb8ba172ff1a",
+            "sourceHash": "sha256:04d700b48f3d5e3139ebe1e162df30bf9a223213c82c50b4f77b3692b111c011"
+          },
+          {
+            "anchor": "def test_specify_url_scheme",
+            "category": "test",
+            "chunkId": "chunk-sha256:16ee31d23e81a55724b26868389fbfb1e1611754fbe339e545313547d4085447",
+            "declarationRange": {
+              "end": 2611,
+              "start": 2303
+            },
+            "fusionScore": 0.009803921915590763,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009803921915590763,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 80,
+                "source": "vector",
+                "sourceRank": 42,
+                "sourceScore": 0.7067991495132446
+              }
+            ],
+            "generation": "sha256:a520da0978078b1b3c12c8c04f3037bbf698cb90446c25d02bbc44b0c6fc57c2",
+            "parentUnitId": "sha256:88f514fb1f01324de4872163c8f3a0d4a9306b2c557f702ec4ebd9882ac9e53f",
+            "path": "tests/test_testing.py",
+            "ranges": [
+              {
+                "end": 2611,
+                "start": 2303
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-0522d4b5c0999dc803e8b46751d8bcb12738a9fb7d8f2c8f733b82b730cac0bc",
+            "sourceHash": "sha256:5b3a6244c709b4102e921f79a949ac82f0db99efd59e671c464731fdfceab63d"
+          },
+          {
+            "anchor": "def Scaffold::url_defaults",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:07308915624ae86adacc35389c2b70f0bf905ab91266a37c9ffb95ffaceef65e",
+            "declarationRange": {
+              "end": 23207,
+              "start": 22555
+            },
+            "fusionScore": 0.009708737954497337,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009708737954497337,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 81,
+                "source": "lexical",
+                "sourceRank": 43,
+                "sourceScore": 3.638803243637085
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:9d6ec7054c925302c64b170a7d6ca8bf3984bbcafa2edb0dcfd3f5f882821d1b",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 23207,
+                "start": 22555
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-83a5400bfe910825bbafd3f07b636f788f0f2230ad1f4dfc328f3a99d13cd9a1",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint::foo",
+            "category": "test",
+            "chunkId": "chunk-sha256:b31a1051fb78620aaf69558da9c62851914dc05f56fee1bfcb7823d611e9c458",
+            "declarationRange": {
+              "end": 47552,
+              "start": 47504
+            },
+            "fusionScore": 0.009708737954497337,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009708737954497337,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 82,
+                "source": "vector",
+                "sourceRank": 43,
+                "sourceScore": 0.7083523869514465
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:be0ac675b801485344cf1dd32d2c4ef9113133a73f819f31b84527b19dbddbff",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 47552,
+                "start": 47504
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-b57de68b32b1895b669d6c82cd885cfd538b906732680d9ca67957d789677605",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_full_url_request",
+            "category": "test",
+            "chunkId": "chunk-sha256:9a38026ac562647abbd8e878f49e39d19c9dc8e4a87d73b3cf63e3873d107b19",
+            "declarationRange": {
+              "end": 7027,
+              "start": 6684
+            },
+            "fusionScore": 0.009615384973585606,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009615384973585606,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 83,
+                "source": "vector",
+                "sourceRank": 44,
+                "sourceScore": 0.7085878849029541
+              }
+            ],
+            "generation": "sha256:a520da0978078b1b3c12c8c04f3037bbf698cb90446c25d02bbc44b0c6fc57c2",
+            "parentUnitId": "sha256:d33edd97e57d7ee156dee7c9408d9d03402a30e92db660df24f8e185ee9d6d24",
+            "path": "tests/test_testing.py",
+            "ranges": [
+              {
+                "end": 7027,
+                "start": 6684
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-438c89a7447813ae63d546f6e2abcb65ee161d141032ca185186f8d4e3f181d9",
+            "sourceHash": "sha256:5b3a6244c709b4102e921f79a949ac82f0db99efd59e671c464731fdfceab63d"
+          },
+          {
+            "anchor": "def test_json_request_and_response",
+            "category": "test",
+            "chunkId": "chunk-sha256:e54c9ce83b9d2242b7ac6ff2825a66f97b8a01101e8b7b5384800b4add4b3757",
+            "declarationRange": {
+              "end": 7593,
+              "start": 7030
+            },
+            "fusionScore": 0.009615384973585606,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009615384973585606,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 84,
+                "source": "lexical",
+                "sourceRank": 44,
+                "sourceScore": 3.613882064819336
+              }
+            ],
+            "generation": "sha256:a520da0978078b1b3c12c8c04f3037bbf698cb90446c25d02bbc44b0c6fc57c2",
+            "parentUnitId": "sha256:3aa8b0efc155bb965c8f77266b87965198ab33d75f0b107a3553e27dcd8ecda1",
+            "path": "tests/test_testing.py",
+            "ranges": [
+              {
+                "end": 7593,
+                "start": 7030
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-5f9d876f1407508361aa2f000cbe97f60355ea2f18762017e1c70e6b7208a5e0",
+            "sourceHash": "sha256:5b3a6244c709b4102e921f79a949ac82f0db99efd59e671c464731fdfceab63d"
+          },
+          {
+            "anchor": "def test_child_and_parent_subdomain",
+            "category": "test",
+            "chunkId": "chunk-sha256:5311c9bedd30027599180439b70c82cda045af0f694cc7a698cd0ea4e6d9dbdb",
+            "declarationRange": {
+              "end": 29666,
+              "start": 28990
+            },
+            "fusionScore": 0.009523809887468815,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009523809887468815,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 85,
+                "source": "lexical",
+                "sourceRank": 45,
+                "sourceScore": 3.613882064819336
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:423b4a044073bb9a94baba49fb84c8b861493086817a22a314f439e67bd0f790",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 29666,
+                "start": 28990
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-190f5517afee9b0c28698cbecffa0ae00bb8e6a591c388d9ff486eee7248ab0c",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def test_proper_test_request_context",
+            "category": "test",
+            "chunkId": "chunk-sha256:bd5d2885508cd1503e16225e188e4ad89a4d4d203d21c60f72d726335d2e61f0",
+            "declarationRange": {
+              "end": 2461,
+              "start": 1226
+            },
+            "fusionScore": 0.009523809887468815,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009523809887468815,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 86,
+                "source": "vector",
+                "sourceRank": 45,
+                "sourceScore": 0.7089710831642151
+              }
+            ],
+            "generation": "sha256:0afb97b69e67d3cc2f9d142919b56103cd33976d3243dc603e3a25752f5118cc",
+            "parentUnitId": "sha256:cc1b7c3bedc6f90b36b59180ca4bb2832de76be32856ead3cf3ab4b78f014f0c",
+            "path": "tests/test_reqctx.py",
+            "ranges": [
+              {
+                "end": 2353,
+                "start": 1226
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-a0589a1f6e4f923ea954c19f7b735252c7f97e5c7a2a93c5350e05964c4b4356",
+            "sourceHash": "sha256:93d7f891096b037099b4770fb3498019436c4fa16062a0b99ea610af3ce32c5a"
+          },
+          {
+            "anchor": "def FormDataRoutingRedirect::__init__",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:b0f9bd133b43963aaf807d96dfac3ebbbd75069283db8196a4b19eb947b0c3b3",
+            "declarationRange": {
+              "end": 2760,
+              "start": 1875
+            },
+            "fusionScore": 0.009433962404727936,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009433962404727936,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 87,
+                "source": "vector",
+                "sourceRank": 46,
+                "sourceScore": 0.7102252244949341
+              }
+            ],
+            "generation": "sha256:311351f5cb7fd94465f3ffa77029fe6e19a30400065d4da6a3ccc8c1c273df34",
+            "parentUnitId": "sha256:5fbe7c8f1bb0fb2213482fb45f62777950148db80e85677d82544e1151dbc32b",
+            "path": "src/flask/debughelpers.py",
+            "ranges": [
+              {
+                "end": 2760,
+                "start": 1875
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-b43d6809d92c8cb6c26984dd7469d3c4d8e007cb66aa95e2c4a28ea65c75a926",
+            "sourceHash": "sha256:75c8258dc3487e1d0857dc5d3c7ca471fac1a254282570fa57e56d71aada037e"
+          },
+          {
+            "anchor": "def TestUrlFor::test_url_for_with_anchor::index",
+            "category": "test",
+            "chunkId": "chunk-sha256:ab6e0a4fff17c018e491b1d9649061af1f7c04e39c088a81b43f5053e7199845",
+            "declarationRange": {
+              "end": 2889,
+              "start": 2853
+            },
+            "fusionScore": 0.009433962404727936,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009433962404727936,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 88,
+                "source": "lexical",
+                "sourceRank": 46,
+                "sourceScore": 3.57589054107666
+              }
+            ],
+            "generation": "sha256:d24aa3b2d1ae7d4dbdc2eae0ceb12ffb44db4af7dcbafa31b1e6725c786827d1",
+            "parentUnitId": "sha256:1ceb7baa758b1e778429ed395a7471b5284285451ae0360da7ff7879445d79fb",
+            "path": "tests/test_helpers.py",
+            "ranges": [
+              {
+                "end": 2889,
+                "start": 2853
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-f9a52f8b12a722bb733ce349df5c02c36ffba455fa48ea765033ae832972e61d",
+            "sourceHash": "sha256:04d700b48f3d5e3139ebe1e162df30bf9a223213c82c50b4f77b3692b111c011"
+          },
+          {
+            "anchor": "class EnvironBuilder",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:ad74116eb449b5589d981cd05811584f153653eb4fb50aeebb93ece7f042ff95",
+            "declarationRange": {
+              "end": 3151,
+              "start": 642
+            },
+            "fusionScore": 0.009345794096589088,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009345794096589088,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 89,
+                "source": "vector",
+                "sourceRank": 47,
+                "sourceScore": 0.7108249068260193
+              }
+            ],
+            "generation": "sha256:b8ddaebc796ea31c4dbd4d2ce221e30e873933b3fe8454db0d7370dd916d73a3",
+            "parentUnitId": "sha256:565bfa07fd75be2f2f47a265d672975ffed81310170606d5674fd4802511946c",
+            "path": "src/flask/testing.py",
+            "ranges": [
+              {
+                "end": 1667,
+                "start": 642
+              },
+              {
+                "end": 2850,
+                "start": 2844
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-c10b8666c444c7f2c7fa3076cd197d5e0eed5ca2ebec6daef737a08be74387e3",
+            "sourceHash": "sha256:629d481658aaec7076a55913eda38c270ec45d430b34b2f9d38b2eec2b0ad3da"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint::bar_foo",
+            "category": "test",
+            "chunkId": "chunk-sha256:0426430727226bc280dce2803310085a4949e3e64ecd2c16b2286cad1ad2315d",
+            "declarationRange": {
+              "end": 8326,
+              "start": 8274
+            },
+            "fusionScore": 0.009259259328246117,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.009259259328246117,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 90,
+                "source": "vector",
+                "sourceRank": 48,
+                "sourceScore": 0.7127178907394409
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:6fb8bdea7b36f69cdf19df213c04a66221174a003b94664d53058711289421c7",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 8326,
+                "start": 8274
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-e360e1332c39bd86f6846c8f3f1dfc320ad9a45746ccd2ddf9b6d1c4fae0fa7b",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint::foo_bar",
+            "category": "test",
+            "chunkId": "chunk-sha256:2e9b36fc451c87619bc603a6cd680a70c286a5d53aa6c23398a01b705b62d3db",
+            "declarationRange": {
+              "end": 8138,
+              "start": 8086
+            },
+            "fusionScore": 0.00917431153357029,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.00917431153357029,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 91,
+                "source": "vector",
+                "sourceRank": 49,
+                "sourceScore": 0.7133191823959351
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:2185a85b76e7b8b300166909173884e94eeec6111332011335be9fee5a8f7c87",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 8138,
+                "start": 8086
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-a8b11b288b17bdc9fffc5020c8ab8db43fe38f466febf5edb1328ce26df9d487",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def Blueprint::register",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:0d0a8bea5d483da5a4da1354239ee2949aacf17e881183aa48463bd6eece6e8f",
+            "declarationRange": {
+              "end": 15259,
+              "start": 10928
+            },
+            "fusionScore": 0.00909090880304575,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.00909090880304575,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 92,
+                "source": "lexical",
+                "sourceRank": 50,
+                "sourceScore": 6.246913433074951
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:676d63faaaf2cf1b2ea2616bba826bd8892993358fe9b1dec400e632f169c5f9",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 13908,
+                "start": 12465
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-5abe2599fc12b070dfbb3892ac944a25f15c5290d21b795829e9737cdb1a6386",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def Flask::preprocess_request",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:14dd6302a729ac56eddb3f89a936479e936737e335f574e40774e24f4a41e4d8",
+            "declarationRange": {
+              "end": 56057,
+              "start": 54901
+            },
+            "fusionScore": 0.00909090880304575,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.00909090880304575,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 93,
+                "source": "vector",
+                "sourceRank": 50,
+                "sourceScore": 0.7139201164245605
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:926bb2e27cdb7d4273386375bb4d371f1c3983e91fe2f95dbb4aac26348f416e",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 56057,
+                "start": 54901
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-790850f7c1d22408cd45dee43dd22cd393264243458aceb7908acee9a0aa725c",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          }
+        ],
+        "effectiveConfigHash": "f1cd039a25c50856b45a8905259dde94b4af63ac2ff5e73cb449a893f4e65947",
+        "passageRepresentationId": "code-passage-v1/6c565799a44ef61392aefa737eb3998c3078c98a3d32acfc3e1813d1dcb89348",
+        "phaseMs": {
+          "fusion": 0.9424669999999999,
+          "graph_expansion": 65.068404,
+          "lexical_candidates": 1136.51661,
+          "query_tokenization": 0.094294,
+          "source_authority": 9.690713,
+          "vector_candidates": 49.11472,
+          "vector_embedding": 22.463323,
+          "vector_search": 4.728563
+        },
+        "queryRepresentationId": "code-query-v1/6425ffc2849dee5e5639446fb66325a46e63e9393f42f9b87fccf96bd216def8",
+        "reindexRequired": false,
+        "seconds": 1.274601141,
+        "sourceFailures": [],
+        "sourceRevision": 9834
+      }
+    },
+    {
+      "request": {
+        "query": "register a URL rule and endpoint on the Flask application",
+        "resultLimit": 10,
+        "candidatesPerLane": 20
+      },
+      "result": {
+        "candidateCounts": {
+          "fused_parents": 35,
+          "fused_segments": 42,
+          "graph_expansion": 7,
+          "lexical": 20,
+          "unavailable_sources": 0,
+          "vector": 20
+        },
+        "candidates": [
+          {
+            "anchor": "def Blueprint::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:8e4fe2fb06bda801bc7a359d66daab74ef883b923b7359881498814c6472c5d2",
+            "declarationRange": {
+              "end": 17742,
+              "start": 16671
+            },
+            "fusionScore": 0.032522473484277725,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.032522473484277725,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 1,
+                "source": "lexical",
+                "sourceRank": 1,
+                "sourceScore": 9.466032981872559
+              },
+              {
+                "fusionScore": 0.032522473484277725,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 1,
+                "source": "vector",
+                "sourceRank": 2,
+                "sourceScore": 0.6132436990737915
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:efdd07ce006ee4e19fe0f6f826c71e1dec4212d646bbf642532f30b17735425f",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 17742,
+                "start": 16671
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-82117d6d3f9265b42df5ebf34ea248feafadec27f0d28757a1b62ad2f781d5b0",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:b04321083c3275c007e1ddb22e15c5fd63de76ebf52ffa156d7535e38606c0b6",
+            "declarationRange": {
+              "end": 8457,
+              "start": 6632
+            },
+            "fusionScore": 0.0317540317773819,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.0317540317773819,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 2,
+                "source": "vector",
+                "sourceRank": 4,
+                "sourceScore": 0.6296883225440979
+              },
+              {
+                "fusionScore": 0.0317540317773819,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 2,
+                "source": "graph_expansion",
+                "sourceRank": 2,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:9d801ba25a5dda0a349ac8ca3cde0460ab1bc4caa128f7bd3469f8bfd2030394",
+            "parentUnitId": "sha256:d510ec9ed26e7e2228e1bcac897f23f24ddb24c022883e9aae6598fb822eb8ce",
+            "path": "src/flask/helpers.py",
+            "ranges": [
+              {
+                "end": 8284,
+                "start": 6837
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-a2f4d602d29f4cd74d86c2c5cf7b3b8d63880ae990bbb6351172a201f24e5161",
+            "sourceHash": "sha256:4e2b647be02a93f655ddd058105c5ed8e9ffe3daef398ef3dd21e3a3817623fb"
+          },
+          {
+            "anchor": "def BlueprintSetupState::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:2085779a80499aee8e2bf6977a8cadcba086c43f5ed76d55f489406930182e98",
+            "declarationRange": {
+              "end": 4394,
+              "start": 3319
+            },
+            "fusionScore": 0.03077651560306549,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.03077651560306549,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 3,
+                "source": "lexical",
+                "sourceRank": 4,
+                "sourceScore": 8.11285400390625
+              },
+              {
+                "fusionScore": 0.03077651560306549,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 3,
+                "source": "vector",
+                "sourceRank": 6,
+                "sourceScore": 0.6368786096572876
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:494b1879e8b8cb22ea8d8e3e92234d8eb87ba7a354c8a7d13ea14432eb390d7f",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 4394,
+                "start": 3319
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-906e7f0269fd7358291ded6faf66bf808fde2b1ac0163be512c1e9a508e1c143",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def App::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:2423c77adc023e91dd9ac83c05a8a78140cff7828ad4441837e0bb656271a21d",
+            "declarationRange": {
+              "end": 27245,
+              "start": 24980
+            },
+            "fusionScore": 0.03057890012860298,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.03057890012860298,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 4,
+                "source": "lexical",
+                "sourceRank": 3,
+                "sourceScore": 9.466032981872559
+              },
+              {
+                "fusionScore": 0.03057890012860298,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 4,
+                "source": "vector",
+                "sourceRank": 8,
+                "sourceScore": 0.6466631889343262
+              }
+            ],
+            "generation": "sha256:14f707b9c27d1827ab02af07fc75f0ed392940d085805a1afc6c6d5f7edd7a1f",
+            "parentUnitId": "sha256:72386e0e1b6c945a3cd2d27b796ef1bde5707662e5e1e562cbde891a91325aa1",
+            "path": "src/flask/sansio/app.py",
+            "ranges": [
+              {
+                "end": 26568,
+                "start": 24980
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-c7bbc652731bb6ff77df5b736551c100febc588a452b960d712f60adbb325a7b",
+            "sourceHash": "sha256:cf5df9f2972be7cad9878df7ea321804617d769f47823984abbe0a9b1cbc460b"
+          },
+          {
+            "anchor": "def Flask::create_url_adapter",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:1ef6ecbb093ee476593824fad255b0aacee1e86302328a154989a6f1633c27e9",
+            "declarationRange": {
+              "end": 22510,
+              "start": 20236
+            },
+            "fusionScore": 0.027799228206276894,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.027799228206276894,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 5,
+                "source": "lexical",
+                "sourceRank": 10,
+                "sourceScore": 5.921300888061523
+              },
+              {
+                "fusionScore": 0.027799228206276894,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 5,
+                "source": "vector",
+                "sourceRank": 14,
+                "sourceScore": 0.6667788624763489
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:e6f66ff858cb689dd8165779080ecf889d3de7b0fd397ce8e68c3c855584c445",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 21695,
+                "start": 20236
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-2eb3a73c8dc2dfaae043d63a8df8a589429fbfcec4beb14f7f213318c935cbd7",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def Flask::url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:4c399600af588bd2773c5b4a02acc370f70188ea8678531377b154f7924a4b0a",
+            "declarationRange": {
+              "end": 49063,
+              "start": 43940
+            },
+            "fusionScore": 0.016393441706895828,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.016393441706895828,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 6,
+                "source": "vector",
+                "sourceRank": 1,
+                "sourceScore": 0.578529953956604
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:f7ed4f221085645d97db21fc2c1ed1426a4ac89010b86da57c14b28dca256a14",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 45756,
+                "start": 44206
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-2f699e2028ca6b2a77505cc1b5174ec4d886d38ab7c59ae272d4d4f56acc76aa",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:b04321083c3275c007e1ddb22e15c5fd63de76ebf52ffa156d7535e38606c0b6",
+            "declarationRange": {
+              "end": 8457,
+              "start": 6632
+            },
+            "fusionScore": 0.016393441706895828,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.016393441706895828,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 7,
+                "source": "graph_expansion",
+                "sourceRank": 1,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:9d801ba25a5dda0a349ac8ca3cde0460ab1bc4caa128f7bd3469f8bfd2030394",
+            "parentUnitId": "sha256:d510ec9ed26e7e2228e1bcac897f23f24ddb24c022883e9aae6598fb822eb8ce",
+            "path": "src/flask/helpers.py",
+            "ranges": [
+              {
+                "end": 6837,
+                "start": 6632
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-50c8cd78afd3c0c1b2ea0ce51c9533d6e661554306602c76b45f9b9164ec32bf",
+            "sourceHash": "sha256:4e2b647be02a93f655ddd058105c5ed8e9ffe3daef398ef3dd21e3a3817623fb"
+          },
+          {
+            "anchor": "def Scaffold::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:d3e5bbce87d8c380387aa0fa851aa74f6c56275f753e0ae683db2d0ff5c9cf46",
+            "declarationRange": {
+              "end": 16358,
+              "start": 13968
+            },
+            "fusionScore": 0.016129031777381897,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.016129031777381897,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 8,
+                "source": "lexical",
+                "sourceRank": 2,
+                "sourceScore": 9.466032981872559
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:24d6c7e4b201e9da1248fbb343d089c9dec2968cddff7757fda4b58a6197481a",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 14211,
+                "start": 13968
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-b086f7af0588a9f8553cfa6dc297ded9e36a6ea2f4fecd7cf1eec25f749237af",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def Request::endpoint",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:aacd3769e94f9e62026cc49bb9c2d6d402755c49dc3e2c5f68b4e5a3b102b39a",
+            "declarationRange": {
+              "end": 6310,
+              "start": 5871
+            },
+            "fusionScore": 0.01587301678955555,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01587301678955555,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 9,
+                "source": "vector",
+                "sourceRank": 3,
+                "sourceScore": 0.6183964610099792
+              }
+            ],
+            "generation": "sha256:d318c4dfbab0f5c082b274b8b2c4b9279e57d5455e35133b128fd98e237f96e1",
+            "parentUnitId": "sha256:ef4fdbbfcaab14831c205315da2c14ad4e9cb04b77b029fc0abca5f0ac3b8beb",
+            "path": "src/flask/wrappers.py",
+            "ranges": [
+              {
+                "end": 6310,
+                "start": 5871
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-7fd4b28b53797b32e5656e689bf5a365a0840bdf6e7a4dc46821e5bbe5b8a242",
+            "sourceHash": "sha256:8d492fe2655e93622ae21c3177846faab20c6faf41bf43c49438162e6779391a"
+          },
+          {
+            "anchor": "def url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:b04321083c3275c007e1ddb22e15c5fd63de76ebf52ffa156d7535e38606c0b6",
+            "declarationRange": {
+              "end": 8457,
+              "start": 6632
+            },
+            "fusionScore": 0.01587301678955555,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01587301678955555,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 10,
+                "source": "graph_expansion",
+                "sourceRank": 3,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:9d801ba25a5dda0a349ac8ca3cde0460ab1bc4caa128f7bd3469f8bfd2030394",
+            "parentUnitId": "sha256:d510ec9ed26e7e2228e1bcac897f23f24ddb24c022883e9aae6598fb822eb8ce",
+            "path": "src/flask/helpers.py",
+            "ranges": [
+              {
+                "end": 8457,
+                "start": 8284
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-fce572dc674e3a28610ee3e6b0ad1372bb62ff6d5c73fa4376608891622f1728",
+            "sourceHash": "sha256:4e2b647be02a93f655ddd058105c5ed8e9ffe3daef398ef3dd21e3a3817623fb"
+          },
+          {
+            "anchor": "def get_db",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:7e8f06da4b801f6a7017db2fa2e4eb8da85c443fefc6aec502c4ed1baf54928b",
+            "declarationRange": {
+              "end": 484,
+              "start": 111
+            },
+            "fusionScore": 0.015625,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.015625,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 11,
+                "source": "graph_expansion",
+                "sourceRank": 4,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:18289540782cd1e5714b7cf8ca6de91e50f35bfb5c29eaf256ae01080f6ffa14",
+            "parentUnitId": "sha256:b7d1a421773c9c5dfb4d5ede0b9a83064eec2bc70ed921b9740edaccb21c694d",
+            "path": "examples/tutorial/flaskr/db.py",
+            "ranges": [
+              {
+                "end": 484,
+                "start": 111
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ba6c5ba57fbdbeb6ad893f6d6d9bfef8c784bfa0909fc4f32adcf239f704ce9e",
+            "sourceHash": "sha256:700f9d0a455bf79c9bf6de4f2784f13b96256faea19c15ddee71fb7957e14c31"
+          },
+          {
+            "anchor": "def Scaffold::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:d3e5bbce87d8c380387aa0fa851aa74f6c56275f753e0ae683db2d0ff5c9cf46",
+            "declarationRange": {
+              "end": 16358,
+              "start": 13968
+            },
+            "fusionScore": 0.015384615398943424,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.015384615398943424,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 12,
+                "source": "vector",
+                "sourceRank": 5,
+                "sourceScore": 0.6298329830169678
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:24d6c7e4b201e9da1248fbb343d089c9dec2968cddff7757fda4b58a6197481a",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 15821,
+                "start": 14211
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-1fc657d0498cc63db1bca7cef3fff9e73e99810aa0e5604d68c297af552d65af",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def register",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:84cc1f1d6f932ee9b7d934bb37c8eb268aa61c78f1a13945c6b2074c1604b5f3",
+            "declarationRange": {
+              "end": 2260,
+              "start": 1128
+            },
+            "fusionScore": 0.015384615398943424,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.015384615398943424,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 13,
+                "source": "lexical",
+                "sourceRank": 5,
+                "sourceScore": 6.9417243003845215
+              }
+            ],
+            "generation": "sha256:992bd51b69b41bd4381a7dfe2d1664bf4e0c1ced69d2fe2a08b60c9eced59783",
+            "parentUnitId": "sha256:98a07889b3539e57df02b18dc950bc0651ea25e2b3d76b00d3aef891e8849ac3",
+            "path": "examples/tutorial/flaskr/auth.py",
+            "ranges": [
+              {
+                "end": 2260,
+                "start": 1128
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-56dfa3c30e439728035525b209de72a334bf00e6270c6022c1d5dc35b9b66c58",
+            "sourceHash": "sha256:a5ed5eaa05c6f6ee3e5bdb07b9e657a6e9320a115a68fd74b1cb4ac646680167"
+          },
+          {
+            "anchor": "def render_template",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:195cb28877a78edd9c2f9d9aed04d9f6d4b1d747ee3acba8aa218a6ee06628ea",
+            "declarationRange": {
+              "end": 5084,
+              "start": 4529
+            },
+            "fusionScore": 0.015384615398943424,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.015384615398943424,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 14,
+                "source": "graph_expansion",
+                "sourceRank": 5,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:5bde105ac061c6a5b5045db5e8eace131a2997d463dfcd47b1d558fff8231a30",
+            "parentUnitId": "sha256:1df33a96686be2b531f4471199280afd69a9037a4fb18380e7917e74880d6be0",
+            "path": "src/flask/templating.py",
+            "ranges": [
+              {
+                "end": 5084,
+                "start": 4529
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-cc89e70447cf3f615830166324d794c6ed9caaeb134201906efdb02f862821ce",
+            "sourceHash": "sha256:3ed7a044a96c911267e855b7359d9f159f06321f75fbe678a6656923d5e0989e"
+          },
+          {
+            "anchor": "def flash",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:abfff458a11e33b99341b3fbf418882f28d6011de13cae0eab4aa106165fc844",
+            "declarationRange": {
+              "end": 12381,
+              "start": 11001
+            },
+            "fusionScore": 0.01515151560306549,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01515151560306549,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 15,
+                "source": "graph_expansion",
+                "sourceRank": 6,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:9d801ba25a5dda0a349ac8ca3cde0460ab1bc4caa128f7bd3469f8bfd2030394",
+            "parentUnitId": "sha256:ea1dc4b8589c373c8ad725a568e3006603a5c294c1c3d26ad8a7dfe13f575c4d",
+            "path": "src/flask/helpers.py",
+            "ranges": [
+              {
+                "end": 12381,
+                "start": 11001
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-20cbd4550a2313f9bc647d208c4cf9d3a20d934b1f887fa2af59be835c4f27b4",
+            "sourceHash": "sha256:4e2b647be02a93f655ddd058105c5ed8e9ffe3daef398ef3dd21e3a3817623fb"
+          },
+          {
+            "anchor": "def test_nested_callback_order::a",
+            "category": "test",
+            "chunkId": "chunk-sha256:f6988d440f699eca3e64a086570a698ef5f21206ec69f96e0624130f796c604b",
+            "declarationRange": {
+              "end": 27253,
+              "start": 27206
+            },
+            "fusionScore": 0.01515151560306549,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01515151560306549,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 16,
+                "source": "lexical",
+                "sourceRank": 6,
+                "sourceScore": 6.659264087677002
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:031eca213ae43f5f06de3fe0ecf4722ac01999b18a58066a58b0f4903d813478",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 27253,
+                "start": 27206
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-f69ad470b2d5bbd01be6a2150e6364d514f759eca9799b07c57cef74e265dcf1",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def Flask::app_context",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:712269592b3c3374a31bc99c17643d4c5a8f0e444c5e6cea0dcc5bdeab8a2473",
+            "declarationRange": {
+              "end": 60214,
+              "start": 59585
+            },
+            "fusionScore": 0.014925372786819935,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014925372786819935,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 17,
+                "source": "graph_expansion",
+                "sourceRank": 7,
+                "sourceScore": 1.0
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:c08e24f91490b4b1c05698f6219ad332017861a48fed3062f2cd08c5bea79b80",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 60214,
+                "start": 59585
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-84f7f7cb95e44ab068232f5f3d5a8806485eab78fcd2d75866fce0a492587de6",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def Flask::url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:4c399600af588bd2773c5b4a02acc370f70188ea8678531377b154f7924a4b0a",
+            "declarationRange": {
+              "end": 49063,
+              "start": 43940
+            },
+            "fusionScore": 0.014925372786819935,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014925372786819935,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 18,
+                "source": "vector",
+                "sourceRank": 7,
+                "sourceScore": 0.6426984667778015
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:f7ed4f221085645d97db21fc2c1ed1426a4ac89010b86da57c14b28dca256a14",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 47260,
+                "start": 45756
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-8b0e0bbac840f78614c484c021aeb54b633b4d4204f81526b3c48c9ab17daefc",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def Flask::url_for",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:4c399600af588bd2773c5b4a02acc370f70188ea8678531377b154f7924a4b0a",
+            "declarationRange": {
+              "end": 49063,
+              "start": 43940
+            },
+            "fusionScore": 0.014925372786819935,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014925372786819935,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 19,
+                "source": "lexical",
+                "sourceRank": 7,
+                "sourceScore": 6.460050582885742
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:f7ed4f221085645d97db21fc2c1ed1426a4ac89010b86da57c14b28dca256a14",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 44206,
+                "start": 43940
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ad9010f73a0115b4983470b45f3aa684b5bb844637768ab54efe2895fd2198d0",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def Blueprint::register",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:0d0a8bea5d483da5a4da1354239ee2949aacf17e881183aa48463bd6eece6e8f",
+            "declarationRange": {
+              "end": 15259,
+              "start": 10928
+            },
+            "fusionScore": 0.014705882407724857,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014705882407724857,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 20,
+                "source": "lexical",
+                "sourceRank": 8,
+                "sourceScore": 6.246913433074951
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:676d63faaaf2cf1b2ea2616bba826bd8892993358fe9b1dec400e632f169c5f9",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 12465,
+                "start": 10928
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-56fef4321cfe6ec8e637412b26dda271add423a66b8b76124cbcf02fe79585a3",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def App::add_url_rule",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:2423c77adc023e91dd9ac83c05a8a78140cff7828ad4441837e0bb656271a21d",
+            "declarationRange": {
+              "end": 27245,
+              "start": 24980
+            },
+            "fusionScore": 0.014492753893136978,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014492753893136978,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 21,
+                "source": "vector",
+                "sourceRank": 9,
+                "sourceScore": 0.6556956768035889
+              }
+            ],
+            "generation": "sha256:14f707b9c27d1827ab02af07fc75f0ed392940d085805a1afc6c6d5f7edd7a1f",
+            "parentUnitId": "sha256:72386e0e1b6c945a3cd2d27b796ef1bde5707662e5e1e562cbde891a91325aa1",
+            "path": "src/flask/sansio/app.py",
+            "ranges": [
+              {
+                "end": 27245,
+                "start": 26568
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-914646339f75d24dbe3d49bcdafea5fbeb5db505a1d9a391f0683e916b33a624",
+            "sourceHash": "sha256:cf5df9f2972be7cad9878df7ea321804617d769f47823984abbe0a9b1cbc460b"
+          },
+          {
+            "anchor": "def test_register",
+            "category": "test",
+            "chunkId": "chunk-sha256:01429274fa76ec6224e929d024d816d6bb34da3d74a1dc8d0c37f1e6ef17c82a",
+            "declarationRange": {
+              "end": 678,
+              "start": 92
+            },
+            "fusionScore": 0.014492753893136978,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014492753893136978,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 22,
+                "source": "lexical",
+                "sourceRank": 9,
+                "sourceScore": 6.246913433074951
+              }
+            ],
+            "generation": "sha256:0d9d583e0aee1f72ebd121462dc9ec030456fcce3920af46c45ba29e9d802a07",
+            "parentUnitId": "sha256:7c51ba997aa011edfde03d64880ade8c3a78bc1c88849989553a6be2585ec4d1",
+            "path": "examples/tutorial/tests/test_auth.py",
+            "ranges": [
+              {
+                "end": 678,
+                "start": 92
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-bc6a8ca0e1b5f42564a8c745f50804013f0b6453c3e6f404011b627fd8e9ee6c",
+            "sourceHash": "sha256:cbbe178c9980d8499561d8eae72f01b8abeead2fa10c9d5f71427da4af38a938"
+          },
+          {
+            "anchor": "def test_endpoint_decorator",
+            "category": "test",
+            "chunkId": "chunk-sha256:9f7663b0ecf12e3979101a88dc11034564fc24c65b73e69b651269e1490c1982",
+            "declarationRange": {
+              "end": 9552,
+              "start": 9137
+            },
+            "fusionScore": 0.014285714365541935,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014285714365541935,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 23,
+                "source": "vector",
+                "sourceRank": 10,
+                "sourceScore": 0.6564203500747681
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:7125c285606e50d383bcfee89ce1f344ca76c9491da757fa49b30d0aa021dd60",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 9552,
+                "start": 9137
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-1af96fd84de38f3796660a533883236ae97ab7361cb664309818e552741741ce",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def Scaffold::route",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:eaecd47fbc50b2aa6752f817d344e154ce5302176347f89b91efcc45be0530f3",
+            "declarationRange": {
+              "end": 13945,
+              "start": 12896
+            },
+            "fusionScore": 0.014084506779909134,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014084506779909134,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 24,
+                "source": "vector",
+                "sourceRank": 11,
+                "sourceScore": 0.6570865511894226
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:ca04686fafbfa4d21c9a7ab9247d86c23b46ab8b20da223dd89aacaf14fe9c65",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 13945,
+                "start": 12896
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-48f249b47fcceb693dd4ebb3ae9a1b56a1b6ec6c8c4c5532de5d413e7f4b5423",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def App::register_blueprint",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:ce7ee3a666542ab58c4bfb470fd44a2563570aedf90d0acbd0e4a4c263f16b2b",
+            "declarationRange": {
+              "end": 24739,
+              "start": 23461
+            },
+            "fusionScore": 0.014084506779909134,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.014084506779909134,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 25,
+                "source": "lexical",
+                "sourceRank": 11,
+                "sourceScore": 5.678535461425781
+              }
+            ],
+            "generation": "sha256:14f707b9c27d1827ab02af07fc75f0ed392940d085805a1afc6c6d5f7edd7a1f",
+            "parentUnitId": "sha256:d9d40bbb3df1a7d0ca93097d385575bd0d02a9e81fd8d39b2e0e84336f15d693",
+            "path": "src/flask/sansio/app.py",
+            "ranges": [
+              {
+                "end": 24739,
+                "start": 23461
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-5a03c1c085814184da30d1d5922f27b5549faa553aa1e3a19e830fab43db1d7c",
+            "sourceHash": "sha256:cf5df9f2972be7cad9878df7ea321804617d769f47823984abbe0a9b1cbc460b"
+          },
+          {
+            "anchor": "def TaggedJSONSerializer::register",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:babd09c229876f796e2dc8064c33678f3b6288e4786927e18dc7469d03765971",
+            "declarationRange": {
+              "end": 7937,
+              "start": 6848
+            },
+            "fusionScore": 0.013888888992369175,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013888888992369175,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 26,
+                "source": "lexical",
+                "sourceRank": 12,
+                "sourceScore": 5.678535461425781
+              }
+            ],
+            "generation": "sha256:7c08d0f9abd1439edcc3ff716bdaade1cffe957d20c22992826f323ba7b88592",
+            "parentUnitId": "sha256:eb50660d761d33f74242f41c75449d2fa16bf0f1c221a6f176bea7e8dc55b97b",
+            "path": "src/flask/json/tag.py",
+            "ranges": [
+              {
+                "end": 7937,
+                "start": 6848
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-abdf6e8c2e76920e5180c8065b8d8e3bd5ae31456fd22cf41419fd53703f9240",
+            "sourceHash": "sha256:0e168dc2e20e85db7647be28382f58e19f19a6bc4562245be5d50fe5bcb220dc"
+          },
+          {
+            "anchor": "def TestUrlFor::test_url_with_method",
+            "category": "test",
+            "chunkId": "chunk-sha256:dc3e42aa84a2dfd8c2bc9ae52970e745529beba30b39e57f51f808ca9080358a",
+            "declarationRange": {
+              "end": 4871,
+              "start": 4054
+            },
+            "fusionScore": 0.013888888992369175,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013888888992369175,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 27,
+                "source": "vector",
+                "sourceRank": 12,
+                "sourceScore": 0.6575980186462402
+              }
+            ],
+            "generation": "sha256:d24aa3b2d1ae7d4dbdc2eae0ceb12ffb44db4af7dcbafa31b1e6725c786827d1",
+            "parentUnitId": "sha256:bb4c9882f483dc09ee2f2c8675899e0392a468103ab3e7fc83d00c28c16a128b",
+            "path": "tests/test_helpers.py",
+            "ranges": [
+              {
+                "end": 4871,
+                "start": 4054
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-af06a3199ba6e0c6e56ea4d191982c837651195bd2a7d115561798ad59bc7b48",
+            "sourceHash": "sha256:04d700b48f3d5e3139ebe1e162df30bf9a223213c82c50b4f77b3692b111c011"
+          },
+          {
+            "anchor": "def AppContext::match_request",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:617586beff19fd15c9631da9d5c1a6f37eab9ef9936a767199b764772738b303",
+            "declarationRange": {
+              "end": 14041,
+              "start": 13545
+            },
+            "fusionScore": 0.013698630034923553,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013698630034923553,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 28,
+                "source": "vector",
+                "sourceRank": 13,
+                "sourceScore": 0.6584190726280212
+              }
+            ],
+            "generation": "sha256:38ef0ff1a734515d638d04e4448a9881031ca80f243b096aa3b74e8ef03bab36",
+            "parentUnitId": "sha256:039ffd74d095ea5cbc07b2bb6bd8877567a988e52a07c9b54a8e920bf217a302",
+            "path": "src/flask/ctx.py",
+            "ranges": [
+              {
+                "end": 14041,
+                "start": 13545
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-59b66324575f182bd070f496380b97fffff88e6973cb3f3317b3d91476738e1f",
+            "sourceHash": "sha256:e21952d044159438765eb27848b0fe4c75f83faee8645181a09a1eccb1d5cab7"
+          },
+          {
+            "anchor": "def Blueprint::register_blueprint",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:54e9e63b3d78b696a539b2e3b18b16ba7d80703bc2086e11a41f94e0ad2805e1",
+            "declarationRange": {
+              "end": 10922,
+              "start": 10197
+            },
+            "fusionScore": 0.013698630034923553,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013698630034923553,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 29,
+                "source": "lexical",
+                "sourceRank": 13,
+                "sourceScore": 5.678535461425781
+              }
+            ],
+            "generation": "sha256:3c4955816932e5bda79a90b2c930be080381de130b0aebf740635af0ab880d09",
+            "parentUnitId": "sha256:33f3698a26b542ecd30aafe3a2afa846e60ce06eebdee30c5a2eb698c87eb5a3",
+            "path": "src/flask/sansio/blueprints.py",
+            "ranges": [
+              {
+                "end": 10922,
+                "start": 10197
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-a7448e6aa7e8c9a6fb3100ed4e759009f0ce26e417f67a92bcf1357b4803da55",
+            "sourceHash": "sha256:da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1"
+          },
+          {
+            "anchor": "def test_session_using_application_root",
+            "category": "test",
+            "chunkId": "chunk-sha256:ab6effb7088ff34df14e6ae7cd2047d41157238720a490a2638d230aa4fdb625",
+            "declarationRange": {
+              "end": 8585,
+              "start": 7915
+            },
+            "fusionScore": 0.013513513840734959,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013513513840734959,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 30,
+                "source": "lexical",
+                "sourceRank": 14,
+                "sourceScore": 5.476020336151123
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:d24f6ed30457ea14a6c03b7487bee2ef761509a3bdc77c8c6366401363fe9f49",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 8585,
+                "start": 7915
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ebef573f46a91c317c4a941db363801d07f40aab9df38942a77ccd9d33ecd7e1",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint",
+            "category": "test",
+            "chunkId": "chunk-sha256:d6288ba20711ea47c2d703722e59dcb434e1928e9b7440e6c0682c77bbc1f898",
+            "declarationRange": {
+              "end": 48079,
+              "start": 47399
+            },
+            "fusionScore": 0.013333333656191826,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013333333656191826,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 31,
+                "source": "vector",
+                "sourceRank": 15,
+                "sourceScore": 0.6702483296394348
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:9482aaca4eaf81785df639c968dee1cb00f7fe8094f0db93434d914c5ad86625",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 48079,
+                "start": 47399
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-4823815e238de30bd0b736c5cac68ea9eaec7ea13e8a2755d1d98b0b57660c01",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_teardown_on_pop",
+            "category": "test",
+            "chunkId": "chunk-sha256:34ec7d67c953b4a52889c04ff4f3f055fba2dec03b5e07f558378618c787ca68",
+            "declarationRange": {
+              "end": 543,
+              "start": 283
+            },
+            "fusionScore": 0.013333333656191826,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.013333333656191826,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 32,
+                "source": "lexical",
+                "sourceRank": 15,
+                "sourceScore": 5.3934645652771
+              }
+            ],
+            "generation": "sha256:0afb97b69e67d3cc2f9d142919b56103cd33976d3243dc603e3a25752f5118cc",
+            "parentUnitId": "sha256:da6d335ab6da28a4b1392d729036764bbd1310c6601b531920f83f4f7170e065",
+            "path": "tests/test_reqctx.py",
+            "ranges": [
+              {
+                "end": 543,
+                "start": 283
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-87a342861d441202624243a1109ca1d2713ad261538420cfba97b5d4373e2d40",
+            "sourceHash": "sha256:93d7f891096b037099b4770fb3498019436c4fa16062a0b99ea610af3ce32c5a"
+          },
+          {
+            "anchor": "def Flask::create_url_adapter",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:1ef6ecbb093ee476593824fad255b0aacee1e86302328a154989a6f1633c27e9",
+            "declarationRange": {
+              "end": 22510,
+              "start": 20236
+            },
+            "fusionScore": 0.01315789483487606,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01315789483487606,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 33,
+                "source": "vector",
+                "sourceRank": 16,
+                "sourceScore": 0.6761077046394348
+              }
+            ],
+            "generation": "sha256:9ef904cd3fb68a0f4bef0b2407f8deb755312608eb92d79041d85dfe755cff64",
+            "parentUnitId": "sha256:e6f66ff858cb689dd8165779080ecf889d3de7b0fd397ce8e68c3c855584c445",
+            "path": "src/flask/app.py",
+            "ranges": [
+              {
+                "end": 22510,
+                "start": 21695
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-b4b6b3cab74845413bae2e4b3bbd8dd682e32db18823380b4a436586853db936",
+            "sourceHash": "sha256:510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b"
+          },
+          {
+            "anchor": "def test_register_validate_input",
+            "category": "test",
+            "chunkId": "chunk-sha256:54444d337f9c5748d51545b4b309abd8bd6dda62d0d54fca70e0bf45b43c3bdf",
+            "declarationRange": {
+              "end": 1117,
+              "start": 901
+            },
+            "fusionScore": 0.01315789483487606,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.01315789483487606,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 34,
+                "source": "lexical",
+                "sourceRank": 16,
+                "sourceScore": 5.204962253570557
+              }
+            ],
+            "generation": "sha256:0d9d583e0aee1f72ebd121462dc9ec030456fcce3920af46c45ba29e9d802a07",
+            "parentUnitId": "sha256:d40b282d9371912093e4b45d848f97b98103097638b6725a1157bab53c833ecb",
+            "path": "examples/tutorial/tests/test_auth.py",
+            "ranges": [
+              {
+                "end": 1117,
+                "start": 901
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-c35cd29daf539b25dd2ff5b0b72f475a5c6854162cd138fbea6b079b3940942c",
+            "sourceHash": "sha256:cbbe178c9980d8499561d8eae72f01b8abeead2fa10c9d5f71427da4af38a938"
+          },
+          {
+            "anchor": "def App::inject_url_defaults",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:0f62a32e7e769a7da2c5033bfaa4ca5fe2fdee4018de218f3e6a55dff5278992",
+            "declarationRange": {
+              "end": 38220,
+              "start": 37394
+            },
+            "fusionScore": 0.012987012974917889,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012987012974917889,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 35,
+                "source": "vector",
+                "sourceRank": 17,
+                "sourceScore": 0.6774646639823914
+              }
+            ],
+            "generation": "sha256:14f707b9c27d1827ab02af07fc75f0ed392940d085805a1afc6c6d5f7edd7a1f",
+            "parentUnitId": "sha256:08bf5a94f639dfdbceaef9fc69789ebfc31808a32d60d6ad98b6decc2ec7d7fe",
+            "path": "src/flask/sansio/app.py",
+            "ranges": [
+              {
+                "end": 38220,
+                "start": 37394
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-27aaec0497cca6d8908355d4a64591d3e17060ed302461ae65f6fd3fb6fddb89",
+            "sourceHash": "sha256:cf5df9f2972be7cad9878df7ea321804617d769f47823984abbe0a9b1cbc460b"
+          },
+          {
+            "anchor": "def Scaffold::register_error_handler",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:5cdc7edf2eb0d44edc62e486e2f284d759351fdc5e4e62b5a2e3cf6c168e410d",
+            "declarationRange": {
+              "end": 25463,
+              "start": 24985
+            },
+            "fusionScore": 0.012987012974917889,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012987012974917889,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 36,
+                "source": "lexical",
+                "sourceRank": 17,
+                "sourceScore": 5.204962253570557
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:87a658ba81d4ae0a60cf6407b9533c572536bf8dbe4a0d6d7540ebb2583a4a54",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 25463,
+                "start": 24985
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-74be2716a841fe2b58a4ee0843c4629d73a4350960b364383693a98751930fb0",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def Scaffold::endpoint",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:512c68e37c402702eccdd0c983e329a7e787896d5b08a3cdefa6045217a2ce87",
+            "declarationRange": {
+              "end": 17010,
+              "start": 16381
+            },
+            "fusionScore": 0.012820512987673283,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012820512987673283,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 37,
+                "source": "vector",
+                "sourceRank": 18,
+                "sourceScore": 0.6821545362472534
+              }
+            ],
+            "generation": "sha256:ec2878d17810aeeb8566867e42fd1511f7e718f1c03f31c26c10617ec9557e0a",
+            "parentUnitId": "sha256:f24c682f2a0aa78ea5d8b01b076bf79e6cede407d4aa70f01a7b158b3c84f51e",
+            "path": "src/flask/sansio/scaffold.py",
+            "ranges": [
+              {
+                "end": 17010,
+                "start": 16381
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-5481d0d46a1df2db806a6b971a00da0836f9d48cdae3f55bc15c0056e3a9f4c3",
+            "sourceHash": "sha256:d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b"
+          },
+          {
+            "anchor": "def test_session_using_application_root::index",
+            "category": "test",
+            "chunkId": "chunk-sha256:d28e8231f68fbca8fd5007a1f439256b526f4597c4615f3a482df102652091c1",
+            "declarationRange": {
+              "end": 8472,
+              "start": 8393
+            },
+            "fusionScore": 0.012820512987673283,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012820512987673283,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 38,
+                "source": "lexical",
+                "sourceRank": 18,
+                "sourceScore": 5.084619522094727
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:5d0fad4664432cade00e1a3964a8e211194df2f634acd977ee55d23213faf366",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 8472,
+                "start": 8393
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-c318b608234fc6f6ea601ffd5686dbb4dd5f0c8a48b50c10c9f3921c00b6c15f",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_url_for_passes_special_values_to_build_error_handler",
+            "category": "test",
+            "chunkId": "chunk-sha256:762bfd2da39509c77d97c9635d0f61b48b71474607960c71fc549b738aed952c",
+            "declarationRange": {
+              "end": 38004,
+              "start": 37608
+            },
+            "fusionScore": 0.012658228166401386,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012658228166401386,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 39,
+                "source": "vector",
+                "sourceRank": 19,
+                "sourceScore": 0.6826339960098267
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:a237d6da2aa923c93decfa45ffe3a56cdc2e933ef4988c444be806ec492c7c2c",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 38004,
+                "start": 37608
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-3bf27d5703fd1036b02f8284ad840330ba3b6ce1468e91ed23ec485e80b72df8",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_options_on_multiple_rules",
+            "category": "test",
+            "chunkId": "chunk-sha256:8c095e18a99648f38f3648edda128a3e00a789a68e9f9ef1a00d1a75c9326e0b",
+            "declarationRange": {
+              "end": 1393,
+              "start": 1055
+            },
+            "fusionScore": 0.012658228166401386,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012658228166401386,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 40,
+                "source": "lexical",
+                "sourceRank": 19,
+                "sourceScore": 4.978288650512695
+              }
+            ],
+            "generation": "sha256:304501f6a9e57ebaa16947189e40713a4e46daaabdc5fda928df6a743035eb54",
+            "parentUnitId": "sha256:9966827338d672d9972e68afac5c84bbd46750cd94f77cc2cca518e1a4167591",
+            "path": "tests/test_basic.py",
+            "ranges": [
+              {
+                "end": 1393,
+                "start": 1055
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ad8bd7bac2d66951fadfbdf5ea65426da4755c36c99e6c7f25488fd156fe2449",
+            "sourceHash": "sha256:0d0d7928be4dbb0c9471d9ab8f47d954d0201634790c606dfff9453619914390"
+          },
+          {
+            "anchor": "def test_route_decorator_custom_endpoint",
+            "category": "test",
+            "chunkId": "chunk-sha256:3f94de75bafd7e054f75560352aacb7486de173150c18a502bc8f79f86403a05",
+            "declarationRange": {
+              "end": 8713,
+              "start": 7871
+            },
+            "fusionScore": 0.012500000186264515,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012500000186264515,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 41,
+                "source": "vector",
+                "sourceRank": 20,
+                "sourceScore": 0.6829713582992554
+              }
+            ],
+            "generation": "sha256:d2be31e55652a6ed06d60e5ffeef1f44f4db6250950cf74bccfbf60abd0570e8",
+            "parentUnitId": "sha256:30eeb744f4ff49c597d8ca1a9c600be89bcc33806e42eaf6fddf76c68a793759",
+            "path": "tests/test_blueprints.py",
+            "ranges": [
+              {
+                "end": 8713,
+                "start": 7871
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-88acd0645cf17978c284084e12c0281d1f1ca72fe1e9e70a2daec51afdfe7628",
+            "sourceHash": "sha256:9c7e1a3caf96db080ed22d52dcab8994f7e64381a06b5aa7f605eff62e8b21fc"
+          },
+          {
+            "anchor": "def Request::on_json_loading_failed",
+            "category": "implementation",
+            "chunkId": "chunk-sha256:a7224248fd58f79b0f2475073bd7643a5f79872f9e8921ccef3f6667c7d6d915",
+            "declarationRange": {
+              "end": 8107,
+              "start": 7830
+            },
+            "fusionScore": 0.012500000186264515,
+            "fusionTraces": [
+              {
+                "fusionScore": 0.012500000186264515,
+                "fusionStrategy": "reciprocal_rank_fusion",
+                "rank": 42,
+                "source": "lexical",
+                "sourceRank": 20,
+                "sourceScore": 4.978288650512695
+              }
+            ],
+            "generation": "sha256:d318c4dfbab0f5c082b274b8b2c4b9279e57d5455e35133b128fd98e237f96e1",
+            "parentUnitId": "sha256:2ab3683cbb2b22a28154871040ca5a15892007908b6e5f8642436b17c15c5591",
+            "path": "src/flask/wrappers.py",
+            "ranges": [
+              {
+                "end": 8107,
+                "start": 7830
+              }
+            ],
+            "repository": "github.com/pallets/flask",
+            "segmentId": "segment-ab8b61230dd96c17358bdc515df113d237e557435b191c70c2e3e2dde24cf5d1",
+            "sourceHash": "sha256:8d492fe2655e93622ae21c3177846faab20c6faf41bf43c49438162e6779391a"
+          }
+        ],
+        "effectiveConfigHash": "f1cd039a25c50856b45a8905259dde94b4af63ac2ff5e73cb449a893f4e65947",
+        "passageRepresentationId": "code-passage-v1/6c565799a44ef61392aefa737eb3998c3078c98a3d32acfc3e1813d1dcb89348",
+        "phaseMs": {
+          "fusion": 0.478364,
+          "graph_expansion": 33.685462,
+          "lexical_candidates": 864.983803,
+          "query_tokenization": 0.27920700000000004,
+          "source_authority": 11.428758,
+          "vector_candidates": 28.17952,
+          "vector_embedding": 15.363586999999999,
+          "vector_search": 3.750032
+        },
+        "queryRepresentationId": "code-query-v1/6425ffc2849dee5e5639446fb66325a46e63e9393f42f9b87fccf96bd216def8",
+        "reindexRequired": false,
+        "seconds": 0.949645328,
+        "sourceFailures": [],
+        "sourceRevision": 9834
+      }
+    }
+  ],
+  "probeSha256": "399d7933876d6689bbc954f9f4fa4e637d91eb314b7b4b773ea70a26fbe4cf76",
+  "stderr": [
+    "engram-mcp: vector bootstrap checkpoint \u2014 knowledge_store=true, vectors_path=\"/home/videogamer/.engram/evaluations/reliable-code-intelligence/stores/flask-t5-context-v2/engram_data.db\""
+  ],
+  "returnCode": 0,
+  "actualModelVectors": true,
+  "perLaneDepthIndependentOfFinalTen": true,
+  "sourceHashMatchesFrozenCorpus": true,
+  "segmentDedup": true,
+  "rrfTraceScoresReconstruct": true
+}

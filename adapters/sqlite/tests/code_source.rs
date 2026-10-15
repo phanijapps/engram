@@ -699,3 +699,163 @@ fn malformed_parent_unit_prevents_activation() {
         Err(CoreError::ValidationFailed { .. })
     ));
 }
+
+#[test]
+fn target_access_matches_full_access_for_every_owner_without_visiting_unrelated_rows() {
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    let first = manifest("first.ts", "one", "hello");
+    active(&store, &first, "hello");
+    let mut second = manifest("second.ts", "two", "world");
+    second.provenance.actor.id = Id::from("other");
+    active(&store, &second, "world");
+    {
+        let conn = store.lock().unwrap();
+        for (m, ids) in [
+            (&first, vec!["shared", "owner-only"]),
+            (&second, vec!["shared", "other-only"]),
+        ] {
+            for id in ids {
+                conn.execute(
+                    "INSERT INTO code_source_contributions VALUES(?1,?2,'entity',?3)",
+                    rusqlite::params![serde_json::to_string(&m.file).unwrap(), m.attempt_id, id],
+                )
+                .unwrap();
+            }
+        }
+        conn.execute("INSERT INTO code_source_contributions VALUES('unverified','legacy:unverified','entity','legacy-only')",[]).unwrap();
+    }
+    // A real generic document head owns the same ID as a code entity, with
+    // a different private actor. Kind-specific ownership must stay separate.
+    let mut doc_head = block_on(store.get_document_head(&DocumentHeadKey {
+        scope: first.file.scope.clone(),
+        repository: "repo".into(),
+        source_key: "first.ts".into(),
+    }))
+    .unwrap()
+    .unwrap();
+    doc_head.key.source_key = "README.md".into();
+    doc_head.attempt_id = "doc-attempt".into();
+    doc_head.state = CodeSourceState::Updating;
+    doc_head.document_id = Some(Id::from("generic-doc"));
+    doc_head.chunk_ids = vec![Id::from("owner-only")];
+    doc_head.provenance.actor.id = Id::from("other");
+    block_on(store.begin_document_head(doc_head.clone(), None)).unwrap();
+    let (mut source, mut doc) = parents(&first);
+    source.id = Id::from("generic-source");
+    source.policy = doc_head.policy.clone();
+    source.provenance = doc_head.provenance.clone();
+    doc.id = Id::from("generic-doc");
+    doc.source_id = source.id.clone();
+    doc.kind = SourceDocumentKind::Markdown;
+    doc.path = Some("README.md".into());
+    doc.policy = doc_head.policy.clone();
+    doc.provenance = doc_head.provenance.clone();
+    let paragraph:KnowledgeChunk=serde_json::from_value(json!({"id":"owner-only","documentId":doc.id,"sourceId":source.id,"kind":"paragraph","documentKind":"markdown","text":"owned documentation","contentHash":"doc-hash","policy":doc_head.policy,"provenance":doc_head.provenance,"createdAt":"2026-10-14T00:00:00Z"})).unwrap();
+    for payload in [
+        engram_knowledge::DocumentHeadWrite::Source(source),
+        engram_knowledge::DocumentHeadWrite::Document(doc),
+        engram_knowledge::DocumentHeadWrite::Chunk(paragraph),
+    ] {
+        block_on(store.write_document_record(&doc_head.key, &doc_head.attempt_id, payload))
+            .unwrap();
+    }
+    doc_head.state = CodeSourceState::Active;
+    block_on(store.activate_document_head(doc_head.clone())).unwrap();
+    {
+        let conn = store.lock().unwrap();
+        conn.execute(
+            "INSERT INTO document_head_records VALUES(?1,?2,'relationship','doc-edge')",
+            rusqlite::params![
+                serde_json::to_string(&doc_head.key).unwrap(),
+                doc_head.attempt_id
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO code_source_contributions VALUES(?1,?2,'relationship','code-edge')",
+            rusqlite::params![
+                serde_json::to_string(&first.file).unwrap(),
+                first.attempt_id
+            ],
+        )
+        .unwrap();
+    }
+    for actor in ["owner", "other", "stranger"] {
+        for scope in [
+            first.file.scope.clone(),
+            serde_json::from_value(json!({"tenant":"wrong"})).unwrap(),
+        ] {
+            let request:RetrievalRequest=serde_json::from_value(json!({"scope":scope,"query":"q","requester":{"actor":{"id":actor,"kind":"agent"}}})).unwrap();
+            let full = store.source_record_access(&request).unwrap();
+            if scope == first.file.scope && actor == "owner" {
+                assert!(full.allows(RetrievalTargetType::Entity, "owner-only"));
+                assert!(!full.allows(RetrievalTargetType::Chunk, "owner-only"));
+                assert!(
+                    full.policy(RetrievalTargetType::Relationship, "code-edge")
+                        .is_some()
+                );
+                assert!(!full.allows(RetrievalTargetType::Relationship, "doc-edge"));
+            }
+            if scope == first.file.scope && actor == "other" {
+                assert!(
+                    full.policy(RetrievalTargetType::Chunk, "owner-only")
+                        .is_some()
+                );
+                assert!(
+                    full.policy(RetrievalTargetType::Relationship, "doc-edge")
+                        .is_some()
+                );
+            }
+            for id in [
+                "shared",
+                "owner-only",
+                "other-only",
+                "legacy-only",
+                "unmanaged",
+                "doc-edge",
+                "code-edge",
+                first.snapshot_ids[0].as_str(),
+            ] {
+                let target = store.source_record_access_for_target(&request, id).unwrap();
+                for kind in [
+                    RetrievalTargetType::Entity,
+                    RetrievalTargetType::Chunk,
+                    RetrievalTargetType::Relationship,
+                ] {
+                    assert_eq!(
+                        target.allows(kind.clone()),
+                        full.allows(kind.clone(), id),
+                        "{actor} {id}"
+                    );
+                    assert_eq!(
+                        target.policy(kind.clone()),
+                        full.policy(kind, id),
+                        "{actor} {id}"
+                    );
+                }
+            }
+        }
+    }
+    // An unrelated broken ownership row cannot widen the target or make a
+    // bounded target read consult another record's unavailable manifest.
+    store
+        .lock()
+        .unwrap()
+        .execute(
+            "INSERT INTO code_source_contributions VALUES('broken','real','entity','unrelated')",
+            [],
+        )
+        .unwrap();
+    let request:RetrievalRequest=serde_json::from_value(json!({"scope":first.file.scope,"query":"q","requester":{"actor":{"id":"owner","kind":"agent"}}})).unwrap();
+    assert!(
+        store
+            .source_record_access_for_target(&request, "shared")
+            .unwrap()
+            .allows(RetrievalTargetType::Entity)
+    );
+    assert!(
+        store
+            .source_record_access_for_target(&request, "unrelated")
+            .is_err()
+    );
+}

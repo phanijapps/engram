@@ -6,6 +6,8 @@
 mod entry;
 mod extension;
 #[cfg(feature = "fastembed-provider")]
+mod fastembed_assets;
+#[cfg(feature = "fastembed-provider")]
 mod fastembed_provider;
 #[cfg(feature = "fastembed-provider")]
 mod fastembed_tokenization;

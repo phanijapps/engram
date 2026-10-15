@@ -35,6 +35,10 @@ pub enum EmbeddingError {
 /// embeddings. All implementations must provide stable provider and model
 /// identifiers, vector dimensions, and embedding space identity.
 pub trait EmbeddingProvider: Send + Sync {
+    /// Actual verified weight/tokenizer manifest; independent of configured aliases.
+    fn asset_identity(&self) -> Option<&str> {
+        None
+    }
     /// Exact original-input byte offsets with truncation disabled. Unknown
     /// providers cannot claim tokenizer-complete code representations.
     fn tokenize_untruncated(

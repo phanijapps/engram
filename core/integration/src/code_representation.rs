@@ -36,6 +36,8 @@ pub fn code_representation(
     let base = model.embedding_space();
     let identity = serde_json::to_vec(&(
         "ast-segments-v1",
+        "verified-local-assets-v1",
+        model.asset_identity(),
         engram_code::SOURCE_COVERAGE_FINGERPRINT,
         "context-facts-v1/whole-fact-source-1/category-1/input-offsets-1/blank-context-1",
         "trim-passage-v1",

@@ -1,0 +1,181 @@
+{
+  "checkpoint": "T7 offline encoder representation activation",
+  "featureShipped": false,
+  "calls": [
+    {
+      "seconds": 327.41511654900387,
+      "failed": false,
+      "text": "reindex: embedded 1024 chunks (limit 1024) (1024 new + 0 reused from existing vectors) (1024 code chunks)\n1010 more pending \u2014 call reindex again to continue (deterministic order)",
+      "response": {
+        "id": 1,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "reindex: embedded 1024 chunks (limit 1024) (1024 new + 0 reused from existing vectors) (1024 code chunks)\n1010 more pending \u2014 call reindex again to continue (deterministic order)",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "seconds": 273.07172260399966,
+      "failed": false,
+      "text": "reindex: embedded 1010 chunks (limit 1024) (1010 new + 0 reused from existing vectors) (1010 code chunks)\nbacklog drained",
+      "response": {
+        "id": 2,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "reindex: embedded 1010 chunks (limit 1024) (1010 new + 0 reused from existing vectors) (1010 code chunks)\nbacklog drained",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "beforeCanonical": {
+    "canonical_document_history": {
+      "rows": 1590,
+      "sha256": "be3c252387a85cab6a0d3c3125576ac7307ff62c9094f8d4faa03702109155a0"
+    },
+    "code_source_attempts": {
+      "rows": 660,
+      "sha256": "e8579c211b63a8180cec65492461320321d21fc46b94d6e33379c93d19bb4c71"
+    },
+    "code_source_contributions": {
+      "rows": 369459,
+      "sha256": "5adaaf7adaafa77eea0fef516b308eb949e452425cc39c239af1327ebd187616"
+    },
+    "code_source_generations": {
+      "rows": 86,
+      "sha256": "2a658a8c136c6c64eae45f9dc140909080e5c1e695323de078af2c6e35e2d6a0"
+    },
+    "code_source_reader": {
+      "rows": 1,
+      "sha256": "5cbac499fd8bfedb0e0d57b2cd1c51ca9cbb4f58f98ef4bc92b36242e5a92bf7"
+    },
+    "code_source_revision": {
+      "rows": 1,
+      "sha256": "8098a4f54c3f41e8c59377d340156c60881588e97328dce650f546c2ac9e7ffc"
+    },
+    "document_head_attempts": {
+      "rows": 780,
+      "sha256": "ec0980880c609c4db46af1627a6ace02088cffc892291c99e5a1442d8b8c2b4c"
+    },
+    "document_head_history": {
+      "rows": 2014,
+      "sha256": "a42694f076c70d6dcbcda89c92f70f58a682fc5067e63ea16f44d1444f50f173"
+    },
+    "document_head_records": {
+      "rows": 66676,
+      "sha256": "bc793f084297b94552ee3ed2a59685f38a720f4dd3bfcd2d13331941647d65d6"
+    },
+    "document_heads": {
+      "rows": 206,
+      "sha256": "e21cbcde5b1b33c0ef0429333ea478c8b7a6ff4f34349682df7e59540a101d4e"
+    },
+    "knowledge_chunks_records": {
+      "rows": 2453,
+      "sha256": "72f87930b391d5cc8cb0547a4f9eb07e4a4ef3e0ad56a6f349e13dba2b5f7f06"
+    },
+    "knowledge_documents": {
+      "rows": 206,
+      "sha256": "593bf03f005f84cc69b1881a3a3e7f50d5b604e7a6361c36b96667d5848c3eb4"
+    },
+    "knowledge_entities_records": {
+      "rows": 2247,
+      "sha256": "b6a2ac5ac9db51386630ed5b44390c1402c0596117a582a121bf901404012b43"
+    },
+    "knowledge_graphs_records": {
+      "rows": 206,
+      "sha256": "0b194e09e41c23644fbbcbf0761880499f83c14aaa182102c8020b302e39d919"
+    },
+    "knowledge_relationships_records": {
+      "rows": 4913,
+      "sha256": "a835ede34fb4fbcbbf8b79a77575cad68ae5247fb9c88d53f3054c67fe3811c0"
+    },
+    "knowledge_sources": {
+      "rows": 206,
+      "sha256": "0dae48e1e31692e3d24676754495a654cbb0aac8b7e91ee74679619751d920be"
+    },
+    "knowledge_unresolved_refs_records": {
+      "rows": 1873,
+      "sha256": "8e2dfca37002fab4ce45b2953c725adf8bbac20229f529b434f752f7b90ddd95"
+    }
+  },
+  "afterCanonical": {
+    "canonical_document_history": {
+      "rows": 1590,
+      "sha256": "be3c252387a85cab6a0d3c3125576ac7307ff62c9094f8d4faa03702109155a0"
+    },
+    "code_source_attempts": {
+      "rows": 660,
+      "sha256": "e8579c211b63a8180cec65492461320321d21fc46b94d6e33379c93d19bb4c71"
+    },
+    "code_source_contributions": {
+      "rows": 369459,
+      "sha256": "5adaaf7adaafa77eea0fef516b308eb949e452425cc39c239af1327ebd187616"
+    },
+    "code_source_generations": {
+      "rows": 86,
+      "sha256": "2a658a8c136c6c64eae45f9dc140909080e5c1e695323de078af2c6e35e2d6a0"
+    },
+    "code_source_reader": {
+      "rows": 1,
+      "sha256": "5cbac499fd8bfedb0e0d57b2cd1c51ca9cbb4f58f98ef4bc92b36242e5a92bf7"
+    },
+    "code_source_revision": {
+      "rows": 1,
+      "sha256": "8098a4f54c3f41e8c59377d340156c60881588e97328dce650f546c2ac9e7ffc"
+    },
+    "document_head_attempts": {
+      "rows": 780,
+      "sha256": "ec0980880c609c4db46af1627a6ace02088cffc892291c99e5a1442d8b8c2b4c"
+    },
+    "document_head_history": {
+      "rows": 2014,
+      "sha256": "a42694f076c70d6dcbcda89c92f70f58a682fc5067e63ea16f44d1444f50f173"
+    },
+    "document_head_records": {
+      "rows": 66676,
+      "sha256": "bc793f084297b94552ee3ed2a59685f38a720f4dd3bfcd2d13331941647d65d6"
+    },
+    "document_heads": {
+      "rows": 206,
+      "sha256": "e21cbcde5b1b33c0ef0429333ea478c8b7a6ff4f34349682df7e59540a101d4e"
+    },
+    "knowledge_chunks_records": {
+      "rows": 2453,
+      "sha256": "72f87930b391d5cc8cb0547a4f9eb07e4a4ef3e0ad56a6f349e13dba2b5f7f06"
+    },
+    "knowledge_documents": {
+      "rows": 206,
+      "sha256": "593bf03f005f84cc69b1881a3a3e7f50d5b604e7a6361c36b96667d5848c3eb4"
+    },
+    "knowledge_entities_records": {
+      "rows": 2247,
+      "sha256": "b6a2ac5ac9db51386630ed5b44390c1402c0596117a582a121bf901404012b43"
+    },
+    "knowledge_graphs_records": {
+      "rows": 206,
+      "sha256": "0b194e09e41c23644fbbcbf0761880499f83c14aaa182102c8020b302e39d919"
+    },
+    "knowledge_relationships_records": {
+      "rows": 4913,
+      "sha256": "a835ede34fb4fbcbbf8b79a77575cad68ae5247fb9c88d53f3054c67fe3811c0"
+    },
+    "knowledge_sources": {
+      "rows": 206,
+      "sha256": "0dae48e1e31692e3d24676754495a654cbb0aac8b7e91ee74679619751d920be"
+    },
+    "knowledge_unresolved_refs_records": {
+      "rows": 1873,
+      "sha256": "8e2dfca37002fab4ce45b2953c725adf8bbac20229f529b434f752f7b90ddd95"
+    }
+  },
+  "canonicalPreserved": true
+}

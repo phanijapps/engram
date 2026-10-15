@@ -1,0 +1,61 @@
+{
+  "checkpoint": "T7 actual local scorer component",
+  "featureShipped": false,
+  "actualModel": {
+    "identity": {
+      "input_contract_id": "roberta-query-document/4-specials/pad-id-1/untruncated-preflight-v1/fastembed-5.17.2/ort-2.0.0-rc12/cpu-intra1",
+      "manifest_id": "model-manifest-v1/5a313a5e79e3036626005ee29fec2090d7f5172bf2f925e9f803d14da835c962",
+      "model_id": "jinaai/jina-reranker-v1-turbo-en",
+      "score_contract_id": "logits-column-0/raw-v1",
+      "tokenizer_id": "tokenizer-json-sha256:6401ed6592b8ff3f3744627f2064512fada1d6e471d9efdcc50cec89140856f0/roberta-pair-pad1/window-8192",
+      "window": 8192
+    },
+    "longInput": {
+      "codeTokens": 611,
+      "contextTokens": 0,
+      "queryTokens": 7,
+      "specialTokens": 4,
+      "totalTokens": 622,
+      "truncated": false
+    },
+    "longScores": [
+      -4.056697845458984
+    ],
+    "promotedOriginalIndex": 2,
+    "reverseScores": [
+      -0.08435185253620148,
+      -3.9601378440856934,
+      -1.5096518993377686
+    ],
+    "scores": [
+      -1.5096518993377686,
+      -3.9601378440856934,
+      -0.08435185253620148
+    ]
+  },
+  "testPassed": true,
+  "elapsedTestSeconds": 9.86,
+  "trace": {
+    "internetAddressFamilyOrConnectObserved": false,
+    "unixSocketPairsObserved": true,
+    "zeroByteInheritedDescriptorReceives": 3,
+    "scope": "cargo test and its child processes",
+    "sha256": "d96c5f6886b0daa91abbc8d528da7d93aec5abc5428d566552ddb71ef1bbcf57"
+  },
+  "logSha256": "f5d15931441c8d812ac83f0a125ce60e9c32107bf14d07b020be0f2a1f96aec6",
+  "qualityGate": "not run",
+  "actualOfflineEmbedding": {
+    "observed": {
+      "manifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+      "dimensions": 384,
+      "norm": 1.0000002,
+      "window": 512,
+      "longTokens": 702
+    },
+    "testPassed": true,
+    "elapsedTestSeconds": 7.56,
+    "internetAddressFamilyOrConnectObserved": false,
+    "networkTraceSha256": "48bc14e93148d35c824328a0e50ead9ab6847bd52802730f235e56305560a869",
+    "testLogSha256": "01c19ffa7fab9692b46ba2e3b4313413f063145af235dbaae106a3fcfe36c5c7"
+  }
+}

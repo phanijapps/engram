@@ -2,7 +2,7 @@
   "version": 1,
   "construction": "verified; scoped independent reviews clean",
   "featureShipped": false,
-  "rollout": "disposable rehearsal running; retained self store unchanged",
+  "rollout": "disposable retained-store rehearsal passed; actual self store still unchanged",
   "fullRepositoryGates": {
     "report": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/history-correction-gates-2026-10-15/report.json",
     "sha256": "ef1e6a559445c5929c7db295bf89fad47f9d3b0bd528f3f7382b0d4dbd3527a1",
@@ -29,5 +29,101 @@
     "/home/videogamer/projects/mem-alpha/docs/specs/reliable-code-intelligence/reviews/t11-history-security-2026-10-15.md",
     "/home/videogamer/projects/mem-alpha/docs/specs/reliable-code-intelligence/reviews/t11-history-quality-2026-10-15.md"
   ],
-  "historicalBaselineLineage": "Exact accepted T0 receipt and final reviewed manifest pinned; all six original raw artifacts preserved; receipt/raw bytes included in freeze identity."
+  "historicalBaselineLineage": "Exact accepted T0 receipt and final reviewed manifest pinned; all six original raw artifacts preserved; receipt/raw bytes included in freeze identity.",
+  "nativeLive": {
+    "testsPassed": 5,
+    "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/history-correction-gates-2026-10-15/native-live.log",
+    "sha256": "183036045aa022e89f5cfcda485590c45619b04745c16df635aee397d24b85db",
+    "actualCodeEmbedding": true,
+    "actualCrossEncoder": true
+  },
+  "rolloutPreflight": {
+    "script": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t11-self-rollout.py",
+    "sha256": "fbf3ca104444d969d5160be7429ba2b5dd1b1cc8902d64aad7b158d6b8f20090",
+    "security": "clean for gated execution; actual-store mutation still requires the declared assessment/backup checks",
+    "optimizedExecutionRejectedBeforeReads": true,
+    "ambientCodeEnvironmentRejectedBeforeReads": true
+  },
+  "disposableRehearsal": {
+    "runState": "complete",
+    "rawReport": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t11-disposable-history-rehearsal.json",
+    "sha256": "840597ee991e09d2c21bfa0352f8f35dc563d9e6e52e07bec8e9d009db2cd9d8",
+    "script": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t11-disposable-history-rehearsal.py",
+    "scriptSha256": "89e63e787c427a2e13f0e54fa41a2b90c31828bb2e51847584b7fafc5dc1c89b",
+    "binarySha256": "90cd964ee22d8c09d06177fd40dee580f697099ac1d19bdfa6e5abfac7fc49f2",
+    "scanSecondsNonbenchmark": 466.538091911003,
+    "zeroErrors": true,
+    "all86744PriorCanonicalRecordsPreserved": true,
+    "retention": {
+      "knowledge_sources": {
+        "unchangedCurrent": 628,
+        "exactArchived": 0,
+        "missingOrChanged": []
+      },
+      "knowledge_documents": {
+        "unchangedCurrent": 1744,
+        "exactArchived": 0,
+        "missingOrChanged": []
+      },
+      "knowledge_chunks_records": {
+        "unchangedCurrent": 22084,
+        "exactArchived": 0,
+        "missingOrChanged": []
+      },
+      "knowledge_graphs_records": {
+        "unchangedCurrent": 999,
+        "exactArchived": 0,
+        "missingOrChanged": []
+      },
+      "knowledge_entities_records": {
+        "unchangedCurrent": 9573,
+        "exactArchived": 0,
+        "missingOrChanged": []
+      },
+      "knowledge_relationships_records": {
+        "unchangedCurrent": 33258,
+        "exactArchived": 0,
+        "missingOrChanged": []
+      },
+      "knowledge_unresolved_refs_records": {
+        "unchangedCurrent": 18457,
+        "exactArchived": 1,
+        "missingOrChanged": []
+      }
+    },
+    "otherRetainedTables": {
+      "memories": {
+        "beforeRows": 1,
+        "afterRows": 1,
+        "exactlyUnchanged": true
+      },
+      "memory_events": {
+        "beforeRows": 1,
+        "afterRows": 1,
+        "exactlyUnchanged": true
+      },
+      "beliefs": {
+        "beforeRows": 0,
+        "afterRows": 0,
+        "exactlyUnchanged": true
+      },
+      "contradictions": {
+        "beforeRows": 0,
+        "afterRows": 0,
+        "exactlyUnchanged": true
+      },
+      "hierarchy_nodes": {
+        "beforeRows": 0,
+        "afterRows": 0,
+        "exactlyUnchanged": true
+      },
+      "hierarchy_relations": {
+        "beforeRows": 0,
+        "afterRows": 0,
+        "exactlyUnchanged": true
+      }
+    },
+    "experimentalGlobalTriggers": 0
+  },
+  "priorAttemptsPreserved": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/history-correction-prior-attempts"
 }

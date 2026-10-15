@@ -64,6 +64,7 @@ field_admission!(
     "evidence.max_supporting_units"
 );
 field_admission!(present_max_per_file, "evidence.max_per_file");
+field_admission!(present_weak_parent_order, "evidence.weak_parent_order");
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -277,6 +278,12 @@ pub struct CodeScorerOverlay {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CodeEvidenceOverlay {
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_weak_parent_order"
+    )]
+    pub weak_parent_order: Option<super::CodeWeakParentOrder>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",

@@ -934,3 +934,58 @@ fn indexed_revision_is_authorized_current_metadata_with_document_source_fallback
         );
     }
 }
+
+#[test]
+fn callable_comment_prefix_can_activate_without_widening_declaration_span() {
+    for (role, comment_bytes, suffix, expected) in [
+        (CodeChunkRole::Symbol, 20, false, true),
+        (CodeChunkRole::ContainerContext, 20, false, false),
+        (CodeChunkRole::Symbol, 8193, false, false),
+        (CodeChunkRole::Symbol, 20, true, false),
+    ] {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        let text = format!("//{}\nfunction run() {{}}", "x".repeat(comment_bytes));
+        let mut m = manifest("callable.ts", "comment", &text);
+        let mut unit = chunk(&m, &text);
+        unit.id = Id::from("callable-with-comment");
+        let code = unit.code.as_mut().unwrap();
+        code.role = role;
+        code.unit = Some("run".into());
+        code.declaration_range = Some(CodeByteRange {
+            start: text.find("function run").unwrap() as u64,
+            end: text.len() as u64 - u64::from(suffix),
+        });
+        let declaration = code.declaration_range;
+        m.records.push(CodeSourceRecord {
+            kind: CodeSourceRecordKind::Chunk,
+            id: unit.id.to_string(),
+        });
+        block_on(store.begin_code_source(m.clone(), None)).unwrap();
+        block_on(store.stage_code_records(&m.file, &m.attempt_id, &m.records)).unwrap();
+        guarded_parents(&store, &m);
+        for c in [chunk(&m, &text), unit] {
+            block_on(store.write_code_record(&m.file, &m.attempt_id, CodeSourceWrite::Chunk(c)))
+                .unwrap();
+        }
+        m.state = CodeSourceState::Active;
+        let result = block_on(store.activate_code_source(m.clone()));
+        assert_eq!(
+            result.is_ok(),
+            expected,
+            "role={role:?} prefix={comment_bytes} suffix={suffix}: {result:?}"
+        );
+        if expected {
+            assert_eq!(
+                block_on(store.read_code_source(read(&m), &m.file.scope))
+                    .unwrap()
+                    .text,
+                text
+            );
+            let loaded =
+                block_on(store.get_chunk(&Id::from("callable-with-comment"), &m.file.scope))
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(loaded.code.unwrap().declaration_range, declaration);
+        }
+    }
+}

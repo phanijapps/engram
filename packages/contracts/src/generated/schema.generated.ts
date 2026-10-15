@@ -764,6 +764,14 @@ export const engramV1Schema = {
               "maximum": 32768,
               "minimum": 256,
               "type": "integer"
+            },
+            "weak_parent_order": {
+              "default": "best_lane_rank",
+              "enum": [
+                "best_lane_rank",
+                "scorer"
+              ],
+              "type": "string"
             }
           },
           "required": [
@@ -1071,6 +1079,14 @@ export const engramV1Schema = {
               "maximum": 32768,
               "minimum": 256,
               "type": "integer"
+            },
+            "weak_parent_order": {
+              "default": "best_lane_rank",
+              "enum": [
+                "best_lane_rank",
+                "scorer"
+              ],
+              "type": "string"
             }
           },
           "type": "object"

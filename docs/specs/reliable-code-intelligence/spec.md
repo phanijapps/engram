@@ -235,8 +235,10 @@ body-coverage slots. This is a language-neutral role policy, not a filename or
 symbol-name heuristic. The selection policy is included in calibration binding
 v3, so earlier artifacts require resealing against the new score distribution.
 
-Successful cross-encoding ranks parents by maximum scored segment score, with
-ties retaining prior RRF parent order. Unscored parents are not mixed into that
+Successful cross-encoding assigns each parent its maximum scored segment score,
+with model-score ties retaining prior RRF order. Validated confident parents
+retain model order; the default uncertain tail uses independent lane ranks as
+described below. `weak_parent_order=scorer` retains model order for all parents. Unscored parents are not mixed into that
 ranking. Strategy `none` ranks all eligible fused parents by maximum segment
 RRF, retaining first appearance on ties. Failure discards partial rerank scores
 and uses that full bounded pre-score RRF parent ordering. Raw cross-encoder and
@@ -440,3 +442,22 @@ implementations need source updates; existing required fields and generic
 operations retain their meanings. The draft JSON Schema is directly authored
 without a dedicated schema-authoring skill; mechanical validation supplements,
 but does not replace, semantic/contract review.
+
+
+The callable-comment correction preserves adjacent grammar comments verbatim in
+canonical source slices (up to five whole comment nodes, 8,192 prefix bytes).
+Declaration spans remain unchanged. Blank-line-separated notices, trailing
+comments from earlier statements and noncomment syntax are not attached.
+Container slices exclude each child callable's attached prefix. This changes
+the coverage fingerprint and therefore requires rescan, embedding reindex and
+new calibration; public DTO shapes and confidence policy are unchanged.
+
+
+With `evidence.weak_parent_order=best_lane_rank` (default), validated cross-encoder
+results keep their confident head. Below-threshold parents are ordered by the
+best observed lexical/vector lane rank, then fused RRF score and original fused
+order; graph expansion and zero-weight lanes are excluded from the rank prior.
+`scorer` preserves the legacy order. This reorders only admitted, scored parents
+before existing presentation budgets. It does not change raw `rerankScore`,
+score space, candidate breadth or the maximum-returnable-score confidence gate.
+The changed configuration/binding invalidates previous calibration artifacts.

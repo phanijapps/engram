@@ -333,3 +333,52 @@ fn query_confidence_requires_a_returnable_passing_parent() {
         CodeParentDecisionReason::BelowThreshold
     );
 }
+
+#[test]
+fn calibrated_weak_tail_uses_lane_rank_without_reordering_confident_head() {
+    let configure = |a: &mut Admission,
+                     primary: &mut Vec<CodeCandidate>,
+                     ranking: &mut Ranking,
+                     _: &mut CodeCalibrationArtifact| {
+        a.config.retrieval.result_limit = 2;
+        ranking.parents[1].score = -0.1;
+        ranking.parents[2].score = -0.2;
+        primary[1].fusion_traces[0].source_rank = Some(50);
+        primary[2].fusion_traces[0].source_rank = Some(1);
+    };
+    let p = packet_with(3, 3, configure);
+    assert_eq!(
+        p.items
+            .iter()
+            .map(|i| i.parent_unit_id.as_str())
+            .collect::<Vec<_>>(),
+        ["unit-0", "unit-2"]
+    );
+    assert_eq!(p.items[1].rerank_score, Some(-0.2));
+    let old = packet_with(3, 3, |a, primary, ranking, c| {
+        configure(a, primary, ranking, c);
+        a.config.evidence.weak_parent_order = engram_retrieval::CodeWeakParentOrder::Scorer;
+    });
+    assert_eq!(old.items[1].parent_unit_id, "unit-1");
+}
+
+#[test]
+fn graph_expansion_and_zero_weight_lanes_do_not_supply_a_fallback_rank() {
+    for zero_vector in [false, true] {
+        let p = packet_with(3, 3, |a, primary, ranking, _| {
+            a.config.retrieval.result_limit = 2;
+            ranking.parents[1].score = -0.1;
+            ranking.parents[2].score = -0.2;
+            primary[1].fusion_traces = vec![serde_json::from_value(serde_json::json!({"source":if zero_vector {"vector"} else {"graph_expansion"},"sourceRank":1})).unwrap()];
+            primary[2].fusion_traces = vec![
+                serde_json::from_value(serde_json::json!({"source":"lexical","sourceRank":2}))
+                    .unwrap(),
+            ];
+            if zero_vector {
+                a.config.fusion.source_weights.insert("vector".into(), 0.0);
+            }
+        });
+        assert_eq!(p.items[0].parent_unit_id, "unit-0");
+        assert_eq!(p.items[1].parent_unit_id, "unit-2");
+    }
+}

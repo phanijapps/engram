@@ -1,0 +1,523 @@
+{
+  "date": "2026-10-15",
+  "scope": "callable source comments and calibrated weak-tail ordering; development-only full-corpus verification",
+  "featureShipped": false,
+  "publicContractChange": "Compatible optional v1 config evidence.weak_parent_order=best_lane_rank|scorer; evidence packet DTO unchanged. Exhaustive Rust config struct literals require the new field.",
+  "rootCause": "Exact AST coverage replaced comment-prefixed legacy text with declaration-only slices; source documentation of empty-buffer recovery was lost. Below-packet-threshold model ordering also displaced a strongly retrieved implementation after comments were restored.",
+  "fix": [
+    "Preserve up to five adjacent whole grammar comment nodes within8192 prefix bytes as exact callable source slices; AST declaration spans remain unchanged.",
+    "Keep confident raw model order; order the below-threshold tail by best positive-weight lexical/vector rank, then RRF and original fused order. This is an ordering heuristic, not per-parent probability calibration.",
+    "Bound the source-inventory exception to one contiguous Symbol slice ending at the declaration end; actor, policy, snapshot, generation, hash, UTF-8 and hierarchy checks remain."
+  ],
+  "configuration": {
+    "default": "evidence.weak_parent_order=best_lane_rank",
+    "legacyOptOut": "ENGRAM_CODE__EVIDENCE__WEAK_PARENT_ORDER=scorer",
+    "parentCap": 50,
+    "pairCap": 75,
+    "perFileCap": 4,
+    "calibrationBinding": "code-evidence-binding-v4/confident-head-retrieval-tail"
+  },
+  "modelAndNumericalThresholdUnchanged": true,
+  "fixedThresholdCheck": {
+    "threshold": -0.9790937304496765,
+    "negatives": 15,
+    "rejected": 14,
+    "required": 14
+  },
+  "negativeCheck": {
+    "count": 15,
+    "rejected": 14,
+    "required": 14
+  },
+  "negativeStatusChanges": [],
+  "summaries": {
+    "engram": {
+      "before": {
+        "positiveQuestions": 10,
+        "requiredUnitRecallAt10": 0.6,
+        "requiredRangeCoverage": 0.6
+      },
+      "after": {
+        "positiveQuestions": 10,
+        "requiredUnitRecallAt10": 0.6333333333333333,
+        "requiredRangeCoverage": 0.6303925378935096
+      }
+    },
+    "flask": {
+      "before": {
+        "positiveQuestions": 10,
+        "requiredUnitRecallAt10": 0.6,
+        "requiredRangeCoverage": 0.6
+      },
+      "after": {
+        "positiveQuestions": 10,
+        "requiredUnitRecallAt10": 0.65,
+        "requiredRangeCoverage": 0.6376344086021505
+      }
+    },
+    "vite": {
+      "before": {
+        "positiveQuestions": 10,
+        "requiredUnitRecallAt10": 0.8,
+        "requiredRangeCoverage": 0.8,
+        "warmMedianSeconds": 11.069557370006805,
+        "sampleWarmP95Seconds": 13.97888589098875,
+        "timedRequests": 15
+      },
+      "after": {
+        "positiveQuestions": 10,
+        "requiredUnitRecallAt10": 0.9,
+        "requiredRangeCoverage": 0.9,
+        "warmMedianSeconds": 13.395426635004696,
+        "sampleWarmP95Seconds": 16.542877268992015,
+        "timedRequests": 15
+      }
+    }
+  },
+  "positiveQuestionChanges": [
+    {
+      "id": "vite-d01",
+      "corpus": "vite",
+      "beforeRecall": 0.0,
+      "afterRecall": 0.0,
+      "beforeRangeCoverage": 0.0,
+      "afterRangeCoverage": 0.0
+    },
+    {
+      "id": "vite-d02",
+      "corpus": "vite",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "vite-d03",
+      "corpus": "vite",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "vite-d04",
+      "corpus": "vite",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "vite-d05",
+      "corpus": "vite",
+      "beforeRecall": 0.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 0.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "vite-d06",
+      "corpus": "vite",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "vite-d07",
+      "corpus": "vite",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "vite-d08",
+      "corpus": "vite",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "vite-d09",
+      "corpus": "vite",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "vite-d10",
+      "corpus": "vite",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "engram-metadata-auth",
+      "corpus": "engram",
+      "beforeRecall": 0.0,
+      "afterRecall": 0.3333333333333333,
+      "beforeRangeCoverage": 0.0,
+      "afterRangeCoverage": 0.30392537893509525
+    },
+    {
+      "id": "engram-scope-auth",
+      "corpus": "engram",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "engram-generation-read",
+      "corpus": "engram",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "engram-residual",
+      "corpus": "engram",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "engram-source-attempt",
+      "corpus": "engram",
+      "beforeRecall": 0.0,
+      "afterRecall": 0.0,
+      "beforeRangeCoverage": 0.0,
+      "afterRangeCoverage": 0.0
+    },
+    {
+      "id": "engram-source-persist",
+      "corpus": "engram",
+      "beforeRecall": 0.0,
+      "afterRecall": 0.0,
+      "beforeRangeCoverage": 0.0,
+      "afterRangeCoverage": 0.0
+    },
+    {
+      "id": "engram-deny-path",
+      "corpus": "engram",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "engram-filter-merge",
+      "corpus": "engram",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "engram-markdown-fences",
+      "corpus": "engram",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "engram-lexical-fresh",
+      "corpus": "engram",
+      "beforeRecall": 0.0,
+      "afterRecall": 0.0,
+      "beforeRangeCoverage": 0.0,
+      "afterRangeCoverage": 0.0
+    },
+    {
+      "id": "flask-d01",
+      "corpus": "flask",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "flask-d02",
+      "corpus": "flask",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "flask-d03",
+      "corpus": "flask",
+      "beforeRecall": 0.0,
+      "afterRecall": 0.0,
+      "beforeRangeCoverage": 0.0,
+      "afterRangeCoverage": 0.0
+    },
+    {
+      "id": "flask-d04",
+      "corpus": "flask",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "flask-d05",
+      "corpus": "flask",
+      "beforeRecall": 0.0,
+      "afterRecall": 0.0,
+      "beforeRangeCoverage": 0.0,
+      "afterRangeCoverage": 0.0
+    },
+    {
+      "id": "flask-d06",
+      "corpus": "flask",
+      "beforeRecall": 0.0,
+      "afterRecall": 0.5,
+      "beforeRangeCoverage": 0.0,
+      "afterRangeCoverage": 0.3763440860215054
+    },
+    {
+      "id": "flask-d07",
+      "corpus": "flask",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "flask-d08",
+      "corpus": "flask",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "flask-d09",
+      "corpus": "flask",
+      "beforeRecall": 1.0,
+      "afterRecall": 1.0,
+      "beforeRangeCoverage": 1.0,
+      "afterRangeCoverage": 1.0
+    },
+    {
+      "id": "flask-d10",
+      "corpus": "flask",
+      "beforeRecall": 0.0,
+      "afterRecall": 0.0,
+      "beforeRangeCoverage": 0.0,
+      "afterRangeCoverage": 0.0
+    }
+  ],
+  "lostQuestions": [],
+  "requiredUnitPreservation": {
+    "positiveQuestions": 30,
+    "lostPreviouslyRetrievedRequiredUnits": [],
+    "comparison": "label unit positions resolved independently against old and new active generations"
+  },
+  "frozenCorpusVerification": {
+    "manifestSha256": "a78489ada1947213c5a5719a7ac9661c9ea37e66168bd95f0f3bfbc856de8feb",
+    "corpora": {
+      "engram": {
+        "unchanged": true,
+        "files": 1299
+      },
+      "flask": {
+        "unchanged": true,
+        "files": 236
+      },
+      "vite": {
+        "unchanged": true,
+        "files": 579
+      }
+    }
+  },
+  "sourceStoresUnchanged": true,
+  "selfStoreOpened": false,
+  "calibration": {
+    "artifact": {
+      "schemaVersion": 1,
+      "id": "code-calibration-v1/168355ae7260de568b168f538bc94b0607df41c024037d7a0f37e2252ec46ef8",
+      "configHash": "7457fd124cfdedbd44dcbea93a762a265fbb2a328bed26a8a7e7f54c3f9cf9c4",
+      "queryRepresentationId": "code-query-v1/6425ffc2849dee5e5639446fb66325a46e63e9393f42f9b87fccf96bd216def8",
+      "passageRepresentationId": "code-passage-v1/3999a5debee44e097a50795cbf3b0b8df4ae42a58c0fccfa016016e1ec6150f0",
+      "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+      "scorerManifestId": "model-manifest-v1/5a313a5e79e3036626005ee29fec2090d7f5172bf2f925e9f803d14da835c962",
+      "tokenizerIdentity": "5749ef57b8429e89b0e8140093a2eb34e56de83945690b28944aa477db9523f6",
+      "scoreTransformation": "raw_logit",
+      "scoreSpace": "cross_encoder",
+      "threshold": -0.97909373,
+      "developmentLabelsSha256": "1a9f560d6097a81737deff341bf58e550324430801547da66d6e6ccc5ce9db29"
+    },
+    "oldArtifactId": "code-calibration-v1/599317da85391615e95d4a7beb79a1a91a65112f12956415c0a7af8119fb9e11",
+    "numericThresholdUnchanged": true
+  },
+  "sourceRepresentationId": "code-passage-v1/3999a5debee44e097a50795cbf3b0b8df4ae42a58c0fccfa016016e1ec6150f0",
+  "sourceMappingVersion": "source-v1/ts-0.26/mapping-2026-10-15/context-1/attached-callable-comments-1/snapshot-65536",
+  "sourceScans": {
+    "vite": {
+      "seconds": 91.96256374199584,
+      "summary": "ScanSummary { scanned: 774, ingested: 515, unchanged: 0, skipped: 43, entities: 4621, relationships: 8513, errors: 0, admission_failures: [], git_remote: Some(\"https://github.com/vitejs/vite.git\"), git_branch: Some(\"main\"), git_sha: Some(\"c2c9ef4dcd\") }\nno scan config; builtin filter\nembedded 0 chunks",
+      "successfulMcpReindexCalls": 4
+    },
+    "flask": {
+      "seconds": 457.060274486008,
+      "summary": "ScanSummary { scanned: 265, ingested: 206, unchanged: 0, skipped: 11, entities: 2750, relationships: 4799, errors: 0, admission_failures: [], git_remote: Some(\"https://github.com/pallets/flask.git\"), git_branch: Some(\"main\"), git_sha: Some(\"d086db856b\") }\nno scan config; builtin filter\nembedded 0 chunks",
+      "successfulMcpReindexCalls": 2
+    },
+    "engram": {
+      "seconds": 1183.8280998010014,
+      "summary": "ScanSummary { scanned: 1267, ingested: 1001, unchanged: 0, skipped: 8, entities: 10641, relationships: 31407, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 256 chunks (10498 more pending from this source \u2014 re-run scan_repo to continue)",
+      "successfulMcpReindexCalls": 1
+    }
+  },
+  "fixtureSdkPreparation": {
+    "actualNewEmbeddings": 9248,
+    "authority": "load_current_code_segments and inventory activation; revision fences around every batch",
+    "comparedExisting": 0,
+    "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+    "exclusiveFixtureOnly": true,
+    "files": 622,
+    "inputAssembler": "production code_indexing/input.rs",
+    "maximumAbsoluteDifference": 0.0,
+    "missingInventories": 0,
+    "representationId": "code-passage-v1/3999a5debee44e097a50795cbf3b0b8df4ae42a58c0fccfa016016e1ec6150f0",
+    "seconds": 2571.429099437
+  },
+  "fixturePreparationNotes": [
+    "All three copied corpora were rescanned with0errors. Vite andFlask were indexed through actual MCP maintenance.",
+    "Engram preparation combined actual MCP embeddings and a temporary exclusive-fixture Rust SDK helper over authorized prepared segment leases. The helper reused the production input assembler, performed actual admitted BGE inference, checked coverage/revision fences, and activated inventories through ports.",
+    "A helper recomputation matched an MCP-generated vector with maximum absolute difference0.0; source/binary/parity receipts are archived. This helper is not shipped in the repository.",
+    "The final actual MCP Engram maintenance confirmed0remaining backlog before queries. No old namespace or generic vector was counted as satisfying the new representation."
+  ],
+  "finalEngramMcpReindex": {
+    "seconds": 8.766254803005722,
+    "failed": false,
+    "text": "reindex: embedded 0 chunks (limit 1024) (0 code chunks)\nbacklog drained",
+    "response": {
+      "id": 1,
+      "jsonrpc": "2.0",
+      "result": {
+        "content": [
+          {
+            "text": "reindex: embedded 0 chunks (limit 1024) (0 code chunks)\nbacklog drained",
+            "type": "text"
+          }
+        ]
+      }
+    }
+  },
+  "focusedSourceInputAblation": {
+    "oldScore": -2.7009172,
+    "restoredSourceCommentScore": -0.5280197,
+    "metadataRemovalOnlyScore": -2.3169487,
+    "queryAndContextOtherwiseUnchanged": true
+  },
+  "rejectedExperiments": [
+    {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/callable-comments-2026-10-15/live.json",
+      "reason": "Initial source activation failed closed on74Vitefiles under the declaration-only inventory invariant; fixed with a bounded exception and storage regression test."
+    },
+    {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/callable-comments-v3-2026-10-15/live.json",
+      "reason": "Source-only restoration recovered d05 but displaced d02; projected recall stayed8/10, so this variant was rejected."
+    },
+    {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/callable-comments-v3-2026-10-15/diversity-two-d02.json",
+      "reason": "A smaller per-file cap recovers d02 but would drop d06. The production cap remains4."
+    },
+    {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-short-body-format-ablation.json",
+      "reason": "Code fences, captions and identifier splitting did not improve the short-body scores."
+    }
+  ],
+  "baseline": {
+    "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/before.json",
+    "protocol": "Actual previous9479590binary/config/calibration on old copied stores; Vite uses preserved15warm measurements, Engram/Flask quality-only before calls."
+  },
+  "timingProtocol": "Reused prior same-machine Vite baseline15 warm requests; new Vite15 sequential requests after all builds/indexing/baseline queries finish. Other corpora quality-only. Not AC12 certification.",
+  "repositoryGates": {
+    "passed": true,
+    "commands": 11,
+    "rustPassed": 1208,
+    "rustIgnored": 10,
+    "actualRebuiltNativeConfigCheck": true
+  },
+  "review": "focused self-review per owner instruction; no adversarial agent rounds",
+  "selfReviewChecks": [
+    "Exact AST source ownership and declaration identity are separate; storage prefix bounds do not expand actor/policy/file/generation access.",
+    "The weak ordering operates only on already-scored parents and preserves actual raw logits, score-space labels, the confident head, query-level acceptance and presentation budgets.",
+    "Graph expansion, zero-weight lanes, unknown ranks and unvalidated/failed/disabled scoring do not masquerade as independent strong rank evidence.",
+    "Canonical parent lookup ids remain distinct from logical unit ids; prior mapping uses the canonical key.",
+    "File/env/explicit config and native snapshot origins preserve transport parity; generated contracts are reproducible.",
+    "All corpus source excerpts are checked against frozen source hashes and exact bytes. The original evaluation stores and actual self store are preserved."
+  ],
+  "limitations": [
+    "Thirty development positives and fifteen development negatives do not replace the frozen failed held-out assessment or establish beta readiness.",
+    "The remaining Vite environment-file helper miss and the known Vite absent-feature false positive remain.",
+    "The15-request warm sample is not the60-request AC12 performance certification.",
+    "A new source representation requires rescan, embedding reindex and a matching development-checked calibration before deployment.",
+    "candidateRecall is not reported from empty observer inventories in the runtime grading helper."
+  ],
+  "rawReceiptHashes": {
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-weak-tail-comments-model-build.log": "5455802115a51f3e2bac9f06306c6314556c17e7a946925927c8ba14e22789c7",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-comments-before-all.log": "193e07f81533762a41dcc14acd2914a3ebc3822e634a10016fbbb080ccd69dc1",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/live.json": "f3f7e0df2bf4463a491046c8fda9af35375bd824061cdca26a19eeacce432af4",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/sdk-fixture-fill.log": "8c9d61f5c05e6af41c65d2eaaf50fe12558c300673d95b11107d5277c21b9a35",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-source-comments-red.log": "0cb0e3eb4a680ef70160c9f29995e19dfa32ac9d4c3d50bbba0a075d7c4de212",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-weak-parent-red.log": "1f9f11a22328d041efb29f083b5c8072b9e6f1816eb8a9ff9735d3d4cddf15e1",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/config.json": "1eb4549d6c2791a49b8a2e74fd66a37beea4e7df1c6583b8f445371720774d3d",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/calibration.json": "d6f7bb890616a327dd2479b05cbe05f587d72a1d319735eefc674b72f872f792",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-source-comments-boundary-tests.log": "6f969a8dab71f7c6416385890f75e9f2e6f450b9f1969e058a87c98b611f26e5",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-weak-tail-comments-native-config.log": "bd741a3424c1ecaa4465aefa2fa49e287abb41cae054b4eea5f37cbc54bdcfbb",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable_short_body_format.py": "d0d3e7f9ccdca34c708be6dfb4cd75ae2fe3cffe006d883c05c0ca0f0e56a269",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/frozen-verification.json": "4fd27a8ca0972f19829c581b7e76df5cd87367300c617ae3948d4e65aab207d6",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-source-comments-green.log": "c46c63964df8e41bbfc9cd0c9acb4830c559c9ea8c5671ae9491744b08911c14",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/sdk-fixture-fill.json": "9b872b8d0c0323584e5188762a6d40d9c7e750b13f493661f734a6c4c08b4e20",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/accepted-binary-receipt.json": "5cdfd7e5a328c83dc0e87d285218dc8ca0021b5e95461f35c3c4b6c3d7bcb1e4",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/required-unit-preservation.json": "a50f5a114c1e2df9f6c30696491c6a24380645e39690d9197ecf90426e93a23a",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/before.json": "d3acd2ce890b9f7329b4d6dcbb3ecb705e2f963ff9f0304c85838afcc24cb1c8",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-weak-parent-green.log": "286020cccc59f7bf25bf614c35fb8ab413b1debcbf8185dd93a3bbafe14021d9",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable_comments_before_all.py": "fec65772d03a485c6a3abcd9e55f15a2de27021ab6cea836116cb70d4ee19fa8",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-short-body-format-ablation.json": "e8a8ac2fd50c03af093003cc276930b223f91b02d42b7e98d3241b8cf93f198f",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-weak-parent-unit.log": "ff1eae3a5b5ba85af255f52a3d36e1ba3fac90053bfcd278d7534c8e78909a5e",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable_weak_tail_comments_live.py": "396720d49762756085060c6cc43f69136c8e0af4994c3244f1658f844a87b458",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-short-body-ablation.log": "eb4169e3111205fcb486340fd72e07232c2a444744d73074e53d1dbab4f6e06d",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/source.patch": "055c8f56870fb03b99105c3da0bd0ebbcd37cccc52345f0a0d71acfa27ed17cd",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-short-body-ablation.json": "1dcd843429b482b3f05f1c7208d67f110c3218f116ef9fc34a894d9f552ff670",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable_short_body_ablation.py": "c1519c20a8088fcf125b0cf244c375da029d0b8359a9c08d923715fd5b241b36",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-weak-tail-comments-live.log": "508ae2b8422e801f4b1a5203ec16ae7368448f814be997dbb09841fcfb7bf408",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-source-comments-store-green.log": "33ce650745442615e4858a42d714b2fa709b184756cf01b9a8b1775985db11a2",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-source-comments-store-red.log": "ca5be881cc477ee78831dd439ddc7dabbdd78b588eb4a42c577d7044fab61a31",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/reliable-short-body-format.log": "3b4fe2dfe37ead96150c0061e17f457c58535e6e39eda31b9842a3a6e77a88eb",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/fixture-tool/code_fixture_vectors.rs": "27d961fe96914d171e40952300ff31269a7e5942a22de36e95642adba4b5cd3f",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/fixture-tool/production_input.rs": "38eca02fbe5d0f7eee1a183755fa1eb2cb9ce9a61239b66282a2133d10692377",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/fixture-tool/parity.log": "1cbb969105d4102b116b236e3190e8ed3442a43002601aa96f28dd796d4b21be",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/fixture-tool/code_fixture_vectors": "85c95c1966de4346f257570a46d0e0693b6623a416525116ae1813ac4f1053db",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/fixture-tool/Cargo.integration.with-fixture.toml": "b181d0c99e2b7d7dd37a5f1460d1138ba752266c217907331268885ed0d9fc2f",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/fixture-tool/receipt.json": "04f54722c87b4eb3ee2bbe1beeb73c617129f13c63ad56f75313a45b258e9d85",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/6-pnpm.log": "e37046173101e5309970362a2b8b24c7912b0f4d950cf4cf87f495fcab52a899",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/10-scripts-ci-check-surface-parity.sh.log": "b3225247e8a41fa566bc9accdc9e582f14f89e2660d1334af844cbdcc1e894e9",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/2-cargo.log": "954434131dc96d9ceeb9755ac56a1e49d28f132dedd09810e354e0fbc7bf19ee",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/report.json": "a0194aa801cf4f83d83e041b8cba301e6319ab291542cbb87e66f9a73e83bd4c",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/8-scripts-ci-check-docs.sh.log": "5a8199511e487d45222b8f4221b1f9254743f9419cc50bde4f81934cd2042f6f",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/9-scripts-ci-check-engine-neutrality.sh.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/5-pnpm.log": "4ba51c60724d802982fc33926fd3aaea2084367b6cef429a07729df339b4368b",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/4-pnpm.log": "5d0e0018f27359ea361bfda384df2853e9bebbbc56f149145fa4415373c992e8",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/1-cargo.log": "b53b33a0d19adb51b36e96f3fd2bf405d85c77dfa95860a573788088b4cb7e31",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/0-cargo.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/7-scripts-ci-check-contracts.sh.log": "fce86ba532e1d76036faf9bd6bbddb2d942388071b20bab4aaecbcfd90921aea",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/gates/3-pnpm.log": "2684eb0c2cdb2a307b40a553b72df0c4eeca9533b20880f44229a0370e93c1f7",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/new-source/core/integration/src/code_evidence/weak_order.rs": "fadd5dc591fcf5a405cf2bd061dbee13f8794ef504b25e019bf47b6d3903fbe7",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/new-source/core/code/tests/source_comments.rs": "85006a5f91b2992feb6df50f066d7cdfa92afcd25e816e316c01778db10fba29",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/new-source/core/code/src/parser/attached_comments.rs": "a8a27390a4c071dcb0345ee5659b83df72870edc6bb8ad3eee0378ed71ed973b",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/weak-tail-comments-2026-10-15/new-source/adapters/retrieval/cross-encoder-rerank/examples/score_probe.rs": "deca1f4029dc16edde52c51bc5a0e52d57ce15c77d2efd52f9d510b6f15338d9"
+  }
+}

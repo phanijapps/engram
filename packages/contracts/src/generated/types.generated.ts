@@ -286,6 +286,7 @@ export interface CodeIntelligenceConfig {
     max_per_file: number;
     max_supporting_units: number;
     token_budget: number;
+    weak_parent_order?: "best_lane_rank" | "scorer";
   };
   fusion: RecallFusionConfig & {
     rerank?: {
@@ -2700,6 +2701,7 @@ export interface CodeIntelligenceConfigOverlay {
     max_per_file?: number;
     max_supporting_units?: number;
     token_budget?: number;
+    weak_parent_order?: "best_lane_rank" | "scorer";
   };
   fusion?: RecallFusionConfig & {
     rerank?: {

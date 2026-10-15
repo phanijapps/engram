@@ -108,7 +108,16 @@ pub struct CodeLocalScorerConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CodeEvidenceConfig {
+    #[serde(default = "profiles::default_weak_parent_order")]
+    pub weak_parent_order: CodeWeakParentOrder,
     pub token_budget: u32,
     pub max_supporting_units: u32,
     pub max_per_file: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodeWeakParentOrder {
+    BestLaneRank,
+    Scorer,
 }

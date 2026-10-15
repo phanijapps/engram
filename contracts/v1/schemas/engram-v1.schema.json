@@ -2557,6 +2557,14 @@
               "minimum": 1,
               "maximum": 100,
               "default": 4
+            },
+            "weak_parent_order": {
+              "type": "string",
+              "enum": [
+                "best_lane_rank",
+                "scorer"
+              ],
+              "default": "best_lane_rank"
             }
           }
         },
@@ -3782,6 +3790,14 @@
               "minimum": 1,
               "maximum": 100,
               "default": 4
+            },
+            "weak_parent_order": {
+              "type": "string",
+              "enum": [
+                "best_lane_rank",
+                "scorer"
+              ],
+              "default": "best_lane_rank"
             }
           },
           "required": [

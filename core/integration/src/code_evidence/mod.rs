@@ -9,5 +9,6 @@ mod preflight;
 mod ranking;
 pub(crate) mod readiness;
 mod views;
+mod weak_order;
 pub use calibration::artifact_id;
 pub use operation::calibration_template;

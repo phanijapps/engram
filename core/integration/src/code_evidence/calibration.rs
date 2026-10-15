@@ -40,7 +40,7 @@ pub(super) fn binding(
         admission.config.query.instruction,
     )?;
     let config_hash = hash(&(
-        "code-evidence-binding-v3/symbol-body-coverage",
+        "code-evidence-binding-v4/confident-head-retrieval-tail",
         &admission.config,
         model.asset_identity(),
         &representation,

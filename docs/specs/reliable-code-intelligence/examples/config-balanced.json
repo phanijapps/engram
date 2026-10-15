@@ -36,7 +36,8 @@
   "evidence": {
     "token_budget": 6000,
     "max_supporting_units": 20,
-    "max_per_file": 4
+    "max_per_file": 4,
+    "weak_parent_order": "best_lane_rank"
   },
   "query": {
     "instruction": "none"

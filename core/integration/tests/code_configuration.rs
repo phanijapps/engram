@@ -245,3 +245,35 @@ fn environment_capture_ignores_non_unicode_outside_code_namespace() {
         assert!(status.success());
     }
 }
+
+#[test]
+fn weak_parent_order_resolves_from_environment_and_rejects_unknown_values() {
+    let launch = CodeConfigLaunch {
+        environment: BTreeMap::from([(
+            "ENGRAM_CODE__EVIDENCE__WEAK_PARENT_ORDER".into(),
+            "scorer".into(),
+        )]),
+        ..Default::default()
+    };
+    let resolved = load_code_config(&launch).unwrap();
+    assert_eq!(
+        resolved.effective.evidence.weak_parent_order,
+        engram_retrieval::CodeWeakParentOrder::Scorer
+    );
+    assert_eq!(
+        resolved.origins["evidence.weak_parent_order"],
+        "environment"
+    );
+    assert!(
+        serde_json::from_value::<CodeIntelligenceConfigOverlay>(
+            serde_json::json!({"evidence":{"weak_parent_order":"unknown"}})
+        )
+        .is_err()
+    );
+    assert!(
+        serde_json::from_value::<CodeIntelligenceConfigOverlay>(
+            serde_json::json!({"evidence":{"weak_parent_order":null}})
+        )
+        .is_err()
+    );
+}

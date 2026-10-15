@@ -217,7 +217,7 @@ pub(super) fn assemble(
     let mut budget = config.evidence.token_budget as u64;
     let mut files: HashMap<(&str, &str), u32> = HashMap::new();
     let mut rejected = BTreeMap::new();
-    for parent in &ranking.parents {
+    for parent in super::weak_order::parents(ranking, primary, calibration, config) {
         let Some(&(first, _, _)) = parent.segments.first() else {
             rejected.insert(
                 parent.parent.clone(),

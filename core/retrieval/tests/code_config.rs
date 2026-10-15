@@ -122,3 +122,23 @@ fn legacy_full_configs_default_parent_breadth_without_changing_their_pair_budget
     c.local_scorer.max_parents = 0;
     assert!(c.validate().is_err());
 }
+
+#[test]
+fn legacy_evidence_config_defaults_weak_parent_order_and_round_trips_opt_out() {
+    let mut value = serde_json::to_value(CodeIntelligenceConfig::default()).unwrap();
+    value["evidence"]
+        .as_object_mut()
+        .unwrap()
+        .remove("weak_parent_order");
+    let mut decoded: CodeIntelligenceConfig = serde_json::from_value(value).unwrap();
+    assert_eq!(
+        decoded.evidence.weak_parent_order,
+        engram_retrieval::CodeWeakParentOrder::BestLaneRank
+    );
+    decoded.evidence.weak_parent_order = engram_retrieval::CodeWeakParentOrder::Scorer;
+    assert_eq!(
+        serde_json::from_value::<CodeIntelligenceConfig>(serde_json::to_value(&decoded).unwrap())
+            .unwrap(),
+        decoded
+    );
+}

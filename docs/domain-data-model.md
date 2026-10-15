@@ -2795,3 +2795,47 @@ its first scoring opportunity; extra interface/class context does not consume
 body-coverage slots. This is a language-neutral role policy, not a filename or
 symbol-name heuristic. The selection policy is included in calibration binding
 v3, so earlier artifacts require resealing against the new score distribution.
+
+
+### Attached callable source comments (derived-index correction)
+
+Exact AST callable source ranges retain up to five immediately adjacent grammar
+comment nodes, bounded to an 8,192-byte prefix. Bytes, delimiters and whitespace
+are preserved verbatim; no synthesized documentation is inserted. Detached
+file notices, trailing comments owned by prior statements, strings and
+preprocessor directives are not attached. Declaration ranges remain the AST
+node spans, so symbol and parent containment judgments remain structural.
+Container source slices exclude the attached comment prefixes of child
+callables. Unsupported or nonadjacent comment layouts stay in source residuals.
+No public fields change. The coverage fingerprint changes, invalidating passage
+and calibration identities: operators must rescan sources, reindex embeddings
+and seal a matching calibration after checking development negatives. Historical
+source generations remain historical; an old store is never silently reported
+as having the new comment-aware representation.
+
+The inventory validator admits this prefix only for a single contiguous Symbol
+slice ending exactly at the declaration end, with at most 8,192 bytes before
+the declaration. Container and suffix expansion remain invalid. Exact snapshot
+bytes, UTF-8 boundaries, content hashes, manifest membership, file/generation,
+actor and policy equality remain mandatory. AST attachment is produced by the
+code parser; declaration containment still determines the hierarchy.
+
+
+### Confidence-aware weak-part ordering (optional v1 config addition)
+
+Compatible v1 wire addition: `CodeEvidenceConfig.weak_parent_order` selects `best_lane_rank` (balanced default)
+or `scorer` (legacy ordering). With validated cross-encoder calibration,
+above-threshold parents retain scorer order. Below-threshold parents use their
+best observed lexical/vector source rank, then fused RRF score and original
+fused order. Graph expansion is not an independent retrieval rank. The fallback
+orders only already-admitted scored parents; it adds no candidates, rescoring,
+source grants or synthetic confidence. Existing per-file, evidence and result
+limits still apply. Query admission remains the maximum returnable raw model
+score; raw scores and score-space labels stay unchanged. This cutoff is a
+packet-admission calibration, not an individual-parent probability; using it
+as an ordering pivot does not assert per-parent calibration. Without validated
+cross-encoder calibration or with `scorer`, ordering is unchanged. The setting
+is optional on the wire, defaults through Rust, and resolves through the shared
+file/environment/explicit path. Calibration binding changes with this policy. Rust callers using exhaustive
+`CodeEvidenceConfig` struct literals must supply the new field; callers using
+profile constructors and existing serialized configs retain supported decoding.

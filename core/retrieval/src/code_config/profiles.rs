@@ -6,6 +6,10 @@ pub(super) fn default_max_parents() -> u32 {
     50
 }
 
+pub(super) fn default_weak_parent_order() -> CodeWeakParentOrder {
+    CodeWeakParentOrder::BestLaneRank
+}
+
 impl CodeIntelligenceConfig {
     /// Profile expansion is the sole default definition; overlays do not default fields.
     pub fn for_profile(profile: CodeIntelligenceProfile) -> Self {
@@ -48,6 +52,7 @@ impl CodeIntelligenceConfig {
                 on_failure: CodeScorerFailurePolicy::Degrade,
             },
             evidence: CodeEvidenceConfig {
+                weak_parent_order: default_weak_parent_order(),
                 token_budget: 6000,
                 max_supporting_units: 20,
                 max_per_file: 4,

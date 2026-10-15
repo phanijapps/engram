@@ -836,3 +836,102 @@ checkout/accepted ADRs govern construction, not stale descriptive paragraphs.
 
 - 2026-10-14: Draft authored from measured self-evaluation and primary-source
   research; real local scorer and configurable defaults explicitly in scope.
+
+
+### Sequential fix 4 investigation — short-body ranking
+
+Owner authorized the next single-cause fix after coverage commit 9479590.
+Use focused self-review and actual local-model verification. Preserve the frozen
+assessment, source stores, model and numerical threshold; do not use held-out
+labels to choose changes. Investigate development misses vite-d01 and vite-d05.
+Rivals: absent candidates (ruled out by scored parent traces); truncated bodies
+(ruled out by one complete segment and no remaining scorer tails); missing
+natural-language source context (test with label-free local scorer input probes).
+The exact-source AST path currently replaces legacy text containing leading doc
+comments with declaration-only slices; determine whether this drops useful
+behavioral context before selecting the minimum fix. First add a small offline
+scorer probe that accepts only query/document inputs, never relevance labels.
+No hand-written summaries, query-specific promotions or threshold relaxation.
+
+
+The source-only ablation reproduces readModifiedFile at -2.7009172 with its
+current model input and -0.5280197 after restoring only the existing three-line
+comment, with the same model, query and context. Removing metadata alone still
+fails (-2.3169487); the undocumented env helper remains a separate miss. Root
+cause is the exact coverage assembly introduced in 22013a1 replacing legacy
+comment-prefixed text with declaration-only ranges. Fix callable coverage, not
+ranking or confidence. Keep declaration spans unchanged, attach only bounded
+adjacent AST comment nodes, and remove those prefixes from container-owned
+child exclusions. Bump coverage identity and require real rescan/reindex.
+Regression tests cover TS exports, Rust Unicode/CRLF, Python, block comments,
+detached/trailing/string negatives, and sibling method ownership. Verify the
+actual MCP result, Vite development nonregression, all15 development negatives,
+exact source byte evidence, and original store preservation. The general docs
+augmentation of interfaces/classes is out of scope for this callable fix.
+
+
+Initial live rescan correctly failed closed on74 Vite files: the inventory
+validator assumed every source range began within its declaration. The first
+trial and stderr are preserved. Add a bounded Symbol-prefix exception for one
+contiguous slice ending at the declaration end; retain all snapshot, generation,
+policy and hierarchy checks. A storage regression test reproduces rejection of
+a legitimate attached prefix, and pins continued rejection of container prefixes,
+oversized prefixes and suffix expansion. This is part of the same source-range
+correction; no parser dependency is added to storage and no public DTO is added.
+
+
+The source-only variant is rejected: a full-corpus raw projection recovers
+d05 but loses d02 (8/10 overall). Smaller per-file caps recover d02 but would
+lose d06; formatting/name-splitting ablations do not help. These are retained
+failed experiments, not accepted quality claims. The model correctly has low
+confidence in the disputed tail, yet that tail still uses pure model order.
+A label-free retrieval-rank observer supports a confidence-aware fallback:
+strong model scores remain first; below-threshold parts use the best actual
+lexical/vector lane rank, RRF as tie-breaker, then stable original order. The
+captured Vite development projection recovers9/10, retaining all prior8; this
+must pass actual calibrated runtime and negative controls before acceptance.
+Add optional `evidence.weak_parent_order` (`best_lane_rank`/`scorer`) so operators
+can retain old ordering. Keep raw score/packet-confidence semantics and all
+budgets; do not promote new unscored parents or count graph expansion as an
+independent lane. Test the returned selection, confident-head stability,
+legacy/config overrides, missing-lane and all-below behavior.
+
+Fixture preparation may use the Rust SDK over already-authorized complete
+segment sets: production input assembler, actual admitted BGE embeddings,
+per-file validated leases and revision fences around each batch, followed by
+MCP maintenance/queries. It is confined to disposable `callable-comments-*`
+stores, and a recomputation matches an actual MCP-generated vector exactly.
+This test helper changes no production maintenance path. Final proof must name
+SDK preparation separately from MCP reindex counts. Expand development checks
+to all30 positives and15 negatives across the three corpora; no held-out tuning.
+
+
+**Sequential fix 4 accepted development result (2026-10-15):** Actual rebuilt
+MCP on freshly rescanned/indexed copies, with the same admitted BGE/Jina models
+and numeric threshold, gives the following mean required-unit recall@10:
+
+| Corpus | Before | After |
+| --- | ---: | ---: |
+| Engram | 60.0% | 63.3% |
+| Flask | 60.0% | 65.0% |
+| Vite | 80.0% | 90.0% |
+
+There are ten positive questions per corpus; multi-unit questions contribute
+fractional recall. No previously retrieved required units are lost across all
+30 positives. Vite required-range coverage improves from 80.0% to 90.0%:
+readModifiedFile is recovered while resolveEnvPrefix and all other prior
+successes remain. The undocumented getEnvFilesForMode miss remains. All 15
+calibrated negative controls preserve the same 14 rejections; the known Vite
+false positive remains. The raw-score guard passed before sealing the new v4
+calibration, with the same threshold.
+
+Vite's 15-request warm sample median changes from 11.07s to 13.40s, and sample
+p95 from 13.98s to 16.54s; this is not AC12's 60-request certification. All eleven
+repository gates pass (1,208 Rust tests, ten ignored), plus the actual rebuilt
+native configuration snapshot check. All frozen corpus files match their
+manifest; original stores retain logical identities and the actual self store
+remains unopened. The source-only, formatting and smaller-file-cap experiments
+remain recorded as rejected. The temporary SDK fixture helper and its exact
+MCP-vector comparison are archived; it is not a production change. The full
+frozen failed assessment remains historical and unshipped. See the
+[callable-comment and weak-tail live proof](../../research/reliable-code-callable-comments-live-2026-10-15.json).

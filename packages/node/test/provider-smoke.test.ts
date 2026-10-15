@@ -18,7 +18,7 @@ describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (re
   it("reports the shared Rust code snapshot with explicit launch precedence", async () => {
     const base=mkdtempSync(join(tmpdir(),"engram-code-config-"));
     const path=join(base,"code.json");
-    writeFileSync(path,JSON.stringify({profile:"fast-v1",fusion:{rrf_k:42},evidence:{token_budget:1200},local_scorer:{max_parents:24,max_candidates:60}}));
+    writeFileSync(path,JSON.stringify({profile:"fast-v1",fusion:{rrf_k:42},evidence:{token_budget:1200,weak_parent_order:"scorer"},local_scorer:{max_parents:24,max_candidates:60}}));
     try {
       const transport=createNativeProviderTransport({configJson:JSON.stringify({
         storage_path:join(base,"store"),trusted_root:base,scope_policy:"Strict",enable_vector:false,
@@ -29,6 +29,8 @@ describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (re
       expect(snapshot?.effective.profile).toBe("fast-v1");
       expect(snapshot?.effective.fusion.rrf_k).toBe(42);
       expect(snapshot?.effective.evidence.token_budget).toBe(1024);
+      expect(snapshot?.effective.evidence.weak_parent_order).toBe("scorer");
+      expect(snapshot?.origins["evidence.weak_parent_order"]).toBe("file");
       expect(snapshot?.effective.local_scorer.max_parents).toBe(24);
       expect(snapshot?.effective.local_scorer.max_candidates).toBe(60);
       expect(snapshot?.origins["local_scorer.max_parents"]).toBe("file");

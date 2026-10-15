@@ -101,3 +101,43 @@ from 10.12s to 11.07s. Negative rejection stays at 14/15 with the same threshold
 Two short-function misses remain, and these development
 results do not replace the frozen held-out assessment. See the
 [coverage live proof](../../../research/reliable-code-scorer-coverage-live-2026-10-15.json).
+
+
+## Refreshing attached callable comments
+
+The callable-comment correction changes the source-coverage fingerprint. Rescan
+the repository, then run embedding reindex until its backlog drains. A reindex
+alone cannot add comments to older canonical declaration-only chunks. Check the
+new representation on development queries and negatives before sealing its
+calibration. Old artifacts do not validate against the new passage identity.
+The model, 50-parent/75-pair bounds and confidence policy are unchanged.
+Comments remain exact source evidence, and declaration locations remain the AST
+node spans. This correction does not add summaries or a new metadata field.
+
+
+## Ordering uncertain answer parts
+
+`evidence.weak_parent_order` defaults to `best_lane_rank`. With a validated
+cross-encoder calibration, confident model results remain first. The uncertain
+tail uses the best contributing lexical/vector source rank, then RRF/stable
+order, instead of trusting weak model-score differences. This adds no candidates
+and does not weaken packet confidence or change raw model scores. To retain
+pure scorer ordering, set:
+
+```sh
+ENGRAM_CODE__EVIDENCE__WEAK_PARENT_ORDER=scorer
+```
+
+Changing this setting requires a matching calibration artifact. Graph expansion
+and zero-weight lanes do not supply an independent fallback rank. Unvalidated,
+failed or disabled cross-encoding retains its existing ordering.
+
+
+Development verification on rebuilt copies preserves all previously retrieved
+required units across 30 positive questions. Mean required-unit recall@10 rises
+from 60.0% to 63.3% (Engram), 60.0% to 65.0% (Flask), and 80.0% to 90.0% (Vite).
+Negative rejection remains 14/15 with the same threshold. Vite warm median
+latency rises from 11.07s to 13.40s. Existing stores need source rescan, embedding
+reindex and a matching calibration; this verification does not upgrade the
+actual self store or replace the frozen held-out assessment. See the
+[live proof](../../../research/reliable-code-callable-comments-live-2026-10-15.json).

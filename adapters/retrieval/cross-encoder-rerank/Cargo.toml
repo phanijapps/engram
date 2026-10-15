@@ -21,3 +21,7 @@ local-onnx = ["dep:engram-local-model-assets", "dep:fastembed", "dep:tokenizers"
 [dev-dependencies]
 chrono.workspace = true
 tempfile = "3"
+
+[[example]]
+name = "score_probe"
+required-features = ["local-onnx"]

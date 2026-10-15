@@ -106,12 +106,35 @@ class ObservationTests(unittest.TestCase):
 
 
 class FreezeAndDenominatorTests(unittest.TestCase):
+    def test_real_artifact_hashes_accept_json_paths_and_block_drift_before_release(self):
+        import json,tempfile
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import code_evidence_assessment as module
+        from code_evidence_eval_support import artifact_paths,store_paths
+        from code_eval_corpus import sha256
+        class ReleaseReached(Exception):pass
+        with tempfile.TemporaryDirectory() as directory:
+            output=Path(directory);args=SimpleNamespace(output=output,base=output/'base')
+            for path in artifact_paths(args):path.write_bytes(b'frozen')
+            frozen={'outputRoot':str(output.resolve()),'baseRoot':str(args.base.resolve()),'assessmentMarker':str((output/'assessment-started.json').resolve()),
+                    'inputs':{},'artifacts':{str(p.resolve()):sha256(p) for p in artifact_paths(args)},'storeIdentities':{str(p.resolve()):{} for p in store_paths(args)}}
+            (output/'freeze.json').write_text(json.dumps(frozen))
+            with patch.object(module,'identity',return_value={}),patch.object(module,'logical_store_identity',return_value={}),patch.object(module,'inputs',side_effect=ReleaseReached) as release:
+                target=artifact_paths(args)[0];target.write_bytes(b'drift')
+                with self.assertRaisesRegex(ValueError,'artifact drift'):module.assessment(args)
+                release.assert_not_called();self.assertFalse((output/'assessment-started.json').exists())
+                target.write_bytes(b'frozen')
+                with self.assertRaises(ReleaseReached):module.assessment(args)
+                release.assert_called_once_with(args,'heldout')
+                self.assertTrue((output/'assessment-started.json').exists())
+
     def test_failed_positive_and_negative_cases_remain_in_their_denominators(self):
         from code_evidence_assessment import summarize
         entries=[{'id':str(i),'polarity':'answerable' if i<2 else 'negative'} for i in range(4)]
         def row(i,score,failed=False,status=None):
             return {'id':str(i),'corpus':'engram','failed':failed,'evidenceStatus':status,'metrics':{'candidateRecallAt50':score,'requiredUnitRecallAt10':score,'requiredRangeCoverage':score,'mrrAt10':score,'ndcgAt10':score,'allRequiredRecovered':score==1,'unjudgedPrimaryItems':0}}
-        result=summarize([row(0,1),row(1,0,True),row(2,None,status='insufficient_evidence'),row(3,None,True)],entries)
+        result=summarize([row(0,1),row(1,0,True),row(2,None,status='insufficient_evidence'),row(3,None,True,status='insufficient_evidence')],entries)
         self.assertEqual(result['answerableCount'],2);self.assertEqual(result['requiredUnitRecallAt10'],.5)
         self.assertEqual(result['negativeCount'],2);self.assertEqual(result['negativeInsufficient'],1)
         self.assertEqual(result['failedCalls'],2)
@@ -211,6 +234,16 @@ class AssessmentIntegrityTests(unittest.TestCase):
             finish_metrics(broken,entries);self.assertFalse(broken['allQualityAndWarmGatesPass'])
         broken=copy.deepcopy(report);broken['baseline']['engram']['startup']['failed']=True
         finish_metrics(broken,entries);self.assertFalse(broken['allQualityAndWarmGatesPass'])
+        broken=copy.deepcopy(report);by_id={e['id']:e for e in entries}
+        negatives=[c for run in broken['balanced'].values() for c in run['cases'] if by_id[c['id']]['polarity']=='negative']
+        self.assertEqual(len(negatives),20)
+        for index,case in enumerate(negatives):
+            case['evidenceStatus']='insufficient_evidence' if index<18 else 'candidates_available'
+            case['failed']=index==17
+        finish_metrics(broken,entries)
+        self.assertEqual(broken['summaries']['balanced']['heldout']['negativeCount'],20)
+        self.assertEqual(broken['summaries']['balanced']['heldout']['negativeInsufficient'],17)
+        self.assertFalse(broken['gates']['heldoutNegatives18of20'])
 
 
 class ProbeIsolationTests(unittest.TestCase):

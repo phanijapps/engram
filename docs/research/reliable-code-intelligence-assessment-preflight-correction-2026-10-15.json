@@ -1,0 +1,23 @@
+{
+  "phase": "pre-release assessment harness correction",
+  "heldoutReleased": false,
+  "previousDevelopment": "270 real calls completed; exact v1 evidence retained, not rebound",
+  "failedFreezeSha256": "30fcdc6c3866f28ed8733bcbd4b4c1939fd319e0d324b9e074bb529abf6a8c14",
+  "failureLog": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v1/preflight-failure/reliable-t10-freeze-assess-history.log",
+  "oldAssessmentModuleSha256": "fc14e464e8f8de4bfca5fed1ef5031d85ee9db06046c5bb5fde56d835bfcf532",
+  "frozenStoresUnchanged": {
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/stores/engram-t5-context": true,
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/stores/engram-baseline": true,
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/stores/flask-t5-context-v2": true,
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/stores/flask-baseline": true,
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/stores/vite-t5-context": true,
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/stores/vite-baseline": true
+  },
+  "corrections": [
+    "Convert JSON artifact path strings to Path before real hashing",
+    "Failed negative calls remain in denominator and contribute zero rejection credit"
+  ],
+  "freshDevelopmentAttempt": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2",
+  "runtimeModelConfigLabelsChanged": false,
+  "testsPassed": 29
+}

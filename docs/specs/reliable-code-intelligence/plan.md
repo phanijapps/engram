@@ -676,6 +676,17 @@ explicitly unvalidated. No runtime preset, frozen corpus, query or label changed
 See `reviews/t11-paired-tail-{adversarial,quality}-2026-10-15.md` and the
 paired-tail live research artifact.
 
+**Assessment preflight correction (T10):** The first completed development run
+and freeze exposed a harness path-type bug before any held-out selection or
+assessment marker: JSON artifact keys are strings, while the real hash helper
+requires Paths. Convert explicitly and cover the guard with real file hashing,
+not a mocked hash helper. Failed negative calls also remain in the denominator
+but receive zero insufficiency credit, including structured invalid responses.
+Preserve the original v1 run/freeze/failure receipts and unchanged store identities;
+rerun all development calls under the corrected v2 runner identity rather than
+rebinding old measurements. No runtime model, profile, query, label or target
+changes. Only after fresh development/freeze may the single assessment open.
+
 **Baseline lineage correction (T10):** Accepted T0 reports predate blind label
 range review and retain historical manifest digests. Admit the exact committed
 T0 receipt and each raw artifact's recorded hash/content, pin the final reviewed

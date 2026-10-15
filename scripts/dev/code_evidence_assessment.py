@@ -30,7 +30,7 @@ def summarize(rows, entries):
         values=[c['metrics'][key] for c in positive if c['metrics'][key] is not None]
         result[key]=sum(values)/len(values) if values else None
     result['allRequiredRecovered']=sum(c['metrics']['allRequiredRecovered'] for c in positive)
-    result['negativeInsufficient']=sum(c.get('evidenceStatus')=='insufficient_evidence' for c in negative)
+    result['negativeInsufficient']=sum(not c.get('failed') and c.get('evidenceStatus')=='insufficient_evidence' for c in negative)
     result['unjudgedPrimaryItems']=sum(c['metrics']['unjudgedPrimaryItems'] for c in rows)
     result['perRepository']={name:summarize_subset([c for c in positive if c['corpus']==name]) for name in ('engram','flask','vite')}
     return result
@@ -198,7 +198,7 @@ def assessment(args):
         raise ValueError('assessment root/marker differs from frozen runtime paths')
     if set(frozen['artifacts'])!={str(p.resolve()) for p in artifact_paths(args)} or set(frozen['storeIdentities'])!={str(p.resolve()) for p in store_paths(args)}:
         raise ValueError('frozen path inventories differ from actual runtime artifacts/stores')
-    if frozen['inputs']!=identity(args) or any(sha256(path)!=expected for path,expected in frozen['artifacts'].items()):
+    if frozen['inputs']!=identity(args) or any(sha256(Path(path))!=expected for path,expected in frozen['artifacts'].items()):
         raise ValueError('freeze input/artifact drift; held-out inputs have not been released')
     if any(logical_store_identity(Path(path))!=expected for path,expected in frozen['storeIdentities'].items()):
         raise ValueError('frozen persisted store identity drift before held-out release')

@@ -53,6 +53,7 @@ pub(super) fn fuse(
             .entry(id)
             .and_modify(|candidate| candidate.fusion_traces.push(hit.trace.clone()))
             .or_insert(CodeCandidate {
+                indexed_revision: None,
                 segment: hit.resolved.segment,
                 parent: hit.resolved.parent,
                 fusion_score: 0.0,

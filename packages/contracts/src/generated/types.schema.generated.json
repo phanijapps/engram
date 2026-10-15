@@ -1357,6 +1357,13 @@
           "minItems": 1,
           "type": "array"
         },
+        "rerankContext": {
+          "items": {
+            "$ref": "#/$defs/CodeContextFact"
+          },
+          "maxItems": 20,
+          "type": "array"
+        },
         "rerankInput": {
           "anyOf": [
             {
@@ -1372,6 +1379,14 @@
             "number",
             "null"
           ]
+        },
+        "rerankSources": {
+          "items": {
+            "$ref": "#/$defs/CodeEvidenceSourceRef"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "type": "array"
         },
         "segmentId": {
           "minLength": 1,
@@ -2453,6 +2468,10 @@
             "learned_ranker"
           ],
           "type": "string"
+        },
+        "rank": {
+          "minimum": 1,
+          "type": "integer"
         },
         "rerankScore": {
           "type": "number"

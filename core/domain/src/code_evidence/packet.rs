@@ -93,6 +93,12 @@ pub struct CodeSegmentEvidence {
     pub embedding_input: CodeTokenCoverage,
     #[serde(deserialize_with = "crate::code_evidence::required_nullable")]
     pub rerank_input: Option<CodeTokenCoverage>,
+    /// Exact successful scorer-view inputs; original embedding ranges remain
+    /// in `sources`. Absent for disabled/failed scoring.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rerank_sources: Option<Vec<CodeEvidenceSourceRef>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rerank_context: Option<Vec<CodeContextFact>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

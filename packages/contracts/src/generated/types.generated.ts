@@ -1670,8 +1670,477 @@ export interface CodeSegmentEvidence {
         FusionTrace,
         FusionTrace
       ];
+  /**
+   * @maxItems 20
+   */
+  rerankContext?:
+    | []
+    | [CodeContextFact]
+    | [CodeContextFact, CodeContextFact]
+    | [CodeContextFact, CodeContextFact, CodeContextFact]
+    | [CodeContextFact, CodeContextFact, CodeContextFact, CodeContextFact]
+    | [CodeContextFact, CodeContextFact, CodeContextFact, CodeContextFact, CodeContextFact]
+    | [CodeContextFact, CodeContextFact, CodeContextFact, CodeContextFact, CodeContextFact, CodeContextFact]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ]
+    | [
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact,
+        CodeContextFact
+      ];
   rerankInput: CodeTokenCoverage | null;
   rerankScore: number | null;
+  /**
+   * @minItems 1
+   * @maxItems 20
+   */
+  rerankSources?:
+    | [CodeEvidenceSourceRef]
+    | [CodeEvidenceSourceRef, CodeEvidenceSourceRef]
+    | [CodeEvidenceSourceRef, CodeEvidenceSourceRef, CodeEvidenceSourceRef]
+    | [CodeEvidenceSourceRef, CodeEvidenceSourceRef, CodeEvidenceSourceRef, CodeEvidenceSourceRef]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ]
+    | [
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef,
+        CodeEvidenceSourceRef
+      ];
   segmentId: string;
   /**
    * @minItems 1
@@ -1919,6 +2388,7 @@ export interface FusionTrace {
   deduplicatedWith?: string[];
   fusionScore?: number;
   fusionStrategy?: "none" | "weighted_sum" | "reciprocal_rank_fusion" | "max_score" | "learned_ranker";
+  rank?: number;
   rerankScore?: number;
   rerankStrategy?: "none" | "mmr" | "cross_encoder" | "llm_judge" | "policy_priority";
   source: string;

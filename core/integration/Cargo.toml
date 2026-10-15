@@ -104,3 +104,7 @@ required-features = ["fastembed"]
 [[example]]
 name = "code_candidate_probe"
 required-features = ["fastembed"]
+
+[[example]]
+name = "code_evidence_probe"
+required-features = ["fastembed", "cross-encoder-rerank"]

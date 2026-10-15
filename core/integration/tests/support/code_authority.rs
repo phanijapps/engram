@@ -23,6 +23,9 @@ pub(crate) struct Model {
     pub(crate) queries: AtomicUsize,
 }
 impl EmbeddingProvider for Model {
+    fn asset_identity(&self) -> Option<&str> {
+        Some("test-verified-embedding-manifest")
+    }
     fn is_local(&self) -> bool {
         true
     }
@@ -125,7 +128,6 @@ pub(crate) struct Fixture {
     pub(crate) expansion: Arc<Graph>,
 }
 pub(crate) fn fixture() -> Fixture {
-    let root = tempfile::tempdir().unwrap();
     let text: String = (0..35)
         .map(|i| {
             format!(
@@ -134,7 +136,52 @@ pub(crate) fn fixture() -> Fixture {
             )
         })
         .collect();
+    fixture_with_text(&text)
+}
+pub(crate) fn fixture_with_text(text: &str) -> Fixture {
+    fixture_text(text, false)
+}
+pub(crate) fn fixture_with_git(text: &str) -> Fixture {
+    fixture_text(text, true)
+}
+fn fixture_text(text: &str, git: bool) -> Fixture {
+    let root = tempfile::tempdir().unwrap();
     std::fs::write(root.path().join("public.ts"), text).unwrap();
+    if git {
+        for args in [
+            vec!["init", "-q"],
+            vec![
+                "remote",
+                "add",
+                "origin",
+                "https://example.invalid/fixture.git",
+            ],
+            vec!["add", "public.ts"],
+            vec!["commit", "-qm", "fixture"],
+        ] {
+            let out = std::process::Command::new("git")
+                .current_dir(root.path())
+                .args([
+                    "-c",
+                    "core.hooksPath=/dev/null",
+                    "-c",
+                    "commit.gpgSign=false",
+                    "-c",
+                    "user.name=EngramFixture",
+                    "-c",
+                    "user.email=fixture@example.invalid",
+                ])
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                out.status.success(),
+                "git fixture setup: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+        }
+    }
+
     let store = Arc::new(SqlKnowledgeStore::open_in_memory().unwrap());
     let scope: Scope = serde_json::from_value(json!({"tenant":"t","workspace":"w"})).unwrap();
     let requester: Requester =

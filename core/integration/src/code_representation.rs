@@ -5,7 +5,7 @@ use engram_retrieval::CodeIndexConfig;
 use engram_runtime::{CoreError, CoreResult};
 use sha2::{Digest, Sha256};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct CodeRepresentation {
     pub id: String,
     pub embedding_space: EmbeddingSpace,

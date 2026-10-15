@@ -859,3 +859,78 @@ fn target_access_matches_full_access_for_every_owner_without_visiting_unrelated_
             .is_err()
     );
 }
+
+#[test]
+fn indexed_revision_is_authorized_current_metadata_with_document_source_fallbacks() {
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    for (path, document_version, source_version, revision, expected) in [
+        (
+            "doc.ts",
+            Some("doc-rev"),
+            Some("source-rev"),
+            Some("git-rev"),
+            Some("doc-rev"),
+        ),
+        (
+            "source.ts",
+            None,
+            Some("source-rev"),
+            Some("git-rev"),
+            Some("source-rev"),
+        ),
+        ("git.ts", None, None, Some("git-rev"), Some("git-rev")),
+        ("unknown.ts", None, None, None, None),
+    ] {
+        let mut m = manifest(path, "first", "hello");
+        block_on(store.begin_code_source(m.clone(), None)).unwrap();
+        block_on(store.stage_code_records(&m.file, &m.attempt_id, &m.records)).unwrap();
+        let (mut source, mut document) = parents(&m);
+        source.version = source_version.map(str::to_owned);
+        document.version = document_version.map(str::to_owned);
+        if let Some(revision) = revision {
+            source
+                .metadata
+                .as_mut()
+                .unwrap()
+                .insert("revision".into(), json!(revision));
+        }
+        for record in [
+            CodeSourceWrite::Source(source),
+            CodeSourceWrite::Document(document),
+            CodeSourceWrite::Chunk(chunk(&m, "hello")),
+        ] {
+            block_on(store.write_code_record(&m.file, &m.attempt_id, record)).unwrap();
+        }
+        m.state = CodeSourceState::Active;
+        block_on(store.activate_code_source(m.clone())).unwrap();
+        let requester = read(&m).requester;
+        assert_eq!(
+            block_on(store.indexed_code_revision(&m.file, &m.file.scope, &requester))
+                .unwrap()
+                .as_deref(),
+            expected
+        );
+        let stranger: Requester =
+            serde_json::from_value(json!({"actor":{"id":"stranger","kind":"agent"}})).unwrap();
+        assert!(
+            block_on(store.indexed_code_revision(&m.file, &m.file.scope, &stranger))
+                .unwrap()
+                .is_none()
+        );
+        let wrong: Scope = serde_json::from_value(json!({"tenant":"other"})).unwrap();
+        assert!(
+            block_on(store.indexed_code_revision(&m.file, &wrong, &requester))
+                .unwrap()
+                .is_none()
+        );
+        let prior = m.attempt_id.clone();
+        m.attempt_id = "next".into();
+        m.state = CodeSourceState::Updating;
+        block_on(store.begin_code_source(m.clone(), Some(&prior))).unwrap();
+        assert!(
+            block_on(store.indexed_code_revision(&m.file, &m.file.scope, &requester))
+                .unwrap()
+                .is_none()
+        );
+    }
+}

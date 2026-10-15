@@ -28,7 +28,8 @@ pub use engram_runtime::{CoreError, CoreResult};
 
 pub use code_source::{
     CodeSourceRepository, authorize_code_source_access, authorize_code_source_read,
-    authorize_code_source_scope, code_source_retrieval_authorized, validate_code_unit_hierarchy,
+    authorize_code_source_scope, code_source_retrieval_authorized,
+    source_retrieval_policy_authorized, validate_code_unit_hierarchy,
 };
 pub use graph::KnowledgeGraphRepository;
 pub use identity::EntityIdentityRepository;

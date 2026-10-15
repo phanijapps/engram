@@ -1141,6 +1141,10 @@
           "items": {
             "type": "string"
           }
+        },
+        "rank": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },
@@ -3047,6 +3051,21 @@
               "type": "null"
             }
           ]
+        },
+        "rerankSources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeEvidenceSourceRef"
+          },
+          "minItems": 1,
+          "maxItems": 20
+        },
+        "rerankContext": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeContextFact"
+          },
+          "maxItems": 20
         }
       },
       "required": [

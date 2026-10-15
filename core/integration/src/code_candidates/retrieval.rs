@@ -145,8 +145,36 @@ pub async fn collect(
     });
     final_hits.extend(expanded);
     let start = Instant::now();
-    let candidates = fusion::fuse(&request, &config, final_hits)?;
+    let mut candidates = fusion::fuse(&request, &config, final_hits)?;
     *phase_ms.entry("fusion".into()).or_default() += start.elapsed().as_secs_f64() * 1000.0;
+    let start = Instant::now();
+    let sources = provider
+        .require_knowledge()?
+        .code_sources()
+        .ok_or_else(|| CoreError::ProviderUnavailable {
+            provider: "code source authority".into(),
+        })?;
+    let mut revisions = std::collections::HashMap::new();
+    for candidate in &mut candidates {
+        let key = serde_json::to_string(&candidate.segment.file).map_err(|_| {
+            CoreError::ValidationFailed {
+                reason: "invalid indexed source identity".into(),
+            }
+        })?;
+        if !revisions.contains_key(&key) {
+            revisions.insert(
+                key.clone(),
+                sources
+                    .indexed_code_revision(&candidate.segment.file, scope, requester)
+                    .await?,
+            );
+        }
+        candidate.indexed_revision = revisions[&key].clone();
+    }
+    phase_ms.insert(
+        "indexed_provenance".into(),
+        start.elapsed().as_secs_f64() * 1000.0,
+    );
     candidate_counts.insert("fused_segments".into(), candidates.len() as u32);
     candidate_counts.insert(
         "fused_parents".into(),

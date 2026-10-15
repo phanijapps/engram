@@ -391,6 +391,60 @@ stubs, and normal invocation performs no network access.
 
 ### T8: Shared evidence operation and diagnostics
 
+**Execution:** Component complete. Fifteen evidence integration tests, two assembly
+budget tests and independent adversarial, quality and security re-reviews passed.
+The real offline BGE/Jina probe after review fixes returned 10 current items from
+42/30 scored pairs in 12.36/7.61 seconds; exact excerpt bytes, known indexed
+revision, complete token coverage and accepted-schema validation passed. Missing
+calibration correctly returned insufficient evidence. This is a component proof,
+not the held-out quality or final p95 gate. See the dated T8 review reports and
+`docs/research/reliable-code-intelligence-evidence-live-2026-10-15.json`.
+
+**Construction design:** `code_evidence` contains focused preflight, scorer-view
+preparation, ranking, calibration, assembly and operation modules. Byte admission
+and actual embedding/scorer query budgets precede every inference; locality is
+checked before any injected scorer inspector receives a query or code. Only
+implementation parents enter the scorer pool; other categories remain bounded
+supporting units. Oversized pairs split exact source ranges using untruncated
+scorer offsets and complete-pair checks, with whole context facts omitted only
+when needed to fit. Continuation views share their original embedding segment;
+compatible optional `rerankSources`/`rerankContext` preserve exact successful pair
+inputs separately from original embedding coverage. Pooling runs across views
+with existing one-parent-first/round-robin helpers, at most the configured pair
+count; aggregation emits only the best scored view per embedding segment.
+Calibration is injected as a typed immutable artifact; its runtime binding
+hashes effective settings, actual model/tokenizer identities and both input
+representation contracts. Continuation preparation is lazy and bounded by the
+pair-work cap: the existing pool selects original segments first; prepare the
+first exact view of each selected segment in pool order, then spend remaining
+slots on continuations round-robin by prior parent order. A cursor records source
+remaining without enumerating every future view. Diagnostics distinguish omitted
+original segments/parents, prepared-but-unscored views and original segments with
+unprepared continuation tails; unknown future view counts are never invented.
+Request overrides invalidate a nonmatching artifact.
+Threshold follows parent aggregation and precedes diversity. Assembly uses exact
+range excerpts, counts every emitted source/context token, enforces all array
+and serialized-byte bounds, and reports omissions. The operation compares the
+source/index revision after all inference and assembly, retries at most once,
+then returns only re-resolved current ranges or drops the affected packet;
+request caches never grant authorization. The recheck covers exact heads,
+policies, attempts, generations, representations and every supporting/context
+donor, not Git revision alone. Changed bytes never inherit an old score: retry
+the complete pipeline once or drop the evidence. Internal view IDs are unique
+and retain their original segment mapping; stable maximum-view ties preserve
+prior RRF/view order. Original-segment omissions and extra unscored views have
+separate counters. Scorer-view rendering, separators and continuation rules have
+a versioned identity included in calibration. A winning score, coverage, ranges
+and facts are one coherent record; if budgets cannot retain it intact, omit it
+rather than trim input references while retaining the score. Evidence status is
+computed from final post-budget/post-recheck primary items only. Scope/requester
+stay trusted host input. Numeric preparation/attempt counters survive model
+fallback while all views/scores/source text are discarded. Source-change retries
+retain only discarded-attempt pair counts and retry count; final per-view counts
+refer to the retained attempt. Current indexed source/document revision metadata
+is obtained through an exact-scope, retrieval-authorized knowledge port and
+rechecked with source authority; it is never inferred from the live Git checkout.
+
 **Depends on:** T5, T6, T7
 **Mode:** TDD and source-grounded integration.
 **Spec mapping:** AC5–AC7.

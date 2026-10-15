@@ -1941,6 +1941,7 @@ Fields:
 | Field | Required | Type | Meaning |
 |-------|----------|------|---------|
 | `source` | yes | string | Retrieval source name |
+| `rank` | no | positive integer | Final fused position; compatible schema promotion of the existing Rust field |
 | `sourceRank` | no | integer | Rank within source result list |
 | `sourceScore` | no | number | Score before fusion |
 | `fusionStrategy` | no | FusionStrategy | Fusion method |
@@ -2672,7 +2673,18 @@ Primary items carry normalized per-unit `sourceCategory=implementation`;
 tests/generated/unknown/documentation units are supporting context. Structured
 excerpts map text to exact byte ranges. Bounded segment evidence carries
 contributing `FusionTrace`s, source ranges and embedding/rerank token coverage.
-Context/unresolved-import facts have independently authorized sources.
+`CodeSegmentEvidence.sources` always identifies the complete original embedding
+segment input ranges. Compatible optional `rerankSources` and `rerankContext`
+identify the exact source subranges and whole context facts used by a successful
+scorer pair, including deterministic continuations. They are absent on disabled
+or failed scoring. These derived scoring views never replace embedding segment
+identity, original coverage or canonical code. Multiple scored views of one
+embedding segment collapse to its best score; the emitted rerank ranges/coverage
+belong to that winning view. Context/unresolved-import facts have independently
+authorized sources. Current indexed revision metadata comes from the authorized
+canonical document version, source version or persisted source revision metadata;
+unknown or unauthorized revisions remain null. The knowledge source port owns
+this retrieval-only lookup; it grants no raw-source-read permission.
 Diagnostics distinguish strategy score spaces, scored pairs, omitted segments/
 parents, calibration identity/status and effective settings. Unvalidated or
 fallback packets are insufficient even when candidates remain for inspection.

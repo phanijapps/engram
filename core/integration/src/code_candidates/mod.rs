@@ -10,6 +10,7 @@ pub use retrieval::collect;
 use std::collections::BTreeMap;
 
 pub struct CodeCandidate {
+    pub indexed_revision: Option<String>,
     pub segment: CodeEmbeddingSegment,
     pub parent: KnowledgeChunk,
     pub fusion_score: f32,

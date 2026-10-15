@@ -65,6 +65,14 @@ pub(super) fn current_attempt(
 
 #[async_trait]
 impl CodeSourceRepository for SqlKnowledgeStore {
+    async fn indexed_code_revision(
+        &self,
+        file: &CodeFileKey,
+        scope: &Scope,
+        requester: &Requester,
+    ) -> CoreResult<Option<String>> {
+        super::code_source_provenance::indexed_revision(self, file, scope, requester)
+    }
     async fn get_code_source(
         &self,
         file: &CodeFileKey,

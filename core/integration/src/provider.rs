@@ -70,6 +70,7 @@ pub struct EngramProvider {
     vectors: Option<Arc<dyn VectorIndex>>,
     code_vectors: Option<Arc<dyn VectorIndex>>,
     code_scorer: Option<Arc<dyn RerankScorer>>,
+    code_calibration: Option<engram_domain::CodeCalibrationArtifact>,
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
@@ -328,6 +329,20 @@ impl EngramProvider {
     pub fn code_vectors(&self) -> Option<&Arc<dyn VectorIndex>> {
         self.code_vectors.as_ref()
     }
+    /// Installs an immutable operator-supplied development calibration on this
+    /// provider instance. Requests cannot supply or replace the artifact.
+    pub fn with_code_calibration(
+        mut self,
+        artifact: engram_domain::CodeCalibrationArtifact,
+    ) -> Self {
+        self.code_calibration = Some(artifact);
+        self
+    }
+
+    pub fn code_calibration(&self) -> Option<&engram_domain::CodeCalibrationArtifact> {
+        self.code_calibration.as_ref()
+    }
+
     pub fn code_scorer(&self) -> Option<&Arc<dyn RerankScorer>> {
         self.code_scorer.as_ref()
     }
@@ -663,6 +678,7 @@ impl EngramProvider {
             vectors: None,
             code_vectors: None,
             code_scorer: None,
+            code_calibration: None,
             migration: None,
             embedding_provider: None,
             provenance: None,
@@ -706,6 +722,7 @@ pub struct EngramProviderBuilder {
     vectors: Option<Arc<dyn VectorIndex>>,
     code_vectors: Option<Arc<dyn VectorIndex>>,
     code_scorer: Option<Arc<dyn RerankScorer>>,
+    code_calibration: Option<engram_domain::CodeCalibrationArtifact>,
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
@@ -743,6 +760,7 @@ impl EngramProviderBuilder {
             vectors: None,
             code_vectors: None,
             code_scorer: None,
+            code_calibration: None,
             migration: None,
             embedding_provider: None,
             provenance: None,
@@ -851,6 +869,11 @@ impl EngramProviderBuilder {
         self.code_vectors = Some(handle);
         self
     }
+    pub fn code_calibration(mut self, artifact: engram_domain::CodeCalibrationArtifact) -> Self {
+        self.code_calibration = Some(artifact);
+        self
+    }
+
     pub fn code_scorer(mut self, handle: Arc<dyn RerankScorer>) -> Self {
         self.code_scorer = Some(handle);
         self
@@ -987,6 +1010,7 @@ impl EngramProviderBuilder {
             vectors: self.vectors,
             code_vectors: self.code_vectors,
             code_scorer: self.code_scorer,
+            code_calibration: self.code_calibration,
             migration: self.migration,
             embedding_provider: self.embedding_provider,
             provenance: self.provenance,

@@ -25,13 +25,12 @@ pub fn document_head_retrieval_authorized(
 ) -> bool {
     head.state == engram_domain::CodeSourceState::Active
         && &head.key.scope == scope
-        && head
-            .policy
-            .allowed_uses
-            .contains(&engram_domain::AllowedUse::Retrieval)
-        && head.policy.expires_at.is_none_or(|expiry| expiry > now)
-        && (head.policy.visibility != engram_domain::Visibility::Private
-            || requester.actor.id == head.provenance.actor.id)
+        && crate::source_retrieval_policy_authorized(
+            &head.policy,
+            &head.provenance.actor,
+            requester,
+            now,
+        )
 }
 
 #[async_trait]

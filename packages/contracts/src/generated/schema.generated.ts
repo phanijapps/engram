@@ -1358,6 +1358,13 @@ export const engramV1Schema = {
           "minItems": 1,
           "type": "array"
         },
+        "rerankContext": {
+          "items": {
+            "$ref": "#/$defs/CodeContextFact"
+          },
+          "maxItems": 20,
+          "type": "array"
+        },
         "rerankInput": {
           "anyOf": [
             {
@@ -1373,6 +1380,14 @@ export const engramV1Schema = {
             "number",
             "null"
           ]
+        },
+        "rerankSources": {
+          "items": {
+            "$ref": "#/$defs/CodeEvidenceSourceRef"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "type": "array"
         },
         "segmentId": {
           "minLength": 1,
@@ -2454,6 +2469,10 @@ export const engramV1Schema = {
             "learned_ranker"
           ],
           "type": "string"
+        },
+        "rank": {
+          "minimum": 1,
+          "type": "integer"
         },
         "rerankScore": {
           "type": "number"

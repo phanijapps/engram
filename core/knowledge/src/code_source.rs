@@ -14,6 +14,17 @@ pub trait CodeSourceRepository: Send + Sync {
     async fn get_code_source(&self, file: &CodeFileKey)
     -> CoreResult<Option<CodeSourceGeneration>>;
 
+    /// Indexed source/document revision when current and retrieval-authorized.
+    /// This metadata lookup never confers a raw-source read grant.
+    async fn indexed_code_revision(
+        &self,
+        _file: &CodeFileKey,
+        _scope: &Scope,
+        _requester: &Requester,
+    ) -> CoreResult<Option<String>> {
+        Ok(None)
+    }
+
     /// Compare-and-set to an updating attempt, before destructive replacement.
     async fn begin_code_source(
         &self,
@@ -204,13 +215,12 @@ pub fn code_source_retrieval_authorized(
 ) -> bool {
     manifest.file.is_valid()
         && manifest.file.scope == *scope
-        && manifest
-            .policy
-            .allowed_uses
-            .contains(&AllowedUse::Retrieval)
-        && manifest.policy.expires_at.is_none_or(|v| v > now)
-        && (manifest.policy.visibility != Visibility::Private
-            || requester.actor.id == manifest.provenance.actor.id)
+        && source_retrieval_policy_authorized(
+            &manifest.policy,
+            &manifest.provenance.actor,
+            requester,
+            now,
+        )
 }
 
 /// Parent anchors must resolve to a strictly containing declaration in the
@@ -248,4 +258,16 @@ pub fn validate_code_unit_hierarchy<'a>(
         }
     }
     Ok(())
+}
+
+/// Shared source/document retrieval policy check, independent of raw-read grants.
+pub fn source_retrieval_policy_authorized(
+    policy: &Policy,
+    owner: &Actor,
+    requester: &Requester,
+    now: Timestamp,
+) -> bool {
+    policy.allowed_uses.contains(&AllowedUse::Retrieval)
+        && policy.expires_at.is_none_or(|expiry| expiry > now)
+        && (policy.visibility != Visibility::Private || requester.actor.id == owner.id)
 }

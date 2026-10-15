@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use engram_domain::*;
 use engram_ingest::{ScanOptions, scan_repository};
 use engram_integration::{
-    CapabilityReport, EngramProvider, EngramProviderBuilder,
-    code_candidates::collect, code_representation::code_representation,
+    CapabilityReport, EngramProvider, EngramProviderBuilder, code_candidates::collect,
+    code_representation::code_representation,
 };
 use engram_knowledge::{CodeSegmentRepository, CodeSourceRepository};
 use engram_retrieval::CodeRetrievalLane;

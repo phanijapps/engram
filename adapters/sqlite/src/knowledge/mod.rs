@@ -17,6 +17,7 @@ mod code_segments_schema;
 mod code_segments_state;
 mod code_segments_validation;
 mod code_source;
+mod code_source_provenance;
 mod connection_options;
 mod document_code_head;
 mod document_derived_write;

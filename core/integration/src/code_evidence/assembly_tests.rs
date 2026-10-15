@@ -292,3 +292,44 @@ fn parent_decision_limits_discard_diagnostics_before_evidence() {
     );
     assert!(serde_json::to_vec(&pressure).unwrap().len() <= 261632);
 }
+
+#[test]
+fn query_confidence_keeps_lower_scored_parts_of_an_accepted_answer() {
+    let p = packet_with(2, 3, |_, _, ranking, _| {
+        ranking.parents[1].score = -1.0;
+        ranking.parents[1].segments[0].2 = -1.0;
+        ranking.scores[1] = -1.0;
+    });
+    assert_eq!(
+        p.items.len(),
+        2,
+        "one passing parent must not hide other ranked implementation parts"
+    );
+    assert_eq!(p.items[1].rerank_score, Some(-1.0));
+    assert_eq!(p.evidence_status, CodeEvidenceStatus::CandidatesAvailable);
+    assert!(
+        p.diagnostics
+            .parent_decisions
+            .iter()
+            .all(|d| d.reason == CodeParentDecisionReason::Selected)
+    );
+}
+
+#[test]
+fn query_confidence_requires_a_returnable_passing_parent() {
+    let p = packet_with(2, 3, |_, primary, ranking, _| {
+        primary[0].parent.location.as_mut().unwrap().anchor = Some("a".repeat(270000));
+        ranking.parents[1].score = -1.0;
+        ranking.parents[1].segments[0].2 = -1.0;
+        ranking.scores[1] = -1.0;
+    });
+    assert!(
+        p.items.is_empty(),
+        "a high score without returnable evidence cannot admit an answer"
+    );
+    assert_eq!(p.evidence_status, CodeEvidenceStatus::InsufficientEvidence);
+    assert_eq!(
+        p.diagnostics.parent_decisions[1].reason,
+        CodeParentDecisionReason::BelowThreshold
+    );
+}

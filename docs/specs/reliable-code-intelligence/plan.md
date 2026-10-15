@@ -23,6 +23,31 @@ the original evaluation store's logical identity is unchanged. See
 The next sequential change is the ranking/confidence accuracy fix; traces now
 show the actual cause rather than inferring it from final omissions.
 
+**Sequential fix 2 — confidence scope:** Negative calibration fits the maximum
+score of a returnable packet, but the original runtime filtered every parent.
+Align the scope: retain bounded ranked implementation parts when at least one
+returnable parent passes; otherwise clear primary evidence and restore its
+token/file allowance for supporting context. Add a versioned binding so old
+artifacts cannot validate under changed semantics. Reproduce a mixed-score
+answer dropping its second implementation part, then test all-below rejection,
+nonreturnable high scores, old-artifact invalidation and actual-model failed
+development cases plus the fixed development negatives. Preserve completed
+held-out results. Models, ranking order, score threshold and targets stay fixed.
+
+**Fix 2 result:** The mixed-score regression fails before the correction and
+passes after it. Real-model before/after calls on disposable store copies recover
+all required parents for four of five selected failed development queries
+(Engram deny-path and Vite d02/d04/d09); all five failed before. Vite d01 remains
+below packet confidence. All fifteen development negatives are checked at runtime:
+14 reject, with exactly the same rejection identities as the prior completed
+development run. Prior accepted primary items retain their model scores. The
+threshold and development-label digest are unchanged; old artifact bindings
+are rejected and the new binding is separately sealed. Original stores retain
+their logical identities and the self store is unopened. All eleven repository
+gates pass (1,195 Rust tests, 10 ignored). No held-out or overall quality result
+is inferred from this deliberately selected regression set. See
+[confidence live proof](../../research/reliable-code-packet-confidence-live-2026-10-15.json).
+
 Freeze the evaluation first, promote the reviewed portable contracts, then build
 configuration and current-document authority. Add derivative AST/token coverage
 without replacing canonical methods. Separate candidate retrieval from output,

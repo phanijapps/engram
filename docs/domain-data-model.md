@@ -2763,3 +2763,13 @@ evidence selection and trimmed before evidence, preserving ranking, confidence,
 source checks and the existing total packet byte limit. The shared packet makes
 this additive diagnostic available through Rust, native/TypeScript, HTTP and
 stdio without changing query fields or calibration/configuration identities.
+
+The subsequent confidence-filter correction applies the development-fitted
+maximum-score threshold to the returnable primary packet, matching the negative
+calibration statistic. A passing packet retains other ranked implementation
+parts within existing budgets. If none of its returnable parents reaches the
+threshold, primary evidence is cleared and supporting-only evidence remains
+insufficient. Individual selected scores may be below the applied packet
+threshold. The versioned `code-evidence-binding-v2/packet-max-confidence` binding prevents earlier
+parent-filter calibration artifacts from validating silently. No model, source
+authority, frozen target or held-out label changes accompany this correction.

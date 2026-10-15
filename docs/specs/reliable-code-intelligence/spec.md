@@ -269,14 +269,21 @@ below-threshold evidence is insufficient. A calibration artifact fixes its
 threshold from development labels only and binds effective config, query/passage
 representation, tokenizer/model/score transformation and strategy. Its score
 space is successful cross-encoder parent score or, for `none`, parent RRF.
-Thresholds apply after aggregation, before diversity/output limits. Only
+The threshold applies to the maximum score of returnable primary evidence
+after aggregation and output limits. It gates the packet, not each individual
+parent: accepted packets retain other ranked implementation parts within the
+existing budgets, including scores below the threshold. Only
 production implementation parents satisfy the primary gate; tests, generated
 code, docs and unknown classifications are supporting context. Classification
 is normalized per-unit metadata with source provenance, including tests nested
 inside production files, rather than extension-only inference.
 
-With matching validated calibration, below-threshold parents are omitted and
-status is `candidates_available` only if a primary parent remains. Missing,
+With matching validated calibration, primary evidence is omitted when no
+returnable primary parent reaches the threshold. A high-scoring parent that
+cannot be emitted does not admit a packet. This owner-authorized confidence
+correction replaces individual-parent filtering; its versioned binding rejects
+older calibration artifacts. Status is `candidates_available` only if a passing
+primary parent remains. Missing,
 stale/mismatched calibration, invalidating operator overrides or scorer fallback
 set `unvalidated` and always `insufficient_evidence`. Authorized ranked candidates
 can remain for inspection, marked unvalidated. No threshold from another

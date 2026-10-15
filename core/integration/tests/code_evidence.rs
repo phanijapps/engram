@@ -325,7 +325,7 @@ fn fitted(provider: &EngramProvider, threshold: f32) -> CodeCalibrationArtifact 
     artifact
 }
 #[test]
-fn matching_calibration_filters_parent_scores_and_operator_overrides_invalidate_it() {
+fn matching_calibration_gates_packet_scores_and_operator_overrides_invalidate_it() {
     let f = fixture();
     let scorer = Arc::new(Scorer::new(true, false));
     let original = provider(&f, scorer.clone(), f.config.clone());
@@ -340,7 +340,8 @@ fn matching_calibration_filters_parent_scores_and_operator_overrides_invalidate_
         packet.evidence_status,
         CodeEvidenceStatus::CandidatesAvailable
     );
-    assert!(packet.items.iter().all(|i| i.rerank_score.unwrap() >= 8.0));
+    assert!(packet.items.iter().any(|i| i.rerank_score.unwrap() >= 8.0));
+    assert!(packet.items.iter().any(|i| i.rerank_score.unwrap() < 8.0));
     let mut reduced = query();
     reduced.candidates_per_lane = Some(20);
     let changed = block_on(p.code_evidence(&reduced, &f.scope, &f.requester)).unwrap();

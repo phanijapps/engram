@@ -40,7 +40,7 @@ pub(super) fn binding(
         admission.config.query.instruction,
     )?;
     let config_hash = hash(&(
-        "code-evidence-binding-v1",
+        "code-evidence-binding-v2/packet-max-confidence",
         &admission.config,
         model.asset_identity(),
         &representation,

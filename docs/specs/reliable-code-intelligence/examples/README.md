@@ -39,13 +39,26 @@ and the packet's serialized byte bound. Match `parentUnitId` to the canonical
 code unit. Each row reports its best fused score, actual reranker score (null
 when unscored), applied threshold (null when unvalidated), retrieved/scored
 segment counts and one terminal reason. `below_threshold` means the parent was
-scored but failed confidence filtering; `scorer_pool` means no scoring opportunity;
+scored but its packet failed confidence filtering; `scorer_pool` means no scoring opportunity;
 the other rejection reasons identify result, per-file, token, metadata-validity
 or serialized-byte limits. `selected` means retained in the final primary items.
 `omittedParentDecisions` reports trace rows removed by count/byte bounds; absent
 legacy trace fields mean no trace was recorded, not that nothing was rejected.
 Trace trimming never removes source evidence, and source/authority checks remain
 the same as for the returned packet. Scores are not probabilities.
+
+After the packet-confidence correction, `appliedThreshold` gates the maximum
+returnable primary score for the whole query. An accepted packet can therefore
+include selected implementation parts scoring below that threshold. A packet
+with no returnable passing parent clears its primary items; their trace reason
+is `below_threshold`. Older calibration bindings become unvalidated and require
+a separately sealed artifact for the new confidence contract.
+
+The [confidence correction proof](../../../research/reliable-code-packet-confidence-live-2026-10-15.json)
+records actual-model recovery of four out of five deliberately selected failed
+development questions, with unchanged rejection of fourteen out of fifteen
+development negatives. This is a focused regression check, not a new held-out
+assessment or a beta-readiness result.
 
 The [first live proof](../../../research/reliable-code-parent-decisions-live-2026-10-15.json)
 uses two development queries with actual local models and identical pre-change

@@ -218,14 +218,6 @@ pub(super) fn assemble(
     let mut files: HashMap<(&str, &str), u32> = HashMap::new();
     let mut rejected = BTreeMap::new();
     for parent in &ranking.parents {
-        if calibration.is_some_and(|c| parent.score < c.threshold) {
-            rejected.insert(
-                parent.parent.clone(),
-                CodeParentDecisionReason::BelowThreshold,
-            );
-            packet.diagnostics.omitted_units += 1;
-            continue;
-        }
         let Some(&(first, _, _)) = parent.segments.first() else {
             rejected.insert(
                 parent.parent.clone(),
@@ -334,6 +326,37 @@ pub(super) fn assemble(
         budget = budget.saturating_sub(item_tokens(model, &item)?);
         *files.entry(file).or_default() += 1;
         packet.items.push(item);
+    }
+    // Calibration fits the maximum emitted primary score per query. Apply
+    // that same packet statistic, rather than silently deleting lower-scored
+    // implementation parts from an otherwise accepted answer. Only returnable
+    // evidence may admit a packet; an oversized high score cannot authorize it.
+    if calibration.is_some_and(|c| {
+        !packet.items.iter().any(|item| {
+            let score = match c.score_space {
+                CodeScoreSpace::CrossEncoder => item.rerank_score,
+                CodeScoreSpace::Rrf => Some(item.fusion_score),
+            };
+            score.is_some_and(|s| s >= c.threshold)
+        })
+    }) {
+        let denied: HashSet<_> = packet
+            .items
+            .iter()
+            .map(|i| i.parent_unit_id.as_str())
+            .collect();
+        for candidate in primary {
+            if denied.contains(candidate.segment.parent_unit_id.as_str()) {
+                rejected.insert(
+                    candidate.parent.id.to_string(),
+                    CodeParentDecisionReason::BelowThreshold,
+                );
+            }
+        }
+        packet.diagnostics.omitted_units += packet.items.len() as u32;
+        packet.items.clear();
+        budget = config.evidence.token_budget as u64;
+        files.clear();
     }
     let mut seen = HashSet::new();
     for c in supporting {

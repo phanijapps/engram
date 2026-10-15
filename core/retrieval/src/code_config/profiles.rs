@@ -14,7 +14,7 @@ impl CodeIntelligenceConfig {
                 context_token_budget: 64,
             },
             query: CodeQueryConfig {
-                instruction: CodeQueryInstruction::LegacyV1,
+                instruction: CodeQueryInstruction::None,
             },
             retrieval: CodeRetrievalConfig {
                 candidates_per_lane: if fast { 20 } else { 50 },

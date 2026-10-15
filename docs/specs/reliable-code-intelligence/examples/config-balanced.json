@@ -38,6 +38,6 @@
     "max_per_file": 4
   },
   "query": {
-    "instruction": "legacy-v1"
+    "instruction": "none"
   }
 }

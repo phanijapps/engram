@@ -281,10 +281,12 @@ or explicitly unsupported; stale/incompatible segment IDs resolve to no candidat
 
 ### T5: Authorized context and representation compatibility
 
-**Execution:** Construction implementation, independent re-reviews and real-model
-live smoke complete. Frozen Flask/Vite development query-format comparisons are
-complete; Engram comparison and final format selection remain pending. See
-`reviews/t5-2026-10-15.md`. T5 is not yet complete and no final quality claim is made.
+**Execution:** Complete: construction, independent re-reviews, real-model live
+smoke and all three frozen development query-format comparisons. The predeclared
+mean-MRR@10 rule selects `none`; its small top-ten recall tradeoff is recorded in
+the ablation artifact. Defaults/annotations now agree; generic document query
+formatting remains unchanged. See `reviews/t5-2026-10-15.md`. Final pipeline quality
+and pinned offline asset identity remain their T7/T10 gates.
 
 **Construction design:** Add pure AST-derived per-unit category/signature/import
 ranges in `core/code`; paths alone must not label inline tests as implementation.

@@ -95,6 +95,7 @@ settings or described as automatic repository-root discovery.
 | Setting | `balanced-v1` | `fast-v1` |
 | --- | --- | --- |
 | Body token target / maximum context | 384 / 64 | Same representation |
+| Query instruction | none (development-selected) | none (development-selected) |
 | Initial lanes | vector, lexical | vector, lexical |
 | Candidates per lane / final parents | 50 / 10 | 20 / 10 |
 | RRF k / weights | 60 / 1.0 | 60 / 1.0 |
@@ -174,9 +175,11 @@ inferred requirement substitutes for source.
 Passage segmentation/context/tokenizer/model/normalization changes create a
 new representation identity and target IDs. Query formatting has its own
 version; query-only instruction changes do not re-embed unchanged passages.
-`query.instruction` admits `legacy-v1` (initial default), `none` and
+`query.instruction` admits `legacy-v1` (initial default), `none` (selected default) and
 `bge-retrieval-v1`; the latter uses the documented BGE retrieval instruction.
-Development ablation selects the release profile format before held-out scoring.
+The frozen three-corpus development ablation selected `none` using its predeclared
+mean-MRR@10 rule; [the recorded comparison](../../research/reliable-code-intelligence-query-ablation-2026-10-15.json) includes the recall tradeoff. This is a compatible default
+selection for the unshipped profiles; held-out scoring remains a later gate.
 Reindex-required state is observable; incompatible/snapshot/legacy hash donors
 cannot satisfy new-profile readiness or reuse.
 

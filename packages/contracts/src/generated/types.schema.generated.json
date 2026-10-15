@@ -943,7 +943,7 @@
           "description": "Query-only format; excluded from passage representation identity.",
           "properties": {
             "instruction": {
-              "default": "legacy-v1",
+              "default": "none",
               "enum": [
                 "legacy-v1",
                 "none",
@@ -1168,7 +1168,7 @@
           "description": "Query-only format; excluded from passage representation identity.",
           "properties": {
             "instruction": {
-              "default": "legacy-v1",
+              "default": "none",
               "enum": [
                 "legacy-v1",
                 "none",

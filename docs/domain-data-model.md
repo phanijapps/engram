@@ -2648,7 +2648,9 @@ custom transports as their wiring is implemented.
 reranking and evidence presentation. Its fusion member reuses
 `RecallFusionConfig`; generic memory recall keeps its existing defaults.
 Query formatting is a separate `query.instruction` field: `legacy-v1`, `none`,
-or `bge-retrieval-v1`, initially legacy until development ablation. It changes
+or `bge-retrieval-v1`. The initial legacy default was replaced by `none` after
+the frozen three-corpus development ablation selected it using mean MRR@10
+([evidence](research/reliable-code-intelligence-query-ablation-2026-10-15.json)). It changes
 query identity/calibration, never passage identity or a re-embedding requirement.
 Versioned profiles and field defaults have one Rust-owned definition. Hosts
 resolve file/environment/explicit overrides once and report configuration

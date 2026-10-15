@@ -944,7 +944,7 @@ export const engramV1Schema = {
           "description": "Query-only format; excluded from passage representation identity.",
           "properties": {
             "instruction": {
-              "default": "legacy-v1",
+              "default": "none",
               "enum": [
                 "legacy-v1",
                 "none",
@@ -1169,7 +1169,7 @@ export const engramV1Schema = {
           "description": "Query-only format; excluded from passage representation identity.",
           "properties": {
             "instruction": {
-              "default": "legacy-v1",
+              "default": "none",
               "enum": [
                 "legacy-v1",
                 "none",

@@ -2560,7 +2560,7 @@
                 "none",
                 "bge-retrieval-v1"
               ],
-              "default": "legacy-v1"
+              "default": "none"
             }
           },
           "description": "Query-only format; excluded from passage representation identity."
@@ -3757,7 +3757,7 @@
                 "none",
                 "bge-retrieval-v1"
               ],
-              "default": "legacy-v1"
+              "default": "none"
             }
           },
           "description": "Query-only format; excluded from passage representation identity.",

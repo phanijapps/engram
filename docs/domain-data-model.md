@@ -2727,3 +2727,21 @@ authority. Old document versions remain explicitly historical. Unverified
 legacy heads and updating/incomplete sources are excluded from current
 discovery. Historical requests require trusted-host authorization and do not
 weaken source policy. These contracts introduce no cross-store ACID guarantee.
+
+The integration SDK runtime capability map adds `code_evidence` (current source,
+segment, embedding and configured retrieval prerequisites) and `code_scorer`
+(actual admitted local cross-encoder handle and compatible pinned identity).
+These compatible keys do not certify calibration or quality gates. Missing
+configured retrieval lanes are degraded; missing source or local embedding
+authority is unsupported. A disabled scorer reports FeatureDisabled. Trusted
+host configuration may name `code_calibration_path`, a bounded JSON artifact
+loaded once at startup; queries cannot install or replace calibration. Native
+evidence handles bind the accepted CodeSourceContext separately from strict
+CodeEvidenceQuery inputs. HTTP and stdio expose `code op=evidence` with those
+query fields and return only CodeEvidencePacket.
+
+The scorer port additionally declares `supports_code_input` (default false for
+compatible generic scorers). Only an already constructed, admitted local model
+with implemented untruncated query/document/pair inspectors declares true.
+Readiness requires that declaration plus compatible actual model identity; the
+operation continues validating actual input coverage and authorization.

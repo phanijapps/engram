@@ -80,7 +80,7 @@ pub(super) fn prepare(
         // Unknown/nonlocal inspectors receive neither query nor source text.
         let scorer = provider
             .code_scorer()
-            .filter(|s| s.is_local())
+            .filter(|s| s.is_local() && s.supports_code_input())
             .ok_or_else(unavailable)?;
         let id = scorer
             .identity()

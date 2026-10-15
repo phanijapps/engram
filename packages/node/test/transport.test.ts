@@ -46,6 +46,7 @@ class FakeNativeMemoryEngine {
  *  The transport tests do not exercise the provider; this only satisfies the
  *  NativeBinding shape now that NativeProvider is a required member. */
 class StubNativeProvider {
+  requireCodeEvidenceApi(_context:string) { return {evidenceJson:(_query:string)=>"{}"}; }
   requireExportImportApi() {return {exportAuthorizedJson:()=>"{}"};}
   requireMigrationApi() {return {dryRunImportAuthorizedJson:()=>"{}",applyImportAuthorizedJson:()=>"null"};}
   requireCodeSourceApi() {return {readSourceJson:()=>"{}",listSourcesJson:()=>"[]"};}

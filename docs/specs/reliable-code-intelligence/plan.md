@@ -463,6 +463,37 @@ insufficiency/fallback/representation status rather than only symbol headers.
 
 ### T9: Rust/native/HTTP/stdio parity and capability readiness
 
+**Execution:** Component complete. Same-corpus actual Rust/native/stdio/HTTP
+calls each scored 42 pairs and returned the same typed packet (phase timings
+excluded; the Rust diagnostic JSON wrapper's score numbers compare by declared
+f32 bits). Native/stdio/HTTP item JSON values match exactly. After readiness
+review fixes, actual native BGE/Jina tests passed 23/23 and real stdio scored
+three pairs on a fresh fixture. Strict wire/immutable authority, missing/disabled
+lanes and generic scorer readiness regressions pass; Rust library 76 + evidence
+19, stdio suite 174, HTTP 83 + one explicit model skip, full TypeScript suite,
+workspace check/build and boundary gates passed. The initial full TS run saw
+five transient live-agentzero 503 failures; isolated route returned 200, graph
+7/7 passed, and the unchanged full test command passed on retry. No store was
+wiped or test weakened. Calibration/quality and retained-store gates remain T10/T11.
+
+**Construction design:** All surfaces call the same Rust `code_evidence` method.
+Native handles bind a validated trusted `CodeSourceContext` at construction;
+query JSON contains only the accepted strict query DTO. HTTP exposes `code`
+with `op=evidence` and the same query fields. Stdio removes only `op` before
+strict DTO decoding and uses launch scope plus its retrieval requester. Two
+additive capability keys distinguish `code_evidence` prerequisite handles from
+`code_scorer` actual admitted local model readiness; neither certifies calibration
+or corpus quality. Configured missing lanes report degraded prerequisites, while
+source/embedding authority missing reports unsupported. Calibration is loaded
+once from an explicit operator-selected JSON path (64 KiB, regular file), never
+from query inputs or repository discovery, and all recipes install the immutable
+artifact. Existing packets still validate its identity at request time. The native
+build propagates the local scorer feature; generic recall remains unchanged. A
+compatible port declaration `supports_code_input` defaults false for generic
+scorers and is true only after actual local input-contract construction. Readiness
+and operation admission require it alongside actual identity; disabled vector
+lanes impose no vector prerequisite, while missing enabled lanes degrade.
+
 **Depends on:** T8
 **Mode:** goal-based end-to-end integration.
 **Spec mapping:** AC1, AC6–AC8.

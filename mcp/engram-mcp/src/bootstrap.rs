@@ -59,6 +59,10 @@ fn open_pgvector(config: &McpConfig) -> Result<EngramProvider, String> {
             Some(path) => engram_config.with_code_config_path(path),
             None => engram_config,
         };
+        let engram_config = match &config.code_calibration_path {
+            Some(path) => engram_config.with_code_calibration_path(path),
+            None => engram_config,
+        };
         engram_backend_pgvector::open(&engram_config)
             .map_err(|e| format!("failed to open pgvector provider: {e}"))
     }
@@ -133,6 +137,10 @@ fn open_sqlite(config: &McpConfig) -> Result<EngramProvider, String> {
             ));
         }
     };
+    let engram_config = match &config.code_calibration_path {
+        Some(path) => engram_config.with_code_calibration_path(path),
+        None => engram_config,
+    };
     EngramProvider::open(&engram_config).map_err(|e| format!("failed to open engram provider: {e}"))
 }
 
@@ -147,6 +155,7 @@ mod tests {
             // `storage_path` is the directory the shared database file lives in.
             storage_path: dir.to_path_buf(),
             code_config_path: None,
+            code_calibration_path: None,
             project: "test".to_string(),
             scope_strategy: ScopeMappingStrategy::Strict,
             embedding: EmbeddingProviderConfig {

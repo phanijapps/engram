@@ -237,8 +237,14 @@ export interface NativeCodeSourceApiBinding {
 export interface NativeSourceExportBinding {exportAuthorizedJson(contextJson:string):string;}
 /** Validated source preview and fenced import through the existing migration API. */
 export interface NativeSourceMigrationBinding {dryRunImportAuthorizedJson(dataJson:string,contextJson:string):string;applyImportAuthorizedJson(manifestJson:string,contextJson:string):string;}
+/** Trusted context is fixed when this Rust handle is constructed. */
+export interface NativeCodeEvidenceApiBinding {
+  evidenceJson(queryJson: string): string;
+}
+
 /** Held Rust provider capability handles and operations. */
 export interface NativeProviderBinding {
+  requireCodeEvidenceApi(contextJson: string): NativeCodeEvidenceApiBinding;
   requireExportImportApi():NativeSourceExportBinding;
   requireMigrationApi():NativeSourceMigrationBinding;
   requireCodeSourceApi(contextJson:string):NativeCodeSourceApiBinding;

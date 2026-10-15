@@ -50,6 +50,12 @@ pub trait RerankScorer: Send + Sync {
     fn is_local(&self) -> bool {
         false
     }
+    /// True only after construction has admitted the complete code-input
+    /// contract, including untruncated query/document/pair inspectors. Generic
+    /// scorers retain a false default even when they expose an identity.
+    fn supports_code_input(&self) -> bool {
+        false
+    }
     fn identity(&self) -> Option<RerankScorerIdentity> {
         None
     }

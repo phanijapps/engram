@@ -40,6 +40,7 @@ serde_json.workspace = true
 # build turns this on; default builds stay free of model-bearing code.
 default = []
 fastembed = ["engram-store-sqlite/fastembed", "engram-integration/fastembed"]
+cross-encoder-rerank = ["engram-integration/cross-encoder-rerank"]
 # Enables the pgvector (Postgres) backend: routes a config carrying
 # pgvector_connection_string to backends_pgvector::open. Opt-in (default builds
 # stay SQLite + FastEmbed).

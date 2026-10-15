@@ -103,6 +103,7 @@ describe.skipIf(!ready)("engram-mcp-http (real addon)", () => {
         "build_maintenance_plan",
         "capability_report",
         "change_impact",
+        "code",
         "code_health",
       "code_sources",
         "consolidate",

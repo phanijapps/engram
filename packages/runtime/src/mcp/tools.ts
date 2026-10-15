@@ -413,6 +413,27 @@ export function registerTools(
     async () => textResult({ pong: true, server: "engram-mcp-http" }),
   );
 
+  server.registerTool("code", {
+    description: "Current source-grounded code evidence with exact ranges and scorer/calibration diagnostics. Scope and requester come from trusted launch context.",
+    inputSchema: z.object({
+      op: z.literal("evidence"),
+      query: z.string().min(1).max(16384),
+      repository: z.string().min(1).max(2048).optional(),
+      resultLimit: z.number().int().min(1).max(100).optional(),
+      candidatesPerLane: z.number().int().min(10).max(1000).optional(),
+      evidenceTokenBudget: z.number().int().min(256).max(32768).optional(),
+    }).strict(),
+  }, async ({op: _op, ...query}) => {
+    if (!opts?.sourceContext) throw new Error("code_evidence unsupported: trusted source context is not configured");
+    return textResult(await transport.codeEvidence({
+      query: query.query,
+      ...(query.repository === undefined ? {} : {repository:query.repository}),
+      ...(query.resultLimit === undefined ? {} : {resultLimit:query.resultLimit}),
+      ...(query.candidatesPerLane === undefined ? {} : {candidatesPerLane:query.candidatesPerLane}),
+      ...(query.evidenceTokenBudget === undefined ? {} : {evidenceTokenBudget:query.evidenceTokenBudget}),
+    }, opts.sourceContext));
+  });
+
   server.registerTool("source_read",{
     description:"Read exact accepted source with typed coverage in the trusted project scope.",
     inputSchema:z.object({repository:z.string().min(1),path:z.string().min(1),generation:z.string().optional(),maxBytes:z.number().int().positive().max(1048576).optional()}).strict(),
@@ -436,7 +457,7 @@ export function registerTools(
     },
     async () => {
       const report=await transport.capabilities();
-      return textResult(opts?.sourceContext ? report : {...(report as Record<string,unknown>),code_source_preservation:{Unsupported:{reason:"ProviderUnavailable"}},code_embeddings:{Unsupported:{reason:"ProviderUnavailable"}}});
+      return textResult(opts?.sourceContext ? report : {...(report as Record<string,unknown>),code_evidence:{Unsupported:{reason:"ProviderUnavailable"}},code_source_preservation:{Unsupported:{reason:"ProviderUnavailable"}},code_embeddings:{Unsupported:{reason:"ProviderUnavailable"}}});
     },
   );
 

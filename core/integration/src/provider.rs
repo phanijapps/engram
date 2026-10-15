@@ -995,7 +995,7 @@ impl EngramProviderBuilder {
                     .index
                 }),
         );
-        EngramProvider {
+        let mut provider = EngramProvider {
             capabilities: self.capabilities,
             memory: self.memory,
             knowledge: self.knowledge,
@@ -1028,7 +1028,11 @@ impl EngramProviderBuilder {
             adapter_version: self.adapter_version,
             code_configuration: self.code_configuration,
             code_retrieval_lanes: self.code_retrieval_lanes,
-        }
+        };
+        let (evidence, scorer) = crate::code_evidence::readiness::states(&provider);
+        provider.capabilities.code_evidence = evidence;
+        provider.capabilities.code_scorer = scorer;
+        provider
     }
 }
 

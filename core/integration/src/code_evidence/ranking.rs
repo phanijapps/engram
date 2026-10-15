@@ -88,7 +88,9 @@ pub(super) async fn rank(
     let mut pool_omitted_segments = 0;
     let mut tails = HashSet::new();
     let result = async {
-        if !scorer.is_local() || scorer.identity() != admission.identity {
+        if !(scorer.is_local() && scorer.supports_code_input())
+            || scorer.identity() != admission.identity
+        {
             return Err(super::preflight::unavailable());
         }
         let originals = rows(candidates);
@@ -185,7 +187,9 @@ pub(super) async fn rank(
                 return Err(super::eligibility::changed());
             }
         }
-        if !scorer.is_local() || scorer.identity() != admission.identity {
+        if !(scorer.is_local() && scorer.supports_code_input())
+            || scorer.identity() != admission.identity
+        {
             return Err(super::preflight::unavailable());
         }
         let documents: Vec<_> = views.iter().map(|v| v.text.clone()).collect();
@@ -195,7 +199,9 @@ pub(super) async fn rank(
         } else {
             scorer.score_batch(query, &documents, config.batch_size as usize)?
         };
-        if !scorer.is_local() || scorer.identity() != admission.identity {
+        if !(scorer.is_local() && scorer.supports_code_input())
+            || scorer.identity() != admission.identity
+        {
             return Err(super::preflight::unavailable());
         }
         if scores.len() != views.len() || scores.iter().any(|s| !s.is_finite()) {

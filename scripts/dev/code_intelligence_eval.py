@@ -18,13 +18,13 @@ from code_eval_corpus import load_frozen, sha256, validate_artifact_paths
 
 
 class EvaluationServer:
-    def __init__(self, binary, storage, project):
+    def __init__(self, binary, storage, project, tool_profile="all", extra_args=()):
         self.responses = queue.Queue()
         self.errors = []
         self.seq = 0
         self.proc = subprocess.Popen(
             [str(binary), "--storage", str(storage), "--project", project,
-             "--vector", "--tools", "all"], stdin=subprocess.PIPE,
+             "--vector", "--tools", tool_profile, *extra_args], stdin=subprocess.PIPE,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
         threading.Thread(target=self._read, daemon=True).start()
         threading.Thread(target=self._errors, daemon=True).start()
@@ -104,20 +104,21 @@ def main():
               "revision": corpus["revision"], "mode": args.mode, "split": args.split,
               "binarySha256": binary_digest, "concurrency": 1, "cases": [],
               "candidateMetricsAvailable": False, "runState": "running"}
-    server = EvaluationServer(binary, args.storage, "code-eval-" + args.corpus)
+    server = EvaluationServer(binary, args.storage, "code-eval-" + args.corpus,
+                              tool_profile="all" if args.mode == "baseline" else "full")
     try:
-        report["startup"] = server.call("capability_report", {})
+        report["startup"] = server.call("capability_report", {}) if args.mode == "baseline" else server.call("maintain", {"op":"capabilities"})
         if report["startup"]["failed"] or "vector: supported" not in report["startup"]["text"]:
             raise RuntimeError("evaluation requires actual vector readiness")
         save(args.output, report)
         if args.scan:
-            report["scan"] = server.call("scan_repo", {"path": str(args.corpus_root.resolve())})
+            report["scan"] = server.call("scan_repo", {"path": str(args.corpus_root.resolve())}) if args.mode == "baseline" else server.call("scan", {"target":"repo","path":str(args.corpus_root.resolve())})
             save(args.output, report)
             if report["scan"]["failed"] or "errors: 0" not in report["scan"]["text"]:
                 raise RuntimeError("corpus scan failed")
             print("scan", round(report["scan"]["seconds"], 3), flush=True)
             while True:
-                r = server.call("reindex", {"limit": 1024})
+                r = server.call("reindex", {"limit": 1024}) if args.mode == "baseline" else server.call("maintain", {"op":"reindex","limit":1024})
                 report.setdefault("reindex", []).append(r)
                 save(args.output, report)
                 print("reindex", round(r["seconds"], 3), r["text"][:120], flush=True)

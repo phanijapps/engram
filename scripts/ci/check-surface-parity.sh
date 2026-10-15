@@ -62,4 +62,9 @@ if [ "${#missing[@]}" -gt 0 ]; then
   exit 1
 fi
 
+# Direct operations are outside require_* scanning; guard their native gateway.
+grep -q 'pub async fn code_evidence' "$ROOT/core/integration/src/code_evidence/operation.rs"
+grep -q 'requireCodeEvidenceApi' "$BINDING"
+grep -q 'provider.code_evidence' "$ROOT/bindings/node/src/code_evidence.rs"
+
 echo "surface parity check passed (${#FACADE_REQUIRES[@]} capabilities: proxied + ${#SPECIAL_CASES[@]} special + ${#DEBT_ALLOWLIST[@]} acknowledged-debt)"

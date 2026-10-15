@@ -127,6 +127,7 @@ impl SqliteLayoutPaths {
 /// `CoreError::Adapter` if the storage directory cannot be created.
 pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let code_configuration = config.resolve_code_configuration()?;
+    let code_calibration = config.load_code_calibration()?;
     config.validate().map_err(|e| CoreError::InvalidRequest {
         reason: format!("configuration validation failed: {e}"),
     })?;
@@ -840,7 +841,11 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // is always present under the SQLite backend (no fallback when a lane is
     // absent — it is a benign empty cache in that case).
     builder = builder.graph_cache(graph_cache);
-    Ok(builder.build())
+    let provider = builder.build();
+    Ok(match code_calibration {
+        Some(a) => provider.with_code_calibration(a),
+        None => provider,
+    })
 }
 
 /// The fixed diagnostic scope used by the wired observability handle.

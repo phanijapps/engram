@@ -140,6 +140,8 @@ struct ProfileFile {
     enable_vector: Option<bool>,
     #[serde(default)]
     code_intelligence: Option<engram_retrieval::CodeIntelligenceConfigOverlay>,
+    #[serde(default)]
+    code_calibration_path: Option<PathBuf>,
 }
 
 /// The default embedding-provider config used when a profile file omits the
@@ -242,6 +244,9 @@ pub struct EngramConfig {
     /// Operator-selected JSON/TOML path; never discovered in scanned repositories.
     #[serde(default)]
     pub code_config_path: Option<PathBuf>,
+    /// Explicit operator artifact loaded once; never discovered from source.
+    #[serde(default)]
+    pub code_calibration_path: Option<PathBuf>,
     /// Preserved code section from an explicit SDK host profile (file precedence).
     #[serde(default)]
     pub code_profile_settings: Option<engram_retrieval::CodeIntelligenceConfigOverlay>,
@@ -270,6 +275,7 @@ impl EngramConfig {
             enable_vector: true,
             code_intelligence: None,
             code_config_path: None,
+            code_calibration_path: None,
             code_profile_settings: None,
         }
     }
@@ -312,6 +318,20 @@ impl EngramConfig {
     pub fn with_code_config_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.code_config_path = Some(path.into());
         self
+    }
+
+    #[must_use]
+    pub fn with_code_calibration_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.code_calibration_path = Some(path.into());
+        self
+    }
+
+    /// Reads a bounded operator artifact once. Invalid identity remains unvalidated
+    /// at request time; malformed or oversized artifacts fail startup explicitly.
+    pub fn load_code_calibration(
+        &self,
+    ) -> engram_runtime::CoreResult<Option<engram_domain::CodeCalibrationArtifact>> {
+        crate::code_evidence::installation::load(self.code_calibration_path.as_deref())
     }
 
     /// Builder for opting into the single-file SQLite layout.
@@ -507,6 +527,7 @@ impl EngramConfig {
             code_intelligence: None,
             code_config_path: None,
             code_profile_settings: profile.code_intelligence,
+            code_calibration_path: profile.code_calibration_path,
         })
     }
 

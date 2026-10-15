@@ -60,6 +60,9 @@ fn tokens(text: &str, special: u32) -> TextTokenization {
     }
 }
 impl RerankScorer for Scorer {
+    fn supports_code_input(&self) -> bool {
+        true
+    }
     fn score(&self, _: &str, _: &str) -> CoreResult<f32> {
         panic!("batch scorer required")
     }
@@ -681,4 +684,146 @@ fn known_indexed_git_revision_survives_all_emitted_source_and_context_references
             }
         }
     }
+}
+
+#[test]
+fn readiness_uses_actual_prerequisites_and_separates_disabled_or_nonlocal_scorers() {
+    let f = fixture();
+    let local = provider(&f, Arc::new(Scorer::new(true, false)), f.config.clone());
+    assert_eq!(
+        local.capabilities().code_evidence,
+        CapabilityState::Supported
+    );
+    assert_eq!(local.capabilities().code_scorer, CapabilityState::Supported);
+    let nonlocal = provider(&f, Arc::new(Scorer::new(false, false)), f.config.clone());
+    assert_eq!(
+        nonlocal.capabilities().code_evidence,
+        CapabilityState::Supported
+    );
+    assert_eq!(
+        nonlocal.capabilities().code_scorer,
+        CapabilityState::Unsupported {
+            reason: CapabilityReason::ProviderUnavailable
+        }
+    );
+    let fast = provider(
+        &f,
+        Arc::new(Scorer::new(true, false)),
+        engram_retrieval::CodeIntelligenceConfig::for_profile(CodeIntelligenceProfile::FastV1),
+    );
+    assert_eq!(
+        fast.capabilities().code_scorer,
+        CapabilityState::Unsupported {
+            reason: CapabilityReason::FeatureDisabled
+        }
+    );
+    let absent =
+        EngramProviderBuilder::new(CapabilityReport::new(CapabilityState::Supported)).build();
+    assert_eq!(
+        absent.capabilities().code_evidence,
+        CapabilityState::Unsupported {
+            reason: CapabilityReason::ProviderUnavailable
+        }
+    );
+}
+
+#[test]
+fn explicitly_loaded_calibration_is_an_immutable_snapshot_and_malformed_selection_fails() {
+    use engram_integration::{
+        CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode,
+    };
+    let f = fixture();
+    let p = provider(&f, Arc::new(Scorer::new(true, false)), f.config.clone());
+    let mut artifact =
+        engram_integration::code_evidence::calibration_template(&p, &query()).unwrap();
+    artifact.development_labels_sha256 = "a".repeat(64);
+    artifact.id = engram_integration::code_evidence::artifact_id(&artifact).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("calibration.json");
+    std::fs::write(&path, serde_json::to_vec(&artifact).unwrap()).unwrap();
+    let config = EngramConfig::new(
+        dir.path().join("store"),
+        dir.path(),
+        ScopeMappingStrategy::Strict,
+        EmbeddingProviderConfig {
+            provider_type: "none".into(),
+            model: "none".into(),
+            dimensions: 3,
+            prompt_profile: "query".into(),
+            normalization: None,
+        },
+        MigrationMode::DryRun,
+        CapabilityPolicy::FailClosed,
+    )
+    .with_code_calibration_path(&path);
+    let p = p.with_code_calibration(config.load_code_calibration().unwrap().unwrap());
+    std::fs::write(&path, b"{}").unwrap();
+    assert_eq!(p.code_calibration().unwrap(), &artifact);
+    assert!(config.load_code_calibration().is_err());
+}
+
+#[test]
+fn lexical_only_readiness_does_not_require_vectors_and_missing_enabled_vector_is_degraded() {
+    let f = fixture();
+    let mut config = f.config.clone();
+    config.retrieval.enabled_lanes = vec![engram_retrieval::CodeRetrievalLane::Lexical];
+    config.retrieval.graph_hops = 0;
+    let build = |config: &engram_retrieval::CodeIntelligenceConfig| {
+        let overlay = serde_json::from_value(serde_json::to_value(config).unwrap()).unwrap();
+        EngramProviderBuilder::new(CapabilityReport::new(CapabilityState::Supported))
+            .knowledge(f.store.clone())
+            .embedding_provider(f.model.clone())
+            .code_retrieval_lane(
+                engram_retrieval::CodeRetrievalLane::Lexical,
+                f.lexical.clone(),
+            )
+            .code_configuration(resolve_code_config(None, None, Some(&overlay)).unwrap())
+            .build()
+    };
+    let lexical = build(&config);
+    assert!(lexical.code_vectors().is_none());
+    assert_eq!(
+        lexical.capabilities().code_evidence,
+        CapabilityState::Supported
+    );
+    let packet = block_on(lexical.code_evidence(&query(), &f.scope, &f.requester)).unwrap();
+    assert!(!packet.items.is_empty());
+    config
+        .retrieval
+        .enabled_lanes
+        .push(engram_retrieval::CodeRetrievalLane::Vector);
+    let missing = build(&config);
+    assert_eq!(
+        missing.capabilities().code_evidence,
+        CapabilityState::Degraded {
+            reason: CapabilityReason::ProviderUnavailable
+        }
+    );
+}
+
+#[test]
+fn local_identity_alone_cannot_advertise_the_code_input_contract() {
+    struct GenericIdentityOnly;
+    impl RerankScorer for GenericIdentityOnly {
+        fn is_local(&self) -> bool {
+            true
+        }
+        fn identity(&self) -> Option<RerankScorerIdentity> {
+            Scorer::new(true, false).identity()
+        }
+        fn score(&self, _: &str, _: &str) -> CoreResult<f32> {
+            panic!("generic scorer must not receive code")
+        }
+    }
+    let f = fixture();
+    let p = EngramProviderBuilder::new(CapabilityReport::new(CapabilityState::Supported))
+        .code_scorer(Arc::new(GenericIdentityOnly))
+        .build();
+    assert_eq!(
+        p.capabilities().code_scorer,
+        CapabilityState::Unsupported {
+            reason: CapabilityReason::ProviderUnavailable
+        }
+    );
+    assert!(f.model.queries.load(Ordering::SeqCst) == 0);
 }

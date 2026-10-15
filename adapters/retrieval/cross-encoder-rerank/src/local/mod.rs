@@ -108,6 +108,9 @@ impl LocalOnnxScorer {
     }
 }
 impl RerankScorer for LocalOnnxScorer {
+    fn supports_code_input(&self) -> bool {
+        true
+    }
     fn is_local(&self) -> bool {
         true
     }

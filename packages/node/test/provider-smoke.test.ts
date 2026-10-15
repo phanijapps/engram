@@ -263,3 +263,36 @@ describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (re
   }, 60_000);
 
 });
+
+describe.skipIf(!existsSync(ADDON_PATH) || process.env.ENGRAM_LIVE_FASTEMBED !== "1")("real code evidence native API", () => {
+  it("runs the actual local scorer, binds immutable authority and rejects query-side overrides", async () => {
+    const base=mkdtempSync(join(tmpdir(),"engram-evidence-native-"));
+    const repo=join(base,"repo");mkdirSync(repo);
+    writeFileSync(join(repo,"user.ts"),"export class UserService { async getUser(id:string) { return this.db.query('SELECT * FROM users WHERE id = ?',id); } async deleteUser(id:string) { return this.db.query('DELETE FROM users WHERE id = ?',id); } }\n");
+    const config={storage_path:join(base,"store"),trusted_root:base,scope_policy:"Strict",embedding_provider:{provider_type:"fastembed",model:"BAAI/bge-small-en-v1.5",dimensions:384,prompt_profile:"query"},migration_mode:"Apply",capability_policy:"FailClosed",enable_vector:true};
+    try {
+      const native=new (loadNativeBinding().NativeProvider)(JSON.stringify(config));
+      const transport=createNativeProviderTransport({provider:native});
+      const scope={tenant:"native-evidence",workspace:"users"};
+      const context={scope,requester:{actor:{id:"host",kind:"agent" as const}},readerVersion:1 as const};
+      expect(await transport.capabilities()).toMatchObject({code_evidence:"Supported",code_scorer:"Supported"});
+      await transport.scan({path:repo,scope});
+      const indexed=await transport.backfillEmbeddings({scope,requester:{actor:{id:"engram-node",kind:"agent"}},limit:64});
+      expect(indexed.codeEmbedded).toBeGreaterThan(0);expect(indexed.remaining).toBe(0);
+      const api=native.requireCodeEvidenceApi(JSON.stringify(context));
+      context.scope.workspace="unrelated";
+      const packet=JSON.parse(api.evidenceJson(JSON.stringify({query:"delete a user from the database using their ID"})));
+      expect(packet.items.length).toBeGreaterThan(0);
+      expect(packet.diagnostics).toMatchObject({scorerState:"ready",effectiveReranker:"cross_encoder",calibrationState:"unvalidated",reindexRequired:false});
+      expect(packet.diagnostics.scoredPairs).toBeGreaterThan(0);
+      expect(packet.evidenceStatus).toBe("insufficient_evidence");
+      expect(packet.items.some((item:{excerpts:Array<{text:string}>})=>item.excerpts.some(e=>e.text.includes("DELETE FROM users")))).toBe(true);
+      for(const extra of [{scope},{requester:context.requester},{model:"remote"},{calibration:{}},{query:"é".repeat(8193)}]) {
+        expect(()=>api.evidenceJson(JSON.stringify({query:"valid",...extra}))).toThrow();
+      }
+      const denied=JSON.parse(native.requireCodeEvidenceApi(JSON.stringify(context)).evidenceJson(JSON.stringify({query:"delete a user"})));
+      expect(denied.items).toHaveLength(0);
+      expect(()=>native.requireCodeEvidenceApi(JSON.stringify({...context,readerVersion:2}))).toThrow();
+    } finally {rmSync(base,{recursive:true,force:true});}
+  },120_000);
+});

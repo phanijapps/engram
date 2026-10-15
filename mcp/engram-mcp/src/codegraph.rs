@@ -2427,8 +2427,9 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
     .map(|(name, ok)| format!("  {name}: {}", if ok { "supported" } else { "unsupported" }))
     .collect();
     Ok(protocol::text_content(format!(
-        "Server: engram-mcp 0.1.0\nCapabilities:\n{}",
-        caps.join("\n")
+        "Server: engram-mcp 0.1.0\nCapabilities:\n{}\nRuntime capability report: {}",
+        caps.join("\n"),
+        serde_json::to_string(app.provider.capabilities()).map_err(internal)?
     )))
 }
 

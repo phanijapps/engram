@@ -15,6 +15,26 @@ import {loadNativeBinding} from "../src/binding.js";
 const ADDON_PATH = fileURLToPath(new URL("../engram_node.node", import.meta.url));
 
 describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (real addon)", () => {
+  it("reports the shared Rust code snapshot with explicit launch precedence", async () => {
+    const base=mkdtempSync(join(tmpdir(),"engram-code-config-"));
+    const path=join(base,"code.json");
+    writeFileSync(path,JSON.stringify({profile:"fast-v1",fusion:{rrf_k:42},evidence:{token_budget:1200}}));
+    try {
+      const transport=createNativeProviderTransport({configJson:JSON.stringify({
+        storage_path:join(base,"store"),trusted_root:base,scope_policy:"Strict",enable_vector:false,
+        embedding_provider:{provider_type:"none",model:"none",dimensions:384,prompt_profile:"query"},
+        migration_mode:"DryRun",capability_policy:"FailClosed"
+      }),codeConfigPath:path,codeIntelligence:{evidence:{token_budget:1024}}});
+      const snapshot=await transport.codeConfiguration();
+      expect(snapshot?.effective.profile).toBe("fast-v1");
+      expect(snapshot?.effective.fusion.rrf_k).toBe(42);
+      expect(snapshot?.effective.evidence.token_budget).toBe(1024);
+      expect(snapshot?.origins["fusion.rrf_k"]).toBe("file");
+      expect(snapshot?.origins["evidence.token_budget"]).toBe("explicit");
+      expect(snapshot?.hash).toMatch(/^[a-f0-9]{64}$/);
+    } finally {rmSync(base,{recursive:true,force:true});}
+  });
+
   it("constructs from config, scans a repo, and runs consolidation execution", async () => {
     const base = mkdtempSync(join(tmpdir(), "engram-smoke-"));
     const store = join(base, "store");

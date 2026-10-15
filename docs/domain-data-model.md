@@ -2652,7 +2652,8 @@ or `bge-retrieval-v1`, initially legacy until development ablation. It changes
 query identity/calibration, never passage identity or a re-embedding requirement.
 Versioned profiles and field defaults have one Rust-owned definition. Hosts
 resolve file/environment/explicit overrides once and report configuration
-origin and hash. Query callers cannot override authorization or index/model
+origin and hash as a `CodeConfigurationSnapshot` (`effective`, `hash`, and
+fieldwise `origins`). Query callers cannot override authorization or index/model
 identity. Transport casing is snake_case for configuration and camelCase for
 operation DTOs, as fixed by the accepted schema.
 

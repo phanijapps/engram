@@ -52,6 +52,7 @@ class StubNativeProvider {
   fileDependenciesJson(): string { return "[]"; }
   exploreJson(): string { return "[]"; }
   constructor(_configJson?: string) {}
+  codeConfigurationJson(): string { return "null"; }
   capabilitiesJson(): string {
     return "{}";
   }

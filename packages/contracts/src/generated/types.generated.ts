@@ -119,6 +119,7 @@ export interface EngramV1Types {
   CodeCalibrationArtifact: CodeCalibrationArtifact;
   CodeChunkDescriptor: CodeChunkDescriptor;
   CodeChunkRole: CodeChunkRole;
+  CodeConfigurationSnapshot: CodeConfigurationSnapshot;
   CodeContextFact: CodeContextFact;
   CodeEdgeKind: CodeEdgeKind;
   CodeEmbeddingSegment: CodeEmbeddingSegment;
@@ -268,6 +269,131 @@ export interface Scope {
   subject?: string;
   tenant: string;
   workspace?: string;
+}
+export interface CodeConfigurationSnapshot {
+  effective: CodeIntelligenceConfig;
+  hash: string;
+  origins: {
+    [k: string]: "profile" | "file" | "environment" | "explicit";
+  };
+}
+/**
+ * Fully resolved immutable snapshot; Rust profiles/field-wise overlays supply values.
+ */
+export interface CodeIntelligenceConfig {
+  evidence: {
+    max_per_file: number;
+    max_supporting_units: number;
+    token_budget: number;
+  };
+  fusion: RecallFusionConfig & {
+    rerank?: {
+      strategy?: "none" | "cross_encoder";
+      [k: string]: unknown;
+    };
+    [k: string]: unknown;
+  } & {
+    /**
+     * Weight applied to any lane source not named in `source_weights`. Default 1.0 (pure RRF when no overrides are set).
+     */
+    default_source_weight: number;
+    rerank: RerankConfig1;
+    /**
+     * RRF constant (>= 1). Lower values make top ranks dominate more aggressively; higher values flatten. Conventional default 60 (Cormack et al. 2009).
+     */
+    rrf_k: number;
+    /**
+     * Per-lane-source weight overrides. Keys are the normalized lane source tags (the weight keys): `vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`. A zero weight keeps a source visible for traceability while contributing nothing to its fused score.
+     */
+    source_weights: {
+      [k: string]: number;
+    };
+    [k: string]: unknown;
+  } & {
+    source_weights?: {
+      [k: string]: unknown;
+    };
+    [k: string]: unknown;
+  };
+  index: {
+    body_token_target: number;
+    context_token_budget: number;
+  };
+  local_scorer: {
+    batch_size: number;
+    max_candidates: number;
+    model_id: string;
+    on_failure: "degrade" | "error";
+    pair_token_limit: number;
+    query_token_limit: number;
+  };
+  profile: "balanced-v1" | "fast-v1";
+  /**
+   * Query-only format; excluded from passage representation identity.
+   */
+  query: {
+    instruction: "legacy-v1" | "none" | "bge-retrieval-v1";
+  };
+  retrieval: {
+    candidates_per_lane: number;
+    /**
+     * @minItems 1
+     */
+    enabled_lanes: [
+      "vector" | "lexical" | "graph" | "associative_graph" | "community_summary",
+      ...("vector" | "lexical" | "graph" | "associative_graph" | "community_summary")[]
+    ];
+    graph_hops: number;
+    graph_neighbor_limit: number;
+    result_limit: number;
+  };
+  schema_version: 1;
+}
+/**
+ * External recall-fusion configuration (RFC-0019). Operator-facing, serializable config loaded from a `[recall_fusion]` profile section or `.engram/recall.json`. Drives weighted reciprocal-rank fusion (vector + lexical + graph + facts + ...) and optional reranking in engram's unified recall. Absent config falls back to equal-weight RRF (today's behavior).
+ */
+export interface RecallFusionConfig {
+  /**
+   * Weight applied to any lane source not named in `source_weights`. Default 1.0 (pure RRF when no overrides are set).
+   */
+  default_source_weight?: number;
+  rerank?: RerankConfig;
+  /**
+   * RRF constant (>= 1). Lower values make top ranks dominate more aggressively; higher values flatten. Conventional default 60 (Cormack et al. 2009).
+   */
+  rrf_k?: number;
+  /**
+   * Per-lane-source weight overrides. Keys are the normalized lane source tags (the weight keys): `vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`. A zero weight keeps a source visible for traceability while contributing nothing to its fused score.
+   */
+  source_weights?: {
+    [k: string]: number;
+  };
+}
+/**
+ * Optional reranker selection + parameters. When absent, no reranking is applied (fusion output is the final ranking).
+ */
+export interface RerankConfig {
+  /**
+   * MMR relevance/diversity trade-off in [0, 1] (1 = pure relevance, 0 = max diversity). Only consulted for `strategy = "mmr"`.
+   */
+  lambda?: number;
+  /**
+   * Which reranker to apply between fusion and budget.
+   */
+  strategy?: "none" | "mmr" | "cross_encoder" | "llm_judge" | "policy_priority";
+}
+/**
+ * Reranker selection + parameters. `strategy` reuses the domain RerankStrategy enum (snake_case); engram wires `none`/`mmr`/`cross_encoder` today (the other variants deserialize but are not dispatched).
+ */
+export interface RerankConfig1 {
+  /**
+   * MMR relevance/diversity trade-off in [0, 1] (1 = pure relevance, 0 = max diversity). Only consulted for `strategy = "mmr"`.
+   */
+  lambda: number;
+  /**
+   * Which reranker to apply between fusion and budget.
+   */
+  strategy: "none" | "cross_encoder";
 }
 export interface CodeContextFact {
   kind: "path" | "symbol" | "signature" | "parent" | "import" | "unresolved_import";
@@ -2073,119 +2199,6 @@ export interface CodeEvidenceQuery {
   resultLimit?: number;
 }
 /**
- * Fully resolved immutable snapshot; Rust profiles/field-wise overlays supply values.
- */
-export interface CodeIntelligenceConfig {
-  evidence: {
-    max_per_file: number;
-    max_supporting_units: number;
-    token_budget: number;
-  };
-  fusion: RecallFusionConfig & {
-    rerank?: {
-      strategy?: "none" | "cross_encoder";
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
-  } & {
-    /**
-     * Weight applied to any lane source not named in `source_weights`. Default 1.0 (pure RRF when no overrides are set).
-     */
-    default_source_weight: number;
-    rerank: RerankConfig1;
-    /**
-     * RRF constant (>= 1). Lower values make top ranks dominate more aggressively; higher values flatten. Conventional default 60 (Cormack et al. 2009).
-     */
-    rrf_k: number;
-    /**
-     * Per-lane-source weight overrides. Keys are the normalized lane source tags (the weight keys): `vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`. A zero weight keeps a source visible for traceability while contributing nothing to its fused score.
-     */
-    source_weights: {
-      [k: string]: number;
-    };
-    [k: string]: unknown;
-  };
-  index: {
-    body_token_target: number;
-    context_token_budget: number;
-  };
-  local_scorer: {
-    batch_size: number;
-    max_candidates: number;
-    model_id: string;
-    on_failure: "degrade" | "error";
-    pair_token_limit: number;
-    query_token_limit: number;
-  };
-  profile: "balanced-v1" | "fast-v1";
-  /**
-   * Query-only format; excluded from passage representation identity.
-   */
-  query: {
-    instruction: "legacy-v1" | "none" | "bge-retrieval-v1";
-  };
-  retrieval: {
-    candidates_per_lane: number;
-    /**
-     * @minItems 1
-     */
-    enabled_lanes: [
-      "vector" | "lexical" | "graph" | "associative_graph" | "community_summary",
-      ...("vector" | "lexical" | "graph" | "associative_graph" | "community_summary")[]
-    ];
-    graph_hops: number;
-    graph_neighbor_limit: number;
-    result_limit: number;
-  };
-  schema_version: 1;
-}
-/**
- * External recall-fusion configuration (RFC-0019). Operator-facing, serializable config loaded from a `[recall_fusion]` profile section or `.engram/recall.json`. Drives weighted reciprocal-rank fusion (vector + lexical + graph + facts + ...) and optional reranking in engram's unified recall. Absent config falls back to equal-weight RRF (today's behavior).
- */
-export interface RecallFusionConfig {
-  /**
-   * Weight applied to any lane source not named in `source_weights`. Default 1.0 (pure RRF when no overrides are set).
-   */
-  default_source_weight?: number;
-  rerank?: RerankConfig;
-  /**
-   * RRF constant (>= 1). Lower values make top ranks dominate more aggressively; higher values flatten. Conventional default 60 (Cormack et al. 2009).
-   */
-  rrf_k?: number;
-  /**
-   * Per-lane-source weight overrides. Keys are the normalized lane source tags (the weight keys): `vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`. A zero weight keeps a source visible for traceability while contributing nothing to its fused score.
-   */
-  source_weights?: {
-    [k: string]: number;
-  };
-}
-/**
- * Optional reranker selection + parameters. When absent, no reranking is applied (fusion output is the final ranking).
- */
-export interface RerankConfig {
-  /**
-   * MMR relevance/diversity trade-off in [0, 1] (1 = pure relevance, 0 = max diversity). Only consulted for `strategy = "mmr"`.
-   */
-  lambda?: number;
-  /**
-   * Which reranker to apply between fusion and budget.
-   */
-  strategy?: "none" | "mmr" | "cross_encoder" | "llm_judge" | "policy_priority";
-}
-/**
- * Reranker selection + parameters. `strategy` reuses the domain RerankStrategy enum (snake_case); engram wires `none`/`mmr`/`cross_encoder` today (the other variants deserialize but are not dispatched).
- */
-export interface RerankConfig1 {
-  /**
-   * MMR relevance/diversity trade-off in [0, 1] (1 = pure relevance, 0 = max diversity). Only consulted for `strategy = "mmr"`.
-   */
-  lambda: number;
-  /**
-   * Which reranker to apply between fusion and budget.
-   */
-  strategy: "none" | "cross_encoder";
-}
-/**
  * Partial overlay. Defaults shown are balanced-v1 annotations; shared profile expansion precedes explicit overrides.
  */
 export interface CodeIntelligenceConfigOverlay {
@@ -2197,6 +2210,11 @@ export interface CodeIntelligenceConfigOverlay {
   fusion?: RecallFusionConfig & {
     rerank?: {
       strategy?: "none" | "cross_encoder";
+      [k: string]: unknown;
+    };
+    [k: string]: unknown;
+  } & {
+    source_weights?: {
       [k: string]: unknown;
     };
     [k: string]: unknown;

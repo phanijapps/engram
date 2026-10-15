@@ -195,6 +195,36 @@ export const engramV1Schema = {
       ],
       "type": "string"
     },
+    "CodeConfigurationSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "effective": {
+          "$ref": "#/$defs/CodeIntelligenceConfig"
+        },
+        "hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "origins": {
+          "additionalProperties": {
+            "enum": [
+              "profile",
+              "file",
+              "environment",
+              "explicit"
+            ],
+            "type": "string"
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "effective",
+        "hash",
+        "origins"
+      ],
+      "type": "object"
+    },
     "CodeContextFact": {
       "additionalProperties": false,
       "properties": {
@@ -810,6 +840,23 @@ export const engramV1Schema = {
                 "source_weights",
                 "rerank"
               ]
+            },
+            {
+              "properties": {
+                "source_weights": {
+                  "propertyNames": {
+                    "enum": [
+                      "vector",
+                      "lexical",
+                      "graph",
+                      "associative_graph",
+                      "community_summary"
+                    ]
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
             }
           ]
         },
@@ -1025,6 +1072,23 @@ export const engramV1Schema = {
                         "cross_encoder"
                       ]
                     }
+                  },
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "properties": {
+                "source_weights": {
+                  "propertyNames": {
+                    "enum": [
+                      "vector",
+                      "lexical",
+                      "graph",
+                      "associative_graph",
+                      "community_summary"
+                    ]
                   },
                   "type": "object"
                 }

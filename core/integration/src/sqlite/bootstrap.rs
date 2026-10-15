@@ -126,6 +126,7 @@ impl SqliteLayoutPaths {
 /// Returns `CoreError::InvalidRequest` if configuration validation fails, or
 /// `CoreError::Adapter` if the storage directory cannot be created.
 pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvider> {
+    let code_configuration = config.resolve_code_configuration()?;
     config.validate().map_err(|e| CoreError::InvalidRequest {
         reason: format!("configuration validation failed: {e}"),
     })?;
@@ -702,6 +703,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
 
     let mut builder = EngramProviderBuilder::new(report)
+        .code_configuration(code_configuration)
         .schema_version(SCHEMA_VERSION)
         .adapter_version(ADAPTER_VERSION);
     if let Some(h) = memory {

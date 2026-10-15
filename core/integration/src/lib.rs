@@ -39,6 +39,7 @@
 
 pub mod batch;
 pub mod capability;
+pub mod code_configuration;
 pub mod code_graph;
 pub mod community_query;
 pub mod config;

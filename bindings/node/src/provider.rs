@@ -122,6 +122,12 @@ impl NativeProvider {
         encode(self.inner.capabilities())
     }
 
+    /// Shared immutable code settings; unsupported bootstrap has no snapshot.
+    #[napi(js_name = "codeConfigurationJson")]
+    pub fn code_configuration_json(&self) -> Result<String> {
+        encode(&self.inner.code_configuration())
+    }
+
     /// Backfills eligible retrieval vectors through the shared SDK operation.
     #[napi(js_name = "backfillEmbeddingsJson")]
     pub fn backfill_embeddings_json(&self, request_json: String) -> Result<String> {

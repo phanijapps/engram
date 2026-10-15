@@ -82,6 +82,7 @@ pub struct EngramProvider {
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     schema_version: String,
     adapter_version: String,
+    code_configuration: Option<crate::code_configuration::ResolvedCodeConfig>,
 }
 
 impl EngramProvider {
@@ -138,7 +139,9 @@ impl EngramProvider {
         config.validate().map_err(|e| CoreError::InvalidRequest {
             reason: format!("configuration validation failed: {e}"),
         })?;
-        Ok(Self::empty())
+        let mut provider = Self::empty();
+        provider.code_configuration = Some(config.resolve_code_configuration()?);
+        Ok(provider)
     }
 
     /// Opens a provider from configuration, selecting the backend from the
@@ -229,6 +232,11 @@ impl EngramProvider {
                     .to_string(),
             })
         }
+    }
+
+    /// Immutable settings admitted during startup, including origin and hash.
+    pub fn code_configuration(&self) -> Option<&crate::code_configuration::ResolvedCodeConfig> {
+        self.code_configuration.as_ref()
     }
 
     /// Returns the capability report for this provider.
@@ -647,6 +655,7 @@ impl EngramProvider {
             graph_cache: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
+            code_configuration: None,
         }
     }
 }
@@ -686,6 +695,7 @@ pub struct EngramProviderBuilder {
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     schema_version: String,
     adapter_version: String,
+    code_configuration: Option<crate::code_configuration::ResolvedCodeConfig>,
 }
 
 impl EngramProviderBuilder {
@@ -719,7 +729,16 @@ impl EngramProviderBuilder {
             graph_cache: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
+            code_configuration: None,
         }
+    }
+
+    pub fn code_configuration(
+        mut self,
+        config: crate::code_configuration::ResolvedCodeConfig,
+    ) -> Self {
+        self.code_configuration = Some(config);
+        self
     }
 
     /// Attaches the memory repository handle.
@@ -921,6 +940,7 @@ impl EngramProviderBuilder {
             graph_cache: self.graph_cache,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
+            code_configuration: self.code_configuration,
         }
     }
 }

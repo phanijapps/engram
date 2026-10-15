@@ -195,6 +195,13 @@ reviewed; no newly accepted enum silently breaks legacy source-role semantics.
 
 ### T2: Shared config resolution and host loading
 
+**Execution:** Complete: immutable host snapshots, strict presence-preserving
+file/env/explicit overlays and allowlisted query reductions pass focused tests.
+The real native addon returns the shared snapshot; workspace typecheck/build
+pass. Independent secure-design and quality fallback reviews are clean.
+See `reviews/t2-2026-10-14.md`. Real model readiness and evidence transports
+remain T7–T9 acceptance work.
+
 **Depends on:** T1
 **Mode:** TDD and transport integration.
 **Spec mapping:** AC1, AC8.

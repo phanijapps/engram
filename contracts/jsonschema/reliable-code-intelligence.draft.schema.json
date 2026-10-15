@@ -107,6 +107,23 @@
                   }
                 }
               }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source_weights": {
+                  "type": "object",
+                  "propertyNames": {
+                    "enum": [
+                      "vector",
+                      "lexical",
+                      "graph",
+                      "associative_graph",
+                      "community_summary"
+                    ]
+                  }
+                }
+              }
             }
           ]
         },
@@ -1272,6 +1289,23 @@
                     "strategy",
                     "lambda"
                   ]
+                }
+              }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source_weights": {
+                  "type": "object",
+                  "propertyNames": {
+                    "enum": [
+                      "vector",
+                      "lexical",
+                      "graph",
+                      "associative_graph",
+                      "community_summary"
+                    ]
+                  }
                 }
               }
             }

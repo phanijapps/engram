@@ -2464,6 +2464,23 @@
                   }
                 }
               }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source_weights": {
+                  "type": "object",
+                  "propertyNames": {
+                    "enum": [
+                      "vector",
+                      "lexical",
+                      "graph",
+                      "associative_graph",
+                      "community_summary"
+                    ]
+                  }
+                }
+              }
             }
           ]
         },
@@ -3631,6 +3648,23 @@
                   ]
                 }
               }
+            },
+            {
+              "type": "object",
+              "properties": {
+                "source_weights": {
+                  "type": "object",
+                  "propertyNames": {
+                    "enum": [
+                      "vector",
+                      "lexical",
+                      "graph",
+                      "associative_graph",
+                      "community_summary"
+                    ]
+                  }
+                }
+              }
             }
           ]
         },
@@ -3743,6 +3777,36 @@
         "evidence",
         "query"
       ]
+    },
+    "CodeConfigurationSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "effective",
+        "hash",
+        "origins"
+      ],
+      "properties": {
+        "effective": {
+          "$ref": "#/$defs/CodeIntelligenceConfig"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "origins": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "enum": [
+              "profile",
+              "file",
+              "environment",
+              "explicit"
+            ]
+          }
+        }
+      }
     }
   }
 }

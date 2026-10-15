@@ -82,3 +82,23 @@ fn operator_bounds_require_usable_candidates_and_expansion() {
     c.fusion.source_weights.insert("lexical".into(), f32::NAN);
     assert!(c.validate().is_err());
 }
+
+#[test]
+fn query_overrides_can_reduce_but_never_expand_operator_bounds() {
+    let c = CodeIntelligenceConfig::default();
+    let q=serde_json::from_value(serde_json::json!({"query":"find tail guard","resultLimit":5,"candidatesPerLane":20,"evidenceTokenBudget":1024})).unwrap();
+    let effective = c.for_query(&q).unwrap();
+    assert_eq!(effective.retrieval.result_limit, 5);
+    assert_eq!(effective.retrieval.candidates_per_lane, 20);
+    assert_eq!(effective.evidence.token_budget, 1024);
+    for value in [
+        serde_json::json!({"query":"q","resultLimit":11}),
+        serde_json::json!({"query":"q","candidatesPerLane":51}),
+        serde_json::json!({"query":"q","evidenceTokenBudget":6001}),
+    ] {
+        assert!(
+            c.for_query(&serde_json::from_value(value).unwrap())
+                .is_err()
+        );
+    }
+}

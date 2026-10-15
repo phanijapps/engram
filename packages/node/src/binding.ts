@@ -243,6 +243,7 @@ export interface NativeProviderBinding {
   requireMigrationApi():NativeSourceMigrationBinding;
   requireCodeSourceApi(contextJson:string):NativeCodeSourceApiBinding;
   capabilitiesJson(): string;
+  codeConfigurationJson(): string;
   fileDependenciesJson(requestJson: string): string;
   exploreJson(requestJson: string): string;
   backfillEmbeddingsJson(requestJson: string): string;

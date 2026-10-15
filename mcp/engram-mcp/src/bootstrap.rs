@@ -55,6 +55,10 @@ fn open_pgvector(config: &McpConfig) -> Result<EngramProvider, String> {
             config.capability_policy,
         )
         .with_pgvector(conn_str);
+        let engram_config = match &config.code_config_path {
+            Some(path) => engram_config.with_code_config_path(path),
+            None => engram_config,
+        };
         engram_backend_pgvector::open(&engram_config)
             .map_err(|e| format!("failed to open pgvector provider: {e}"))
     }
@@ -99,6 +103,10 @@ fn open_sqlite(config: &McpConfig) -> Result<EngramProvider, String> {
     // rebuild. Default `true`; `--no-vector` skips the vector index + embedding
     // provider/model + vector recall lane.
     .with_enable_vector(config.enable_vector);
+    let engram_config = match &config.code_config_path {
+        Some(path) => engram_config.with_code_config_path(path),
+        None => engram_config,
+    };
     // RFC-0019 (Blocker 1): resolve the operator-facing `[recall_fusion]` config
     // through the discovery ladder and apply it to the `EngramConfig` before
     // `EngramProvider::open`. Without this, the MCP path always builds with
@@ -138,6 +146,7 @@ mod tests {
         McpConfig {
             // `storage_path` is the directory the shared database file lives in.
             storage_path: dir.to_path_buf(),
+            code_config_path: None,
             project: "test".to_string(),
             scope_strategy: ScopeMappingStrategy::Strict,
             embedding: EmbeddingProviderConfig {

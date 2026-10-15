@@ -1,5 +1,5 @@
 import type {
-  CodeSourceContext, CodeSourceQuery, CodeSourceReadResult, CodeSourceGeneration,
+  CodeConfigurationSnapshot, CodeIntelligenceConfigOverlay, CodeSourceContext, CodeSourceQuery, CodeSourceReadResult, CodeSourceGeneration,
   ContextPayload, EmbeddingBackfillRequest, EmbeddingBackfillReport,
   RetrievalRequest,
   WriteMemoryRequest,
@@ -20,6 +20,9 @@ export interface NativeProviderTransportOptions {
   loader?: NativeBindingLoader;
   /** Serialized `EngramConfig` (v1 shape). Required when `provider` is not injected. */
   configJson?: string;
+  /** Explicit typed code fields applied by the shared Rust resolver. */
+  codeIntelligence?: CodeIntelligenceConfigOverlay;
+  codeConfigPath?: string;
   /** Inject an already-constructed `NativeProvider` (tests, or a shared provider). */
   provider?: NativeProviderBinding;
 }
@@ -92,6 +95,7 @@ export interface NativeProviderTransport {
   listCodeSources(context:CodeSourceContext):Promise<CodeSourceGeneration[]>;
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
+  codeConfiguration(): Promise<CodeConfigurationSnapshot | null>;
   /** Unified recall (fused across lanes) → `ContextPayload`. */
   recall(request: RetrievalRequest): Promise<ContextPayload>;
   /** Write a memory + lifecycle event. */
@@ -203,6 +207,9 @@ export function createNativeProviderTransport(
   options: NativeProviderTransportOptions
 ): NativeProviderTransport {
   if (options.provider) {
+    if (options.codeIntelligence !== undefined || options.codeConfigPath !== undefined) {
+      throw new Error("Code launch settings cannot reconfigure an injected provider");
+    }
     return new JsonNativeProviderTransport(options.provider);
   }
   if (!options.configJson) {
@@ -211,11 +218,18 @@ export function createNativeProviderTransport(
     );
   }
   const binding = options.binding ?? loadNativeBinding(options.loader);
-  return new JsonNativeProviderTransport(new binding.NativeProvider(options.configJson));
+  const config = JSON.parse(options.configJson) as Record<string, unknown>;
+  if (options.codeIntelligence !== undefined) config.code_intelligence = options.codeIntelligence;
+  if (options.codeConfigPath !== undefined) config.code_config_path = options.codeConfigPath;
+  return new JsonNativeProviderTransport(new binding.NativeProvider(JSON.stringify(config)));
 }
 
 class JsonNativeProviderTransport implements NativeProviderTransport {
   constructor(private readonly provider: NativeProviderBinding) {}
+
+  async codeConfiguration(): Promise<CodeConfigurationSnapshot | null> {
+    return decode(this.provider.codeConfigurationJson()) as CodeConfigurationSnapshot | null;
+  }
 
   async capabilities(): Promise<unknown> {
     return decode(this.provider.capabilitiesJson());

@@ -2846,6 +2846,18 @@
             "cross_encoder",
             null
           ]
+        },
+        "parentDecisions": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/CodeParentDecision"
+          }
+        },
+        "omittedParentDecisions": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
         }
       },
       "required": [
@@ -3826,6 +3838,62 @@
           }
         }
       }
+    },
+    "CodeParentDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parentUnitId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reason": {
+          "enum": [
+            "selected",
+            "below_threshold",
+            "scorer_pool",
+            "result_limit",
+            "per_file_limit",
+            "evidence_budget",
+            "invalid_evidence",
+            "serialized_byte_limit"
+          ]
+        },
+        "fusionScore": {
+          "type": "number"
+        },
+        "rerankScore": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "appliedThreshold": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "retrievedSegments": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "scoredSegments": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        }
+      },
+      "required": [
+        "parentUnitId",
+        "reason",
+        "fusionScore",
+        "rerankScore",
+        "appliedThreshold",
+        "retrievedSegments",
+        "scoredSegments"
+      ]
     }
   }
 }

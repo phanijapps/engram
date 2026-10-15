@@ -385,6 +385,11 @@
             "cross_encoder"
           ]
         },
+        "omittedParentDecisions": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
         "omittedParents": {
           "maximum": 1000000,
           "minimum": 0,
@@ -399,6 +404,13 @@
           "maximum": 1000000,
           "minimum": 0,
           "type": "integer"
+        },
+        "parentDecisions": {
+          "items": {
+            "$ref": "#/$defs/CodeParentDecision"
+          },
+          "maxItems": 200,
+          "type": "array"
         },
         "phaseMs": {
           "additionalProperties": {
@@ -1321,6 +1333,62 @@
         "tokenizerWindow",
         "scoreTransformation",
         "inputContractId"
+      ],
+      "type": "object"
+    },
+    "CodeParentDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "appliedThreshold": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fusionScore": {
+          "type": "number"
+        },
+        "parentUnitId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "selected",
+            "below_threshold",
+            "scorer_pool",
+            "result_limit",
+            "per_file_limit",
+            "evidence_budget",
+            "invalid_evidence",
+            "serialized_byte_limit"
+          ]
+        },
+        "rerankScore": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "retrievedSegments": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scoredSegments": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "parentUnitId",
+        "reason",
+        "fusionScore",
+        "rerankScore",
+        "appliedThreshold",
+        "retrievedSegments",
+        "scoredSegments"
       ],
       "type": "object"
     },
@@ -3883,6 +3951,9 @@
     "CodeModelManifest": {
       "$ref": "#/$defs/CodeModelManifest"
     },
+    "CodeParentDecision": {
+      "$ref": "#/$defs/CodeParentDecision"
+    },
     "CodeParseQuality": {
       "$ref": "#/$defs/CodeParseQuality"
     },
@@ -4216,7 +4287,8 @@
     "CodeModelManifest",
     "CodeCalibrationArtifact",
     "CodeIntelligenceConfig",
-    "CodeConfigurationSnapshot"
+    "CodeConfigurationSnapshot",
+    "CodeParentDecision"
   ],
   "title": "EngramV1Types",
   "type": "object"

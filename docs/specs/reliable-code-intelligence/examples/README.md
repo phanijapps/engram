@@ -32,3 +32,23 @@ reranker defaults. Configuration is captured once at startup and reported with
 an effective hash and field origins. Generic `.engram/recall.json` discovery stays
 separate. The HTTP runtime's existing `--config` accepts the full `EngramConfig`
 JSON; its `code_config_path`/`code_intelligence` fields use the same Rust resolver.
+## Inspecting rejected implementation parents
+
+Evidence packets now include `diagnostics.parentDecisions`, capped at 200 rows
+and the packet's serialized byte bound. Match `parentUnitId` to the canonical
+code unit. Each row reports its best fused score, actual reranker score (null
+when unscored), applied threshold (null when unvalidated), retrieved/scored
+segment counts and one terminal reason. `below_threshold` means the parent was
+scored but failed confidence filtering; `scorer_pool` means no scoring opportunity;
+the other rejection reasons identify result, per-file, token, metadata-validity
+or serialized-byte limits. `selected` means retained in the final primary items.
+`omittedParentDecisions` reports trace rows removed by count/byte bounds; absent
+legacy trace fields mean no trace was recorded, not that nothing was rejected.
+Trace trimming never removes source evidence, and source/authority checks remain
+the same as for the returned packet. Scores are not probabilities.
+
+The [first live proof](../../../research/reliable-code-parent-decisions-live-2026-10-15.json)
+uses two development queries with actual local models and identical pre-change
+evidence. Vite `getEnvFilesForMode` was scored at -2.6768866 and rejected below
+-0.97909373; `initPublicFiles` was selected at -0.97173107. This diagnostic change
+does not alter calibration or claim a relevance improvement.

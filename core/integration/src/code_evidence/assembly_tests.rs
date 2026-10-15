@@ -40,11 +40,23 @@ impl EmbeddingProvider for Counter {
     }
 }
 fn packet(names: usize, length: usize) -> CodeEvidencePacket {
+    packet_with(names, length, |_, _, _, _| {})
+}
+fn packet_with(
+    names: usize,
+    length: usize,
+    edit: impl FnOnce(
+        &mut Admission,
+        &mut Vec<CodeCandidate>,
+        &mut Ranking,
+        &mut CodeCalibrationArtifact,
+    ),
+) -> CodeEvidencePacket {
     let config = CodeIntelligenceConfig::default();
     let mut config = config;
     config.evidence.max_per_file = 100;
     let resolved = resolve_code_config(None, None, None).unwrap();
-    let admission = Admission {
+    let mut admission = Admission {
         config,
         resolved,
         requested: CodeEvidenceReranker::CrossEncoder,
@@ -52,13 +64,13 @@ fn packet(names: usize, length: usize) -> CodeEvidencePacket {
         identity: None,
         state: CodeScorerState::Ready,
     };
-    let binding:CodeCalibrationArtifact=serde_json::from_value(serde_json::json!({"schemaVersion":1,"id":"test","configHash":"test","queryRepresentationId":"q","passageRepresentationId":"p","embeddingManifestId":"e","scorerManifestId":"s","tokenizerIdentity":"t","scoreTransformation":"raw_logit","scoreSpace":"cross_encoder","threshold":0,"developmentLabelsSha256":"ab".repeat(32)})).unwrap();
+    let mut binding:CodeCalibrationArtifact=serde_json::from_value(serde_json::json!({"schemaVersion":1,"id":"test","configHash":"test","queryRepresentationId":"q","passageRepresentationId":"p","embeddingManifestId":"e","scorerManifestId":"s","tokenizerIdentity":"t","scoreTransformation":"raw_logit","scoreSpace":"cross_encoder","threshold":0,"developmentLabelsSha256":"ab".repeat(32)})).unwrap();
     let mut primary = vec![];
     let mut parents = vec![];
     let mut views = vec![];
     for index in 0..names {
         let id = format!("unit-{index}");
-        let parent:KnowledgeChunk=serde_json::from_value(serde_json::json!({"id":id,"documentId":"doc","sourceId":"source","kind":"code_block","text":"abc","contentHash":"hash","policy":{"visibility":"workspace","retention":"durable","allowedUses":["retrieval"]},"provenance":{"source":"test","actor":{"id":"actor","kind":"agent"},"observedAt":"2026-10-14T00:00:00Z"},"createdAt":"2026-10-14T00:00:00Z","location":{"anchor":"a".repeat(length)},"code":{"role":"symbol","file":{"scope":{"tenant":"t"},"repository":"repo","path":"a.ts"},"generation":"g","sourceHash":"hash","fingerprint":"f","ranges":[{"start":0,"end":3}],"complete":true,"parseQuality":"clean","unit":id}})).unwrap();
+        let parent:KnowledgeChunk=serde_json::from_value(serde_json::json!({"id":format!("chunk-{index}"),"documentId":"doc","sourceId":"source","kind":"code_block","text":"abc","contentHash":"hash","policy":{"visibility":"workspace","retention":"durable","allowedUses":["retrieval"]},"provenance":{"source":"test","actor":{"id":"actor","kind":"agent"},"observedAt":"2026-10-14T00:00:00Z"},"createdAt":"2026-10-14T00:00:00Z","location":{"anchor":"a".repeat(length)},"code":{"role":"symbol","file":{"scope":{"tenant":"t"},"repository":"repo","path":"a.ts"},"generation":"g","sourceHash":"hash","fingerprint":"f","ranges":[{"start":0,"end":3}],"complete":true,"parseQuality":"clean","unit":id}})).unwrap();
         let code = parent.code.as_ref().unwrap();
         let segment = CodeEmbeddingSegment {
             id: format!("segment-{index}"),
@@ -98,7 +110,7 @@ fn packet(names: usize, length: usize) -> CodeEvidencePacket {
             },
         });
         parents.push(super::super::ranking::RankedParent {
-            parent: id,
+            parent: parent.id.to_string(),
             segments: vec![(index, Some(index), 1.0)],
             score: 1.0,
         });
@@ -113,7 +125,7 @@ fn packet(names: usize, length: usize) -> CodeEvidencePacket {
             fusion_traces: vec![trace],
         });
     }
-    let ranking = Ranking {
+    let mut ranking = Ranking {
         parents,
         views,
         scores: vec![1.0; names],
@@ -127,6 +139,7 @@ fn packet(names: usize, length: usize) -> CodeEvidencePacket {
         attempted_pairs: names as u32,
         pool_omitted_segments: 0,
     };
+    edit(&mut admission, &mut primary, &mut ranking, &mut binding);
     assemble(
         &Counter,
         PacketInput {
@@ -180,4 +193,102 @@ fn byte_budget_removing_every_primary_recomputes_insufficient_status() {
         CodeCalibrationState::Validated
     );
     assert_eq!(packet.diagnostics.omitted_units, 1);
+}
+
+#[test]
+fn parent_decisions_explain_threshold_pool_and_selection() {
+    let selected = packet(1, 3);
+    assert_eq!(selected.diagnostics.parent_decisions.len(), 1);
+    let decision = &selected.diagnostics.parent_decisions[0];
+    assert_eq!(decision.reason, CodeParentDecisionReason::Selected);
+    assert_eq!(decision.rerank_score, Some(1.0));
+    assert_eq!(decision.applied_threshold, Some(0.0));
+    assert_eq!(
+        (decision.retrieved_segments, decision.scored_segments),
+        (1, 1)
+    );
+    let threshold = packet_with(1, 3, |_, _, _, binding| binding.threshold = 2.0);
+    assert!(threshold.items.is_empty());
+    let decision = &threshold.diagnostics.parent_decisions[0];
+    assert_eq!(decision.reason, CodeParentDecisionReason::BelowThreshold);
+    assert_eq!(decision.applied_threshold, Some(2.0));
+    let pool = packet_with(2, 3, |_, _, ranking, _| {
+        ranking.parents.truncate(1);
+        ranking.views.truncate(1);
+        ranking.scores.truncate(1);
+    });
+    let decision = pool
+        .diagnostics
+        .parent_decisions
+        .iter()
+        .find(|d| d.parent_unit_id == "unit-1")
+        .unwrap();
+    assert_eq!(decision.reason, CodeParentDecisionReason::ScorerPool);
+    assert_eq!(decision.rerank_score, None);
+    assert_eq!(decision.scored_segments, 0);
+}
+
+#[test]
+fn parent_decisions_distinguish_output_limits() {
+    for (kind, expected) in [
+        (0, CodeParentDecisionReason::ResultLimit),
+        (1, CodeParentDecisionReason::PerFileLimit),
+        (2, CodeParentDecisionReason::EvidenceBudget),
+    ] {
+        let p = packet_with(2, 3, |a, _, _, _| match kind {
+            0 => a.config.retrieval.result_limit = 1,
+            1 => a.config.evidence.max_per_file = 1,
+            _ => a.config.evidence.token_budget = 2,
+        });
+        assert!(
+            p.diagnostics
+                .parent_decisions
+                .iter()
+                .any(|d| d.reason == expected)
+        );
+    }
+    let p = packet(10, 40000);
+    for d in &p.diagnostics.parent_decisions {
+        assert_eq!(
+            d.reason == CodeParentDecisionReason::Selected,
+            p.items.iter().any(|i| i.parent_unit_id == d.parent_unit_id)
+        );
+    }
+    assert!(
+        p.diagnostics
+            .parent_decisions
+            .iter()
+            .any(|d| d.reason == CodeParentDecisionReason::SerializedByteLimit)
+    );
+}
+
+#[test]
+fn legacy_packets_decode_with_no_parent_decisions() {
+    let mut json = serde_json::to_value(packet(1, 3)).unwrap();
+    json["diagnostics"]
+        .as_object_mut()
+        .unwrap()
+        .remove("parentDecisions");
+    json["diagnostics"]
+        .as_object_mut()
+        .unwrap()
+        .remove("omittedParentDecisions");
+    let packet: CodeEvidencePacket = serde_json::from_value(json).unwrap();
+    assert!(packet.diagnostics.parent_decisions.is_empty());
+    assert_eq!(packet.diagnostics.omitted_parent_decisions, 0);
+}
+
+#[test]
+fn parent_decision_limits_discard_diagnostics_before_evidence() {
+    let bounded = packet(250, 3);
+    assert_eq!(bounded.diagnostics.parent_decisions.len(), 200);
+    assert_eq!(bounded.diagnostics.omitted_parent_decisions, 50);
+    let pressure = packet(250, 23000);
+    assert_eq!(pressure.items, packet(10, 23000).items);
+    assert!(pressure.diagnostics.parent_decisions.len() < 200);
+    assert_eq!(
+        pressure.diagnostics.omitted_parent_decisions as usize,
+        250 - pressure.diagnostics.parent_decisions.len()
+    );
+    assert!(serde_json::to_vec(&pressure).unwrap().len() <= 261632);
 }

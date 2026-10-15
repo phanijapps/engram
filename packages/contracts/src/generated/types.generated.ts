@@ -134,6 +134,7 @@ export interface EngramV1Types {
   CodeIntelligenceConfigOverlay: CodeIntelligenceConfigOverlay;
   CodeModelAsset: CodeModelAsset;
   CodeModelManifest: CodeModelManifest;
+  CodeParentDecision: CodeParentDecision;
   CodeParseQuality: CodeParseQuality;
   CodeScoreTransformation: CodeScoreTransformation;
   CodeSegmentEvidence: CodeSegmentEvidence;
@@ -1140,9 +1141,14 @@ export interface CodeEvidenceDiagnostics {
     [k: string]: string;
   };
   effectiveReranker: "none" | "cross_encoder";
+  omittedParentDecisions?: number;
   omittedParents: number;
   omittedSegments: number;
   omittedUnits: number;
+  /**
+   * @maxItems 200
+   */
+  parentDecisions?: CodeParentDecision[];
   phaseMs: {
     [k: string]: number;
   };
@@ -1155,6 +1161,23 @@ export interface CodeEvidenceDiagnostics {
   scorerState: "ready" | "disabled" | "unavailable" | "failed";
   thresholdScoreSpace: "rrf" | "cross_encoder" | null;
   truncated: boolean;
+}
+export interface CodeParentDecision {
+  appliedThreshold: number | null;
+  fusionScore: number;
+  parentUnitId: string;
+  reason:
+    | "selected"
+    | "below_threshold"
+    | "scorer_pool"
+    | "result_limit"
+    | "per_file_limit"
+    | "evidence_budget"
+    | "invalid_evidence"
+    | "serialized_byte_limit";
+  rerankScore: number | null;
+  retrievedSegments: number;
+  scoredSegments: number;
 }
 export interface CodeEvidenceItem {
   /**

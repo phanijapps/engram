@@ -167,6 +167,8 @@ pub(super) fn assemble(
         evidence_status: CodeEvidenceStatus::InsufficientEvidence,
         source_failures: failures,
         diagnostics: CodeEvidenceDiagnostics {
+            parent_decisions: vec![],
+            omitted_parent_decisions: 0,
             config_hash: binding.config_hash.clone(),
             profile: config.profile,
             requested_reranker: admission.requested,
@@ -214,12 +216,21 @@ pub(super) fn assemble(
     );
     let mut budget = config.evidence.token_budget as u64;
     let mut files: HashMap<(&str, &str), u32> = HashMap::new();
+    let mut rejected = BTreeMap::new();
     for parent in &ranking.parents {
         if calibration.is_some_and(|c| parent.score < c.threshold) {
+            rejected.insert(
+                parent.parent.clone(),
+                CodeParentDecisionReason::BelowThreshold,
+            );
             packet.diagnostics.omitted_units += 1;
             continue;
         }
         let Some(&(first, _, _)) = parent.segments.first() else {
+            rejected.insert(
+                parent.parent.clone(),
+                CodeParentDecisionReason::InvalidEvidence,
+            );
             continue;
         };
         let c = &primary[first];
@@ -233,6 +244,14 @@ pub(super) fn assemble(
         if packet.items.len() >= config.retrieval.result_limit as usize
             || files.get(&file).copied().unwrap_or(0) >= config.evidence.max_per_file
         {
+            rejected.insert(
+                parent.parent.clone(),
+                if packet.items.len() >= config.retrieval.result_limit as usize {
+                    CodeParentDecisionReason::ResultLimit
+                } else {
+                    CodeParentDecisionReason::PerFileLimit
+                },
+            );
             packet.diagnostics.omitted_units += 1;
             packet.diagnostics.truncated = true;
             continue;
@@ -275,14 +294,21 @@ pub(super) fn assemble(
                     next.context.push(fact.clone());
                 }
             }
-            if !valid_item(&next)
-                || item_tokens(model, &next)? > budget
-                || serde_json::to_vec(&next).map_err(|_| invalid())?.len() > MAX_BYTES
-            {
+            let rejection = if !valid_item(&next) {
+                Some(CodeParentDecisionReason::InvalidEvidence)
+            } else if item_tokens(model, &next)? > budget {
+                Some(CodeParentDecisionReason::EvidenceBudget)
+            } else if serde_json::to_vec(&next).map_err(|_| invalid())?.len() > MAX_BYTES {
+                Some(CodeParentDecisionReason::SerializedByteLimit)
+            } else {
+                None
+            };
+            if let Some(reason) = rejection {
                 packet.diagnostics.omitted_segments += 1;
                 packet.diagnostics.truncated = true;
                 // Never retain a lower score after dropping the maximum view.
                 if item.segments.is_empty() {
+                    rejected.insert(parent.parent.clone(), reason);
                     break;
                 }
                 continue;
@@ -362,6 +388,7 @@ pub(super) fn assemble(
     } else {
         CodeEvidenceStatus::InsufficientEvidence
     };
+    super::decisions::attach(&mut packet, primary, ranking, calibration, &rejected)?;
     Ok(packet)
 }
 fn invalid() -> CoreError {

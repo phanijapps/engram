@@ -162,6 +162,10 @@ pub enum CodeScoreSpace {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CodeEvidenceDiagnostics {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parent_decisions: Vec<super::CodeParentDecision>,
+    #[serde(default, skip_serializing_if = "super::decision::is_zero")]
+    pub omitted_parent_decisions: u32,
     pub config_hash: String,
     pub profile: CodeIntelligenceProfile,
     pub requested_reranker: CodeEvidenceReranker,

@@ -5,6 +5,24 @@
 
 ## Approach
 
+**2026-10-15 sequential follow-up:** Owner requested one fix at a time with less
+adversarial review. First slice adds bounded, source-authorized per-parent
+selection/rejection diagnostics using the existing shared packet. Preserve all
+ranking, thresholds, query fields, frozen assessment artifacts and self-store
+state. Verify threshold/pool/output reasons, old-packet decoding, trace bounds
+and unchanged evidence under trace pressure; exercise an actual built MCP against
+a disposable evaluation-store copy. Use one focused self-review for this slice;
+the owner's lighter review instruction supersedes repeated agent review rounds.
+This observability slice does not claim an accuracy improvement or ship AC10.
+Completed with 1,193 Rust workspace tests passed (10 ignored), generated
+contracts, TypeScript checks/tests/build and boundary gates. Five native
+actual-model tests pass. Two development queries through the rebuilt MCP on a
+disposable Vite copy validate the new schema and preserve exact prior evidence;
+the original evaluation store's logical identity is unchanged. See
+[parent-decision live proof](../../research/reliable-code-parent-decisions-live-2026-10-15.json).
+The next sequential change is the ranking/confidence accuracy fix; traces now
+show the actual cause rather than inferring it from final omissions.
+
 Freeze the evaluation first, promote the reviewed portable contracts, then build
 configuration and current-document authority. Add derivative AST/token coverage
 without replacing canonical methods. Separate candidate retrieval from output,

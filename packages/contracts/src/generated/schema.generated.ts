@@ -386,6 +386,11 @@ export const engramV1Schema = {
             "cross_encoder"
           ]
         },
+        "omittedParentDecisions": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
         "omittedParents": {
           "maximum": 1000000,
           "minimum": 0,
@@ -400,6 +405,13 @@ export const engramV1Schema = {
           "maximum": 1000000,
           "minimum": 0,
           "type": "integer"
+        },
+        "parentDecisions": {
+          "items": {
+            "$ref": "#/$defs/CodeParentDecision"
+          },
+          "maxItems": 200,
+          "type": "array"
         },
         "phaseMs": {
           "additionalProperties": {
@@ -1322,6 +1334,62 @@ export const engramV1Schema = {
         "tokenizerWindow",
         "scoreTransformation",
         "inputContractId"
+      ],
+      "type": "object"
+    },
+    "CodeParentDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "appliedThreshold": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "fusionScore": {
+          "type": "number"
+        },
+        "parentUnitId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "reason": {
+          "enum": [
+            "selected",
+            "below_threshold",
+            "scorer_pool",
+            "result_limit",
+            "per_file_limit",
+            "evidence_budget",
+            "invalid_evidence",
+            "serialized_byte_limit"
+          ]
+        },
+        "rerankScore": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "retrievedSegments": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scoredSegments": {
+          "maximum": 1000000,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "parentUnitId",
+        "reason",
+        "fusionScore",
+        "rerankScore",
+        "appliedThreshold",
+        "retrievedSegments",
+        "scoredSegments"
       ],
       "type": "object"
     },

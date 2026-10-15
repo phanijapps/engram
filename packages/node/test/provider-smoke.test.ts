@@ -285,6 +285,12 @@ describe.skipIf(!existsSync(ADDON_PATH) || process.env.ENGRAM_LIVE_FASTEMBED !==
       expect(packet.items.length).toBeGreaterThan(0);
       expect(packet.diagnostics).toMatchObject({scorerState:"ready",effectiveReranker:"cross_encoder",calibrationState:"unvalidated",reindexRequired:false});
       expect(packet.diagnostics.scoredPairs).toBeGreaterThan(0);
+      expect(packet.diagnostics.parentDecisions.length).toBeGreaterThan(0);
+      for (const decision of packet.diagnostics.parentDecisions) {
+        expect(decision.appliedThreshold).toBeNull();
+        expect(decision.rerankScore).toEqual(expect.any(Number));
+        expect(decision.reason === "selected").toBe(packet.items.some((item:{parentUnitId:string}) => item.parentUnitId === decision.parentUnitId));
+      }
       expect(packet.evidenceStatus).toBe("insufficient_evidence");
       expect(packet.items.some((item:{excerpts:Array<{text:string}>})=>item.excerpts.some(e=>e.text.includes("DELETE FROM users")))).toBe(true);
       for(const extra of [{scope},{requester:context.requester},{model:"remote"},{calibration:{}},{query:"é".repeat(8193)}]) {
@@ -292,6 +298,7 @@ describe.skipIf(!existsSync(ADDON_PATH) || process.env.ENGRAM_LIVE_FASTEMBED !==
       }
       const denied=JSON.parse(native.requireCodeEvidenceApi(JSON.stringify(context)).evidenceJson(JSON.stringify({query:"delete a user"})));
       expect(denied.items).toHaveLength(0);
+      expect(denied.diagnostics.parentDecisions ?? []).toHaveLength(0);
       expect(()=>native.requireCodeEvidenceApi(JSON.stringify({...context,readerVersion:2}))).toThrow();
     } finally {rmSync(base,{recursive:true,force:true});}
   },120_000);

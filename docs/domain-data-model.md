@@ -2745,3 +2745,21 @@ compatible generic scorers). Only an already constructed, admitted local model
 with implemented untruncated query/document/pair inspectors declares true.
 Readiness requires that declaration plus compatible actual model identity; the
 operation continues validating actual input coverage and authorization.
+
+### Code evidence parent decisions (compatible v1 addition)
+
+`CodeEvidenceDiagnostics.parentDecisions` optionally records up to 200 current,
+authorized implementation-parent decisions. Each `CodeParentDecision` identifies
+the opaque parent unit, selected/rejected reason, best fused score, nullable
+actual reranker score and applied threshold, and retrieved/scored segment counts.
+Reasons distinguish `selected`, `below_threshold`, `scorer_pool`, `result_limit`,
+`per_file_limit`, `evidence_budget`, `invalid_evidence`, and
+`serialized_byte_limit`. An unscored parent has a null reranker score; an
+unvalidated operation has a null applied threshold. No query/source text or
+additional source authorization is introduced. `omittedParentDecisions` counts
+decisions excluded by the trace count/serialized-byte bound. Legacy packets
+default to an empty trace and zero omitted decisions. Traces are attached after
+evidence selection and trimmed before evidence, preserving ranking, confidence,
+source checks and the existing total packet byte limit. The shared packet makes
+this additive diagnostic available through Rust, native/TypeScript, HTTP and
+stdio without changing query fields or calibration/configuration identities.

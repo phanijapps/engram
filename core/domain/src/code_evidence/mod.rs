@@ -1,10 +1,12 @@
 //! Additive source-grounded evidence DTOs; no inference or storage behavior.
 mod coverage;
+mod decision;
 mod packet;
 mod query;
 mod source;
 
 pub use coverage::CodeTokenCoverage;
+pub use decision::{CodeParentDecision, CodeParentDecisionReason};
 pub use packet::*;
 pub use query::{CodeEvidenceQuery, CodeEvidenceValidationError};
 pub use source::CodeEvidenceSourceRef;

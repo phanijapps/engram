@@ -514,7 +514,7 @@ mod local_embedding_backfill {
             block_on(index.embedded_ids()).unwrap().is_empty(),
             "canonical code vectors must not be written to the generic index"
         );
-        assert_eq!(*model.inputs.lock().unwrap(), vec!["hello"]);
+        assert_eq!(*model.inputs.lock().unwrap(), vec!["path: a.ts\n\nhello"]);
         assert_eq!(
             embedded_code_parents(&provider, &retrieval),
             [Id::from("unit")].into_iter().collect()
@@ -635,7 +635,7 @@ mod local_embedding_backfill {
             let (provider, index) = provider(store, model.clone());
             let report = block_on(provider.backfill_embeddings(&request(&retrieval))).unwrap();
             assert_eq!(report.code_embedded, 1, "{role} should be embedded");
-            assert_eq!(*model.inputs.lock().unwrap(), vec!["hello"]);
+            assert_eq!(*model.inputs.lock().unwrap(), vec!["path: a.ts\n\nhello"]);
             assert!(embedded_code_parents(&provider, &retrieval).contains(&Id::from("unit")));
             assert!(
                 block_on(index.vector_for_target(&Id::from("snapshot")))

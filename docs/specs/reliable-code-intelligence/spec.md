@@ -5,7 +5,7 @@
 - **Plan:** [plan.md](plan.md)
 - **Constrained by:** ADR-0003, ADR-0009, ADR-0022, ADR-0026, ADR-0028 (pure-code ownership), ADR-0029, ADR-0030; RFC-0021
 - **Brief:** none — authored directly from the user's approved research direction
-- **Contract:** [draft JSON Schema](../../../contracts/jsonschema/reliable-code-intelligence.draft.schema.json); [draft domain extension](../../domain-data-model.md#draft-reliable-code-intelligence-contracts); existing [RecallFusionConfig](../../../contracts/v1/schemas/recall-fusion.schema.json)
+- **Contract:** [accepted additive v1 schema](../../../contracts/v1/schemas/engram-v1.schema.json); [domain extension](../../domain-data-model.md#reliable-code-intelligence-contracts); existing [RecallFusionConfig](../../../contracts/v1/schemas/recall-fusion.schema.json)
 - **Shape:** mixed (data, retrieval behavior and model/transport integration)
 
 > Spec contract: these are requirements, not claims about current runtime
@@ -172,6 +172,9 @@ inferred requirement substitutes for source.
 Passage segmentation/context/tokenizer/model/normalization changes create a
 new representation identity and target IDs. Query formatting has its own
 version; query-only instruction changes do not re-embed unchanged passages.
+`query.instruction` admits `legacy-v1` (initial default), `none` and
+`bge-retrieval-v1`; the latter uses the documented BGE retrieval instruction.
+Development ablation selects the release profile format before held-out scoring.
 Reindex-required state is observable; incompatible/snapshot/legacy hash donors
 cannot satisfy new-profile readiness or reuse.
 
@@ -229,6 +232,11 @@ Before tokenization, reject queries over 16,384 UTF-8 bytes and repository
 identifiers over 2,048 UTF-8 bytes. These fixed admission limits apply through
 every transport and embedded callers; oversized input invokes neither tokenizer
 nor scorer.
+
+Source-reference generations and hashes preserve the exact opaque strings in
+accepted source contracts. Segment `parentChunkId` locates the canonical record;
+`parentUnitId` and reference `unitId` identify its descriptor unit. Validate both
+identities together; never reinterpret one as the other.
 
 `CodeEvidenceQuery` accepts query/repository and bounded result/candidate/token
 limits. Host scope/requester and index/model identity are not wire overrides.

@@ -2631,24 +2631,30 @@ identity-equivalent root; collisions are denied. A failed import may retain a
 new root under BestEffort, and retry reuses it. File retraction preserves roots
 while independent graphs still refer to them.
 
-## Draft: reliable code-intelligence contracts
+## Reliable code-intelligence contracts
 
-This section is a **proposal**, governed by
-[`reliable-code-intelligence`](specs/reliable-code-intelligence/spec.md), not
-accepted v1 behavior. Its authored schema is
-[`reliable-code-intelligence.draft.schema.json`](../contracts/jsonschema/reliable-code-intelligence.draft.schema.json).
-Accepted schemas/generated types remain unchanged until implementation promotes
-the reviewed definitions through the normal contract-generation path.
+These additive v1 shapes are governed by
+[`reliable-code-intelligence`](specs/reliable-code-intelligence/spec.md) and the
+accepted [`v1 schema`](../contracts/v1/schemas/engram-v1.schema.json). Contract
+acceptance does not imply the operation or model/quality gates have shipped.
+`CodeIntelligenceConfigOverlay` describes partial operator settings; the resolved
+`CodeIntelligenceConfig` contains every required field. Existing memory/recall
+payloads and canonical source-role enums are unchanged. Adding optional SDK
+configuration requires source updates to explicit Rust struct literals and
+custom transports as their wiring is implemented.
 
 `CodeIntelligenceConfig` is an optional, typed code-specific configuration on
 `EngramConfig`. It separates index representation, candidate retrieval, local
 reranking and evidence presentation. Its fusion member reuses
 `RecallFusionConfig`; generic memory recall keeps its existing defaults.
+Query formatting is a separate `query.instruction` field: `legacy-v1`, `none`,
+or `bge-retrieval-v1`, initially legacy until development ablation. It changes
+query identity/calibration, never passage identity or a re-embedding requirement.
 Versioned profiles and field defaults have one Rust-owned definition. Hosts
 resolve file/environment/explicit overrides once and report configuration
 origin and hash. Query callers cannot override authorization or index/model
 identity. Transport casing is snake_case for configuration and camelCase for
-operation DTOs, as fixed by the draft schema.
+operation DTOs, as fixed by the accepted schema.
 
 `CodeEvidenceQuery` contains query text, optional repository restriction and
 bounded query-time result/candidate/evidence limits. Scope and requester come
@@ -2670,7 +2676,12 @@ fallback packets are insufficient even when candidates remain for inspection.
 Calibration/model manifests are pinned derived artifacts, not probabilities.
 
 `CodeEmbeddingSegment` is derived from a canonical unit with typed parent,
-source ranges, source generation/attempt and representation fingerprint.
+source ranges, source generation/attempt and representation fingerprint. Each
+segment has distinct `parentChunkId` (canonical repository lookup key) and
+`parentUnitId` (`CodeChunkDescriptor.unit`); both must resolve to the same
+current canonical parent. Source references preserve the accepted nonempty
+opaque string generation and sourceHash exactly; there is no numeric counter
+conversion or invented source digest.
 Complete methods and snapshots remain canonical source. Segment identities
 include representation identity; different tokenizer/context/model settings
 cannot reuse incompatible vectors merely because raw source hashes match.
@@ -2679,9 +2690,25 @@ subject to the same source-ownership checks before model use and retrieval.
 
 `DocumentHead` identifies the current indexed document for a stable source
 within exact scope/repository, with generation, attempt, state and content hash.
+Its typed key contains exact scope, repository and opaque stable sourceKey;
+its value carries opaque generation/attempt, state, sourceHash, nullable current
+documentId, canonical chunkIds, policy and provenance.
+`CodeSegmentInventory` separately fences one representation and its segment IDs
+against the canonical source generation/attempt; it is not canonical inventory.
+Its segment IDs follow canonical parent inventory order, then ascending first
+source byte within each parent, including terminal continuations.
+
+`CodeModelManifest` carries schemaVersion, model/revision/license, admitted
+relative asset paths and SHA-256 digests, a versioned inputContractId identifying
+pair order/token preparation/output interpretation, tokenizer identity/window and score
+transformation. `CodeCalibrationArtifact` binds config, query/passage identities,
+embedding/scorer manifests, tokenizer/score transformation and strategy score
+space to a finite threshold and development-label digest. These descriptors
+carry no download URL, runtime code or authorization grant.
+
 Publication uses a guarded compare-and-swap after verifying the canonical
 inventory; vector/lexical records are projections, not current-version
 authority. Old document versions remain explicitly historical. Unverified
 legacy heads and updating/incomplete sources are excluded from current
 discovery. Historical requests require trusted-host authorization and do not
-weaken source policy. This proposal introduces no cross-store ACID guarantee.
+weaken source policy. These contracts introduce no cross-store ACID guarantee.

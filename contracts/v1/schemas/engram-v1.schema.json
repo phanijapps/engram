@@ -2302,6 +2302,1447 @@
           "minimum": 0
         }
       }
+    },
+    "RerankConfig": {
+      "title": "RerankConfig",
+      "description": "Reranker selection + parameters. `strategy` reuses the domain RerankStrategy enum (snake_case); engram wires `none`/`mmr`/`cross_encoder` today (the other variants deserialize but are not dispatched).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategy": {
+          "description": "Which reranker to apply between fusion and budget.",
+          "type": "string",
+          "enum": [
+            "none",
+            "mmr",
+            "cross_encoder",
+            "llm_judge",
+            "policy_priority"
+          ],
+          "default": "none"
+        },
+        "lambda": {
+          "description": "MMR relevance/diversity trade-off in [0, 1] (1 = pure relevance, 0 = max diversity). Only consulted for `strategy = \"mmr\"`.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.5
+        }
+      }
+    },
+    "RecallFusionConfig": {
+      "title": "RecallFusionConfig",
+      "description": "External recall-fusion configuration (RFC-0019). Operator-facing, serializable config loaded from a `[recall_fusion]` profile section or `.engram/recall.json`. Drives weighted reciprocal-rank fusion (vector + lexical + graph + facts + ...) and optional reranking in engram's unified recall. Absent config falls back to equal-weight RRF (today's behavior).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rrf_k": {
+          "description": "RRF constant (>= 1). Lower values make top ranks dominate more aggressively; higher values flatten. Conventional default 60 (Cormack et al. 2009).",
+          "type": "integer",
+          "minimum": 1,
+          "default": 60
+        },
+        "default_source_weight": {
+          "description": "Weight applied to any lane source not named in `source_weights`. Default 1.0 (pure RRF when no overrides are set).",
+          "type": "number",
+          "minimum": 0,
+          "default": 1.0
+        },
+        "source_weights": {
+          "description": "Per-lane-source weight overrides. Keys are the normalized lane source tags (the weight keys): `vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`. A zero weight keeps a source visible for traceability while contributing nothing to its fused score.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          },
+          "default": {}
+        },
+        "rerank": {
+          "description": "Optional reranker selection + parameters. When absent, no reranking is applied (fusion output is the final ranking).",
+          "$ref": "#/$defs/RerankConfig"
+        }
+      }
+    },
+    "CodeIntelligenceConfigOverlay": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "default": 1
+        },
+        "profile": {
+          "enum": [
+            "balanced-v1",
+            "fast-v1"
+          ],
+          "default": "balanced-v1"
+        },
+        "index": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "body_token_target": {
+              "type": "integer",
+              "minimum": 64,
+              "maximum": 8192,
+              "default": 384
+            },
+            "context_token_budget": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1024,
+              "default": 64
+            }
+          }
+        },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "candidates_per_lane": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 1000,
+              "default": 50
+            },
+            "result_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "enabled_lanes": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "vector",
+                  "lexical",
+                  "graph",
+                  "associative_graph",
+                  "community_summary"
+                ]
+              },
+              "default": [
+                "vector",
+                "lexical"
+              ]
+            },
+            "graph_hops": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2,
+              "default": 1
+            },
+            "graph_neighbor_limit": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 20
+            }
+          }
+        },
+        "fusion": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/RecallFusionConfig"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "rerank": {
+                  "type": "object",
+                  "properties": {
+                    "strategy": {
+                      "enum": [
+                        "none",
+                        "cross_encoder"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "local_scorer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "minLength": 1,
+              "default": "jinaai/jina-reranker-v1-turbo-en"
+            },
+            "query_token_limit": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 2048,
+              "default": 128
+            },
+            "pair_token_limit": {
+              "type": "integer",
+              "minimum": 128,
+              "maximum": 8192,
+              "default": 1024
+            },
+            "max_candidates": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "batch_size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "default": 8
+            },
+            "on_failure": {
+              "enum": [
+                "degrade",
+                "error"
+              ],
+              "default": "degrade"
+            }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "token_budget": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 32768,
+              "default": 6000
+            },
+            "max_supporting_units": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 20
+            },
+            "max_per_file": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 4
+            }
+          }
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "instruction": {
+              "enum": [
+                "legacy-v1",
+                "none",
+                "bge-retrieval-v1"
+              ],
+              "default": "legacy-v1"
+            }
+          },
+          "description": "Query-only format; excluded from passage representation identity."
+        }
+      },
+      "description": "Partial overlay. Defaults shown are balanced-v1 annotations; shared profile expansion precedes explicit overrides."
+    },
+    "CodeEvidenceQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384,
+          "description": "Runtime enforces at most 16384 UTF-8 bytes before tokenization (schema length is code points)."
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "description": "Runtime enforces at most 2048 UTF-8 bytes before tokenization (schema length is code points)."
+        },
+        "resultLimit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "candidatesPerLane": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 1000
+        },
+        "evidenceTokenBudget": {
+          "type": "integer",
+          "minimum": 256,
+          "maximum": 32768
+        }
+      },
+      "required": [
+        "query"
+      ]
+    },
+    "CodeEvidenceSourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "unitId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Canonical CodeChunkDescriptor.unit, distinct from KnowledgeChunk.id; never a chunk lookup key."
+        },
+        "sourceHash": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact opaque canonical source hash, preserved without relabeling."
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact opaque canonical source-generation identifier; never a numeric counter."
+        },
+        "representationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startByte": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "endByte": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "indexedRevision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "repository",
+        "path",
+        "unitId",
+        "sourceHash",
+        "generation",
+        "representationId",
+        "startByte",
+        "endByte",
+        "indexedRevision"
+      ]
+    },
+    "CodeEvidenceItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parentUnitId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "const": "code"
+        },
+        "sourceCategory": {
+          "const": "implementation"
+        },
+        "excerpts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeExcerptPart"
+          },
+          "maxItems": 20,
+          "minItems": 1
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeSegmentEvidence"
+          },
+          "maxItems": 200,
+          "minItems": 1
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeContextFact"
+          },
+          "maxItems": 20,
+          "minItems": 0
+        },
+        "partial": {
+          "type": "boolean"
+        },
+        "fusionScore": {
+          "type": "number"
+        },
+        "rerankScore": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "parentUnitId",
+        "name",
+        "kind",
+        "sourceCategory",
+        "excerpts",
+        "segments",
+        "context",
+        "partial",
+        "fusionScore",
+        "rerankScore"
+      ]
+    },
+    "CodeEvidenceDiagnostics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "configHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile": {
+          "enum": [
+            "balanced-v1",
+            "fast-v1"
+          ]
+        },
+        "requestedReranker": {
+          "enum": [
+            "none",
+            "cross_encoder"
+          ]
+        },
+        "effectiveReranker": {
+          "enum": [
+            "none",
+            "cross_encoder"
+          ]
+        },
+        "scorerState": {
+          "enum": [
+            "ready",
+            "disabled",
+            "unavailable",
+            "failed"
+          ]
+        },
+        "scorerManifestId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "calibrationState": {
+          "enum": [
+            "validated",
+            "unvalidated"
+          ]
+        },
+        "candidateCounts": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000
+          }
+        },
+        "omittedUnits": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "reindexRequired": {
+          "type": "boolean"
+        },
+        "configOrigins": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "queryRepresentationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "phaseMs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "omittedSegments": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "omittedParents": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "scoredPairs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000000
+        },
+        "calibrationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thresholdScoreSpace": {
+          "enum": [
+            "rrf",
+            "cross_encoder",
+            null
+          ]
+        }
+      },
+      "required": [
+        "configHash",
+        "profile",
+        "requestedReranker",
+        "effectiveReranker",
+        "scorerState",
+        "scorerManifestId",
+        "calibrationState",
+        "candidateCounts",
+        "omittedUnits",
+        "truncated",
+        "reindexRequired",
+        "configOrigins",
+        "queryRepresentationId",
+        "phaseMs",
+        "omittedSegments",
+        "omittedParents",
+        "scoredPairs",
+        "calibrationId",
+        "thresholdScoreSpace"
+      ]
+    },
+    "CodeEvidencePacket": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeEvidenceItem"
+          },
+          "maxItems": 100
+        },
+        "evidenceStatus": {
+          "enum": [
+            "candidates_available",
+            "insufficient_evidence"
+          ]
+        },
+        "diagnostics": {
+          "$ref": "#/$defs/CodeEvidenceDiagnostics"
+        },
+        "sourceFailures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RetrievalSourceFailure"
+          },
+          "maxItems": 100
+        },
+        "supportingUnits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeSupportingUnit"
+          },
+          "maxItems": 100,
+          "minItems": 0
+        }
+      },
+      "required": [
+        "items",
+        "evidenceStatus",
+        "diagnostics",
+        "sourceFailures",
+        "supportingUnits"
+      ]
+    },
+    "CodeTokenCoverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "codeTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8192
+        },
+        "contextTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1024
+        },
+        "queryTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2048
+        },
+        "specialTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "totalTokens": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16384
+        },
+        "truncated": {
+          "const": false
+        }
+      },
+      "required": [
+        "codeTokens",
+        "contextTokens",
+        "queryTokens",
+        "specialTokens",
+        "totalTokens",
+        "truncated"
+      ]
+    },
+    "CodeExcerptPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/CodeEvidenceSourceRef"
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 131072
+        }
+      },
+      "required": [
+        "source",
+        "text"
+      ]
+    },
+    "CodeContextFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "path",
+            "symbol",
+            "signature",
+            "parent",
+            "import",
+            "unresolved_import"
+          ]
+        },
+        "value": {
+          "type": "string",
+          "maxLength": 8192
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeEvidenceSourceRef"
+          },
+          "maxItems": 20,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "kind",
+        "value",
+        "sources"
+      ]
+    },
+    "CodeSegmentEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "segmentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeEvidenceSourceRef"
+          },
+          "maxItems": 20,
+          "minItems": 1
+        },
+        "fusionTraces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FusionTrace"
+          },
+          "maxItems": 10,
+          "minItems": 1
+        },
+        "fusionScore": {
+          "type": "number"
+        },
+        "rerankScore": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "embeddingInput": {
+          "$ref": "#/$defs/CodeTokenCoverage"
+        },
+        "rerankInput": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CodeTokenCoverage"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "segmentId",
+        "sources",
+        "fusionTraces",
+        "fusionScore",
+        "rerankScore",
+        "embeddingInput",
+        "rerankInput"
+      ]
+    },
+    "CodeSupportingUnit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "unitId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "code",
+            "document"
+          ]
+        },
+        "sourceCategory": {
+          "enum": [
+            "implementation",
+            "test",
+            "generated",
+            "documentation",
+            "unknown"
+          ]
+        },
+        "excerpts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeExcerptPart"
+          },
+          "maxItems": 20,
+          "minItems": 1
+        },
+        "partial": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "unitId",
+        "name",
+        "kind",
+        "sourceCategory",
+        "excerpts",
+        "partial"
+      ]
+    },
+    "CodeSourceCategory": {
+      "enum": [
+        "implementation",
+        "test",
+        "generated",
+        "documentation",
+        "unknown"
+      ]
+    },
+    "DocumentHeadKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceKey": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "scope",
+        "repository",
+        "sourceKey"
+      ]
+    },
+    "DocumentHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/DocumentHeadKey"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attemptId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "$ref": "#/$defs/CodeSourceState"
+        },
+        "sourceHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "documentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "chunkIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "maxItems": 100000
+        },
+        "policy": {
+          "$ref": "#/$defs/Policy"
+        },
+        "provenance": {
+          "$ref": "#/$defs/Provenance"
+        }
+      },
+      "required": [
+        "key",
+        "generation",
+        "attemptId",
+        "state",
+        "sourceHash",
+        "documentId",
+        "chunkIds",
+        "policy",
+        "provenance"
+      ]
+    },
+    "CodeEmbeddingSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parentChunkId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parentUnitId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "$ref": "#/$defs/CodeFileKey"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attemptId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "representationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeByteRange"
+          },
+          "maxItems": 20,
+          "minItems": 1
+        },
+        "continuation": {
+          "type": "boolean"
+        },
+        "sourceCategory": {
+          "$ref": "#/$defs/CodeSourceCategory"
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeContextFact"
+          },
+          "maxItems": 20
+        },
+        "embeddingInput": {
+          "$ref": "#/$defs/CodeTokenCoverage"
+        }
+      },
+      "required": [
+        "id",
+        "parentChunkId",
+        "parentUnitId",
+        "file",
+        "generation",
+        "attemptId",
+        "sourceHash",
+        "representationId",
+        "ranges",
+        "continuation",
+        "sourceCategory",
+        "context",
+        "embeddingInput"
+      ]
+    },
+    "CodeSegmentInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "$ref": "#/$defs/CodeFileKey"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attemptId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "representationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "segmentIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "maxItems": 100000,
+          "description": "Canonical parent inventory order, then ascending first source byte per parent; terminal continuations follow their range."
+        },
+        "state": {
+          "$ref": "#/$defs/CodeSourceState"
+        }
+      },
+      "required": [
+        "file",
+        "generation",
+        "attemptId",
+        "representationId",
+        "segmentIds",
+        "state"
+      ]
+    },
+    "CodeModelAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "role": {
+          "enum": [
+            "onnx",
+            "onnx_data",
+            "tokenizer",
+            "tokenizer_config",
+            "special_tokens",
+            "model_config"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "role"
+      ]
+    },
+    "CodeScoreTransformation": {
+      "enum": [
+        "raw_logit",
+        "sigmoid",
+        "none"
+      ]
+    },
+    "CodeModelManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeModelAsset"
+          },
+          "maxItems": 20,
+          "minItems": 1
+        },
+        "tokenizerIdentity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tokenizerWindow": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32768
+        },
+        "scoreTransformation": {
+          "$ref": "#/$defs/CodeScoreTransformation"
+        },
+        "inputContractId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Versioned input order, token preparation and expected output interpretation; included in manifest identity."
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "modelId",
+        "revision",
+        "license",
+        "assets",
+        "tokenizerIdentity",
+        "tokenizerWindow",
+        "scoreTransformation",
+        "inputContractId"
+      ]
+    },
+    "CodeCalibrationArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "configHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "queryRepresentationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "passageRepresentationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "embeddingManifestId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scorerManifestId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tokenizerIdentity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scoreTransformation": {
+          "$ref": "#/$defs/CodeScoreTransformation"
+        },
+        "scoreSpace": {
+          "enum": [
+            "rrf",
+            "cross_encoder"
+          ]
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "developmentLabelsSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "configHash",
+        "queryRepresentationId",
+        "passageRepresentationId",
+        "embeddingManifestId",
+        "scorerManifestId",
+        "tokenizerIdentity",
+        "scoreTransformation",
+        "scoreSpace",
+        "threshold",
+        "developmentLabelsSha256"
+      ]
+    },
+    "CodeIntelligenceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "default": 1
+        },
+        "profile": {
+          "enum": [
+            "balanced-v1",
+            "fast-v1"
+          ],
+          "default": "balanced-v1"
+        },
+        "index": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "body_token_target": {
+              "type": "integer",
+              "minimum": 64,
+              "maximum": 8192,
+              "default": 384
+            },
+            "context_token_budget": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1024,
+              "default": 64
+            }
+          },
+          "required": [
+            "body_token_target",
+            "context_token_budget"
+          ]
+        },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "candidates_per_lane": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 1000,
+              "default": 50
+            },
+            "result_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "enabled_lanes": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "vector",
+                  "lexical",
+                  "graph",
+                  "associative_graph",
+                  "community_summary"
+                ]
+              },
+              "default": [
+                "vector",
+                "lexical"
+              ]
+            },
+            "graph_hops": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2,
+              "default": 1
+            },
+            "graph_neighbor_limit": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          "required": [
+            "candidates_per_lane",
+            "result_limit",
+            "enabled_lanes",
+            "graph_hops",
+            "graph_neighbor_limit"
+          ]
+        },
+        "fusion": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/RecallFusionConfig"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "rerank": {
+                  "type": "object",
+                  "properties": {
+                    "strategy": {
+                      "enum": [
+                        "none",
+                        "cross_encoder"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "required": [
+                "rrf_k",
+                "default_source_weight",
+                "source_weights",
+                "rerank"
+              ],
+              "properties": {
+                "rrf_k": {
+                  "description": "RRF constant (>= 1). Lower values make top ranks dominate more aggressively; higher values flatten. Conventional default 60 (Cormack et al. 2009).",
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 60
+                },
+                "default_source_weight": {
+                  "description": "Weight applied to any lane source not named in `source_weights`. Default 1.0 (pure RRF when no overrides are set).",
+                  "type": "number",
+                  "minimum": 0,
+                  "default": 1.0
+                },
+                "source_weights": {
+                  "description": "Per-lane-source weight overrides. Keys are the normalized lane source tags (the weight keys): `vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`. A zero weight keeps a source visible for traceability while contributing nothing to its fused score.",
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "default": {}
+                },
+                "rerank": {
+                  "title": "RerankConfig",
+                  "description": "Reranker selection + parameters. `strategy` reuses the domain RerankStrategy enum (snake_case); engram wires `none`/`mmr`/`cross_encoder` today (the other variants deserialize but are not dispatched).",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "strategy": {
+                      "description": "Which reranker to apply between fusion and budget.",
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "cross_encoder"
+                      ],
+                      "default": "none"
+                    },
+                    "lambda": {
+                      "description": "MMR relevance/diversity trade-off in [0, 1] (1 = pure relevance, 0 = max diversity). Only consulted for `strategy = \"mmr\"`.",
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "default": 0.5
+                    }
+                  },
+                  "required": [
+                    "strategy",
+                    "lambda"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "local_scorer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "minLength": 1,
+              "default": "jinaai/jina-reranker-v1-turbo-en"
+            },
+            "query_token_limit": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 2048,
+              "default": 128
+            },
+            "pair_token_limit": {
+              "type": "integer",
+              "minimum": 128,
+              "maximum": 8192,
+              "default": 1024
+            },
+            "max_candidates": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "batch_size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "default": 8
+            },
+            "on_failure": {
+              "enum": [
+                "degrade",
+                "error"
+              ],
+              "default": "degrade"
+            }
+          },
+          "required": [
+            "model_id",
+            "query_token_limit",
+            "pair_token_limit",
+            "max_candidates",
+            "batch_size",
+            "on_failure"
+          ]
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "token_budget": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 32768,
+              "default": 6000
+            },
+            "max_supporting_units": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 20
+            },
+            "max_per_file": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 4
+            }
+          },
+          "required": [
+            "token_budget",
+            "max_supporting_units",
+            "max_per_file"
+          ]
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "instruction": {
+              "enum": [
+                "legacy-v1",
+                "none",
+                "bge-retrieval-v1"
+              ],
+              "default": "legacy-v1"
+            }
+          },
+          "description": "Query-only format; excluded from passage representation identity.",
+          "required": [
+            "instruction"
+          ]
+        }
+      },
+      "description": "Fully resolved immutable snapshot; Rust profiles/field-wise overlays supply values.",
+      "required": [
+        "schema_version",
+        "profile",
+        "index",
+        "retrieval",
+        "fusion",
+        "local_scorer",
+        "evidence",
+        "query"
+      ]
     }
   }
 }

@@ -38,6 +38,10 @@ EXAMPLES = ROOT / "contracts/v1/examples"
 INVALID_EXAMPLES = EXAMPLES / "invalid"
 
 VALID_EXAMPLE_DEFS = {
+    "code-evidence-query.json": "CodeEvidenceQuery",
+    "code-evidence-packet.json": "CodeEvidencePacket",
+    "code-intelligence-config.balanced.json": "CodeIntelligenceConfig",
+    "code-intelligence-config.fast.json": "CodeIntelligenceConfig",
     "write-memory-request.json": "WriteMemoryRequest",
     "write-memory-response.json": "WriteMemoryResponse",
     "retrieval-request.json": "RetrievalRequest",
@@ -54,6 +58,10 @@ VALID_EXAMPLE_DEFS = {
 }
 
 INVALID_EXAMPLE_DEFS = {
+    "code-evidence-query.scope.json": "CodeEvidenceQuery",
+    "code-evidence-query.requester.json": "CodeEvidenceQuery",
+    "code-evidence-query.model.json": "CodeEvidenceQuery",
+    "code-evidence-query.budget.json": "CodeEvidenceQuery",
     "write-memory-request.missing-scope-tenant.json": "WriteMemoryRequest",
     "write-memory-request.training-export.json": "WriteMemoryRequest",
     "memory-record.missing-status.json": "MemoryRecord",

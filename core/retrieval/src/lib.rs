@@ -4,7 +4,9 @@
 //! on already-produced candidate results. It does not call stores, embedding
 //! providers, policy engines, graph databases, or model rerankers.
 
+pub mod code_config;
 mod composer;
+pub use code_config::*;
 mod config;
 mod graph_cache;
 mod record_access;

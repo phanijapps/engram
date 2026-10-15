@@ -175,6 +175,21 @@
               "default": 4
             }
           }
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "instruction": {
+              "enum": [
+                "legacy-v1",
+                "none",
+                "bge-retrieval-v1"
+              ],
+              "default": "legacy-v1"
+            }
+          },
+          "description": "Query-only format; excluded from passage representation identity."
         }
       },
       "description": "Partial overlay. Defaults shown are balanced-v1 annotations; shared profile expansion precedes explicit overrides."
@@ -230,16 +245,18 @@
         },
         "unitId": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "Canonical CodeChunkDescriptor.unit, distinct from KnowledgeChunk.id; never a chunk lookup key."
         },
         "sourceHash": {
           "type": "string",
-          "pattern": "^sha256:[a-f0-9]{64}$"
+          "minLength": 1,
+          "description": "Exact opaque canonical source hash, preserved without relabeling."
         },
         "generation": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 9007199254740991
+          "type": "string",
+          "minLength": 1,
+          "description": "Exact opaque canonical source-generation identifier; never a numeric counter."
         },
         "representationId": {
           "type": "string",
@@ -715,6 +732,661 @@
         "excerpts",
         "partial"
       ]
+    },
+    "CodeSourceCategory": {
+      "enum": [
+        "implementation",
+        "test",
+        "generated",
+        "documentation",
+        "unknown"
+      ]
+    },
+    "DocumentHeadKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "$ref": "../v1/schemas/engram-v1.schema.json#/$defs/Scope"
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceKey": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "scope",
+        "repository",
+        "sourceKey"
+      ]
+    },
+    "DocumentHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/DocumentHeadKey"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attemptId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "state": {
+          "$ref": "../v1/schemas/engram-v1.schema.json#/$defs/CodeSourceState"
+        },
+        "sourceHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "documentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "chunkIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "maxItems": 100000
+        },
+        "policy": {
+          "$ref": "../v1/schemas/engram-v1.schema.json#/$defs/Policy"
+        },
+        "provenance": {
+          "$ref": "../v1/schemas/engram-v1.schema.json#/$defs/Provenance"
+        }
+      },
+      "required": [
+        "key",
+        "generation",
+        "attemptId",
+        "state",
+        "sourceHash",
+        "documentId",
+        "chunkIds",
+        "policy",
+        "provenance"
+      ]
+    },
+    "CodeEmbeddingSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parentChunkId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parentUnitId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "$ref": "../v1/schemas/engram-v1.schema.json#/$defs/CodeFileKey"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attemptId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "representationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ranges": {
+          "type": "array",
+          "items": {
+            "$ref": "../v1/schemas/engram-v1.schema.json#/$defs/CodeByteRange"
+          },
+          "maxItems": 20,
+          "minItems": 1
+        },
+        "continuation": {
+          "type": "boolean"
+        },
+        "sourceCategory": {
+          "$ref": "#/$defs/CodeSourceCategory"
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextFact"
+          },
+          "maxItems": 20
+        },
+        "embeddingInput": {
+          "$ref": "#/$defs/TokenCoverage"
+        }
+      },
+      "required": [
+        "id",
+        "parentChunkId",
+        "parentUnitId",
+        "file",
+        "generation",
+        "attemptId",
+        "sourceHash",
+        "representationId",
+        "ranges",
+        "continuation",
+        "sourceCategory",
+        "context",
+        "embeddingInput"
+      ]
+    },
+    "CodeSegmentInventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "$ref": "../v1/schemas/engram-v1.schema.json#/$defs/CodeFileKey"
+        },
+        "generation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attemptId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "representationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "segmentIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "maxItems": 100000,
+          "description": "Canonical parent inventory order, then ascending first source byte per parent; terminal continuations follow their range."
+        },
+        "state": {
+          "$ref": "../v1/schemas/engram-v1.schema.json#/$defs/CodeSourceState"
+        }
+      },
+      "required": [
+        "file",
+        "generation",
+        "attemptId",
+        "representationId",
+        "segmentIds",
+        "state"
+      ]
+    },
+    "CodeModelAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "role": {
+          "enum": [
+            "onnx",
+            "onnx_data",
+            "tokenizer",
+            "tokenizer_config",
+            "special_tokens",
+            "model_config"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "role"
+      ]
+    },
+    "CodeScoreTransformation": {
+      "enum": [
+        "raw_logit",
+        "sigmoid",
+        "none"
+      ]
+    },
+    "CodeModelManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CodeModelAsset"
+          },
+          "maxItems": 20,
+          "minItems": 1
+        },
+        "tokenizerIdentity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tokenizerWindow": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32768
+        },
+        "scoreTransformation": {
+          "$ref": "#/$defs/CodeScoreTransformation"
+        },
+        "inputContractId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Versioned input order, token preparation and expected output interpretation; included in manifest identity."
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "modelId",
+        "revision",
+        "license",
+        "assets",
+        "tokenizerIdentity",
+        "tokenizerWindow",
+        "scoreTransformation",
+        "inputContractId"
+      ]
+    },
+    "CodeCalibrationArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": {
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "configHash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "queryRepresentationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "passageRepresentationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "embeddingManifestId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scorerManifestId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tokenizerIdentity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scoreTransformation": {
+          "$ref": "#/$defs/CodeScoreTransformation"
+        },
+        "scoreSpace": {
+          "enum": [
+            "rrf",
+            "cross_encoder"
+          ]
+        },
+        "threshold": {
+          "type": "number"
+        },
+        "developmentLabelsSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "configHash",
+        "queryRepresentationId",
+        "passageRepresentationId",
+        "embeddingManifestId",
+        "scorerManifestId",
+        "tokenizerIdentity",
+        "scoreTransformation",
+        "scoreSpace",
+        "threshold",
+        "developmentLabelsSha256"
+      ]
+    },
+    "EffectiveConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "default": 1
+        },
+        "profile": {
+          "enum": [
+            "balanced-v1",
+            "fast-v1"
+          ],
+          "default": "balanced-v1"
+        },
+        "index": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "body_token_target": {
+              "type": "integer",
+              "minimum": 64,
+              "maximum": 8192,
+              "default": 384
+            },
+            "context_token_budget": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1024,
+              "default": 64
+            }
+          },
+          "required": [
+            "body_token_target",
+            "context_token_budget"
+          ]
+        },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "candidates_per_lane": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 1000,
+              "default": 50
+            },
+            "result_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 10
+            },
+            "enabled_lanes": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "vector",
+                  "lexical",
+                  "graph",
+                  "associative_graph",
+                  "community_summary"
+                ]
+              },
+              "default": [
+                "vector",
+                "lexical"
+              ]
+            },
+            "graph_hops": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2,
+              "default": 1
+            },
+            "graph_neighbor_limit": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 20
+            }
+          },
+          "required": [
+            "candidates_per_lane",
+            "result_limit",
+            "enabled_lanes",
+            "graph_hops",
+            "graph_neighbor_limit"
+          ]
+        },
+        "fusion": {
+          "allOf": [
+            {
+              "$ref": "../v1/schemas/recall-fusion.schema.json"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "rerank": {
+                  "type": "object",
+                  "properties": {
+                    "strategy": {
+                      "enum": [
+                        "none",
+                        "cross_encoder"
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "required": [
+                "rrf_k",
+                "default_source_weight",
+                "source_weights",
+                "rerank"
+              ],
+              "properties": {
+                "rrf_k": {
+                  "description": "RRF constant (>= 1). Lower values make top ranks dominate more aggressively; higher values flatten. Conventional default 60 (Cormack et al. 2009).",
+                  "type": "integer",
+                  "minimum": 1,
+                  "default": 60
+                },
+                "default_source_weight": {
+                  "description": "Weight applied to any lane source not named in `source_weights`. Default 1.0 (pure RRF when no overrides are set).",
+                  "type": "number",
+                  "minimum": 0,
+                  "default": 1.0
+                },
+                "source_weights": {
+                  "description": "Per-lane-source weight overrides. Keys are the normalized lane source tags (the weight keys): `vector`, `lexical`, `graph`, `associative_graph`, `community_summary`, `temporal`, `facts`, `belief`. A zero weight keeps a source visible for traceability while contributing nothing to its fused score.",
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "default": {}
+                },
+                "rerank": {
+                  "title": "RerankConfig",
+                  "description": "Reranker selection + parameters. `strategy` reuses the domain RerankStrategy enum (snake_case); engram wires `none`/`mmr`/`cross_encoder` today (the other variants deserialize but are not dispatched).",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "strategy": {
+                      "description": "Which reranker to apply between fusion and budget.",
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "cross_encoder"
+                      ],
+                      "default": "none"
+                    },
+                    "lambda": {
+                      "description": "MMR relevance/diversity trade-off in [0, 1] (1 = pure relevance, 0 = max diversity). Only consulted for `strategy = \"mmr\"`.",
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "default": 0.5
+                    }
+                  },
+                  "required": [
+                    "strategy",
+                    "lambda"
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        "local_scorer": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "model_id": {
+              "type": "string",
+              "minLength": 1,
+              "default": "jinaai/jina-reranker-v1-turbo-en"
+            },
+            "query_token_limit": {
+              "type": "integer",
+              "minimum": 16,
+              "maximum": 2048,
+              "default": 128
+            },
+            "pair_token_limit": {
+              "type": "integer",
+              "minimum": 128,
+              "maximum": 8192,
+              "default": 1024
+            },
+            "max_candidates": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "batch_size": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "default": 8
+            },
+            "on_failure": {
+              "enum": [
+                "degrade",
+                "error"
+              ],
+              "default": "degrade"
+            }
+          },
+          "required": [
+            "model_id",
+            "query_token_limit",
+            "pair_token_limit",
+            "max_candidates",
+            "batch_size",
+            "on_failure"
+          ]
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "token_budget": {
+              "type": "integer",
+              "minimum": 256,
+              "maximum": 32768,
+              "default": 6000
+            },
+            "max_supporting_units": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100,
+              "default": 20
+            },
+            "max_per_file": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 4
+            }
+          },
+          "required": [
+            "token_budget",
+            "max_supporting_units",
+            "max_per_file"
+          ]
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "instruction": {
+              "enum": [
+                "legacy-v1",
+                "none",
+                "bge-retrieval-v1"
+              ],
+              "default": "legacy-v1"
+            }
+          },
+          "description": "Query-only format; excluded from passage representation identity.",
+          "required": [
+            "instruction"
+          ]
+        }
+      },
+      "description": "Fully resolved immutable snapshot; Rust profiles/field-wise overlays supply values.",
+      "required": [
+        "schema_version",
+        "profile",
+        "index",
+        "retrieval",
+        "fusion",
+        "local_scorer",
+        "evidence",
+        "query"
+      ]
     }
-  }
+  },
+  "description": "Historical reviewed proposal. Accepted additive definitions are in contracts/v1/schemas/engram-v1.schema.json; runtime implementation and quality gates remain in progress."
 }

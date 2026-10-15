@@ -36,5 +36,8 @@
     "token_budget": 6000,
     "max_supporting_units": 20,
     "max_per_file": 4
+  },
+  "query": {
+    "instruction": "legacy-v1"
   }
 }

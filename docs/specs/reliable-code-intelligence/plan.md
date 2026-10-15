@@ -134,9 +134,11 @@ coverage, context and unresolved facts follow the draft packet definitions and
 
 ### T0: Freeze corpora, labels and reference machine
 
-**Execution:** Freeze checkpoint complete; serialized baseline collection is
-running. [Independent review](reviews/t0-2026-10-14.md). T10 must verify collection
-completion before tuning.
+**Execution:** Complete: frozen inputs, independent label/harness review,
+original12+identifier2+three-corpus45 development requests and four live
+authorization controls. [Raw baseline](../../research/reliable-code-intelligence-baseline-2026-10-14.json).
+[Independent review](reviews/t0-2026-10-14.md). Candidate/phase metrics unavailable
+in legacy search remain unavailable. T10 verifies these results before tuning.
 
 **Depends on:** none
 **Mode:** goal-based check plus recorded blind label review.
@@ -164,6 +166,11 @@ inaccessible to tuning/scoring code.
 
 ### T1: Promote reviewed contracts and defaults
 
+**Execution:** Complete: accepted additive schema, generated TS, strict portable
+DTOs and profile defaults pass focused tests. Independent adversarial/security
+and quality fallback reviews are clean. Model/transport behavior is not inferred
+from this checkpoint. See `reviews/t1-2026-10-14.md`.
+
 **Depends on:** T0
 **Mode:** TDD plus goal-based contract generation.
 **Spec mapping:** AC1, AC7–AC8.
@@ -171,6 +178,11 @@ inaccessible to tuning/scoring code.
 profile defaults, query bounds and semantic cross-field checks match schemas;
 existing v1 payloads/types remain compatible. Query/repository UTF-8 byte
 admission rejects oversized input before any tokenizer/scorer call.
+**Construction:** `stub: true` — `core/domain/tests/code_evidence.rs` and
+`core/retrieval/tests/code_config.rs` were red on missing APIs, then passed for
+byte admission, opaque source references, profile defaults, strict effective
+fusion and token-window inequalities. Model-call and transport assertions are
+completed by T8/T9 rather than inferred from these pure DTO checks.
 Complete balanced/fast examples and a two-segment scored packet exercise all
 diagnostics, accepted failure references and source-range mapping.
 **Approach:** After spec approval, finalize the draft domain extension, schema

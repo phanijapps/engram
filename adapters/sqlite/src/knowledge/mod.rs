@@ -30,9 +30,12 @@ mod guarded_source_write;
 mod identity;
 #[allow(clippy::module_inception)]
 mod knowledge;
+#[cfg(test)]
+mod legacy_delete_tests;
 mod maintenance;
 mod ontology;
 mod record_writes;
+mod repository_contract;
 mod retrieval;
 mod schema;
 mod scope;

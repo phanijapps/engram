@@ -65,6 +65,34 @@ pub(super) fn current_attempt(
 
 #[async_trait]
 impl CodeSourceRepository for SqlKnowledgeStore {
+    async fn put_repository_contract(
+        &self,
+        scope: &Scope,
+        repository: &str,
+        entity: KnowledgeEntity,
+        relationship: KnowledgeRelationship,
+    ) -> CoreResult<()> {
+        let mut conn = self.lock()?;
+        let tx = conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+        super::repository_contract::put(&tx, scope, repository, entity, relationship)?;
+        tx.commit().map_err(sql_error)
+    }
+    async fn retract_repository_contract(
+        &self,
+        scope: &Scope,
+        repository: &str,
+        entity: &EntityId,
+        relationship: &RelationshipId,
+    ) -> CoreResult<()> {
+        let mut conn = self.lock()?;
+        let tx = conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+        super::repository_contract::retract(&tx, scope, repository, entity, relationship)?;
+        tx.commit().map_err(sql_error)
+    }
     async fn indexed_code_revision(
         &self,
         file: &CodeFileKey,
@@ -357,6 +385,10 @@ impl CodeSourceRepository for SqlKnowledgeStore {
                 CodeSourceRecordKind::Entity,
                 id.as_str(),
             )?;
+            // Source-refresh GC preserves this exact, validated repository
+            // context as history. Ordinary KG hard-delete APIs do not enter
+            // this path or acquire retention for standalone facts.
+            tx.execute("INSERT INTO canonical_document_history(kind,record_id,record_json) SELECT 'entity',?1,?2 WHERE NOT EXISTS(SELECT 1 FROM document_head_records WHERE kind='entity' AND record_id=?1)", params![id.as_str(),json]).map_err(sql_error)?;
             tx.execute(
                 "DELETE FROM knowledge_entities_records WHERE id=?1",
                 [id.as_str()],

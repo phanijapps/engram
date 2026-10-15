@@ -483,11 +483,13 @@ where
         }
         // File is new or changed — delete prior graph(s) before writing.
         if let Some(heads) = repo.document_heads() {
-            block_on(crate::document_generation::exclude(
+            block_on(crate::document_generation::fence_refresh(
                 heads,
                 &head_key,
-                None,
+                &hash,
+                &opts.policy,
                 &opts.actor,
+                &opts.source_name,
             ))?;
         }
         match block_on(reconcile::delete_prior_graphs_for_path(
@@ -765,7 +767,8 @@ where
                             .await?;
                             for entity in &g.entities {
                                 if entity.kind == EntityKind::Repository {
-                                    repo.put_entity(entity.clone()).await?;
+                                    port.ensure_repository_context(&manifest.file, entity.clone())
+                                        .await?;
                                 } else {
                                     port.write_code_record(
                                         &manifest.file,
@@ -1010,6 +1013,29 @@ where
                         removed_delete_failed.insert(removed_path.clone());
                     }
                 }
+                continue;
+            }
+        }
+        if let Some(heads) = repo.document_heads() {
+            let key = DocumentHeadKey {
+                scope: opts.scope.clone(),
+                repository: source_key.clone(),
+                source_key: removed_path.clone(),
+            };
+            // The manifest identifies last-seen bytes, not an active current
+            // document. Fence and attribute before retracting legacy graphs.
+            if block_on(crate::document_generation::fence_refresh(
+                heads,
+                &key,
+                &removal_manifest[removed_path],
+                &opts.policy,
+                &opts.actor,
+                &opts.source_name,
+            ))
+            .is_err()
+            {
+                summary.errors += 1;
+                removed_delete_failed.insert(removed_path.clone());
                 continue;
             }
         }
@@ -1399,7 +1425,7 @@ where
     // FIX 2: Removed paths where the post-pass delete failed — keep in the
     // manifest so they are retried rather than being silently pruned.
     for rel in &removed_delete_failed {
-        if let Some(h) = opts.manifest.get(rel.as_str()) {
+        if let Some(h) = removal_manifest.get(rel.as_str()) {
             new_manifest.insert(rel.clone(), h.clone());
         }
         // Also carry forward contract manifest entries for these files.

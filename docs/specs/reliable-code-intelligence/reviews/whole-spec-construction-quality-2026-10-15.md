@@ -48,3 +48,12 @@ The implementation remains split by configuration, authority, derived lifecycle,
 Synchronous ONNX batches remain noncancellable once started, as explicitly documented. Retry work may exceed one attempt's pair budget but is bounded to one retry and separately counted. Old namespaces/history increase storage, intentionally preserving rollback and provenance; final index-growth evidence is still required. Scope-wide source revisions can conservatively invalidate a query on concurrent indexing, so steady-state operational proof must use a frozen store and rollout must retain explicit insufficiency during preparation. These are disclosed behavior/verification limits, not new defects.
 
 git diff --check passes. Final evidence can be added as a focused follow-up without reopening or modifying held-out labels/targets.
+
+## Subsequent AC9 finding — first legacy-store adoption
+
+The current construction-clean verdict is superseded pending two first-adoption retention corrections identified during read-only preflight of the T11 scratch rollout driver. The verified self backup has no existing head/history records; prior managed-refresh fixtures do not establish first-adoption retention.
+
+1. Generic scanner retraction deletes legacy graph/entities/relationships/unresolved references before stage/begin_document_head attributes them. Archive triggers require document_head_records ownership, which is absent at that deletion. Old graph facts can be physically lost rather than retained historically.
+2. Generic legacy attribution omits the source row; DocumentHeadWrite::Source overwrites it before registering ownership. Reused source IDs can lose the old exact source metadata/provenance without archive.
+
+See /tmp/reliable-self-rollout-preflight.md for source paths and the parent-requested trace. Scope/history assertions must accept exact unchanged-current OR exact archived canonical bytes and preserve pre-existing history/memory rows, while detecting genuine loss. The parent is rehearsing on a disposable verified-backup copy; no self/backup writes or model/evaluator runs were performed by this reviewer. A focused legacy-adoption fix/test re-review is required before restoring the construction-clean verdict or running retained self rollout.

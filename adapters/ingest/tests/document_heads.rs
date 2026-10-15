@@ -29,6 +29,119 @@ fn key(opts: &ScanOptions) -> DocumentHeadKey {
 }
 
 #[test]
+fn first_legacy_refresh_preserves_sources_and_graph_facts_before_cleanup() {
+    assert_first_legacy_cleanup_preserves_history(false);
+}
+
+#[test]
+fn first_legacy_removed_file_preserves_graph_facts_before_cleanup() {
+    assert_first_legacy_cleanup_preserves_history(true);
+}
+
+#[test]
+fn failed_removed_head_fence_retains_discovered_hash_for_retry() {
+    let root = tempfile::tempdir().unwrap();
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    let mut opts = options("retry-repository", "w");
+    let path = root.path().join("README.md");
+    std::fs::write(&path, "# PaymentGateway\n\nCustomerRegistry.\n").unwrap();
+    let (first, manifest) = scan_repository(root.path(), &opts, &store, |_| {}).unwrap();
+    assert_eq!(first.errors, 0);
+    let hash = manifest["README.md"].clone();
+    assert!(opts.manifest.is_empty());
+    std::fs::remove_file(path).unwrap();
+    store.lock().unwrap().execute_batch("CREATE TRIGGER injected_removed_fence BEFORE UPDATE ON document_heads WHEN NEW.state='incomplete' BEGIN SELECT RAISE(ABORT,'injected failed fence'); END;").unwrap();
+    let (failed, retry) = scan_repository(root.path(), &opts, &store, |_| {}).unwrap();
+    assert_eq!(failed.errors, 1);
+    assert_eq!(
+        retry.get("README.md"),
+        Some(&hash),
+        "discovered failed removal needs a retry hash"
+    );
+    store
+        .lock()
+        .unwrap()
+        .execute_batch("DROP TRIGGER injected_removed_fence")
+        .unwrap();
+    opts.manifest = retry;
+    let (retried, after) = scan_repository(root.path(), &opts, &store, |_| {}).unwrap();
+    assert_eq!(retried.errors, 0);
+    assert!(!after.contains_key("README.md"));
+}
+
+fn assert_first_legacy_cleanup_preserves_history(removed: bool) {
+    let root = tempfile::tempdir().unwrap();
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    let mut opts = options("legacy-repository", "w");
+    let path = root.path().join("README.md");
+    std::fs::write(
+        &path,
+        "# PaymentGateway\n\nInvoiceProcessor uses CustomerRegistry.\n",
+    )
+    .unwrap();
+    let (first, prior_manifest) = scan_repository(root.path(), &opts, &store, |_| {}).unwrap();
+    assert_eq!(first.errors, 0);
+    let tables = [
+        ("knowledge_sources", "source"),
+        ("knowledge_documents", "document"),
+        ("knowledge_chunks_records", "chunk"),
+        ("knowledge_graphs_records", "graph"),
+        ("knowledge_entities_records", "entity"),
+        ("knowledge_relationships_records", "relationship"),
+        ("knowledge_unresolved_refs_records", "unresolved_reference"),
+    ];
+    let mut old = Vec::new();
+    {
+        let conn = store.lock().unwrap();
+        for (table, kind) in tables {
+            let mut stmt = conn
+                .prepare(&format!("SELECT id,record_json FROM {table}"))
+                .unwrap();
+            for row in stmt
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+                })
+                .unwrap()
+            {
+                let (id, raw) = row.unwrap();
+                old.push((table, kind, id, raw));
+            }
+        }
+        // Simulate an actual pre-head retained store, keeping canonical data.
+        conn.execute_batch("DELETE FROM document_head_records;DELETE FROM document_heads;DELETE FROM document_head_attempts;DELETE FROM document_head_history;DELETE FROM canonical_document_history;").unwrap();
+    }
+    assert!(old.iter().any(|(_, kind, _, _)| *kind == "graph"));
+    assert!(old.iter().any(|(_, kind, _, _)| *kind == "relationship"));
+    if removed {
+        std::fs::remove_file(&path).unwrap();
+        opts.manifest = prior_manifest;
+    } else {
+        std::fs::write(
+            &path,
+            "# PaymentGateway\n\nInvoiceProcessor validates CustomerRegistry before payment.\n",
+        )
+        .unwrap();
+    }
+    let (second, _) = scan_repository(root.path(), &opts, &store, |_| {}).unwrap();
+    assert_eq!(second.errors, 0, "{second:?}");
+    let conn = store.lock().unwrap();
+    for (table, kind, id, raw) in old {
+        let unchanged: bool = conn
+            .query_row(
+                &format!("SELECT EXISTS(SELECT 1 FROM {table} WHERE id=?1 AND record_json=?2)"),
+                [id.as_str(), raw.as_str()],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let archived:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM canonical_document_history WHERE kind=?1 AND record_id=?2 AND record_json=?3)",[kind,id.as_str(),raw.as_str()],|row|row.get(0)).unwrap();
+        assert!(
+            unchanged || archived,
+            "old {kind} {id} lost before first attribution"
+        );
+    }
+}
+
+#[test]
 fn scan_refresh_adopts_missing_authority_and_retains_all_versions() {
     let root = tempfile::tempdir().unwrap();
     let store = SqlKnowledgeStore::open_in_memory().unwrap();

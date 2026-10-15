@@ -7,6 +7,60 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from code_evidence_calibration import F32_MAX, f32, next_up, select_threshold, strategy_maximum
 from code_evidence_judgments import baseline_observations, candidate_parents, judgments
 
+class AcceptedBaselineTests(unittest.TestCase):
+    def test_freeze_identity_detects_receipt_and_raw_baseline_byte_drift(self):
+        import tempfile
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import code_evidence_eval_support as module
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);base=root/'base';(base/'results').mkdir(parents=True)
+            artifact=root/'executable';artifact.write_bytes(b'input')
+            args=SimpleNamespace(base=base,manifest=artifact,probe=artifact,sealer=artifact,metrics=artifact,mcp=artifact)
+            (base/'baseline-engram-mcp').write_bytes(b'baseline')
+            receipt=root/'docs/research/reliable-code-intelligence-baseline-2026-10-14.json';receipt.parent.mkdir(parents=True);receipt.write_bytes(b'receipt')
+            raws=[base/'results'/(name+'.json') for name in ['engram-baseline-original','engram-baseline-identifier','engram-baseline-development','flask-baseline-development','vite-baseline-development','authorization-baseline']]
+            for raw in raws:raw.write_bytes(b'raw')
+            with patch.object(module,'ROOT',root):
+                before=module.identity(args)
+                for path in [receipt,*raws]:
+                    self.assertIn(str(path.resolve()),before)
+                    original=path.read_bytes();path.write_bytes(b'changed')
+                    self.assertNotEqual(before,module.identity(args));path.write_bytes(original)
+
+    def test_historical_reports_require_exact_receipts_and_reviewed_input_identity(self):
+        import json,tempfile
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import code_evidence_baselines as module
+        from code_eval_corpus import sha256
+        with tempfile.TemporaryDirectory() as directory:
+            base=Path(directory);(base/'results').mkdir()
+            binary=base/'baseline-engram-mcp';binary.write_bytes(b'baseline')
+            manifest={'baselineCommit':'commit','baselineBinarySha256':sha256(binary),'authorizationBattery':{'sha256':'auth'},'corpora':[{'id':n,'revision':'rev'} for n in ('engram','flask','vite')]}
+            receipt={'baselineCommit':'commit','reports':{},'collectionSummary':{}}
+            names=[('engram','original'),('engram','identifier'),('engram','development'),('flask','development'),('vite','development')]
+            for name,split in names:
+                report={'runState':'complete','manifestSha256':'historical','binarySha256':sha256(binary),'corpus':name,'revision':'rev','mode':'baseline','split':split,'cases':[{'id':name+'-'+split,'failed':False}]}
+                path=base/'results'/f'{name}-baseline-{split}.json';path.write_text(json.dumps(report))
+                receipt['reports'][path.stem]=report;receipt['collectionSummary'][path.stem]={'rawReportSha256':sha256(path)}
+            auth=base/'results/authorization-baseline.json';authorization={'runState':'complete','passed':True,'cases':[{}]*4,'fixtureSha256':'auth','binarySha256':sha256(binary)};auth.write_text(json.dumps(authorization))
+            receipt['reports'][auth.stem]=authorization;receipt['collectionSummary'][auth.stem]={'rawReportSha256':sha256(auth)}
+            path=base/'receipt.json';path.write_text(json.dumps(receipt));args=SimpleNamespace(base=base)
+            def selected(args,split):return None,None,[{'id':name+'-'+split,'corpus':name} for name,s in names if s==split],None
+            with patch.object(module,'RECEIPT',path),patch.object(module,'RECEIPT_SHA256',sha256(path)),patch.object(module,'REVIEWED_MANIFEST_SHA256','reviewed'),patch.object(module,'inputs',side_effect=selected):
+                admitted=module.require_baselines(args,manifest,'reviewed');self.assertEqual(len(admitted),7)
+                with self.assertRaisesRegex(ValueError,'reviewed manifest drift'):module.require_baselines(args,manifest,'historical')
+                target=base/'results/engram-baseline-development.json';original=target.read_text();target.write_text(original+'\n')
+                with self.assertRaisesRegex(ValueError,'raw artifact drift'):module.require_baselines(args,manifest,'reviewed')
+                target.write_text(original);path.write_text(path.read_text()+'\n')
+                with self.assertRaisesRegex(ValueError,'receipt or reviewed manifest drift'):module.require_baselines(args,manifest,'reviewed')
+                path.write_text(json.dumps(receipt));binary.write_bytes(b'different binary')
+                with self.assertRaisesRegex(ValueError,'baseline binary drift'):module.require_baselines(args,manifest,'reviewed')
+                binary.write_bytes(b'baseline')
+                with patch.object(module,'inputs',return_value=(None,None,[{'id':'changed','corpus':'engram'}],None)):
+                    with self.assertRaisesRegex(ValueError,'inventory/order mismatch'):module.require_baselines(args,manifest,'reviewed')
+
 class CalibrationTests(unittest.TestCase):
     def test_tied_negatives_use_next_f32_and_keep_the_entire_denominator(self):
         threshold,rejected,target=select_threshold([None]*3 + [1.0]*11 + [2.0])

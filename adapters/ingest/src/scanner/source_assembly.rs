@@ -8,6 +8,10 @@ use engram_knowledge::{CoreError, CoreResult};
 
 pub(super) const FINGERPRINT: &str = engram_code::SOURCE_COVERAGE_FINGERPRINT;
 
+#[cfg(test)]
+#[path = "source_assembly_tests.rs"]
+mod tests;
+
 pub(super) fn prepare(
     request: DocumentIngestRequest,
     manifest: &mut CodeSourceGeneration,
@@ -110,12 +114,17 @@ pub(super) fn prepare(
             "chunk-{}",
             content_hash(
                 serde_json::to_vec(&(
+                    "code-canonical-chunk-v2",
                     &code.file,
                     &code.generation,
                     code.role,
                     &code.ranges,
                     &code.unit,
-                    &chunk.content_hash
+                    &chunk.content_hash,
+                    &chunk.source_id,
+                    &chunk.document_id,
+                    &chunk.kind,
+                    &chunk.document_kind
                 ))
                 .map_err(|e| CoreError::InvalidRequest {
                     reason: e.to_string()

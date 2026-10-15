@@ -97,6 +97,34 @@ pub trait CodeSourceRepository: Send + Sync {
             reason: "source context ensure unsupported".into(),
         })
     }
+    /// Atomically merges a repository's shared API projection, retaining prior
+    /// semantic states. This source-only operation does not alter KG CRUD's
+    /// ordinary hard-delete lifetime. Added source refs must name this repository.
+    async fn put_repository_contract(
+        &self,
+        _scope: &Scope,
+        _repository: &str,
+        _entity: KnowledgeEntity,
+        _relationship: KnowledgeRelationship,
+    ) -> CoreResult<()> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "code_source_context".into(),
+            reason: "repository contract projection unsupported".into(),
+        })
+    }
+    /// Retracts only this repository's edge/ref; shared API nodes survive.
+    async fn retract_repository_contract(
+        &self,
+        _scope: &Scope,
+        _repository: &str,
+        _entity: &EntityId,
+        _relationship: &RelationshipId,
+    ) -> CoreResult<()> {
+        Err(CoreError::CapabilityUnsupported {
+            capability: "code_source_context".into(),
+            reason: "repository contract retraction unsupported".into(),
+        })
+    }
     /// Explicit export requires its own grant, distinct from source read.
     async fn export_code_source(
         &self,

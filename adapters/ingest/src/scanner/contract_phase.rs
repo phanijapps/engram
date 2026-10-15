@@ -46,6 +46,31 @@ where
                     provenance,
                     now,
                 );
+                let rel = crate::contract::build_exposes_rel(
+                    scope,
+                    stable_source_key,
+                    op,
+                    provenance,
+                    now,
+                );
+                if let Some(port) = repo.code_sources() {
+                    match block_on(port.put_repository_contract(
+                        scope,
+                        stable_source_key,
+                        entity,
+                        rel,
+                    )) {
+                        Ok(()) => keys.push(op.normalized_key.clone()),
+                        Err(error) => {
+                            eprintln!(
+                                "[engram-ingest] warning: failed to persist repository contract '{}': {error}",
+                                op.normalized_key
+                            );
+                            had_write_error = true;
+                        }
+                    }
+                    continue;
+                }
                 // Read-modify-write union for cross-repo merge (T5).
                 match block_on(crate::contract::upsert_api_entity_with_source_ref(
                     repo, scope, entity,

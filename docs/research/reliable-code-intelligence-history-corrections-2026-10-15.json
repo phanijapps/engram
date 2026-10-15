@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "construction": "verified; scoped independent reviews clean",
+  "featureShipped": false,
+  "rollout": "disposable rehearsal running; retained self store unchanged",
+  "fullRepositoryGates": {
+    "report": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/history-correction-gates-2026-10-15/report.json",
+    "sha256": "ef1e6a559445c5929c7db295bf89fad47f9d3b0bd528f3f7382b0d4dbd3527a1",
+    "allPassed": true,
+    "rustPassed": 1189,
+    "rustIgnored": 10
+  },
+  "focusedLogs": {
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/history-correction-gates-2026-10-15/reliable-code-only-history-red.log": "a3cf47b9547095df0ff82eaecf3e8de18abb88c38c031bfede04622a182f80a1",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/history-correction-gates-2026-10-15/reliable-code-only-history-green.log": "c1b24ddf8303f4c36d1a34c00189e2c68ca0cc4bb05234051fdeb9d3a367c6e4",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/history-correction-gates-2026-10-15/reliable-code-only-scanner-history.log": "168a51c09e075857cbd14e04180ec3ee811d3af72a17061c568fa6d74dd24403",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/history-correction-gates-2026-10-15/reliable-contract-history-green.log": "44ab8761c8e00b1dc0b9def47e51443741bb974ea8e974b9f2f74a803825a35e",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/history-correction-gates-2026-10-15/reliable-contract-rollback-green.log": "11cb84cf48548e7c30f7b23a087038caf407575661c42828a31ff60f976ad1e3",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/history-correction-gates-2026-10-15/reliable-baseline-lineage-tests.log": "0ba89f922d0cf34680c3eb985b8022c299ca72da0927bef04451197832295519"
+  },
+  "binaries": {
+    "/home/videogamer/projects/mem-alpha/target/release/engram-mcp": "90cd964ee22d8c09d06177fd40dee580f697099ac1d19bdfa6e5abfac7fc49f2",
+    "/home/videogamer/projects/mem-alpha/target/release/examples/code_evidence_probe": "811f70e4f28edd1ca3ceef93b3912b1367f2a70f509754b5c159e9458aefa956",
+    "/home/videogamer/projects/mem-alpha/target/release/examples/code_calibration_seal": "c6eae3a833c69d0a51ef0c22d2a90904bc36a20e51a64f8ada356320daad1ca6",
+    "/home/videogamer/projects/mem-alpha/target/release/examples/code_metrics": "f180456fd346f92afac37e5eacf02336c3138c2454103e43101bf15c518a843a"
+  },
+  "reviews": [
+    "/home/videogamer/projects/mem-alpha/docs/specs/reliable-code-intelligence/reviews/t11-history-adversarial-2026-10-15.md",
+    "/home/videogamer/projects/mem-alpha/docs/specs/reliable-code-intelligence/reviews/t11-history-security-2026-10-15.md",
+    "/home/videogamer/projects/mem-alpha/docs/specs/reliable-code-intelligence/reviews/t11-history-quality-2026-10-15.md"
+  ],
+  "historicalBaselineLineage": "Exact accepted T0 receipt and final reviewed manifest pinned; all six original raw artifacts preserved; receipt/raw bytes included in freeze identity."
+}

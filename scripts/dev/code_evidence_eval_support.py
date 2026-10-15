@@ -108,7 +108,10 @@ def store(args, name, baseline=False):
 def identity(args):
     paths = [args.manifest, args.probe, args.sealer, args.metrics, args.mcp,
              args.base/'baseline-engram-mcp', Path(__file__),
-             *(Path(__file__).parent/name for name in ('code_evidence_eval.py','code_evidence_assessment.py','code_evidence_calibration.py','code_evidence_judgments.py',
+             ROOT/'docs/research/reliable-code-intelligence-baseline-2026-10-14.json',
+             *(args.base/'results'/name for name in ('engram-baseline-original.json','engram-baseline-identifier.json',
+                'engram-baseline-development.json','flask-baseline-development.json','vite-baseline-development.json','authorization-baseline.json')),
+             *(Path(__file__).parent/name for name in ('code_evidence_eval.py','code_evidence_baselines.py','code_evidence_assessment.py','code_evidence_calibration.py','code_evidence_judgments.py',
                'code_eval_corpus.py','code_intelligence_eval.py','code_query_ablation.py'))]
     return {str(p.resolve()): sha256(p) for p in paths}
 

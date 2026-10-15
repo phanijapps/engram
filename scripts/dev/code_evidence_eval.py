@@ -13,29 +13,9 @@ from pathlib import Path
 from code_eval_corpus import sha256, validate_artifact_paths
 from code_intelligence_eval import save
 from code_evidence_eval_support import ROOT, VARIANTS, JsonProbe, inputs, store, identity, metric, logical_store_identity, artifact_paths, store_paths
+from code_evidence_baselines import require_baselines
 from code_evidence_calibration import digest, seal, select_threshold, strategy_maximum
 from code_evidence_judgments import candidate_parents, canonical_records, packet_observations
-
-
-def require_baselines(args, manifest, manifest_hash):
-    found = {}
-    for name, split in [('engram','original'),('engram','identifier'),('engram','development'),('flask','development'),('vite','development')]:
-        path = args.base/'results'/f'{name}-baseline-{split}.json'
-        report = json.loads(path.read_text())
-        if report['runState'] != 'complete' or report['manifestSha256'] != manifest_hash or report['binarySha256'] != manifest['baselineBinarySha256'] or any(c['failed'] for c in report['cases']):
-            raise ValueError('completed frozen baseline prerequisite failed: '+str(path))
-        expected = [e['id'] for e in inputs(args,split)[2] if e['corpus']==name]
-        if [c['id'] for c in report['cases']] != expected:
-            raise ValueError('baseline case inventory/order mismatch')
-        found[str(path)] = sha256(path)
-    auth=args.base/'results/authorization-baseline.json'
-    authorization=json.loads(auth.read_text())
-    if authorization.get('runState')!='complete' or not authorization.get('passed') or len(authorization['cases'])!=4 or authorization['fixtureSha256']!=manifest['authorizationBattery']['sha256'] or authorization['binarySha256']!=manifest['baselineBinarySha256']:
-        raise ValueError('frozen authorization baseline prerequisite failed')
-    found[str(auth)]=sha256(auth)
-    if sha256(args.base/'baseline-engram-mcp') != manifest['baselineBinarySha256']:
-        raise ValueError('baseline binary drift')
-    return found
 
 
 def run_variant(args, variant, corpus, entries, artifact=None, sink=None, checkpoint=None):

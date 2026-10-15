@@ -163,3 +163,44 @@ pub(crate) async fn exclude(
     }
     Ok(())
 }
+
+/// Fence a verified file refresh before cleanup can mutate legacy contributions.
+/// Empty inventory is deliberately unavailable; only later staged input can activate.
+pub(crate) async fn fence_refresh(
+    port: &dyn DocumentHeadRepository,
+    key: &DocumentHeadKey,
+    source_hash: &str,
+    policy: &Policy,
+    actor: &Actor,
+    source_name: &str,
+) -> CoreResult<()> {
+    let prior = port.get_document_head(key).await?;
+    let head = DocumentHead {
+        key: key.clone(),
+        generation: content_hash(
+            serde_json::to_vec(&(key, source_hash, "refresh-v1")).map_err(|e| {
+                CoreError::InvalidRequest {
+                    reason: e.to_string(),
+                }
+            })?,
+        ),
+        attempt_id: attempt(),
+        state: CodeSourceState::Updating,
+        source_hash: source_hash.into(),
+        document_id: None,
+        chunk_ids: vec![],
+        policy: policy.clone(),
+        provenance: Provenance {
+            source: source_name.into(),
+            actor: actor.clone(),
+            observed_at: chrono::Utc::now(),
+            evidence: vec![],
+            derivations: vec![],
+            confidence: None,
+            method: Some("document_refresh".into()),
+        },
+    };
+    port.begin_document_head(head.clone(), prior.as_ref().map(|h| h.attempt_id.as_str()))
+        .await?;
+    port.fail_document_head(key, &head.attempt_id).await
+}

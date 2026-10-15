@@ -77,7 +77,21 @@ pub(crate) async fn persist_derived<R: KnowledgeRepository + KnowledgeGraphRepos
         .await?;
         for entity in &extracted.entities {
             if entity.graph_id.is_none() {
-                repository.put_entity(entity.clone()).await?;
+                let file = CodeFileKey {
+                    scope: head.key.scope.clone(),
+                    repository: head.key.repository.clone(),
+                    path: head.key.source_key.clone(),
+                };
+                if entity.kind == EntityKind::Repository
+                    && file.is_valid()
+                    && let Some(context) = repository.code_sources()
+                {
+                    context
+                        .ensure_repository_context(&file, entity.clone())
+                        .await?;
+                } else {
+                    repository.put_entity(entity.clone()).await?;
+                }
             } else {
                 port.write_document_record(
                     &head.key,

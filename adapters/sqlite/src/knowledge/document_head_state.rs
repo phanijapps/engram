@@ -82,6 +82,14 @@ pub(super) fn initialize(conn: &Connection) -> CoreResult<()> {
               UPDATE document_heads SET state='incomplete',record_json=json_set(record_json,'$.state','incomplete') WHERE state='active' AND head_key IN (SELECT head_key FROM document_head_records r WHERE r.kind='{kind}' AND r.record_id=OLD.id AND r.attempt_id=document_heads.attempt_id);
               UPDATE code_source_revision SET revision=revision+1 WHERE singleton=1;
             END;")).map_err(sql_error)?;
+            // Code graph members are not mirrored into document_head_records.
+            // New names install this correction on already initialized stores;
+            // the disjoint predicate leaves the existing head archive unique.
+            conn.execute_batch(&format!("CREATE TRIGGER IF NOT EXISTS canonical_code_{table}_{event} BEFORE {event} ON {table} {changed} BEGIN
+              INSERT INTO canonical_document_history(kind,record_id,record_json) SELECT '{kind}',OLD.id,OLD.record_json
+              WHERE EXISTS(SELECT 1 FROM code_source_contributions c WHERE c.kind='{kind}' AND c.record_id=OLD.id)
+              AND NOT EXISTS(SELECT 1 FROM document_head_records d WHERE d.kind='{kind}' AND d.record_id=OLD.id);
+            END;")).map_err(sql_error)?;
         }
     }
     Ok(())

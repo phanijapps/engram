@@ -619,9 +619,12 @@ original canonical/history data remain retained. Whole-workspace Rust tests
 pass (1,181 passed, 10 ignored), and the rebuilt native addon passes five live
 tests including actual local embedding/scoring. TypeScript, build, generated
 contracts and boundary gates pass. The final observability correction is
-independently reviewed clean; integrated construction review is clean with
-T10/T11 outcome gates explicitly pending. Retained-store scan/reindex/evidence
-verification has not run. See
+independently reviewed clean. Subsequent rollout preflight superseded the initial
+integrated construction signoff with the legacy retention gaps described below;
+the scoped corrections now pass independent adversarial, security and quality
+review. Full repository gates pass (1,189 Rust tests, 10 ignored); development
+calibration and a fresh disposable-copy rehearsal are running. T10/T11 outcome
+gates remain pending. The retained self store has not been modified. See
 `reviews/t11-observability-adversarial-2026-10-15.md`,
 `reviews/t11-observability-quality-2026-10-15.md`, and
 `reviews/whole-spec-construction-quality-2026-10-15.md`.
@@ -633,6 +636,52 @@ provider's complete report. At the provider boundary, delegate diagnostic counts
 and timings while supplying the finalized immutable capability snapshot. Verify
 the existing conformance fixture and a focused supplied-handle regression; this
 applies equally to every backend and does not change retrieval behavior.
+
+**Legacy retention correction (AC9):** Rollout preflight found generic graph
+cleanup preceding legacy head attribution, and a reused source overwrite
+preceding source ownership registration. Fence the exact verified generic-file
+refresh through the existing unavailable-head lease before cleanup, and attribute
+its legacy source alongside its document/graph contributions. Preserve exact old
+repository-context bytes through the explicitly scoped source-refresh context
+operation. Existing owned archive/invalidation triggers remain unchanged.
+Standalone KG updates and hard deletes must not acquire history retention.
+Reproduce the first-adoption and immutable-ID failures, cover full actual scanner
+refresh and negative standalone-delete behavior, and preserve current-head/CAS
+invariants; never select unverified legacy data as current.
+Rehearse force adoption on a disposable copy of the consistent backup, verifying
+old records either unchanged or exactly archived and all prior history/memory
+preserved. Do not mutate the retained store or release held-out inputs before
+this correction and reviews pass. Incremental proof requires zero ingested files
+and unchanged canonical/history identity, not merely vector reuse.
+
+**Remaining history correction (AC9):** The first zero-error disposable scan
+preserved all old source/document/chunk/graph/entity bytes, but exposed twelve
+graphless contract edges and one code-owned pending reference whose prior JSON
+was not archived. Add disjoint archive triggers for code-contribution-only
+mutations, with idempotent installation on existing stores. Shared repository
+API/exposes projections use focused atomic source-only operations: validate stored
+and incoming exact scope/repository identities, merge only the caller repository's
+source ref, retain semantic/metadata changes and retractions, and preserve
+unchanged edge provenance. Ordinary KG hard-delete lifetime remains unchanged.
+Rehearse again; a zero-error scan alone is not retained-history proof.
+
+**Baseline lineage correction (T10):** Accepted T0 reports predate blind label
+range review and retain historical manifest digests. Admit the exact committed
+T0 receipt and each raw artifact's recorded hash/content, pin the final reviewed
+manifest, and retain binary/corpus/revision/split/order checks. Do not accept a
+historical hash allowlist, rerun the baseline, change labels, or inspect held-out
+inputs before freeze. Freeze receipt identity with the admitted measurements.
+
+**Canonical identity correction (AC9):** The disposable retained-store rehearsal
+also exposed an immutable-ID collision: unchanged code has stable file/generation
+and content, while a new Git source/revision changes its owning source/document.
+Canonical chunk IDs must bind all immutable ownership/content fields, including
+source and document IDs, with a versioned identity tag. Keep logical unit IDs,
+source-coverage fingerprint and old canonical rows intact. Test unchanged code
+across source/revision changes: new ownership gets new canonical chunk IDs,
+identical ownership remains deterministic, and the original immutability guard
+continues to reject a changed payload under an existing ID. Existing frozen
+evaluation stores remain valid; opaque IDs do not require an unrelated rescan.
 
 **Depends on:** T10
 **Mode:** goal-based live verification and repository gates.

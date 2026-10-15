@@ -1,6 +1,6 @@
 use engram_domain::*;
 use engram_ingest::{ScanFilter, ScanOptions, scan_repository};
-use engram_knowledge::CodeSourceRepository;
+use engram_knowledge::{CodeSourceRepository, KnowledgeRepository};
 use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
 use serde_json::json;
@@ -282,7 +282,7 @@ fn explicit_policy_change_excludes_prior_source_when_new_bytes_are_invalid() {
 }
 
 #[test]
-fn snapshot_unit_and_cleanup_failures_remain_unavailable_and_retry() {
+fn snapshot_and_unit_failures_remain_unavailable_and_retry() {
     for (label, trigger) in [
         (
             "snapshot",
@@ -291,10 +291,6 @@ fn snapshot_unit_and_cleanup_failures_remain_unavailable_and_retry() {
         (
             "unit",
             "CREATE TRIGGER injected BEFORE INSERT ON knowledge_chunks_records WHEN json_extract(NEW.record_json,'$.code.role')='symbol' AND json_extract(NEW.record_json,'$.code.file.path')='a.ts' BEGIN SELECT RAISE(ABORT,'unit failure'); END;",
-        ),
-        (
-            "cleanup",
-            "CREATE TRIGGER injected BEFORE DELETE ON knowledge_chunks_records WHEN json_extract(OLD.record_json,'$.code.file.path')='a.ts' BEGIN SELECT RAISE(ABORT,'cleanup failure'); END;",
         ),
     ] {
         let root = tempfile::tempdir().unwrap();
@@ -331,6 +327,33 @@ fn snapshot_unit_and_cleanup_failures_remain_unavailable_and_retry() {
             .find(|m| m.file.path == "a.ts")
             .unwrap();
         assert_eq!(read(&store, &a), "function a() { return 3; }\n");
+    }
+}
+
+#[test]
+fn refresh_preserves_prior_canonical_chunks_without_cleanup() {
+    let root = tempfile::tempdir().unwrap();
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    let mut opts = opts();
+    fs::write(root.path().join("a.ts"), "function a() { return 1; }\n").unwrap();
+    let (_, manifest) = scan_repository(root.path(), &opts, &store, |_| {}).unwrap();
+    opts.manifest = manifest;
+    let prior: Vec<(String, String)> = {
+        let conn = store.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT id,record_json FROM knowledge_chunks_records ORDER BY id").unwrap();
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().collect::<Result<_, _>>().unwrap()
+    };
+    store.lock().unwrap().execute_batch("CREATE TRIGGER forbid_cleanup BEFORE DELETE ON knowledge_chunks_records BEGIN SELECT RAISE(ABORT,'canonical history must survive refresh'); END;").unwrap();
+    fs::write(root.path().join("a.ts"), "function a() { return 3; }\n").unwrap();
+    let (summary, _) = scan_repository(root.path(), &opts, &store, |_| {}).unwrap();
+    assert_eq!(summary.errors, 0, "{summary:?}");
+    assert_eq!(summary.ingested, 1);
+    let current = block_on(store.list_code_sources(&opts.scope)).unwrap().pop().unwrap();
+    assert_eq!(read(&store, &current), "function a() { return 3; }\n");
+    for (id, expected) in prior {
+        let retained: String = store.lock().unwrap().query_row("SELECT record_json FROM knowledge_chunks_records WHERE id=?1", [&id], |r| r.get(0)).unwrap();
+        assert_eq!(retained, expected, "canonical history changed: {id}");
+        assert!(block_on(store.get_chunk(&ChunkId::from(id), &opts.scope)).unwrap().is_none(), "retained history must not be current evidence");
     }
 }
 

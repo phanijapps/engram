@@ -28,9 +28,10 @@
     "model_id": "jinaai/jina-reranker-v1-turbo-en",
     "query_token_limit": 128,
     "pair_token_limit": 1024,
-    "max_candidates": 50,
+    "max_candidates": 75,
     "batch_size": 8,
-    "on_failure": "degrade"
+    "on_failure": "degrade",
+    "max_parents": 50
   },
   "evidence": {
     "token_budget": 6000,

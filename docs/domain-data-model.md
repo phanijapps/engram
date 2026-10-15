@@ -2773,3 +2773,25 @@ insufficient. Individual selected scores may be below the applied packet
 threshold. The versioned `code-evidence-binding-v2/packet-max-confidence` binding prevents earlier
 parent-filter calibration artifacts from validating silently. No model, source
 authority, frozen target or held-out label changes accompany this correction.
+
+### Independent scorer parent and view budgets (optional v1 config addition)
+
+`CodeLocalScorerConfig.max_parents` caps distinct implementation parents admitted
+in fused RRF order, independently of `max_candidates`, the total scored-pair
+budget including extra segments and continuations. Missing `max_parents` in
+existing full configuration files defaults to 50; overlays/files/environment
+resolve it through the shared configuration path. Both limits are positive and
+bounded by 200; effective parent admission also cannot exceed the pair budget.
+The balanced development preset uses 50 parents and at most 75 pairs; fast keeps
+its disabled scorer's 50-pair setting. Every admitted parent gets one segment
+before later segments are admitted in round-robin order. Index representation,
+models and calibration threshold values are unchanged; the changed effective
+configuration requires a separately sealed matching calibration artifact.
+
+
+Additional retrieved segments and lazy continuation views are eligible only for
+parents with typed `CodeChunkRole::Symbol` metadata. Container context retains
+its first scoring opportunity; extra interface/class context does not consume
+body-coverage slots. This is a language-neutral role policy, not a filename or
+symbol-name heuristic. The selection policy is included in calibration binding
+v3, so earlier artifacts require resealing against the new score distribution.

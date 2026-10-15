@@ -2513,7 +2513,7 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 200,
-              "default": 50
+              "default": 75
             },
             "batch_size": {
               "type": "integer",
@@ -2527,6 +2527,12 @@
                 "error"
               ],
               "default": "degrade"
+            },
+            "max_parents": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
             }
           }
         },
@@ -3724,7 +3730,7 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 200,
-              "default": 50
+              "default": 75
             },
             "batch_size": {
               "type": "integer",
@@ -3738,6 +3744,12 @@
                 "error"
               ],
               "default": "degrade"
+            },
+            "max_parents": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
             }
           },
           "required": [

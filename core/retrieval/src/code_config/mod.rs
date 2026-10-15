@@ -98,6 +98,8 @@ pub struct CodeLocalScorerConfig {
     pub model_id: String,
     pub query_token_limit: u32,
     pub pair_token_limit: u32,
+    #[serde(default = "profiles::default_max_parents")]
+    pub max_parents: u32,
     pub max_candidates: u32,
     pub batch_size: u32,
     pub on_failure: CodeScorerFailurePolicy,

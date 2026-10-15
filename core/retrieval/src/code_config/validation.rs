@@ -136,6 +136,7 @@ impl CodeIntelligenceConfig {
                 8192,
             ),
             ("local_scorer.max_candidates", s.max_candidates, 1, 200),
+            ("local_scorer.max_parents", s.max_parents, 1, 200),
             ("local_scorer.batch_size", s.batch_size, 1, 64),
             ("evidence.token_budget", e.token_budget, 256, 32768),
             (
@@ -171,6 +172,11 @@ impl CodeIntelligenceConfig {
         if rerank.strategy == RerankStrategy::CrossEncoder && r.result_limit > s.max_candidates {
             return Err(invalid(
                 "retrieval.result_limit exceeds local_scorer.max_candidates",
+            ));
+        }
+        if rerank.strategy == RerankStrategy::CrossEncoder && r.result_limit > s.max_parents {
+            return Err(invalid(
+                "retrieval.result_limit exceeds local_scorer.max_parents",
             ));
         }
         if r.graph_hops > 0 && r.graph_neighbor_limit == 0 {

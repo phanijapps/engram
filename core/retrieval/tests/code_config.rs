@@ -10,7 +10,8 @@ fn balanced_and_fast_have_independent_candidate_and_output_budgets() {
     assert_eq!(balanced.index.context_token_budget, 64);
     assert_eq!(balanced.retrieval.candidates_per_lane, 50);
     assert_eq!(balanced.retrieval.result_limit, 10);
-    assert_eq!(balanced.local_scorer.max_candidates, 50);
+    assert_eq!(balanced.local_scorer.max_candidates, 75);
+    assert_eq!(balanced.local_scorer.max_parents, 50);
     assert_eq!(
         balanced.fusion.rerank.unwrap().strategy,
         RerankStrategy::CrossEncoder
@@ -101,4 +102,23 @@ fn query_overrides_can_reduce_but_never_expand_operator_bounds() {
                 .is_err()
         );
     }
+}
+
+#[test]
+fn legacy_full_configs_default_parent_breadth_without_changing_their_pair_budget() {
+    let mut value = serde_json::to_value(CodeIntelligenceConfig::default()).unwrap();
+    value["local_scorer"]
+        .as_object_mut()
+        .unwrap()
+        .remove("max_parents");
+    value["local_scorer"]["max_candidates"] = serde_json::json!(50);
+    let c: CodeIntelligenceConfig = serde_json::from_value(value).unwrap();
+    assert_eq!(c.local_scorer.max_parents, 50);
+    assert_eq!(c.local_scorer.max_candidates, 50);
+    assert!(c.validate().is_ok());
+    let mut c = c;
+    c.local_scorer.max_parents = 9;
+    assert!(c.validate().is_err());
+    c.local_scorer.max_parents = 0;
+    assert!(c.validate().is_err());
 }

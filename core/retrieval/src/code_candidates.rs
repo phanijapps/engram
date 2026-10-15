@@ -52,19 +52,44 @@ fn groups(rows: &[CodeRankedSegment]) -> CoreResult<Vec<Vec<usize>>> {
 /// The input must already be in stable best-first RRF order. Every parent gets
 /// one opportunity before subsequent segments are admitted in round-robin order.
 pub fn code_scoring_pool(rows: &[CodeRankedSegment], limit: usize) -> CoreResult<CodeScoringPool> {
-    if limit == 0 {
-        return Err(invalid("code scorer pool limit must be positive"));
+    code_scoring_pool_with_parent_limit(rows, limit, limit)
+}
+
+/// Parent breadth and total segment/view work are independent upper bounds.
+pub fn code_scoring_pool_with_parent_limit(
+    rows: &[CodeRankedSegment],
+    parent_limit: usize,
+    pair_limit: usize,
+) -> CoreResult<CodeScoringPool> {
+    code_scoring_pool_with_coverage(rows, parent_limit, pair_limit, |_| true)
+}
+
+/// Every admitted parent gets its first view. The predicate controls only extra
+/// views, allowing callers to spend additional work on typed symbol bodies.
+pub fn code_scoring_pool_with_coverage(
+    rows: &[CodeRankedSegment],
+    parent_limit: usize,
+    pair_limit: usize,
+    allow_extra_views: impl Fn(&str) -> bool,
+) -> CoreResult<CodeScoringPool> {
+    if parent_limit == 0 || pair_limit == 0 {
+        return Err(invalid(
+            "code scorer parent and pair limits must be positive",
+        ));
     }
     let groups = groups(rows)?;
-    let admitted = groups.len().min(limit);
+    let admitted = groups.len().min(parent_limit).min(pair_limit);
     let mut indices: Vec<_> = groups[..admitted].iter().map(|group| group[0]).collect();
     let mut offset = 1;
-    while indices.len() < limit {
+    while indices.len() < pair_limit {
         let before = indices.len();
         for group in &groups[..admitted] {
+            if !allow_extra_views(&rows[group[0]].parent_id) {
+                continue;
+            }
             if let Some(index) = group.get(offset) {
                 indices.push(*index);
-                if indices.len() == limit {
+                if indices.len() == pair_limit {
                     break;
                 }
             }

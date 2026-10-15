@@ -60,8 +60,44 @@ development questions, with unchanged rejection of fourteen out of fifteen
 development negatives. This is a focused regression check, not a new held-out
 assessment or a beta-readiness result.
 
+## Controlling scorer breadth and source coverage
+
+`local_scorer.max_parents` limits distinct implementation parents;
+`local_scorer.max_candidates` limits total scored pairs, including additional
+retrieved segments and scorer continuations. The balanced development preset
+uses 50 parents and up to 75 pairs. Every admitted parent receives one segment
+before additional segments are admitted in round-robin order. This preserves
+the old 50-parent frontier and avoids spending extra pair slots on more parents.
+
+Additional retrieved segments and lazy continuation views are eligible only for
+parents with typed `CodeChunkRole::Symbol` metadata. Container context retains
+its first scoring opportunity; extra interface/class context does not consume
+body-coverage slots. This is a language-neutral role policy, not a filename or
+symbol-name heuristic. The selection policy is included in calibration binding
+v3, so earlier artifacts require resealing against the new score distribution.
+
+Equivalent environment overrides are:
+
+```sh
+ENGRAM_CODE__LOCAL_SCORER__MAX_PARENTS=50
+ENGRAM_CODE__LOCAL_SCORER__MAX_CANDIDATES=75
+```
+
+Existing full JSON/TOML configs without `max_parents` default to 50 and preserve
+their explicit `max_candidates`. Both fields participate in config origins and
+calibration identity. A changed budget needs a matching calibration artifact
+checked on development negatives; reusing an older artifact reports unvalidated.
+This expands scoring of retrieved source, not discovery of missing candidates.
+
 The [first live proof](../../../research/reliable-code-parent-decisions-live-2026-10-15.json)
 uses two development queries with actual local models and identical pre-change
 evidence. Vite `getEnvFilesForMode` was scored at -2.6768866 and rejected below
 -0.97909373; `initPublicFiles` was selected at -0.97173107. This diagnostic change
 does not alter calibration or claim a relevance improvement.
+
+Development verification preserves Vite parent recall at 8/10 while increasing
+required-range coverage from 69.55% to 80.00%. The warm sample median increases
+from 10.12s to 11.07s. Negative rejection stays at 14/15 with the same threshold.
+Two short-function misses remain, and these development
+results do not replace the frozen held-out assessment. See the
+[coverage live proof](../../../research/reliable-code-scorer-coverage-live-2026-10-15.json).

@@ -7,7 +7,7 @@ use crate::code_candidates::CodeCandidate;
 use engram_domain::*;
 use engram_retrieval::{
     CodeRankedSegment, CodeScorerFailurePolicy, CodeScoringPool, code_parent_order,
-    code_scoring_pool,
+    code_scoring_pool_with_coverage,
 };
 use engram_runtime::{CoreError, CoreResult};
 use std::collections::{HashMap, HashSet};
@@ -94,7 +94,23 @@ pub(super) async fn rank(
             return Err(super::preflight::unavailable());
         }
         let originals = rows(candidates);
-        let pool = code_scoring_pool(&originals, config.max_candidates as usize)?;
+        let coverage_parents: HashSet<_> = candidates
+            .iter()
+            .filter(|candidate| {
+                candidate
+                    .parent
+                    .code
+                    .as_ref()
+                    .is_some_and(|code| code.role == CodeChunkRole::Symbol)
+            })
+            .map(|candidate| candidate.parent.id.to_string())
+            .collect();
+        let pool = code_scoring_pool_with_coverage(
+            &originals,
+            config.max_parents as usize,
+            config.max_candidates as usize,
+            |parent| coverage_parents.contains(parent),
+        )?;
         pool_omitted_segments = pool.omitted_segments as u32;
         let mut cursors: Vec<_> = pool
             .indices
@@ -136,6 +152,9 @@ pub(super) async fn rank(
         while views.len() < config.max_candidates as usize {
             let before = views.len();
             for parent in &parents {
+                if !coverage_parents.contains(*parent) {
+                    continue;
+                }
                 if let Some(&cursor) = by_parent[parent]
                     .iter()
                     .find(|&&i| cursors[i].has_remaining())

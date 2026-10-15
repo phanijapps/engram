@@ -1,0 +1,199 @@
+{
+  "date": "2026-10-15",
+  "scope": "independent scorer parent and view budgets; development-only functional and paired warm sample verification",
+  "featureShipped": false,
+  "wireContractChange": "optional local_scorer.max_parents (default50); existing explicit pair budgets preserved when reading legacy full configs",
+  "balancedDevelopmentBounds": {
+    "parents": 50,
+    "pairs": 75,
+    "batchSize": 8
+  },
+  "extraViewEligibility": "typed CodeChunkRole::Symbol bodies only; container context retains its initial view",
+  "calibrationBinding": "code-evidence-binding-v3/symbol-body-coverage",
+  "rejectedFirstTrial": {
+    "rawPath": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-coverage-2026-10-15/live.json",
+    "reason": "Extra container views displaced resolveEnvPrefix, reducing development recall0.8 to0.7; rejected before activation.",
+    "sha256": "2962b9fd061bff8ad43822af0390d2e8b42f16c1c52c45d32065102d85469d12"
+  },
+  "baselineProvenance": {
+    "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-coverage-2026-10-15/live.json",
+    "sha256": "2962b9fd061bff8ad43822af0390d2e8b42f16c1c52c45d32065102d85469d12",
+    "reuse": "same-store baseline measured before rejected all-parent trial; immutable original stores verified"
+  },
+  "modelOrNumericConfidenceThresholdChanged": false,
+  "fixedThresholdCheck": {
+    "threshold": -0.9790937304496765,
+    "negatives": 15,
+    "rejected": 14,
+    "required": 14
+  },
+  "negativeCheck": {
+    "count": 15,
+    "rejected": 14,
+    "required": 14
+  },
+  "negativeRejectionStatusChanges": [],
+  "summaries": {
+    "before": {
+      "positiveQuestions": 10,
+      "requiredUnitRecallAt10": 0.8,
+      "requiredRangeCoverage": 0.695453490483818,
+      "meanScoredPairs": 50.0,
+      "warmMedianSeconds": 10.123159957001917,
+      "sampleWarmP95Seconds": 11.581332161003957,
+      "timedRequests": 15
+    },
+    "after": {
+      "positiveQuestions": 10,
+      "requiredUnitRecallAt10": 0.8,
+      "requiredRangeCoverage": 0.8,
+      "meanScoredPairs": 61.7,
+      "warmMedianSeconds": 11.069557370006805,
+      "sampleWarmP95Seconds": 13.97888589098875,
+      "timedRequests": 15
+    }
+  },
+  "coverageChanges": [
+    {
+      "id": "vite-d01",
+      "before": 0.0,
+      "after": 0.0,
+      "beforeScoredPairs": 50,
+      "afterScoredPairs": 54
+    },
+    {
+      "id": "vite-d02",
+      "before": 1.0,
+      "after": 1.0,
+      "beforeScoredPairs": 50,
+      "afterScoredPairs": 61
+    },
+    {
+      "id": "vite-d03",
+      "before": 1.0,
+      "after": 1.0,
+      "beforeScoredPairs": 50,
+      "afterScoredPairs": 67
+    },
+    {
+      "id": "vite-d04",
+      "before": 1.0,
+      "after": 1.0,
+      "beforeScoredPairs": 50,
+      "afterScoredPairs": 58
+    },
+    {
+      "id": "vite-d05",
+      "before": 0.0,
+      "after": 0.0,
+      "beforeScoredPairs": 50,
+      "afterScoredPairs": 56
+    },
+    {
+      "id": "vite-d06",
+      "before": 1.0,
+      "after": 1.0,
+      "beforeScoredPairs": 50,
+      "afterScoredPairs": 61
+    },
+    {
+      "id": "vite-d07",
+      "before": 0.7163461538461539,
+      "after": 1.0,
+      "beforeScoredPairs": 50,
+      "afterScoredPairs": 74
+    },
+    {
+      "id": "vite-d08",
+      "before": 1.0,
+      "after": 1.0,
+      "beforeScoredPairs": 50,
+      "afterScoredPairs": 61
+    },
+    {
+      "id": "vite-d09",
+      "before": 0.38510354041416167,
+      "after": 1.0,
+      "beforeScoredPairs": 50,
+      "afterScoredPairs": 62
+    },
+    {
+      "id": "vite-d10",
+      "before": 0.8530852105778648,
+      "after": 1.0,
+      "beforeScoredPairs": 50,
+      "afterScoredPairs": 63
+    }
+  ],
+  "retrievalLaneInventoriesUnchanged": true,
+  "sourceStoresUnchanged": true,
+  "selfStoreOpened": false,
+  "runtimeBinarySha256": "b346fef0b2f6840ef3a6779397d13249652a05a043ec09814227571f485aae3b",
+  "probeSha256": "1f035403bbbfa2e6d2d48e605b4580f3c7f5b3168334c59b26d9be30547798ba",
+  "calibration": {
+    "artifact": {
+      "schemaVersion": 1,
+      "id": "code-calibration-v1/599317da85391615e95d4a7beb79a1a91a65112f12956415c0a7af8119fb9e11",
+      "configHash": "6962bff6752ce7fac29dedb8f09765be34f042a7fd85556a4380fa8df5d7f6ff",
+      "queryRepresentationId": "code-query-v1/6425ffc2849dee5e5639446fb66325a46e63e9393f42f9b87fccf96bd216def8",
+      "passageRepresentationId": "code-passage-v1/6c565799a44ef61392aefa737eb3998c3078c98a3d32acfc3e1813d1dcb89348",
+      "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+      "scorerManifestId": "model-manifest-v1/5a313a5e79e3036626005ee29fec2090d7f5172bf2f925e9f803d14da835c962",
+      "tokenizerIdentity": "5749ef57b8429e89b0e8140093a2eb34e56de83945690b28944aa477db9523f6",
+      "scoreTransformation": "raw_logit",
+      "scoreSpace": "cross_encoder",
+      "threshold": -0.97909373,
+      "developmentLabelsSha256": "1a9f560d6097a81737deff341bf58e550324430801547da66d6e6ccc5ce9db29"
+    },
+    "fixedThresholdMeasuredOnNewConfig": true,
+    "oldArtifactId": "code-calibration-v1/753b7fa12de02ead2d6486367b287c394e5d922ab38be4e8bf0276149afe36c7"
+  },
+  "timingProtocol": "one warmup per Vite variant then all15 development requests sequentially, same copied store, no overlapping gate/build process; not AC12 sixty-request certification",
+  "repositoryGates": {
+    "passed": true,
+    "commands": 11,
+    "rustPassed": 1199,
+    "rustIgnored": 10,
+    "nativeConfigurationBridge": "actual rebuilt addon reads max_parents and max_candidates independently from shared host config"
+  },
+  "review": "focused self-review per owner request; no adversarial agent rounds",
+  "selfReviewChecks": [
+    "Existing code_scoring_pool wrapper retains lexical/admission semantics; scorer alone uses separate parent cap.",
+    "The original fifty first opportunities are preserved before additional views; no extra parent breadth. Additional retrieved views and continuations require the typed Symbol role.",
+    "Additional segments still pass current source authorization and actual tokenizer/pair limits.",
+    "Scoring remains bounded across initial views and lazy continuations; invalid-score batches retain existing whole-batch fallback.",
+    "Legacy full configs default max_parents50 without rewriting an explicit max_candidates50.",
+    "Actual new-config negative scores admit the fixed threshold before sealing; calibrated runtime repeats verify all15 negatives."
+  ],
+  "limitations": [
+    "Ten Vite development positives and fifteen development negatives are not a fresh held-out quality assessment.",
+    "The15-request-per-variant warm sample is not AC12 sixty-request p95 certification.",
+    "Already fully scored short functions can still be misranked; code absent from the candidate pool is unchanged.",
+    "The frozen failed assessment and actual self-store rollout status remain unchanged."
+  ],
+  "rawReceiptHashes": {
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/source.patch": "0b617b60f61998e8b79129697992dd119dfc3ff5e7956ea441d13b2ca0690d1c",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/accepted-binary-receipt.json": "b993b0c8f8d7754917aabe19fee6a73ad52f75726573a883d3c125902bcd2b8c",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/live.json": "5c9c3ae7c2563cd9db579f86bc9db0317dd1422ab6557e8df0e31aa1b537547a",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/coverage-config.json": "76d7e193f94631072f982ef3c93e7b559af30a87ce274d88c8ac161fd97b15c8",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/coverage-calibration.json": "34240b9666bb4a660e46d96c8a510373640ce2c1c0f5cf8bd21dba27e1fd8380",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/before/receipt.json": "58f3464a8e7e192a7eca794b858aff8e7dbf85f6acf951f64fccea2d094dd50d",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/reliable-symbol-coverage-model-build.log": "19c9979ee82bf76213ad689c6c671ed7d311240fdafc03b1a826ad094563b054",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/reliable_symbol_coverage_live.py": "b1e65022398c803ba2b27667fffe0d3a9954a9f6a4f5a037cd54a19ff707e02f",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/reliable-symbol-coverage-native-config.log": "8a7a74882fab87dabbdc74a7533d441ae0d1ac5b7237c3f72c6ae0b0799d84c2",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/reliable-symbol-coverage-unit.log": "a9c1536a368354c5453d5a39831ff729b4f8b1f299a4d90db9ec9d52b8a0269f",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/reliable-symbol-coverage-live.log": "42f19e3629e246d015b6dc8507ceb82fb07abe74b469074025dac1bfd4f430e7",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/6-pnpm.log": "581516353c0f4d9118b5219c920e14b37b426aa67489a17834f878836beb8432",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/10-scripts-ci-check-surface-parity.sh.log": "b3225247e8a41fa566bc9accdc9e582f14f89e2660d1334af844cbdcc1e894e9",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/2-cargo.log": "f5aba7333d22cfb8944cbf2d21d34154fea838fae04c6735147d51b1dc2204e9",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/report.json": "1180aadecb8403d64e345c17297ed7b15dbcfe2ef21f0192e8545d784a177c5e",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/8-scripts-ci-check-docs.sh.log": "5a8199511e487d45222b8f4221b1f9254743f9419cc50bde4f81934cd2042f6f",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/9-scripts-ci-check-engine-neutrality.sh.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/5-pnpm.log": "63ed9bf8436c1c0dda6ba808679506b912575789675c9c38bcf1b25329d2fea1",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/4-pnpm.log": "dfc072881657d44fd6e216c5f8382f3eeeaf32644c08447c6fc62e26f40a012e",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/1-cargo.log": "c309169b7395d4d3a2b50dd711e26979a0ec8dfb4b023a18097566f69d09c6ba",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/0-cargo.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/7-scripts-ci-check-contracts.sh.log": "fce86ba532e1d76036faf9bd6bbddb2d942388071b20bab4aaecbcfd90921aea",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/scorer-symbol-coverage-2026-10-15/gates/3-pnpm.log": "2684eb0c2cdb2a307b40a553b72df0c4eeca9533b20880f44229a0370e93c1f7"
+  }
+}

@@ -2,6 +2,10 @@ use super::*;
 use crate::{RecallFusionConfig, RerankConfig};
 use engram_domain::{CodeIntelligenceProfile, RerankStrategy};
 
+pub(super) fn default_max_parents() -> u32 {
+    50
+}
+
 impl CodeIntelligenceConfig {
     /// Profile expansion is the sole default definition; overlays do not default fields.
     pub fn for_profile(profile: CodeIntelligenceProfile) -> Self {
@@ -38,7 +42,8 @@ impl CodeIntelligenceConfig {
                 model_id: "jinaai/jina-reranker-v1-turbo-en".into(),
                 query_token_limit: 128,
                 pair_token_limit: 1024,
-                max_candidates: 50,
+                max_parents: default_max_parents(),
+                max_candidates: if fast { 50 } else { 75 },
                 batch_size: 8,
                 on_failure: CodeScorerFailurePolicy::Degrade,
             },

@@ -111,7 +111,7 @@ settings or described as automatic repository-root discovery.
 | Initial lanes | vector, lexical | vector, lexical |
 | Candidates per lane / final parents | 50 / 10 | 20 / 10 |
 | RRF k / weights | 60 / 1.0 | 60 / 1.0 |
-| Reranking / maximum scored segments | cross_encoder / 50 | none / zero model calls |
+| Reranking / parent cap / maximum scored pairs | cross_encoder / 50 / 75 | none / zero model calls |
 | Local scorer | `jinaai/jina-reranker-v1-turbo-en` | Not loaded for reranking |
 | Scorer query / total pair tokens | 128 / 1,024 | Not used |
 | Scorer batch / failure policy | 8 / degrade | Not used |
@@ -143,7 +143,7 @@ scorerWindow`; scorer query count is at most `query_token_limit`. Over-budget
 queries return InvalidRequest before inference. Segments too large for scoring
 use deterministic range-based continuations, never prefix truncation.
 `result_limit <= candidates_per_lane` and, for cross-encoding,
-`result_limit <= max_candidates`. Fewer candidates can yield fewer parents;
+`result_limit <= max_candidates` and `result_limit <= max_parents`. Fewer candidates can yield fewer parents;
 batch size never increases the scored-pool bound.
 
 ### Current source and documents
@@ -210,12 +210,30 @@ lanes are not invoked; zero weight alone is not advertised as saving lane cost.
 
 A local scorer ranks a bounded fused **segment** pool before presentation.
 Group stable RRF-ordered segments by parent; select the best segment of each
-parent in first-appearance order, up to `max_candidates` parents. Fill remaining
-slots with subsequent segments in round-robin parent order. Remaining segments
+parent in first-appearance order, up to `max_parents` parents (and no more than
+the pair budget). Fill remaining
+slots with subsequent Symbol-body segments in round-robin parent order. Remaining segments
 and parents are excluded from scored ranking and counted as budget omissions.
 No more than `max_candidates` pairs are scored;
 pair/batch limits use the scorer's tokenizer. Presentation selects matching
 ranges plus bounded supporting units instead of a fixed method-prefix excerpt.
+
+The owner-authorized coverage follow-up separates the previous shared breadth/
+pair limit: the current balanced development preset preserves the same 50-parent
+frontier while allowing up to 75 segment/continuation pairs. The prior frozen
+assessment used its original 50-pair preset and is not relabeled or rerun for
+tuning. Operators may set `local_scorer.max_parents` and `max_candidates`
+independently through the shared file/env/explicit path. Existing full config
+files missing the new optional parent cap default to 50 without changing their
+explicit pair cap. Fast remains scorer-disabled. This change cannot recover
+code absent from the retrieved pool or help an already fully scored short body.
+
+Additional retrieved segments and lazy continuation views are eligible only for
+parents with typed `CodeChunkRole::Symbol` metadata. Container context retains
+its first scoring opportunity; extra interface/class context does not consume
+body-coverage slots. This is a language-neutral role policy, not a filename or
+symbol-name heuristic. The selection policy is included in calibration binding
+v3, so earlier artifacts require resealing against the new score distribution.
 
 Successful cross-encoding ranks parents by maximum scored segment score, with
 ties retaining prior RRF parent order. Unscored parents are not mixed into that

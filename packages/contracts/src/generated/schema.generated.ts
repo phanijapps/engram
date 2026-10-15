@@ -904,6 +904,12 @@ export const engramV1Schema = {
               "type": "integer"
             },
             "max_candidates": {
+              "default": 75,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "max_parents": {
               "default": 50,
               "maximum": 200,
               "minimum": 1,
@@ -1137,6 +1143,12 @@ export const engramV1Schema = {
               "type": "integer"
             },
             "max_candidates": {
+              "default": 75,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "max_parents": {
               "default": 50,
               "maximum": 200,
               "minimum": 1,

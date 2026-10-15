@@ -8,6 +8,7 @@ mod code_candidates;
 pub mod code_config;
 pub use code_candidates::{
     CodeParentRank, CodeRankedSegment, CodeScoringPool, code_parent_order, code_scoring_pool,
+    code_scoring_pool_with_coverage, code_scoring_pool_with_parent_limit,
 };
 mod composer;
 pub use code_config::*;

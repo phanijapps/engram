@@ -48,6 +48,38 @@ gates pass (1,195 Rust tests, 10 ignored). No held-out or overall quality result
 is inferred from this deliberately selected regression set. See
 [confidence live proof](../../research/reliable-code-packet-confidence-live-2026-10-15.json).
 
+**Sequential fix 3 — independent coverage budgets:** Introduce optional
+`local_scorer.max_parents` (50 by default) and predeclare a balanced development
+pair cap of 75. Preserve the first opportunity for the same top 50 parents;
+reserve remaining pair opportunities for additional retrieved segments and
+continuations of typed Symbol bodies instead of admitting more parents.
+ContainerContext parents retain their initial opportunity only. Reproduce fifty distinct
+parents exhausting all opportunities before a second segment. Verify independent
+limits, stable ordering, bounded continuation work, legacy config decoding and
+file/env/explicit precedence. Compare actual-model multi-segment Vite development
+evidence coverage, failed short-function controls, all fifteen development
+negatives and paired warm timings on disposable copies. Keep the model and
+numeric confidence threshold fixed. The frozen assessment remains historical;
+this is not a new held-out tuning run. Review stays a focused self-review.
+
+
+**Sequential fix 3 live outcome (2026-10-15):** The initial all-parent 50/75
+trial was rejected: an extra `UserConfig` container view displaced
+`resolveEnvPrefix`, reducing Vite development parent recall from 8/10 to 7/10.
+The typed Symbol-body policy restores 8/10 and improves mean required-range
+coverage from 69.55% to 80.00%. `transformCjsImport`, `loadPackageData` and the
+other partial-body case now expose all labeled required ranges. The two
+already fully scored short-function misses remain unresolved. The actual-model
+15-request warm sample changes median latency from 10.12s to 11.07s and sample
+p95 from 11.58s to 13.98s; this is not the full AC12 timing certification.
+The same numeric threshold rejects the same 14/15 development negatives in
+both raw-score and calibrated-runtime checks before accepting the new binding.
+All eleven repository gates pass (1,199 Rust tests; 10 ignored), plus the actual
+rebuilt native addon configuration check. The first rejected trial and its binaries are preserved, and
+the baseline is reused from its same-store pre-change measurements. No held-out
+labels, original assessment results or actual self store are changed. See the
+[coverage live proof](../../research/reliable-code-scorer-coverage-live-2026-10-15.json).
+
 Freeze the evaluation first, promote the reviewed portable contracts, then build
 configuration and current-document authority. Add derivative AST/token coverage
 without replacing canonical methods. Separate candidate retrieval from output,

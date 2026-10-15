@@ -72,6 +72,7 @@ fn unknown_or_null_settings_and_bad_environment_are_rejected() {
         serde_json::json!({"query":null}),
         serde_json::json!({"fusion":{"rerank":null}}),
         serde_json::json!({"fusion":{"rerank":{"x":0}}}),
+        serde_json::json!({"local_scorer":{"max_parents":null}}),
     ] {
         assert!(serde_json::from_value::<CodeIntelligenceConfigOverlay>(value).is_err());
     }
@@ -88,6 +89,39 @@ fn unknown_or_null_settings_and_bad_environment_are_rejected() {
         };
         assert!(load_code_config(&launch).is_err(), "{key}");
     }
+}
+
+#[test]
+fn scorer_parent_and_pair_budgets_resolve_independently_across_launch_layers() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("code.json");
+    std::fs::write(
+        &path,
+        r#"{"local_scorer":{"max_parents":30,"max_candidates":60}}"#,
+    )
+    .unwrap();
+    let launch = CodeConfigLaunch {
+        file: Some(path),
+        environment: BTreeMap::from([
+            ("ENGRAM_CODE__LOCAL_SCORER__MAX_PARENTS".into(), "40".into()),
+            (
+                "ENGRAM_CODE__LOCAL_SCORER__MAX_CANDIDATES".into(),
+                "80".into(),
+            ),
+        ]),
+        explicit: Some(overlay(
+            serde_json::json!({"local_scorer":{"max_parents":35}}),
+        )),
+        ..Default::default()
+    };
+    let resolved = load_code_config(&launch).unwrap();
+    assert_eq!(resolved.effective.local_scorer.max_parents, 35);
+    assert_eq!(resolved.effective.local_scorer.max_candidates, 80);
+    assert_eq!(resolved.origins["local_scorer.max_parents"], "explicit");
+    assert_eq!(
+        resolved.origins["local_scorer.max_candidates"],
+        "environment"
+    );
 }
 
 #[test]

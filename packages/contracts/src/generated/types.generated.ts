@@ -323,6 +323,7 @@ export interface CodeIntelligenceConfig {
   local_scorer: {
     batch_size: number;
     max_candidates: number;
+    max_parents?: number;
     model_id: string;
     on_failure: "degrade" | "error";
     pair_token_limit: number;
@@ -2719,6 +2720,7 @@ export interface CodeIntelligenceConfigOverlay {
   local_scorer?: {
     batch_size?: number;
     max_candidates?: number;
+    max_parents?: number;
     model_id?: string;
     on_failure?: "degrade" | "error";
     pair_token_limit?: number;

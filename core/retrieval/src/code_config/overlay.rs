@@ -55,6 +55,7 @@ field_admission!(present_model_id, "local_scorer.model_id");
 field_admission!(present_query_token_limit, "local_scorer.query_token_limit");
 field_admission!(present_pair_token_limit, "local_scorer.pair_token_limit");
 field_admission!(present_max_candidates, "local_scorer.max_candidates");
+field_admission!(present_max_parents, "local_scorer.max_parents");
 field_admission!(present_batch_size, "local_scorer.batch_size");
 field_admission!(present_on_failure, "local_scorer.on_failure");
 field_admission!(present_token_budget, "evidence.token_budget");
@@ -247,6 +248,12 @@ pub struct CodeScorerOverlay {
         deserialize_with = "present_pair_token_limit"
     )]
     pub pair_token_limit: Option<u32>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present_max_parents"
+    )]
+    pub max_parents: Option<u32>,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",

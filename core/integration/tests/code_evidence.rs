@@ -254,7 +254,7 @@ fn successful_scoring_has_exact_winning_ranges_and_remains_insufficient_without_
         packet.diagnostics.scored_pairs as usize,
         scorer.pairs.load(Ordering::SeqCst)
     );
-    assert!(packet.diagnostics.scored_pairs <= 50);
+    assert!(packet.diagnostics.scored_pairs <= 75);
     assert!(packet.items.len() <= 10);
     assert_eq!(
         packet.diagnostics.calibration_state,
@@ -398,10 +398,10 @@ fn scorer_continuations_keep_exact_pair_inputs_and_bound_preparation_work() {
     let p = provider(&f, scorer.clone(), config);
     let packet = block_on(p.code_evidence(&query(), &f.scope, &f.requester)).unwrap();
     assert!(!packet.items.is_empty());
-    assert!(packet.diagnostics.scored_pairs <= 50);
+    assert!(packet.diagnostics.scored_pairs <= 75);
     assert!(packet.diagnostics.candidate_counts["segments_with_unprepared_scoring_tails"] > 0);
     assert!(
-        scorer.inspected.load(Ordering::SeqCst) < 50 * 60,
+        scorer.inspected.load(Ordering::SeqCst) < 75 * 60,
         "preparation must be bounded before inference"
     );
     let mut partial = false;

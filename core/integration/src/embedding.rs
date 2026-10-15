@@ -47,6 +47,18 @@ pub trait EmbeddingProvider: Send + Sync {
             reason: "embedding provider has no exact tokenizer contract".into(),
         })
     }
+    /// Embeds exactly the prepared code-query input without adding a second
+    /// provider prefix. Unknown provider input preparation fails closed.
+    fn embed_prepared_code_query(
+        &self,
+        _query: &crate::code_query::PreparedCodeQuery,
+    ) -> CoreResult<Vec<f32>> {
+        Err(engram_runtime::CoreError::CapabilityUnsupported {
+            capability: "code_query_embedding".into(),
+            reason: "embedding provider has no explicit code-query input contract".into(),
+        })
+    }
+
     /// True only for inference performed in this process, without transmitting
     /// source to another service. Unknown/external providers fail closed.
     fn is_local(&self) -> bool {

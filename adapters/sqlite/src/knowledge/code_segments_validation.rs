@@ -69,14 +69,34 @@ pub(super) fn segment(
         || !inv.segment_ids.contains(&s.id)
         || !s.embedding_input.is_valid()
         || s.embedding_input.query_tokens != 0
-        || !s.context.is_empty()
-        || s.embedding_input.context_tokens != 0
+        || s.context.len() > 20
+        || (s.context.is_empty() && s.embedding_input.context_tokens != 0)
     {
-        return Err(invalid(
-            "segment identity/token coverage is invalid or context is not yet validated",
-        ));
+        return Err(invalid("segment identity/token coverage is invalid"));
     }
-    parent(conn, m, s)
+    let primary = parent(conn, m, s)?;
+    for fact in &s.context {
+        if fact.sources.len() != 1 {
+            return Err(invalid("context needs one current canonical contributor"));
+        }
+        let source = &fact.sources[0];
+        let id: Option<String> = conn.query_row(
+            "SELECT id FROM knowledge_chunks_records WHERE json_extract(record_json,'$.code.unit')=?1 AND json_extract(record_json,'$.documentId')=?2",
+            rusqlite::params![source.unit_id, m.document_id.as_ref().map(|id| id.as_str())], |row| row.get(0),
+        ).optional().map_err(sql_error)?;
+        let mut owner = s.clone();
+        owner.parent_chunk_id = Id::from(
+            id.ok_or_else(|| invalid("context contributor is missing from current source"))?,
+        );
+        owner.parent_unit_id = source.unit_id.clone();
+        owner.ranges = vec![CodeByteRange {
+            start: source.start_byte,
+            end: source.end_byte,
+        }];
+        let donor = parent(conn, m, &owner)?;
+        engram_knowledge::validate_code_context_fact(fact, &primary, &donor, &s.representation_id)?;
+    }
+    Ok(primary)
 }
 fn merged(mut ranges: Vec<CodeByteRange>) -> Vec<CodeByteRange> {
     ranges.sort_by_key(|r| (r.start, r.end));

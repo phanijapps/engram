@@ -46,3 +46,6 @@ pub use code_source_write::CodeSourceWrite;
 pub use document_head::{
     DocumentHeadRepository, DocumentHeadWrite, document_head_retrieval_authorized,
 };
+
+mod code_context;
+pub use code_context::{code_context_text, validate_code_context_fact};

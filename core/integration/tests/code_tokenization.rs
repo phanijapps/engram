@@ -9,7 +9,7 @@ fn actual_bge_tokenizer_covers_method_tail_without_truncation() {
     let model = FastEmbedBgeSmallQueryProvider::new().unwrap();
     let source = format!(
         "fn enormous() {{\n{}\nreturn final_tail_anchor();\n}}\n",
-        " let value = \"π 🦀 unicode body\";\n".repeat(220)
+        " let value = \"π 🦀 unicode body\";\n".repeat(300)
     );
     let full = model.tokenize_untruncated(&source, true).unwrap();
     assert_eq!(full.window, 512);
@@ -63,6 +63,45 @@ fn actual_bge_tokenizer_covers_method_tail_without_truncation() {
         assert_eq!(combined.tokenizer_id, full.tokenizer_id);
     }
     let vectors = model.embed_passage_batch(&bodies).unwrap();
+    let changed = source.replace("final_tail_anchor", "refund_invoice_payment");
+    assert!(source.chars().count() > 8192);
+    assert_eq!(
+        source.chars().take(8192).collect::<String>(),
+        changed.chars().take(8192).collect::<String>()
+    );
+    let changed_tree = parser.parse(&changed, "rs").unwrap();
+    let changed_plans = segment_source_ranges(
+        &changed,
+        &[CodeByteRange {
+            start: 0,
+            end: changed.len() as u64,
+        }],
+        "",
+        &structural_boundaries(&changed_tree),
+        384,
+        |text| Ok(model.tokenize_untruncated(text, false)?.offsets),
+    )
+    .unwrap();
+    let changed_first: String = changed_plans[0]
+        .ranges
+        .iter()
+        .map(|r| &changed[r.start as usize..r.end as usize])
+        .collect();
+    assert_eq!(bodies[0], changed_first);
+    let changed_tail: String = changed_plans
+        .last()
+        .unwrap()
+        .ranges
+        .iter()
+        .map(|r| &changed[r.start as usize..r.end as usize])
+        .collect();
+    let changed_vector = model.embed_passage(&changed_tail).unwrap();
+    assert_ne!(
+        *vectors.last().unwrap(),
+        changed_vector,
+        "changes beyond the old 8192-character prefix must change a real tail vector"
+    );
+
     assert_eq!(vectors.len(), bodies.len());
     assert!(
         vectors

@@ -1,6 +1,9 @@
 //! Canonical parent → deterministic tokenizer-bounded segment descriptions.
 use crate::{EmbeddingProvider, code_representation::CodeRepresentation};
-use engram_code::{TreeSitterChunker, segment_source_ranges, structural_boundaries};
+use engram_code::{
+    CodeUnitSyntax, TreeSitterChunker, analyze_code_unit, segment_source_ranges_with_context,
+    source_import_ranges, structural_boundaries,
+};
 use engram_domain::*;
 
 use engram_retrieval::CodeIndexConfig;
@@ -38,6 +41,7 @@ pub(super) fn derive(
     let parser = TreeSitterChunker::new()?;
     let tree = parser.parse(&source.text, &extension).ok();
     let boundaries = tree.as_ref().map(structural_boundaries).unwrap_or_default();
+    let imports = tree.as_ref().map(source_import_ranges).unwrap_or_default();
     let m = &source.manifest;
     let mut segments = Vec::new();
     for parent in parents {
@@ -54,7 +58,14 @@ pub(super) fn derive(
         let unit = code.unit.as_ref().ok_or_else(|| {
             invalid("code unit needs verified normalized identity; rescan its source")
         })?;
-        let plans = segment_source_ranges(
+        let syntax = tree
+            .as_ref()
+            .map(|tree| analyze_code_unit(&source.text, &m.file.path, tree, code.declaration_range))
+            .unwrap_or(CodeUnitSyntax {
+                category: CodeSourceCategory::Unknown,
+                signature_range: None,
+            });
+        let plans = segment_source_ranges_with_context(
             &source.text,
             &code.ranges,
             &code.slice_separator,
@@ -75,16 +86,22 @@ pub(super) fn derive(
         )?;
         for plan in plans {
             let body = engram_knowledge::code_segment_text(parent, &plan.ranges)?;
-            let actual = model.tokenize_untruncated(body.trim(), true)?;
-            if actual.tokenizer_id != representation.tokenizer_id
-                || actual.total_tokens() > representation.window as usize
-                || actual.offsets.len() > config.body_token_target as usize
-                || actual.offsets.len() != plan.code_tokens as usize
-            {
-                return Err(invalid(
-                    "complete segment input exceeds its declared tokenizer contract",
-                ));
-            }
+            let context = super::context::select(
+                parent,
+                parents,
+                syntax.signature_range,
+                &imports,
+                &source.text,
+                &body,
+                model,
+                config,
+                representation,
+            )?;
+            let (_, coverage) =
+                super::input::build_input(&body, &context, model, config, representation)?
+                    .ok_or_else(|| {
+                        invalid("complete segment input exceeds its declared tokenizer contract")
+                    })?;
             let identity = serde_json::to_vec(&(
                 "code-segment-v1",
                 &representation.id,
@@ -93,6 +110,8 @@ pub(super) fn derive(
                 &code.fingerprint,
                 &plan.ranges,
                 &body,
+                &context,
+                syntax.category,
             ))
             .map_err(|e| invalid(&e.to_string()))?;
             let digest: String = Sha256::digest(identity)
@@ -110,16 +129,9 @@ pub(super) fn derive(
                 representation_id: representation.id.clone(),
                 ranges: plan.ranges,
                 continuation: plan.continuation,
-                source_category: CodeSourceCategory::Unknown,
-                context: vec![],
-                embedding_input: CodeTokenCoverage {
-                    code_tokens: actual.offsets.len() as u32,
-                    context_tokens: 0,
-                    query_tokens: 0,
-                    special_tokens: actual.special_tokens,
-                    total_tokens: actual.total_tokens() as u32,
-                    truncated: false,
-                },
+                source_category: syntax.category,
+                context,
+                embedding_input: coverage,
             });
         }
     }

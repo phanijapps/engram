@@ -61,6 +61,42 @@ pub fn segment_source_ranges<F>(
     separator: &str,
     boundaries: &[u64],
     budget: u32,
+    tokenize: F,
+) -> CoreResult<Vec<TokenSegmentPlan>>
+where
+    F: FnMut(&str) -> CoreResult<Vec<CodeByteRange>>,
+{
+    partition(
+        source, ranges, separator, boundaries, budget, false, tokenize,
+    )
+}
+
+/// Like `segment_source_ranges`, but permits zero-token shell gaps when range
+/// bounds prevent attaching them to code. The consumer MUST supply grounded,
+/// nonempty context before inference; these plans alone are not model inputs.
+pub fn segment_source_ranges_with_context<F>(
+    source: &str,
+    ranges: &[CodeByteRange],
+    separator: &str,
+    boundaries: &[u64],
+    budget: u32,
+    tokenize: F,
+) -> CoreResult<Vec<TokenSegmentPlan>>
+where
+    F: FnMut(&str) -> CoreResult<Vec<CodeByteRange>>,
+{
+    partition(
+        source, ranges, separator, boundaries, budget, true, tokenize,
+    )
+}
+
+fn partition<F>(
+    source: &str,
+    ranges: &[CodeByteRange],
+    separator: &str,
+    boundaries: &[u64],
+    budget: u32,
+    allow_context: bool,
     mut tokenize: F,
 ) -> CoreResult<Vec<TokenSegmentPlan>>
 where
@@ -166,7 +202,15 @@ where
             start = end;
         }
     }
-    attach_blank_segments(source, ranges, separator, budget, result, &mut tokenize)
+    attach_blank_segments(
+        source,
+        ranges,
+        separator,
+        budget,
+        allow_context,
+        result,
+        &mut tokenize,
+    )
 }
 
 /// Blank shell gaps have source bytes but no independent model meaning. Keep
@@ -176,6 +220,7 @@ fn attach_blank_segments<F>(
     canonical: &[CodeByteRange],
     separator: &str,
     budget: u32,
+    allow_context: bool,
     plans: Vec<TokenSegmentPlan>,
     tokenize: &mut F,
 ) -> CoreResult<Vec<TokenSegmentPlan>>
@@ -233,9 +278,11 @@ where
                     continue;
                 }
             }
-            return Err(invalid(
-                "blank source gap cannot fit an adjacent model segment",
-            ));
+            if !allow_context {
+                return Err(invalid(
+                    "blank source gap cannot fit an adjacent model segment",
+                ));
+            }
         }
         result.push(plan);
     }

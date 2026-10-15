@@ -99,3 +99,7 @@ cross-encoder-rerank = ["dep:engram-rerank-cross-encoder"]
 # provider when selected. Mutually exclusive with `sqlite` at dispatch time
 # (sqlite wins if both are enabled). Capability cells attach incrementally.
 surreal = ["dep:engram-store-surreal", "dep:tokio"]
+
+[[example]]
+name = "code_query_probe"
+required-features = ["fastembed"]

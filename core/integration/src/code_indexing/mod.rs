@@ -1,5 +1,7 @@
 //! Focused derived-code preparation and bounded embedding maintenance.
+mod context;
 mod derivation;
+mod input;
 mod maintenance;
 pub(crate) use maintenance::backfill;
 

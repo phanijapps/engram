@@ -7,6 +7,9 @@
 //! I/O, git, storage, async runtime, or LLM; `adapters/ingest` consumes it to
 //! build the code graph.
 
+mod context;
+pub use context::{CodeUnitSyntax, analyze_code_unit, source_import_ranges};
+
 pub mod edges;
 pub mod frameworks;
 pub mod identity;
@@ -15,7 +18,10 @@ pub mod parser;
 pub mod queries;
 pub mod resolution;
 mod segmentation;
-pub use segmentation::{TokenSegmentPlan, segment_source_ranges, structural_boundaries};
+pub use segmentation::{
+    TokenSegmentPlan, segment_source_ranges, segment_source_ranges_with_context,
+    structural_boundaries,
+};
 
 pub use edges::{StructuralEdges, contains_pairs};
 pub use frameworks::{FrameworkFacts, RouteFact, extract_frameworks};

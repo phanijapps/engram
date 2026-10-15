@@ -2,7 +2,7 @@
 use async_trait::async_trait;
 use engram_domain::*;
 use engram_knowledge::{CodeSegmentRepository, code_segment_text};
-use engram_retrieval::{CodeIndexConfig, RetrievalIndex};
+use engram_retrieval::{CodeIndexConfig, CodeQueryInstruction, RetrievalIndex};
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_sqlite::{
     SqlKnowledgeStore, SqliteVectorIndex, VectorQueryProvider, VectorResolvedTarget,
@@ -88,13 +88,16 @@ impl VectorQueryProvider for FixedQuery {
 }
 
 /// One legacy vector lane over document and complete code representations.
-/// Query inference is shared; score fusion remains the existing outer RRF.
+/// Legacy query inference is shared. Explicit code formatting preserves the
+/// document query contract; score fusion remains the existing outer RRF.
 pub(super) struct CompatibleVectorLane {
     pub base: Arc<SqliteVectorIndex>,
     pub code: Arc<SqliteVectorIndex>,
     pub query: Arc<dyn VectorQueryProvider>,
     pub store: Arc<SqlKnowledgeStore>,
     pub representation: String,
+    pub code_instruction: CodeQueryInstruction,
+    pub embedder: Arc<dyn crate::EmbeddingProvider>,
 }
 #[async_trait]
 impl RetrievalIndex for CompatibleVectorLane {
@@ -102,8 +105,24 @@ impl RetrievalIndex for CompatibleVectorLane {
         &self,
         request: &RetrievalRequest,
     ) -> CoreResult<Vec<RetrievalResult>> {
-        let query: Arc<dyn VectorQueryProvider> =
-            Arc::new(FixedQuery(self.query.query_vector(request)?));
+        let base_vector = self.query.query_vector(request)?;
+        let prepared = crate::code_query::prepare_code_query(
+            self.embedder.as_ref(),
+            &request.query,
+            self.code_instruction,
+        );
+        let code_vector = match prepared {
+            Ok(query) => Some(if self.code_instruction == CodeQueryInstruction::LegacyV1 {
+                base_vector.clone()
+            } else {
+                self.embedder.embed_prepared_code_query(&query)?
+            }),
+            // Generic document recall retains its legacy query contract; the
+            // new code-evidence operation independently rejects invalid queries.
+            Err(CoreError::InvalidRequest { .. }) => None,
+            Err(error) => return Err(error),
+        };
+        let query: Arc<dyn VectorQueryProvider> = Arc::new(FixedQuery(base_vector));
         let base = VectorRetrievalIndex::new(
             (*self.base).clone(),
             query.clone(),
@@ -111,16 +130,18 @@ impl RetrievalIndex for CompatibleVectorLane {
                 self.store.clone(),
             )),
         );
-        let code = VectorRetrievalIndex::new(
-            (*self.code).clone(),
-            query,
-            Arc::new(SegmentResolver {
-                store: self.store.clone(),
-                representation: self.representation.clone(),
-            }),
-        );
         let mut results = base.retrieve_candidates(request).await?;
-        results.extend(code.retrieve_candidates(request).await?);
+        if let Some(vector) = code_vector {
+            let code = VectorRetrievalIndex::new(
+                (*self.code).clone(),
+                Arc::new(FixedQuery(vector)),
+                Arc::new(SegmentResolver {
+                    store: self.store.clone(),
+                    representation: self.representation.clone(),
+                }),
+            );
+            results.extend(code.retrieve_candidates(request).await?);
+        }
         results.sort_by(|a, b| {
             b.score
                 .total

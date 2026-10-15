@@ -1,0 +1,3367 @@
+{
+  "checkpoint": "T5 authorized context and independent query formats",
+  "qualityComparisonAvailable": false,
+  "runState": "complete",
+  "binarySha256": "ef61f8c7dd8f1177687f3b80201f31e7f124744db84021dd9b09370f20aa1c95",
+  "calls": [
+    {
+      "tool": "capability_report",
+      "seconds": 0.4880426620002254,
+      "failed": false,
+      "text": "Server: engram-mcp 0.1.0\nCapabilities:\n  memory: supported\n  code_embeddings: supported\n  knowledge: supported\n  code_source_preservation: supported\n  graph: supported\n  knowledge_query: supported\n  lexical_feed: supported\n  recall: supported\n  consolidation: supported\n  batch: supported\n  ontology: supported\n  taxonomy: supported\n  beliefs: supported\n  procedures: supported\n  hierarchy: supported\n  identity: supported\n  vector: supported",
+      "response": {
+        "id": 1,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "Server: engram-mcp 0.1.0\nCapabilities:\n  memory: supported\n  code_embeddings: supported\n  knowledge: supported\n  code_source_preservation: supported\n  graph: supported\n  knowledge_query: supported\n  lexical_feed: supported\n  recall: supported\n  consolidation: supported\n  batch: supported\n  ontology: supported\n  taxonomy: supported\n  beliefs: supported\n  procedures: supported\n  hierarchy: supported\n  identity: supported\n  vector: supported",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "scan_repo",
+      "seconds": 1.2355466769949999,
+      "failed": false,
+      "text": "ScanSummary { scanned: 4, ingested: 3, unchanged: 0, skipped: 0, entities: 92, relationships: 87, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 97 chunks",
+      "response": {
+        "id": 2,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "ScanSummary { scanned: 4, ingested: 3, unchanged: 0, skipped: 0, entities: 92, relationships: 87, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 97 chunks",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "reindex",
+      "seconds": 0.02465118899999652,
+      "failed": false,
+      "text": "reindex: embedded 0 chunks (limit 1024) (0 code chunks)\nbacklog drained",
+      "response": {
+        "id": 3,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "reindex: embedded 0 chunks (limit 1024) (0 code chunks)\nbacklog drained",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "search",
+      "seconds": 0.055810251004004385,
+      "failed": false,
+      "text": "pub fn enormous() { \u2014 engram-mcp-scan, a.rs [graph+vector:3.00, rrf=0.03 (norm:1.00)]\npub fn enormous() {\n let mut total = 0;\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += \n... [truncated]\nasync getUser(id: string) { \u2014 engram-mcp-scan, user.service.ts [vector:0.55, rrf=0.02 (norm:0.50)]\nasync getUser(id: string) {\n    return await this.db.query('SELECT * FROM users WHERE id = ?', id);\n  }\nMany::m19 \u2014 engram-mcp-scan, many.py [community_summary:1.00, rrf=0.02 (norm:0.50)]\nMany::m41 \u2014 engram-mcp-scan, many.py [community_summary:1.00, rrf=0.02 (norm:0.50)]\nimport { Database } from './db'; \u2014 engram-mcp-scan, user.service.ts [vector:0.54, rrf=0.02 (norm:0.49)]\nimport { Database } from './db';\nexport \n... [2 results from user.service.ts capped for diversity]\n... [3 results from many.py capped for diversity]",
+      "response": {
+        "id": 4,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "pub fn enormous() { \u2014 engram-mcp-scan, a.rs [graph+vector:3.00, rrf=0.03 (norm:1.00)]\npub fn enormous() {\n let mut total = 0;\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += \n... [truncated]\nasync getUser(id: string) { \u2014 engram-mcp-scan, user.service.ts [vector:0.55, rrf=0.02 (norm:0.50)]\nasync getUser(id: string) {\n    return await this.db.query('SELECT * FROM users WHERE id = ?', id);\n  }\nMany::m19 \u2014 engram-mcp-scan, many.py [community_summary:1.00, rrf=0.02 (norm:0.50)]\nMany::m41 \u2014 engram-mcp-scan, many.py [community_summary:1.00, rrf=0.02 (norm:0.50)]\nimport { Database } from './db'; \u2014 engram-mcp-scan, user.service.ts [vector:0.54, rrf=0.02 (norm:0.49)]\nimport { Database } from './db';\nexport \n... [2 results from user.service.ts capped for diversity]\n... [3 results from many.py capped for diversity]",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "contextOnlyBlankShellSegments": 3,
+  "vectorsEnabled": true,
+  "sourceBytes": 12809,
+  "sourceCharacters": 11769,
+  "canonicalParents": 86,
+  "derivedSegments": 97,
+  "derivedVectors": 97,
+  "completeCanonicalByteCover": true,
+  "tailEmbedded": true,
+  "queryReturnedCanonicalParent": true,
+  "legacyOrSnapshotDonorsUsed": false,
+  "singleFileLayoutPreserved": true,
+  "groundedParentAndUnresolvedImport": true,
+  "contextWithin64Tokens": true,
+  "actualCodeQueryFormats": [
+    {
+      "effectiveConfigHash": "36be65cae3a3497808d7f37d60d1c141fac9b1e9f6ecf9cfd172ed3b65924545",
+      "effectiveIndexConfig": {
+        "body_token_target": 384,
+        "context_token_budget": 64
+      },
+      "embeddingSpace": {
+        "dimensions": 384,
+        "model": "BAAI/bge-small-en-v1.5",
+        "normalization": null,
+        "prompt_profile": "code-passage-v1/cd73d7fe15346d112edf9bfae60678327de0081af62916ae401ee1de8da4829c",
+        "provider": "fastembed"
+      },
+      "parents": [
+        {
+          "anchor": "fn UserService::getUser",
+          "chunkId": "chunk-sha256:f724da22c9bbfb8cc28b453edf1f566501589e4f48aa3567cd08d36336dbd21d",
+          "declarationRange": {
+            "end": 235,
+            "start": 132
+          },
+          "distance": 0.7814531922340393,
+          "generation": "sha256:6e4b8957e6f1ed6aa36228f61150e9ea498b9471994b457de3e3142429b0abbb",
+          "parentUnitId": "sha256:16ad2cb1d5f396980fc2b2f5f1d351796007f1b48f1f530eacf28079c58aa5ba",
+          "path": "user.service.ts",
+          "ranges": [
+            {
+              "end": 235,
+              "start": 132
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-b608bdfc4178e332fb8535467c814de7d00705cf9a3933b25606c435b7d3636d",
+          "sourceHash": "sha256:f6a5095c638f0540ccd75a2147e9e83de5c9636777e5ed41ee2e9eca41f63746"
+        },
+        {
+          "anchor": "fn UserService::constructor",
+          "chunkId": "chunk-sha256:a73712521fc3a1ac5f74db4a89acd6f2c5dd5e7270ed919e437fed32d090d3e4",
+          "declarationRange": {
+            "end": 129,
+            "start": 86
+          },
+          "distance": 0.9127365946769714,
+          "generation": "sha256:6e4b8957e6f1ed6aa36228f61150e9ea498b9471994b457de3e3142429b0abbb",
+          "parentUnitId": "sha256:de9f9e9b65a6af4e3e40b097c14a185854198963c6a3b16e815416d0217c032b",
+          "path": "user.service.ts",
+          "ranges": [
+            {
+              "end": 129,
+              "start": 86
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-94c49963491c049c37409e68d00727cfeaec58f44b25b5e69f6a1d6119276d2f",
+          "sourceHash": "sha256:f6a5095c638f0540ccd75a2147e9e83de5c9636777e5ed41ee2e9eca41f63746"
+        },
+        {
+          "anchor": "class UserService",
+          "chunkId": "chunk-sha256:abd3ac4b6eb81c010185cea2f6fb5e10c89c960bcf739c7697fb7de0e6672938",
+          "declarationRange": {
+            "end": 237,
+            "start": 40
+          },
+          "distance": 0.9239524602890015,
+          "generation": "sha256:6e4b8957e6f1ed6aa36228f61150e9ea498b9471994b457de3e3142429b0abbb",
+          "parentUnitId": "sha256:dfa1e2de87730fdb41e177bb5d95781a90982f095f48380f0d45f6f3452a6452",
+          "path": "user.service.ts",
+          "ranges": [
+            {
+              "end": 86,
+              "start": 40
+            },
+            {
+              "end": 132,
+              "start": 129
+            },
+            {
+              "end": 237,
+              "start": 235
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-0852baafa81dd48c0d0593a15ee1da7cafe5ba0f36aee86c9e9c54ecdb436167",
+          "sourceHash": "sha256:f6a5095c638f0540ccd75a2147e9e83de5c9636777e5ed41ee2e9eca41f63746"
+        },
+        {
+          "anchor": "def Many::m61",
+          "chunkId": "chunk-sha256:c963ec42b778b27c2ebce27a051f0d8107d132f87ccc2d01f3e2ff3bda5401bc",
+          "declarationRange": {
+            "end": 2346,
+            "start": 2314
+          },
+          "distance": 0.9329726696014404,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:ebc68f57938d76e90688d28ba142b7d0609b68b16b42b6de43b6bf87ad5cf0e9",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2346,
+              "start": 2314
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-47ac603205bee8385158ba5d5f9a79d75469848b06ee33c32d6b5881f169041f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m26",
+          "chunkId": "chunk-sha256:b2dbc9e40a37e5baa84688c7187d5d05bfec326bf89ce0b152c99d8e64df4ea5",
+          "declarationRange": {
+            "end": 1016,
+            "start": 984
+          },
+          "distance": 0.9385519027709961,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e9577818e1270e0a235500f660529039429041b065e9b947fb7b84dc9b1b9d36",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1016,
+              "start": 984
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-3aa7691b7b01acedb49d27f2470ed0b17dbe776f10d10dbf3b81fd11b7ce5888",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m31",
+          "chunkId": "chunk-sha256:1da5ed3e51e3744ed9ff46dd036e5ece5de1f9657e9258b42615d13f0051850f",
+          "declarationRange": {
+            "end": 1206,
+            "start": 1174
+          },
+          "distance": 0.939338743686676,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:b4052e7b04fe97ae263919f18471e3eea6d0efe83f06a6d7ad256a68b8412ce9",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1206,
+              "start": 1174
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-b87a975b8ed35788e65dda1724f2787eb4fc89c61aa925df1b00e6ad6c0dccd4",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m20",
+          "chunkId": "chunk-sha256:c7ad1b569b8ea0512f4bf9242ae4ff49d7f3cef044e85ec9d7f32e1624814c89",
+          "declarationRange": {
+            "end": 788,
+            "start": 756
+          },
+          "distance": 0.9398012161254883,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:29c92d19bce7b530df55af713fcbfbef0be150e51f5db7e407ff76f470aba82f",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 788,
+              "start": 756
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f540302b674d55e15bc275998f24a8b6d4898fe00d8cc7d2daa2eb4dc246fb0e",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m76",
+          "chunkId": "chunk-sha256:158df5a134a7102f032ea16f29f5ad6a5c5c3f03c07aa96238b9045ca17ef39f",
+          "declarationRange": {
+            "end": 2916,
+            "start": 2884
+          },
+          "distance": 0.9402176737785339,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:434f981859a8cca7a80f3d3ff49d8dda6b7556df7744fb9f57a9c040590a8494",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2916,
+              "start": 2884
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-da41e19d06e0105fcdc13c5cc967be5e83ee41d42b4fc4bd6f22362321c5b713",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m67",
+          "chunkId": "chunk-sha256:59e9d2cafdc35fbea277ffb4377e694efc4321a8bbfe6e011cfad58507b29e3a",
+          "declarationRange": {
+            "end": 2574,
+            "start": 2542
+          },
+          "distance": 0.9402910470962524,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:abc5b37cfdf4df4cfa0611ccf1899eea929b9d0de8586ccbe5a9eb84d79e5344",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2574,
+              "start": 2542
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f3a50d1a7ebb97bd810f5233acd3048a650ea6ccaf21cb904a5fb76255ad3466",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m21",
+          "chunkId": "chunk-sha256:871cca1f755241f37b0c7f2ad3e2edd38e17fe7fbdfd2dfd2a6362492e8cbc3f",
+          "declarationRange": {
+            "end": 826,
+            "start": 794
+          },
+          "distance": 0.9409106969833374,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:936e663975ca24871653819ebfbbe145ce0809fe0e686c7b2db7c2cca0752ee3",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 826,
+              "start": 794
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-28d39984e978999e3957848a9d18c5fcf1327d22a87bd20b06ed2facb4a14a2f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m18",
+          "chunkId": "chunk-sha256:ac1439491fd18642680bbbfc0e300e7a8b92b4647bdd3d93ba86b806a9603d34",
+          "declarationRange": {
+            "end": 712,
+            "start": 680
+          },
+          "distance": 0.9429205060005188,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:24279b05867bd9969a2c2313fada7c5f60f4fc0129174e7fc7515f2694d1dd30",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 712,
+              "start": 680
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8f5eb908bbaa2139bde777e7e46d2eafe3af0a04f54f3c8df47ba924aefbe170",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m30",
+          "chunkId": "chunk-sha256:811e1f4ac83c25f2fc27adaadd902e9d2a724f6ca03d6cebb29093670c87c1f1",
+          "declarationRange": {
+            "end": 1168,
+            "start": 1136
+          },
+          "distance": 0.9429677724838257,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:4c1185105cc0e397c9a5567c669ca232e762deed2f592d690974292464a88484",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1168,
+              "start": 1136
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-ea29366ce5ccdafd562af8eabd6442cfea480c6efa9e92131d1f8fbe559d4567",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m71",
+          "chunkId": "chunk-sha256:774335bc9027af169719bb52d6ee30afc59bae09b20a6ab7db6f5b8370a300ea",
+          "declarationRange": {
+            "end": 2726,
+            "start": 2694
+          },
+          "distance": 0.9436795115470886,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:5e7dbc30572a7de4f3201ab7cf67a398dceac67a0dcc8f3b0bde0e8555929dd8",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2726,
+              "start": 2694
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-63ccf39d961f045f4381ffc634e947972c794f5c80f2e53966b234922ea5394c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m68",
+          "chunkId": "chunk-sha256:611ce54a5a511d9cd3d13757b97e215b3e50ced21d45d119545acda11de80cd0",
+          "declarationRange": {
+            "end": 2612,
+            "start": 2580
+          },
+          "distance": 0.943681001663208,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:ccf5a1fa89bcfd5f46e57a1f3bed9329791299866bcbfa81b09161ef6a2f56ec",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2612,
+              "start": 2580
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-82eb2f9cbca6986b3cd3ca8e01eaf731473eaf0fb9e038d08506815c13519dd9",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m74",
+          "chunkId": "chunk-sha256:af7ad28c691323a5a0a3e503b8a0ffe631daf1aab3cdbf0c0890a499fbcc9047",
+          "declarationRange": {
+            "end": 2840,
+            "start": 2808
+          },
+          "distance": 0.943921685218811,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:4b077baaeb60e3d79b9f8629b80023d1cbd64e37dd565769042d9442dd74de5a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2840,
+              "start": 2808
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-420f20714f0ffb000f7bdeae3885529c1f05f31c7e333fcfa9989d0062c1e845",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m27",
+          "chunkId": "chunk-sha256:513433f485c135b09da3861e351d86b9bb00178b26f3a3ef5869dd5a9184472e",
+          "declarationRange": {
+            "end": 1054,
+            "start": 1022
+          },
+          "distance": 0.9439665675163269,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e85305a2e42cf4cc30ad92f8985535d2f13aee77e0705b736e89e6455d050354",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1054,
+              "start": 1022
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-e7808321757dabf8493a81121cff40f457d552eb0c400c79c2f463d8c95c0357",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m56",
+          "chunkId": "chunk-sha256:33a6ac35bcecef41fff35a33f6af20c7106645ace0e5e55df727d1358f00e08e",
+          "declarationRange": {
+            "end": 2156,
+            "start": 2124
+          },
+          "distance": 0.9440947771072388,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:b133a04f2184ac1ae42bcdb6730ce92f663957edf88a780bf86b91168ae371cc",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2156,
+              "start": 2124
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7fd3a4e885f0b45b3c542254b5fe4a3b978a78e83bba2579e5b0da929f5184b8",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m16",
+          "chunkId": "chunk-sha256:6b1dc81c45ce27eb3ffaea11935f856ee135f1ec5d85f33ff6285a7c4ed5585e",
+          "declarationRange": {
+            "end": 636,
+            "start": 604
+          },
+          "distance": 0.9445253610610962,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:5e4cae7699f09ad1ab05427d002551edba9fbe1c8b4dfaf803dd1a6be742579a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 636,
+              "start": 604
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-2818df60bcbdc4d9fcdb486ae13647a07ad2c0c330fde2187ef619afde835513",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m0",
+          "chunkId": "chunk-sha256:cb83f5e9eb7d78528123a49b619d1b26295c1d4fb83a2a72fb7ea70204cfde9a",
+          "declarationRange": {
+            "end": 46,
+            "start": 16
+          },
+          "distance": 0.9453116655349731,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:293ad16894368a1efea4b44f46a05213867d86dc6fb05c3c0d2778269c01211b",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 46,
+              "start": 16
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-9f5476be322ec16232e938923f7aa83326f4ad46e2345c8f90d52c5daac7c8f6",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m37",
+          "chunkId": "chunk-sha256:1c63360b18ff28fbcfd70ac8c0d735429036ea7be70db659f9ed820aa7f27702",
+          "declarationRange": {
+            "end": 1434,
+            "start": 1402
+          },
+          "distance": 0.9463005065917969,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e3dc6145626dcd6a3443c52f441326c45e7172dd4ea17660f8ebcac82242880e",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1434,
+              "start": 1402
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-4cacdb92d68d99d0b1a1189fe9ee8e44682229dc508e6af229a99db5ff2e2550",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m14",
+          "chunkId": "chunk-sha256:a206cf192103791ff8a9db2be56790720b340850ce792a5708d82ab7ccc9c731",
+          "declarationRange": {
+            "end": 560,
+            "start": 528
+          },
+          "distance": 0.9463752508163452,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c5e849874bbb23aac0848983e56159a98430d321ec57813e1be03d16236d94ea",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 560,
+              "start": 528
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7c27709dd07d3ce8b3de546133651a83a3baf9a89802746be14d8df0fa699c95",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m28",
+          "chunkId": "chunk-sha256:7c249bbf6dbda35821634af1aef8a1ff2effa9e33aa45acf2bf99adcb5aafc05",
+          "declarationRange": {
+            "end": 1092,
+            "start": 1060
+          },
+          "distance": 0.9464287161827087,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:aa5c63c0239605afcdc3c30b1d9e7d3f9cb68dabc6638ea4cd81e29f64223366",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1092,
+              "start": 1060
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7f1dfaafb609beb28ef999ad71734ad52e4f6867b30ff66aa9a1d73fbe352d8f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m53",
+          "chunkId": "chunk-sha256:f00bf405d8bd07dcd09ee28eae0157c077cb852070dc7b6c55b4141e099101b6",
+          "declarationRange": {
+            "end": 2042,
+            "start": 2010
+          },
+          "distance": 0.9471002221107483,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e43df4f1665b8a0324b6a80349bce6c4a4e38ec90f96041df5413587aae6dab0",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2042,
+              "start": 2010
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-c576084187208cece787e9fa06e3bc9701f8f85425757b9deb8a8ceb1c385134",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m36",
+          "chunkId": "chunk-sha256:441a7822c3c32e5650a4e5b9bbf495f8968c54c6b06a9726fa3d4d4f0f8fc894",
+          "declarationRange": {
+            "end": 1396,
+            "start": 1364
+          },
+          "distance": 0.947188138961792,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:011e5eed40baf105337162c431ee6d96bb085118a6321d7b243c86fb4a516fa5",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1396,
+              "start": 1364
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-aeed6d52afa4575bbb38ab13c84c0fd7e54d8aa3051af067720d011892fbd1ae",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m69",
+          "chunkId": "chunk-sha256:0b3332571df778833022053d929f91bc5975dcff8a4029b6702814fc6c15d2ed",
+          "declarationRange": {
+            "end": 2650,
+            "start": 2618
+          },
+          "distance": 0.9472772479057312,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:73c3499121787f7f710647b596fb5863e77fdf8a5bbd5e6f8e7046c5aab1f70f",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2650,
+              "start": 2618
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-d0ad68196ef95c70bf50ce3ea64b9488963713f41a0f3c926edb4110fdae2ea2",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m78",
+          "chunkId": "chunk-sha256:83ed7c000e74c361b716fc2bfb2e9401a3efbe76cbb7116ea07c3130ecf34b1d",
+          "declarationRange": {
+            "end": 2992,
+            "start": 2960
+          },
+          "distance": 0.9475475549697876,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:091e3ef558c33be6031884e07d3a51746e3244ddbc56f96c2b997f855e0b87df",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2992,
+              "start": 2960
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7240e143c3b5be8d56bd6988b894377c84632c467f6e0f540b8c0ad4df232e1d",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m19",
+          "chunkId": "chunk-sha256:30e69229f11af63c5b3b07c29d650632db38068ecdc1ef012dece0dc02ab740f",
+          "declarationRange": {
+            "end": 750,
+            "start": 718
+          },
+          "distance": 0.9475611448287964,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c9b1fd073021851b48b9431198f57eb50324238f13b28a02b73c38e12a8ed47a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 750,
+              "start": 718
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8bb5220045d22068b9f59cf8f5655d48d8e54124ce2d145b59e08f3fe5be6e18",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m62",
+          "chunkId": "chunk-sha256:f5a66ce713996ea262ce87ec0e49bfa2756ca4eb8e6db666133891d3d4307865",
+          "declarationRange": {
+            "end": 2384,
+            "start": 2352
+          },
+          "distance": 0.9476277232170105,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:077e22f46ea5aca13f589e43c5e4fcc27455e5bd8e876c5cf83215b4f83889ae",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2384,
+              "start": 2352
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-bb9904ab90e7b9d32ba5551054f6d7a327bd4ee5a3ebeddcc780ecfc255b31e2",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m11",
+          "chunkId": "chunk-sha256:2c4727219eb8e66f768d303318b96637de8e348367565767a9026ea44965176d",
+          "declarationRange": {
+            "end": 446,
+            "start": 414
+          },
+          "distance": 0.9481608271598816,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:3b01ab5c7c1878a53da5fc343857f6139001e0e892d86f55cbd081c02b22ce84",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 446,
+              "start": 414
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-477f63bbbe58c9db1275ed8c0b7906cedb2a8024e80d559e26f9d150f0821678",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m10",
+          "chunkId": "chunk-sha256:2c8eb8f83bfb6aaf6de9c90913608bfc383231fb28f82ee65322853a43cbac66",
+          "declarationRange": {
+            "end": 408,
+            "start": 376
+          },
+          "distance": 0.9481744170188904,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:ec3dafab1bbeb7dd10bb986788db540c46bffb6d928735ea8804a61e22a70449",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 408,
+              "start": 376
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-57d4cfaa551a949d994a76c14820f78f020894ecf577bd939f75db27717b0043",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m35",
+          "chunkId": "chunk-sha256:4f3baa20545eb8aef7a5d235795781b229fb29dbda279bc704b6b1cd869d2e39",
+          "declarationRange": {
+            "end": 1358,
+            "start": 1326
+          },
+          "distance": 0.9484550356864929,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:fa95efa28b277bf9dca35f1eba9d1d90939064a891ef0697b9664a41c706984d",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1358,
+              "start": 1326
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-c5ed1d5ae766e68f13b41709f8a8328f17bbfbc7618909495a751acad6e7ed57",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m17",
+          "chunkId": "chunk-sha256:155f0f9cf04a39bebd2807e9099f8794d5bce303e78ae955580075eb64a69100",
+          "declarationRange": {
+            "end": 674,
+            "start": 642
+          },
+          "distance": 0.9488562345504761,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:31c5c18ba3509e6c15ecd6869441ea18931f3b11946f5ea00c02e67af29874d3",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 674,
+              "start": 642
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-27cbd8f88a6993dfc1a6fca5db99f80506e7ed3f47f87546c892f91f27e7c944",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m29",
+          "chunkId": "chunk-sha256:0b76d94264cd8b9d40cc27e26bf4f84563d7c7146299d699b4bb9079583675de",
+          "declarationRange": {
+            "end": 1130,
+            "start": 1098
+          },
+          "distance": 0.949131965637207,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:f25529990de77d1f731d4920d951b7bab567af7c986de63623659d26cd835912",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1130,
+              "start": 1098
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-e2473b3d9dd3c7709ec9cdc5d906dbb62a4f4da92ac66e6380eec3e73a443059",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m32",
+          "chunkId": "chunk-sha256:5cbd8ec4875621d93c321848d6f0466da54f45076f12c9738b35d85b6e015c11",
+          "declarationRange": {
+            "end": 1244,
+            "start": 1212
+          },
+          "distance": 0.9492063522338867,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:29dfd2921ac35a8c0c8dcf2109af7da6b60e4a8e5c4e2c2d0f0d9e78c0382d74",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1244,
+              "start": 1212
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-75fda9a7fe07580fb4a5ecb02a315af37d91fd065961603102a234dc040b0d51",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m25",
+          "chunkId": "chunk-sha256:bc545935eae27a4e27c69b78dfc1e3ff0fb2d06f0789b1145e7de5b25e34d16b",
+          "declarationRange": {
+            "end": 978,
+            "start": 946
+          },
+          "distance": 0.9493482112884521,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:6b5e1d1fff4c3be86566a81065194198eaa722ed8f3785e22a9961076028d63c",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 978,
+              "start": 946
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8b11f537aafbc757ad63fbc5f4a47493d8332a0ab6bf768d13fe84275b47874b",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m57",
+          "chunkId": "chunk-sha256:c4d0f2d717889a6215d4a450d34dd8df1c5a739b35da445a11b42a6a88283af3",
+          "declarationRange": {
+            "end": 2194,
+            "start": 2162
+          },
+          "distance": 0.9495013356208801,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:45d11c87213b89574ef64c4246aacb291156509d5c87b90d472a9f311069f656",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2194,
+              "start": 2162
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8c7f142535a351fe1573694ced42ee47546e5d91c6e1700bf1366138e20e41fe",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m12",
+          "chunkId": "chunk-sha256:3a08b016c35e2e9e67218f45bb50990598a421d7733c704676bec329fcdaeb4b",
+          "declarationRange": {
+            "end": 484,
+            "start": 452
+          },
+          "distance": 0.9497774839401245,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:449a661d72eb6b94b1857c515cf7a4bbdc722625a9dbb1b6b1ed2448199c053e",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 484,
+              "start": 452
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-6d43c62323042e9ab1602e0128c40aebbb102f95a6f32f9fb153daf482dd841c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m15",
+          "chunkId": "chunk-sha256:8cd82b37f14b564847428f4123cabd03e3c9fb1f6a94dbe85a8ea61311fa009d",
+          "declarationRange": {
+            "end": 598,
+            "start": 566
+          },
+          "distance": 0.9497929811477661,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:35081bf4277ff35f165dd94ec07843934fcbb90a6a23d8a59fef2e7d1176082f",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 598,
+              "start": 566
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-2074f6862b090c46922106ab89e0f465f3617ff620f1213650ece990f4aeb652",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m77",
+          "chunkId": "chunk-sha256:dac08cf719dda5c704504f11b6b98ce9eb5ef72510f33556ebe9d0ffb883acb2",
+          "declarationRange": {
+            "end": 2954,
+            "start": 2922
+          },
+          "distance": 0.9499382972717285,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:309d5e642925c36811822900abc78352959924ded9dee12cb0b860354552ac3a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2954,
+              "start": 2922
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f7047b0c8d3d36243c6c8bcbaec1ea756cc8cc5781b29ccbacffb780241bcdfa",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m24",
+          "chunkId": "chunk-sha256:a525d588e1959b63f24241c4ee3bb7c3e4b26c4a844ca53db603d900d5b5c992",
+          "declarationRange": {
+            "end": 940,
+            "start": 908
+          },
+          "distance": 0.9501382112503052,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:9b6ea0ed08ce69b3e3b8bd56fb6f4e067439f286cea54667099e2de979699f25",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 940,
+              "start": 908
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-511c40a819fd2347912ee56dfe521e8a93cff2bfa24fdae3c70ab4199e26adc8",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m51",
+          "chunkId": "chunk-sha256:a5c2297ccc74a002a70c7aad1ded4dd8f865a7f8ff837e450b7b1154ede7f761",
+          "declarationRange": {
+            "end": 1966,
+            "start": 1934
+          },
+          "distance": 0.9501825571060181,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c46db26cf624a8aa6c05b660d0548c68e3bb040c2ee6ce22e3587c17b0c4c969",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1966,
+              "start": 1934
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f1df92ea03407c821f9055b7da6bb2b6a09f4c95b032661410db6cb75db7210f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m23",
+          "chunkId": "chunk-sha256:633d22f39ebfcb1147f8022df0f7e31b6637b0172ce12bdfcb192d95d1bc977e",
+          "declarationRange": {
+            "end": 902,
+            "start": 870
+          },
+          "distance": 0.9505254626274109,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:6de9c7b6da69ca71045d023ffd5afc01a93c1ed93ae78067464fb04c4a3b440b",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 902,
+              "start": 870
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-59d2830d94c20f69beb28c7478099b00e06261187a826548f6ea587c03319fe5",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m6",
+          "chunkId": "chunk-sha256:6c953e2c67eb7c4484e61deb10feab059ae7c5aa38016616814bdbcc5f369514",
+          "declarationRange": {
+            "end": 262,
+            "start": 232
+          },
+          "distance": 0.9505916237831116,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:76befedb504f10ac1989411e83b7712dc47ca557acfd0462807a4c87994b2b34",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 262,
+              "start": 232
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-ce4916a7e6639602a313c0a8dadb485c1baf14f1a8189dd4b479e94b4555665c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m34",
+          "chunkId": "chunk-sha256:c7b24cb1e9c3db281ae5c54493657877b3ce7f5a687ddf72c10c199c9268ca53",
+          "declarationRange": {
+            "end": 1320,
+            "start": 1288
+          },
+          "distance": 0.9514181613922119,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:eaec18e3b95fda337522a4f24fe72c7e23b4302f8d2ef8e3568c9eff94d32761",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1320,
+              "start": 1288
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-94e3b185aa4c47a557e778e0ac07fcc82f735e38286014e343ba33e3b52c8e07",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m38",
+          "chunkId": "chunk-sha256:5acc64e5bd99f72fe71b880128053399a90f0dbd9d043bc633ad655bbbee06ee",
+          "declarationRange": {
+            "end": 1472,
+            "start": 1440
+          },
+          "distance": 0.9517378807067871,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c3cef64dad4697d39c56c59c4740fd71e88b546bc40235183147116f02b3d221",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1472,
+              "start": 1440
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-3e0472c83e1c3caef2a132140dfe24ab7724326f66d7f1e7477b69c508679e1c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m47",
+          "chunkId": "chunk-sha256:4b4c3efcbb5e145af16822d268633f3e3034e650e0c090702f05ef5d2558c7a6",
+          "declarationRange": {
+            "end": 1814,
+            "start": 1782
+          },
+          "distance": 0.9522865414619446,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e01faa5fbadf871217158fddb0fb49c0daf56aa02ee581087e82f90aa3338261",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1814,
+              "start": 1782
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-105771d0efc99d9465a74b254f910af6c2b51015220edb798846235629680144",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m39",
+          "chunkId": "chunk-sha256:7ce758510702f3fde5db23b214e61a03805511933221b9ab9282d72663863c89",
+          "declarationRange": {
+            "end": 1510,
+            "start": 1478
+          },
+          "distance": 0.9523760676383972,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:69c866e018a8fa323686369c146e67d39b6572e96383e87513b1b139f6ffc68f",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1510,
+              "start": 1478
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-cd0808c26929c6e491f9caa508eb4c7c497112415d4818b2e725789ca6275db6",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m79",
+          "chunkId": "chunk-sha256:a0a817429ecd1b4e5eb02ba6194204dd5c636e0898e469d98844f5537269c9ce",
+          "declarationRange": {
+            "end": 3030,
+            "start": 2998
+          },
+          "distance": 0.9527326822280884,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:14b462d8c82312be67e9ae96988b8a93f05eca6086d2468e235cdd9932610360",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 3030,
+              "start": 2998
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-b57f6411c2e03866faf6ad914d2d5f00ed888cbb12194fc67fbab248b584e079",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m22",
+          "chunkId": "chunk-sha256:a131907af5163d7a274125c6dd33a2bcd739e7be4decd56595de5f935c9d35e5",
+          "declarationRange": {
+            "end": 864,
+            "start": 832
+          },
+          "distance": 0.9529086351394653,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:7ded76c1f55df515f24c9591caa9bfdbf39cf864d0dce5e666eb3f2a4828b0b5",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 864,
+              "start": 832
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-4c329026f384f3b52d5767521d29f9db23980bd9020f22d46a44eb20e6c96f31",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m66",
+          "chunkId": "chunk-sha256:d2dcdbc38e92247522e691803558599662490094a19b6a4b1bb534cca5595804",
+          "declarationRange": {
+            "end": 2536,
+            "start": 2504
+          },
+          "distance": 0.9535608887672424,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:3a4a830169c70889461cfc1009782b1557ac2f83cf01ae7a45119ab3310c6637",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2536,
+              "start": 2504
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-5dc94c55fd5a31fcd94ab53590a2c8fc845053af73f7d699c30c2bc9ab63d478",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        }
+      ],
+      "passageRepresentationId": "code-passage-v1/cd73d7fe15346d112edf9bfae60678327de0081af62916ae401ee1de8da4829c",
+      "queryRepresentationId": "code-query-v1/1df538145704ff88613c31750b0cdfdd83841b92d107e12b85d63fd318aebc25",
+      "queryTokens": {
+        "codeTokens": 0,
+        "contextTokens": 0,
+        "queryTokens": 14,
+        "specialTokens": 2,
+        "totalTokens": 16,
+        "truncated": false
+      },
+      "rawSegmentHits": 50,
+      "seconds": 0.037824217,
+      "tokenizerId": "tokenizer-json-sha256:346fbeb4f4eb87746676304d918f3e1c01fe988e7e3c546977a64e20bcb61d3c/window-512"
+    },
+    {
+      "effectiveConfigHash": "36be65cae3a3497808d7f37d60d1c141fac9b1e9f6ecf9cfd172ed3b65924545",
+      "effectiveIndexConfig": {
+        "body_token_target": 384,
+        "context_token_budget": 64
+      },
+      "embeddingSpace": {
+        "dimensions": 384,
+        "model": "BAAI/bge-small-en-v1.5",
+        "normalization": null,
+        "prompt_profile": "code-passage-v1/cd73d7fe15346d112edf9bfae60678327de0081af62916ae401ee1de8da4829c",
+        "provider": "fastembed"
+      },
+      "parents": [
+        {
+          "anchor": "fn UserService::getUser",
+          "chunkId": "chunk-sha256:f724da22c9bbfb8cc28b453edf1f566501589e4f48aa3567cd08d36336dbd21d",
+          "declarationRange": {
+            "end": 235,
+            "start": 132
+          },
+          "distance": 0.7803197503089905,
+          "generation": "sha256:6e4b8957e6f1ed6aa36228f61150e9ea498b9471994b457de3e3142429b0abbb",
+          "parentUnitId": "sha256:16ad2cb1d5f396980fc2b2f5f1d351796007f1b48f1f530eacf28079c58aa5ba",
+          "path": "user.service.ts",
+          "ranges": [
+            {
+              "end": 235,
+              "start": 132
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-b608bdfc4178e332fb8535467c814de7d00705cf9a3933b25606c435b7d3636d",
+          "sourceHash": "sha256:f6a5095c638f0540ccd75a2147e9e83de5c9636777e5ed41ee2e9eca41f63746"
+        },
+        {
+          "anchor": "fn UserService::constructor",
+          "chunkId": "chunk-sha256:a73712521fc3a1ac5f74db4a89acd6f2c5dd5e7270ed919e437fed32d090d3e4",
+          "declarationRange": {
+            "end": 129,
+            "start": 86
+          },
+          "distance": 0.8941337466239929,
+          "generation": "sha256:6e4b8957e6f1ed6aa36228f61150e9ea498b9471994b457de3e3142429b0abbb",
+          "parentUnitId": "sha256:de9f9e9b65a6af4e3e40b097c14a185854198963c6a3b16e815416d0217c032b",
+          "path": "user.service.ts",
+          "ranges": [
+            {
+              "end": 129,
+              "start": 86
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-94c49963491c049c37409e68d00727cfeaec58f44b25b5e69f6a1d6119276d2f",
+          "sourceHash": "sha256:f6a5095c638f0540ccd75a2147e9e83de5c9636777e5ed41ee2e9eca41f63746"
+        },
+        {
+          "anchor": "class UserService",
+          "chunkId": "chunk-sha256:abd3ac4b6eb81c010185cea2f6fb5e10c89c960bcf739c7697fb7de0e6672938",
+          "declarationRange": {
+            "end": 237,
+            "start": 40
+          },
+          "distance": 0.9040580987930298,
+          "generation": "sha256:6e4b8957e6f1ed6aa36228f61150e9ea498b9471994b457de3e3142429b0abbb",
+          "parentUnitId": "sha256:dfa1e2de87730fdb41e177bb5d95781a90982f095f48380f0d45f6f3452a6452",
+          "path": "user.service.ts",
+          "ranges": [
+            {
+              "end": 86,
+              "start": 40
+            },
+            {
+              "end": 132,
+              "start": 129
+            },
+            {
+              "end": 237,
+              "start": 235
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-0852baafa81dd48c0d0593a15ee1da7cafe5ba0f36aee86c9e9c54ecdb436167",
+          "sourceHash": "sha256:f6a5095c638f0540ccd75a2147e9e83de5c9636777e5ed41ee2e9eca41f63746"
+        },
+        {
+          "anchor": "def Many::m61",
+          "chunkId": "chunk-sha256:c963ec42b778b27c2ebce27a051f0d8107d132f87ccc2d01f3e2ff3bda5401bc",
+          "declarationRange": {
+            "end": 2346,
+            "start": 2314
+          },
+          "distance": 0.9128182530403137,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:ebc68f57938d76e90688d28ba142b7d0609b68b16b42b6de43b6bf87ad5cf0e9",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2346,
+              "start": 2314
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-47ac603205bee8385158ba5d5f9a79d75469848b06ee33c32d6b5881f169041f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m20",
+          "chunkId": "chunk-sha256:c7ad1b569b8ea0512f4bf9242ae4ff49d7f3cef044e85ec9d7f32e1624814c89",
+          "declarationRange": {
+            "end": 788,
+            "start": 756
+          },
+          "distance": 0.9170771837234497,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:29c92d19bce7b530df55af713fcbfbef0be150e51f5db7e407ff76f470aba82f",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 788,
+              "start": 756
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f540302b674d55e15bc275998f24a8b6d4898fe00d8cc7d2daa2eb4dc246fb0e",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m26",
+          "chunkId": "chunk-sha256:b2dbc9e40a37e5baa84688c7187d5d05bfec326bf89ce0b152c99d8e64df4ea5",
+          "declarationRange": {
+            "end": 1016,
+            "start": 984
+          },
+          "distance": 0.9189245104789734,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e9577818e1270e0a235500f660529039429041b065e9b947fb7b84dc9b1b9d36",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1016,
+              "start": 984
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-3aa7691b7b01acedb49d27f2470ed0b17dbe776f10d10dbf3b81fd11b7ce5888",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m67",
+          "chunkId": "chunk-sha256:59e9d2cafdc35fbea277ffb4377e694efc4321a8bbfe6e011cfad58507b29e3a",
+          "declarationRange": {
+            "end": 2574,
+            "start": 2542
+          },
+          "distance": 0.919299304485321,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:abc5b37cfdf4df4cfa0611ccf1899eea929b9d0de8586ccbe5a9eb84d79e5344",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2574,
+              "start": 2542
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f3a50d1a7ebb97bd810f5233acd3048a650ea6ccaf21cb904a5fb76255ad3466",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m31",
+          "chunkId": "chunk-sha256:1da5ed3e51e3744ed9ff46dd036e5ece5de1f9657e9258b42615d13f0051850f",
+          "declarationRange": {
+            "end": 1206,
+            "start": 1174
+          },
+          "distance": 0.919565737247467,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:b4052e7b04fe97ae263919f18471e3eea6d0efe83f06a6d7ad256a68b8412ce9",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1206,
+              "start": 1174
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-b87a975b8ed35788e65dda1724f2787eb4fc89c61aa925df1b00e6ad6c0dccd4",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m76",
+          "chunkId": "chunk-sha256:158df5a134a7102f032ea16f29f5ad6a5c5c3f03c07aa96238b9045ca17ef39f",
+          "declarationRange": {
+            "end": 2916,
+            "start": 2884
+          },
+          "distance": 0.9196938276290894,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:434f981859a8cca7a80f3d3ff49d8dda6b7556df7744fb9f57a9c040590a8494",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2916,
+              "start": 2884
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-da41e19d06e0105fcdc13c5cc967be5e83ee41d42b4fc4bd6f22362321c5b713",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m30",
+          "chunkId": "chunk-sha256:811e1f4ac83c25f2fc27adaadd902e9d2a724f6ca03d6cebb29093670c87c1f1",
+          "declarationRange": {
+            "end": 1168,
+            "start": 1136
+          },
+          "distance": 0.9213874936103821,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:4c1185105cc0e397c9a5567c669ca232e762deed2f592d690974292464a88484",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1168,
+              "start": 1136
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-ea29366ce5ccdafd562af8eabd6442cfea480c6efa9e92131d1f8fbe559d4567",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m53",
+          "chunkId": "chunk-sha256:f00bf405d8bd07dcd09ee28eae0157c077cb852070dc7b6c55b4141e099101b6",
+          "declarationRange": {
+            "end": 2042,
+            "start": 2010
+          },
+          "distance": 0.9217458963394165,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e43df4f1665b8a0324b6a80349bce6c4a4e38ec90f96041df5413587aae6dab0",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2042,
+              "start": 2010
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-c576084187208cece787e9fa06e3bc9701f8f85425757b9deb8a8ceb1c385134",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m21",
+          "chunkId": "chunk-sha256:871cca1f755241f37b0c7f2ad3e2edd38e17fe7fbdfd2dfd2a6362492e8cbc3f",
+          "declarationRange": {
+            "end": 826,
+            "start": 794
+          },
+          "distance": 0.9218035936355591,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:936e663975ca24871653819ebfbbe145ce0809fe0e686c7b2db7c2cca0752ee3",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 826,
+              "start": 794
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-28d39984e978999e3957848a9d18c5fcf1327d22a87bd20b06ed2facb4a14a2f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m74",
+          "chunkId": "chunk-sha256:af7ad28c691323a5a0a3e503b8a0ffe631daf1aab3cdbf0c0890a499fbcc9047",
+          "declarationRange": {
+            "end": 2840,
+            "start": 2808
+          },
+          "distance": 0.9219688177108765,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:4b077baaeb60e3d79b9f8629b80023d1cbd64e37dd565769042d9442dd74de5a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2840,
+              "start": 2808
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-420f20714f0ffb000f7bdeae3885529c1f05f31c7e333fcfa9989d0062c1e845",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m56",
+          "chunkId": "chunk-sha256:33a6ac35bcecef41fff35a33f6af20c7106645ace0e5e55df727d1358f00e08e",
+          "declarationRange": {
+            "end": 2156,
+            "start": 2124
+          },
+          "distance": 0.9227783679962158,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:b133a04f2184ac1ae42bcdb6730ce92f663957edf88a780bf86b91168ae371cc",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2156,
+              "start": 2124
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7fd3a4e885f0b45b3c542254b5fe4a3b978a78e83bba2579e5b0da929f5184b8",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m68",
+          "chunkId": "chunk-sha256:611ce54a5a511d9cd3d13757b97e215b3e50ced21d45d119545acda11de80cd0",
+          "declarationRange": {
+            "end": 2612,
+            "start": 2580
+          },
+          "distance": 0.9230704307556152,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:ccf5a1fa89bcfd5f46e57a1f3bed9329791299866bcbfa81b09161ef6a2f56ec",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2612,
+              "start": 2580
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-82eb2f9cbca6986b3cd3ca8e01eaf731473eaf0fb9e038d08506815c13519dd9",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m71",
+          "chunkId": "chunk-sha256:774335bc9027af169719bb52d6ee30afc59bae09b20a6ab7db6f5b8370a300ea",
+          "declarationRange": {
+            "end": 2726,
+            "start": 2694
+          },
+          "distance": 0.9231292009353638,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:5e7dbc30572a7de4f3201ab7cf67a398dceac67a0dcc8f3b0bde0e8555929dd8",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2726,
+              "start": 2694
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-63ccf39d961f045f4381ffc634e947972c794f5c80f2e53966b234922ea5394c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m18",
+          "chunkId": "chunk-sha256:ac1439491fd18642680bbbfc0e300e7a8b92b4647bdd3d93ba86b806a9603d34",
+          "declarationRange": {
+            "end": 712,
+            "start": 680
+          },
+          "distance": 0.9232360124588013,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:24279b05867bd9969a2c2313fada7c5f60f4fc0129174e7fc7515f2694d1dd30",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 712,
+              "start": 680
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8f5eb908bbaa2139bde777e7e46d2eafe3af0a04f54f3c8df47ba924aefbe170",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m0",
+          "chunkId": "chunk-sha256:cb83f5e9eb7d78528123a49b619d1b26295c1d4fb83a2a72fb7ea70204cfde9a",
+          "declarationRange": {
+            "end": 46,
+            "start": 16
+          },
+          "distance": 0.9232425093650818,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:293ad16894368a1efea4b44f46a05213867d86dc6fb05c3c0d2778269c01211b",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 46,
+              "start": 16
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-9f5476be322ec16232e938923f7aa83326f4ad46e2345c8f90d52c5daac7c8f6",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m27",
+          "chunkId": "chunk-sha256:513433f485c135b09da3861e351d86b9bb00178b26f3a3ef5869dd5a9184472e",
+          "declarationRange": {
+            "end": 1054,
+            "start": 1022
+          },
+          "distance": 0.924405038356781,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e85305a2e42cf4cc30ad92f8985535d2f13aee77e0705b736e89e6455d050354",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1054,
+              "start": 1022
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-e7808321757dabf8493a81121cff40f457d552eb0c400c79c2f463d8c95c0357",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m16",
+          "chunkId": "chunk-sha256:6b1dc81c45ce27eb3ffaea11935f856ee135f1ec5d85f33ff6285a7c4ed5585e",
+          "declarationRange": {
+            "end": 636,
+            "start": 604
+          },
+          "distance": 0.9248449206352234,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:5e4cae7699f09ad1ab05427d002551edba9fbe1c8b4dfaf803dd1a6be742579a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 636,
+              "start": 604
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-2818df60bcbdc4d9fcdb486ae13647a07ad2c0c330fde2187ef619afde835513",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m14",
+          "chunkId": "chunk-sha256:a206cf192103791ff8a9db2be56790720b340850ce792a5708d82ab7ccc9c731",
+          "declarationRange": {
+            "end": 560,
+            "start": 528
+          },
+          "distance": 0.9257681965827942,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c5e849874bbb23aac0848983e56159a98430d321ec57813e1be03d16236d94ea",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 560,
+              "start": 528
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7c27709dd07d3ce8b3de546133651a83a3baf9a89802746be14d8df0fa699c95",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m10",
+          "chunkId": "chunk-sha256:2c8eb8f83bfb6aaf6de9c90913608bfc383231fb28f82ee65322853a43cbac66",
+          "declarationRange": {
+            "end": 408,
+            "start": 376
+          },
+          "distance": 0.9259465932846069,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:ec3dafab1bbeb7dd10bb986788db540c46bffb6d928735ea8804a61e22a70449",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 408,
+              "start": 376
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-57d4cfaa551a949d994a76c14820f78f020894ecf577bd939f75db27717b0043",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m28",
+          "chunkId": "chunk-sha256:7c249bbf6dbda35821634af1aef8a1ff2effa9e33aa45acf2bf99adcb5aafc05",
+          "declarationRange": {
+            "end": 1092,
+            "start": 1060
+          },
+          "distance": 0.9262736439704895,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:aa5c63c0239605afcdc3c30b1d9e7d3f9cb68dabc6638ea4cd81e29f64223366",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1092,
+              "start": 1060
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7f1dfaafb609beb28ef999ad71734ad52e4f6867b30ff66aa9a1d73fbe352d8f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m37",
+          "chunkId": "chunk-sha256:1c63360b18ff28fbcfd70ac8c0d735429036ea7be70db659f9ed820aa7f27702",
+          "declarationRange": {
+            "end": 1434,
+            "start": 1402
+          },
+          "distance": 0.9263185858726501,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e3dc6145626dcd6a3443c52f441326c45e7172dd4ea17660f8ebcac82242880e",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1434,
+              "start": 1402
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-4cacdb92d68d99d0b1a1189fe9ee8e44682229dc508e6af229a99db5ff2e2550",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m78",
+          "chunkId": "chunk-sha256:83ed7c000e74c361b716fc2bfb2e9401a3efbe76cbb7116ea07c3130ecf34b1d",
+          "declarationRange": {
+            "end": 2992,
+            "start": 2960
+          },
+          "distance": 0.9265381097793579,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:091e3ef558c33be6031884e07d3a51746e3244ddbc56f96c2b997f855e0b87df",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2992,
+              "start": 2960
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7240e143c3b5be8d56bd6988b894377c84632c467f6e0f540b8c0ad4df232e1d",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m51",
+          "chunkId": "chunk-sha256:a5c2297ccc74a002a70c7aad1ded4dd8f865a7f8ff837e450b7b1154ede7f761",
+          "declarationRange": {
+            "end": 1966,
+            "start": 1934
+          },
+          "distance": 0.9265621304512024,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c46db26cf624a8aa6c05b660d0548c68e3bb040c2ee6ce22e3587c17b0c4c969",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1966,
+              "start": 1934
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f1df92ea03407c821f9055b7da6bb2b6a09f4c95b032661410db6cb75db7210f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m25",
+          "chunkId": "chunk-sha256:bc545935eae27a4e27c69b78dfc1e3ff0fb2d06f0789b1145e7de5b25e34d16b",
+          "declarationRange": {
+            "end": 978,
+            "start": 946
+          },
+          "distance": 0.9272071123123169,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:6b5e1d1fff4c3be86566a81065194198eaa722ed8f3785e22a9961076028d63c",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 978,
+              "start": 946
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8b11f537aafbc757ad63fbc5f4a47493d8332a0ab6bf768d13fe84275b47874b",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m57",
+          "chunkId": "chunk-sha256:c4d0f2d717889a6215d4a450d34dd8df1c5a739b35da445a11b42a6a88283af3",
+          "declarationRange": {
+            "end": 2194,
+            "start": 2162
+          },
+          "distance": 0.9272799491882324,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:45d11c87213b89574ef64c4246aacb291156509d5c87b90d472a9f311069f656",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2194,
+              "start": 2162
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8c7f142535a351fe1573694ced42ee47546e5d91c6e1700bf1366138e20e41fe",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m69",
+          "chunkId": "chunk-sha256:0b3332571df778833022053d929f91bc5975dcff8a4029b6702814fc6c15d2ed",
+          "declarationRange": {
+            "end": 2650,
+            "start": 2618
+          },
+          "distance": 0.9275608658790588,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:73c3499121787f7f710647b596fb5863e77fdf8a5bbd5e6f8e7046c5aab1f70f",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2650,
+              "start": 2618
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-d0ad68196ef95c70bf50ce3ea64b9488963713f41a0f3c926edb4110fdae2ea2",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m35",
+          "chunkId": "chunk-sha256:4f3baa20545eb8aef7a5d235795781b229fb29dbda279bc704b6b1cd869d2e39",
+          "declarationRange": {
+            "end": 1358,
+            "start": 1326
+          },
+          "distance": 0.927608847618103,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:fa95efa28b277bf9dca35f1eba9d1d90939064a891ef0697b9664a41c706984d",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1358,
+              "start": 1326
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-c5ed1d5ae766e68f13b41709f8a8328f17bbfbc7618909495a751acad6e7ed57",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m19",
+          "chunkId": "chunk-sha256:30e69229f11af63c5b3b07c29d650632db38068ecdc1ef012dece0dc02ab740f",
+          "declarationRange": {
+            "end": 750,
+            "start": 718
+          },
+          "distance": 0.9277633428573608,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c9b1fd073021851b48b9431198f57eb50324238f13b28a02b73c38e12a8ed47a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 750,
+              "start": 718
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8bb5220045d22068b9f59cf8f5655d48d8e54124ce2d145b59e08f3fe5be6e18",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m55",
+          "chunkId": "chunk-sha256:114909ea24a8ba0553bcc166c4f8a18d241fe97a36b816b1090ce76bd5e19af2",
+          "declarationRange": {
+            "end": 2118,
+            "start": 2086
+          },
+          "distance": 0.928063690662384,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:4978f650134cf5a36c3f529377d46cbec9ed556cb05808ae5c5ca2c4ee9b181a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2118,
+              "start": 2086
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-0d4c224e0b24ebc10ac2dfc1f27df869f9900a7b76362785d81296425a2d40f9",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m17",
+          "chunkId": "chunk-sha256:155f0f9cf04a39bebd2807e9099f8794d5bce303e78ae955580075eb64a69100",
+          "declarationRange": {
+            "end": 674,
+            "start": 642
+          },
+          "distance": 0.928106963634491,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:31c5c18ba3509e6c15ecd6869441ea18931f3b11946f5ea00c02e67af29874d3",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 674,
+              "start": 642
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-27cbd8f88a6993dfc1a6fca5db99f80506e7ed3f47f87546c892f91f27e7c944",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m62",
+          "chunkId": "chunk-sha256:f5a66ce713996ea262ce87ec0e49bfa2756ca4eb8e6db666133891d3d4307865",
+          "declarationRange": {
+            "end": 2384,
+            "start": 2352
+          },
+          "distance": 0.9284092783927917,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:077e22f46ea5aca13f589e43c5e4fcc27455e5bd8e876c5cf83215b4f83889ae",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2384,
+              "start": 2352
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-bb9904ab90e7b9d32ba5551054f6d7a327bd4ee5a3ebeddcc780ecfc255b31e2",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m6",
+          "chunkId": "chunk-sha256:6c953e2c67eb7c4484e61deb10feab059ae7c5aa38016616814bdbcc5f369514",
+          "declarationRange": {
+            "end": 262,
+            "start": 232
+          },
+          "distance": 0.9284566044807434,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:76befedb504f10ac1989411e83b7712dc47ca557acfd0462807a4c87994b2b34",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 262,
+              "start": 232
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-ce4916a7e6639602a313c0a8dadb485c1baf14f1a8189dd4b479e94b4555665c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m11",
+          "chunkId": "chunk-sha256:2c4727219eb8e66f768d303318b96637de8e348367565767a9026ea44965176d",
+          "declarationRange": {
+            "end": 446,
+            "start": 414
+          },
+          "distance": 0.9286169409751892,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:3b01ab5c7c1878a53da5fc343857f6139001e0e892d86f55cbd081c02b22ce84",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 446,
+              "start": 414
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-477f63bbbe58c9db1275ed8c0b7906cedb2a8024e80d559e26f9d150f0821678",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m15",
+          "chunkId": "chunk-sha256:8cd82b37f14b564847428f4123cabd03e3c9fb1f6a94dbe85a8ea61311fa009d",
+          "declarationRange": {
+            "end": 598,
+            "start": 566
+          },
+          "distance": 0.9287284016609192,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:35081bf4277ff35f165dd94ec07843934fcbb90a6a23d8a59fef2e7d1176082f",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 598,
+              "start": 566
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-2074f6862b090c46922106ab89e0f465f3617ff620f1213650ece990f4aeb652",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m77",
+          "chunkId": "chunk-sha256:dac08cf719dda5c704504f11b6b98ce9eb5ef72510f33556ebe9d0ffb883acb2",
+          "declarationRange": {
+            "end": 2954,
+            "start": 2922
+          },
+          "distance": 0.9287818074226379,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:309d5e642925c36811822900abc78352959924ded9dee12cb0b860354552ac3a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2954,
+              "start": 2922
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f7047b0c8d3d36243c6c8bcbaec1ea756cc8cc5781b29ccbacffb780241bcdfa",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m36",
+          "chunkId": "chunk-sha256:441a7822c3c32e5650a4e5b9bbf495f8968c54c6b06a9726fa3d4d4f0f8fc894",
+          "declarationRange": {
+            "end": 1396,
+            "start": 1364
+          },
+          "distance": 0.9291805028915405,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:011e5eed40baf105337162c431ee6d96bb085118a6321d7b243c86fb4a516fa5",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1396,
+              "start": 1364
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-aeed6d52afa4575bbb38ab13c84c0fd7e54d8aa3051af067720d011892fbd1ae",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m47",
+          "chunkId": "chunk-sha256:4b4c3efcbb5e145af16822d268633f3e3034e650e0c090702f05ef5d2558c7a6",
+          "declarationRange": {
+            "end": 1814,
+            "start": 1782
+          },
+          "distance": 0.9293596148490906,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e01faa5fbadf871217158fddb0fb49c0daf56aa02ee581087e82f90aa3338261",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1814,
+              "start": 1782
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-105771d0efc99d9465a74b254f910af6c2b51015220edb798846235629680144",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m58",
+          "chunkId": "chunk-sha256:0951287bb791f92775278a1df23eceb02e4b54c3bda243e976b503d2f2b11466",
+          "declarationRange": {
+            "end": 2232,
+            "start": 2200
+          },
+          "distance": 0.9295124411582947,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:849ecd7b0f87ec99a744bd62178c3a660b4dd58fd0a132b958b4f582e362a150",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2232,
+              "start": 2200
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-9672138d8e5eeb5834cff070ac4fc1d5e8464122bdce34245fba57c31277f750",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m66",
+          "chunkId": "chunk-sha256:d2dcdbc38e92247522e691803558599662490094a19b6a4b1bb534cca5595804",
+          "declarationRange": {
+            "end": 2536,
+            "start": 2504
+          },
+          "distance": 0.9296999573707581,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:3a4a830169c70889461cfc1009782b1557ac2f83cf01ae7a45119ab3310c6637",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2536,
+              "start": 2504
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-5dc94c55fd5a31fcd94ab53590a2c8fc845053af73f7d699c30c2bc9ab63d478",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m12",
+          "chunkId": "chunk-sha256:3a08b016c35e2e9e67218f45bb50990598a421d7733c704676bec329fcdaeb4b",
+          "declarationRange": {
+            "end": 484,
+            "start": 452
+          },
+          "distance": 0.9297509789466858,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:449a661d72eb6b94b1857c515cf7a4bbdc722625a9dbb1b6b1ed2448199c053e",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 484,
+              "start": 452
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-6d43c62323042e9ab1602e0128c40aebbb102f95a6f32f9fb153daf482dd841c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m59",
+          "chunkId": "chunk-sha256:c70a81b21220b7b2cd421b87e139e8e6e08227a20e2d6ffee0c5aa1098f78ddf",
+          "declarationRange": {
+            "end": 2270,
+            "start": 2238
+          },
+          "distance": 0.9304707646369934,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:29856234098187563338ac3c0d67d6006117c5c59013e165598808f3fd40b451",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2270,
+              "start": 2238
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-34888ca82e9f194ab9bc366ca384c2a505150258ff4d23e7d96c1b95643fa074",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m32",
+          "chunkId": "chunk-sha256:5cbd8ec4875621d93c321848d6f0466da54f45076f12c9738b35d85b6e015c11",
+          "declarationRange": {
+            "end": 1244,
+            "start": 1212
+          },
+          "distance": 0.9305111169815063,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:29dfd2921ac35a8c0c8dcf2109af7da6b60e4a8e5c4e2c2d0f0d9e78c0382d74",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1244,
+              "start": 1212
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-75fda9a7fe07580fb4a5ecb02a315af37d91fd065961603102a234dc040b0d51",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m24",
+          "chunkId": "chunk-sha256:a525d588e1959b63f24241c4ee3bb7c3e4b26c4a844ca53db603d900d5b5c992",
+          "declarationRange": {
+            "end": 940,
+            "start": 908
+          },
+          "distance": 0.9308157563209534,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:9b6ea0ed08ce69b3e3b8bd56fb6f4e067439f286cea54667099e2de979699f25",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 940,
+              "start": 908
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-511c40a819fd2347912ee56dfe521e8a93cff2bfa24fdae3c70ab4199e26adc8",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m29",
+          "chunkId": "chunk-sha256:0b76d94264cd8b9d40cc27e26bf4f84563d7c7146299d699b4bb9079583675de",
+          "declarationRange": {
+            "end": 1130,
+            "start": 1098
+          },
+          "distance": 0.9309747815132141,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:f25529990de77d1f731d4920d951b7bab567af7c986de63623659d26cd835912",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1130,
+              "start": 1098
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-e2473b3d9dd3c7709ec9cdc5d906dbb62a4f4da92ac66e6380eec3e73a443059",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m23",
+          "chunkId": "chunk-sha256:633d22f39ebfcb1147f8022df0f7e31b6637b0172ce12bdfcb192d95d1bc977e",
+          "declarationRange": {
+            "end": 902,
+            "start": 870
+          },
+          "distance": 0.9317781329154968,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:6de9c7b6da69ca71045d023ffd5afc01a93c1ed93ae78067464fb04c4a3b440b",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 902,
+              "start": 870
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-59d2830d94c20f69beb28c7478099b00e06261187a826548f6ea587c03319fe5",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m79",
+          "chunkId": "chunk-sha256:a0a817429ecd1b4e5eb02ba6194204dd5c636e0898e469d98844f5537269c9ce",
+          "declarationRange": {
+            "end": 3030,
+            "start": 2998
+          },
+          "distance": 0.932347297668457,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:14b462d8c82312be67e9ae96988b8a93f05eca6086d2468e235cdd9932610360",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 3030,
+              "start": 2998
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-b57f6411c2e03866faf6ad914d2d5f00ed888cbb12194fc67fbab248b584e079",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m38",
+          "chunkId": "chunk-sha256:5acc64e5bd99f72fe71b880128053399a90f0dbd9d043bc633ad655bbbee06ee",
+          "declarationRange": {
+            "end": 1472,
+            "start": 1440
+          },
+          "distance": 0.9329017996788025,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c3cef64dad4697d39c56c59c4740fd71e88b546bc40235183147116f02b3d221",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1472,
+              "start": 1440
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-3e0472c83e1c3caef2a132140dfe24ab7724326f66d7f1e7477b69c508679e1c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        }
+      ],
+      "passageRepresentationId": "code-passage-v1/cd73d7fe15346d112edf9bfae60678327de0081af62916ae401ee1de8da4829c",
+      "queryRepresentationId": "code-query-v1/6425ffc2849dee5e5639446fb66325a46e63e9393f42f9b87fccf96bd216def8",
+      "queryTokens": {
+        "codeTokens": 0,
+        "contextTokens": 0,
+        "queryTokens": 12,
+        "specialTokens": 2,
+        "totalTokens": 14,
+        "truncated": false
+      },
+      "rawSegmentHits": 50,
+      "seconds": 0.028928566,
+      "tokenizerId": "tokenizer-json-sha256:346fbeb4f4eb87746676304d918f3e1c01fe988e7e3c546977a64e20bcb61d3c/window-512"
+    },
+    {
+      "effectiveConfigHash": "36be65cae3a3497808d7f37d60d1c141fac9b1e9f6ecf9cfd172ed3b65924545",
+      "effectiveIndexConfig": {
+        "body_token_target": 384,
+        "context_token_budget": 64
+      },
+      "embeddingSpace": {
+        "dimensions": 384,
+        "model": "BAAI/bge-small-en-v1.5",
+        "normalization": null,
+        "prompt_profile": "code-passage-v1/cd73d7fe15346d112edf9bfae60678327de0081af62916ae401ee1de8da4829c",
+        "provider": "fastembed"
+      },
+      "parents": [
+        {
+          "anchor": "fn UserService::getUser",
+          "chunkId": "chunk-sha256:f724da22c9bbfb8cc28b453edf1f566501589e4f48aa3567cd08d36336dbd21d",
+          "declarationRange": {
+            "end": 235,
+            "start": 132
+          },
+          "distance": 0.801996648311615,
+          "generation": "sha256:6e4b8957e6f1ed6aa36228f61150e9ea498b9471994b457de3e3142429b0abbb",
+          "parentUnitId": "sha256:16ad2cb1d5f396980fc2b2f5f1d351796007f1b48f1f530eacf28079c58aa5ba",
+          "path": "user.service.ts",
+          "ranges": [
+            {
+              "end": 235,
+              "start": 132
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-b608bdfc4178e332fb8535467c814de7d00705cf9a3933b25606c435b7d3636d",
+          "sourceHash": "sha256:f6a5095c638f0540ccd75a2147e9e83de5c9636777e5ed41ee2e9eca41f63746"
+        },
+        {
+          "anchor": "fn UserService::constructor",
+          "chunkId": "chunk-sha256:a73712521fc3a1ac5f74db4a89acd6f2c5dd5e7270ed919e437fed32d090d3e4",
+          "declarationRange": {
+            "end": 129,
+            "start": 86
+          },
+          "distance": 0.9248009920120239,
+          "generation": "sha256:6e4b8957e6f1ed6aa36228f61150e9ea498b9471994b457de3e3142429b0abbb",
+          "parentUnitId": "sha256:de9f9e9b65a6af4e3e40b097c14a185854198963c6a3b16e815416d0217c032b",
+          "path": "user.service.ts",
+          "ranges": [
+            {
+              "end": 129,
+              "start": 86
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-94c49963491c049c37409e68d00727cfeaec58f44b25b5e69f6a1d6119276d2f",
+          "sourceHash": "sha256:f6a5095c638f0540ccd75a2147e9e83de5c9636777e5ed41ee2e9eca41f63746"
+        },
+        {
+          "anchor": "class UserService",
+          "chunkId": "chunk-sha256:abd3ac4b6eb81c010185cea2f6fb5e10c89c960bcf739c7697fb7de0e6672938",
+          "declarationRange": {
+            "end": 237,
+            "start": 40
+          },
+          "distance": 0.9374983906745911,
+          "generation": "sha256:6e4b8957e6f1ed6aa36228f61150e9ea498b9471994b457de3e3142429b0abbb",
+          "parentUnitId": "sha256:dfa1e2de87730fdb41e177bb5d95781a90982f095f48380f0d45f6f3452a6452",
+          "path": "user.service.ts",
+          "ranges": [
+            {
+              "end": 86,
+              "start": 40
+            },
+            {
+              "end": 132,
+              "start": 129
+            },
+            {
+              "end": 237,
+              "start": 235
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-0852baafa81dd48c0d0593a15ee1da7cafe5ba0f36aee86c9e9c54ecdb436167",
+          "sourceHash": "sha256:f6a5095c638f0540ccd75a2147e9e83de5c9636777e5ed41ee2e9eca41f63746"
+        },
+        {
+          "anchor": "def Many::m61",
+          "chunkId": "chunk-sha256:c963ec42b778b27c2ebce27a051f0d8107d132f87ccc2d01f3e2ff3bda5401bc",
+          "declarationRange": {
+            "end": 2346,
+            "start": 2314
+          },
+          "distance": 0.9406142234802246,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:ebc68f57938d76e90688d28ba142b7d0609b68b16b42b6de43b6bf87ad5cf0e9",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2346,
+              "start": 2314
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-47ac603205bee8385158ba5d5f9a79d75469848b06ee33c32d6b5881f169041f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m26",
+          "chunkId": "chunk-sha256:b2dbc9e40a37e5baa84688c7187d5d05bfec326bf89ce0b152c99d8e64df4ea5",
+          "declarationRange": {
+            "end": 1016,
+            "start": 984
+          },
+          "distance": 0.9424901008605957,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e9577818e1270e0a235500f660529039429041b065e9b947fb7b84dc9b1b9d36",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1016,
+              "start": 984
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-3aa7691b7b01acedb49d27f2470ed0b17dbe776f10d10dbf3b81fd11b7ce5888",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m20",
+          "chunkId": "chunk-sha256:c7ad1b569b8ea0512f4bf9242ae4ff49d7f3cef044e85ec9d7f32e1624814c89",
+          "declarationRange": {
+            "end": 788,
+            "start": 756
+          },
+          "distance": 0.9433951377868652,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:29c92d19bce7b530df55af713fcbfbef0be150e51f5db7e407ff76f470aba82f",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 788,
+              "start": 756
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f540302b674d55e15bc275998f24a8b6d4898fe00d8cc7d2daa2eb4dc246fb0e",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m71",
+          "chunkId": "chunk-sha256:774335bc9027af169719bb52d6ee30afc59bae09b20a6ab7db6f5b8370a300ea",
+          "declarationRange": {
+            "end": 2726,
+            "start": 2694
+          },
+          "distance": 0.9437925219535828,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:5e7dbc30572a7de4f3201ab7cf67a398dceac67a0dcc8f3b0bde0e8555929dd8",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2726,
+              "start": 2694
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-63ccf39d961f045f4381ffc634e947972c794f5c80f2e53966b234922ea5394c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m74",
+          "chunkId": "chunk-sha256:af7ad28c691323a5a0a3e503b8a0ffe631daf1aab3cdbf0c0890a499fbcc9047",
+          "declarationRange": {
+            "end": 2840,
+            "start": 2808
+          },
+          "distance": 0.9438359141349792,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:4b077baaeb60e3d79b9f8629b80023d1cbd64e37dd565769042d9442dd74de5a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2840,
+              "start": 2808
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-420f20714f0ffb000f7bdeae3885529c1f05f31c7e333fcfa9989d0062c1e845",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m68",
+          "chunkId": "chunk-sha256:611ce54a5a511d9cd3d13757b97e215b3e50ced21d45d119545acda11de80cd0",
+          "declarationRange": {
+            "end": 2612,
+            "start": 2580
+          },
+          "distance": 0.9439986944198608,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:ccf5a1fa89bcfd5f46e57a1f3bed9329791299866bcbfa81b09161ef6a2f56ec",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2612,
+              "start": 2580
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-82eb2f9cbca6986b3cd3ca8e01eaf731473eaf0fb9e038d08506815c13519dd9",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m67",
+          "chunkId": "chunk-sha256:59e9d2cafdc35fbea277ffb4377e694efc4321a8bbfe6e011cfad58507b29e3a",
+          "declarationRange": {
+            "end": 2574,
+            "start": 2542
+          },
+          "distance": 0.9444490671157837,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:abc5b37cfdf4df4cfa0611ccf1899eea929b9d0de8586ccbe5a9eb84d79e5344",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2574,
+              "start": 2542
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f3a50d1a7ebb97bd810f5233acd3048a650ea6ccaf21cb904a5fb76255ad3466",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m23",
+          "chunkId": "chunk-sha256:633d22f39ebfcb1147f8022df0f7e31b6637b0172ce12bdfcb192d95d1bc977e",
+          "declarationRange": {
+            "end": 902,
+            "start": 870
+          },
+          "distance": 0.9446261525154114,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:6de9c7b6da69ca71045d023ffd5afc01a93c1ed93ae78067464fb04c4a3b440b",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 902,
+              "start": 870
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-59d2830d94c20f69beb28c7478099b00e06261187a826548f6ea587c03319fe5",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m31",
+          "chunkId": "chunk-sha256:1da5ed3e51e3744ed9ff46dd036e5ece5de1f9657e9258b42615d13f0051850f",
+          "declarationRange": {
+            "end": 1206,
+            "start": 1174
+          },
+          "distance": 0.9450265765190125,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:b4052e7b04fe97ae263919f18471e3eea6d0efe83f06a6d7ad256a68b8412ce9",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1206,
+              "start": 1174
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-b87a975b8ed35788e65dda1724f2787eb4fc89c61aa925df1b00e6ad6c0dccd4",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m27",
+          "chunkId": "chunk-sha256:513433f485c135b09da3861e351d86b9bb00178b26f3a3ef5869dd5a9184472e",
+          "declarationRange": {
+            "end": 1054,
+            "start": 1022
+          },
+          "distance": 0.9450400471687317,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e85305a2e42cf4cc30ad92f8985535d2f13aee77e0705b736e89e6455d050354",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1054,
+              "start": 1022
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-e7808321757dabf8493a81121cff40f457d552eb0c400c79c2f463d8c95c0357",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m76",
+          "chunkId": "chunk-sha256:158df5a134a7102f032ea16f29f5ad6a5c5c3f03c07aa96238b9045ca17ef39f",
+          "declarationRange": {
+            "end": 2916,
+            "start": 2884
+          },
+          "distance": 0.9458256959915161,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:434f981859a8cca7a80f3d3ff49d8dda6b7556df7744fb9f57a9c040590a8494",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2916,
+              "start": 2884
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-da41e19d06e0105fcdc13c5cc967be5e83ee41d42b4fc4bd6f22362321c5b713",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m18",
+          "chunkId": "chunk-sha256:ac1439491fd18642680bbbfc0e300e7a8b92b4647bdd3d93ba86b806a9603d34",
+          "declarationRange": {
+            "end": 712,
+            "start": 680
+          },
+          "distance": 0.9458281993865967,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:24279b05867bd9969a2c2313fada7c5f60f4fc0129174e7fc7515f2694d1dd30",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 712,
+              "start": 680
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8f5eb908bbaa2139bde777e7e46d2eafe3af0a04f54f3c8df47ba924aefbe170",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m28",
+          "chunkId": "chunk-sha256:7c249bbf6dbda35821634af1aef8a1ff2effa9e33aa45acf2bf99adcb5aafc05",
+          "declarationRange": {
+            "end": 1092,
+            "start": 1060
+          },
+          "distance": 0.9459236264228821,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:aa5c63c0239605afcdc3c30b1d9e7d3f9cb68dabc6638ea4cd81e29f64223366",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1092,
+              "start": 1060
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7f1dfaafb609beb28ef999ad71734ad52e4f6867b30ff66aa9a1d73fbe352d8f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m21",
+          "chunkId": "chunk-sha256:871cca1f755241f37b0c7f2ad3e2edd38e17fe7fbdfd2dfd2a6362492e8cbc3f",
+          "declarationRange": {
+            "end": 826,
+            "start": 794
+          },
+          "distance": 0.9463087916374207,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:936e663975ca24871653819ebfbbe145ce0809fe0e686c7b2db7c2cca0752ee3",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 826,
+              "start": 794
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-28d39984e978999e3957848a9d18c5fcf1327d22a87bd20b06ed2facb4a14a2f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m78",
+          "chunkId": "chunk-sha256:83ed7c000e74c361b716fc2bfb2e9401a3efbe76cbb7116ea07c3130ecf34b1d",
+          "declarationRange": {
+            "end": 2992,
+            "start": 2960
+          },
+          "distance": 0.9465471506118774,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:091e3ef558c33be6031884e07d3a51746e3244ddbc56f96c2b997f855e0b87df",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2992,
+              "start": 2960
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7240e143c3b5be8d56bd6988b894377c84632c467f6e0f540b8c0ad4df232e1d",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m0",
+          "chunkId": "chunk-sha256:cb83f5e9eb7d78528123a49b619d1b26295c1d4fb83a2a72fb7ea70204cfde9a",
+          "declarationRange": {
+            "end": 46,
+            "start": 16
+          },
+          "distance": 0.9475418329238892,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:293ad16894368a1efea4b44f46a05213867d86dc6fb05c3c0d2778269c01211b",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 46,
+              "start": 16
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-9f5476be322ec16232e938923f7aa83326f4ad46e2345c8f90d52c5daac7c8f6",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m16",
+          "chunkId": "chunk-sha256:6b1dc81c45ce27eb3ffaea11935f856ee135f1ec5d85f33ff6285a7c4ed5585e",
+          "declarationRange": {
+            "end": 636,
+            "start": 604
+          },
+          "distance": 0.9479336738586426,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:5e4cae7699f09ad1ab05427d002551edba9fbe1c8b4dfaf803dd1a6be742579a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 636,
+              "start": 604
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-2818df60bcbdc4d9fcdb486ae13647a07ad2c0c330fde2187ef619afde835513",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m30",
+          "chunkId": "chunk-sha256:811e1f4ac83c25f2fc27adaadd902e9d2a724f6ca03d6cebb29093670c87c1f1",
+          "declarationRange": {
+            "end": 1168,
+            "start": 1136
+          },
+          "distance": 0.9482805728912354,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:4c1185105cc0e397c9a5567c669ca232e762deed2f592d690974292464a88484",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1168,
+              "start": 1136
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-ea29366ce5ccdafd562af8eabd6442cfea480c6efa9e92131d1f8fbe559d4567",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m69",
+          "chunkId": "chunk-sha256:0b3332571df778833022053d929f91bc5975dcff8a4029b6702814fc6c15d2ed",
+          "declarationRange": {
+            "end": 2650,
+            "start": 2618
+          },
+          "distance": 0.9483656883239746,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:73c3499121787f7f710647b596fb5863e77fdf8a5bbd5e6f8e7046c5aab1f70f",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2650,
+              "start": 2618
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-d0ad68196ef95c70bf50ce3ea64b9488963713f41a0f3c926edb4110fdae2ea2",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m14",
+          "chunkId": "chunk-sha256:a206cf192103791ff8a9db2be56790720b340850ce792a5708d82ab7ccc9c731",
+          "declarationRange": {
+            "end": 560,
+            "start": 528
+          },
+          "distance": 0.9484925270080566,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c5e849874bbb23aac0848983e56159a98430d321ec57813e1be03d16236d94ea",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 560,
+              "start": 528
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7c27709dd07d3ce8b3de546133651a83a3baf9a89802746be14d8df0fa699c95",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m56",
+          "chunkId": "chunk-sha256:33a6ac35bcecef41fff35a33f6af20c7106645ace0e5e55df727d1358f00e08e",
+          "declarationRange": {
+            "end": 2156,
+            "start": 2124
+          },
+          "distance": 0.9486628174781799,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:b133a04f2184ac1ae42bcdb6730ce92f663957edf88a780bf86b91168ae371cc",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2156,
+              "start": 2124
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-7fd3a4e885f0b45b3c542254b5fe4a3b978a78e83bba2579e5b0da929f5184b8",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m17",
+          "chunkId": "chunk-sha256:155f0f9cf04a39bebd2807e9099f8794d5bce303e78ae955580075eb64a69100",
+          "declarationRange": {
+            "end": 674,
+            "start": 642
+          },
+          "distance": 0.9489341378211975,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:31c5c18ba3509e6c15ecd6869441ea18931f3b11946f5ea00c02e67af29874d3",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 674,
+              "start": 642
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-27cbd8f88a6993dfc1a6fca5db99f80506e7ed3f47f87546c892f91f27e7c944",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m53",
+          "chunkId": "chunk-sha256:f00bf405d8bd07dcd09ee28eae0157c077cb852070dc7b6c55b4141e099101b6",
+          "declarationRange": {
+            "end": 2042,
+            "start": 2010
+          },
+          "distance": 0.9489755034446716,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e43df4f1665b8a0324b6a80349bce6c4a4e38ec90f96041df5413587aae6dab0",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2042,
+              "start": 2010
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-c576084187208cece787e9fa06e3bc9701f8f85425757b9deb8a8ceb1c385134",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m19",
+          "chunkId": "chunk-sha256:30e69229f11af63c5b3b07c29d650632db38068ecdc1ef012dece0dc02ab740f",
+          "declarationRange": {
+            "end": 750,
+            "start": 718
+          },
+          "distance": 0.9496065378189087,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c9b1fd073021851b48b9431198f57eb50324238f13b28a02b73c38e12a8ed47a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 750,
+              "start": 718
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8bb5220045d22068b9f59cf8f5655d48d8e54124ce2d145b59e08f3fe5be6e18",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m37",
+          "chunkId": "chunk-sha256:1c63360b18ff28fbcfd70ac8c0d735429036ea7be70db659f9ed820aa7f27702",
+          "declarationRange": {
+            "end": 1434,
+            "start": 1402
+          },
+          "distance": 0.9497509598731995,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:e3dc6145626dcd6a3443c52f441326c45e7172dd4ea17660f8ebcac82242880e",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1434,
+              "start": 1402
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-4cacdb92d68d99d0b1a1189fe9ee8e44682229dc508e6af229a99db5ff2e2550",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m13",
+          "chunkId": "chunk-sha256:4453e8d06334de79657a00434309d65367a19a5eac4ae9c8f0b650c04a7ce3ae",
+          "declarationRange": {
+            "end": 522,
+            "start": 490
+          },
+          "distance": 0.9502068758010864,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:6c69607784740d3dfa49aebc254192cbf7dbd61d107d1fdb6e9cbeed68eac997",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 522,
+              "start": 490
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-dd5521144265014d0ecccc27e9b381852a4cb7d16de0e3bca01ed5481cd8f3ee",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m62",
+          "chunkId": "chunk-sha256:f5a66ce713996ea262ce87ec0e49bfa2756ca4eb8e6db666133891d3d4307865",
+          "declarationRange": {
+            "end": 2384,
+            "start": 2352
+          },
+          "distance": 0.9503560066223145,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:077e22f46ea5aca13f589e43c5e4fcc27455e5bd8e876c5cf83215b4f83889ae",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2384,
+              "start": 2352
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-bb9904ab90e7b9d32ba5551054f6d7a327bd4ee5a3ebeddcc780ecfc255b31e2",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m10",
+          "chunkId": "chunk-sha256:2c8eb8f83bfb6aaf6de9c90913608bfc383231fb28f82ee65322853a43cbac66",
+          "declarationRange": {
+            "end": 408,
+            "start": 376
+          },
+          "distance": 0.9506620168685913,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:ec3dafab1bbeb7dd10bb986788db540c46bffb6d928735ea8804a61e22a70449",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 408,
+              "start": 376
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-57d4cfaa551a949d994a76c14820f78f020894ecf577bd939f75db27717b0043",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m63",
+          "chunkId": "chunk-sha256:9b286457e556544df484e5a7afb2a4e6e8a797466bbd866b45a3bcf13b5fc53d",
+          "declarationRange": {
+            "end": 2422,
+            "start": 2390
+          },
+          "distance": 0.9509968757629395,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:91a32ceacde6409eb1b764410f5d62cb578517f8eb46496061d14b61e4a94aee",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2422,
+              "start": 2390
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-129200a8b459167697c98c731206cdd1f3f74f6f86e10984dd397730a3cae079",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m12",
+          "chunkId": "chunk-sha256:3a08b016c35e2e9e67218f45bb50990598a421d7733c704676bec329fcdaeb4b",
+          "declarationRange": {
+            "end": 484,
+            "start": 452
+          },
+          "distance": 0.9510142207145691,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:449a661d72eb6b94b1857c515cf7a4bbdc722625a9dbb1b6b1ed2448199c053e",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 484,
+              "start": 452
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-6d43c62323042e9ab1602e0128c40aebbb102f95a6f32f9fb153daf482dd841c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m73",
+          "chunkId": "chunk-sha256:4753f49b02e7c8c587c235a5b5bd10d144cbc91e4170c74e82e4fb054df46ee3",
+          "declarationRange": {
+            "end": 2802,
+            "start": 2770
+          },
+          "distance": 0.9510844349861145,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:5e9f8b8b7c66a222b700e5b8c7b4fcf2600ac170fe5a43062068dd31e0866369",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2802,
+              "start": 2770
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-dcf6233c60879dca614b0e0531663e580911c87044b53e9012a7735d4233e76a",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m24",
+          "chunkId": "chunk-sha256:a525d588e1959b63f24241c4ee3bb7c3e4b26c4a844ca53db603d900d5b5c992",
+          "declarationRange": {
+            "end": 940,
+            "start": 908
+          },
+          "distance": 0.9511731863021851,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:9b6ea0ed08ce69b3e3b8bd56fb6f4e067439f286cea54667099e2de979699f25",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 940,
+              "start": 908
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-511c40a819fd2347912ee56dfe521e8a93cff2bfa24fdae3c70ab4199e26adc8",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m29",
+          "chunkId": "chunk-sha256:0b76d94264cd8b9d40cc27e26bf4f84563d7c7146299d699b4bb9079583675de",
+          "declarationRange": {
+            "end": 1130,
+            "start": 1098
+          },
+          "distance": 0.9512014389038086,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:f25529990de77d1f731d4920d951b7bab567af7c986de63623659d26cd835912",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1130,
+              "start": 1098
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-e2473b3d9dd3c7709ec9cdc5d906dbb62a4f4da92ac66e6380eec3e73a443059",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m57",
+          "chunkId": "chunk-sha256:c4d0f2d717889a6215d4a450d34dd8df1c5a739b35da445a11b42a6a88283af3",
+          "declarationRange": {
+            "end": 2194,
+            "start": 2162
+          },
+          "distance": 0.9513259530067444,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:45d11c87213b89574ef64c4246aacb291156509d5c87b90d472a9f311069f656",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2194,
+              "start": 2162
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-8c7f142535a351fe1573694ced42ee47546e5d91c6e1700bf1366138e20e41fe",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m79",
+          "chunkId": "chunk-sha256:a0a817429ecd1b4e5eb02ba6194204dd5c636e0898e469d98844f5537269c9ce",
+          "declarationRange": {
+            "end": 3030,
+            "start": 2998
+          },
+          "distance": 0.9513768553733826,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:14b462d8c82312be67e9ae96988b8a93f05eca6086d2468e235cdd9932610360",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 3030,
+              "start": 2998
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-b57f6411c2e03866faf6ad914d2d5f00ed888cbb12194fc67fbab248b584e079",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m33",
+          "chunkId": "chunk-sha256:03b5e36bf0dc6869593215e0023eddf1f339e67f9c81f8e9bec212cc567db049",
+          "declarationRange": {
+            "end": 1282,
+            "start": 1250
+          },
+          "distance": 0.9515008330345154,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:cd0310dd52b4c1161c517fd05b0931c7ce0bb32baa4a724a2639bdc9d5d1f07a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1282,
+              "start": 1250
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-38710bde177a1cad8196491796937a15d2af3771f92a16eb981ca262dc694da8",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m51",
+          "chunkId": "chunk-sha256:a5c2297ccc74a002a70c7aad1ded4dd8f865a7f8ff837e450b7b1154ede7f761",
+          "declarationRange": {
+            "end": 1966,
+            "start": 1934
+          },
+          "distance": 0.9519029855728149,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:c46db26cf624a8aa6c05b660d0548c68e3bb040c2ee6ce22e3587c17b0c4c969",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1966,
+              "start": 1934
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f1df92ea03407c821f9055b7da6bb2b6a09f4c95b032661410db6cb75db7210f",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m11",
+          "chunkId": "chunk-sha256:2c4727219eb8e66f768d303318b96637de8e348367565767a9026ea44965176d",
+          "declarationRange": {
+            "end": 446,
+            "start": 414
+          },
+          "distance": 0.9527704119682312,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:3b01ab5c7c1878a53da5fc343857f6139001e0e892d86f55cbd081c02b22ce84",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 446,
+              "start": 414
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-477f63bbbe58c9db1275ed8c0b7906cedb2a8024e80d559e26f9d150f0821678",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m70",
+          "chunkId": "chunk-sha256:7f4ce6080430676eaa9fefb0122242e6228137fe6aeea188c10a305607f6a11d",
+          "declarationRange": {
+            "end": 2688,
+            "start": 2656
+          },
+          "distance": 0.9527851343154907,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:0f7b1344a98179b99316cfeacdde171db7e0ebdb12cccb5e2c6b0d667e34a744",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2688,
+              "start": 2656
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-af8133fafa89a18b8704ff57f5b859718233722e030dc45411848407e1a6ff83",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m77",
+          "chunkId": "chunk-sha256:dac08cf719dda5c704504f11b6b98ce9eb5ef72510f33556ebe9d0ffb883acb2",
+          "declarationRange": {
+            "end": 2954,
+            "start": 2922
+          },
+          "distance": 0.9528165459632874,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:309d5e642925c36811822900abc78352959924ded9dee12cb0b860354552ac3a",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2954,
+              "start": 2922
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-f7047b0c8d3d36243c6c8bcbaec1ea756cc8cc5781b29ccbacffb780241bcdfa",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m32",
+          "chunkId": "chunk-sha256:5cbd8ec4875621d93c321848d6f0466da54f45076f12c9738b35d85b6e015c11",
+          "declarationRange": {
+            "end": 1244,
+            "start": 1212
+          },
+          "distance": 0.9528281092643738,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:29dfd2921ac35a8c0c8dcf2109af7da6b60e4a8e5c4e2c2d0f0d9e78c0382d74",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1244,
+              "start": 1212
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-75fda9a7fe07580fb4a5ecb02a315af37d91fd065961603102a234dc040b0d51",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m36",
+          "chunkId": "chunk-sha256:441a7822c3c32e5650a4e5b9bbf495f8968c54c6b06a9726fa3d4d4f0f8fc894",
+          "declarationRange": {
+            "end": 1396,
+            "start": 1364
+          },
+          "distance": 0.9530045986175537,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:011e5eed40baf105337162c431ee6d96bb085118a6321d7b243c86fb4a516fa5",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1396,
+              "start": 1364
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-aeed6d52afa4575bbb38ab13c84c0fd7e54d8aa3051af067720d011892fbd1ae",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m6",
+          "chunkId": "chunk-sha256:6c953e2c67eb7c4484e61deb10feab059ae7c5aa38016616814bdbcc5f369514",
+          "declarationRange": {
+            "end": 262,
+            "start": 232
+          },
+          "distance": 0.953019917011261,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:76befedb504f10ac1989411e83b7712dc47ca557acfd0462807a4c87994b2b34",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 262,
+              "start": 232
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-ce4916a7e6639602a313c0a8dadb485c1baf14f1a8189dd4b479e94b4555665c",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m66",
+          "chunkId": "chunk-sha256:d2dcdbc38e92247522e691803558599662490094a19b6a4b1bb534cca5595804",
+          "declarationRange": {
+            "end": 2536,
+            "start": 2504
+          },
+          "distance": 0.9532267451286316,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:3a4a830169c70889461cfc1009782b1557ac2f83cf01ae7a45119ab3310c6637",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 2536,
+              "start": 2504
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-5dc94c55fd5a31fcd94ab53590a2c8fc845053af73f7d699c30c2bc9ab63d478",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m15",
+          "chunkId": "chunk-sha256:8cd82b37f14b564847428f4123cabd03e3c9fb1f6a94dbe85a8ea61311fa009d",
+          "declarationRange": {
+            "end": 598,
+            "start": 566
+          },
+          "distance": 0.9534889459609985,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:35081bf4277ff35f165dd94ec07843934fcbb90a6a23d8a59fef2e7d1176082f",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 598,
+              "start": 566
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-2074f6862b090c46922106ab89e0f465f3617ff620f1213650ece990f4aeb652",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m35",
+          "chunkId": "chunk-sha256:4f3baa20545eb8aef7a5d235795781b229fb29dbda279bc704b6b1cd869d2e39",
+          "declarationRange": {
+            "end": 1358,
+            "start": 1326
+          },
+          "distance": 0.9538814425468445,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:fa95efa28b277bf9dca35f1eba9d1d90939064a891ef0697b9664a41c706984d",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1358,
+              "start": 1326
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-c5ed1d5ae766e68f13b41709f8a8328f17bbfbc7618909495a751acad6e7ed57",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        },
+        {
+          "anchor": "def Many::m34",
+          "chunkId": "chunk-sha256:c7b24cb1e9c3db281ae5c54493657877b3ce7f5a687ddf72c10c199c9268ca53",
+          "declarationRange": {
+            "end": 1320,
+            "start": 1288
+          },
+          "distance": 0.9539713859558105,
+          "generation": "sha256:b0b8355c6b50e26d5bb3d3abb44c99aef420b73f39ae784e62af0daf1acb805a",
+          "parentUnitId": "sha256:eaec18e3b95fda337522a4f24fe72c7e23b4302f8d2ef8e3568c9eff94d32761",
+          "path": "many.py",
+          "ranges": [
+            {
+              "end": 1320,
+              "start": 1288
+            }
+          ],
+          "repository": "engram-mcp-scan",
+          "segmentId": "segment-94e3b185aa4c47a557e778e0ac07fcc82f735e38286014e343ba33e3b52c8e07",
+          "sourceHash": "sha256:f063995f40093d1d3524bf24f79431334f2ab1b1b890d9604670d91716075883"
+        }
+      ],
+      "passageRepresentationId": "code-passage-v1/cd73d7fe15346d112edf9bfae60678327de0081af62916ae401ee1de8da4829c",
+      "queryRepresentationId": "code-query-v1/4d7216a0a697583a1a3d6c96ede9374cb8e7c742fe2b3dfde86645a42556fc6d",
+      "queryTokens": {
+        "codeTokens": 0,
+        "contextTokens": 0,
+        "queryTokens": 20,
+        "specialTokens": 2,
+        "totalTokens": 22,
+        "truncated": false
+      },
+      "rawSegmentHits": 50,
+      "seconds": 0.030794815,
+      "tokenizerId": "tokenizer-json-sha256:346fbeb4f4eb87746676304d918f3e1c01fe988e7e3c546977a64e20bcb61d3c/window-512"
+    }
+  ],
+  "probeBinarySha256": "383bfbdb93be63ceb4f3469f846c63c04f04bc728ca619e08fa96e58c1f1d4ae",
+  "queryFormatDoesNotChangePassageIdentity": true,
+  "getUserRankOneAllFormats": true,
+  "stderr": [
+    "engram-mcp: vector bootstrap checkpoint \u2014 knowledge_store=true, vectors_path=\"/tmp/engram-t5-live-hyutonqk/store/engram_data.db\"",
+    "engram-mcp: scan_repository done: ScanSummary { scanned: 4, ingested: 3, unchanged: 0, skipped: 0, entities: 92, relationships: 87, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }",
+    "engram-mcp: lexical delta feed done (90 entries)",
+    "engram-mcp: embed done (97 embedded, 0 pending)",
+    "engram-mcp: reindex done (0 embedded, 0 pending) in 0.0s"
+  ]
+}

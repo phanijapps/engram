@@ -164,3 +164,58 @@ fn many_method_container_honors_range_bound_even_below_token_budget() {
         .collect();
     assert_eq!(bytes, expected);
 }
+
+#[test]
+fn very_large_blank_shell_explicitly_requires_grounded_context_without_losing_bytes() {
+    let source = format!(
+        "class Many:\n{}",
+        (0..80)
+            .map(|i| format!("    def m{i}(self):\n        return {i}\n\n"))
+            .collect::<String>()
+    );
+    let parser = TreeSitterChunker::new().unwrap();
+    let tree = parser.parse(&source, "py").unwrap();
+    let parent = parser
+        .covered_chunks_with_tree(&tree, &source, "py")
+        .unwrap()
+        .into_iter()
+        .find(|p| p.role == engram_domain::CodeChunkRole::ContainerContext)
+        .unwrap();
+    assert!(parent.ranges.len() > 40);
+    let tokenize = |text: &str| {
+        let prefix = text.len() - text.trim_start().len();
+        Ok(scalar_tokens(text.trim())?
+            .into_iter()
+            .map(|r| CodeByteRange {
+                start: r.start + prefix as u64,
+                end: r.end + prefix as u64,
+            })
+            .collect())
+    };
+    assert!(segment_source_ranges(&source, &parent.ranges, "\n", &[], 384, tokenize).is_err());
+    let plans = engram_code::segment_source_ranges_with_context(
+        &source,
+        &parent.ranges,
+        "\n",
+        &[],
+        384,
+        tokenize,
+    )
+    .unwrap();
+    assert!(plans.iter().any(|p| p.code_tokens == 0));
+    assert!(plans.iter().all(|p| p.ranges.len() <= 20));
+    let flatten = |ranges: Vec<CodeByteRange>| -> Vec<u8> {
+        ranges
+            .iter()
+            .flat_map(|r| {
+                source.as_bytes()[r.start as usize..r.end as usize]
+                    .iter()
+                    .copied()
+            })
+            .collect()
+    };
+    assert_eq!(
+        flatten(plans.into_iter().flat_map(|p| p.ranges).collect()),
+        flatten(parent.ranges)
+    );
+}

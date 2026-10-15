@@ -281,6 +281,23 @@ or explicitly unsupported; stale/incompatible segment IDs resolve to no candidat
 
 ### T5: Authorized context and representation compatibility
 
+**Execution:** Construction implementation, independent re-reviews and real-model
+live smoke complete. Frozen Flask/Vite development query-format comparisons are
+complete; Engram comparison and final format selection remain pending. See
+`reviews/t5-2026-10-15.md`. T5 is not yet complete and no final quality claim is made.
+
+**Construction design:** Add pure AST-derived per-unit category/signature/import
+ranges in `core/code`; paths alone must not label inline tests as implementation.
+Select bounded current facts in integration from independently authorized canonical
+contributors. Preserve raw source references; never infer resolved dependencies
+from syntax-only imports. Revalidate every contributor at persistence, inference
+and query resolution. Facts that do not fit are omitted whole; actual combined
+input is retokenized, and context content participates in segment identity.
+Version explicit query formatting separately from passage identity; preserve the
+legacy generic document query behavior. Run all three query-prefix variants on
+development data only before choosing the release format. Actual asset digests
+and offline provisioning remain the already-planned T7 work.
+
 **Depends on:** T2, T4
 **Mode:** TDD and live embedding ablation.
 **Spec mapping:** AC3–AC4.

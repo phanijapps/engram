@@ -42,6 +42,7 @@ pub mod capability;
 pub mod code_configuration;
 pub mod code_graph;
 mod code_indexing;
+pub mod code_query;
 pub mod code_representation;
 pub mod community_query;
 pub mod config;

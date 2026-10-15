@@ -215,7 +215,7 @@ fn bounded_reindex_covers_large_unicode_method_and_ignores_canonical_vector_dono
             .lock()
             .unwrap()
             .iter()
-            .all(|s| s.chars().count() <= 384)
+            .all(|s| s.chars().count() + 2 <= 512)
     );
     let set = block_on(store.load_current_code_segments(
         &source.file,
@@ -224,6 +224,28 @@ fn bounded_reindex_covers_large_unicode_method_and_ignores_canonical_vector_dono
     ))
     .unwrap()
     .unwrap();
+    assert!(
+        set.segments
+            .iter()
+            .all(|s| s.embedding_input.code_tokens <= 384
+                && s.embedding_input.context_tokens <= 64
+                && s.embedding_input.total_tokens <= 512
+                && !s.embedding_input.truncated)
+    );
+    assert!(
+        set.segments
+            .iter()
+            .all(|s| s.source_category == CodeSourceCategory::Implementation
+                && !s.context.is_empty())
+    );
+    assert!(
+        model
+            .inputs
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|s| s.starts_with("path: a.rs\nsymbol: fn enormous"))
+    );
     for parent in &parents {
         let bodies: Vec<String> = set
             .segments
@@ -261,4 +283,106 @@ fn bounded_reindex_covers_large_unicode_method_and_ignores_canonical_vector_dono
     assert_eq!(repeated.embedded, 0);
     assert_eq!(repeated.new_embeddings, 0);
     assert_eq!(repeated.remaining, 0);
+}
+
+#[test]
+fn very_large_class_shell_uses_grounded_context_for_blank_ranges() {
+    let root = tempfile::tempdir().unwrap();
+    let text = format!(
+        "class Many:\n{}",
+        (0..80)
+            .map(|i| format!("    def m{i}(self):\n        return {i}\n\n"))
+            .collect::<String>()
+    );
+    std::fs::write(root.path().join("many.py"), text).unwrap();
+    let store = Arc::new(SqlKnowledgeStore::open_in_memory().unwrap());
+    let scope: Scope = serde_json::from_value(json!({"tenant":"t","workspace":"w"})).unwrap();
+    let requester: Requester =
+        serde_json::from_value(json!({"actor":{"id":"owner","kind":"agent"}})).unwrap();
+    let options = ScanOptions {
+        scope: scope.clone(),
+        policy: serde_json::from_value(
+            json!({"visibility":"workspace","retention":"durable","allowedUses":["retrieval"]}),
+        )
+        .unwrap(),
+        actor: requester.actor.clone(),
+        source_name: "fixture".into(),
+        max_bytes: 0,
+        manifest: Default::default(),
+        scan_filter: Default::default(),
+    };
+    let (scanned, _) = scan_repository(root.path(), &options, store.as_ref(), |_| {}).unwrap();
+    assert_eq!(scanned.errors, 0);
+    let source = block_on(store.list_code_sources(&scope)).unwrap().remove(0);
+    let model = Arc::new(ScalarModel {
+        inputs: Mutex::new(Vec::new()),
+    });
+    let rep = engram_integration::code_representation::code_representation(
+        model.as_ref(),
+        &CodeIntelligenceConfig::for_profile(CodeIntelligenceProfile::BalancedV1).index,
+    )
+    .unwrap();
+    let base = Arc::new(
+        SqliteVectorIndex::open_in_memory(3)
+            .unwrap()
+            .with_embedding_space(model.embedding_space()),
+    );
+    let code = Arc::new(
+        SqliteVectorIndex::open_in_memory(3)
+            .unwrap()
+            .with_embedding_space(rep.embedding_space.clone()),
+    );
+    let provider = EngramProviderBuilder::new(CapabilityReport::new(CapabilityState::Supported))
+        .knowledge(store.clone())
+        .knowledge_query(store.clone())
+        .embedding_provider(model.clone())
+        .vectors(base)
+        .code_vectors(code.clone())
+        .build();
+    let request = EmbeddingBackfillRequest {
+        scope: scope.clone(),
+        requester: requester.clone(),
+        limit: 1024,
+        source_filter: None,
+    };
+    let report = block_on(provider.backfill_embeddings(&request)).unwrap();
+    assert_eq!(report.remaining, 0);
+    let set = block_on(store.load_current_code_segments(&source.file, &rep.id, &requester))
+        .unwrap()
+        .unwrap();
+    assert_eq!(set.lease.inventory.state, CodeSourceState::Active);
+    let blanks: Vec<_> = set
+        .segments
+        .iter()
+        .filter(|s| s.embedding_input.code_tokens == 0)
+        .collect();
+    assert!(!blanks.is_empty());
+    for segment in blanks {
+        assert!(segment.ranges.len() <= 20);
+        assert!(!segment.context.is_empty());
+        assert!(segment.embedding_input.context_tokens > 0);
+        let resolved =
+            block_on(store.resolve_code_segment(&segment.id, &scope, &requester, &rep.id))
+                .unwrap()
+                .unwrap();
+        assert!(
+            code_segment_text(&resolved.parent, &segment.ranges)
+                .unwrap()
+                .trim()
+                .is_empty()
+        );
+        assert!(
+            block_on(code.vector_for_target(&Id::from(segment.id.clone())))
+                .unwrap()
+                .is_some()
+        );
+    }
+    assert!(
+        model
+            .inputs
+            .lock()
+            .unwrap()
+            .iter()
+            .all(|s| !s.trim().is_empty())
+    );
 }

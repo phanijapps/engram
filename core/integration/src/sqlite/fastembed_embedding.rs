@@ -41,6 +41,25 @@ impl EmbeddingProvider for FastEmbedEmbeddingProvider {
         }
         self.inner.tokenize_untruncated(text, special_tokens)
     }
+    fn embed_prepared_code_query(
+        &self,
+        query: &crate::code_query::PreparedCodeQuery,
+    ) -> CoreResult<Vec<f32>> {
+        // BGE uses the same encoder for passages and explicitly prepared queries.
+        // The exact prepared text already includes its selected instruction.
+        let actual = self.tokenize_untruncated(&query.text, true)?;
+        if actual.tokenizer_id != query.tokenizer_id
+            || actual.window != query.window
+            || actual.total_tokens() != query.coverage.total_tokens as usize
+            || actual.total_tokens() > actual.window as usize
+        {
+            return Err(engram_runtime::CoreError::InvalidRequest {
+                reason: "prepared query tokenizer contract changed".into(),
+            });
+        }
+        self.inner.embed_passage(&query.text)
+    }
+
     fn is_local(&self) -> bool {
         true
     }

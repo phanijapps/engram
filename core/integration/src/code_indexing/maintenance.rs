@@ -166,15 +166,19 @@ pub(crate) async fn backfill(
                         .filter(|r| r.segment == **s)
                         .ok_or_else(|| unavailable("code parent changed before inference"))?;
                     let body = engram_knowledge::code_segment_text(&resolved.parent, &s.ranges)?;
-                    let actual = model.tokenize_untruncated(body.trim(), true)?;
-                    if actual.total_tokens() != s.embedding_input.total_tokens as usize
-                        || actual.tokenizer_id != representation.tokenizer_id
-                        || actual.total_tokens() > actual.window as usize
-                    {
+                    let (text, coverage) = super::input::build_input(
+                        &body,
+                        &s.context,
+                        model.as_ref(),
+                        &config,
+                        &representation,
+                    )?
+                    .ok_or_else(|| unavailable("segment code/context token budget changed"))?;
+                    if coverage != s.embedding_input {
                         return Err(unavailable("segment model-input contract changed"));
                     }
                     targets.push(s);
-                    texts.push(body.trim().to_owned());
+                    texts.push(text);
                 }
                 let vectors = model.embed_batch(&texts)?;
                 if vectors.len() != targets.len() {

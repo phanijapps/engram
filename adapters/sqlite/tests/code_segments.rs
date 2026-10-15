@@ -302,3 +302,85 @@ fn direct_segment_mutation_revokes_active_inventory_and_advances_revision() {
         );
     }
 }
+
+#[test]
+fn same_file_context_must_match_current_canonical_identity_and_grounded_value() {
+    let (store, _, inventory, mut segment, requester) = fixture(false);
+    segment.context = vec![CodeContextFact {
+        kind: CodeContextKind::Path,
+        value: inventory.file.path.clone(),
+        sources: vec![CodeEvidenceSourceRef {
+            repository: inventory.file.repository.clone(),
+            path: inventory.file.path.clone(),
+            unit_id: segment.parent_unit_id.clone(),
+            source_hash: segment.source_hash.clone(),
+            generation: segment.generation.clone(),
+            representation_id: segment.representation_id.clone(),
+            start_byte: 0,
+            end_byte: 5,
+            indexed_revision: None,
+        }],
+    }];
+    segment.embedding_input.context_tokens = 2;
+    segment.embedding_input.total_tokens += 2;
+    let lease = block_on(store.begin_code_segments(inventory.clone(), None)).unwrap();
+    for mutation in ["value", "path", "generation", "unit"] {
+        let mut bad = segment.clone();
+        match mutation {
+            "value" => bad.context[0].value = "invented/path.ts".into(),
+            "path" => bad.context[0].sources[0].path = "src/private.ts".into(),
+            "generation" => bad.context[0].sources[0].generation = "stale".into(),
+            "unit" => bad.context[0].sources[0].unit_id = "unowned-unit".into(),
+            _ => unreachable!(),
+        }
+        assert!(block_on(store.write_code_segments(&lease, vec![bad])).is_err());
+    }
+    block_on(store.write_code_segments(&lease, vec![segment])).unwrap();
+    block_on(store.activate_code_segments(&lease)).unwrap();
+    let resolved = block_on(store.resolve_code_segment(
+        "segment",
+        &inventory.file.scope,
+        &requester,
+        &inventory.representation_id,
+    ))
+    .unwrap()
+    .unwrap();
+    assert_eq!(resolved.segment.context[0].value, "src/a.ts");
+    let fact = &resolved.segment.context[0];
+    let mut mixed = resolved.parent.clone();
+    mixed.provenance.actor.id = Id::from("independent-owner");
+    assert!(
+        engram_knowledge::validate_code_context_fact(
+            fact,
+            &resolved.parent,
+            &mixed,
+            &inventory.representation_id
+        )
+        .is_err()
+    );
+    mixed = resolved.parent.clone();
+    mixed.policy.visibility = Visibility::Private;
+    assert!(
+        engram_knowledge::validate_code_context_fact(
+            fact,
+            &resolved.parent,
+            &mixed,
+            &inventory.representation_id
+        )
+        .is_err()
+    );
+    // A warm, previously grounded vector cannot survive contributor revocation.
+    store.shared_connection().lock().unwrap().execute(
+        "UPDATE knowledge_chunks_records SET record_json=json_set(record_json,'$.policy.visibility','private') WHERE id='parent'", [],
+    ).unwrap();
+    assert!(
+        block_on(store.resolve_code_segment(
+            "segment",
+            &inventory.file.scope,
+            &requester,
+            &inventory.representation_id
+        ))
+        .unwrap()
+        .is_none()
+    );
+}

@@ -456,6 +456,11 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
                                         query: provider_arc.clone(),
                                         store: knowledge_handle.clone(),
                                         representation,
+                                        code_instruction: code_configuration
+                                            .effective
+                                            .query
+                                            .instruction,
+                                        embedder: embedder.clone(),
                                     },
                                 ));
                                 code_vectors = Some(code_index);

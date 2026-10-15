@@ -6,6 +6,7 @@ use rusqlite::Connection;
 pub(super) fn initialize(conn: &Connection) -> CoreResult<()> {
     conn.execute_batch("CREATE TABLE IF NOT EXISTS code_segment_inventories(file_key TEXT NOT NULL,representation_id TEXT NOT NULL,record_json TEXT NOT NULL,lease_revision INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(file_key,representation_id));
       CREATE TABLE IF NOT EXISTS code_embedding_segments(id TEXT PRIMARY KEY,file_key TEXT NOT NULL,representation_id TEXT NOT NULL,record_json TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS knowledge_code_unit_idx ON knowledge_chunks_records(json_extract(record_json,'$.code.unit')) WHERE json_extract(record_json,'$.code.unit') IS NOT NULL;
       CREATE INDEX IF NOT EXISTS code_segments_file_representation ON code_embedding_segments(file_key,representation_id);
       CREATE TABLE IF NOT EXISTS code_index_revision(singleton INTEGER PRIMARY KEY CHECK(singleton=1),revision INTEGER NOT NULL);
       INSERT OR IGNORE INTO code_index_revision VALUES(1,0);

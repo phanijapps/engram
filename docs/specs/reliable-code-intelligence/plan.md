@@ -665,6 +665,17 @@ source ref, retain semantic/metadata changes and retractions, and preserve
 unchanged edge provenance. Ordinary KG hard-delete lifetime remains unchanged.
 Rehearse again; a zero-error scan alone is not retained-history proof.
 
+**AC3 final construction proof:** Independent whole-spec review identified a
+missing paired-ranking assertion beyond the existing changed-tail-vector test.
+An isolated native live fixture now embeds two neutral-named long functions with
+a shared body and distinct cancellation/refund tails beyond 8,192 bytes. With
+only the vector lane enabled (no lexical/graph/scorer shortcut), both natural
+queries recover the correct parent at rank one and the exact late source range.
+Thirty-two actual BGE embeddings are produced with no reuse. Inspection remains
+explicitly unvalidated. No runtime preset, frozen corpus, query or label changed.
+See `reviews/t11-paired-tail-{adversarial,quality}-2026-10-15.md` and the
+paired-tail live research artifact.
+
 **Baseline lineage correction (T10):** Accepted T0 reports predate blind label
 range review and retain historical manifest digests. Admit the exact committed
 T0 receipt and each raw artifact's recorded hash/content, pin the final reviewed

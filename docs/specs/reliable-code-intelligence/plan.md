@@ -508,12 +508,17 @@ operation and all supported recipes honestly describe available prerequisites.
 
 ### T10: Calibration and profile validation
 
-**Execution:** Evaluation harness built and independently reviewed clean;
-26 synthetic construction tests and seven Rust evaluator tests pass. The
-actual label-free observer smoke preserves exact source bytes with local
-scoring. Derived evaluation namespace preparation is running; development
-calibration and the untouched held-out assessment have not run. This checkpoint
-does not establish quality or operational acceptance. See
+**Execution:** Assessment complete; quality acceptance failed. Fresh v2
+development completed all 270 calls after the preflight correction below;
+the single frozen assessment completed 74 calls per variant and 60 actual MCP
+measurements, without call failures. Balanced held-out Recall@50 is 92.5%,
+required-unit Recall@10 is 60% (target >=80%), and originals recover all required
+anchors in 1/10 (target >=8/10). Engram 60% and Vite 46.67% miss the per-repository
+70% target. Identifiers, negative rejection (19/20), nDCG nonregression, packet
+parity and frozen-store preservation pass. T10's done condition is unmet;
+no post-assessment retuning or relabeling was performed. The feature remains
+unshipped. See the
+[final assessment](../../research/reliable-code-intelligence-final-assessment-2026-10-15.md),
 `reviews/t10-harness-adversarial-2026-10-15.md` and
 `reviews/t10-harness-quality-2026-10-15.md`.
 
@@ -622,9 +627,13 @@ contracts and boundary gates pass. The final observability correction is
 independently reviewed clean. Subsequent rollout preflight superseded the initial
 integrated construction signoff with the legacy retention gaps described below;
 the scoped corrections now pass independent adversarial, security and quality
-review. Full repository gates pass (1,189 Rust tests, 10 ignored); development
-calibration and a fresh disposable-copy rehearsal are running. T10/T11 outcome
-gates remain pending. The retained self store has not been modified. See
+review. Full repository gates pass (1,189 Rust tests, 10 ignored). The fresh
+disposable rehearsal passed: zero scan errors and all 86,744 old canonical
+records preserved unchanged-current or exactly archived. Actual MCP warm p95
+passed at 10.800065 seconds over 60 requests. T10 quality gates failed, so actual
+retained-self rollout, reindex, idle repeat and final evidence battery were not
+executed. T11's done condition remains unmet; the retained self store has not
+been modified. See the final assessment above and
 `reviews/t11-observability-adversarial-2026-10-15.md`,
 `reviews/t11-observability-quality-2026-10-15.md`, and
 `reviews/whole-spec-construction-quality-2026-10-15.md`.

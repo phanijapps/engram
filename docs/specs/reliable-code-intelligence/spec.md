@@ -12,6 +12,18 @@
 > behavior. Approved by the owner on 2026-10-14; implementation and public
 > contract promotion are in progress.
 
+**Assessment outcome (2026-10-15): Not shipped.** The frozen assessment is
+complete: held-out required-unit Recall@10 is 60% (target >=80%), with Engram
+60% and Vite 46.67% below the >=70% per-repository target. Original questions
+recover all required anchors in 1/10 packets (target >=8/10). All 356 calls
+completed; warm actual MCP p95 passed at 10.800065 seconds. AC10 is unmet;
+actual-self rollout/reindex and its AC9/AC12 proof were not executed because
+quality prerequisites failed. Construction evidence does not imply acceptance.
+Recorded human label/citation review remains pending. See the
+[final assessment](../../research/reliable-code-intelligence-final-assessment-2026-10-15.md).
+The Implementing status and unchecked acceptance criteria intentionally remain;
+this failed acceptance run does not authorize target changes or held-out tuning.
+
 ## Objective
 
 Developers, agents and product analysts ask natural-language questions and

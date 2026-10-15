@@ -36,6 +36,39 @@ const INPUT_CHAR_LIMIT: usize = 8192;
 const BATCH_SIZE: usize = 64;
 type Sources = HashMap<(String, String), CodeSourceGeneration>;
 
+async fn head_attempt(
+    provider: &EngramProvider,
+    request: &EmbeddingBackfillRequest,
+    reference: &ChunkRef,
+) -> CoreResult<Option<Option<String>>> {
+    let Some(heads) = provider.require_knowledge()?.document_heads() else {
+        return Ok(if reference.code.is_none() {
+            Some(None)
+        } else {
+            None
+        });
+    };
+    if !heads.is_managed_chunk(&reference.id).await? {
+        return Ok(if reference.code.is_none() {
+            Some(None)
+        } else {
+            None
+        });
+    }
+    Ok(heads
+        .current_document_for_chunk(&reference.id, &request.scope)
+        .await?
+        .filter(|h| {
+            engram_knowledge::document_head_retrieval_authorized(
+                h,
+                &request.scope,
+                &request.requester,
+                chrono::Utc::now(),
+            )
+        })
+        .map(|h| Some(h.attempt_id)))
+}
+
 struct Prepared {
     reference: ChunkRef,
     text: String,
@@ -90,7 +123,7 @@ async fn eligible_refs(
     } else {
         HashMap::new()
     };
-    Ok(refs
+    let refs: Vec<_> = refs
         .into_iter()
         .filter(|r| {
             if !r.semantic_eligible || !r.has_text {
@@ -106,7 +139,14 @@ async fn eligible_refs(
                 None => r.model_eligible,
             }
         })
-        .collect())
+        .collect();
+    let mut eligible = Vec::new();
+    for reference in refs {
+        if head_attempt(provider, request, &reference).await?.is_some() {
+            eligible.push(reference);
+        }
+    }
+    Ok(eligible)
 }
 
 // Resolve actual canonical content before every use. Never treat a source read
@@ -116,6 +156,9 @@ async fn prepare(
     request: &EmbeddingBackfillRequest,
     reference: &ChunkRef,
 ) -> CoreResult<Option<Prepared>> {
+    let Some(head_attempt) = head_attempt(provider, request, reference).await? else {
+        return Ok(None);
+    };
     let Some(chunk) = provider
         .require_knowledge()?
         .get_chunk(&reference.id, &request.scope)
@@ -139,7 +182,9 @@ async fn prepare(
         let Some(manifest) = port.get_code_source(&code.file).await? else {
             return Ok(None);
         };
-        if !code_allowed(reference, &manifest, request) {
+        if !code_allowed(reference, &manifest, request)
+            || head_attempt.as_deref() != Some(manifest.attempt_id.as_str())
+        {
             return Ok(None);
         }
         Some(manifest.attempt_id)
@@ -152,7 +197,7 @@ async fn prepare(
         {
             return Ok(None);
         }
-        None
+        head_attempt
     };
     Ok(Some(Prepared {
         reference: reference.clone(),

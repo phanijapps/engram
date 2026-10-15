@@ -68,6 +68,7 @@ pub(super) fn initialize_source_views(connection: &Connection) -> CoreResult<()>
       INSERT OR IGNORE INTO code_source_attempts SELECT file_key,attempt_id FROM code_source_contributions;
       CREATE TABLE IF NOT EXISTS code_source_revision(singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL);
       INSERT OR IGNORE INTO code_source_revision VALUES(1,0);").map_err(sql_error)?;
+    super::document_head_state::initialize(connection)?;
     for (table, kind) in RECORD_TABLES.iter().zip([
         "chunk",
         "entity",
@@ -95,12 +96,29 @@ pub(super) fn initialize_source_views(connection: &Connection) -> CoreResult<()>
         } else {
             ""
         };
+        let document_filter = if kind == "chunk" {
+            "AND (NOT EXISTS(SELECT 1 FROM document_head_records dh WHERE dh.kind='chunk' AND dh.record_id=r.id)
+              OR EXISTS(SELECT 1 FROM document_head_records dh JOIN document_heads h ON h.head_key=dh.head_key AND h.attempt_id=dh.attempt_id
+              WHERE dh.kind='chunk' AND dh.record_id=r.id AND h.state='active' AND json_extract(h.record_json,'$.documentId')=r.document_id
+              AND EXISTS(SELECT 1 FROM json_each(h.record_json,'$.policy.allowedUses') WHERE value='retrieval')
+              AND (json_extract(h.record_json,'$.policy.expiresAt') IS NULL OR julianday(json_extract(h.record_json,'$.policy.expiresAt'))>julianday('now'))))".to_owned()
+        } else {
+            format!("AND (NOT EXISTS(SELECT 1 FROM document_head_records d WHERE d.kind='{kind}' AND d.record_id=r.id)
+                OR EXISTS(SELECT 1 FROM document_head_records d JOIN document_heads h ON h.head_key=d.head_key AND h.attempt_id=d.attempt_id
+                WHERE d.kind='{kind}' AND d.record_id=r.id AND h.state='active'
+                AND EXISTS(SELECT 1 FROM json_each(h.record_json,'$.policy.allowedUses') WHERE value='retrieval')
+                AND (json_extract(h.record_json,'$.policy.expiresAt') IS NULL OR julianday(json_extract(h.record_json,'$.policy.expiresAt'))>julianday('now'))))")
+        };
+        // The outer schema transaction makes replacement atomic for other readers.
+        connection
+            .execute_batch(&format!("DROP VIEW IF EXISTS {table};"))
+            .map_err(sql_error)?;
         connection.execute_batch(&format!("CREATE VIEW IF NOT EXISTS {table} AS
           SELECT {projection} FROM {table}_records r {join}
           WHERE (NOT EXISTS (SELECT 1 FROM code_source_contributions c WHERE c.kind='{kind}' AND c.record_id=r.id)
           OR EXISTS (SELECT 1 FROM code_source_contributions c JOIN code_source_generations g
             ON g.file_key=c.file_key AND g.attempt_id=c.attempt_id
-            WHERE c.kind='{kind}' AND c.record_id=r.id AND g.state='active' AND EXISTS(SELECT 1 FROM json_each(g.record_json,'$.policy.allowedUses') WHERE value='retrieval') AND (json_extract(g.record_json,'$.policy.expiresAt') IS NULL OR julianday(json_extract(g.record_json,'$.policy.expiresAt'))>julianday('now')))) {source_filter};")).map_err(sql_error)?;
+            WHERE c.kind='{kind}' AND c.record_id=r.id AND g.state='active' AND EXISTS(SELECT 1 FROM json_each(g.record_json,'$.policy.allowedUses') WHERE value='retrieval') AND (json_extract(g.record_json,'$.policy.expiresAt') IS NULL OR julianday(json_extract(g.record_json,'$.policy.expiresAt'))>julianday('now')))) {source_filter} {document_filter};")).map_err(sql_error)?;
     }
     for (table, kind) in [
         ("knowledge_sources", "source"),

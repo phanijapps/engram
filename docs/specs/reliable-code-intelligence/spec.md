@@ -148,6 +148,8 @@ remains unavailable until a verified retry; it cannot reactivate stale content.
 Historical records survive. New history-query operations are outside this slice;
 existing explicitly authorized reads retain their contracts. Legacy heads need
 verified scan/import evidence, not timestamp-only selection.
+Existing unmanaged generic recall stays compatible; it does not confer verified
+current-head authority on the new code-evidence operation.
 
 ### Token coverage and context
 

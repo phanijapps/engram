@@ -28,6 +28,22 @@ impl SqlKnowledgeStore {
                 manifests.insert(key, m);
             }
         }
+        let mut heads = HashMap::new();
+        {
+            let mut stmt = tx
+                .prepare("SELECT head_key,record_json FROM document_heads")
+                .map_err(sql_error)?;
+            for row in stmt
+                .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+                .map_err(sql_error)?
+            {
+                let (key, json) = row.map_err(sql_error)?;
+                heads.insert(
+                    key,
+                    serde_json::from_str::<DocumentHead>(&json).map_err(json_error)?,
+                );
+            }
+        }
         let mut access = RecordAccess::default();
         let now = Utc::now();
         {
@@ -63,7 +79,21 @@ impl SqlKnowledgeStore {
                     .ok_or_else(|| CoreError::ProviderUnavailable {
                         provider: "source ownership manifest unavailable".into(),
                     })?;
-                if m.state == CodeSourceState::Active
+                let code_head = super::document_code_head::head(m);
+                let head_key = super::document_head_state::key(&code_head.key)?;
+                let head_current = heads.get(&head_key).is_some_and(|h| {
+                    h.attempt_id == m.attempt_id
+                        && h.generation == m.generation
+                        && h.source_hash == m.source_hash
+                        && engram_knowledge::document_head_retrieval_authorized(
+                            h,
+                            &request.scope,
+                            &request.requester,
+                            now,
+                        )
+                });
+                if head_current
+                    && m.state == CodeSourceState::Active
                     && m.attempt_id == attempt
                     && engram_knowledge::code_source_retrieval_authorized(
                         m,
@@ -75,6 +105,42 @@ impl SqlKnowledgeStore {
                         && m.snapshot_ids.iter().any(|c| c.as_str() == id))
                 {
                     access.permit(kind, &id, m.policy.clone());
+                }
+            }
+        }
+        {
+            let mut stmt=tx.prepare("SELECT head_key,attempt_id,record_id,kind FROM document_head_records r WHERE kind IN ('chunk','entity','relationship') AND NOT EXISTS(SELECT 1 FROM code_source_contributions c WHERE c.kind=r.kind AND c.record_id=r.record_id)").map_err(sql_error)?;
+            for row in stmt
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                    ))
+                })
+                .map_err(sql_error)?
+            {
+                let (key, attempt, id, kind) = row.map_err(sql_error)?;
+                let kind = match kind.as_str() {
+                    "chunk" => RetrievalTargetType::Chunk,
+                    "entity" => RetrievalTargetType::Entity,
+                    _ => RetrievalTargetType::Relationship,
+                };
+                access.restrict(kind.clone(), &id);
+                if let Some(h) = heads.get(&key) {
+                    if h.attempt_id == attempt
+                        && (kind != RetrievalTargetType::Chunk
+                            || h.chunk_ids.iter().any(|v| v.as_str() == id))
+                        && engram_knowledge::document_head_retrieval_authorized(
+                            h,
+                            &request.scope,
+                            &request.requester,
+                            now,
+                        )
+                    {
+                        access.permit(kind, &id, h.policy.clone());
+                    }
                 }
             }
         }

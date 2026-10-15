@@ -1,5 +1,7 @@
 use engram_domain::*;
-use engram_knowledge::{CodeSourceRepository, CodeSourceWrite, KnowledgeRepository};
+use engram_knowledge::{
+    CodeSourceRepository, CodeSourceWrite, DocumentHeadRepository, KnowledgeRepository,
+};
 use engram_runtime::CoreError;
 use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
@@ -17,6 +19,30 @@ fn manifest(path: &str, attempt: &str, text: &str) -> CodeSourceGeneration {
         "policy":{"visibility":"private","retention":"durable","allowedUses":["retrieval"]},
         "provenance":{"source":"test","actor":{"id":"owner","kind":"agent"},"observedAt":"2026-10-14T00:00:00Z"}
     })).unwrap()
+}
+
+#[test]
+fn generic_head_cannot_supersede_code_source_authority() {
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    let m = manifest("a.ts", "first", "hello");
+    active(&store, &m, "hello");
+    let key = DocumentHeadKey {
+        scope: m.file.scope.clone(),
+        repository: m.file.repository.clone(),
+        source_key: m.file.path.clone(),
+    };
+    let mut h = block_on(store.get_document_head(&key)).unwrap().unwrap();
+    h.state = CodeSourceState::Updating;
+    h.attempt_id = "generic-overwrite".into();
+    assert!(block_on(store.begin_document_head(h, Some("first"))).is_err());
+    assert_eq!(
+        block_on(store.get_document_head(&key))
+            .unwrap()
+            .unwrap()
+            .attempt_id,
+        "first"
+    );
+    assert!(block_on(store.read_code_source(read(&m), &m.file.scope)).is_ok());
 }
 fn chunk(m: &CodeSourceGeneration, text: &str) -> KnowledgeChunk {
     serde_json::from_value(json!({

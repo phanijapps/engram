@@ -19,13 +19,28 @@ pub(super) async fn is_current(
     file: &CodeFileKey,
     hash: &str,
     opts: &ScanOptions,
+    heads: Option<&dyn engram_knowledge::DocumentHeadRepository>,
 ) -> CoreResult<bool> {
-    Ok(port.get_code_source(file).await?.is_some_and(|m| {
-        m.state == CodeSourceState::Active
-            && m.source_hash == hash
-            && m.fingerprint == FINGERPRINT
-            && m.policy == opts.policy
-    }))
+    let Some(m) = port.get_code_source(file).await? else {
+        return Ok(false);
+    };
+    let Some(heads) = heads else { return Ok(false) };
+    let key = DocumentHeadKey {
+        scope: file.scope.clone(),
+        repository: file.repository.clone(),
+        source_key: file.path.clone(),
+    };
+    let current = heads.get_document_head(&key).await?;
+    Ok(m.state == CodeSourceState::Active
+        && m.source_hash == hash
+        && m.fingerprint == FINGERPRINT
+        && m.policy == opts.policy
+        && current.is_some_and(|h| {
+            h.state == CodeSourceState::Active
+                && h.generation == m.generation
+                && h.attempt_id == m.attempt_id
+                && h.document_id == m.document_id
+        }))
 }
 /// An explicit policy change must exclude the old source even when admission
 /// fails. Retain its physical inventory for retry cleanup; never activate it.
@@ -99,25 +114,9 @@ pub(super) async fn begin(
         prior.as_ref().map(|p| p.attempt_id.as_str()),
     )
     .await?;
-    // Ownership is released before replacement writes; independently active
-    // contributors preserve shared physical records inside the adapter.
-    if let Err(error) = cleanup(port, &manifest).await {
-        let _ = port
-            .fail_code_source(&manifest.file, &manifest.attempt_id)
-            .await;
-        return Err(error);
-    }
+    // Superseded contributions remain historical. Current authority filters
+    // projections; a refresh never deletes canonical records for reclamation.
     Ok(manifest)
-}
-pub(super) async fn cleanup(
-    port: &dyn CodeSourceRepository,
-    m: &CodeSourceGeneration,
-) -> CoreResult<()> {
-    for (owner, record) in port.prior_code_records(&m.file, &m.attempt_id).await? {
-        port.remove_code_record(&m.file, &m.attempt_id, &owner, &record)
-            .await?;
-    }
-    Ok(())
 }
 pub(super) async fn persist(
     port: &dyn CodeSourceRepository,
@@ -182,7 +181,7 @@ pub(super) async fn heal_reference(
     let result = async {
         port.stage_code_records(&m.file, &m.attempt_id, &m.records)
             .await?;
-        cleanup(port, &m).await?;
+
         port.write_code_record(
             &m.file,
             &m.attempt_id,

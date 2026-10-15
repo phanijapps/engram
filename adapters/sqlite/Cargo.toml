@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+serde.workspace = true
 # Memory cell — folded in from engram-store-sql (consolidation T1):
 async-trait.workspace = true
 chrono.workspace = true

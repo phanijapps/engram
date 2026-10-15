@@ -340,20 +340,41 @@ fn refresh_preserves_prior_canonical_chunks_without_cleanup() {
     opts.manifest = manifest;
     let prior: Vec<(String, String)> = {
         let conn = store.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT id,record_json FROM knowledge_chunks_records ORDER BY id").unwrap();
-        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?))).unwrap().collect::<Result<_, _>>().unwrap()
+        let mut stmt = conn
+            .prepare("SELECT id,record_json FROM knowledge_chunks_records ORDER BY id")
+            .unwrap();
+        stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
     };
     store.lock().unwrap().execute_batch("CREATE TRIGGER forbid_cleanup BEFORE DELETE ON knowledge_chunks_records BEGIN SELECT RAISE(ABORT,'canonical history must survive refresh'); END;").unwrap();
     fs::write(root.path().join("a.ts"), "function a() { return 3; }\n").unwrap();
     let (summary, _) = scan_repository(root.path(), &opts, &store, |_| {}).unwrap();
     assert_eq!(summary.errors, 0, "{summary:?}");
     assert_eq!(summary.ingested, 1);
-    let current = block_on(store.list_code_sources(&opts.scope)).unwrap().pop().unwrap();
+    let current = block_on(store.list_code_sources(&opts.scope))
+        .unwrap()
+        .pop()
+        .unwrap();
     assert_eq!(read(&store, &current), "function a() { return 3; }\n");
     for (id, expected) in prior {
-        let retained: String = store.lock().unwrap().query_row("SELECT record_json FROM knowledge_chunks_records WHERE id=?1", [&id], |r| r.get(0)).unwrap();
+        let retained: String = store
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT record_json FROM knowledge_chunks_records WHERE id=?1",
+                [&id],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(retained, expected, "canonical history changed: {id}");
-        assert!(block_on(store.get_chunk(&ChunkId::from(id), &opts.scope)).unwrap().is_none(), "retained history must not be current evidence");
+        assert!(
+            block_on(store.get_chunk(&ChunkId::from(id), &opts.scope))
+                .unwrap()
+                .is_none(),
+            "retained history must not be current evidence"
+        );
     }
 }
 

@@ -59,6 +59,7 @@ pub(super) fn current_attempt(
             reason: "code source lease was superseded or is not updating".into(),
         });
     }
+    super::document_code_head::updating_lease(conn, &m)?;
     Ok(m)
 }
 
@@ -112,6 +113,11 @@ impl CodeSourceRepository for SqlKnowledgeStore {
         )
         .map_err(sql_error)?;
         super::source_legacy::attribute_legacy_records(&tx, &manifest.file, &key)?;
+        super::document_code_head::begin(
+            &tx,
+            &manifest,
+            prior.as_ref().map(|m| m.attempt_id.as_str()),
+        )?;
         save(&tx, &manifest, &key)?;
         tx.commit().map_err(sql_error)
     }
@@ -137,6 +143,7 @@ impl CodeSourceRepository for SqlKnowledgeStore {
             }
         }
         save(&tx, &manifest, &key)?;
+        super::document_code_head::synchronize(&tx, &manifest)?;
         tx.commit().map_err(sql_error)
     }
     async fn write_code_record(
@@ -179,6 +186,7 @@ impl CodeSourceRepository for SqlKnowledgeStore {
         }
         validate_inventory(&tx, &manifest, &key)?;
         save(&tx, &manifest, &key)?;
+        super::document_code_head::synchronize(&tx, &manifest)?;
         tx.commit().map_err(sql_error)
     }
     async fn fail_code_source(&self, file: &CodeFileKey, attempt: &str) -> CoreResult<()> {
@@ -196,6 +204,7 @@ impl CodeSourceRepository for SqlKnowledgeStore {
             });
         }
         m.state = CodeSourceState::Incomplete;
+        super::document_code_head::synchronize(&tx, &m)?;
         save(&tx, &m, &key)?;
         tx.commit().map_err(sql_error)
     }
@@ -294,9 +303,7 @@ impl CodeSourceRepository for SqlKnowledgeStore {
         let mut retained = false;
         {
             let mut stmt = tx
-                .prepare(
-                    "SELECT record_json FROM knowledge_graphs_records WHERE stable_source_key=?1",
-                )
+                .prepare("SELECT record_json FROM knowledge_graphs WHERE stable_source_key=?1")
                 .map_err(sql_error)?;
             let rows = stmt
                 .query_map([repository], |r| r.get::<_, String>(0))

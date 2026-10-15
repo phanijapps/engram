@@ -39,10 +39,8 @@ pub(super) fn validate_inventory(
     m: &CodeSourceGeneration,
     key: &str,
 ) -> CoreResult<String> {
-    let stale:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM code_source_contributions WHERE file_key=?1 AND attempt_id<>?2)",rusqlite::params![key,m.attempt_id],|r|r.get(0)).map_err(sql_error)?;
-    if stale {
-        return Err(invalid("superseded source inventory has not been cleaned"));
-    }
+    // Historical attempts remain persisted. Only the current fenced attempt
+    // contributes to activation and retrieval eligibility.
     if m.snapshot_ids.is_empty() {
         return Err(invalid("source snapshot inventory is empty"));
     }

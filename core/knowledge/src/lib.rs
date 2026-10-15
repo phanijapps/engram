@@ -10,6 +10,7 @@
 
 mod code_source;
 mod code_source_write;
+mod document_head;
 mod graph;
 pub mod identity;
 mod ingest;
@@ -38,3 +39,6 @@ pub use taxonomy::TaxonomyRepository;
 pub use taxonomy_validation::validate_taxonomy_proposal;
 
 pub use code_source_write::CodeSourceWrite;
+pub use document_head::{
+    DocumentHeadRepository, DocumentHeadWrite, document_head_retrieval_authorized,
+};

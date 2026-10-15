@@ -32,7 +32,7 @@ use engram_domain::{
     KnowledgeRelationship, Policy, Retention, RetrievalRequest, RetrievalTargetType, Scope,
     Sensitivity, Visibility,
 };
-use engram_knowledge::KnowledgeRepository;
+use engram_knowledge::{DocumentHeadRepository, KnowledgeRepository};
 use engram_retrieval::{GraphCache, RetrievalIndex};
 use engram_runtime::CoreResult;
 use engram_store_associative_graph::{AssociativeGraphIndex, GraphRelationshipSource};
@@ -160,7 +160,12 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
         indexed_text: Option<&str>,
         _request: &RetrievalRequest,
     ) -> CoreResult<bool> {
-        if !self.store.has_code_contribution(target_id)? {
+        if !self.store.has_code_contribution(target_id)?
+            && !self
+                .store
+                .is_managed_chunk(&ChunkId::from(target_id))
+                .await?
+        {
             return Ok(true);
         }
         let Some(canonical) = self.store.semantic_lexical_text(target_id)? else {

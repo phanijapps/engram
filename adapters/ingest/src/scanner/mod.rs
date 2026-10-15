@@ -364,6 +364,11 @@ where
 
     for (_canonical, kind, rel) in &readable {
         let file = source_generation::file_key(opts, &source_key, rel);
+        let head_key = DocumentHeadKey {
+            scope: opts.scope.clone(),
+            repository: source_key.clone(),
+            source_key: rel.clone(),
+        };
         let source_port = if *kind == FileKind::Code {
             repo.code_sources()
         } else {
@@ -373,6 +378,13 @@ where
             // Policy retraction is independent of whether replacement bytes
             // can be admitted. Failure propagates rather than leaving old access.
             block_on(source_generation::exclude_changed_policy(port, &file, opts))?;
+        } else if let Some(heads) = repo.document_heads() {
+            block_on(crate::document_generation::exclude(
+                heads,
+                &head_key,
+                Some(&opts.policy),
+                &opts.actor,
+            ))?;
         }
         let bytes = match admitted_reader.read(rel, max_bytes) {
             Ok(b) => b,
@@ -415,10 +427,34 @@ where
         };
         let hash = content_hash(&bytes);
         let current = source_port
-            .map(|port| block_on(source_generation::is_current(port, &file, &hash, opts)))
+            .map(|port| {
+                block_on(source_generation::is_current(
+                    port,
+                    &file,
+                    &hash,
+                    opts,
+                    repo.document_heads(),
+                ))
+            })
             .transpose()?;
+        let document_current = if source_port.is_none() {
+            repo.document_heads()
+                .map(|port| {
+                    block_on(crate::document_generation::current(
+                        port,
+                        &head_key,
+                        &hash,
+                        &opts.policy,
+                    ))
+                })
+                .transpose()?
+        } else {
+            None
+        };
         if opts.manifest.get(rel.as_str()).is_some_and(|h| h == &hash)
             && current.is_none_or(|value| value)
+            && (document_current.is_none_or(|value| value)
+                || (source_port.is_none() && text.trim().is_empty()))
         {
             unchanged_rels.push(rel.clone());
             continue;
@@ -446,6 +482,14 @@ where
             continue;
         }
         // File is new or changed — delete prior graph(s) before writing.
+        if let Some(heads) = repo.document_heads() {
+            block_on(crate::document_generation::exclude(
+                heads,
+                &head_key,
+                None,
+                &opts.actor,
+            ))?;
+        }
         match block_on(reconcile::delete_prior_graphs_for_path(
             repo,
             &opts.scope,
@@ -539,6 +583,7 @@ where
             }
             let text = String::from_utf8(item.content.clone()).expect("pre-admitted UTF-8");
             let mut source_manifest = item.source.clone();
+            let mut document_manifest: Option<DocumentHead> = None;
             let text_for_ast = text.clone(); // keep a copy for AST call extraction
             let hash = item.hash.clone();
             let document_kind = match kind {
@@ -593,21 +638,38 @@ where
                 };
                 let mut req = request;
                 req.text = text;
-                block_on(code_ingestor.ingest_with_candidates(repo, req, candidates))
+                block_on(code_ingestor.ingest_staged(repo, req, Some(candidates))).map(|(i, h)| {
+                    document_manifest = h;
+                    i
+                })
             } else {
                 let mut req = request;
                 req.text = text;
                 match kind {
-                    FileKind::Code => block_on(code_ingestor.ingest(repo, req)),
-                    FileKind::Text if is_markdown_ext(ext) => {
-                        block_on(markdown_ingestor.ingest(repo, req))
+                    FileKind::Code => {
+                        block_on(code_ingestor.ingest_staged(repo, req, None)).map(|(i, h)| {
+                            document_manifest = h;
+                            i
+                        })
                     }
-                    FileKind::Text => block_on(text_ingestor.ingest(repo, req)),
+                    FileKind::Text if is_markdown_ext(ext) => {
+                        block_on(markdown_ingestor.ingest_staged(repo, req, None)).map(|(i, h)| {
+                            document_manifest = h;
+                            i
+                        })
+                    }
+                    FileKind::Text => {
+                        block_on(text_ingestor.ingest_staged(repo, req, None)).map(|(i, h)| {
+                            document_manifest = h;
+                            i
+                        })
+                    }
                 }
             };
             let ingested = match ingested {
                 Ok(i) => i,
-                Err(_) => {
+                Err(error) => {
+                    eprintln!("engram: ingestion failed for {rel}: {error}");
                     if let Some(m) = &source_manifest {
                         let _ = block_on(
                             repo.code_sources()
@@ -724,13 +786,12 @@ where
                                 .await?;
                             }
                         } else {
-                            repo.put_graph(g.graph.clone()).await?;
-                            for entity in &g.entities {
-                                repo.put_entity(entity.clone()).await?;
-                            }
-                            for rel in &g.relationships {
-                                repo.put_relationship(rel.clone()).await?;
-                            }
+                            crate::document_graph_persistence::persist_derived(
+                                repo,
+                                document_manifest.as_ref(),
+                                &g,
+                            )
+                            .await?;
                         }
                         if let Some(manifest) = &source_manifest {
                             for reference in &g.unresolved {
@@ -745,8 +806,6 @@ where
                                     )
                                     .await?;
                             }
-                        } else if !g.unresolved.is_empty() {
-                            repo.put_unresolved_refs(g.unresolved.clone()).await?;
                         }
                         for (chunk_idx, entity_refs) in &g.chunk_entities {
                             if let Some(chunk) = ingested.chunks.get(*chunk_idx) {
@@ -761,6 +820,15 @@ where
                                             engram_knowledge::CodeSourceWrite::Chunk(updated),
                                         )
                                         .await?;
+                                } else if let Some(manifest) = &document_manifest {
+                                    repo.document_heads()
+                                        .unwrap()
+                                        .write_document_record(
+                                            &manifest.key,
+                                            &manifest.attempt_id,
+                                            engram_knowledge::DocumentHeadWrite::Chunk(updated),
+                                        )
+                                        .await?;
                                 } else {
                                     repo.put_chunk(updated).await?;
                                 }
@@ -768,7 +836,15 @@ where
                         }
                         Ok::<(), CoreError>(())
                     });
-                    if persistence.is_err() {
+                    if let Err(error) = persistence {
+                        eprintln!("engram: graph persistence failed for {rel}: {error}");
+                        if let Some(h) = &document_manifest {
+                            let _ = block_on(
+                                repo.document_heads()
+                                    .unwrap()
+                                    .fail_document_head(&h.key, &h.attempt_id),
+                            );
+                        }
                         if let Some(m) = &source_manifest {
                             let _ = block_on(
                                 repo.code_sources()
@@ -781,6 +857,14 @@ where
                     g
                 }
                 Err(_) => {
+                    if let Some(h) = &document_manifest {
+                        let _ = block_on(
+                            repo.document_heads()
+                                .unwrap()
+                                .fail_document_head(&h.key, &h.attempt_id),
+                        );
+                        return (rel.clone(), Outcome::Error, Vec::new());
+                    }
                     if let Some(m) = &source_manifest {
                         let _ = block_on(
                             repo.code_sources()
@@ -818,11 +902,30 @@ where
 
             if let Some(mut m) = source_manifest {
                 m.state = CodeSourceState::Active;
-                if block_on(repo.code_sources().unwrap().activate_code_source(m.clone())).is_err() {
+                if let Err(error) =
+                    block_on(repo.code_sources().unwrap().activate_code_source(m.clone()))
+                {
+                    eprintln!("engram: code activation failed for {rel}: {error}");
                     let _ = block_on(
                         repo.code_sources()
                             .unwrap()
                             .fail_code_source(&m.file, &m.attempt_id),
+                    );
+                    return (rel.clone(), Outcome::Error, Vec::new());
+                }
+            }
+            if let Some(mut h) = document_manifest {
+                h.state = CodeSourceState::Active;
+                if let Err(error) = block_on(
+                    repo.document_heads()
+                        .unwrap()
+                        .activate_document_head(h.clone()),
+                ) {
+                    eprintln!("engram: document activation failed for {rel}: {error}");
+                    let _ = block_on(
+                        repo.document_heads()
+                            .unwrap()
+                            .fail_document_head(&h.key, &h.attempt_id),
                     );
                     return (rel.clone(), Outcome::Error, Vec::new());
                 }
@@ -857,6 +960,15 @@ where
     // paths, so they must never be treated as "removed files" and must not
     // trigger a `delete_prior_graphs_for_path` call.
     let mut removal_manifest = opts.manifest.clone();
+    if let Some(port) = repo.document_heads() {
+        for h in block_on(port.list_document_heads(&opts.scope, &source_key))? {
+            if h.state == CodeSourceState::Active {
+                removal_manifest
+                    .entry(h.key.source_key)
+                    .or_insert(h.source_hash);
+            }
+        }
+    }
     if let Some(port) = repo.code_sources() {
         for m in block_on(port.list_code_sources(&opts.scope))? {
             if m.file.repository == source_key

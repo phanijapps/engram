@@ -139,6 +139,7 @@ pub(super) fn write(
                 v.id.as_str(),
                 &serde_json::to_value(&v).map_err(super::schema::json_error)?,
             )? {
+                super::document_derived_write::immutable_chunk(conn, &v)?;
                 record_writes::put_chunk(conn, v)?;
             }
         }
@@ -262,6 +263,28 @@ pub(super) fn reject_unfenced_write(
 ) -> CoreResult<()> {
     let owned: bool = conn
         .query_row(
+            "SELECT EXISTS(SELECT 1 FROM document_head_records WHERE kind=?1 AND record_id=?2)",
+            params![record_kind(kind), id],
+            |r| r.get(0),
+        )
+        .map_err(sql_error)?;
+    if owned {
+        return Err(CoreError::Conflict {
+            reason: "document-head-owned record requires a fenced writer".into(),
+        });
+    }
+    reject_code_unfenced_write(conn, kind, id)
+}
+
+/// Referencing a managed generic document does not mutate its canonical body.
+/// Code graphs remain part of the stronger code-source contribution inventory.
+pub(super) fn reject_code_unfenced_write(
+    conn: &Connection,
+    kind: CodeSourceRecordKind,
+    id: &str,
+) -> CoreResult<()> {
+    let owned: bool = conn
+        .query_row(
             "SELECT EXISTS(SELECT 1 FROM code_source_contributions WHERE kind=?1 AND record_id=?2)",
             params![record_kind(kind), id],
             |r| r.get(0),
@@ -319,6 +342,25 @@ pub(super) fn authorize_owned_mutation(
     id: &str,
     scope: &Scope,
 ) -> CoreResult<()> {
+    {
+        let mut stmt = conn.prepare("SELECT h.record_json FROM document_head_records r LEFT JOIN document_heads h ON h.head_key=r.head_key WHERE r.kind=?1 AND r.record_id=?2").map_err(sql_error)?;
+        for row in stmt
+            .query_map(params![record_kind(kind), id], |r| {
+                r.get::<_, Option<String>>(0)
+            })
+            .map_err(sql_error)?
+        {
+            let json = row
+                .map_err(sql_error)?
+                .ok_or_else(|| invalid("document owner authority is unavailable"))?;
+            let h: DocumentHead = serde_json::from_str(&json).map_err(super::schema::json_error)?;
+            if &h.key.scope != scope {
+                return Err(CoreError::PolicyDenied {
+                    reason: "document mutation requires its exact scope".into(),
+                });
+            }
+        }
+    }
     let mut stmt=conn.prepare("SELECT g.record_json FROM code_source_contributions c JOIN code_source_generations g ON g.file_key=c.file_key WHERE c.kind=?1 AND c.record_id=?2").map_err(sql_error)?;
     let rows = stmt
         .query_map(params![record_kind(kind), id], |r| r.get::<_, String>(0))
@@ -336,7 +378,7 @@ pub(super) fn authorize_owned_mutation(
 }
 
 /// Restoring supplied record IDs cannot overwrite an unrelated scope's data.
-fn reject_foreign_record_scope(
+pub(super) fn reject_foreign_record_scope(
     conn: &Connection,
     kind: CodeSourceRecordKind,
     id: &str,

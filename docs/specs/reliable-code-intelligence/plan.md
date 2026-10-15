@@ -219,6 +219,13 @@ than creating conflicting strategy/weight fields.
 
 ### T3: Current document authority and legacy adoption
 
+**Execution:** Implementation and focused construction gates complete; independent
+secure-design and quality fallback re-reviews clean. Real vector-enabled
+stdio verification preserves four indexed versions byte-for-byte while returning
+only the current code, and excludes a deleted Markdown file on a force scan without
+a host manifest. Retained self-store adoption remains the integrated T11 gate.
+See `reviews/t3-2026-10-14.md` and the recorded live artifact.
+
 **Depends on:** T1
 **Mode:** TDD adapter/ingestion integration.
 **Spec mapping:** AC2, AC9.
@@ -233,6 +240,18 @@ explicit canonical/history access separate from candidate views. Cover imports
 and scanner paths that create documents.
 **Done when:** The obsolete backlog-body-loss chunk cannot be current evidence
 on the retained store; sibling/independent owners and historical rows survive.
+
+**Construction:** New SQLite head/lease tests cover retained versions, incomplete
+inventory, CAS/attempt reuse, exact scope/source identity, immutable canonical
+chunk content, code/generic lease-family exclusion and raw-mutation invalidation.
+Scanner tests cover same path across repositories/scopes, private/expiry changes,
+missing-head adoption and deleted generic files without a host manifest. Cached
+lexical/graph fixtures validate stale projections and durable derived ownership.
+Lossy generic legacy imports remain unverified; verified code-bundle imports
+activate through the existing code-source writer and mirrored head. Existing
+unmanaged generic recall remains compatible; T6–T9 must require a verified head
+for every new code-evidence candidate. No new history/export format or PG
+code-source support is claimed.
 
 ### T4: Token-aware structural segments and parent resolution
 

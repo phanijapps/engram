@@ -35,17 +35,31 @@ where
     if stable_source_key.is_empty() {
         return Ok(());
     }
+    if let Some(heads) = repo.document_heads() {
+        let key = DocumentHeadKey {
+            scope: scope.clone(),
+            repository: stable_source_key.into(),
+            source_key: path.into(),
+        };
+        // Retraction preserves canonical history and excludes the indexed head.
+        // Pre-ingest calls already hold an updating code/document lease.
+        if let Some(head) = heads.get_document_head(&key).await? {
+            let actor = head.provenance.actor;
+            crate::document_generation::exclude(heads, &key, None, &actor).await?;
+        }
+    }
 
     // Find prior graphs for this (key, path) pair.
     let all_graphs = repo.list_graphs_by_source(scope, stable_source_key).await?;
     let prior_graphs: Vec<KnowledgeGraph> = all_graphs
         .into_iter()
         .filter(|g| {
-            g.metadata
-                .as_ref()
-                .and_then(|m| m.get(SOURCE_PATH_KEY))
-                .and_then(|v| v.as_str())
-                == Some(path)
+            &g.scope == scope
+                && g.metadata
+                    .as_ref()
+                    .and_then(|m| m.get(SOURCE_PATH_KEY))
+                    .and_then(|v| v.as_str())
+                    == Some(path)
         })
         .collect();
 
@@ -58,11 +72,12 @@ where
         // delete does not abort the graph retraction (the scan summary tracks
         // errors). Embedding retraction is fastembed-gated and handled by the
         // dead-vector GC sweep, not here.
-        if let Some(doc_id) = graph
-            .metadata
-            .as_ref()
-            .and_then(|m| m.get(DOCUMENT_ID_KEY))
-            .and_then(|v| v.as_str())
+        if repo.document_heads().is_none()
+            && let Some(doc_id) = graph
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get(DOCUMENT_ID_KEY))
+                .and_then(|v| v.as_str())
         {
             let doc_id = DocumentId::from(doc_id.to_owned());
             let chunks = repo.list_chunks_by_document(&doc_id, scope).await?;

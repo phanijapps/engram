@@ -13,6 +13,12 @@
 
 mod candidate_text;
 mod code_source;
+mod document_code_head;
+mod document_derived_write;
+mod document_head;
+mod document_head_legacy;
+mod document_head_records;
+mod document_head_state;
 mod graph;
 mod guarded_source_write;
 mod identity;

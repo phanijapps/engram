@@ -598,6 +598,9 @@ struct FailingEntityWriteStore {
 
 #[async_trait::async_trait]
 impl engram_knowledge::KnowledgeRepository for FailingEntityWriteStore {
+    fn document_heads(&self) -> Option<&dyn engram_knowledge::DocumentHeadRepository> {
+        self.inner.document_heads()
+    }
     async fn put_source(
         &self,
         source: engram_domain::KnowledgeSource,

@@ -6,8 +6,7 @@ use engram_code::{ChunkCandidate, CoveredCodeCandidate, snapshot_ranges};
 use engram_domain::*;
 use engram_knowledge::{CoreError, CoreResult};
 
-pub(super) const FINGERPRINT: &str =
-    "source-v1/ts-0.26/mapping-2026-10-14/context-1/snapshot-65536";
+pub(super) const FINGERPRINT: &str = engram_code::SOURCE_COVERAGE_FINGERPRINT;
 
 pub(super) fn prepare(
     request: DocumentIngestRequest,

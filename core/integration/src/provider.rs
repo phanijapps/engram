@@ -67,6 +67,7 @@ pub struct EngramProvider {
     hierarchy: Option<Arc<dyn HierarchyRepository>>,
     retrieval: Option<Arc<dyn RetrievalIndex>>,
     vectors: Option<Arc<dyn VectorIndex>>,
+    code_vectors: Option<Arc<dyn VectorIndex>>,
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
@@ -312,6 +313,14 @@ impl EngramProvider {
     /// Returns the vector index handle if supported.
     pub fn vectors(&self) -> Option<&Arc<dyn VectorIndex>> {
         self.vectors.as_ref()
+    }
+    /// Dedicated representation-keyed code targets; canonical/document vectors
+    /// cannot satisfy readiness or donate prefix-limited legacy embeddings.
+    pub fn code_vectors(&self) -> Option<&Arc<dyn VectorIndex>> {
+        self.code_vectors.as_ref()
+    }
+    pub fn code_segments(&self) -> Option<&dyn engram_knowledge::CodeSegmentRepository> {
+        self.knowledge.as_ref().and_then(|k| k.code_segments())
     }
 
     /// Returns the migration service handle if supported.
@@ -640,6 +649,7 @@ impl EngramProvider {
             hierarchy: None,
             retrieval: None,
             vectors: None,
+            code_vectors: None,
             migration: None,
             embedding_provider: None,
             provenance: None,
@@ -680,6 +690,7 @@ pub struct EngramProviderBuilder {
     hierarchy: Option<Arc<dyn HierarchyRepository>>,
     retrieval: Option<Arc<dyn RetrievalIndex>>,
     vectors: Option<Arc<dyn VectorIndex>>,
+    code_vectors: Option<Arc<dyn VectorIndex>>,
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
@@ -714,6 +725,7 @@ impl EngramProviderBuilder {
             hierarchy: None,
             retrieval: None,
             vectors: None,
+            code_vectors: None,
             migration: None,
             embedding_provider: None,
             provenance: None,
@@ -804,6 +816,10 @@ impl EngramProviderBuilder {
     /// Attaches the vector index handle.
     pub fn vectors(mut self, handle: Arc<dyn VectorIndex>) -> Self {
         self.vectors = Some(handle);
+        self
+    }
+    pub fn code_vectors(mut self, handle: Arc<dyn VectorIndex>) -> Self {
+        self.code_vectors = Some(handle);
         self
     }
 
@@ -906,11 +922,22 @@ impl EngramProviderBuilder {
         // well as backend recipes. Vector storage alone is not code embedding.
         self.capabilities.code_embeddings = crate::embedding_backfill::capability(
             self.embedding_provider.as_deref(),
+            self.code_vectors.as_deref(),
             self.vectors.as_deref(),
             self.knowledge_query.is_some(),
             self.knowledge
                 .as_ref()
-                .is_some_and(|k| k.code_sources().is_some()),
+                .is_some_and(|k| k.code_sources().is_some() && k.code_segments().is_some()),
+            &self
+                .code_configuration
+                .as_ref()
+                .map(|c| c.effective.index.clone())
+                .unwrap_or_else(|| {
+                    engram_retrieval::CodeIntelligenceConfig::for_profile(
+                        engram_domain::CodeIntelligenceProfile::BalancedV1,
+                    )
+                    .index
+                }),
         );
         EngramProvider {
             capabilities: self.capabilities,
@@ -925,6 +952,7 @@ impl EngramProviderBuilder {
             hierarchy: self.hierarchy,
             retrieval: self.retrieval,
             vectors: self.vectors,
+            code_vectors: self.code_vectors,
             migration: self.migration,
             embedding_provider: self.embedding_provider,
             provenance: self.provenance,

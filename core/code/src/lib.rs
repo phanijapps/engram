@@ -14,6 +14,8 @@ pub mod noise;
 pub mod parser;
 pub mod queries;
 pub mod resolution;
+mod segmentation;
+pub use segmentation::{TokenSegmentPlan, segment_source_ranges, structural_boundaries};
 
 pub use edges::{StructuralEdges, contains_pairs};
 pub use frameworks::{FrameworkFacts, RouteFact, extract_frameworks};
@@ -24,7 +26,8 @@ pub use noise::is_noise_symbol;
 pub use parser::chunking::{ChunkCandidate, Chunker};
 pub use parser::code_symbol::CodeSymbolChunker;
 pub use parser::source_coverage::{
-    CoveredCodeCandidate, snapshot_ranges, source_parse_outcome, source_residual_ranges,
+    CoveredCodeCandidate, SOURCE_COVERAGE_FINGERPRINT, snapshot_ranges, source_parse_outcome,
+    source_residual_ranges,
 };
 pub use parser::tree_sitter_chunker::TreeSitterChunker;
 pub use queries::{ExploreNode, FileDependency, explore, file_dependencies};

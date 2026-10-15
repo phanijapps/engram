@@ -187,6 +187,8 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut hierarchy: Option<Arc<dyn HierarchyRepository>> = None;
     let retrieval: Option<Arc<dyn engram_retrieval::RetrievalIndex>> = None;
     let mut vectors: Option<Arc<dyn engram_retrieval::VectorIndex>> = None;
+    #[allow(unused_mut)]
+    let mut code_vectors: Option<Arc<dyn engram_retrieval::VectorIndex>> = None;
     let mut provenance: Option<Arc<dyn crate::ProvenanceQuery>> = None;
     let mut batch: Option<Arc<dyn crate::BatchIngest>> = None;
     let mut recall: Option<Arc<dyn crate::UnifiedRecall>> = None;
@@ -436,21 +438,43 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
                         let resolver =
                             recall_lanes::KnowledgeVectorResolver::new(knowledge_handle.clone());
                         let vec_index = Arc::new(vector_index);
-                        retrieval_lanes.push(Arc::new(
-                            engram_store_sqlite::VectorRetrievalIndex::new(
-                                (*vec_index).clone(),
+                        let embedder: Arc<dyn crate::EmbeddingProvider> =
+                            Arc::new(super::fastembed_embedding::FastEmbedEmbeddingProvider::new(
                                 provider_arc.clone(),
-                                Arc::new(resolver),
-                            ),
-                        ));
+                                space.clone(),
+                            ));
+                        match super::code_index::open(
+                            &paths.vectors,
+                            embedder.as_ref(),
+                            &code_configuration.effective.index,
+                        ) {
+                            Ok((code_index, representation)) => {
+                                retrieval_lanes.push(Arc::new(
+                                    super::code_index::CompatibleVectorLane {
+                                        base: vec_index.clone(),
+                                        code: code_index.clone(),
+                                        query: provider_arc.clone(),
+                                        store: knowledge_handle.clone(),
+                                        representation,
+                                    },
+                                ));
+                                code_vectors = Some(code_index);
+                            }
+                            Err(error @ CoreError::InvalidRequest { .. }) => return Err(error),
+                            Err(error) => {
+                                eprintln!("engram: code-vector index unavailable: {error}");
+                                retrieval_lanes.push(Arc::new(
+                                    engram_store_sqlite::VectorRetrievalIndex::new(
+                                        (*vec_index).clone(),
+                                        provider_arc.clone(),
+                                        Arc::new(resolver),
+                                    ),
+                                ));
+                            }
+                        }
                         vectors = Some(vec_index as Arc<dyn engram_retrieval::VectorIndex>);
                         vectors_state = CapabilityState::Supported;
-                        embedding_provider = Some(Arc::new(
-                            super::fastembed_embedding::FastEmbedEmbeddingProvider::new(
-                                provider_arc,
-                                space,
-                            ),
-                        ));
+                        embedding_provider = Some(embedder);
                     }
                     Err(e) => {
                         eprintln!("engram-mcp: FastEmbed init failed — vector lane disabled: {e}");
@@ -655,11 +679,13 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let report = CapabilityReport::builder()
         .code_embeddings(crate::embedding_backfill::capability(
             embedding_provider.as_deref(),
+            code_vectors.as_deref(),
             vectors.as_deref(),
             knowledge_query.is_some(),
             knowledge
                 .as_ref()
-                .is_some_and(|k| k.code_sources().is_some()),
+                .is_some_and(|k| k.code_sources().is_some() && k.code_segments().is_some()),
+            &code_configuration.effective.index,
         ))
         .code_source_preservation(code_source_state)
         .memory(memory_state)
@@ -748,6 +774,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
     if let Some(h) = vectors {
         builder = builder.vectors(h);
+    }
+    if let Some(h) = code_vectors {
+        builder = builder.code_vectors(h);
     }
     if let Some(h) = embedding_provider {
         builder = builder.embedding_provider(h);

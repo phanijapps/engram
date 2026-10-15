@@ -8,9 +8,13 @@
 //! re-exports the public surface so downstream crates depend on the names, not
 //! the internal module layout.
 
+mod code_segments;
 mod code_source;
 mod code_source_write;
 mod document_head;
+pub use code_segments::{
+    CodeSegmentLease, CodeSegmentRepository, CodeSegmentSet, ResolvedCodeSegment, code_segment_text,
+};
 mod graph;
 pub mod identity;
 mod ingest;

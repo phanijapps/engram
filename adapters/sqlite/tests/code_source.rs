@@ -649,7 +649,11 @@ fn concurrent_source_schema_openers_all_acquire_durable_handles() {
         })
         .collect();
     for worker in workers {
-        assert!(worker.join().unwrap().is_ok());
+        let result = worker.join().unwrap();
+        assert!(
+            result.is_ok(),
+            "concurrent source-schema opener failed: {result:?}"
+        );
     }
 }
 

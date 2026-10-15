@@ -36,6 +36,9 @@ impl KnowledgeRepoGraph {
 
 #[async_trait]
 impl KnowledgeRepository for KnowledgeRepoGraph {
+    fn code_segments(&self) -> Option<&dyn engram_knowledge::CodeSegmentRepository> {
+        self.knowledge.code_segments()
+    }
     fn document_heads(&self) -> Option<&dyn engram_knowledge::DocumentHeadRepository> {
         self.knowledge.document_heads()
     }

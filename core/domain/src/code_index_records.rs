@@ -23,6 +23,11 @@ pub struct CodeEmbeddingSegment {
     pub embedding_input: CodeTokenCoverage,
 }
 
+impl CodeEmbeddingSegment {
+    /// Accepted v1 schema bound, also used by deterministic segmentation.
+    pub const MAX_RANGES: usize = 20;
+}
+
 /// Exact source identity; `source_key` is opaque, including for non-file readers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -59,4 +64,9 @@ pub struct CodeSegmentInventory {
     /// first source byte per parent; terminal continuations follow their range.
     pub segment_ids: Vec<String>,
     pub state: CodeSourceState,
+}
+
+impl CodeSegmentInventory {
+    /// Accepted v1 schema bound for one representation inventory.
+    pub const MAX_SEGMENTS: usize = 100_000;
 }

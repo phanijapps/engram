@@ -14,6 +14,8 @@ use std::sync::{Arc, Mutex as StdMutex};
 use crate::vector::{
     entry::{VectorEntry, VectorSearchResult},
     extension::register_sqlite_vec,
+    namespace::VectorNamespace,
+    schema::{create_vectors_table, resolve_meta_space},
     vector::serialize_f32_vector,
 };
 
@@ -26,6 +28,7 @@ pub struct SqliteVectorIndex {
     dimensions: u32,
     embedding_space: EmbeddingSpace,
     requires_reindex: bool,
+    namespace: VectorNamespace,
 }
 
 impl SqliteVectorIndex {
@@ -41,7 +44,8 @@ impl SqliteVectorIndex {
         }
         register_sqlite_vec();
         let connection = Connection::open_in_memory().map_err(sql_error)?;
-        create_vectors_table(&connection, dimensions)?;
+        let namespace = VectorNamespace::legacy();
+        create_vectors_table(&connection, dimensions, &namespace)?;
 
         // Default embedding space for in-memory index. In-memory indexes are
         // ephemeral, so metadata is always empty and reindex is never required.
@@ -53,6 +57,7 @@ impl SqliteVectorIndex {
             dimensions,
             embedding_space,
             requires_reindex: false,
+            namespace,
         })
     }
 
@@ -72,19 +77,22 @@ impl SqliteVectorIndex {
         }
         register_sqlite_vec();
         let connection = Connection::open(path).map_err(sql_error)?;
-        create_vectors_table(&connection, dimensions)?;
+        let namespace = VectorNamespace::legacy();
+        create_vectors_table(&connection, dimensions, &namespace)?;
 
         // Default embedding space for file-backed index. Metadata is resolved
         // so a reopened file built under a different space signals reindex.
         let requested =
             EmbeddingSpace::new("sqlite-vec", "default", dimensions, "query", None::<String>);
-        let (embedding_space, requires_reindex) = resolve_meta_space(&connection, &requested);
+        let (embedding_space, requires_reindex) =
+            resolve_meta_space(&connection, &requested, &namespace)?;
 
         Ok(Self {
             connection: Arc::new(StdMutex::new(connection)),
             dimensions,
             embedding_space,
             requires_reindex,
+            namespace,
         })
     }
 
@@ -108,13 +116,45 @@ impl SqliteVectorIndex {
         }
         register_sqlite_vec();
         let connection = Connection::open(path).map_err(sql_error)?;
-        create_vectors_table(&connection, dimensions)?;
-        let (persisted, requires_reindex) = resolve_meta_space(&connection, &embedding_space);
+        let namespace = VectorNamespace::legacy();
+        create_vectors_table(&connection, dimensions, &namespace)?;
+        let (persisted, requires_reindex) =
+            resolve_meta_space(&connection, &embedding_space, &namespace)?;
         Ok(Self {
             connection: Arc::new(StdMutex::new(connection)),
             dimensions,
             embedding_space: persisted,
             requires_reindex,
+            namespace,
+        })
+    }
+
+    /// Opens an isolated representation in the configured SQLite file.
+    /// The namespace must be a lowercase SHA-256 hex digest; legacy vectors and
+    /// other namespaces are never read, cleared, or adopted by this index.
+    pub fn open_with_embedding_space_namespace(
+        path: &str,
+        embedding_space: EmbeddingSpace,
+        namespace_digest: &str,
+    ) -> CoreResult<Self> {
+        let namespace = VectorNamespace::from_digest(namespace_digest)?;
+        let dimensions = embedding_space.dimensions;
+        if dimensions == 0 {
+            return Err(CoreError::InvalidRequest {
+                reason: "dimensions must be greater than zero".into(),
+            });
+        }
+        register_sqlite_vec();
+        let connection = Connection::open(path).map_err(sql_error)?;
+        create_vectors_table(&connection, dimensions, &namespace)?;
+        let (persisted, requires_reindex) =
+            resolve_meta_space(&connection, &embedding_space, &namespace)?;
+        Ok(Self {
+            connection: Arc::new(StdMutex::new(connection)),
+            dimensions: persisted.dimensions,
+            embedding_space: persisted,
+            requires_reindex,
+            namespace,
         })
     }
 
@@ -132,20 +172,26 @@ impl SqliteVectorIndex {
     /// The target fields preserve the link back to memory, chunk, entity, or
     /// concept records while keeping vector storage separate from domain truth.
     pub fn insert(&self, entry: VectorEntry) -> CoreResult<()> {
+        self.check_namespace_identity()?;
         validate_dimensions(entry.dimensions, self.dimensions, entry.embedding.len())?;
         let embedding = serialize_f32_vector(&entry.embedding)?;
         let conn = self.connection.lock().unwrap();
         // Durable dedup: upsert by id (= target_id). vec0 virtual tables don't
         // support ON CONFLICT, so delete-then-insert — idempotent on re-index
         // (replaces rather than erroring on the PK constraint or duplicating).
-        conn.execute("DELETE FROM vectors WHERE id = ?1", [&entry.id])
-            .map_err(sql_error)?;
         conn.execute(
-            r#"
+            &self.namespace.sql("DELETE FROM vectors WHERE id = ?1"),
+            [&entry.id],
+        )
+        .map_err(sql_error)?;
+        conn.execute(
+            &self.namespace.sql(
+                r#"
                 INSERT INTO vectors
                     (id, embedding, target_type, target_id, model, dimensions, content_hash)
                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                 "#,
+            ),
             params![
                 entry.id,
                 embedding,
@@ -165,6 +211,7 @@ impl SqliteVectorIndex {
     /// Ranking fusion and policy filtering happen outside this adapter; this
     /// method only exposes raw nearest-neighbor rows and distances.
     pub fn search(&self, query: &[f32], limit: u32) -> CoreResult<Vec<VectorSearchResult>> {
+        self.check_namespace_identity()?;
         if limit == 0 {
             return Ok(Vec::new());
         }
@@ -172,14 +219,14 @@ impl SqliteVectorIndex {
         let query = serialize_f32_vector(query)?;
         let conn = self.connection.lock().unwrap();
         let mut statement = conn
-            .prepare(
+            .prepare(&self.namespace.sql(
                 r#"
                 SELECT id, target_type, target_id, model, dimensions, content_hash, distance
                 FROM vectors
                 WHERE embedding MATCH ?1 AND k = ?2
                 ORDER BY distance
                 "#,
-            )
+            ))
             .map_err(sql_error)?;
         let rows = statement
             .query_map(params![query, limit], |row| {
@@ -212,7 +259,8 @@ impl SqliteVectorIndex {
     /// Removes all vectors from the index.
     pub fn clear(&self) -> CoreResult<()> {
         let conn = self.connection.lock().unwrap();
-        conn.execute("DELETE FROM vectors", []).map_err(sql_error)?;
+        conn.execute(&self.namespace.sql("DELETE FROM vectors"), [])
+            .map_err(sql_error)?;
         Ok(())
     }
 
@@ -221,8 +269,22 @@ impl SqliteVectorIndex {
     /// This allows the embedding space to be configured after construction,
     /// typically when loading configuration or migrating between models.
     pub fn with_embedding_space(mut self, embedding_space: EmbeddingSpace) -> Self {
-        self.embedding_space = embedding_space;
+        if self.namespace.is_legacy() {
+            self.embedding_space = embedding_space;
+        } else {
+            // A configuration override cannot relabel durable representation data.
+            self.requires_reindex |= self.embedding_space != embedding_space;
+        }
         self
+    }
+
+    fn check_namespace_identity(&self) -> CoreResult<()> {
+        if !self.namespace.is_legacy() && self.requires_reindex {
+            return Err(CoreError::ProviderUnavailable {
+                provider: "vector namespace embedding identity mismatch; rebuild required".into(),
+            });
+        }
+        Ok(())
     }
 }
 
@@ -315,22 +377,21 @@ impl VectorIndex for SqliteVectorIndex {
         // pinned sqlite-vec; if a future sqlite-vec renames it, the query
         // errors and we fall back to the virtual-table scan — behavior is
         // never lost, only speed.
-        let rows: Vec<String> =
-            match conn
-                .prepare("SELECT id FROM vectors_rowids")
-                .and_then(|mut stmt| {
-                    stmt.query_map([], |row| row.get::<_, String>(0))?
-                        .collect::<Result<Vec<_>, _>>()
-                }) {
-                Ok(rows) => rows,
-                Err(_) => conn
-                    .prepare("SELECT id FROM vectors")
-                    .map_err(sql_error)?
-                    .query_map([], |row| row.get::<_, String>(0))
-                    .map_err(sql_error)?
+        let rows: Vec<String> = match conn
+            .prepare(&self.namespace.sql("SELECT id FROM vectors_rowids"))
+            .and_then(|mut stmt| {
+                stmt.query_map([], |row| row.get::<_, String>(0))?
                     .collect::<Result<Vec<_>, _>>()
-                    .map_err(sql_error)?,
-            };
+            }) {
+            Ok(rows) => rows,
+            Err(_) => conn
+                .prepare(&self.namespace.sql("SELECT id FROM vectors"))
+                .map_err(sql_error)?
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(sql_error)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(sql_error)?,
+        };
         // A stored id that fails validation is adapter-level corruption; skip
         // it rather than failing the whole listing (the per-chunk insert path
         // still validates ids on read).
@@ -341,9 +402,14 @@ impl VectorIndex for SqliteVectorIndex {
     /// Durable content dedup point read: the stored embedding for one target
     /// id, deserialized from the sqlite-vec LE-f32 blob. ([durable-dedup])
     async fn vector_for_target(&self, target_id: &Id) -> CoreResult<Option<Vec<f32>>> {
+        self.check_namespace_identity()?;
         let conn = self.connection.lock().unwrap();
         let blob: Option<Vec<u8>> = conn
-            .prepare("SELECT embedding FROM vectors WHERE id = ?1")
+            .prepare(
+                &self
+                    .namespace
+                    .sql("SELECT embedding FROM vectors WHERE id = ?1"),
+            )
             .map_err(sql_error)?
             .query_row(params![target_id.as_str()], |row| row.get::<_, Vec<u8>>(0))
             .optional()
@@ -358,15 +424,18 @@ impl VectorIndex for SqliteVectorIndex {
 
     async fn delete_target(&self, target_id: &Id) -> CoreResult<()> {
         let conn = self.connection.lock().unwrap();
-        conn.execute("DELETE FROM vectors WHERE id = ?1", [target_id.as_str()])
-            .map_err(sql_error)?;
+        conn.execute(
+            &self.namespace.sql("DELETE FROM vectors WHERE id = ?1"),
+            [target_id.as_str()],
+        )
+        .map_err(sql_error)?;
         Ok(())
     }
 
     async fn gc_orphan_targets(&self, live_target_ids: &[Id]) -> CoreResult<usize> {
         let conn = self.connection.lock().unwrap();
         let all_ids: Vec<String> = conn
-            .prepare("SELECT id FROM vectors")
+            .prepare(&self.namespace.sql("SELECT id FROM vectors"))
             .map_err(sql_error)?
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(sql_error)?
@@ -377,8 +446,11 @@ impl VectorIndex for SqliteVectorIndex {
         let mut deleted = 0;
         for id in &all_ids {
             if !live.contains(id.as_str()) {
-                conn.execute("DELETE FROM vectors WHERE id = ?1", [id.as_str()])
-                    .map_err(sql_error)?;
+                conn.execute(
+                    &self.namespace.sql("DELETE FROM vectors WHERE id = ?1"),
+                    [id.as_str()],
+                )
+                .map_err(sql_error)?;
                 deleted += 1;
             }
         }
@@ -387,99 +459,6 @@ impl VectorIndex for SqliteVectorIndex {
 
     async fn clear(&self) -> CoreResult<()> {
         self.clear()
-    }
-}
-
-/// Creates the `vectors` vec0 virtual table if it does not already exist.
-///
-/// Shared by the in-memory and file-backed constructors so the schema stays in
-/// one place. `IF NOT EXISTS` makes reopen idempotent for the persistent path.
-fn create_vectors_table(connection: &Connection, dimensions: u32) -> CoreResult<()> {
-    connection
-        .execute(
-            &format!(
-                r#"
-                CREATE VIRTUAL TABLE IF NOT EXISTS vectors USING vec0(
-                    id text primary key,
-                    embedding float[{dimensions}],
-                    target_type text,
-                    target_id text,
-                    model text,
-                    dimensions integer,
-                    content_hash text
-                )
-                "#
-            ),
-            [],
-        )
-        .map_err(sql_error)?;
-    // Metadata table records the embedding space the index was built with, so
-    // a later reopen with a different configured space can signal RequiresReindex.
-    connection
-        .execute(
-            r#"
-            CREATE TABLE IF NOT EXISTS vector_meta (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-            "#,
-            [],
-        )
-        .map_err(sql_error)?;
-    Ok(())
-}
-
-/// Resolves the index's embedding space against persisted metadata.
-///
-/// On first open the metadata is empty: the `requested` space is persisted and
-/// returned with `requires_reindex = false`. On reopen, the persisted space is
-/// read back and compared to `requested`: if they differ, the existing vectors
-/// are in a different space and `requires_reindex = true` is returned alongside
-/// the *persisted* space (the index's actual current space).
-fn resolve_meta_space(
-    connection: &Connection,
-    requested: &EmbeddingSpace,
-) -> (EmbeddingSpace, bool) {
-    let get = |key: &str| -> Option<String> {
-        connection
-            .query_row(
-                "SELECT value FROM vector_meta WHERE key = ?1",
-                params![key],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()
-            .ok()
-            .flatten()
-    };
-    let set = |key: &str, value: &str| {
-        let _ = connection.execute(
-            "INSERT OR REPLACE INTO vector_meta (key, value) VALUES (?1, ?2)",
-            params![key, value],
-        );
-    };
-
-    match get("provider") {
-        Some(provider) => {
-            let model = get("model").unwrap_or_default();
-            let dims = get("dimensions")
-                .and_then(|s| s.parse::<u32>().ok())
-                .unwrap_or(requested.dimensions);
-            let profile = get("prompt_profile").unwrap_or_default();
-            let normalization = get("normalization");
-            let persisted = EmbeddingSpace::new(provider, model, dims, profile, normalization);
-            let requires_reindex = &persisted != requested;
-            (persisted, requires_reindex)
-        }
-        None => {
-            set("provider", &requested.provider);
-            set("model", &requested.model);
-            set("dimensions", &requested.dimensions.to_string());
-            set("prompt_profile", &requested.prompt_profile);
-            if let Some(norm) = &requested.normalization {
-                set("normalization", norm);
-            }
-            (requested.clone(), false)
-        }
     }
 }
 
@@ -513,7 +492,7 @@ fn parse_target_type(value: &str) -> Option<EmbeddingTargetType> {
     }
 }
 
-fn sql_error(error: rusqlite::Error) -> CoreError {
+pub(super) fn sql_error(error: rusqlite::Error) -> CoreError {
     CoreError::Adapter {
         adapter: "engram-store-vector".to_owned(),
         message: error.to_string(),

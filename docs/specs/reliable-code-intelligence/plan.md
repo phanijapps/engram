@@ -255,6 +255,16 @@ code-source support is claimed.
 
 ### T4: Token-aware structural segments and parent resolution
 
+**Execution:** Implementation and focused construction gates complete; independent
+adversarial/security and quality fallback re-reviews clean. Canonical methods
+remain unchanged, exact model-tokenized segments cover their tails, and derived
+vector namespaces preserve the configured SQLite file layout. Retry leases fence
+stale workers; missing/failed inventories recover, and unavailable source siblings
+are skipped. The release stdio/BGE smoke and full coverage/actual-vector tests are
+recorded in `reviews/t4-2026-10-14.md`. Context/category enrichment remains T5;
+pinned offline model asset identity remains T7, and final quality/self-store gates
+remain T10–T11. No beta-readiness or ranking improvement is claimed here.
+
 **Depends on:** T1
 **Mode:** TDD pure and model-tokenizer integration.
 **Spec mapping:** AC3–AC4, AC9.

@@ -29,6 +29,18 @@ impl FastEmbedEmbeddingProvider {
 
 #[cfg(feature = "fastembed")]
 impl EmbeddingProvider for FastEmbedEmbeddingProvider {
+    fn tokenize_untruncated(
+        &self,
+        text: &str,
+        special_tokens: bool,
+    ) -> CoreResult<engram_retrieval::TextTokenization> {
+        if self.space.dimensions != self.inner.dimensions() {
+            return Err(engram_runtime::CoreError::InvalidRequest {
+                reason: "declared embedding dimensions differ from the actual local model".into(),
+            });
+        }
+        self.inner.tokenize_untruncated(text, special_tokens)
+    }
     fn is_local(&self) -> bool {
         true
     }

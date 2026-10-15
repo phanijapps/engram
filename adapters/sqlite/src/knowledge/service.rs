@@ -145,18 +145,21 @@ impl SqlKnowledgeStore {
     /// This centralizes pragma application so both `open_with_options` and legacy
     /// constructors can use the same logic.
     fn apply_pragmas(connection: &Connection, options: &SqliteOpenOptions) -> CoreResult<()> {
+        if let Some(timeout_ms) = options.busy_timeout_ms {
+            connection
+                .busy_timeout(std::time::Duration::from_millis(timeout_ms))
+                .map_err(sql_error)?;
+        }
         // Journal mode (returns result set, so we use query_row and ignore the result)
         let journal_pragma = format!(
             "PRAGMA journal_mode = {}",
             options.journal_mode.as_pragma_value()
         );
-        connection
-            .query_row(&journal_pragma, [], |_row| Ok(()))
-            .optional()
-            .map_err(|e| CoreError::Adapter {
-                adapter: "engram-store-knowledge-sqlite".to_owned(),
-                message: e.to_string(),
-            })?;
+        super::connection_options::journal_mode(
+            connection,
+            &journal_pragma,
+            options.busy_timeout_ms,
+        )?;
 
         // Synchronous mode (NORMAL for WAL mode)
         connection

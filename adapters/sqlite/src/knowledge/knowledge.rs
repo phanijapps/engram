@@ -45,6 +45,9 @@ pub(super) fn persisted_archived_at(
 
 #[async_trait]
 impl KnowledgeRepository for SqlKnowledgeStore {
+    fn code_segments(&self) -> Option<&dyn engram_knowledge::CodeSegmentRepository> {
+        Some(self)
+    }
     fn document_heads(&self) -> Option<&dyn engram_knowledge::DocumentHeadRepository> {
         Some(self)
     }

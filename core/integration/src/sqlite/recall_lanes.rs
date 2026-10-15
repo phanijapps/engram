@@ -250,6 +250,9 @@ impl VectorTargetResolver for KnowledgeVectorResolver {
             return Ok(None);
         }
         let chunk = resolve_chunk(&self.store, &hit.target_id, &request.scope).await?;
+        // Canonical code vectors used the legacy prefix-limited representation.
+        // Complete code segments are served by the dedicated compatible lane.
+        let chunk = chunk.filter(|c| c.code.is_none());
         Ok(chunk.map(|mut chunk| {
             if let Some(policy) = access.policy(RetrievalTargetType::Chunk, &hit.target_id) {
                 chunk.policy = policy.clone();

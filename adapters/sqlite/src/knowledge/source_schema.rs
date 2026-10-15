@@ -69,6 +69,7 @@ pub(super) fn initialize_source_views(connection: &Connection) -> CoreResult<()>
       CREATE TABLE IF NOT EXISTS code_source_revision(singleton INTEGER PRIMARY KEY CHECK(singleton=1), revision INTEGER NOT NULL);
       INSERT OR IGNORE INTO code_source_revision VALUES(1,0);").map_err(sql_error)?;
     super::document_head_state::initialize(connection)?;
+    super::code_segments_schema::initialize(connection)?;
     for (table, kind) in RECORD_TABLES.iter().zip([
         "chunk",
         "entity",

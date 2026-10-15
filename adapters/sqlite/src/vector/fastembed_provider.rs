@@ -25,6 +25,8 @@ pub struct FastEmbedBgeSmallQueryProvider {
     model: Mutex<TextEmbedding>,
     model_label: &'static str,
     query_prefix: Option<&'static str>,
+    dimensions: u32,
+    tokenization: super::fastembed_tokenization::LocalTokenizer,
 }
 
 impl FastEmbedBgeSmallQueryProvider {
@@ -46,19 +48,35 @@ impl FastEmbedBgeSmallQueryProvider {
         model_label: &'static str,
         query_prefix: Option<&'static str>,
     ) -> CoreResult<Self> {
+        let dimensions = TextEmbedding::get_model_info(&model)
+            .map_err(adapter_error)?
+            .dim as u32;
         let text_embedding =
             TextEmbedding::try_new(InitOptions::new(model).with_show_download_progress(false))
                 .map_err(adapter_error)?;
         Ok(Self {
+            tokenization: super::fastembed_tokenization::LocalTokenizer::new(&text_embedding)?,
             model: Mutex::new(text_embedding),
             model_label,
             query_prefix,
+            dimensions,
         })
     }
 
     /// Returns the stable model label callers should store with generated vectors.
     pub fn model_name(&self) -> &'static str {
         self.model_label
+    }
+    pub fn dimensions(&self) -> u32 {
+        self.dimensions
+    }
+
+    pub fn tokenize_untruncated(
+        &self,
+        text: &str,
+        special_tokens: bool,
+    ) -> CoreResult<engram_retrieval::TextTokenization> {
+        self.tokenization.tokenize(text, special_tokens)
     }
 
     /// Embeds one retrieval query, applying the model's query prefix if set.
@@ -152,7 +170,7 @@ impl VectorQueryProvider for FastEmbedBgeSmallQueryProvider {
     }
 }
 
-fn adapter_error(error: impl std::fmt::Display) -> CoreError {
+pub(super) fn adapter_error(error: impl std::fmt::Display) -> CoreError {
     CoreError::Adapter {
         adapter: ADAPTER_NAME.to_owned(),
         message: error.to_string(),

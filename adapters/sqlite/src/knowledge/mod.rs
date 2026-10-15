@@ -12,7 +12,12 @@
 //! backend can evolve (or move to Postgres / a graph store) without coupling.
 
 mod candidate_text;
+mod code_segments;
+mod code_segments_schema;
+mod code_segments_state;
+mod code_segments_validation;
 mod code_source;
+mod connection_options;
 mod document_code_head;
 mod document_derived_write;
 mod document_head;

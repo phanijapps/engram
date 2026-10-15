@@ -15,6 +15,8 @@
 
 mod batch;
 mod bootstrap;
+#[cfg(feature = "fastembed")]
+mod code_index;
 mod code_source_conformance;
 mod code_source_import;
 mod community;

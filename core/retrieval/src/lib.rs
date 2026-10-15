@@ -15,7 +15,9 @@ mod ports;
 mod predict;
 mod reciprocal;
 mod router;
+mod tokenization;
 mod vector_index;
+pub use tokenization::TextTokenization;
 mod weighted;
 
 pub use composer::{RetrievalCompositionInput, compose_context};

@@ -614,6 +614,26 @@ leaves the profile/feature unshipped; any target change requires user sign-off.
 
 ### T11: Retained-store rollout, operational proof and gates
 
+**Execution:** Consistent online backup verified before any self-store rollout;
+original canonical/history data remain retained. Whole-workspace Rust tests
+pass (1,181 passed, 10 ignored), and the rebuilt native addon passes five live
+tests including actual local embedding/scoring. TypeScript, build, generated
+contracts and boundary gates pass. The final observability correction is
+independently reviewed clean; integrated construction review is clean with
+T10/T11 outcome gates explicitly pending. Retained-store scan/reindex/evidence
+verification has not run. See
+`reviews/t11-observability-adversarial-2026-10-15.md`,
+`reviews/t11-observability-quality-2026-10-15.md`, and
+`reviews/whole-spec-construction-quality-2026-10-15.md`.
+
+**Construction correction:** Full workspace testing found that observability
+captured capability flags before the provider computed actual code readiness.
+Keep the existing conformance assertion unchanged: diagnostics must equal the
+provider's complete report. At the provider boundary, delegate diagnostic counts
+and timings while supplying the finalized immutable capability snapshot. Verify
+the existing conformance fixture and a focused supplied-handle regression; this
+applies equally to every backend and does not change retrieval behavior.
+
 **Depends on:** T10
 **Mode:** goal-based live verification and repository gates.
 **Spec mapping:** AC9, AC12.

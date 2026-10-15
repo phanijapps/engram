@@ -1032,6 +1032,12 @@ impl EngramProviderBuilder {
         let (evidence, scorer) = crate::code_evidence::readiness::states(&provider);
         provider.capabilities.code_evidence = evidence;
         provider.capabilities.code_scorer = scorer;
+        provider.observability = provider.observability.take().map(|inner| {
+            Arc::new(crate::observability::ProviderObservability::new(
+                inner,
+                provider.capabilities.clone(),
+            )) as Arc<dyn Observability>
+        });
         provider
     }
 }
@@ -1315,5 +1321,13 @@ mod tests {
             provider.observability().is_some(),
             "observability handle must be attached"
         );
+        let snapshot = futures::executor::block_on(provider.observability().unwrap().diagnostics())
+            .expect("diagnostics");
+        assert_eq!(snapshot.capabilities, *provider.capabilities());
+        assert!(!snapshot.capabilities.code_evidence.is_supported());
+        assert!(!snapshot.capabilities.code_scorer.is_supported());
+        assert_eq!(snapshot.embedding_config.model, "test_model");
+        assert_eq!(snapshot.schema_version, "2026.01");
+        assert_eq!(snapshot.adapter_version, "0.1.0");
     }
 }

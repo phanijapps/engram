@@ -1,0 +1,214 @@
+{
+  "phase": "repository construction gates; retrieval quality/retained rollout still pending",
+  "recordedAtUtc": "2026-10-15T10:12:14.297576+00:00",
+  "featureShipped": false,
+  "rustWorkspace": {
+    "targets": 141,
+    "passed": 1181,
+    "failed": 0,
+    "ignored": 10
+  },
+  "nativeLiveTests": 5,
+  "checks": [
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all"
+      ],
+      "exitCode": 0,
+      "seconds": 1.3096302170015406,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/0-cargo.log",
+      "stage": "initial full gate; unchanged API/contracts remain applicable",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "pnpm",
+        "run",
+        "contracts:generate"
+      ],
+      "exitCode": 0,
+      "seconds": 1.4157293300013407,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/3-pnpm.log",
+      "stage": "initial full gate; unchanged API/contracts remain applicable",
+      "logSha256": "2684eb0c2cdb2a307b40a553b72df0c4eeca9533b20880f44229a0370e93c1f7"
+    },
+    {
+      "command": [
+        "pnpm",
+        "run",
+        "typecheck"
+      ],
+      "exitCode": 0,
+      "seconds": 10.795410364000418,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/4-pnpm.log",
+      "stage": "initial full gate; unchanged API/contracts remain applicable",
+      "logSha256": "06ce4f26e2d34cca889c9a5658458416f2838066216d044fd7e7eb0c66d90072"
+    },
+    {
+      "command": [
+        "pnpm",
+        "run",
+        "build"
+      ],
+      "exitCode": 0,
+      "seconds": 51.24739832000341,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/6-pnpm.log",
+      "stage": "initial full gate; unchanged API/contracts remain applicable",
+      "logSha256": "b56e823ebb309dd63096d5ad68a454120ea0b8043e47b489f03a1dcb6fcae9e8"
+    },
+    {
+      "command": [
+        "scripts/ci/check-contracts.sh"
+      ],
+      "exitCode": 0,
+      "seconds": 0.45111947700206656,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/7-scripts-ci-check-contracts.sh.log",
+      "stage": "initial full gate; unchanged API/contracts remain applicable",
+      "logSha256": "fce86ba532e1d76036faf9bd6bbddb2d942388071b20bab4aaecbcfd90921aea"
+    },
+    {
+      "command": [
+        "scripts/ci/check-docs.sh"
+      ],
+      "exitCode": 0,
+      "seconds": 1.0812792770011583,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/8-scripts-ci-check-docs.sh.log",
+      "stage": "initial full gate; unchanged API/contracts remain applicable",
+      "logSha256": "5a8199511e487d45222b8f4221b1f9254743f9419cc50bde4f81934cd2042f6f"
+    },
+    {
+      "command": [
+        "scripts/ci/check-engine-neutrality.sh"
+      ],
+      "exitCode": 0,
+      "seconds": 0.07679147000453668,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/9-scripts-ci-check-engine-neutrality.sh.log",
+      "stage": "initial full gate; unchanged API/contracts remain applicable",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "scripts/ci/check-surface-parity.sh"
+      ],
+      "exitCode": 0,
+      "seconds": 0.19498821399611188,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/10-scripts-ci-check-surface-parity.sh.log",
+      "stage": "initial full gate; unchanged API/contracts remain applicable",
+      "logSha256": "b3225247e8a41fa566bc9accdc9e582f14f89e2660d1334af844cbdcc1e894e9"
+    },
+    {
+      "command": [
+        "cargo",
+        "check",
+        "--workspace",
+        "--offline"
+      ],
+      "exitCode": 0,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/reliable-final-check-after-fix.log",
+      "stage": "after observability correction; actual observed process exit",
+      "logSha256": "c5aa0518e8bd3553c02a766ae9015840bedd07f7333f6b63bab6d632292b3595"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--workspace",
+        "--offline"
+      ],
+      "exitCode": 0,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/reliable-final-workspace-rust-retry.log",
+      "stage": "after observability correction; actual observed process exit",
+      "logSha256": "342d27643070f912fe2ac3ca8248a79366d94a36b3a7bcf282ffc9563a472861"
+    },
+    {
+      "command": [
+        "pnpm",
+        "run",
+        "test"
+      ],
+      "exitCode": 0,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/reliable-final-ts-after-fix.log",
+      "stage": "after observability correction; actual observed process exit",
+      "logSha256": "9dcf029154c95ee31b2f89d5537dea24148355da6777a7d6f3bbb112faca6111"
+    },
+    {
+      "command": [
+        "pnpm",
+        "run",
+        "build:native"
+      ],
+      "exitCode": 0,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/reliable-final-native-build.log",
+      "stage": "after observability correction; actual observed process exit",
+      "logSha256": "d6b91f232d51c527676ee0a3f618c7fa69fd19f7242e3f266474e4e95515d823"
+    },
+    {
+      "command": [
+        "env",
+        "ENGRAM_LIVE_FASTEMBED=1",
+        "pnpm",
+        "--filter",
+        "@engram/node",
+        "exec",
+        "vitest",
+        "run",
+        "test/provider-smoke.test.ts"
+      ],
+      "exitCode": 0,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/reliable-final-native-live-test.log",
+      "stage": "after observability correction; actual observed process exit",
+      "logSha256": "df7b3e9b4aa28bece4ffb1a1bb62a1801d2f94542d60de591bbd0f493cd1acc4"
+    },
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "-p",
+        "engram-mcp",
+        "--offline"
+      ],
+      "exitCode": 0,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/reliable-final-mcp-build.log",
+      "stage": "after observability correction; actual observed process exit",
+      "logSha256": "257190cfef968477fee77f21b6f241634d2977ac1927832aa51eee1d368f4be9"
+    },
+    {
+      "command": [
+        "cargo",
+        "build",
+        "--release",
+        "-p",
+        "engram-integration",
+        "--offline",
+        "--features",
+        "sqlite,fastembed,cross-encoder-rerank",
+        "--example",
+        "code_evidence_probe",
+        "--example",
+        "code_calibration_seal"
+      ],
+      "exitCode": 0,
+      "log": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/final-gates-2026-10-15/reliable-final-probe-build.log",
+      "stage": "after observability correction; actual observed process exit",
+      "logSha256": "2c961dce2c2386ae39adff48487bf20a7bca16bd084296e1c55791638a371623"
+    }
+  ],
+  "initialFailure": {
+    "command": [
+      "cargo",
+      "test",
+      "--workspace",
+      "--offline"
+    ],
+    "cause": "diagnostics retained pre-readiness capability report",
+    "resolution": "provider binds finalized report; existing conformance assertion unchanged; full workspace passes"
+  },
+  "binaries": {
+    "/home/videogamer/projects/mem-alpha/target/release/engram-mcp": "7736e8c458a513c1b03b33175c9dc7faa45386563e577360bf4a535f91d9ea98",
+    "/home/videogamer/projects/mem-alpha/target/release/examples/code_evidence_probe": "1d61b03f48f573ac6d0159c627d435936ed84e7c828fc5cfba2ac4a7c5fe59e5",
+    "/home/videogamer/projects/mem-alpha/packages/node/engram_node.node": "81918a39c8cf5bbc450be6fca5ad0144b6e92ecf065d9e9a6b8f945993c1ee35"
+  }
+}

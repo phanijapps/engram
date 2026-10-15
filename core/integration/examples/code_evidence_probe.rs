@@ -53,11 +53,49 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let line = line?;
         let answer = (|| -> Result<serde_json::Value, Box<dyn std::error::Error>> {
             let request: engram_domain::CodeEvidenceQuery = serde_json::from_str(&line)?;
-            let start = Instant::now();
-            let packet = block_on(provider.code_evidence(&request, &scope, &requester))?;
             let binding =
                 engram_integration::code_evidence::calibration_template(&provider, &request)?;
-            Ok(json!({"packet":packet,"binding":binding,"seconds":start.elapsed().as_secs_f64()}))
+            // Independent label-free pre-score observer. The frozen store must
+            // remain unchanged; this overhead is not operation/MCP latency.
+            let observer_start = Instant::now();
+            let observed = block_on(engram_integration::code_candidates::collect(
+                &provider,
+                &request,
+                &scope,
+                &requester,
+                &provider
+                    .code_configuration()
+                    .ok_or("missing code config")?
+                    .effective,
+            ))?;
+            let observer_seconds = observer_start.elapsed().as_secs_f64();
+            let candidates:Vec<_>=observed.candidates.iter().map(|c| {
+                let code=c.parent.code.as_ref().expect("resolved code parent");
+                json!({"parentUnitId":c.segment.parent_unit_id,"segmentId":c.segment.id,
+                    "path":code.file.path,"anchor":c.parent.location.as_ref().and_then(|l|l.anchor.as_ref()),
+                    "category":c.segment.source_category,"declarationRange":code.declaration_range,
+                    "sourceHash":code.source_hash,"generation":code.generation,"ranges":c.segment.ranges,
+                    "fusionScore":c.fusion_score})
+            }).collect();
+            let start = Instant::now();
+            let packet = block_on(provider.code_evidence(&request, &scope, &requester))?;
+            let seconds = start.elapsed().as_secs_f64();
+            let revision = block_on(
+                provider
+                    .code_segments()
+                    .ok_or("missing segment authority")?
+                    .code_index_revision(),
+            )?;
+            if revision != observed.source_revision {
+                return Err("source/index changed during evaluation observation".into());
+            }
+            if packet.diagnostics.candidate_counts.get("fused_segments")
+                != observed.candidate_counts.get("fused_segments")
+            {
+                return Err("observer/operation candidate inventories differ".into());
+            }
+            Ok(json!({"packet":packet,"binding":binding,"seconds":seconds,
+                "observerSeconds":observer_seconds,"sourceRevision":revision,"candidates":candidates}))
         })();
         let value = match answer {
             Ok(value) => value,

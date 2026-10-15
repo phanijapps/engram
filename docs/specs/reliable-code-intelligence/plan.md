@@ -508,6 +508,91 @@ operation and all supported recipes honestly describe available prerequisites.
 
 ### T10: Calibration and profile validation
 
+**Execution:** Evaluation harness built and independently reviewed clean;
+26 synthetic construction tests and seven Rust evaluator tests pass. The
+actual label-free observer smoke preserves exact source bytes with local
+scoring. Derived evaluation namespace preparation is running; development
+calibration and the untouched held-out assessment have not run. This checkpoint
+does not establish quality or operational acceptance. See
+`reviews/t10-harness-adversarial-2026-10-15.md` and
+`reviews/t10-harness-quality-2026-10-15.md`.
+
+**Predeclared evaluation design (before held-out assessment):** Retain the frozen
+T0 baseline artifacts and binary. Prepare only derived namespaces in the three
+existing evaluation stores; verify corpus bytes and before/after canonical table
+digests. Compare `segmented` (balanced settings with rerank none) and `balanced`
+(the unchanged balanced profile) over identical eligible candidate orders, plus
+the separate default `fast` profile. No new parameter search or model selection
+is planned: T5 already selected query formatting on development data.
+A label-free Rust development observer collects actual eligible implementation
+parents in pre-score stable RRF order, actual operation packets and unsealed
+binding templates from the same immutable store/config. Observer overhead is
+reported separately and cannot substitute for MCP latency measurements.
+Resolve each judged unit by exact pinned path/qualified anchor/declaration ranges
+against canonical indexed metadata; ambiguous or missing identities fail the
+harness. Parent metrics use the existing `engram-eval` function through a line
+protocol example. Baseline headers are reconstructed conservatively from frozen
+canonical metadata and the original renderer contract; ambiguous headers remain
+unjudged, and only actual emitted source excerpt bytes count for range coverage.
+Every ambiguous/unmapped legacy header retains its original rank as an unjudged
+placeholder; never compress positions before top-ten MRR/nDCG/recall.
+Legacy rank metrics are historical diagnostics, never validated new-profile
+evidence. Baseline candidate/phase metrics remain unavailable.
+Development calibration uses only the 45 fixed development cases. For each
+strategy/profile, select the lowest finite f32 threshold that makes at least
+ceil(0.90 * development negative count) negative packets empty of primary items.
+The negative maximum is the largest parent strategy score among actual
+post-budget inspection primary items; no-primary negatives are rejected at every
+threshold. Any effective lane/model/authority failure (apart from the explicitly historical
+`code_sources` unavailability diagnostic), reindex requirement, wrong strategy/state or CE
+fallback aborts fitting instead of counting as a rejected negative. Candidates
+are the least finite f32 (-MAX, which admits every finite score) and nextUp-f32
+values above distinct finite negative maxima; equal scores are rejected together
+only above the tie. Signed zero/subnormal values follow f32 nextUp semantics.
+Overflowing nextUp values are not admissible thresholds; if no finite threshold
+meets the fixed negative denominator, fitting fails without dropping cases. No arbitrary grid or held-out
+feedback is used; the least restrictive qualifying threshold preserves the most
+ranked positive candidates. Seal the actual binding template using the Rust
+artifact sealer and the digest of development labels in fixed query order.
+Offline fit diagnostics are explicitly inspection metrics; rerun the real
+operation with immutable installed calibration to measure validated development
+metrics. If any input/identity/baseline fails validation, do not advance.
+Require the exact calibrated development case inventory and at least 14 of
+the fixed 15 negatives to return both insufficient status and empty primary
+items for every variant. Record the actual counts and independently recompute
+them before freezing; validated artifact IDs alone do not satisfy this check.
+Then persist a freeze file binding executable, configuration, calibration,
+manifest, model identities and runner hashes before semantic selection/use of held-out queries.
+Combined label-file bytes are hash-verified as an opaque envelope in all phases;
+only the selected split's judgments are traversed or source-range verified.
+Development never traverses held-out queries/judgments. The freeze additionally
+binds the resolved assessment/base roots, exact runtime artifact/store path sets,
+and one fixed assessment marker, plus logical persisted rows (including vector shadow
+blobs) and the actual Tantivy lexical file/directory inventory (hash/length for
+every regular file, metadata and namespace marker). Only the installed Tantivy
+0.22.1 transient `.tantivy-writer.lock`/`.tantivy-meta.lock` names are excluded;
+unknown files and additions/removals change the freeze. Symlinks/nonregular
+lexical entries are rejected. These inputs are bound for baseline and new stores; verify these before label release and after
+assessment, independently of SQLite WAL/checkpoint byte layout.
+Every variant must retain the exact case inventory and succeed, including
+baseline startup/warm-up; a failed baseline or fast run invalidates the overall
+assessment even if balanced positive scores pass. An uncorrelated observer
+transport becomes poisoned on timeout, EOF, write failure or malformed output;
+close/reap it before restarting for another case so late replies cannot shift
+query labels. Failed cases remain in their fixed denominator.
+Checkpoint failed cases and any rejected complete responses before metric
+processing, teardown or restart; retain stderr from every child, including
+failed replacement construction.
+One untouched held-out assessment runs baseline/segmented/balanced/fast with no
+retuning. Record actual packets, candidate order, per-query ranks/excerpts,
+macro/per-repo metrics, negatives and paired MRR/nDCG/range coverage. A failed
+quality gate leaves the feature NotShipped; it does not authorize a revised
+threshold against the same held-out labels. The fixed held-out query order also
+predeclares the >=60 measured balanced MCP calls for T11 after one warm-up per
+corpus; actual host calls, not observer calls, determine warm p95. Use nearest-rank
+p95 sorted[ceil(0.95*N)-1] over all 60 measured calls; a failed/timed-out call or
+incomplete run fails the operational gate and cannot be silently excluded.
+
 **Depends on:** T0, T9
 **Mode:** goal-based scored retrieval evaluation.
 **Spec mapping:** AC10–AC11.

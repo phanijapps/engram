@@ -8,6 +8,7 @@ export {
   type NativeGraphMaintenanceApiBinding,
   type NativeMemoryApiBinding,
   type NativeProviderBinding,
+  type NativeCodeEvidenceApiBinding,
   type NativeProviderConstructor,
   type NativeRecallApiBinding,
   type NativeBeliefEngineBinding,

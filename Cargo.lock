@@ -1692,6 +1692,7 @@ name = "engram-eval"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "engram-code",
  "engram-domain",
  "engram-memory",
  "engram-runtime",
@@ -1764,6 +1765,7 @@ dependencies = [
  "engram-store-sqlite",
  "engram-store-surreal",
  "futures",
+ "libc",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
@@ -1794,6 +1796,18 @@ dependencies = [
  "engram-domain",
  "engram-runtime",
  "tokio",
+]
+
+[[package]]
+name = "engram-local-model-assets"
+version = "0.1.0"
+dependencies = [
+ "engram-runtime",
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
 ]
 
 [[package]]
@@ -1889,8 +1903,14 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "engram-domain",
+ "engram-local-model-assets",
  "engram-retrieval",
  "engram-runtime",
+ "fastembed",
+ "serde_json",
+ "sha2 0.11.0",
+ "tempfile",
+ "tokenizers",
 ]
 
 [[package]]
@@ -2001,6 +2021,7 @@ dependencies = [
  "engram-eval",
  "engram-hierarchy",
  "engram-knowledge",
+ "engram-local-model-assets",
  "engram-memory",
  "engram-procedures",
  "engram-retrieval",
@@ -2008,10 +2029,12 @@ dependencies = [
  "fastembed",
  "futures",
  "rusqlite",
+ "serde",
  "serde_json",
  "sha2 0.11.0",
  "sqlite-vec",
  "tempfile",
+ "tokenizers",
 ]
 
 [[package]]

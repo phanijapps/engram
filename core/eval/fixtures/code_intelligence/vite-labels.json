@@ -1,0 +1,796 @@
+[
+  {
+    "id": "vite-h01",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How are environment values exposed to browser code filtered, and which source wins when a file value conflicts with a value already present in the running process?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/env.ts",
+        "qualifiedAnchor": "loadEnv",
+        "startByte": 1077,
+        "endByte": 3637,
+        "requiredRanges": [
+          {
+            "startByte": 2936,
+            "endByte": 3622
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c34fe179f16534f2e50d0efa5466c44a6c910c51786af8708ad4e3302dab77fd"
+      }
+    ],
+    "rationale": "Prefix filtering precedes process-environment overwrite.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h02",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does the development server decide whether a filesystem path may be read when strict file access is enabled?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/middlewares/static.ts",
+        "qualifiedAnchor": "isFileLoadingAllowed",
+        "startByte": 9624,
+        "endByte": 10876,
+        "requiredRanges": [
+          {
+            "startByte": 9714,
+            "endByte": 10875
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "ec7b44a627a5f7ce82a11f7852a5e0aac2a75028636df99ce6fedbc416a2d14b"
+      }
+    ],
+    "rationale": "Rejects alias, colon and deny patterns before safe-module and allowed-directory checks.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h03",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How are special browser requests for files outside the project root converted into filesystem-root requests, and how is denied access handled?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/middlewares/static.ts",
+        "qualifiedAnchor": "serveRawFsMiddleware",
+        "startByte": 6200,
+        "endByte": 7583,
+        "requiredRanges": [
+          {
+            "startByte": 6861,
+            "endByte": 7538
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "ec7b44a627a5f7ce82a11f7852a5e0aac2a75028636df99ce6fedbc416a2d14b"
+      }
+    ],
+    "rationale": "Decodes the special URL, rewrites its path and handles the denied-file error.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h04",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does the asset lookup recognize a public-directory file while preventing a requested path from escaping that directory?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/publicDir.ts",
+        "qualifiedAnchor": "checkPublicFile",
+        "startByte": 916,
+        "endByte": 1755,
+        "requiredRanges": [
+          {
+            "startByte": 1169,
+            "endByte": 1754
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "7dbab4ea10633ac59784efde5d42aac88d78e1eb36c00c756275080295c25ea0"
+      }
+    ],
+    "rationale": "Uses the public-file inventory or normalized-path containment before checking the filesystem.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h05",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does workspace discovery walk upward from a project directory and stop at a workspace marker, with a fallback when it reaches the filesystem root?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/searchRoot.ts",
+        "qualifiedAnchor": "searchForWorkspaceRoot",
+        "startByte": 2132,
+        "endByte": 2537,
+        "requiredRanges": [
+          {
+            "startByte": 2244,
+            "endByte": 2536
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "268985d5ba5eb2cc8e3dc98bfaecfd554560766306824046008c88afc011b8a6"
+      }
+    ],
+    "rationale": "Checks workspace markers, recursively ascends and returns the fallback at the filesystem root.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h06",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How are simultaneous requests to transform the same module reused, and how is an in-flight request replaced after module invalidation?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/transformRequest.ts",
+        "qualifiedAnchor": "transformRequest",
+        "startByte": 2312,
+        "endByte": 4931,
+        "requiredRanges": [
+          {
+            "startByte": 3702,
+            "endByte": 4450
+          },
+          {
+            "startByte": 4455,
+            "endByte": 4930
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c65e70c6cea58d48c4678940529e183db65fc30ffa6c2a85361c83166a1ee4ec"
+      }
+    ],
+    "rationale": "Compares the pending timestamp with invalidation, restarts stale work and manages pending-request cleanup.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h07",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "Before reprocessing a module, how does the server prefer a recovered soft-invalidated transformation and otherwise reuse a cached result?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/transformRequest.ts",
+        "qualifiedAnchor": "getCachedTransformResult",
+        "startByte": 6282,
+        "endByte": 7067,
+        "requiredRanges": [
+          {
+            "startByte": 6508,
+            "endByte": 7066
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c65e70c6cea58d48c4678940529e183db65fc30ffa6c2a85361c83166a1ee4ec"
+      }
+    ],
+    "rationale": "Attempts soft-invalidation recovery before the direct transformation cache.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h08",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does a changed module stop propagating through an importer that explicitly accepts that dependency, while continuing through other importers?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/hmr.ts",
+        "qualifiedAnchor": "propagateUpdate",
+        "startByte": 23023,
+        "endByte": 25711,
+        "requiredRanges": [
+          {
+            "startByte": 24835,
+            "endByte": 25213
+          },
+          {
+            "startByte": 25536,
+            "endByte": 25711
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "70382e5c26bb2369d7385a7a7155b88081551061906d167af4e67a57e4b1c1a2"
+      }
+    ],
+    "rationale": "Accepted dependencies establish boundaries; other importers are traversed recursively.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h09",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How are hot-update dependency arguments read as quoted names or arrays, and why are interpolated template arguments rejected?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/hmr.ts",
+        "qualifiedAnchor": "lexAcceptedHmrDeps",
+        "startByte": 29319,
+        "endByte": 32205,
+        "requiredRanges": [
+          {
+            "startByte": 29639,
+            "endByte": 32205
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "70382e5c26bb2369d7385a7a7155b88081551061906d167af4e67a57e4b1c1a2"
+      }
+    ],
+    "rationale": "The state machine recognizes literal arguments and rejects template interpolation.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h10",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "When importing a package by its root name, how are export mappings, configured entry fields, the main field, and default entry filenames prioritized?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/plugins/resolve.ts",
+        "qualifiedAnchor": "resolvePackageEntry",
+        "startByte": 29122,
+        "endByte": 31703,
+        "requiredRanges": [
+          {
+            "startByte": 29532,
+            "endByte": 30679
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "401f6fa84c7040d618c7e3dd91f66bc91221ed84fb33f6499593f6557f6351fb"
+      }
+    ],
+    "rationale": "Exports take priority over configured fields, main and default index entries.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h11",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does package resolution block a nested import when the package export map does not expose that subpath?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/plugins/resolve.ts",
+        "qualifiedAnchor": "resolveDeepImport",
+        "startByte": 33063,
+        "endByte": 35014,
+        "requiredRanges": [
+          {
+            "startByte": 33492,
+            "endByte": 34297
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "401f6fa84c7040d618c7e3dd91f66bc91221ed84fb33f6499593f6557f6351fb"
+      }
+    ],
+    "rationale": "An unexposed export-map path is rejected before filesystem fallback.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h12",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How is a variable-based dynamic import converted into a module glob expression with a normalized path relative to the importing file?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/plugins/dynamicImportVars.ts",
+        "qualifiedAnchor": "transformDynamicImport",
+        "startByte": 3220,
+        "endByte": 4753,
+        "requiredRanges": [
+          {
+            "startByte": 4045,
+            "endByte": 4752
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "6a1901ceee651ceb5052a4d89c07a42a51ff1518843d8a7afd69837527e7bb57"
+      }
+    ],
+    "rationale": "Normalizes the parsed pattern and constructs the module-glob expression.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h13",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "What rules decide whether an asset becomes embedded data instead of a separate output file, including explicit URL flags, entry files, SVG fragments and size limits?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/plugins/asset.ts",
+        "qualifiedAnchor": "shouldInline",
+        "startByte": 22935,
+        "endByte": 24099,
+        "requiredRanges": [
+          {
+            "startByte": 23173,
+            "endByte": 24098
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "84ef4eb7134ad94e873616b6109d2539996cec533a801525a0538900e1f980c3"
+      }
+    ],
+    "rationale": "Explicit controls and build checks precede extension, size and Git-LFS checks.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h14",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does a web-worker source become a bundle whose entry code is saved as an output asset?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/plugins/worker.ts",
+        "qualifiedAnchor": "workerFileToUrl",
+        "startByte": 14649,
+        "endByte": 15085,
+        "requiredRanges": [
+          {
+            "startByte": 14748,
+            "endByte": 15084
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "a67ed97ce04bec464d88682f20a11a31c8a8f8b65a55f2f3d0039aada2a7a429"
+      }
+    ],
+    "rationale": "Bundles the worker entry and saves its filename and source in the output-asset inventory.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-h15",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does a development proxy rule choose between regular-expression matching and simple URL-prefix matching?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/middlewares/proxy.ts",
+        "qualifiedAnchor": "createProxyContextMatcher",
+        "startByte": 2373,
+        "endByte": 2602,
+        "requiredRanges": [
+          {
+            "startByte": 2453,
+            "endByte": 2601
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "8e24c22f2ce42912dbc4768138661430389ae0bf25976263a018b428a0e14aa6"
+      }
+    ],
+    "rationale": "A leading caret selects regular-expression matching; other rules use a prefix.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-d01",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "Which environment files are considered for a selected mode, in what order, and what happens when environment-file loading is disabled?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/env.ts",
+        "qualifiedAnchor": "getEnvFilesForMode",
+        "startByte": 575,
+        "endByte": 939,
+        "requiredRanges": [
+          {
+            "startByte": 660,
+            "endByte": 938
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c34fe179f16534f2e50d0efa5466c44a6c910c51786af8708ad4e3302dab77fd"
+      }
+    ],
+    "rationale": "Enumerates default, local, mode and mode-local files; a disabled directory yields an empty list.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-d02",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "What prevents a configuration from exposing every process environment variable to the browser by using an empty exposure prefix?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/env.ts",
+        "qualifiedAnchor": "resolveEnvPrefix",
+        "startByte": 3646,
+        "endByte": 4214,
+        "requiredRanges": [
+          {
+            "startByte": 3724,
+            "endByte": 3928
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c34fe179f16534f2e50d0efa5466c44a6c910c51786af8708ad4e3302dab77fd"
+      }
+    ],
+    "rationale": "An empty prefix produces a configuration error.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-d03",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How is the in-memory inventory of public-directory files built, and what happens if recursive scanning encounters a symlink-specific error?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/publicDir.ts",
+        "qualifiedAnchor": "initPublicFiles",
+        "startByte": 327,
+        "endByte": 793,
+        "requiredRanges": [
+          {
+            "startByte": 423,
+            "endByte": 792
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "7dbab4ea10633ac59784efde5d42aac88d78e1eb36c00c756275080295c25ea0"
+      }
+    ],
+    "rationale": "Recursive scanning handles the symlink sentinel and caches relative filenames.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-d04",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How does the project locate the nearest ancestor containing a package manifest and fall back if no ancestor has one?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/searchRoot.ts",
+        "qualifiedAnchor": "searchForPackageRoot",
+        "startByte": 1796,
+        "endByte": 2071,
+        "requiredRanges": [
+          {
+            "startByte": 1884,
+            "endByte": 2070
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "268985d5ba5eb2cc8e3dc98bfaecfd554560766306824046008c88afc011b8a6"
+      }
+    ],
+    "rationale": "Returns the first manifest directory, otherwise ascends and eventually returns the fallback.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-d05",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How does a hot-reload read recover when an editor save initially produces an empty file buffer?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/hmr.ts",
+        "qualifiedAnchor": "readModifiedFile",
+        "startByte": 32956,
+        "endByte": 33421,
+        "requiredRanges": [
+          {
+            "startByte": 33021,
+            "endByte": 33420
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "70382e5c26bb2369d7385a7a7155b88081551061906d167af4e67a57e4b1c1a2"
+      }
+    ],
+    "rationale": "Polls modification time in ten-millisecond intervals up to ten attempts, then rereads.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-d06",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "When modules disappear from the graph, how are their hot-update timestamps refreshed and their URLs announced to clients?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/server/hmr.ts",
+        "qualifiedAnchor": "handlePrunedModules",
+        "startByte": 28409,
+        "endByte": 28955,
+        "requiredRanges": [
+          {
+            "startByte": 28690,
+            "endByte": 28954
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "70382e5c26bb2369d7385a7a7155b88081551061906d167af4e67a57e4b1c1a2"
+      }
+    ],
+    "rationale": "Resets module timestamps and invalidation state, then sends a prune message.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-d07",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How are imports of empty CSS-only output chunks removed without shifting generated code positions, including chained CommonJS requires?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/plugins/css.ts",
+        "qualifiedAnchor": "getEmptyChunkReplacer",
+        "startByte": 45900,
+        "endByte": 47181,
+        "requiredRanges": [
+          {
+            "startByte": 46348,
+            "endByte": 47180
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "08f5807652fca68622a203c0a87d7617b1daeb8cf3a9ecb16f919f4983d15b2a"
+      }
+    ],
+    "rationale": "Uses padded comments and preserves necessary commas and semicolons.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-d08",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "After CSS files are combined, how are imports moved to the beginning in original order and duplicate character-set directives reduced to the first one?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/plugins/css.ts",
+        "qualifiedAnchor": "hoistAtRules",
+        "startByte": 78064,
+        "endByte": 79017,
+        "requiredRanges": [
+          {
+            "startByte": 78313,
+            "endByte": 79016
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "08f5807652fca68622a203c0a87d7617b1daeb8cf3a9ecb16f919f4983d15b2a"
+      }
+    ],
+    "rationale": "Moves imports in order and retains only the first character-set directive.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-d09",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How are default, namespace and named imports rewritten when an imported dependency is CommonJS rather than a native browser module?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/plugins/importAnalysis.ts",
+        "qualifiedAnchor": "transformCjsImport",
+        "startByte": 35005,
+        "endByte": 38927,
+        "requiredRanges": [
+          {
+            "startByte": 35933,
+            "endByte": 38927
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "7081e22918ae078c2b3793de23eabe546df1fe6109dddd2683428d5a36b961f5"
+      }
+    ],
+    "rationale": "Generates a shared module import and type-specific interop assignments.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-d10",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How does package metadata turn its side-effect declaration into a file filter, especially an empty list and filename patterns without slashes?",
+    "requiredUnits": [
+      {
+        "path": "packages/vite/src/node/packages.ts",
+        "qualifiedAnchor": "loadPackageData",
+        "startByte": 4990,
+        "endByte": 6604,
+        "requiredRanges": [
+          {
+            "startByte": 5206,
+            "endByte": 6227
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "6563cc7314120ea15c25a68731c4f1e6e3172325ec97255344d92fada81586f9"
+      }
+    ],
+    "rationale": "Boolean, empty-list and glob-pattern cases produce different side-effect predicates.",
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-hn01",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "Within this build tool's development server, how are OAuth user roles checked before serving project source files?",
+    "requiredUnits": [],
+    "rationale": "Filesystem authorization exists, but the inspected production corpus does not implement OAuth role authorization.",
+    "searchEvidence": {
+      "pattern": "OAuth|oauth|RBAC|role-based|permission role",
+      "exitCode": 1,
+      "matches": []
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-hn02",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does this development server publish hot-update events through Redis so several server instances can broadcast the same change?",
+    "requiredUnits": [],
+    "rationale": "Hot-update channels exist, but no Redis-backed distributed broadcaster was found.",
+    "searchEvidence": {
+      "pattern": "\\bRedis\\b|\\bredis\\b|pub/sub",
+      "exitCode": 1,
+      "matches": []
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-hn03",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does this asset pipeline upload emitted build files to Amazon S3 and retry failed object uploads?",
+    "requiredUnits": [],
+    "rationale": "Asset emission exists, but no S3 upload integration was found.",
+    "searchEvidence": {
+      "pattern": "\\bS3Client\\b|\\bPutObject\\b|Amazon S3|s3://",
+      "exitCode": 1,
+      "matches": []
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-hn04",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does this environment loader decrypt encrypted configuration values using a cloud key-management service before exposing selected values to browser code?",
+    "requiredUnits": [],
+    "rationale": "Environment parsing and expansion exist, but no key-management decryption path was found.",
+    "searchEvidence": {
+      "pattern": "KMS|kms|decrypt.*env|encrypt.*env",
+      "exitCode": 1,
+      "matches": []
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-hn05",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does this build tool sandbox untrusted plugins and apply syscall restrictions before their hooks execute?",
+    "requiredUnits": [],
+    "rationale": "Plugin execution exists, but no plugin sandbox or syscall-restriction implementation was found.",
+    "searchEvidence": {
+      "pattern": "seccomp|sandbox.*plugin|plugin.*sandbox",
+      "exitCode": 1,
+      "matches": []
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-hn06",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "irrelevant_question",
+    "query": "Where does this development server roll back a PostgreSQL transaction when an application database migration fails?",
+    "requiredUnits": [],
+    "rationale": "Application database transaction and migration handling falls outside this source corpus.",
+    "searchEvidence": {
+      "pattern": "BEGIN TRANSACTION|postgres|PostgreSQL|rollback.*transaction",
+      "exitCode": 1,
+      "matches": []
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-hn07",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does this build tool cryptographically sign its output manifest and verify that signature before a client uses the assets?",
+    "requiredUnits": [],
+    "rationale": "Manifest generation exists, but no cryptographic manifest-signing or verification path was found.",
+    "searchEvidence": {
+      "pattern": "cosign|sigstore|sign.*manifest|manifest.*signature",
+      "exitCode": 1,
+      "matches": []
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-dn01",
+    "split": "development",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does this development server negotiate Brotli encoding and compress source-file responses according to the browser's accepted encodings?",
+    "requiredUnits": [],
+    "rationale": "Static serving exists, but no production Brotli response-negotiation implementation was found.",
+    "searchEvidence": {
+      "pattern": "brotli|Brotli|accept-encoding",
+      "exitCode": 1,
+      "matches": []
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-dn02",
+    "split": "development",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does this server enforce a token-bucket request quota for each client IP before transforming modules?",
+    "requiredUnits": [],
+    "rationale": "No application-level token-bucket transform-request quota was found. A per-client shipment map is unrelated.",
+    "searchEvidence": {
+      "pattern": "per[- ](client|IP)|token[- ]bucket|request.*rate.?limit",
+      "exitCode": 0,
+      "matches": [
+        "packages/vite/src/node/server/bundledDev.ts:370: per-client ship map, so later chunks may omit a module only if the client"
+      ],
+      "excludedMatchReason": "Bundled-development delivery tracking is not rate limiting."
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-dn03",
+    "split": "development",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does this build tool start an isolated Docker container for every plugin and destroy it when the build finishes?",
+    "requiredUnits": [],
+    "rationale": "No plugin-container lifecycle exists in the inspected corpus. The Docker mention concerns proxy-related transport timeout.",
+    "searchEvidence": {
+      "pattern": "Docker|docker|container.*isolat",
+      "exitCode": 0,
+      "matches": [
+        "packages/vite/src/shared/moduleRunnerTransport.ts:318: proxy(nginx, docker) hmr ws maybe caused timeout"
+      ],
+      "excludedMatchReason": "Transport timeout comment does not implement container isolation."
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-dn04",
+    "split": "development",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does this environment subsystem retrieve rotating secrets from HashiCorp Vault and renew their leases during development?",
+    "requiredUnits": [],
+    "rationale": "No Vault integration or rotating-secret lease management was found.",
+    "searchEvidence": {
+      "pattern": "HashiCorp|Vault|vault|secret.*rotat",
+      "exitCode": 1,
+      "matches": []
+    },
+    "corpus": "vite"
+  },
+  {
+    "id": "vite-dn05",
+    "split": "development",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does this development proxy decode protocol-buffer messages and bridge gRPC requests into browser-compatible JSON calls?",
+    "requiredUnits": [],
+    "rationale": "HTTP proxying exists, but no gRPC/protocol-buffer JSON bridge was found.",
+    "searchEvidence": {
+      "pattern": "grpc|gRPC|protobuf",
+      "exitCode": 1,
+      "matches": []
+    },
+    "corpus": "vite"
+  }
+]

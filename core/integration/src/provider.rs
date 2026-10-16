@@ -20,8 +20,9 @@ use engram_knowledge::{
 };
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
-use engram_retrieval::{RetrievalIndex, VectorIndex};
+use engram_retrieval::{RerankScorer, RetrievalIndex, VectorIndex};
 use engram_runtime::{CoreError, CoreResult};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::knowledge_query::KnowledgeQuery;
@@ -67,6 +68,9 @@ pub struct EngramProvider {
     hierarchy: Option<Arc<dyn HierarchyRepository>>,
     retrieval: Option<Arc<dyn RetrievalIndex>>,
     vectors: Option<Arc<dyn VectorIndex>>,
+    code_vectors: Option<Arc<dyn VectorIndex>>,
+    code_scorer: Option<Arc<dyn RerankScorer>>,
+    code_calibration: Option<engram_domain::CodeCalibrationArtifact>,
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
@@ -82,9 +86,17 @@ pub struct EngramProvider {
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     schema_version: String,
     adapter_version: String,
+    code_configuration: Option<crate::code_configuration::ResolvedCodeConfig>,
+    code_retrieval_lanes: BTreeMap<String, Arc<dyn RetrievalIndex>>,
 }
 
 impl EngramProvider {
+    pub(crate) fn code_retrieval_lane(
+        &self,
+        lane: engram_retrieval::CodeRetrievalLane,
+    ) -> Option<Arc<dyn RetrievalIndex>> {
+        self.code_retrieval_lanes.get(lane.as_str()).cloned()
+    }
     /// Backfills bounded retrieval embeddings; local code source guards are
     /// shared by Rust embedders and every transport.
     pub async fn backfill_embeddings(
@@ -138,7 +150,9 @@ impl EngramProvider {
         config.validate().map_err(|e| CoreError::InvalidRequest {
             reason: format!("configuration validation failed: {e}"),
         })?;
-        Ok(Self::empty())
+        let mut provider = Self::empty();
+        provider.code_configuration = Some(config.resolve_code_configuration()?);
+        Ok(provider)
     }
 
     /// Opens a provider from configuration, selecting the backend from the
@@ -231,6 +245,11 @@ impl EngramProvider {
         }
     }
 
+    /// Immutable settings admitted during startup, including origin and hash.
+    pub fn code_configuration(&self) -> Option<&crate::code_configuration::ResolvedCodeConfig> {
+        self.code_configuration.as_ref()
+    }
+
     /// Returns the capability report for this provider.
     pub fn capabilities(&self) -> &CapabilityReport {
         &self.capabilities
@@ -304,6 +323,31 @@ impl EngramProvider {
     /// Returns the vector index handle if supported.
     pub fn vectors(&self) -> Option<&Arc<dyn VectorIndex>> {
         self.vectors.as_ref()
+    }
+    /// Dedicated representation-keyed code targets; canonical/document vectors
+    /// cannot satisfy readiness or donate prefix-limited legacy embeddings.
+    pub fn code_vectors(&self) -> Option<&Arc<dyn VectorIndex>> {
+        self.code_vectors.as_ref()
+    }
+    /// Installs an immutable operator-supplied development calibration on this
+    /// provider instance. Requests cannot supply or replace the artifact.
+    pub fn with_code_calibration(
+        mut self,
+        artifact: engram_domain::CodeCalibrationArtifact,
+    ) -> Self {
+        self.code_calibration = Some(artifact);
+        self
+    }
+
+    pub fn code_calibration(&self) -> Option<&engram_domain::CodeCalibrationArtifact> {
+        self.code_calibration.as_ref()
+    }
+
+    pub fn code_scorer(&self) -> Option<&Arc<dyn RerankScorer>> {
+        self.code_scorer.as_ref()
+    }
+    pub fn code_segments(&self) -> Option<&dyn engram_knowledge::CodeSegmentRepository> {
+        self.knowledge.as_ref().and_then(|k| k.code_segments())
     }
 
     /// Returns the migration service handle if supported.
@@ -632,6 +676,9 @@ impl EngramProvider {
             hierarchy: None,
             retrieval: None,
             vectors: None,
+            code_vectors: None,
+            code_scorer: None,
+            code_calibration: None,
             migration: None,
             embedding_provider: None,
             provenance: None,
@@ -647,6 +694,8 @@ impl EngramProvider {
             graph_cache: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
+            code_configuration: None,
+            code_retrieval_lanes: BTreeMap::new(),
         }
     }
 }
@@ -671,6 +720,9 @@ pub struct EngramProviderBuilder {
     hierarchy: Option<Arc<dyn HierarchyRepository>>,
     retrieval: Option<Arc<dyn RetrievalIndex>>,
     vectors: Option<Arc<dyn VectorIndex>>,
+    code_vectors: Option<Arc<dyn VectorIndex>>,
+    code_scorer: Option<Arc<dyn RerankScorer>>,
+    code_calibration: Option<engram_domain::CodeCalibrationArtifact>,
     migration: Option<Arc<dyn MigrationService>>,
     embedding_provider: Option<Arc<dyn EmbeddingProvider>>,
     provenance: Option<Arc<dyn ProvenanceQuery>>,
@@ -686,6 +738,8 @@ pub struct EngramProviderBuilder {
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     schema_version: String,
     adapter_version: String,
+    code_configuration: Option<crate::code_configuration::ResolvedCodeConfig>,
+    code_retrieval_lanes: BTreeMap<String, Arc<dyn RetrievalIndex>>,
 }
 
 impl EngramProviderBuilder {
@@ -704,6 +758,9 @@ impl EngramProviderBuilder {
             hierarchy: None,
             retrieval: None,
             vectors: None,
+            code_vectors: None,
+            code_scorer: None,
+            code_calibration: None,
             migration: None,
             embedding_provider: None,
             provenance: None,
@@ -719,7 +776,28 @@ impl EngramProviderBuilder {
             graph_cache: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
+            code_configuration: None,
+            code_retrieval_lanes: BTreeMap::new(),
         }
+    }
+
+    pub fn code_configuration(
+        mut self,
+        config: crate::code_configuration::ResolvedCodeConfig,
+    ) -> Self {
+        self.code_configuration = Some(config);
+        self
+    }
+
+    /// Retains an existing named lane for independently bounded code retrieval.
+    pub fn code_retrieval_lane(
+        mut self,
+        lane: engram_retrieval::CodeRetrievalLane,
+        index: Arc<dyn RetrievalIndex>,
+    ) -> Self {
+        self.code_retrieval_lanes
+            .insert(lane.as_str().into(), index);
+        self
     }
 
     /// Attaches the memory repository handle.
@@ -785,6 +863,19 @@ impl EngramProviderBuilder {
     /// Attaches the vector index handle.
     pub fn vectors(mut self, handle: Arc<dyn VectorIndex>) -> Self {
         self.vectors = Some(handle);
+        self
+    }
+    pub fn code_vectors(mut self, handle: Arc<dyn VectorIndex>) -> Self {
+        self.code_vectors = Some(handle);
+        self
+    }
+    pub fn code_calibration(mut self, artifact: engram_domain::CodeCalibrationArtifact) -> Self {
+        self.code_calibration = Some(artifact);
+        self
+    }
+
+    pub fn code_scorer(mut self, handle: Arc<dyn RerankScorer>) -> Self {
+        self.code_scorer = Some(handle);
         self
     }
 
@@ -887,13 +978,24 @@ impl EngramProviderBuilder {
         // well as backend recipes. Vector storage alone is not code embedding.
         self.capabilities.code_embeddings = crate::embedding_backfill::capability(
             self.embedding_provider.as_deref(),
+            self.code_vectors.as_deref(),
             self.vectors.as_deref(),
             self.knowledge_query.is_some(),
             self.knowledge
                 .as_ref()
-                .is_some_and(|k| k.code_sources().is_some()),
+                .is_some_and(|k| k.code_sources().is_some() && k.code_segments().is_some()),
+            &self
+                .code_configuration
+                .as_ref()
+                .map(|c| c.effective.index.clone())
+                .unwrap_or_else(|| {
+                    engram_retrieval::CodeIntelligenceConfig::for_profile(
+                        engram_domain::CodeIntelligenceProfile::BalancedV1,
+                    )
+                    .index
+                }),
         );
-        EngramProvider {
+        let mut provider = EngramProvider {
             capabilities: self.capabilities,
             memory: self.memory,
             knowledge: self.knowledge,
@@ -906,6 +1008,9 @@ impl EngramProviderBuilder {
             hierarchy: self.hierarchy,
             retrieval: self.retrieval,
             vectors: self.vectors,
+            code_vectors: self.code_vectors,
+            code_scorer: self.code_scorer,
+            code_calibration: self.code_calibration,
             migration: self.migration,
             embedding_provider: self.embedding_provider,
             provenance: self.provenance,
@@ -921,7 +1026,19 @@ impl EngramProviderBuilder {
             graph_cache: self.graph_cache,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
-        }
+            code_configuration: self.code_configuration,
+            code_retrieval_lanes: self.code_retrieval_lanes,
+        };
+        let (evidence, scorer) = crate::code_evidence::readiness::states(&provider);
+        provider.capabilities.code_evidence = evidence;
+        provider.capabilities.code_scorer = scorer;
+        provider.observability = provider.observability.take().map(|inner| {
+            Arc::new(crate::observability::ProviderObservability::new(
+                inner,
+                provider.capabilities.clone(),
+            )) as Arc<dyn Observability>
+        });
+        provider
     }
 }
 
@@ -1204,5 +1321,13 @@ mod tests {
             provider.observability().is_some(),
             "observability handle must be attached"
         );
+        let snapshot = futures::executor::block_on(provider.observability().unwrap().diagnostics())
+            .expect("diagnostics");
+        assert_eq!(snapshot.capabilities, *provider.capabilities());
+        assert!(!snapshot.capabilities.code_evidence.is_supported());
+        assert!(!snapshot.capabilities.code_scorer.is_supported());
+        assert_eq!(snapshot.embedding_config.model, "test_model");
+        assert_eq!(snapshot.schema_version, "2026.01");
+        assert_eq!(snapshot.adapter_version, "0.1.0");
     }
 }

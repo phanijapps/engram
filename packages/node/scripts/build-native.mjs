@@ -25,12 +25,12 @@ if (!artifact) {
   throw new Error(`unsupported platform: ${process.platform}`);
 }
 
-console.log(`cargo build --release -p engram-node --features fastembed (${process.platform})`);
+console.log(`cargo build --release -p engram-node --features fastembed,cross-encoder-rerank (${process.platform})`);
 // No shell, no interpolation: argv is a fixed literal. The demo enables the
 // `fastembed` feature so NativeRetrievalEngine (semantic retrieval) is included.
 execFileSync(
   "cargo",
-  ["build", "--release", "-p", "engram-node", "--features", "fastembed"],
+  ["build", "--release", "-p", "engram-node", "--features", "fastembed,cross-encoder-rerank"],
   {
     stdio: "inherit",
     cwd: repoRoot,

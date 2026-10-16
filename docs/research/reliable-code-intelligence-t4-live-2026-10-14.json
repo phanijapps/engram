@@ -1,0 +1,98 @@
+{
+  "checkpoint": "T4 structural token segments",
+  "qualityComparisonAvailable": false,
+  "runState": "complete",
+  "binarySha256": "cfbeed5a757caf8deb818de3c7e0b1d23265bc90ce4439d60bcb4a8af26e1877",
+  "calls": [
+    {
+      "tool": "capability_report",
+      "seconds": 0.5015944260012475,
+      "failed": false,
+      "text": "Server: engram-mcp 0.1.0\nCapabilities:\n  memory: supported\n  code_embeddings: supported\n  knowledge: supported\n  code_source_preservation: supported\n  graph: supported\n  knowledge_query: supported\n  lexical_feed: supported\n  recall: supported\n  consolidation: supported\n  batch: supported\n  ontology: supported\n  taxonomy: supported\n  beliefs: supported\n  procedures: supported\n  hierarchy: supported\n  identity: supported\n  vector: supported",
+      "response": {
+        "id": 1,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "Server: engram-mcp 0.1.0\nCapabilities:\n  memory: supported\n  code_embeddings: supported\n  knowledge: supported\n  code_source_preservation: supported\n  graph: supported\n  knowledge_query: supported\n  lexical_feed: supported\n  recall: supported\n  consolidation: supported\n  batch: supported\n  ontology: supported\n  taxonomy: supported\n  beliefs: supported\n  procedures: supported\n  hierarchy: supported\n  identity: supported\n  vector: supported",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "scan_repo",
+      "seconds": 0.4332053210018785,
+      "failed": false,
+      "text": "ScanSummary { scanned: 2, ingested: 1, unchanged: 0, skipped: 0, entities: 3, relationships: 1, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 9 chunks",
+      "response": {
+        "id": 2,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "ScanSummary { scanned: 2, ingested: 1, unchanged: 0, skipped: 0, entities: 3, relationships: 1, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 9 chunks",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "reindex",
+      "seconds": 0.0012502549943746999,
+      "failed": false,
+      "text": "reindex: embedded 0 chunks (limit 1024) (0 code chunks)\nbacklog drained",
+      "response": {
+        "id": 3,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "reindex: embedded 0 chunks (limit 1024) (0 code chunks)\nbacklog drained",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "search",
+      "seconds": 0.02136130000144476,
+      "failed": false,
+      "text": "pub fn enormous() { \u2014 engram-mcp-scan, a.rs [graph+vector:3.00, rrf=0.03 (norm:1.00)]\npub fn enormous() {\n let mut total = 0;\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += \n... [truncated]",
+      "response": {
+        "id": 4,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "pub fn enormous() { \u2014 engram-mcp-scan, a.rs [graph+vector:3.00, rrf=0.03 (norm:1.00)]\npub fn enormous() {\n let mut total = 0;\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += 1; // Unicode \u03c0 \ud83e\udd80 indexing context\n total += \n... [truncated]",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "vectorsEnabled": true,
+  "sourceBytes": 12809,
+  "sourceCharacters": 11769,
+  "canonicalParents": 1,
+  "derivedSegments": 9,
+  "derivedVectors": 9,
+  "completeCanonicalByteCover": true,
+  "tailEmbedded": true,
+  "queryReturnedCanonicalParent": true,
+  "legacyOrSnapshotDonorsUsed": false,
+  "singleFileLayoutPreserved": true,
+  "stderr": [
+    "engram-mcp: vector bootstrap checkpoint \u2014 knowledge_store=true, vectors_path=\"/tmp/engram-t4-live-nnnw5un4/store/engram_data.db\"",
+    "engram-mcp: scan_repository done: ScanSummary { scanned: 2, ingested: 1, unchanged: 0, skipped: 0, entities: 3, relationships: 1, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }",
+    "engram-mcp: lexical delta feed done (3 entries)",
+    "engram-mcp: embed done (9 embedded, 0 pending)",
+    "engram-mcp: reindex done (0 embedded, 0 pending) in 0.0s"
+  ]
+}

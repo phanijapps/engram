@@ -3,6 +3,11 @@ use super::chunking::ChunkCandidate;
 use engram_domain::{CodeByteRange, CodeChunkRole, CodeParseQuality};
 use engram_runtime::{CoreError, CoreResult};
 
+/// Versioned normalized coverage contract, shared by canonical ingestion and
+/// derived passage identity. Mapping changes must bump this marker.
+pub const SOURCE_COVERAGE_FINGERPRINT: &str =
+    "source-v1/ts-0.26/mapping-2026-10-15/context-1/attached-callable-comments-1/snapshot-65536";
+
 #[derive(Debug, Clone)]
 pub struct CoveredCodeCandidate {
     pub candidate: ChunkCandidate,

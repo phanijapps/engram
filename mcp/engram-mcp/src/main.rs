@@ -14,6 +14,7 @@
 mod app;
 mod belief;
 mod bootstrap;
+mod code_evidence;
 mod codegraph;
 mod config;
 mod dependencies;
@@ -42,7 +43,8 @@ fn main() {
         eprintln!(
             "usage: engram-mcp --storage <path> [--project <name>] \
              [--org <name> --domain <name> [--subdomain <name>]] \
-             [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
+             [--ontology <path>] [--taxonomy <path>] [--config <code.json|toml>] \
+             [--code-calibration <artifact.json>] [--layout single|multi] \
              [--db-file <name>] [--backend sqlite|pgvector] \
              [--pg-connection-string <url>] [--tools core|full|all] [--no-vector]"
         );
@@ -801,6 +803,7 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
     registry.register(ToolRecord {
         name: "code",
         description: "Understand this codebase. ONE code-intel surface. \
+                      op=evidence: current source-grounded natural-language evidence with diagnostics. \
                       op=search: ranked code search by query text. \
                       op=context: callers/callees/community for a symbol. \
                       op=impact: blast radius + dependency path from a change. \
@@ -812,11 +815,14 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
         input_schema: json!({
             "type": "object",
             "properties": {
-                "op": { "type": "string", "enum": ["search", "context", "impact", "health", "architecture", "changed", "explore", "dependencies", "source_read", "sources"],
+                "op": { "type": "string", "enum": ["evidence", "search", "context", "impact", "health", "architecture", "changed", "explore", "dependencies", "source_read", "sources"],
                         "description": "Code intelligence operation." },
                 "repository":{"type":"string","description":"Repository stable key for source_read."},
                 "path":{"type":"string","description":"Normalized relative source path."},
                 "generation":{"type":"string"},"maxBytes":{"type":"integer","minimum":1,"maximum":1048576},
+                "resultLimit":{"type":"integer","minimum":1,"maximum":100},
+                "candidatesPerLane":{"type":"integer","minimum":10,"maximum":1000},
+                "evidenceTokenBudget":{"type":"integer","minimum":256,"maximum":32768},
                 "symbol": { "type": "string", "description": "Target symbol (context/impact modes)." },
                 "query": { "type": "string", "description": "Search query (explore mode)." },
                 "depth": { "type": "number", "description": "Traversal depth (default 1-2)." },
@@ -1058,6 +1064,7 @@ fn consolidated_recall(app: &App, args: &Value) -> Result<Value, ToolError> {
 fn consolidated_code(app: &App, args: &Value) -> Result<Value, ToolError> {
     let op = args["op"].as_str().unwrap_or("context");
     match op {
+        "evidence" => crate::code_evidence::evidence(app, args),
         "search" => crate::codegraph::search(
             app,
             &json!({

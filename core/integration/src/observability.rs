@@ -27,6 +27,9 @@ use serde::{Deserialize, Serialize};
 use crate::capability::CapabilityReport;
 use crate::config::EmbeddingProviderConfig;
 
+mod provider_snapshot;
+pub(crate) use provider_snapshot::ProviderObservability;
+
 /// Record counts by semantic type, derived by listing the wired concrete stores.
 ///
 /// Each field is `0` when the underlying store is unavailable or exposes no list

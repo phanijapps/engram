@@ -38,8 +38,8 @@ engram-decay = { path = "../../adapters/consolidation/decay", optional = true }
 # Reranker adapters (RFC-0019 T3/T4). MMR is a tiny pure-Rust crate, available
 # wherever sqlite recall runs (it degrades to relevance-only when no embedder
 # is wired — e.g. fastembed off). The cross-encoder adapter is opt-in via its
-# own feature; it carries no in-tree model, so construction is deferred to a
-# deployer-provided `RerankScorer` (see backlog `cross-encoder-rerank`).
+# own feature. Code evidence uses admitted offline local assets; generic recall
+# retains its existing RRF fallback until it has a separate input contract.
 engram-rerank-mmr = { path = "../../adapters/retrieval/mmr-rerank", optional = true }
 engram-rerank-cross-encoder = { path = "../../adapters/retrieval/cross-encoder-rerank", optional = true }
 engram-ingest = { path = "../../adapters/ingest", optional = true }
@@ -55,6 +55,9 @@ futures = { workspace = true, optional = true }
 # Surreal SDK needs a Tokio reactor, opened under the consumer's runtime).
 engram-store-surreal = { path = "../../adapters/surreal", optional = true }
 tokio = { version = "1", features = ["sync", "rt", "macros"], optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
@@ -88,14 +91,23 @@ sqlite = [
     "dep:engram-ingest",
     "dep:futures",
 ]
-# Cross-encoder reranker adapter (RFC-0019 T4 / D2.1c). Opt-in: the adapter is
-# constructible when a deployer wires a `RerankScorer`; no in-tree model ships
-# today (see backlog `cross-encoder-rerank`). Without this feature, selecting
-# `rerank.strategy = "cross_encoder"` logs a warning and falls back to no
-# rerank.
-cross-encoder-rerank = ["dep:engram-rerank-cross-encoder"]
+# Admitted offline code scorer. Model installation is an explicit operator action.
+# Generic recall does not inherit code pair/pool limits.
+cross-encoder-rerank = ["dep:engram-rerank-cross-encoder", "engram-rerank-cross-encoder/local-onnx"]
 # The SurrealDB backend (embedded SurrealKV). Constructs the Surreal adapter
 # cells under src/surreal/ and makes EngramProvider::open return a wired
 # provider when selected. Mutually exclusive with `sqlite` at dispatch time
 # (sqlite wins if both are enabled). Capability cells attach incrementally.
 surreal = ["dep:engram-store-surreal", "dep:tokio"]
+
+[[example]]
+name = "code_query_probe"
+required-features = ["fastembed"]
+
+[[example]]
+name = "code_candidate_probe"
+required-features = ["fastembed"]
+
+[[example]]
+name = "code_evidence_probe"
+required-features = ["fastembed", "cross-encoder-rerank"]

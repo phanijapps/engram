@@ -1,0 +1,153 @@
+{
+  "items": [
+    {
+      "parentUnitId": "unit-refund",
+      "name": "refundPayment",
+      "kind": "code",
+      "sourceCategory": "implementation",
+      "excerpts": [
+        {
+          "source": {
+            "repository": "example/reliability",
+            "path": "billing.ts",
+            "unitId": "unit-refund",
+            "sourceHash": "sha256:656c8cf223e30e90b8022b966cb9bf0d07be4aeaeb7c59941e585e7ebeffa0e0",
+            "generation": "fixture-generation-v1",
+            "representationId": "example-representation",
+            "startByte": 34,
+            "endByte": 62,
+            "indexedRevision": null
+          },
+          "text": "  return reverseCharge();\n}\n"
+        }
+      ],
+      "segments": [
+        {
+          "segmentId": "example-segment-0",
+          "sources": [
+            {
+              "repository": "example/reliability",
+              "path": "billing.ts",
+              "unitId": "unit-refund",
+              "sourceHash": "sha256:656c8cf223e30e90b8022b966cb9bf0d07be4aeaeb7c59941e585e7ebeffa0e0",
+              "generation": "fixture-generation-v1",
+              "representationId": "example-representation",
+              "startByte": 0,
+              "endByte": 34,
+              "indexedRevision": null
+            }
+          ],
+          "fusionTraces": [
+            {
+              "source": "vector",
+              "sourceRank": 1,
+              "sourceScore": 0.6,
+              "fusionStrategy": "reciprocal_rank_fusion",
+              "fusionScore": 0.02,
+              "rerankStrategy": "cross_encoder",
+              "rerankScore": 0.4
+            }
+          ],
+          "fusionScore": 0.02,
+          "rerankScore": 0.4,
+          "embeddingInput": {
+            "codeTokens": 12,
+            "contextTokens": 4,
+            "queryTokens": 0,
+            "specialTokens": 2,
+            "totalTokens": 18,
+            "truncated": false
+          },
+          "rerankInput": {
+            "codeTokens": 12,
+            "contextTokens": 4,
+            "queryTokens": 5,
+            "specialTokens": 2,
+            "totalTokens": 23,
+            "truncated": false
+          }
+        },
+        {
+          "segmentId": "example-segment-1",
+          "sources": [
+            {
+              "repository": "example/reliability",
+              "path": "billing.ts",
+              "unitId": "unit-refund",
+              "sourceHash": "sha256:656c8cf223e30e90b8022b966cb9bf0d07be4aeaeb7c59941e585e7ebeffa0e0",
+              "generation": "fixture-generation-v1",
+              "representationId": "example-representation",
+              "startByte": 34,
+              "endByte": 62,
+              "indexedRevision": null
+            }
+          ],
+          "fusionTraces": [
+            {
+              "source": "vector",
+              "sourceRank": 2,
+              "sourceScore": 0.6,
+              "fusionStrategy": "reciprocal_rank_fusion",
+              "fusionScore": 0.02,
+              "rerankStrategy": "cross_encoder",
+              "rerankScore": 0.9
+            }
+          ],
+          "fusionScore": 0.02,
+          "rerankScore": 0.9,
+          "embeddingInput": {
+            "codeTokens": 12,
+            "contextTokens": 4,
+            "queryTokens": 0,
+            "specialTokens": 2,
+            "totalTokens": 18,
+            "truncated": false
+          },
+          "rerankInput": {
+            "codeTokens": 12,
+            "contextTokens": 4,
+            "queryTokens": 5,
+            "specialTokens": 2,
+            "totalTokens": 23,
+            "truncated": false
+          }
+        }
+      ],
+      "context": [],
+      "partial": true,
+      "fusionScore": 0.02,
+      "rerankScore": 0.9
+    }
+  ],
+  "supportingUnits": [],
+  "evidenceStatus": "candidates_available",
+  "diagnostics": {
+    "configHash": "example-config-hash",
+    "configOrigins": {
+      "profile": "built-in balanced-v1"
+    },
+    "profile": "balanced-v1",
+    "requestedReranker": "cross_encoder",
+    "effectiveReranker": "cross_encoder",
+    "scorerState": "ready",
+    "scorerManifestId": "example-scorer-manifest",
+    "calibrationState": "validated",
+    "calibrationId": "example-calibration",
+    "thresholdScoreSpace": "cross_encoder",
+    "queryRepresentationId": "example-query-representation",
+    "candidateCounts": {
+      "vector": 2,
+      "lexical": 1
+    },
+    "omittedUnits": 0,
+    "omittedSegments": 0,
+    "omittedParents": 0,
+    "scoredPairs": 2,
+    "truncated": true,
+    "reindexRequired": false,
+    "phaseMs": {
+      "scoring": 1
+    }
+  },
+  "sourceFailures": []
+}

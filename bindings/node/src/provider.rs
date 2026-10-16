@@ -67,7 +67,7 @@ use crate::{decode, encode, id_field, scope_field, to_napi_error};
 /// when that capability family is not wired by the active backend.
 #[napi]
 pub struct NativeProvider {
-    inner: EngramProvider,
+    inner: Arc<EngramProvider>,
 }
 
 #[napi]
@@ -101,7 +101,9 @@ impl NativeProvider {
         } else {
             EngramProvider::open(&config).map_err(to_napi_error)?
         };
-        Ok(Self { inner: provider })
+        Ok(Self {
+            inner: Arc::new(provider),
+        })
     }
 
     /// Opens a provider from a profile file path (e.g. `semantic-engine.toml`).
@@ -113,13 +115,30 @@ impl NativeProvider {
     pub fn from_profile_file(path: String) -> Result<Self> {
         let config = EngramConfig::from_profile_file(&path).map_err(Error::from_reason)?;
         let provider = EngramProvider::open(&config).map_err(to_napi_error)?;
-        Ok(Self { inner: provider })
+        Ok(Self {
+            inner: Arc::new(provider),
+        })
     }
 
     /// Returns the capability report (19 keys) as a JSON string.
     #[napi(js_name = "capabilitiesJson")]
     pub fn capabilities_json(&self) -> Result<String> {
         encode(self.inner.capabilities())
+    }
+
+    /// Shared immutable code settings; unsupported bootstrap has no snapshot.
+    #[napi(js_name = "codeConfigurationJson")]
+    pub fn code_configuration_json(&self) -> Result<String> {
+        encode(&self.inner.code_configuration())
+    }
+
+    /// Binds trusted host authority separately from strict per-query DTOs.
+    #[napi(js_name = "requireCodeEvidenceApi")]
+    pub fn require_code_evidence_api(
+        &self,
+        context_json: String,
+    ) -> Result<crate::code_evidence::NativeCodeEvidenceApi> {
+        crate::code_evidence::NativeCodeEvidenceApi::new(self.inner.clone(), &context_json)
     }
 
     /// Backfills eligible retrieval vectors through the shared SDK operation.

@@ -1,0 +1,508 @@
+{
+  "commit": "98fda3c6d1a84244658d4425728f112303218cd7",
+  "store": "~/.engram/mem-alpha-self",
+  "vectorsEnabled": true,
+  "model": "BGE-small-en-v1.5 (cached local FastEmbed)",
+  "rubric": "Expected implementation anchors fixed before retrieval. Requested top 10; docs, plans, reviews and tests do not substitute for production implementation. Discovery is distinct from sufficient answer evidence. Normalize qualified constructor to its unique source signature. Absence probes excluded from discovery denominator. No model-generated answer-accuracy or vector-only score.",
+  "cases": [
+    {
+      "id": "locality",
+      "query": "Can switching the embedding provider send indexed source code to a remote model? Show the checks before inference.",
+      "seconds": 16.291,
+      "failed": false,
+      "headers": [
+        "## Consequences (Chunk) \u2014 phanijapps/engram, docs/adr/0024-batch-embeddings-deferred-reindex.md [lexical, raw=23.55, rrf=0.02 (norm:1.00)]",
+        "# Local code embeddings: independent review (Chunk) \u2014 phanijapps/engram, docs/specs/local-code-embeddings/reviews/2026-10-14.md [vector, raw=0.60, rrf=0.02 (norm:1.00)]",
+        "pub fn scan_repository<R>( (Chunk) \u2014 phanijapps/engram, adapters/ingest/src/scanner/mod.rs [graph, raw=11.00, rrf=0.02 (norm:1.00)]",
+        "Cursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]",
+        "### 2026-10-14 AST chunking audit (Chunk) \u2014 phanijapps/engram, docs/backlog.md [graph, raw=10.00, rrf=0.02 (norm:0.98)]",
+        "fn code_embedding_readiness_uses_actual_local_model_vector_a (Chunk) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [vector, raw=0.60, rrf=0.02 (norm:0.98)]",
+        "msg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]"
+      ],
+      "matches": [
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "prepare",
+          "ranks": []
+        },
+        {
+          "path": "core/integration/src/embedding.rs",
+          "symbol": "is_local",
+          "ranks": []
+        }
+      ],
+      "text": "## Consequences (Chunk) \u2014 phanijapps/engram, docs/adr/0024-batch-embeddings-deferred-reindex.md [lexical, raw=23.55, rrf=0.02 (norm:1.00)]\n## Consequences\n\n**Positive:**\n- The batch stays decoupled from the embedding model + vector store \u2014 no feature-gating, no model dependency in the batch path.\n- Batch ingest is fast (no model inference); vectors are generated asynchronously.\n- The reindex job can be scheduled, batched, or deferred without coupling to the ingest lifecycle.\n\n**Negative:**\n- Vectors are not immediately available after batch ingest \u2014 a reindex must run before vector-based recall (`UnifiedRecall` vector lane) works o\n... [truncated]\n# Local code embeddings: independent review (Chunk) \u2014 phanijapps/engram, docs/specs/local-code-embeddings/reviews/2026-10-14.md [vector, raw=0.60, rrf=0.02 (norm:1.00)]\n# Local code embeddings: independent review\n\nThe specialist reviewer model was unavailable in this account. Separate\nread-only fallback agents performed adversarial, security and quality reviews;\nnone authored implementation code.\n\n- Pre-execute adversarial/secure-design review: **Clean \u2014 ready to commit.**\n  Covered local-provider declaration, source guards, snapshot/hash exclusions,\n  shared behavior, transport parity and vector-only reset.\n- Implementation adversarial review: **Clean \u2014 ready \n... [truncated]\npub fn scan_repository<R>( (Chunk) \u2014 phanijapps/engram, adapters/ingest/src/scanner/mod.rs [graph, raw=11.00, rrf=0.02 (norm:1.00)]\npub fn scan_repository<R>(\n    root: &Path,\n    opts: &ScanOptions,\n    repo: &R,\n    progress: impl Fn(ScanProgress) + Send + Sync,\n) -> CoreResult<(ScanSummary, std::collections::HashMap<String, String>)>\nwhere\n    R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,\n{\n    let root_canonical = std::fs::canonicalize(root).map_err(|e| CoreError::InvalidRequest {\n        reason: format!(\"cannot canonicalize scan root {}: {e}\", root.display()),\n    })?;\n\n    let admitted_reader =\n     \n... [truncated]\nCursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]\n### 2026-10-14 AST chunking audit (Chunk) \u2014 phanijapps/engram, docs/backlog.md [graph, raw=10.00, rrf=0.02 (norm:0.98)]\n### 2026-10-14 AST chunking audit\n\nEvidence and proposed sequencing:\n[`AST-aware code chunking audit`](research/ast-aware-code-chunking-audit.md).\nDirection: [RFC-0021: Structural code context](rfcs/0021-structural-code-context.md)\n(Accepted; includes additive language/parser registration and polyglot validation).\nLive self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /\n7,192 edges. A separate live fixture verified method source and graph links.\n\n- **[ast-outer-body-loss] VE\n... [truncated]\nfn code_embedding_readiness_uses_actual_local_model_vector_a (Chunk) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [vector, raw=0.60, rrf=0.02 (norm:0.98)]\nfn code_embedding_readiness_uses_actual_local_model_vector_and_source_handles() {\n        let (store, _, _) = seeded();\n        let local = Arc::new(RecordingModel::new(true));\n        let external = Arc::new(RecordingModel::new(false));\n        let (ready, _) = provider(store.clone(), local.clone());\n        let (external, _) = provider(store.clone(), external);\n        let capabilities = CapabilityReport::new(CapabilityState::Supported);\n        let missing_vector = EngramProviderBuilder::new(\n... [truncated]\nmsg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]",
+      "grade": "miss"
+    },
+    {
+      "id": "snapshot-donor",
+      "query": "Can a whole-file source snapshot donate its existing vector to a method with the same content hash? Locate the donor eligibility logic.",
+      "seconds": 10.752,
+      "failed": false,
+      "headers": [
+        "### Accepted source and snapshots (Chunk) \u2014 phanijapps/engram, docs/specs/code-source-preservation/spec.md [vector, raw=0.60, rrf=0.02 (norm:1.00)]",
+        "The first scan embeds chunks into a vector index; `reindex`  (Chunk) \u2014 phanijapps/engram, docs/guides/how-to/quickstart.md [lexical, raw=25.41, rrf=0.02 (norm:1.00)]",
+        "## Acceptance Criteria (Chunk) \u2014 phanijapps/engram, docs/specs/code-source-preservation/spec.md [graph, raw=15.00, rrf=0.02 (norm:1.00)]",
+        "- [x] **AC1 \u2014 Exact snapshots:** accepted TS/Rust/Python, import-only, malformed and unknown-parser code fixtures reconstruct exactly, including Unicode/CRLF/BOM, empty and whitespace-only input; invalid UTF-8/filtered/oversize files are reported without false coverage.",
+        "- [x] **AC2 \u2014 Complete callable bodies:** `checkout` retains fee assignment, validation error and return around its nested function; multiline method signatures/bodies and receiver-qualified nested anchors",
+        "Cursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]",
+        "msg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]"
+      ],
+      "matches": [
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "eligible_refs",
+          "ranks": []
+        },
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "backfill",
+          "ranks": []
+        }
+      ],
+      "text": "### Accepted source and snapshots (Chunk) \u2014 phanijapps/engram, docs/specs/code-source-preservation/spec.md [vector, raw=0.60, rrf=0.02 (norm:1.00)]\n### Accepted source and snapshots\n\nA file is accepted only after existing scanner admission checks, byte-size\nvalidation and strict UTF-8 decoding. Invalid UTF-8 is a typed unsupported\nencoding outcome; no replacement characters are silently substituted. Read or\nadmission failure leaves the prior generation unchanged unless an explicit\npolicy/retraction operation requires exclusion. Empty and whitespace-only\naccepted code files have a snapshot and zero semantic units; an empty file is\nnot an ing\n... [truncated]\nThe first scan embeds chunks into a vector index; `reindex`  (Chunk) \u2014 phanijapps/engram, docs/guides/how-to/quickstart.md [lexical, raw=25.41, rrf=0.02 (norm:1.00)]\nThe first scan embeds chunks into a vector index; `reindex` drains the\nbacklog with content-hash dedup (identical texts share vectors \u2014 69% reuse\nmeasured on a real store).\n## Acceptance Criteria (Chunk) \u2014 phanijapps/engram, docs/specs/code-source-preservation/spec.md [graph, raw=15.00, rrf=0.02 (norm:1.00)]\n## Acceptance Criteria\n\n- [x] **AC1 \u2014 Exact snapshots:** accepted TS/Rust/Python, import-only, malformed and unknown-parser code fixtures reconstruct exactly, including Unicode/CRLF/BOM, empty and whitespace-only input; invalid UTF-8/filtered/oversize files are reported without false coverage.\n- [x] **AC2 \u2014 Complete callable bodies:** `checkout` retains fee assignment, validation error and return around its nested function; multiline method signatures/bodies and receiver-qualified nested anchors\n... [truncated]\nCursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]\nmsg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]",
+      "grade": "miss"
+    },
+    {
+      "id": "generation-race",
+      "query": "A source file changes while the embedding model is running. What prevents the result being inserted for the obsolete indexing attempt?",
+      "seconds": 10.813,
+      "failed": false,
+      "headers": [
+        "## Re-indexing after extraction-quality changes (RFC-0020) (Chunk) \u2014 phanijapps/engram, docs/guides/explanation/how-repos-get-indexed.md [vector, raw=0.61, rrf=0.02 (norm:1.00)]",
+        "## Not in scope (Chunk) \u2014 phanijapps/engram, docs/product/roadmap.md [lexical, raw=27.58, rrf=0.02 (norm:1.00)]",
+        "pub fn scan_repository<R>( (Chunk) \u2014 phanijapps/engram, adapters/ingest/src/scanner/mod.rs [graph, raw=14.00, rrf=0.02 (norm:1.00)]",
+        "Cursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]",
+        "### Compatibility and rollout (Chunk) \u2014 phanijapps/engram, docs/rfcs/0021-structural-code-context.md [graph, raw=13.00, rrf=0.02 (norm:0.98)]",
+        "msg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]"
+      ],
+      "matches": [
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "still_current",
+          "ranks": []
+        },
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "insert_current",
+          "ranks": []
+        }
+      ],
+      "text": "## Re-indexing after extraction-quality changes (RFC-0020) (Chunk) \u2014 phanijapps/engram, docs/guides/explanation/how-repos-get-indexed.md [vector, raw=0.61, rrf=0.02 (norm:1.00)]\n## Re-indexing after extraction-quality changes (RFC-0020)\n\nCode entities carry **qualified identities** `{repo}/{path}::{bare_name}` (the\n`{repo}` is the stable-source-key). When the identity scheme changes \u2014 e.g.\nupgrading to RFC-0020 Phase 1 \u2014 already-indexed entities keep their **legacy**\nids until the source is re-scanned. A re-scan is convergent: it upserts the\ncurrent qualified-id entities + relationships and retracts the prior document\ngraph's stale records.\n\n**No re-embedding is needed.\n... [truncated]\n## Not in scope (Chunk) \u2014 phanijapps/engram, docs/product/roadmap.md [lexical, raw=27.58, rrf=0.02 (norm:1.00)]\n## Not in scope\n\nThings that have come up and that we've explicitly decided are *not*\nin scope. This is the most valuable section for AI agents and new\ncontributors \u2014 it prevents wasted exploration of dead ends.\n\n- **Being an LLM host.** Engram is model-agnostic; LLM calls stay in TypeScript\n  behind the pi SDK. [Charter \u00a7Scope]\n- **Eager index-time embeddings.** Indexing stays embedding-free; embeddings are\n  lazy at query time, cached, and durable. [RFC-0005 D4; PERFORMANCE.md]\n- **Distributed\n... [truncated]\npub fn scan_repository<R>( (Chunk) \u2014 phanijapps/engram, adapters/ingest/src/scanner/mod.rs [graph, raw=14.00, rrf=0.02 (norm:1.00)]\npub fn scan_repository<R>(\n    root: &Path,\n    opts: &ScanOptions,\n    repo: &R,\n    progress: impl Fn(ScanProgress) + Send + Sync,\n) -> CoreResult<(ScanSummary, std::collections::HashMap<String, String>)>\nwhere\n    R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,\n{\n    let root_canonical = std::fs::canonicalize(root).map_err(|e| CoreError::InvalidRequest {\n        reason: format!(\"cannot canonicalize scan root {}: {e}\", root.display()),\n    })?;\n\n    let admitted_reader =\n     \n... [truncated]\nCursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]\n### Compatibility and rollout (Chunk) \u2014 phanijapps/engram, docs/rfcs/0021-structural-code-context.md [graph, raw=13.00, rrf=0.02 (norm:0.98)]\n### Compatibility and rollout\n\nUpdate `docs/domain-data-model.md` before Rust/public schemas, then regenerate\ncontracts. Proposed optional code/summary descriptors are additive on the wire\nfor readers accepting unknown fields, but are **not universally compatible**:\nstrict old schema validators can reject them; new Rust struct fields require\nworkspace caller changes. Version/opt-in new operations and preserve existing\nresponse projections until consumers negotiate the extended schema. Keep\nlegac\n... [truncated]\nmsg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]",
+      "grade": "miss"
+    },
+    {
+      "id": "bounded-input",
+      "query": "Does preserving a complete function guarantee its final statements influence its vector? Locate the input truncation and model batch limits.",
+      "seconds": 10.81,
+      "failed": false,
+      "headers": [
+        "## Approach (Chunk) \u2014 phanijapps/engram, docs/specs/indexing-embed-performance/plan.md [lexical, raw=22.00, rrf=0.02 (norm:1.00)]",
+        "## Vector-enabled follow-up (Chunk) \u2014 phanijapps/engram, docs/research/code-source-preservation-self-verification.md [vector, raw=0.59, rrf=0.02 (norm:1.00)]",
+        "### 2026-10-14 AST chunking audit (Chunk) \u2014 phanijapps/engram, docs/backlog.md [graph, raw=12.00, rrf=0.02 (norm:1.00)]",
+        "local_embedding_backfill::RecordingModel::embed_query (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]",
+        "## Changes to make, in order (Chunk) \u2014 phanijapps/engram, docs/research/ast-aware-code-chunking-audit.md [graph, raw=12.00, rrf=0.02 (norm:0.98)]",
+        "### Always do (Chunk) \u2014 phanijapps/engram, docs/specs/indexing-embed-performance/spec.md [vector, raw=0.59, rrf=0.02 (norm:0.98)]",
+        "local_embedding_backfill::local_backfill_embeds_code_and_never_snapshot_hash_twin_and_repeat_is_idle (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]"
+      ],
+      "matches": [
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "prepare",
+          "ranks": []
+        },
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "backfill",
+          "ranks": []
+        }
+      ],
+      "text": "## Approach (Chunk) \u2014 phanijapps/engram, docs/specs/indexing-embed-performance/plan.md [lexical, raw=22.00, rrf=0.02 (norm:1.00)]\n## Approach\n\nTwo independent wins in `scan_repo`'s embed path: (1) **incremental** \u2014 add `VectorIndex::embedded_ids()` and embed only chunks whose id isn't already in the index; (2) **batching** \u2014 override `EmbeddingProvider::embed_batch` in the fastembed provider with a real batch call and embed in batches. Both are additive; neither changes the model/space/existing vectors. GPU (lever #3) is deferred.\n\nOrder: T1 (the `embedded_ids` query) \u2192 T2 (real `embed_batch`) \u2192 T3 (rewire the loop: filter\n... [truncated]\n## Vector-enabled follow-up (Chunk) \u2014 phanijapps/engram, docs/research/code-source-preservation-self-verification.md [vector, raw=0.59, rrf=0.02 (norm:1.00)]\n## Vector-enabled follow-up\n\nOn the same day, the self store was reopened with vectors enabled, using the\ncached local BGE-small-en-v1.5 model. The real capability report returned\n`vector: supported`. Reindexing covered **11,626 eligible document chunks**\nand drained the backlog; a subsequent reindex returned **zero embedded,\nzero pending**. These are the tool's own embedding counts, including reused\nvectors, rather than counts inferred from SQLite shadow tables.\n\nFour natural-language queries e\n... [truncated]\n### 2026-10-14 AST chunking audit (Chunk) \u2014 phanijapps/engram, docs/backlog.md [graph, raw=12.00, rrf=0.02 (norm:1.00)]\n### 2026-10-14 AST chunking audit\n\nEvidence and proposed sequencing:\n[`AST-aware code chunking audit`](research/ast-aware-code-chunking-audit.md).\nDirection: [RFC-0021: Structural code context](rfcs/0021-structural-code-context.md)\n(Accepted; includes additive language/parser registration and polyglot validation).\nLive self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /\n7,192 edges. A separate live fixture verified method source and graph links.\n\nSource preservation and oute\n... [truncated]\nlocal_embedding_backfill::RecordingModel::embed_query (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]\n## Changes to make, in order (Chunk) \u2014 phanijapps/engram, docs/research/ast-aware-code-chunking-audit.md [graph, raw=12.00, rrf=0.02 (norm:0.98)]\n## Changes to make, in order\n\n1. **Preserve executable and contextual source before enrichment.** Restrict\n   signature-only treatment to appropriate structural containers. Functions\n   and methods containing nested declarations must keep the rest of their\n   behavior. Preserve class fields, initialization blocks, decorators and\n   relevant top-level statements through explicit context/residual chunks or\n   a retrievable source snapshot. Keep AST ranges accurate and distinguish a\n   container's \n... [truncated]\n### Always do (Chunk) \u2014 phanijapps/engram, docs/specs/indexing-embed-performance/spec.md [vector, raw=0.59, rrf=0.02 (norm:0.98)]\n### Always do\n- Additive only: new `VectorIndex` method + `embed_batch` override; do not change the embedding model/space or existing vectors.\n- Keep `VectorIndex` / `EmbeddingProvider` mechanism-agnostic (the sqlite-vec query lives in the adapter).\n- Batch size sane (e.g. 32\u201364); degrade gracefully if a batch partially fails.\nlocal_embedding_backfill::local_backfill_embeds_code_and_never_snapshot_hash_twin_and_repeat_is_idle (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]",
+      "grade": "miss"
+    },
+    {
+      "id": "transport-scope",
+      "query": "Can a maintenance caller forge a wider scope or a different requester when rebuilding code vectors? Show both HTTP and stdio guards.",
+      "seconds": 11.052,
+      "failed": false,
+      "headers": [
+        "### T8: engram-mcp tools (Rust stdio + TS HTTP) (Chunk) \u2014 phanijapps/engram, docs/specs/graph-maintenance-api/plan.md [lexical, raw=23.36, rrf=0.02 (norm:1.00)]",
+        "pub fn reindex(app: &App, args: &Value) -> Result<Value, Too (Chunk) \u2014 phanijapps/engram, mcp/engram-mcp/src/codegraph.rs [vector, raw=0.59, rrf=0.02 (norm:1.00)]",
+        "function registerTools( (Chunk) \u2014 phanijapps/engram, packages/runtime/src/mcp/tools.ts [graph, raw=11.00, rrf=0.02 (norm:1.00)]",
+        "SqlKnowledgeStore::put_source (Function) \u2014 phanijapps/engram, adapters/sqlite/src/knowledge/knowledge.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]",
+        "interface EmbeddingBackfillRequest { (Chunk) \u2014 phanijapps/engram, packages/contracts/src/generated/types.generated.ts [vector, raw=0.58, rrf=0.02 (norm:0.98)]",
+        "/* Smoke: starts the HTTP-MCP server with a REAL provider (t (Chunk) \u2014 phanijapps/engram [graph, raw=11.00, rrf=0.02 (norm:0.98)]",
+        "consolidated_hierarchy (Function) \u2014 phanijapps/engram, mcp/engram-mcp/src/main.rs [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]"
+      ],
+      "matches": [
+        {
+          "path": "packages/runtime/src/mcp/tools.ts",
+          "symbol": null,
+          "ranks": [
+            3
+          ]
+        },
+        {
+          "path": "mcp/engram-mcp/src/codegraph.rs",
+          "symbol": "reindex",
+          "ranks": [
+            2
+          ]
+        }
+      ],
+      "text": "### T8: engram-mcp tools (Rust stdio + TS HTTP) (Chunk) \u2014 phanijapps/engram, docs/specs/graph-maintenance-api/plan.md [lexical, raw=23.36, rrf=0.02 (norm:1.00)]\n### T8: engram-mcp tools (Rust stdio + TS HTTP)\n\n**Depends on:** T7\n**Mode:** goal-based check.\n\n**Tests:**\n- The full maintenance surface registers and dispatches over MCP:\n  `list_maintenance_candidates`, `list_maintenance_entities`,\n  `list_maintenance_relationships`, `build_maintenance_plan`,\n  `apply_maintenance_plan`, `archive`, `restore`, `delete`, `merge`,\n  `rewrite_relationship`, `manage_alias`, `graph_health`. (AC: surface reach)\n- A dry-run (`build_maintenance_plan`, or any mutating \n... [truncated]\npub fn reindex(app: &App, args: &Value) -> Result<Value, Too (Chunk) \u2014 phanijapps/engram, mcp/engram-mcp/src/codegraph.rs [vector, raw=0.59, rrf=0.02 (norm:1.00)]\npub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {\n    // scope defaults to the launch scope when absent (same contract as the\n    // maintenance tools \u2014 the AC2 fix).\n    let scope = crate::maintenance::scope_from_args(app, args)?;\n    if scope != app.scope {\n        return Err(ToolError::new(\n            -32602,\n            \"reindex scope must match the trusted launch scope\",\n        ));\n    }\n    let limit = std::cmp::min(args[\"limit\"].as_u64().unwrap_or(256) as usize, 1024\n... [truncated]\nfunction registerTools( (Chunk) \u2014 phanijapps/engram, packages/runtime/src/mcp/tools.ts [graph, raw=11.00, rrf=0.02 (norm:1.00)]\nfunction registerTools(\n  server: McpServer,\n  transport: NativeProviderTransport,\n  opts?: { ontology?: unknown; taxonomy?: unknown; sourceContext?:CodeSourceContext },\n): void {\n  server.registerTool(\n    \"recall\",\n    {\n      description:\n        \"Unified recall (fused across lanes) over the engram knowledge + memory layer. Returns excerpted items with a total char budget (prevents oversized responses).\",\n      inputSchema: z.object({\n        query: z.string(),\n        scope: scopeSchema,\n   \n... [truncated]\nSqlKnowledgeStore::put_source (Function) \u2014 phanijapps/engram, adapters/sqlite/src/knowledge/knowledge.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]\ninterface EmbeddingBackfillRequest { (Chunk) \u2014 phanijapps/engram, packages/contracts/src/generated/types.generated.ts [vector, raw=0.58, rrf=0.02 (norm:0.98)]\ninterface EmbeddingBackfillRequest {\n  limit?: number;\n  requester: Requester;\n  scope: Scope;\n  sourceFilter?: string;\n}\n/* Smoke: starts the HTTP-MCP server with a REAL provider (t (Chunk) \u2014 phanijapps/engram [graph, raw=11.00, rrf=0.02 (norm:0.98)]\n/* Smoke: starts the HTTP-MCP server with a REAL provider (the addon) + an MCP\n * client lists the tools \u2014 the real-addon end-to-end (T4 mocks the transport).\n * Skips when the build chain isn't ready. */\nimport { describe, it, expect } from \"vitest\";\nimport { existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from \"node:fs\";\nimport { tmpdir } from \"node:os\";\nimport { join } from \"node:path\";\nimport { fileURLToPath } from \"node:url\";\nimport { spawn } from \"node:child_process\";\n\nimport {\n... [truncated]\nconsolidated_hierarchy (Function) \u2014 phanijapps/engram, mcp/engram-mcp/src/main.rs [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]",
+      "grade": "implementation_discovered_HTTP_guard_outside_excerpt"
+    },
+    {
+      "id": "nested-body",
+      "query": "How does extraction retain the whole outer callable when it contains a nested function, while avoiding embedding entire classes?",
+      "seconds": 11.03,
+      "failed": false,
+      "headers": [
+        "### T1: Callables retain behavior around nested declarations (Chunk) \u2014 phanijapps/engram, docs/specs/code-source-preservation/plan.md [graph+vector, raw=0.61, rrf=0.03 (norm:1.00)]",
+        "### Never do (Chunk) \u2014 phanijapps/engram, docs/specs/code-source-preservation/spec.md [vector, raw=0.61, rrf=0.02 (norm:0.52)]",
+        "### 2026-10-14 AST chunking audit (Chunk) \u2014 phanijapps/engram, docs/backlog.md [graph, raw=10.00, rrf=0.02 (norm:0.52)]",
+        "updating_one_file_keeps_siblings_and_independent_shared_owners_visible (Function) \u2014 phanijapps/engram, adapters/sqlite/tests/code_source.rs [community_summary, raw=1.00, rrf=0.02 (norm:0.52)]",
+        "lexical_text_tests::callable_with_nested_declaration_keeps_complete_body (Function) \u2014 phanijapps/engram, core/code/src/parser/tree_sitter_chunker.rs [lexical, raw=22.63, rrf=0.02 (norm:0.52)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:0.52)]",
+        "## Changes to make, in order (Chunk) \u2014 phanijapps/engram, docs/research/ast-aware-code-chunking-audit.md [graph, raw=10.00, rrf=0.02 (norm:0.52)]",
+        "SqlKnowledgeStore (Class) \u2014 phanijapps/engram, adapters/sqlite/src/knowledge/code_source.rs [community_summary, raw=1.00, rrf=0.02 (norm:0.52)]"
+      ],
+      "matches": [
+        {
+          "path": "core/code/src/parser/tree_sitter_chunker.rs",
+          "symbol": "walk_declarations_with_receivers",
+          "ranks": []
+        }
+      ],
+      "text": "### T1: Callables retain behavior around nested declarations (Chunk) \u2014 phanijapps/engram, docs/specs/code-source-preservation/plan.md [graph+vector, raw=0.61, rrf=0.03 (norm:1.00)]\n### T1: Callables retain behavior around nested declarations\n\n**Depends on:** none\n\n**Spec mapping:** AC2. **Mode:** TDD pure/adapter integration.\n\n**Tests:**\n- Exact checkout fixture retains fee, error branch and return in its outer unit.\n- Nested TS/Rust/Python functions/methods retain full outer bodies, multiline signatures and qualified child anchors.\n- Class/impl containers keep existing independent method extraction without full-container duplication.\n\n**Approach:**\n- Replace blanket `has_\n... [truncated]\n### Never do (Chunk) \u2014 phanijapps/engram, docs/specs/code-source-preservation/spec.md [vector, raw=0.61, rrf=0.02 (norm:0.52)]\n### Never do\n\n- Reduce an executable outer function to its signature because it has nested declarations.\n- Claim a reconstructed complete snapshot proves complete semantic extraction.\n- Embed/index raw snapshots through any normal candidate feed, including dedup reuse.\n- Introduce code-specific persistence into a memory/vector adapter, core SQL,\n  a new core facade or a monolithic scanner/generation manager.\n- Treat missing generation/role on legacy chunks as a complete new source view.\n- Advert\n... [truncated]\n### 2026-10-14 AST chunking audit (Chunk) \u2014 phanijapps/engram, docs/backlog.md [graph, raw=10.00, rrf=0.02 (norm:0.52)]\n### 2026-10-14 AST chunking audit\n\nEvidence and proposed sequencing:\n[`AST-aware code chunking audit`](research/ast-aware-code-chunking-audit.md).\nDirection: [RFC-0021: Structural code context](rfcs/0021-structural-code-context.md)\n(Accepted; includes additive language/parser registration and polyglot validation).\nLive self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /\n7,192 edges. A separate live fixture verified method source and graph links.\n\nSource preservation and oute\n... [truncated]\nupdating_one_file_keeps_siblings_and_independent_shared_owners_visible (Function) \u2014 phanijapps/engram, adapters/sqlite/tests/code_source.rs [community_summary, raw=1.00, rrf=0.02 (norm:0.52)]\nlexical_text_tests::callable_with_nested_declaration_keeps_complete_body (Function) \u2014 phanijapps/engram, core/code/src/parser/tree_sitter_chunker.rs [lexical, raw=22.63, rrf=0.02 (norm:0.52)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:0.52)]\n## Changes to make, in order (Chunk) \u2014 phanijapps/engram, docs/research/ast-aware-code-chunking-audit.md [graph, raw=10.00, rrf=0.02 (norm:0.52)]\n## Changes to make, in order\n\n1. **Preserve executable and contextual source before enrichment.** Restrict\n   signature-only treatment to appropriate structural containers. Functions\n   and methods containing nested declarations must keep the rest of their\n   behavior. Preserve class fields, initialization blocks, decorators and\n   relevant top-level statements through explicit context/residual chunks or\n   a retrievable source snapshot. Keep AST ranges accurate and distinguish a\n   container's \n... [truncated]\nSqlKnowledgeStore (Class) \u2014 phanijapps/engram, adapters/sqlite/src/knowledge/code_source.rs [community_summary, raw=1.00, rrf=0.02 (norm:0.52)]",
+      "grade": "miss"
+    },
+    {
+      "id": "stale-cache",
+      "query": "After warming retrieval caches, a source becomes private or expires. Where are old vector hits checked against current source ownership?",
+      "seconds": 10.906,
+      "failed": false,
+      "headers": [
+        "### Foundation verification (in progress) (Chunk) \u2014 phanijapps/engram, docs/specs/code-source-preservation/plan.md [graph, raw=11.00, rrf=0.02 (norm:1.00)]",
+        "async fn retrieve_candidates( (Chunk) \u2014 phanijapps/engram, adapters/sqlite/src/vector/retrieval.rs [vector, raw=0.61, rrf=0.02 (norm:1.00)]",
+        "local_embedding_backfill::RecordingModel::embed_query (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]",
+        "source_policy_and_exact_scope_are_enforced_after_cache_hits_in_every_lane (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [lexical, raw=23.76, rrf=0.02 (norm:1.00)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]",
+        "It is **not a vector database** (vectors are one retrieval m (Chunk) \u2014 phanijapps/engram, README.md [lexical, raw=20.69, rrf=0.02 (norm:0.98)]",
+        "fn register_all_tools(registry: &mut ToolRegistry<App>) { (Chunk) \u2014 phanijapps/engram, mcp/engram-mcp/src/main.rs [graph, raw=11.00, rrf=0.02 (norm:0.98)]"
+      ],
+      "matches": [
+        {
+          "path": "core/integration/src/sqlite/recall_lanes.rs",
+          "symbol": "KnowledgeVectorResolver::resolve",
+          "ranks": []
+        },
+        {
+          "path": "adapters/sqlite/src/knowledge/source_access.rs",
+          "symbol": "source_record_access",
+          "ranks": []
+        }
+      ],
+      "text": "### Foundation verification (in progress) (Chunk) \u2014 phanijapps/engram, docs/specs/code-source-preservation/plan.md [graph, raw=11.00, rrf=0.02 (norm:1.00)]\n### Foundation verification (in progress)\n\n- T1 checkout/nested callable regression: `cargo test -p engram-code` and\n  ingestion chunker fixtures passed (outer source retains fee/error/return).\n- T2 exact partition/context tests: red missing API; green 4 fixtures for\n  UTF-8/BOM/CRLF/empty, overlapping coverage, multiline class fields and recovered syntax.\n- T3 source cell tests: red missing port implementation; green 9 tests covering\n  exact read/exclusion, exact trusted scope, private policy/r\n... [truncated]\nasync fn retrieve_candidates( (Chunk) \u2014 phanijapps/engram, adapters/sqlite/src/vector/retrieval.rs [vector, raw=0.61, rrf=0.02 (norm:1.00)]\nasync fn retrieve_candidates(\n        &self,\n        request: &RetrievalRequest,\n    ) -> CoreResult<Vec<RetrievalResult>> {\n        let source_revision = self.target_resolver.source_revision(request).await?;\n        let query = self.query_provider.query_vector(request)?;\n        let limit = search_limit(request, self.default_limit);\n        let hits = {\n            let index = self.index.lock().map_err(|_| CoreError::Adapter {\n                adapter: \"engram-store-vector\".to_owned(),\n         \n... [truncated]\nlocal_embedding_backfill::RecordingModel::embed_query (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]\nsource_policy_and_exact_scope_are_enforced_after_cache_hits_in_every_lane (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [lexical, raw=23.76, rrf=0.02 (norm:1.00)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]\nIt is **not a vector database** (vectors are one retrieval m (Chunk) \u2014 phanijapps/engram, README.md [lexical, raw=20.69, rrf=0.02 (norm:0.98)]\nIt is **not a vector database** (vectors are one retrieval mode among six). It\nis **not a knowledge store** (knowledge is source-grounded, not free-floating).\nIt is the layer where raw observations become **durable beliefs**, where\nretrieval is **composed** (not single-mode), and where **policy, provenance, and\nscope** govern every read and write \u2014 so memory is auditable, not accidental.\nfn register_all_tools(registry: &mut ToolRegistry<App>) { (Chunk) \u2014 phanijapps/engram, mcp/engram-mcp/src/main.rs [graph, raw=11.00, rrf=0.02 (norm:0.98)]\nfn register_all_tools(registry: &mut ToolRegistry<App>) {\n    registry.register(ToolRecord {\n        name: \"ping\",\n        description: \"Transport health check. Returns \\\"pong\\\". (Phase-1 placeholder.)\",\n        input_schema: json!({ \"type\": \"object\", \"properties\": {}, \"additionalProperties\": false }),\n        handler: ping,\n    });\n    registry.register(ToolRecord {\n        name: \"ontology_read\",\n        description: \"Return the active multi-layer ontology configuration: layers, classes, \\\n    \n... [truncated]\n... [1 results from adapters/integration/tests/code_source_selection.rs capped for diversity]",
+      "grade": "miss"
+    },
+    {
+      "id": "invalid-vector",
+      "query": "What happens if an embedding has the wrong dimensions, contains NaN, or belongs to a different model space?",
+      "seconds": 10.936,
+      "failed": false,
+      "headers": [
+        "pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> Cor (Chunk) \u2014 phanijapps/engram, core/integration/src/sqlite/bootstrap.rs [graph, raw=9.00, rrf=0.02 (norm:1.00)]",
+        "async fn test_search_validates_query_dimensions() { (Chunk) \u2014 phanijapps/engram, core/retrieval/src/vector_index.rs [vector, raw=0.63, rrf=0.02 (norm:1.00)]",
+        "Cursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]",
+        "//! Embedding space identity types for the integration contr (Chunk) \u2014 phanijapps/engram, core/domain/src/embedding.rs [graph, raw=8.00, rrf=0.02 (norm:0.98)]",
+        "async fn test_search_validates_embedding_space() { (Chunk) \u2014 phanijapps/engram, core/retrieval/src/vector_index.rs [vector, raw=0.63, rrf=0.02 (norm:0.98)]",
+        "msg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]",
+        "PgConnection::block_on (Function) \u2014 phanijapps/engram, adapters/pgvector/src/connection.rs [associative_graph, raw=0.01, rrf=0.02 (norm:0.98)]",
+        "### 2026-10-14 AST chunking audit (Chunk) \u2014 phanijapps/engram, docs/backlog.md [graph, raw=8.00, rrf=0.02 (norm:0.97)]"
+      ],
+      "matches": [
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "insert_current",
+          "ranks": []
+        },
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "backfill",
+          "ranks": []
+        }
+      ],
+      "text": "pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> Cor (Chunk) \u2014 phanijapps/engram, core/integration/src/sqlite/bootstrap.rs [graph, raw=9.00, rrf=0.02 (norm:1.00)]\npub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvider> {\n    config.validate().map_err(|e| CoreError::InvalidRequest {\n        reason: format!(\"configuration validation failed: {e}\"),\n    })?;\n\n    let storage = &config.storage_path;\n    std::fs::create_dir_all(storage).map_err(|e| CoreError::Adapter {\n        adapter: \"engram-integration.sqlite\".to_string(),\n        message: format!(\"create storage dir: {e}\"),\n    })?;\n\n    // Resolve per-store SQLite paths once, ho\n... [truncated]\nasync fn test_search_validates_query_dimensions() { (Chunk) \u2014 phanijapps/engram, core/retrieval/src/vector_index.rs [vector, raw=0.63, rrf=0.02 (norm:1.00)]\nasync fn test_search_validates_query_dimensions() {\n        let index = MockVectorIndex::new();\n\n        let embedding_space = index.embedding_space().clone();\n        let query_vector = vec![0.0; 128];\n        let result = index.search(&embedding_space, query_vector, 10).await;\n        assert!(result.is_ok());\n\n        let embedding_space = index.embedding_space().clone();\n        let query_vector = vec![0.0; 256]; // Wrong dimension\n        let result = index.search(&embedding_space, query_vec\n... [truncated]\nCursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]\n//! Embedding space identity types for the integration contr (Chunk) \u2014 phanijapps/engram, core/domain/src/embedding.rs [graph, raw=8.00, rrf=0.02 (norm:0.98)]\n//! Embedding space identity types for the integration contract.\n//!\n//! This module defines the stable embedding space identity that goes beyond\n//! vector dimensions to ensure compatibility between different embedding providers.\n//! Two embeddings are compatible only if they share the same provider, model,\n//! dimensions, prompt profile, and normalization settings.\n\nuse serde::{Deserialize, Serialize};\nuse std::hash::{Hash, Hasher};\n\n/// Bounded retrieval-index maintenance in the trusted host'\n... [truncated]\nasync fn test_search_validates_embedding_space() { (Chunk) \u2014 phanijapps/engram, core/retrieval/src/vector_index.rs [vector, raw=0.63, rrf=0.02 (norm:0.98)]\nasync fn test_search_validates_embedding_space() {\n        let index = MockVectorIndex::new();\n\n        let matching_space = index.embedding_space().clone();\n        let query_vector = vec![0.0; 128];\n        let result = index.search(&matching_space, query_vector, 10).await;\n        assert!(result.is_ok());\n\n        let mismatched_space = EmbeddingSpace::new(\n            \"different_provider\",\n            \"different_model\",\n            128,\n            \"query\",\n            None::<String>,\n      \n... [truncated]\nmsg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]\nPgConnection::block_on (Function) \u2014 phanijapps/engram, adapters/pgvector/src/connection.rs [associative_graph, raw=0.01, rrf=0.02 (norm:0.98)]\n### 2026-10-14 AST chunking audit (Chunk) \u2014 phanijapps/engram, docs/backlog.md [graph, raw=8.00, rrf=0.02 (norm:0.97)]\n### 2026-10-14 AST chunking audit\n\nEvidence and proposed sequencing:\n[`AST-aware code chunking audit`](research/ast-aware-code-chunking-audit.md).\nDirection: [RFC-0021: Structural code context](rfcs/0021-structural-code-context.md)\n(Accepted; includes additive language/parser registration and polyglot validation).\nLive self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /\n7,192 edges. A separate live fixture verified method source and graph links.\n\n- **[ast-outer-body-loss] VE\n... [truncated]",
+      "grade": "miss"
+    },
+    {
+      "id": "retry",
+      "query": "If vector insertion fails halfway through a backfill, does retry regenerate every vector or skip completed targets? Show the selection and failure propagation.",
+      "seconds": 10.821,
+      "failed": false,
+      "headers": [
+        "fn vector_insertion_failure_is_reported_and_retry_converges( (Chunk) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [vector, raw=0.61, rrf=0.02 (norm:1.00)]",
+        "function registerTools( (Chunk) \u2014 phanijapps/engram, packages/runtime/src/mcp/tools.ts [graph, raw=11.00, rrf=0.02 (norm:1.00)]",
+        "local_embedding_backfill::RecordingModel::embed_query (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]",
+        "## Acceptance Criteria (Chunk) \u2014 phanijapps/engram, docs/specs/local-code-embeddings/spec.md [vector, raw=0.60, rrf=0.02 (norm:0.98)]",
+        "fn register_all_tools(registry: &mut ToolRegistry<App>) { (Chunk) \u2014 phanijapps/engram, mcp/engram-mcp/src/main.rs [graph, raw=10.00, rrf=0.02 (norm:0.98)]",
+        "PgConnection::block_on (Function) \u2014 phanijapps/engram, adapters/pgvector/src/connection.rs [associative_graph, raw=0.01, rrf=0.02 (norm:0.98)]"
+      ],
+      "matches": [
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "backfill",
+          "ranks": []
+        },
+        {
+          "path": "core/integration/src/embedding_backfill.rs",
+          "symbol": "insert_current",
+          "ranks": []
+        }
+      ],
+      "text": "fn vector_insertion_failure_is_reported_and_retry_converges( (Chunk) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [vector, raw=0.61, rrf=0.02 (norm:1.00)]\nfn vector_insertion_failure_is_reported_and_retry_converges() {\n        let (store, _, retrieval) = seeded();\n        let model = Arc::new(RecordingModel::new(true));\n        let index = Arc::new(FailOnceVector {\n            inner: Arc::new(\n                SqliteVectorIndex::open_in_memory(3)\n                    .unwrap()\n                    .with_embedding_space(model.embedding_space()),\n            ),\n            fail: AtomicBool::new(true),\n        });\n        let provider =\n            Engr\n... [truncated]\nfunction registerTools( (Chunk) \u2014 phanijapps/engram, packages/runtime/src/mcp/tools.ts [graph, raw=11.00, rrf=0.02 (norm:1.00)]\nfunction registerTools(\n  server: McpServer,\n  transport: NativeProviderTransport,\n  opts?: { ontology?: unknown; taxonomy?: unknown; sourceContext?:CodeSourceContext },\n): void {\n  server.registerTool(\n    \"recall\",\n    {\n      description:\n        \"Unified recall (fused across lanes) over the engram knowledge + memory layer. Returns excerpted items with a total char budget (prevents oversized responses).\",\n      inputSchema: z.object({\n        query: z.string(),\n        scope: scopeSchema,\n   \n... [truncated]\nlocal_embedding_backfill::RecordingModel::embed_query (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]\n## Acceptance Criteria (Chunk) \u2014 phanijapps/engram, docs/specs/local-code-embeddings/spec.md [vector, raw=0.60, rrf=0.02 (norm:0.98)]\n## Acceptance Criteria\n\n- [x] **AC1:** Local backfill embeds symbol/context/residual units and ordinary\n  documents; snapshots and legacy-unknown code are never model/reuse candidates.\n- [x] **AC2:** Private/expired/denied/wrong-scope and inactive code is excluded;\n  a generation/policy transition during inference prevents vector insertion.\n- [x] **AC3:** External/unknown providers receive no code. External LLM feeds\n  remain unchanged. Local execution is an explicit provider contract.\n- [x] **A\n... [truncated]\nfn register_all_tools(registry: &mut ToolRegistry<App>) { (Chunk) \u2014 phanijapps/engram, mcp/engram-mcp/src/main.rs [graph, raw=10.00, rrf=0.02 (norm:0.98)]\nfn register_all_tools(registry: &mut ToolRegistry<App>) {\n    registry.register(ToolRecord {\n        name: \"ping\",\n        description: \"Transport health check. Returns \\\"pong\\\". (Phase-1 placeholder.)\",\n        input_schema: json!({ \"type\": \"object\", \"properties\": {}, \"additionalProperties\": false }),\n        handler: ping,\n    });\n    registry.register(ToolRecord {\n        name: \"ontology_read\",\n        description: \"Return the active multi-layer ontology configuration: layers, classes, \\\n    \n... [truncated]\nPgConnection::block_on (Function) \u2014 phanijapps/engram, adapters/pgvector/src/connection.rs [associative_graph, raw=0.01, rrf=0.02 (norm:0.98)]\n... [2 results from adapters/integration/tests/code_source_selection.rs capped for diversity]",
+      "grade": "miss"
+    },
+    {
+      "id": "new-language",
+      "query": "Which implementation must change to add a new programming language grammar and its declaration node kinds?",
+      "seconds": 10.78,
+      "failed": false,
+      "headers": [
+        "## Decision summary (Chunk) \u2014 phanijapps/engram, docs/adr/0020-extend-entity-kind-vocabulary.md [lexical+vector, raw=0.59, rrf=0.03 (norm:1.00)]",
+        "### D1 \u2014 Parser providers and a common structural model (Chunk) \u2014 phanijapps/engram, docs/rfcs/0021-structural-code-context.md [graph, raw=10.00, rrf=0.02 (norm:0.52)]",
+        "# v1 Compatibility Rules (Chunk) \u2014 phanijapps/engram, contracts/v1/compatibility.md [lexical, raw=21.45, rrf=0.02 (norm:0.52)]",
+        "pub fn new() -> CoreResult<Self> { (Chunk) \u2014 phanijapps/engram, core/code/src/parser/tree_sitter_chunker.rs [vector, raw=0.60, rrf=0.02 (norm:0.52)]",
+        "Cursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:0.52)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:0.52)]"
+      ],
+      "matches": [
+        {
+          "path": "core/code/src/parser/tree_sitter_chunker.rs",
+          "symbol": "TreeSitterChunker::new",
+          "ranks": [
+            4
+          ],
+          "normalization": "TreeSitterChunker::new is rendered as pub fn new() in its implementation file"
+        }
+      ],
+      "text": "## Decision summary (Chunk) \u2014 phanijapps/engram, docs/adr/0020-extend-entity-kind-vocabulary.md [lexical+vector, raw=0.59, rrf=0.03 (norm:1.00)]\n## Decision summary\n\n- **Decision:** Add six `EntityKind` values \u2014 `Struct`, `Interface`, `Trait`, `TypeAlias`, `Enum`, `Endpoint` \u2014 so code-structural extraction can tag the symbol kinds a memtrace-style code graph needs (the codegraph data layer, C2 taxonomy).\n- **Because:** the current `EntityKind` (person / organization / ... / function / class / method / variable / api / ...) lacks struct / interface / trait / type_alias / enum / endpoint, the kinds needed to represent rich code graphs acro\n... [truncated]\n### D1 \u2014 Parser providers and a common structural model (Chunk) \u2014 phanijapps/engram, docs/rfcs/0021-structural-code-context.md [graph, raw=10.00, rrf=0.02 (norm:0.52)]\n### D1 \u2014 Parser providers and a common structural model\n\nIntroduce a `CodeParser` port and normalized result in `engram-code`. The\nport takes caller-provided source plus explicit language/parser selection and\nreturns structural facts. Filesystem discovery, git, provider construction,\nprocess/network I/O and persistence remain in adapters/hosts. Built-in\nTree-sitter parsing stays pure; a future compiler/LSP integration performs its\nI/O in an adapter and supplies normalized results to the same cor\n... [truncated]\n# v1 Compatibility Rules (Chunk) \u2014 phanijapps/engram, contracts/v1/compatibility.md [lexical, raw=21.45, rrf=0.02 (norm:0.52)]\n# v1 Compatibility Rules\n\nAfter v1 acceptance, compatible changes are limited to:\n\n- Add an optional field.\n- Add a new schema file for a new operation or payload.\n- Add a new enum value only when consumers are explicitly required to tolerate\n  unknown values for that enum.\n- Add examples or specs that do not change existing field meaning.\n- Deprecate a field without removing it.\n- Tighten explanatory text without changing behavior.\n\nBreaking changes require v2:\n\n- Rename a field.\n- Remove a fie\n... [truncated]\npub fn new() -> CoreResult<Self> { (Chunk) \u2014 phanijapps/engram, core/code/src/parser/tree_sitter_chunker.rs [vector, raw=0.60, rrf=0.02 (norm:0.52)]\npub fn new() -> CoreResult<Self> {\n        let mut entries = HashMap::new();\n        // Each grammar registers one or more extensions.\n        macro_rules! reg {\n            ($ext:expr, $lang:expr, $map:expr) => {\n                let language: tree_sitter::Language = $lang.into();\n                entries.insert(\n                    $ext,\n                    LangEntry {\n                        language,\n                        kind_map: $map,\n                    },\n                );\n            \n... [truncated]\nCursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:0.52)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:0.52)]",
+      "grade": "implementation_discovered"
+    },
+    {
+      "id": "absence-parser",
+      "query": "Where is the runtime plugin registry that loads arbitrary new language parsers without rebuilding Engram?",
+      "seconds": 10.787,
+      "failed": false,
+      "headers": [
+        "[package] (Chunk) \u2014 phanijapps/engram, core/procedures/Cargo.toml [vector, raw=0.60, rrf=0.02 (norm:1.00)]",
+        "## Consequences (Chunk) \u2014 phanijapps/engram, docs/adr/0001-workspace-boundaries.md [lexical, raw=18.13, rrf=0.02 (norm:1.00)]",
+        "function registerTools( (Chunk) \u2014 phanijapps/engram, packages/runtime/src/mcp/tools.ts [graph, raw=8.00, rrf=0.02 (norm:1.00)]",
+        "Cursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]",
+        "## The ask (Chunk) \u2014 phanijapps/engram, docs/rfcs/0004-enterprise-knowledge-platform.md [graph, raw=8.00, rrf=0.02 (norm:0.98)]",
+        "msg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]"
+      ],
+      "matches": [],
+      "text": "[package] (Chunk) \u2014 phanijapps/engram, core/procedures/Cargo.toml [vector, raw=0.60, rrf=0.02 (norm:1.00)]\n[package]\nname = \"engram-procedures\"\nversion.workspace = true\nedition.workspace = true\nlicense.workspace = true\nrust-version.workspace = true\n\n[dependencies]\nasync-trait.workspace = true\nengram-domain = { path = \"../domain\" }\nengram-runtime = { path = \"../runtime\" }\n## Consequences (Chunk) \u2014 phanijapps/engram, docs/adr/0001-workspace-boundaries.md [lexical, raw=18.13, rrf=0.02 (norm:1.00)]\n## Consequences\n\n- Early work can proceed without committing to a stack.\n- Architecture decisions remain explicit and reviewable.\n- Runtime scaffolding can be added later without moving the design record.\n- Some directories are placeholders until a language is selected.\nfunction registerTools( (Chunk) \u2014 phanijapps/engram, packages/runtime/src/mcp/tools.ts [graph, raw=8.00, rrf=0.02 (norm:1.00)]\nfunction registerTools(\n  server: McpServer,\n  transport: NativeProviderTransport,\n  opts?: { ontology?: unknown; taxonomy?: unknown; sourceContext?:CodeSourceContext },\n): void {\n  server.registerTool(\n    \"recall\",\n    {\n      description:\n        \"Unified recall (fused across lanes) over the engram knowledge + memory layer. Returns excerpted items with a total char budget (prevents oversized responses).\",\n      inputSchema: z.object({\n        query: z.string(),\n        scope: scopeSchema,\n   \n... [truncated]\nCursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]\n## The ask (Chunk) \u2014 phanijapps/engram, docs/rfcs/0004-enterprise-knowledge-platform.md [graph, raw=8.00, rrf=0.02 (norm:0.98)]\n## The ask\n\n**Recommendation (BLUF):** Approve the program above, delivered as seven vertical slices where each leaves a runnable, increasingly-impressive demo. Start with Slice 0 \u2014 a **minimalist, enterprise-ready 3D graph with navigable links** (borrowing agentzero's deterministic layout technique) \u2014 because it is the visible \"stunning\" win, is frontend-only (lowest risk), and every later slice's depth (provenance, confidence) builds on that canvas.\n\n**Why now (SCQA):**\n- *Situation:* RFC 0003\n... [truncated]\nmsg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]",
+      "grade": "not_scored_absence_probe"
+    },
+    {
+      "id": "absence-silver",
+      "query": "Which implemented scan step attaches resolved import bindings, constructor fields, and an English behavior summary to every method chunk?",
+      "seconds": 10.739,
+      "failed": false,
+      "headers": [
+        "## Problem & goals (Chunk) \u2014 phanijapps/engram, docs/rfcs/0021-structural-code-context.md [vector, raw=0.60, rrf=0.02 (norm:1.00)]",
+        "### 2026-10-14 AST chunking audit (Chunk) \u2014 phanijapps/engram, docs/backlog.md [graph, raw=12.00, rrf=0.02 (norm:1.00)]",
+        "## Decision (Chunk) \u2014 phanijapps/engram, docs/adr/0014-memory-record-embedding-surface.md [lexical, raw=17.27, rrf=0.02 (norm:1.00)]",
+        "Cursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]",
+        "Page::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]",
+        "## Changes to make, in order (Chunk) \u2014 phanijapps/engram, docs/research/ast-aware-code-chunking-audit.md [graph, raw=12.00, rrf=0.02 (norm:0.98)]",
+        "msg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]"
+      ],
+      "matches": [],
+      "text": "## Problem & goals (Chunk) \u2014 phanijapps/engram, docs/rfcs/0021-structural-code-context.md [vector, raw=0.60, rrf=0.02 (norm:1.00)]\n## Problem & goals\n\nCurrent Tree-sitter scanning stores complete leaf methods with qualified\nanchors. The containment/import graph is separate from chunks. A declaration\nwith any declaration descendant is reduced to its first signature line;\nthis also affects executable functions containing nested functions. Imports,\nfields, initialization and some top-level statements are not guaranteed to\nbe represented in those semantic chunks. A source span covering a declaration\nis therefore not evidence th\n... [truncated]\n### 2026-10-14 AST chunking audit (Chunk) \u2014 phanijapps/engram, docs/backlog.md [graph, raw=12.00, rrf=0.02 (norm:1.00)]\n### 2026-10-14 AST chunking audit\n\nEvidence and proposed sequencing:\n[`AST-aware code chunking audit`](research/ast-aware-code-chunking-audit.md).\nDirection: [RFC-0021: Structural code context](rfcs/0021-structural-code-context.md)\n(Accepted; includes additive language/parser registration and polyglot validation).\nLive self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /\n7,192 edges. A separate live fixture verified method source and graph links.\n\nSource preservation and oute\n... [truncated]\n## Decision (Chunk) \u2014 phanijapps/engram, docs/adr/0014-memory-record-embedding-surface.md [lexical, raw=17.27, rrf=0.02 (norm:1.00)]\n## Decision\n\n> When memory-level vector indexing is implemented, the vector adapter MUST\n> embed `MemoryContent.summary`, not `MemoryContent.text`.\n\nSpecifically:\n\n- `summary` carries a short abstraction phrase (target: \u2264 15 words) capturing\n  what the memory is fundamentally about, not a truncation of `text`.\n- The `EmbeddingRef` recorded for a `MemoryRecord` MUST set `contentHash` to\n  the hash of `summary`, not `text`, so the embedding is auditable and the\n  embedded surface is unambiguous.\n-\n... [truncated]\nCursor::new (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [community_summary, raw=1.00, rrf=0.02 (norm:1.00)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.01, rrf=0.02 (norm:1.00)]\n## Changes to make, in order (Chunk) \u2014 phanijapps/engram, docs/research/ast-aware-code-chunking-audit.md [graph, raw=12.00, rrf=0.02 (norm:0.98)]\n## Changes to make, in order\n\n1. **Preserve executable and contextual source before enrichment.** Restrict\n   signature-only treatment to appropriate structural containers. Functions\n   and methods containing nested declarations must keep the rest of their\n   behavior. Preserve class fields, initialization blocks, decorators and\n   relevant top-level statements through explicit context/residual chunks or\n   a retrievable source snapshot. Keep AST ranges accurate and distinguish a\n   container's \n... [truncated]\nmsg (Function) \u2014 phanijapps/engram, engram-cc/backend/src/routes/ingest.ts [community_summary, raw=1.00, rrf=0.02 (norm:0.98)]",
+      "grade": "not_scored_absence_probe"
+    }
+  ],
+  "followups": [
+    {
+      "seconds": 10.635,
+      "text": "Consolidated surface live test\n---\n# Local code embeddings: independent review\n\nThe specialist reviewer model was unavailable in this account. Separate\nread-only fallback agents performed adversarial, security and quality reviews;\nnone authored implementation code.\n\n- Pre-execute adversarial/secure-design review: **Clean \u2014 ready to commit.**\n  Covered local-provider declaration, source guards, snapshot/hash exclusions,\n  shared behavior, transport parity and vector-only reset.\n- Implementation adversarial review: **Clean \u2014 ready to commit.** Source\n  authorization, generation fencing, eligible hash reuse, retries and DTOs.\n- Implementation security review: **Clean \u2014 ready to commit.** Locality,\n  exact scope/policy, canonical rechecks, external feed exclusion, bounded\n  model calls and trusted transport identity. Follow-up confirmed the stdio\n  launch-scope guard and regression test.\n- Quality review: two concerns fixed, then **Clean \u2014 ready to commit.**\n  Prepared inputs retain bounded text rather than full source bodi\n... [truncated]\n---\npub fn scan_repository<R>(\n    root: &Path,\n    opts: &ScanOptions,\n    repo: &R,\n    progress: impl Fn(ScanProgress) + Send + Sync,\n) -> CoreResult<(ScanSummary, std::collections::HashMap<String, String>)>\nwhere\n    R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,\n{\n    let root_canonical = std::fs::canonicalize(root).map_err(|e| CoreError::InvalidRequest {\n        reason: format!(\"cannot canonicalize scan root {}: {e}\", root.display()),\n    })?;\n\n    let admitted_reader =\n        source_reader::SourceReader::open(&root_canonical).map_err(|_| CoreError::Adapter {\n            adapter: \"filesystem_ingest\".into(),\n            message: \"cannot open trusted source root\".into(),\n        })?;\n\n    let mut summary = ScanSummary::default();\n\n    // Detect git metadata (remote, branch, SHA) if the root is a git repo.\n    let git = detect_git(&root_canonical);\n    if let Some((ref remote, ref branch, ref sha)) = git {\n        summary.git_remote = Some(remote.clone());\n        sum\n... [truncated]\n---\nCursor::new\n---\nPage::map\n---\n### 2026-10-14 AST chunking audit\n\nEvidence and proposed sequencing:\n[`AST-aware code chunking audit`](research/ast-aware-code-chunking-audit.md).\nDirection: [RFC-0021: Structural code context](rfcs/0021-structural-code-context.md)\n(Accepted; includes additive language/parser registration and polyglot validation).\nLive self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /\n7,192 edges. A separate live fixture verified method source and graph links.\n\n- **[ast-outer-body-loss] VERIFIED:** `checkout` containing nested `validate`\n  persisted only its outer signature and the inner function. Fee assignment,\n  validation error and outer return were absent from every stored chunk.\n  `has_declaration_descendant` applies signature-only treatment to executable\n  functions as well as class containers. Preserve outer behavior and class\n  member/initialization context before adding code summaries. Tracked by\n  `code-source-preservation` AC2/AC3 and plan T1; runtime fix remains open\n... [truncated]\n---\nfn code_embedding_readiness_uses_actual_local_model_vector_and_source_handles() {\n        let (store, _, _) = seeded();\n        let local = Arc::new(RecordingModel::new(true));\n        let external = Arc::new(RecordingModel::new(false));\n        let (ready, _) = provider(store.clone(), local.clone());\n        let (external, _) = provider(store.clone(), external);\n        let capabilities = CapabilityReport::new(CapabilityState::Supported);\n        let missing_vector = EngramProviderBuilder::new(capabilities.clone())\n            .knowledge(store.clone())\n            .knowledge_query(store.clone())\n            .embedding_provider(local.clone())\n            .build();\n        let missing_query = EngramProviderBuilder::new(capabilities.clone())\n            .knowledge(store.clone())\n            .embedding_provider(local.clone())\n            .vectors(Arc::new(\n                SqliteVectorIndex::open_in_memory(3)\n                    .unwrap()\n                    .with_embedding_space(local.emb\n... [truncated]\n---\nmsg\n---\nPgConnection::block_on\n---\n## Changes to make, in order\n\n1. **Preserve executable and contextual source before enrichment.** Restrict\n   signature-only treatment to appropriate structural containers. Functions\n   and methods containing nested declarations must keep the rest of their\n   behavior. Preserve class fields, initialization blocks, decorators and\n   relevant top-level statements through explicit context/residual chunks or\n   a retrievable source snapshot. Keep AST ranges accurate and distinguish a\n   container's full span from its abbreviated stored text. Acceptance:\n   `checkout` retains its validation, error and fee calculation; `UserService`\n   context exposes the field and constructor without losing either method.\n\n2. **Define context hydration over existing graph and source facts.** Assemble\n   a bounded method context with qualified symbol, complete signature, parent\n   declaration, relevant member/constructor context, import bindings and\n   file/revision/ranges. Reuse `contains`, `imports` and ch\n... [truncated]",
+      "failed": false,
+      "id": "recall-locality",
+      "tool": "recall",
+      "args": {
+        "query": "Can switching the embedding provider send indexed source code to a remote model? Show the checks before inference.",
+        "limit": 10
+      }
+    },
+    {
+      "seconds": 5.364,
+      "text": "Consolidated surface live test\n---\n## Re-indexing after extraction-quality changes (RFC-0020)\n\nCode entities carry **qualified identities** `{repo}/{path}::{bare_name}` (the\n`{repo}` is the stable-source-key). When the identity scheme changes \u2014 e.g.\nupgrading to RFC-0020 Phase 1 \u2014 already-indexed entities keep their **legacy**\nids until the source is re-scanned. A re-scan is convergent: it upserts the\ncurrent qualified-id entities + relationships and retracts the prior document\ngraph's stale records.\n\n**No re-embedding is needed.** Embeddings are `EmbeddingTargetType::Chunk`\n(content-keyed), and the identity change touches only the graph layer (entities +\nrelationships), not chunk content. So re-scan rebuilds the graph; the 442k chunk\nvectors persist unchanged. To extract a **concept sub-graph** from documents (the\nLLM `extract-knowledge` op), run `engram-maintain --op extract-knowledge` (or the\n`maintenance_run` MCP tool) after the scan \u2014 documents are chunks-only at ingest.\n---\npub fn scan_repository<R>(\n    root: &Path,\n    opts: &ScanOptions,\n    repo: &R,\n    progress: impl Fn(ScanProgress) + Send + Sync,\n) -> CoreResult<(ScanSummary, std::collections::HashMap<String, String>)>\nwhere\n    R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,\n{\n    let root_canonical = std::fs::canonicalize(root).map_err(|e| CoreError::InvalidRequest {\n        reason: format!(\"cannot canonicalize scan root {}: {e}\", root.display()),\n    })?;\n\n    let admitted_reader =\n        source_reader::SourceReader::open(&root_canonical).map_err(|_| CoreError::Adapter {\n            adapter: \"filesystem_ingest\".into(),\n            message: \"cannot open trusted source root\".into(),\n        })?;\n\n    let mut summary = ScanSummary::default();\n\n    // Detect git metadata (remote, branch, SHA) if the root is a git repo.\n    let git = detect_git(&root_canonical);\n    if let Some((ref remote, ref branch, ref sha)) = git {\n        summary.git_remote = Some(remote.clone());\n        sum\n... [truncated]\n---\nCursor::new\n---\nPage::map\n---\n## Re-indexing after extraction-quality changes (RFC-0020)\n\nCode entities carry **qualified identities** `{repo}/{path}::{bare_name}` (the\n`{repo}` is the stable-source-key). When the identity scheme changes \u2014 e.g.\nupgrading to RFC-0020 Phase 1 \u2014 already-indexed entities keep their **legacy**\nids until the source is re-scanned. A re-scan is convergent: it upserts the\ncurrent qualified-id entities + relationships and retracts the prior document\ngraph's stale records.\n\n**No re-embedding is needed.** Embeddings are `EmbeddingTargetType::Chunk`\n(content-keyed), and the identity change touches only the graph layer (entities +\nrelationships), not chunk content. So re-scan rebuilds the graph; the 442k chunk\nvectors persist unchanged. To extract a **concept sub-graph** from documents (the\nLLM `extract-knowledge` op), run `engram-maintain --op extract-knowledge` (or the\n`maintenance_run` MCP tool) after the scan \u2014 documents are chunks-only at ingest.\n---\n### Compatibility and rollout\n\nUpdate `docs/domain-data-model.md` before Rust/public schemas, then regenerate\ncontracts. Proposed optional code/summary descriptors are additive on the wire\nfor readers accepting unknown fields, but are **not universally compatible**:\nstrict old schema validators can reject them; new Rust struct fields require\nworkspace caller changes. Version/opt-in new operations and preserve existing\nresponse projections until consumers negotiate the extended schema. Keep\nlegacy chunks readable with coverage `legacy_unknown`; never infer completeness\nfrom their location spans. No new serialized chunk-kind variant is needed.\n\nVersion scan manifests by parser, grammar/mapping and chunk-policy fingerprint,\nnot only source bytes. Updating a parser must reindex unchanged files that used\nit. Re-scan affected sources to build snapshots/units and reconcile old chunk,\nentity and vector references through existing source retraction semantics.\nPreserve logical entity identity wh\n... [truncated]\n---\nmsg\n---\nPgConnection::block_on\n---\n## Re-indexing after extraction-quality changes (RFC-0020)\n\nCode entities carry **qualified identities** `{repo}/{path}::{bare_name}` (the\n`{repo}` is the stable-source-key). When the identity scheme changes \u2014 e.g.\nupgrading to RFC-0020 Phase 1 \u2014 already-indexed entities keep their **legacy**\nids until the source is re-scanned. A re-scan is convergent: it upserts the\ncurrent qualified-id entities + relationships and retracts the prior document\ngraph's stale records.\n\n**No re-embedding is needed.** Embeddings are `EmbeddingTargetType::Chunk`\n(content-keyed), and the identity change touches only the graph layer (entities +\nrelationships), not chunk content. So re-scan rebuilds the graph; the 442k chunk\nvectors persist unchanged. To extract a **concept sub-graph** from documents (the\nLLM `extract-knowledge` op), run `engram-maintain --op extract-knowledge` (or the\n`maintenance_run` MCP tool) after the scan \u2014 documents are chunks-only at ingest.",
+      "failed": false,
+      "id": "recall-race",
+      "tool": "recall",
+      "args": {
+        "query": "A source file changes while the embedding model is running. What prevents the result being inserted for the obsolete indexing attempt?",
+        "limit": 10
+      }
+    },
+    {
+      "seconds": 5.333,
+      "text": "Consolidated surface live test\n---\n### T1: Callables retain behavior around nested declarations\n\n**Depends on:** none\n\n**Spec mapping:** AC2. **Mode:** TDD pure/adapter integration.\n\n**Tests:**\n- Exact checkout fixture retains fee, error branch and return in its outer unit.\n- Nested TS/Rust/Python functions/methods retain full outer bodies, multiline signatures and qualified child anchors.\n- Class/impl containers keep existing independent method extraction without full-container duplication.\n\n**Approach:**\n- Replace blanket `has_declaration_descendant` suppression in `core/code/src/parser/tree_sitter_chunker.rs` with explicit callable versus structural-container treatment in a focused helper.\n- Extend `adapters/ingest/tests/tree_sitter_chunker.rs` and focused code parser tests; leave public record fields unchanged in this independently shippable correction.\n\n**Done when:** construction fixtures pass and a built live scan demonstrates the restored outer source. This task does not claim snapshot/whole-file coverage.\n---\n### Never do\n\n- Reduce an executable outer function to its signature because it has nested declarations.\n- Claim a reconstructed complete snapshot proves complete semantic extraction.\n- Embed/index raw snapshots through any normal candidate feed, including dedup reuse.\n- Introduce code-specific persistence into a memory/vector adapter, core SQL,\n  a new core facade or a monolithic scanner/generation manager.\n- Treat missing generation/role on legacy chunks as a complete new source view.\n- Advertise cross-store ACID, undo already-succeeded writes as rollback, or\n  hide a file write/cleanup failure by stamping it unchanged.\n---\n### 2026-10-14 AST chunking audit\n\nEvidence and proposed sequencing:\n[`AST-aware code chunking audit`](research/ast-aware-code-chunking-audit.md).\nDirection: [RFC-0021: Structural code context](rfcs/0021-structural-code-context.md)\n(Accepted; includes additive language/parser registration and polyglot validation).\nLive self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /\n7,192 edges. A separate live fixture verified method source and graph links.\n\nSource preservation and outer-function body loss are now fixed on\n`codex/code-source-preservation` (`22013a1`); the real self-index verified\n620 exact file reads and a complete nested Rust callable. See\n[live verification](research/code-source-preservation-self-verification.md).\n- **[code-context-and-summary] Context enrichment is incomplete:** method\n  anchors carry class names, and `contains`/`imports` exist in the graph, but\n  method chunks do not carry hydrated field/constructor/import bindings and\n  scan leaves `summa\n... [truncated]\n---\nupdating_one_file_keeps_siblings_and_independent_shared_owners_visible\n---\nPage::map\n---\n## Changes to make, in order\n\n1. **Preserve executable and contextual source before enrichment.** Restrict\n   signature-only treatment to appropriate structural containers. Functions\n   and methods containing nested declarations must keep the rest of their\n   behavior. Preserve class fields, initialization blocks, decorators and\n   relevant top-level statements through explicit context/residual chunks or\n   a retrievable source snapshot. Keep AST ranges accurate and distinguish a\n   container's full span from its abbreviated stored text. Acceptance:\n   `checkout` retains its validation, error and fee calculation; `UserService`\n   context exposes the field and constructor without losing either method.\n\n2. **Define context hydration over existing graph and source facts.** Assemble\n   a bounded method context with qualified symbol, complete signature, parent\n   declaration, relevant member/constructor context, import bindings and\n   file/revision/ranges. Reuse `contains`, `imports` and ch\n... [truncated]\n---\n### Never do\n\n- Reduce an executable outer function to its signature because it has nested declarations.\n- Claim a reconstructed complete snapshot proves complete semantic extraction.\n- Embed/index raw snapshots through any normal candidate feed, including dedup reuse.\n- Introduce code-specific persistence into a memory/vector adapter, core SQL,\n  a new core facade or a monolithic scanner/generation manager.\n- Treat missing generation/role on legacy chunks as a complete new source view.\n- Advertise cross-store ACID, undo already-succeeded writes as rollback, or\n  hide a file write/cleanup failure by stamping it unchanged.\n---\nSqlKnowledgeStore\n---\nPgConnection::block_on",
+      "failed": false,
+      "id": "recall-nested",
+      "tool": "recall",
+      "args": {
+        "query": "How does extraction retain the whole outer callable when it contains a nested function, while avoiding embedding entire classes?",
+        "limit": 10
+      }
+    },
+    {
+      "seconds": 6.48,
+      "text": "insert_current (Function) \u2014 phanijapps/engram, core/integration/src/embedding_backfill.rs [graph+associative_graph+community_summary, raw=4.00, rrf=0.05 (norm:1.00)]\nent (Function) \u2014 phanijapps/engram, adapters/integration/tests/associative_recall.rs [exact-match, rrf=0.04 (norm:0.80)]\nEngramProvider::require_vectors (Function) \u2014 phanijapps/engram, core/integration/src/provider.rs [associative_graph+community_summary, raw=1.00, rrf=0.03 (norm:0.66)]\nbackfill (Function) \u2014 phanijapps/engram, core/integration/src/embedding_backfill.rs [associative_graph+community_summary, raw=0.06, rrf=0.03 (norm:0.65)]\nEngramProvider::require_embedding_provider (Function) \u2014 phanijapps/engram, core/integration/src/provider.rs [associative_graph+community_summary, raw=0.04, rrf=0.03 (norm:0.63)]\nlocal_embedding_backfill::FailOnceVector::insert (Function) \u2014 phanijapps/engram, adapters/integration/tests/code_source_selection.rs [graph+associative_graph, raw=0.03, rrf=0.03 (norm:0.60)]\nfn put_scoped( (Chunk) \u2014 phanijapps/engram, adapters/pgvector/src/cells.rs [vector, raw=0.56, rrf=0.02 (norm:0.34)]\nfn put_scoped(\n    conn: &PgConnection,\n    table: &str,\n    id: &str,\n    json: serde_json::Value,\n    s: &Scope,\n) -> CoreResult<()> {\n    conn.block_on(async {\n        conn.client.execute(\n            &format!(\"INSERT INTO {table} (id, record_json, tenant, subject, workspace, session, environment) \\\n                      VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (id) DO UPDATE SET \\\n                      record_json=EXCLUDED.record_json, last_updated_at=now()\"),\n            &[&id, &json, &s.t\n... [truncated]\n... [3 results from core/integration/src/embedding_backfill.rs capped for diversity]",
+      "failed": false,
+      "id": "exact-guard",
+      "tool": "search",
+      "args": {
+        "query": "insert_current",
+        "limit": 10,
+        "diagnostics": true
+      }
+    },
+    {
+      "seconds": 6.566,
+      "text": "walk_declarations_with_receivers (Function) \u2014 phanijapps/engram, core/code/src/parser/tree_sitter_chunker.rs [graph+associative_graph+community_summary, raw=6.00, rrf=0.05 (norm:1.00)]\nwalk_declarations (Function) \u2014 phanijapps/engram, core/code/src/parser/tree_sitter_chunker.rs [graph+community_summary, raw=4.00, rrf=0.03 (norm:0.67)]\nPage::map (Function) \u2014 phanijapps/engram, core/domain/src/paging.rs [associative_graph, raw=0.05, rrf=0.02 (norm:0.34)]\n## What is implemented (Chunk) \u2014 phanijapps/engram, docs/research/ast-aware-code-chunking-audit.md [graph, raw=4.00, rrf=0.02 (norm:0.33)]\n## What is implemented\n\n| Concern | Evidence | Assessment |\n| --- | --- | --- |\n| Parser and declaration boundaries | [`tree_sitter_chunker.rs`](../../core/code/src/parser/tree_sitter_chunker.rs), `TreeSitterChunker::parse`, `walk_declarations_with_receivers`, `ts_kinds` | Supported repository code uses syntax nodes, not fixed character windows. |\n| Method body and parent identity | Same module, leaf branch and qualified anchor construction | A leaf method keeps its complete body; `fn UserServic\n... [truncated]\n... [5 results from core/code/src/parser/tree_sitter_chunker.rs capped for diversity]",
+      "failed": false,
+      "id": "exact-parser",
+      "tool": "search",
+      "args": {
+        "query": "walk_declarations_with_receivers",
+        "limit": 10,
+        "diagnostics": true
+      }
+    }
+  ],
+  "scan": "ScanSummary { scanned: 1269, ingested: 0, unchanged: 999, skipped: 10, entities: 0, relationships: 0, errors: 0, admission_failures: [], git_remote: Some(\"git@github.com:phanijapps/engram.git\"), git_branch: Some(\"codex/code-source-preservation\"), git_sha: Some(\"98fda3c6d1\") }\nno scan config; builtin filter\nembedded 0 chunks",
+  "idleBackfill": "reindex: embedded 0 chunks (limit 512) (0 code chunks)\nbacklog drained",
+  "scopeDenial": {
+    "error": {
+      "code": -32602,
+      "message": "reindex scope must match the trusted launch scope"
+    },
+    "id": 2,
+    "jsonrpc": "2.0"
+  },
+  "sourceChecks": [
+    {
+      "path": "core/integration/src/embedding_backfill.rs",
+      "bytes": 11352,
+      "seconds": 0.005
+    },
+    {
+      "path": "core/integration/src/embedding.rs",
+      "bytes": 8348,
+      "seconds": 0.004
+    },
+    {
+      "path": "core/code/src/parser/tree_sitter_chunker.rs",
+      "bytes": 66619,
+      "seconds": 0.024
+    },
+    {
+      "path": "packages/runtime/src/mcp/tools.ts",
+      "bytes": 38838,
+      "seconds": 0.006
+    },
+    {
+      "path": "mcp/engram-mcp/src/codegraph.rs",
+      "bytes": 186897,
+      "seconds": 0.054
+    },
+    {
+      "path": "core/integration/src/sqlite/recall_lanes.rs",
+      "bytes": 14293,
+      "seconds": 0.009
+    },
+    {
+      "path": "adapters/sqlite/src/knowledge/source_access.rs",
+      "bytes": 3496,
+      "seconds": 0.002
+    }
+  ],
+  "tailCollision": {
+    "prefixCharacters": 12994,
+    "files": {
+      "cancel.ts": 13098,
+      "refund.ts": 13091
+    },
+    "capabilities": "Server: engram-mcp 0.1.0\nCapabilities:\n  memory: supported\n  code_embeddings: supported\n  knowledge: supported\n  code_source_preservation: supported\n  graph: supported\n  knowledge_query: supported\n  lexical_feed: supported\n  recall: supported\n  consolidation: supported\n  batch: supported\n  ontology: supported\n  taxonomy: supported\n  beliefs: supported\n  procedures: supported\n  hierarchy: supported\n  identity: supported\n  vector: supported",
+    "scan": "ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 6, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 4 chunks",
+    "sourceChecks": 2,
+    "idle": "reindex: embedded 0 chunks (limit 256) (0 code chunks)\nbacklog drained",
+    "chunks": [
+      {
+        "id": "chunk-sha256:52174e698d61111729fcf89ae88c253c06dc2dff92ec64d97929ccc9efb65697",
+        "path": "refund.ts",
+        "characters": 13083
+      },
+      {
+        "id": "chunk-sha256:bee24fe8d53e4a2551fc948483c3728bdfb80b37fae2396689e7dc92d7829d9c",
+        "path": "cancel.ts",
+        "characters": 13090
+      }
+    ],
+    "vectorComparison": "dimensions=384 identical=true max_delta=0",
+    "fixture": {
+      "declaration": "export function processRecord() {\n",
+      "repeatedPrefixLine": "  // Shared routine bookkeeping and input validation.\n",
+      "repeatCount": 240,
+      "tails": {
+        "cancel.ts": "  // Cancel the subscription and revoke premium membership access.\n  return 'subscription_cancelled';\n}\n",
+        "refund.ts": "  // Refund the merchant charge and reverse the customer payment.\n  return 'payment_refunded';\n}\n"
+      },
+      "procedure": "Write each file as declaration + repeatedPrefixLine * repeatCount + its tail. Scan a disposable vector-enabled store; verify exact source_read and complete symbol text. Compare both symbol vectors through VectorIndex::vector_for_target. Snapshots are excluded."
+    }
+  },
+  "staleDocument": {
+    "path": "docs/backlog.md",
+    "removedText": "[ast-outer-body-loss]",
+    "presentInCheckout": false,
+    "sameHeadingVersions": 4,
+    "obsoleteChunkId": "chunk-b1d59be3ebf06d0d8fcae2249c73fbe84b147fdea262d83364bf842a569e649b",
+    "obsoleteProvenance": {
+      "source": "engram-mcp-scan [git@github.com:phanijapps/engram.git@codex/code-source-preservation:22013a1b04]",
+      "actor": {
+        "id": "engram-mcp",
+        "kind": "agent",
+        "displayName": "engram-mcp"
+      },
+      "observedAt": "2026-10-14T20:28:51.142828668Z",
+      "derivations": [
+        {
+          "kind": "ingestion",
+          "createdAt": "2026-10-14T20:28:51.142828668Z"
+        }
+      ],
+      "confidence": 1.0,
+      "method": "deterministic_text_ingestion"
+    }
+  },
+  "primarySearchLatencySeconds": {
+    "median": 10.817,
+    "min": 10.739,
+    "max": 16.291
+  },
+  "freshSafetySuite": "cargo test -p engram-conformance --test code_source_selection: 19 passed, 0 failed (2.41s)"
+}

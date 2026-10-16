@@ -34,6 +34,8 @@ pub enum McpBackend {
 #[derive(Debug)]
 pub struct McpConfig {
     pub storage_path: PathBuf,
+    pub code_config_path: Option<PathBuf>,
+    pub code_calibration_path: Option<PathBuf>,
     pub project: String,
     pub scope_strategy: ScopeMappingStrategy,
     pub embedding: EmbeddingProviderConfig,
@@ -73,6 +75,8 @@ impl McpConfig {
     /// reversed) toggling `enable_vector` (default `true`).
     pub fn from_args(argv: &[String]) -> Result<Self, String> {
         let mut storage_path = None;
+        let mut code_config_path = None;
+        let mut code_calibration_path = None;
         let mut project = None;
         let mut ontology_path = None;
         let mut taxonomy_path = None;
@@ -108,6 +112,8 @@ impl McpConfig {
             if !matches!(
                 flag,
                 "--storage"
+                    | "--config"
+                    | "--code-calibration"
                     | "--project"
                     | "--ontology"
                     | "--taxonomy"
@@ -130,6 +136,8 @@ impl McpConfig {
                 .ok_or_else(|| format!("{flag} requires a value"))?;
             match flag {
                 "--storage" => storage_path = Some(PathBuf::from(value)),
+                "--config" => code_config_path = Some(PathBuf::from(value)),
+                "--code-calibration" => code_calibration_path = Some(PathBuf::from(value)),
                 "--project" => project = Some(value),
                 "--ontology" => ontology_path = Some(PathBuf::from(value)),
                 "--taxonomy" => taxonomy_path = Some(PathBuf::from(value)),
@@ -182,6 +190,8 @@ impl McpConfig {
         }
         Ok(Self {
             storage_path,
+            code_config_path,
+            code_calibration_path,
             project: project.unwrap_or_else(|| "default".to_string()),
             scope_strategy: ScopeMappingStrategy::Strict,
             embedding: EmbeddingProviderConfig {
@@ -247,6 +257,23 @@ mod tests {
     #[test]
     fn from_args_requires_storage() {
         assert!(McpConfig::from_args(&[]).is_err());
+    }
+
+    #[test]
+    fn code_config_is_only_selected_by_explicit_operator_flag() {
+        let omitted = McpConfig::from_args(&["--storage".into(), "/tmp/x".into()]).unwrap();
+        assert!(omitted.code_config_path.is_none());
+        let explicit = McpConfig::from_args(&[
+            "--storage".into(),
+            "/tmp/x".into(),
+            "--config".into(),
+            "/tmp/code.toml".into(),
+        ])
+        .unwrap();
+        assert_eq!(
+            explicit.code_config_path,
+            Some(PathBuf::from("/tmp/code.toml"))
+        );
     }
 
     #[test]

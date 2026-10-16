@@ -59,11 +59,48 @@ pub(super) fn current_attempt(
             reason: "code source lease was superseded or is not updating".into(),
         });
     }
+    super::document_code_head::updating_lease(conn, &m)?;
     Ok(m)
 }
 
 #[async_trait]
 impl CodeSourceRepository for SqlKnowledgeStore {
+    async fn put_repository_contract(
+        &self,
+        scope: &Scope,
+        repository: &str,
+        entity: KnowledgeEntity,
+        relationship: KnowledgeRelationship,
+    ) -> CoreResult<()> {
+        let mut conn = self.lock()?;
+        let tx = conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+        super::repository_contract::put(&tx, scope, repository, entity, relationship)?;
+        tx.commit().map_err(sql_error)
+    }
+    async fn retract_repository_contract(
+        &self,
+        scope: &Scope,
+        repository: &str,
+        entity: &EntityId,
+        relationship: &RelationshipId,
+    ) -> CoreResult<()> {
+        let mut conn = self.lock()?;
+        let tx = conn
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+        super::repository_contract::retract(&tx, scope, repository, entity, relationship)?;
+        tx.commit().map_err(sql_error)
+    }
+    async fn indexed_code_revision(
+        &self,
+        file: &CodeFileKey,
+        scope: &Scope,
+        requester: &Requester,
+    ) -> CoreResult<Option<String>> {
+        super::code_source_provenance::indexed_revision(self, file, scope, requester)
+    }
     async fn get_code_source(
         &self,
         file: &CodeFileKey,
@@ -112,6 +149,11 @@ impl CodeSourceRepository for SqlKnowledgeStore {
         )
         .map_err(sql_error)?;
         super::source_legacy::attribute_legacy_records(&tx, &manifest.file, &key)?;
+        super::document_code_head::begin(
+            &tx,
+            &manifest,
+            prior.as_ref().map(|m| m.attempt_id.as_str()),
+        )?;
         save(&tx, &manifest, &key)?;
         tx.commit().map_err(sql_error)
     }
@@ -137,6 +179,7 @@ impl CodeSourceRepository for SqlKnowledgeStore {
             }
         }
         save(&tx, &manifest, &key)?;
+        super::document_code_head::synchronize(&tx, &manifest)?;
         tx.commit().map_err(sql_error)
     }
     async fn write_code_record(
@@ -179,6 +222,7 @@ impl CodeSourceRepository for SqlKnowledgeStore {
         }
         validate_inventory(&tx, &manifest, &key)?;
         save(&tx, &manifest, &key)?;
+        super::document_code_head::synchronize(&tx, &manifest)?;
         tx.commit().map_err(sql_error)
     }
     async fn fail_code_source(&self, file: &CodeFileKey, attempt: &str) -> CoreResult<()> {
@@ -196,6 +240,7 @@ impl CodeSourceRepository for SqlKnowledgeStore {
             });
         }
         m.state = CodeSourceState::Incomplete;
+        super::document_code_head::synchronize(&tx, &m)?;
         save(&tx, &m, &key)?;
         tx.commit().map_err(sql_error)
     }
@@ -294,9 +339,7 @@ impl CodeSourceRepository for SqlKnowledgeStore {
         let mut retained = false;
         {
             let mut stmt = tx
-                .prepare(
-                    "SELECT record_json FROM knowledge_graphs_records WHERE stable_source_key=?1",
-                )
+                .prepare("SELECT record_json FROM knowledge_graphs WHERE stable_source_key=?1")
                 .map_err(sql_error)?;
             let rows = stmt
                 .query_map([repository], |r| r.get::<_, String>(0))
@@ -342,6 +385,10 @@ impl CodeSourceRepository for SqlKnowledgeStore {
                 CodeSourceRecordKind::Entity,
                 id.as_str(),
             )?;
+            // Source-refresh GC preserves this exact, validated repository
+            // context as history. Ordinary KG hard-delete APIs do not enter
+            // this path or acquire retention for standalone facts.
+            tx.execute("INSERT INTO canonical_document_history(kind,record_id,record_json) SELECT 'entity',?1,?2 WHERE NOT EXISTS(SELECT 1 FROM document_head_records WHERE kind='entity' AND record_id=?1)", params![id.as_str(),json]).map_err(sql_error)?;
             tx.execute(
                 "DELETE FROM knowledge_entities_records WHERE id=?1",
                 [id.as_str()],

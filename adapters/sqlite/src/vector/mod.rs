@@ -6,9 +6,15 @@
 mod entry;
 mod extension;
 #[cfg(feature = "fastembed-provider")]
+mod fastembed_assets;
+#[cfg(feature = "fastembed-provider")]
 mod fastembed_provider;
+#[cfg(feature = "fastembed-provider")]
+mod fastembed_tokenization;
 mod index;
+mod namespace;
 mod retrieval;
+mod schema;
 #[allow(clippy::module_inception)]
 mod vector;
 

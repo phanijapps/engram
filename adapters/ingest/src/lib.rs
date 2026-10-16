@@ -8,6 +8,8 @@ mod chunker;
 mod classifier;
 mod contract;
 mod contract_entities;
+mod document_generation;
+mod document_graph_persistence;
 mod extractor;
 mod filesystem;
 mod git;

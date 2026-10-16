@@ -32,7 +32,7 @@ use engram_domain::{
     KnowledgeRelationship, Policy, Retention, RetrievalRequest, RetrievalTargetType, Scope,
     Sensitivity, Visibility,
 };
-use engram_knowledge::KnowledgeRepository;
+use engram_knowledge::{DocumentHeadRepository, KnowledgeRepository};
 use engram_retrieval::{GraphCache, RetrievalIndex};
 use engram_runtime::CoreResult;
 use engram_store_associative_graph::{AssociativeGraphIndex, GraphRelationshipSource};
@@ -160,7 +160,12 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
         indexed_text: Option<&str>,
         _request: &RetrievalRequest,
     ) -> CoreResult<bool> {
-        if !self.store.has_code_contribution(target_id)? {
+        if !self.store.has_code_contribution(target_id)?
+            && !self
+                .store
+                .is_managed_chunk(&ChunkId::from(target_id))
+                .await?
+        {
             return Ok(true);
         }
         let Some(canonical) = self.store.semantic_lexical_text(target_id)? else {
@@ -182,12 +187,14 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
         // (1) Chunk resolution — the common case for docs/memories. Preserves
         // the prior behavior exactly: a chunk-id hit rehydrates its canonical
         // `KnowledgeChunk`.
-        let access = self.store.source_record_access(request)?;
+        let access = self
+            .store
+            .source_record_access_for_target(request, target_id)?;
         let chunk_id = ChunkId::from(target_id);
-        if access.allows(RetrievalTargetType::Chunk, target_id)
+        if access.allows(RetrievalTargetType::Chunk)
             && let Some(mut chunk) = self.store.get_chunk(&chunk_id, &request.scope).await?
         {
-            if let Some(policy) = access.policy(RetrievalTargetType::Chunk, target_id) {
+            if let Some(policy) = access.policy(RetrievalTargetType::Chunk) {
                 chunk.policy = policy.clone();
             }
             return Ok(Some(chunk_to_lexical(chunk)));
@@ -201,11 +208,11 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
         // chunk resolution unchanged; the entity branch is purely additive —
         // entity ids that previously dropped now resolve instead.
         let entity_id = EntityId::from(target_id);
-        if access.allows(RetrievalTargetType::Entity, target_id)
+        if access.allows(RetrievalTargetType::Entity)
             && let Some(entity) = self.store.get_entity(&entity_id, &request.scope).await?
         {
             let mut result = entity_to_lexical(entity);
-            if let Some(policy) = access.policy(RetrievalTargetType::Entity, target_id) {
+            if let Some(policy) = access.policy(RetrievalTargetType::Entity) {
                 result.policy = policy.clone();
             }
             return Ok(Some(result));
@@ -245,6 +252,9 @@ impl VectorTargetResolver for KnowledgeVectorResolver {
             return Ok(None);
         }
         let chunk = resolve_chunk(&self.store, &hit.target_id, &request.scope).await?;
+        // Canonical code vectors used the legacy prefix-limited representation.
+        // Complete code segments are served by the dedicated compatible lane.
+        let chunk = chunk.filter(|c| c.code.is_none());
         Ok(chunk.map(|mut chunk| {
             if let Some(policy) = access.policy(RetrievalTargetType::Chunk, &hit.target_id) {
                 chunk.policy = policy.clone();

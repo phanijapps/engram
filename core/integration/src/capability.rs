@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 /// machine-readable and stable; each capability state includes a reason code
 /// explaining why a feature is not supported.
 ///
-/// The 20 keys cover every capability area named in the host-SDK brief plus
+/// The keys cover every capability area named in the host-SDK brief plus
 /// consolidation. The 8 "not-yet-built" areas (hybrid search, episodes/evidence, contradiction,
 /// atomic batch, unified recall, export/import, maintenance, observability)
 /// default to [`CapabilityState::Unsupported`] with
@@ -22,6 +22,13 @@ use serde::{Deserialize, Serialize};
 /// ship — they are present and explicit, never silently absent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CapabilityReport {
+    /// Current source/segment/embedding and configured retrieval prerequisites.
+    /// Readiness does not certify calibration or corpus quality.
+    #[serde(default = "default_code_graph")]
+    pub code_evidence: CapabilityState,
+    /// Actual admitted local scorer handle, independently of evidence readiness.
+    #[serde(default = "default_code_graph")]
+    pub code_scorer: CapabilityState,
     /// Local retrieval embedding backfill for source-authorized code chunks.
     #[serde(default = "default_code_graph")]
     pub code_embeddings: CapabilityState,
@@ -137,6 +144,8 @@ impl CapabilityReport {
     /// Creates a new capability report with all fields set to the given state.
     pub fn new(state: CapabilityState) -> Self {
         Self {
+            code_evidence: state.clone(),
+            code_scorer: state.clone(),
             code_embeddings: state.clone(),
             code_source_preservation: state.clone(),
             memory: state.clone(),
@@ -170,7 +179,9 @@ impl CapabilityReport {
     /// This is a convenient helper for applications that require all features
     /// to be available before proceeding.
     pub fn all_supported(&self) -> bool {
-        self.code_embeddings.is_supported()
+        self.code_evidence.is_supported()
+            && self.code_scorer.is_supported()
+            && self.code_embeddings.is_supported()
             && self.code_source_preservation.is_supported()
             && self.memory.is_supported()
             && self.knowledge.is_supported()
@@ -338,6 +349,8 @@ impl CapabilityReportBuilder {
         };
         Self {
             report: CapabilityReport {
+                code_evidence: feature_disabled.clone(),
+                code_scorer: feature_disabled.clone(),
                 code_embeddings: feature_disabled.clone(),
                 code_source_preservation: feature_disabled.clone(),
                 memory: provider_unavailable.clone(),
@@ -581,9 +594,11 @@ mod tests {
     #[test]
     fn test_capability_report_includes_all_nineteen_keys() {
         let report = CapabilityReport::new(CapabilityState::Supported);
-        // Verify all 20 capability keys are present in the serialized report.
+        // Verify the stable capability keys are present in the serialized report.
         let json = serde_json::to_string(&report).unwrap();
         for key in [
+            "code_evidence",
+            "code_scorer",
             "code_embeddings",
             "memory",
             "knowledge",

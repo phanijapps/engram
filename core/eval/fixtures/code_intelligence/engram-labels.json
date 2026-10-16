@@ -1,0 +1,1052 @@
+[
+  {
+    "id": "engram-retrieval-policy",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "When a search caller is not the source owner, how are expired or private code files kept out of semantic results?",
+    "requiredUnits": [
+      {
+        "path": "core/knowledge/src/code_source.rs",
+        "qualifiedAnchor": "code_source_retrieval_authorized",
+        "startByte": 6924,
+        "endByte": 7454,
+        "requiredRanges": [
+          {
+            "startByte": 7080,
+            "endByte": 7454
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "fb63cb3662f818652621e88b1f6ad53acc599206c32be8db0ced7e51b015fd76"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-hierarchy",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "What rejects a child symbol whose claimed enclosing declaration belongs to another file or does not strictly contain it?",
+    "requiredUnits": [
+      {
+        "path": "core/knowledge/src/code_source.rs",
+        "qualifiedAnchor": "validate_code_unit_hierarchy",
+        "startByte": 7609,
+        "endByte": 8835,
+        "requiredRanges": [
+          {
+            "startByte": 8524,
+            "endByte": 8806
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "fb63cb3662f818652621e88b1f6ad53acc599206c32be8db0ced7e51b015fd76"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-unicode-snapshot",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How are large source snapshots partitioned without splitting a multibyte character, and what happens when the bound is smaller than one character?",
+    "requiredUnits": [
+      {
+        "path": "core/code/src/parser/source_coverage.rs",
+        "qualifiedAnchor": "snapshot_ranges",
+        "startByte": 1209,
+        "endByte": 1999,
+        "requiredRanges": [
+          {
+            "startByte": 1567,
+            "endByte": 1846
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "59556cf7a6e7736c73670b122a7c70fd73f4832a1c3fab9052a7b0de6e40d40a"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-parse-state",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "How does source preservation distinguish an unavailable grammar, a parser failure and a recovered syntax tree?",
+    "requiredUnits": [
+      {
+        "path": "core/code/src/parser/source_coverage.rs",
+        "qualifiedAnchor": "source_parse_outcome",
+        "startByte": 684,
+        "endByte": 1207,
+        "requiredRanges": [
+          {
+            "startByte": 818,
+            "endByte": 1207
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "59556cf7a6e7736c73670b122a7c70fd73f4832a1c3fab9052a7b0de6e40d40a"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-source-policy-change",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "If admission fails after a source policy changes, what excludes the previous active source while retaining its records for cleanup?",
+    "requiredUnits": [
+      {
+        "path": "adapters/ingest/src/scanner/source_generation.rs",
+        "qualifiedAnchor": "exclude_changed_policy",
+        "startByte": 1166,
+        "endByte": 2116,
+        "requiredRanges": [
+          {
+            "startByte": 1382,
+            "endByte": 2088
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "af339276b8f0ae408c0497ab0efb0125975d306baffff1037486547d2e3639be"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-source-current",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "What must match for a scanned code file to be treated as already current, besides its source hash?",
+    "requiredUnits": [
+      {
+        "path": "adapters/ingest/src/scanner/source_generation.rs",
+        "qualifiedAnchor": "is_current",
+        "startByte": 620,
+        "endByte": 1008,
+        "requiredRanges": [
+          {
+            "startByte": 777,
+            "endByte": 1008
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "af339276b8f0ae408c0497ab0efb0125975d306baffff1037486547d2e3639be"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-sharing-policy",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "When independent owners share an identical physical record, how is one permitted policy chosen without inventing a broader policy?",
+    "requiredUnits": [
+      {
+        "path": "core/retrieval/src/record_access.rs",
+        "qualifiedAnchor": "RecordAccess::permit",
+        "startByte": 800,
+        "endByte": 1492,
+        "requiredRanges": [
+          {
+            "startByte": 914,
+            "endByte": 1136
+          },
+          {
+            "startByte": 1136,
+            "endByte": 1492
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "712cb06612528d130354a8ca89d1f13177996139ecc4fd74674a3f36c9a9f22f"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-weighted-fusion",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "Where are per-source rank contributions weighted and combined when different retrieval lanes find the same target?",
+    "requiredUnits": [
+      {
+        "path": "core/retrieval/src/reciprocal.rs",
+        "qualifiedAnchor": "ReciprocalRankFusion::fuse",
+        "startByte": 2157,
+        "endByte": 3995,
+        "requiredRanges": [
+          {
+            "startByte": 2568,
+            "endByte": 3727
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "f464b8888194a9143eb0d0648a7be281106a26d32c4d142837bc2989845eb305"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-storage-confinement",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "Before opening storage, how is a path confined to its trusted root after resolving symbolic links?",
+    "requiredUnits": [
+      {
+        "path": "core/integration/src/config.rs",
+        "qualifiedAnchor": "EngramConfig::validate",
+        "startByte": 20592,
+        "endByte": 23267,
+        "requiredRanges": [
+          {
+            "startByte": 21487,
+            "endByte": 23267
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "0fcb81c7d1676f369f6921f63f1b8bc8daafaf7328085787eb6c6e8582d4de80"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-concept-override",
+    "split": "heldout",
+    "polarity": "answerable",
+    "query": "What lets a configured concept allowlist override both blocked terms and the minimum name length?",
+    "requiredUnits": [
+      {
+        "path": "adapters/ingest/src/scan_filter.rs",
+        "qualifiedAnchor": "ScanFilter::should_link_concept",
+        "startByte": 4762,
+        "endByte": 5074,
+        "requiredRanges": [
+          {
+            "startByte": 4818,
+            "endByte": 5074
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c97635ab467b41e6c8e8f4d193e74b149b1782026b23684291b4cd33b90b2203"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-metadata-auth",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "Are source metadata reads subject to the same expiry and owner permission rules as source bytes?",
+    "requiredUnits": [
+      {
+        "path": "core/knowledge/src/code_source.rs",
+        "qualifiedAnchor": "authorize_code_source_access",
+        "startByte": 5357,
+        "endByte": 6761,
+        "requiredRanges": [
+          {
+            "startByte": 5760,
+            "endByte": 6542
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "fb63cb3662f818652621e88b1f6ad53acc599206c32be8db0ced7e51b015fd76"
+      },
+      {
+        "path": "mcp/engram-mcp/src/codegraph.rs",
+        "qualifiedAnchor": "code_sources",
+        "startByte": 184193,
+        "endByte": 185154,
+        "requiredRanges": [
+          {
+            "startByte": 184193,
+            "endByte": 185154
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "8cf8b9d43389a6192da1002933b678bfab89f912332db34b79b0d283bdcce1ba"
+      },
+      {
+        "path": "core/knowledge/src/code_source.rs",
+        "qualifiedAnchor": "authorize_code_source_read",
+        "startByte": 4445,
+        "endByte": 5275,
+        "requiredRanges": [
+          {
+            "startByte": 4445,
+            "endByte": 5275
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "fb63cb3662f818652621e88b1f6ad53acc599206c32be8db0ced7e51b015fd76"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-scope-auth",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How is an exact source-read file scope checked against the trusted host scope?",
+    "requiredUnits": [
+      {
+        "path": "core/knowledge/src/code_source.rs",
+        "qualifiedAnchor": "authorize_code_source_scope",
+        "startByte": 4089,
+        "endByte": 4443,
+        "requiredRanges": [
+          {
+            "startByte": 4214,
+            "endByte": 4431
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "fb63cb3662f818652621e88b1f6ad53acc599206c32be8db0ced7e51b015fd76"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-generation-read",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "What stops a raw source read from returning a source generation other than the one requested?",
+    "requiredUnits": [
+      {
+        "path": "core/knowledge/src/code_source.rs",
+        "qualifiedAnchor": "authorize_code_source_read",
+        "startByte": 4445,
+        "endByte": 5275,
+        "requiredRanges": [
+          {
+            "startByte": 4855,
+            "endByte": 5199
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "fb63cb3662f818652621e88b1f6ad53acc599206c32be8db0ced7e51b015fd76"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-residual",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How are uncovered imports and statements found when source coverage ranges overlap or arrive out of order?",
+    "requiredUnits": [
+      {
+        "path": "core/code/src/parser/source_coverage.rs",
+        "qualifiedAnchor": "source_residual_ranges",
+        "startByte": 2155,
+        "endByte": 2949,
+        "requiredRanges": [
+          {
+            "startByte": 2277,
+            "endByte": 2933
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "59556cf7a6e7736c73670b122a7c70fd73f4832a1c3fab9052a7b0de6e40d40a"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-source-attempt",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How is a fresh indexing attempt fenced against the previous attempt before superseded records are cleaned up?",
+    "requiredUnits": [
+      {
+        "path": "adapters/ingest/src/scanner/source_generation.rs",
+        "qualifiedAnchor": "begin",
+        "startByte": 2117,
+        "endByte": 3936,
+        "requiredRanges": [
+          {
+            "startByte": 3441,
+            "endByte": 3918
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "af339276b8f0ae408c0497ab0efb0125975d306baffff1037486547d2e3639be"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-source-persist",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "Are guarded records registered before their source and document payloads are written?",
+    "requiredUnits": [
+      {
+        "path": "adapters/ingest/src/scanner/source_generation.rs",
+        "qualifiedAnchor": "persist",
+        "startByte": 4252,
+        "endByte": 5130,
+        "requiredRanges": [
+          {
+            "startByte": 4543,
+            "endByte": 4918
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "af339276b8f0ae408c0497ab0efb0125975d306baffff1037486547d2e3639be"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-deny-path",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "Do excluded directory names match complete path segments, and are excluded extensions case sensitive?",
+    "requiredUnits": [
+      {
+        "path": "adapters/ingest/src/scan_filter.rs",
+        "qualifiedAnchor": "ScanFilter::is_denylisted",
+        "startByte": 5365,
+        "endByte": 5842,
+        "requiredRanges": [
+          {
+            "startByte": 5419,
+            "endByte": 5842
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c97635ab467b41e6c8e8f4d193e74b149b1782026b23684291b4cd33b90b2203"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-filter-merge",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How do custom scanning filters extend built-in exclusion and concept lists while replacing the length threshold?",
+    "requiredUnits": [
+      {
+        "path": "adapters/ingest/src/scan_filter.rs",
+        "qualifiedAnchor": "ScanFilter::merge",
+        "startByte": 3850,
+        "endByte": 4525,
+        "requiredRanges": [
+          {
+            "startByte": 3900,
+            "endByte": 4505
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c97635ab467b41e6c8e8f4d193e74b149b1782026b23684291b4cd33b90b2203"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-markdown-fences",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "How are fenced Markdown code blocks kept separate from surrounding section prose?",
+    "requiredUnits": [
+      {
+        "path": "adapters/ingest/src/markdown_chunker.rs",
+        "qualifiedAnchor": "MarkdownChunker::chunk",
+        "startByte": 2266,
+        "endByte": 5984,
+        "requiredRanges": [
+          {
+            "startByte": 3336,
+            "endByte": 4295
+          },
+          {
+            "startByte": 4525,
+            "endByte": 4665
+          },
+          {
+            "startByte": 5391,
+            "endByte": 5610
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "695f52a254502c30bd1993a05757f1e23292abe52e7a3a9eabe68e87f5febf0b"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-lexical-fresh",
+    "split": "development",
+    "polarity": "answerable",
+    "query": "What checks whether a cached keyword projection is still current before returning it?",
+    "requiredUnits": [
+      {
+        "path": "core/integration/src/sqlite/recall_lanes.rs",
+        "qualifiedAnchor": "KnowledgeLexicalResolver::projection_is_current",
+        "startByte": 7094,
+        "endByte": 7808,
+        "requiredRanges": [
+          {
+            "startByte": 7267,
+            "endByte": 7808
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "fbba098752ef38ca3a262debe18ead5e78f6c38478d847ac45468e655f085656"
+      }
+    ],
+    "rationale": "Pinned production implementation; decisive range verified from source before retrieval.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-crdt",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does Engram merge concurrent source edits using a replicated CRDT text document?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-payments",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "irrelevant_question",
+    "query": "How does Engram capture a credit card payment and issue a financial refund?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-jvm",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does Engram attach to a running JVM to collect method execution traces?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-market",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "irrelevant_question",
+    "query": "How does Engram calculate a live stock portfolio value from exchange prices?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-remote-runtime",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does Engram remotely execute indexed user functions inside a sandbox container?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-watch-crdt",
+    "split": "heldout",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does the source scanner synchronize collaborative editing cursors between users?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-billing",
+    "split": "development",
+    "polarity": "negative",
+    "negativeKind": "irrelevant_question",
+    "query": "How does Engram produce tax compliant invoices for subscriptions?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-mobile",
+    "split": "development",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does Engram send mobile push notifications through APNs?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-pixels",
+    "split": "development",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does Engram decode video frames for scene detection?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-ftp",
+    "split": "development",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does Engram upload indexed source files through FTP?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "engram-absent-replicated-log",
+    "split": "development",
+    "polarity": "negative",
+    "negativeKind": "absent_feature",
+    "query": "How does Engram elect a Raft leader for distributed storage replication?",
+    "requiredUnits": [],
+    "rationale": "Scoped to Engram production sources; independent blind review must verify absence.",
+    "corpus": "engram"
+  },
+  {
+    "id": "original-locality",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "answerable",
+    "query": "Can switching the embedding provider send indexed source code to a remote model? Show the checks before inference.",
+    "requiredUnits": [
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "prepare",
+        "startByte": 3665,
+        "endByte": 5240,
+        "requiredRanges": [
+          {
+            "startByte": 3665,
+            "endByte": 5240
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      },
+      {
+        "path": "core/integration/src/embedding.rs",
+        "qualifiedAnchor": "EmbeddingProvider::is_local",
+        "startByte": 1479,
+        "endByte": 1527,
+        "requiredRanges": [
+          {
+            "startByte": 1479,
+            "endByte": 1527
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "e9c25cc7f6c7b8df1e98bbec6bc297d66a6db8f1b75a8fda3d0aa3749e47db1a"
+      }
+    ],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval."
+  },
+  {
+    "id": "original-snapshot-donor",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "answerable",
+    "query": "Can a whole-file source snapshot donate its existing vector to a method with the same content hash? Locate the donor eligibility logic.",
+    "requiredUnits": [
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "eligible_refs",
+        "startByte": 2203,
+        "endByte": 3500,
+        "requiredRanges": [
+          {
+            "startByte": 2203,
+            "endByte": 3500
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      },
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "backfill",
+        "startByte": 6588,
+        "endByte": 11351,
+        "requiredRanges": [
+          {
+            "startByte": 6588,
+            "endByte": 11351
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      }
+    ],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval."
+  },
+  {
+    "id": "original-generation-race",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "answerable",
+    "query": "A source file changes while the embedding model is running. What prevents the result being inserted for the obsolete indexing attempt?",
+    "requiredUnits": [
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "still_current",
+        "startByte": 5242,
+        "endByte": 5548,
+        "requiredRanges": [
+          {
+            "startByte": 5242,
+            "endByte": 5548
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      },
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "insert_current",
+        "startByte": 5550,
+        "endByte": 6586,
+        "requiredRanges": [
+          {
+            "startByte": 5550,
+            "endByte": 6586
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      }
+    ],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval."
+  },
+  {
+    "id": "original-bounded-input",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "answerable",
+    "query": "Does preserving a complete function guarantee its final statements influence its vector? Locate the input truncation and model batch limits.",
+    "requiredUnits": [
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "prepare",
+        "startByte": 3665,
+        "endByte": 5240,
+        "requiredRanges": [
+          {
+            "startByte": 3665,
+            "endByte": 5240
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      },
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "backfill",
+        "startByte": 6588,
+        "endByte": 11351,
+        "requiredRanges": [
+          {
+            "startByte": 6588,
+            "endByte": 11351
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      }
+    ],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval."
+  },
+  {
+    "id": "original-transport-scope",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "answerable",
+    "query": "Can a maintenance caller forge a wider scope or a different requester when rebuilding code vectors? Show both HTTP and stdio guards.",
+    "requiredUnits": [
+      {
+        "path": "packages/runtime/src/mcp/tools.ts",
+        "qualifiedAnchor": "registerTools",
+        "startByte": 3601,
+        "endByte": 38837,
+        "requiredRanges": [
+          {
+            "startByte": 11330,
+            "endByte": 11730
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "038393aa6464cc7dfabf39c62fed6872f891f73d8912cf44685199bd1296f69f"
+      },
+      {
+        "path": "mcp/engram-mcp/src/codegraph.rs",
+        "qualifiedAnchor": "reindex",
+        "startByte": 12072,
+        "endByte": 13832,
+        "requiredRanges": [
+          {
+            "startByte": 12072,
+            "endByte": 13832
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "8cf8b9d43389a6192da1002933b678bfab89f912332db34b79b0d283bdcce1ba"
+      }
+    ],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval."
+  },
+  {
+    "id": "original-nested-body",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "answerable",
+    "query": "How does extraction retain the whole outer callable when it contains a nested function, while avoiding embedding entire classes?",
+    "requiredUnits": [
+      {
+        "path": "core/code/src/parser/tree_sitter_chunker.rs",
+        "qualifiedAnchor": "walk_declarations_with_receivers",
+        "startByte": 19224,
+        "endByte": 25879,
+        "requiredRanges": [
+          {
+            "startByte": 19224,
+            "endByte": 25879
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "ff20c5546e24314aa34a7e635131d8c5294360d71b34012bf858f9f2b8127a79"
+      }
+    ],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval."
+  },
+  {
+    "id": "original-stale-cache",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "answerable",
+    "query": "After warming retrieval caches, a source becomes private or expires. Where are old vector hits checked against current source ownership?",
+    "requiredUnits": [
+      {
+        "path": "core/integration/src/sqlite/recall_lanes.rs",
+        "qualifiedAnchor": "KnowledgeVectorResolver::resolve",
+        "startByte": 10465,
+        "endByte": 11124,
+        "requiredRanges": [
+          {
+            "startByte": 10465,
+            "endByte": 11124
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "fbba098752ef38ca3a262debe18ead5e78f6c38478d847ac45468e655f085656"
+      },
+      {
+        "path": "adapters/sqlite/src/knowledge/source_access.rs",
+        "qualifiedAnchor": "SqlKnowledgeStore::source_record_access",
+        "startByte": 339,
+        "endByte": 3493,
+        "requiredRanges": [
+          {
+            "startByte": 339,
+            "endByte": 3493
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "6267a6cfc8fa6a3ac5e3f50a8779d3c415abbdbf479fb912ef036f32665124db"
+      }
+    ],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval."
+  },
+  {
+    "id": "original-invalid-vector",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "answerable",
+    "query": "What happens if an embedding has the wrong dimensions, contains NaN, or belongs to a different model space?",
+    "requiredUnits": [
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "insert_current",
+        "startByte": 5550,
+        "endByte": 6586,
+        "requiredRanges": [
+          {
+            "startByte": 5550,
+            "endByte": 6586
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      },
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "backfill",
+        "startByte": 6588,
+        "endByte": 11351,
+        "requiredRanges": [
+          {
+            "startByte": 6588,
+            "endByte": 11351
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      }
+    ],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval."
+  },
+  {
+    "id": "original-retry",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "answerable",
+    "query": "If vector insertion fails halfway through a backfill, does retry regenerate every vector or skip completed targets? Show the selection and failure propagation.",
+    "requiredUnits": [
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "backfill",
+        "startByte": 6588,
+        "endByte": 11351,
+        "requiredRanges": [
+          {
+            "startByte": 6588,
+            "endByte": 11351
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      },
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "insert_current",
+        "startByte": 5550,
+        "endByte": 6586,
+        "requiredRanges": [
+          {
+            "startByte": 5550,
+            "endByte": 6586
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      }
+    ],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval."
+  },
+  {
+    "id": "original-new-language",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "answerable",
+    "query": "Which implementation must change to add a new programming language grammar and its declaration node kinds?",
+    "requiredUnits": [
+      {
+        "path": "core/code/src/parser/tree_sitter_chunker.rs",
+        "qualifiedAnchor": "TreeSitterChunker::new",
+        "startByte": 1239,
+        "endByte": 4535,
+        "requiredRanges": [
+          {
+            "startByte": 1239,
+            "endByte": 4535
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "ff20c5546e24314aa34a7e635131d8c5294360d71b34012bf858f9f2b8127a79"
+      }
+    ],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval."
+  },
+  {
+    "id": "original-absence-parser",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "negative",
+    "query": "Where is the runtime plugin registry that loads arbitrary new language parsers without rebuilding Engram?",
+    "requiredUnits": [],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval.",
+    "negativeKind": "absent_feature"
+  },
+  {
+    "id": "original-absence-silver",
+    "corpus": "engram",
+    "split": "original",
+    "polarity": "negative",
+    "query": "Which implemented scan step attaches resolved import bindings, constructor fields, and an English behavior summary to every method chunk?",
+    "requiredUnits": [],
+    "rationale": "Original fixed probes preserved; qualified identities normalized against pinned parser output before new retrieval.",
+    "negativeKind": "absent_feature"
+  },
+  {
+    "id": "identifier-insert_current",
+    "corpus": "engram",
+    "split": "identifier",
+    "polarity": "answerable",
+    "query": "insert_current",
+    "requiredUnits": [
+      {
+        "path": "core/integration/src/embedding_backfill.rs",
+        "qualifiedAnchor": "insert_current",
+        "startByte": 5550,
+        "endByte": 6586,
+        "requiredRanges": [
+          {
+            "startByte": 5550,
+            "endByte": 6586
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060"
+      }
+    ],
+    "rationale": "Original exact identifier rank-one control; not vector-only proof."
+  },
+  {
+    "id": "identifier-walk_declarations_with_receivers",
+    "corpus": "engram",
+    "split": "identifier",
+    "polarity": "answerable",
+    "query": "walk_declarations_with_receivers",
+    "requiredUnits": [
+      {
+        "path": "core/code/src/parser/tree_sitter_chunker.rs",
+        "qualifiedAnchor": "walk_declarations_with_receivers",
+        "startByte": 19224,
+        "endByte": 25879,
+        "requiredRanges": [
+          {
+            "startByte": 19224,
+            "endByte": 25879
+          }
+        ],
+        "grade": 3,
+        "sourceSha256": "ff20c5546e24314aa34a7e635131d8c5294360d71b34012bf858f9f2b8127a79"
+      }
+    ],
+    "rationale": "Original exact identifier rank-one control; not vector-only proof."
+  }
+]

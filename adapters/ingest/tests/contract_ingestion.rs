@@ -138,6 +138,187 @@ info:
 paths: {}
 "#;
 
+#[test]
+fn repository_contract_refresh_and_shared_retraction_preserve_exact_history() {
+    use engram_knowledge::{CodeSourceRepository, KnowledgeRepository};
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    let a = tempfile::tempdir().unwrap();
+    let b = tempfile::tempdir().unwrap();
+    fs::write(a.path().join("openapi.yaml"), ORDERS_OPENAPI).unwrap();
+    let opts = scan_opts("history-a", Default::default());
+    let (first, _) = scan_repository(a.path(), &opts, &store, |_| {}).unwrap();
+    assert_eq!(first.errors, 0);
+    let entity = api_entities(&store).remove(0);
+    let rel = exposes_rels(&store).remove(0);
+    let raw = |table: &str, id: &str| {
+        store
+            .lock()
+            .unwrap()
+            .query_row(
+                &format!("SELECT record_json FROM {table} WHERE id=?1"),
+                [id],
+                |r| r.get::<_, String>(0),
+            )
+            .unwrap()
+    };
+    let archived = |kind: &str, id: &str, json: &str| {
+        store.lock().unwrap().query_row("SELECT count(*) FROM canonical_document_history WHERE kind=?1 AND record_id=?2 AND record_json=?3",[kind,id,json],|r|r.get::<_,i64>(0)).unwrap()
+    };
+    let old_entity = raw("knowledge_entities_records", entity.id.as_str());
+    let old_rel = raw("knowledge_relationships_records", rel.id.as_str());
+    let (repeat, _) = scan_repository(a.path(), &opts, &store, |_| {}).unwrap();
+    assert_eq!(repeat.errors, 0);
+    assert_eq!(
+        raw("knowledge_relationships_records", rel.id.as_str()),
+        old_rel,
+        "repeated extraction must not churn provenance"
+    );
+    assert_eq!(archived("relationship", rel.id.as_str(), &old_rel), 0);
+    fs::write(
+        a.path().join("openapi.yaml"),
+        ORDERS_OPENAPI.replace("Get order", "Retrieve order details"),
+    )
+    .unwrap();
+    let (changed, manifest) = scan_repository(a.path(), &opts, &store, |_| {}).unwrap();
+    assert_eq!(changed.errors, 0);
+    assert_eq!(
+        archived("entity", entity.id.as_str(), &old_entity),
+        1,
+        "metadata-only changes retain the old exact observation"
+    );
+    fs::write(b.path().join("openapi.yaml"), ORDERS_OPENAPI).unwrap();
+    let (second, _) = scan_repository(
+        b.path(),
+        &scan_opts("history-b", Default::default()),
+        &store,
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(second.errors, 0);
+    let shared = raw("knowledge_entities_records", entity.id.as_str());
+    fs::write(a.path().join("openapi.yaml"), EMPTY_PATHS_OPENAPI).unwrap();
+    let (retracted, _) =
+        scan_repository(a.path(), &scan_opts("history-a", manifest), &store, |_| {}).unwrap();
+    assert_eq!(retracted.errors, 0);
+    assert!(
+        block_on(store.get_relationship(&rel.id, &scope()))
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(archived("relationship", rel.id.as_str(), &old_rel), 1);
+    assert_eq!(archived("entity", entity.id.as_str(), &shared), 1);
+    let surviving = block_on(store.get_entity(&entity.id, &scope()))
+        .unwrap()
+        .unwrap();
+    assert_eq!(surviving.source_refs.len(), 1);
+    assert_eq!(
+        surviving.source_refs[0].target_id.as_deref(),
+        Some("history-b")
+    );
+    block_on(store.retract_repository_contract(&scope(), "history-a", &entity.id, &rel.id))
+        .unwrap();
+}
+
+#[test]
+fn repository_contract_identity_rejection_rolls_back_without_history_or_foreign_refs() {
+    use engram_knowledge::CodeSourceRepository;
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("openapi.yaml"), ORDERS_OPENAPI).unwrap();
+    let (scan, _) = scan_repository(
+        root.path(),
+        &scan_opts("contract-identity", Default::default()),
+        &store,
+        |_| {},
+    )
+    .unwrap();
+    assert_eq!(scan.errors, 0);
+    let mut entity = api_entities(&store).remove(0);
+    let mut edge = exposes_rels(&store).remove(0);
+    let snapshot = || {
+        let db = store.lock().unwrap();
+        let mut stmt = db
+            .prepare(
+                "SELECT kind,record_id,record_json FROM canonical_document_history ORDER BY id",
+            )
+            .unwrap();
+        stmt.query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+    };
+    let before = snapshot();
+    entity
+        .metadata
+        .as_mut()
+        .unwrap()
+        .insert("summary".into(), serde_json::json!("must roll back"));
+    edge.object.id = Some(Id::from("other-api"));
+    assert!(
+        block_on(store.put_repository_contract(
+            &scope(),
+            "contract-identity",
+            entity.clone(),
+            edge.clone()
+        ))
+        .is_err()
+    );
+    assert_eq!(snapshot(), before);
+    edge.object.id = Some(entity.id.clone());
+    let canonical_before = (api_entities(&store), exposes_rels(&store));
+    store.lock().unwrap().execute_batch("CREATE TRIGGER injected_contract_failure BEFORE UPDATE ON knowledge_relationships_records BEGIN SELECT RAISE(ABORT,'injected edge write failure'); END;").unwrap();
+    assert!(
+        block_on(store.put_repository_contract(
+            &scope(),
+            "contract-identity",
+            entity.clone(),
+            edge.clone()
+        ))
+        .is_err()
+    );
+    assert_eq!(
+        snapshot(),
+        before,
+        "history insert before the failing edge write must roll back"
+    );
+    assert_eq!(
+        (api_entities(&store), exposes_rels(&store)),
+        canonical_before,
+        "the preceding entity write must roll back too"
+    );
+    store
+        .lock()
+        .unwrap()
+        .execute_batch("DROP TRIGGER injected_contract_failure")
+        .unwrap();
+    entity.source_refs.push(EvidenceRef {
+        target_type: EvidenceTargetType::Source,
+        target_id: Some("foreign-repo".into()),
+        uri: None,
+        quote: None,
+        location: None,
+    });
+    assert!(
+        block_on(store.put_repository_contract(&scope(), "contract-identity", entity, edge))
+            .is_err()
+    );
+    assert_eq!(snapshot(), before);
+    assert!(
+        !api_entities(&store)[0]
+            .metadata
+            .as_ref()
+            .unwrap()
+            .values()
+            .any(|v| v == "must roll back")
+    );
+}
+
 // ── T5: cross-repo merge ──────────────────────────────────────────────────────
 
 #[test]
@@ -598,6 +779,9 @@ struct FailingEntityWriteStore {
 
 #[async_trait::async_trait]
 impl engram_knowledge::KnowledgeRepository for FailingEntityWriteStore {
+    fn document_heads(&self) -> Option<&dyn engram_knowledge::DocumentHeadRepository> {
+        self.inner.document_heads()
+    }
     async fn put_source(
         &self,
         source: engram_domain::KnowledgeSource,

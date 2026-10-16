@@ -1,0 +1,144 @@
+// STUB: AC1 — Rust-owned immutable code profiles; generic defaults unchanged.
+use engram_domain::{CodeIntelligenceProfile, RerankStrategy};
+use engram_retrieval::{CodeIntelligenceConfig, RecallFusionConfig};
+
+#[test]
+fn balanced_and_fast_have_independent_candidate_and_output_budgets() {
+    let balanced = CodeIntelligenceConfig::for_profile(CodeIntelligenceProfile::BalancedV1);
+    let fast = CodeIntelligenceConfig::for_profile(CodeIntelligenceProfile::FastV1);
+    assert_eq!(balanced.index.body_token_target, 384);
+    assert_eq!(balanced.index.context_token_budget, 64);
+    assert_eq!(balanced.retrieval.candidates_per_lane, 50);
+    assert_eq!(balanced.retrieval.result_limit, 10);
+    assert_eq!(balanced.local_scorer.max_candidates, 75);
+    assert_eq!(balanced.local_scorer.max_parents, 50);
+    assert_eq!(
+        balanced.fusion.rerank.unwrap().strategy,
+        RerankStrategy::CrossEncoder
+    );
+    assert_eq!(fast.retrieval.candidates_per_lane, 20);
+    assert_eq!(fast.retrieval.graph_hops, 0);
+    assert_eq!(fast.fusion.rerank.unwrap().strategy, RerankStrategy::None);
+    assert!(RecallFusionConfig::default().rerank.is_none());
+}
+
+#[test]
+fn code_profiles_reject_unsupported_strategies_and_impossible_token_budgets() {
+    let mut c = CodeIntelligenceConfig::for_profile(CodeIntelligenceProfile::BalancedV1);
+    assert!(c.validate().is_ok());
+    assert!(c.validate_model_windows(512, 2, 8192, 3).is_ok());
+    c.fusion.rerank.as_mut().unwrap().strategy = RerankStrategy::Mmr;
+    assert!(c.validate().is_err());
+    c.fusion.rerank.as_mut().unwrap().strategy = RerankStrategy::CrossEncoder;
+    c.index.body_token_target = 500;
+    assert!(c.validate_model_windows(512, 2, 8192, 3).is_err());
+    c.index.body_token_target = 384;
+    c.local_scorer.pair_token_limit = 512;
+    assert!(c.validate_model_windows(512, 2, 8192, 3).is_err());
+}
+
+#[test]
+fn effective_snapshot_is_complete_and_nested_fusion_is_strict() {
+    let value = serde_json::to_value(CodeIntelligenceConfig::default()).unwrap();
+    let decoded: CodeIntelligenceConfig = serde_json::from_value(value.clone()).unwrap();
+    assert_eq!(decoded, CodeIntelligenceConfig::default());
+    let mut extra = value.clone();
+    extra["fusion"]["unknown"] = serde_json::json!(true);
+    assert!(serde_json::from_value::<CodeIntelligenceConfig>(extra).is_err());
+    let mut incomplete = value;
+    incomplete["fusion"]
+        .as_object_mut()
+        .unwrap()
+        .remove("rerank");
+    assert!(serde_json::from_value::<CodeIntelligenceConfig>(incomplete).is_err());
+    let mut embedded = CodeIntelligenceConfig::default();
+    embedded.fusion.rerank = None;
+    assert!(
+        embedded.validate().is_err(),
+        "typed SDK cannot emit null effective rerank"
+    );
+}
+
+#[test]
+fn operator_bounds_require_usable_candidates_and_expansion() {
+    let mut c = CodeIntelligenceConfig::default();
+    c.retrieval.result_limit = 51;
+    assert!(c.validate().is_err());
+    c.retrieval.result_limit = 10;
+    c.local_scorer.max_candidates = 9;
+    assert!(c.validate().is_err());
+    c.local_scorer.max_candidates = 50;
+    c.retrieval.graph_neighbor_limit = 0;
+    assert!(c.validate().is_err());
+    c.retrieval.graph_hops = 0;
+    assert!(c.validate().is_ok());
+    c.fusion.default_source_weight = 0.0;
+    assert!(c.validate().is_err());
+    c.fusion.source_weights.insert("lexical".into(), 1.0);
+    assert!(
+        c.validate().is_ok(),
+        "zero vector weight still leaves its lane enabled"
+    );
+    assert_eq!(c.retrieval.enabled_lanes.len(), 2);
+    c.fusion.source_weights.insert("lexical".into(), f32::NAN);
+    assert!(c.validate().is_err());
+}
+
+#[test]
+fn query_overrides_can_reduce_but_never_expand_operator_bounds() {
+    let c = CodeIntelligenceConfig::default();
+    let q=serde_json::from_value(serde_json::json!({"query":"find tail guard","resultLimit":5,"candidatesPerLane":20,"evidenceTokenBudget":1024})).unwrap();
+    let effective = c.for_query(&q).unwrap();
+    assert_eq!(effective.retrieval.result_limit, 5);
+    assert_eq!(effective.retrieval.candidates_per_lane, 20);
+    assert_eq!(effective.evidence.token_budget, 1024);
+    for value in [
+        serde_json::json!({"query":"q","resultLimit":11}),
+        serde_json::json!({"query":"q","candidatesPerLane":51}),
+        serde_json::json!({"query":"q","evidenceTokenBudget":6001}),
+    ] {
+        assert!(
+            c.for_query(&serde_json::from_value(value).unwrap())
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn legacy_full_configs_default_parent_breadth_without_changing_their_pair_budget() {
+    let mut value = serde_json::to_value(CodeIntelligenceConfig::default()).unwrap();
+    value["local_scorer"]
+        .as_object_mut()
+        .unwrap()
+        .remove("max_parents");
+    value["local_scorer"]["max_candidates"] = serde_json::json!(50);
+    let c: CodeIntelligenceConfig = serde_json::from_value(value).unwrap();
+    assert_eq!(c.local_scorer.max_parents, 50);
+    assert_eq!(c.local_scorer.max_candidates, 50);
+    assert!(c.validate().is_ok());
+    let mut c = c;
+    c.local_scorer.max_parents = 9;
+    assert!(c.validate().is_err());
+    c.local_scorer.max_parents = 0;
+    assert!(c.validate().is_err());
+}
+
+#[test]
+fn legacy_evidence_config_defaults_weak_parent_order_and_round_trips_opt_out() {
+    let mut value = serde_json::to_value(CodeIntelligenceConfig::default()).unwrap();
+    value["evidence"]
+        .as_object_mut()
+        .unwrap()
+        .remove("weak_parent_order");
+    let mut decoded: CodeIntelligenceConfig = serde_json::from_value(value).unwrap();
+    assert_eq!(
+        decoded.evidence.weak_parent_order,
+        engram_retrieval::CodeWeakParentOrder::BestLaneRank
+    );
+    decoded.evidence.weak_parent_order = engram_retrieval::CodeWeakParentOrder::Scorer;
+    assert_eq!(
+        serde_json::from_value::<CodeIntelligenceConfig>(serde_json::to_value(&decoded).unwrap())
+            .unwrap(),
+        decoded
+    );
+}

@@ -74,6 +74,26 @@ where
         persist_prepared(repository, prepared).await
     }
 
+    /// Scanner enrichment stays under the document lease until final activation.
+    pub(crate) async fn ingest_staged<R: KnowledgeRepository + ?Sized>(
+        &self,
+        repository: &R,
+        request: DocumentIngestRequest,
+        candidates: Option<Vec<crate::ChunkCandidate>>,
+    ) -> CoreResult<(IngestedKnowledge, Option<DocumentHead>)> {
+        let candidates = match candidates {
+            Some(c) => c,
+            None => self.chunker.chunk(&request.text)?,
+        };
+        let prepared = self.prepare_candidates(request, candidates, false)?;
+        if let Some(port) = repository.document_heads() {
+            let head = crate::document_generation::stage(port, &prepared).await?;
+            Ok((prepared, Some(head)))
+        } else {
+            Ok((persist_prepared(repository, prepared).await?, None))
+        }
+    }
+
     /// Assembly-only seam used by the source generation coordinator, which
     /// stages inventory before any repository write.
     pub(crate) fn prepare_code_candidates(
@@ -111,7 +131,7 @@ where
                 "source-{}",
                 content_hash(
                     serde_json::to_vec(&(
-                        source_id(&request),
+                        source_id(&request)?,
                         &request.scope,
                         &request.document.path
                     ))
@@ -121,7 +141,7 @@ where
                 )
             ))
         } else {
-            source_id(&request)
+            source_id(&request)?
         };
         let document_id = document_id(&source_id, &request.document, &document_hash);
         let now = Utc::now();
@@ -228,6 +248,9 @@ pub(crate) async fn persist_prepared<R: KnowledgeRepository + ?Sized>(
     repository: &R,
     prepared: IngestedKnowledge,
 ) -> CoreResult<IngestedKnowledge> {
+    if let Some(port) = repository.document_heads() {
+        return crate::document_generation::persist(port, prepared).await;
+    }
     let source = repository.put_source(prepared.source).await?;
     let document = repository.put_document(prepared.document).await?;
     let mut chunks = Vec::with_capacity(prepared.chunks.len());
@@ -260,18 +283,22 @@ fn validate_request(request: &DocumentIngestRequest) -> CoreResult<()> {
     Ok(())
 }
 
-fn source_id(request: &DocumentIngestRequest) -> SourceId {
-    Id::from(format!(
-        "source-{}",
-        content_hash(format!(
-            "{}\u{1f}{}\u{1f}{}\u{1f}{:?}",
-            request.scope.tenant,
-            request.document.uri.as_deref().unwrap_or_default(),
-            request.source_name,
-            request.source_kind
-        ))
-        .trim_start_matches("sha256:")
+fn source_id(request: &DocumentIngestRequest) -> CoreResult<SourceId> {
+    let identity = serde_json::to_vec(&(
+        &request.scope,
+        &request.stable_source_key,
+        &request.document.uri,
+        &request.document.path,
+        &request.source_name,
+        &request.source_kind,
     ))
+    .map_err(|e| CoreError::InvalidRequest {
+        reason: e.to_string(),
+    })?;
+    Ok(Id::from(format!(
+        "source-{}",
+        content_hash(identity).trim_start_matches("sha256:")
+    )))
 }
 
 fn document_id(

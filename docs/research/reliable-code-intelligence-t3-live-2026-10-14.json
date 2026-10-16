@@ -1,0 +1,209 @@
+{
+  "checkpoint": "T3 document authority",
+  "qualityComparisonAvailable": false,
+  "runState": "complete",
+  "calls": [
+    {
+      "tool": "capability_report",
+      "seconds": 0.5567474150011549,
+      "failed": false,
+      "text": "Server: engram-mcp 0.1.0\nCapabilities:\n  memory: supported\n  code_embeddings: supported\n  knowledge: supported\n  code_source_preservation: supported\n  graph: supported\n  knowledge_query: supported\n  lexical_feed: supported\n  recall: supported\n  consolidation: supported\n  batch: supported\n  ontology: supported\n  taxonomy: supported\n  beliefs: supported\n  procedures: supported\n  hierarchy: supported\n  identity: supported\n  vector: supported",
+      "response": {
+        "id": 1,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "Server: engram-mcp 0.1.0\nCapabilities:\n  memory: supported\n  code_embeddings: supported\n  knowledge: supported\n  code_source_preservation: supported\n  graph: supported\n  knowledge_query: supported\n  lexical_feed: supported\n  recall: supported\n  consolidation: supported\n  batch: supported\n  ontology: supported\n  taxonomy: supported\n  beliefs: supported\n  procedures: supported\n  hierarchy: supported\n  identity: supported\n  vector: supported",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "scan_repo",
+      "seconds": 0.07051353299902985,
+      "failed": false,
+      "text": "ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 3 chunks",
+      "response": {
+        "id": 2,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 3 chunks",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "scan_repo",
+      "seconds": 0.06410068999684881,
+      "failed": false,
+      "text": "ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 3 chunks",
+      "response": {
+        "id": 3,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 3 chunks",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "scan_repo",
+      "seconds": 0.06421097699785605,
+      "failed": false,
+      "text": "ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 3 chunks",
+      "response": {
+        "id": 4,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 3 chunks",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "scan_repo",
+      "seconds": 0.05977428800542839,
+      "failed": false,
+      "text": "ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 3 chunks",
+      "response": {
+        "id": 5,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 3 chunks",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "reindex",
+      "seconds": 0.0009551320035825484,
+      "failed": false,
+      "text": "reindex: embedded 0 chunks (limit 1024) (0 code chunks)\nbacklog drained",
+      "response": {
+        "id": 6,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "reindex: embedded 0 chunks (limit 1024) (0 code chunks)\nbacklog drained",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "search",
+      "seconds": 0.022367281002516393,
+      "failed": false,
+      "text": "currentVersion \u2014 engram-mcp-scan, source.ts [graph+associative_graph+lexical:3.00, rrf=0.05 (norm:1.00)]\nfunction currentVersion() { return 4; } \u2014 engram-mcp-scan, source.ts [graph+vector:0.65, rrf=0.03 (norm:0.66)]\nfunction currentVersion() { return 4; }\n... [1 results from source.ts capped for diversity]",
+      "response": {
+        "id": 7,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "currentVersion \u2014 engram-mcp-scan, source.ts [graph+associative_graph+lexical:3.00, rrf=0.05 (norm:1.00)]\nfunction currentVersion() { return 4; } \u2014 engram-mcp-scan, source.ts [graph+vector:0.65, rrf=0.03 (norm:0.66)]\nfunction currentVersion() { return 4; }\n... [1 results from source.ts capped for diversity]",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "scan_repo",
+      "seconds": 0.022392038998077624,
+      "failed": false,
+      "text": "ScanSummary { scanned: 2, ingested: 1, unchanged: 0, skipped: 0, entities: 3, relationships: 1, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 0 chunks",
+      "response": {
+        "id": 8,
+        "jsonrpc": "2.0",
+        "result": {
+          "content": [
+            {
+              "text": "ScanSummary { scanned: 2, ingested: 1, unchanged: 0, skipped: 0, entities: 3, relationships: 1, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }\nno scan config; builtin filter\nembedded 0 chunks",
+              "type": "text"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "binarySha256": "c76ef101727a90c06c2f05af9c254d52b2bbff3740f0e3f7af0d48140507c4ea",
+  "vectorsEnabled": true,
+  "versions": [
+    {
+      "version": 1,
+      "retainedChunks": 4,
+      "eligibleChunks": 3,
+      "activeHeads": 2,
+      "priorByteDigestsPreserved": true
+    },
+    {
+      "version": 2,
+      "retainedChunks": 8,
+      "eligibleChunks": 3,
+      "activeHeads": 2,
+      "priorByteDigestsPreserved": true
+    },
+    {
+      "version": 3,
+      "retainedChunks": 12,
+      "eligibleChunks": 3,
+      "activeHeads": 2,
+      "priorByteDigestsPreserved": true
+    },
+    {
+      "version": 4,
+      "retainedChunks": 16,
+      "eligibleChunks": 3,
+      "activeHeads": 2,
+      "priorByteDigestsPreserved": true
+    }
+  ],
+  "searchReturnedCurrentCodeOnly": true,
+  "searchResponseObserved": "currentVersion \u2014 engram-mcp-scan, source.ts [graph+associative_graph+lexical:3.00, rrf=0.05 (norm:1.00)]\nfunction currentVersion() { return 4; } \u2014 engram-mcp-scan, source.ts [graph+vector:0.65, rrf=0.03 (norm:0.66)]\nfunction currentVersion() { return 4; }\n... [1 results from source.ts capped for diversity]",
+  "manifestlessRemoval": {
+    "state": "incomplete",
+    "eligibleMarkdownChunks": 0,
+    "canonicalHistoryRetained": true
+  },
+  "stderr": [
+    "engram-mcp: vector bootstrap checkpoint \u2014 knowledge_store=true, vectors_path=\"/tmp/engram-t3-live-nq9gd90o/store/engram_data.db\"",
+    "engram-mcp: scan_repository done: ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }",
+    "engram-mcp: lexical delta feed done (3 entries)",
+    "engram-mcp: embed done (3 embedded, 0 pending)",
+    "engram-mcp: scan_repository done: ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }",
+    "engram-mcp: lexical delta feed done (3 entries)",
+    "engram-mcp: embed done (3 embedded, 0 pending)",
+    "engram-mcp: scan_repository done: ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }",
+    "engram-mcp: lexical delta feed done (3 entries)",
+    "engram-mcp: embed done (3 embedded, 0 pending)",
+    "engram-mcp: scan_repository done: ScanSummary { scanned: 3, ingested: 2, unchanged: 0, skipped: 0, entities: 4, relationships: 2, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }",
+    "engram-mcp: lexical delta feed done (3 entries)",
+    "engram-mcp: embed done (3 embedded, 0 pending)",
+    "engram-mcp: reindex done (0 embedded, 0 pending) in 0.0s",
+    "engram-mcp: scan_repository done: ScanSummary { scanned: 2, ingested: 1, unchanged: 0, skipped: 0, entities: 3, relationships: 1, errors: 0, admission_failures: [], git_remote: None, git_branch: None, git_sha: None }",
+    "engram-mcp: lexical delta feed done (3 entries)",
+    "engram-mcp: embed done (0 embedded, 0 pending)"
+  ]
+}

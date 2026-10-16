@@ -14,6 +14,7 @@ use engram_runtime::CoreResult;
 
 pub mod accepted_examples;
 mod architecture_coverage;
+pub mod code_intelligence;
 mod contract_runner;
 mod report_summary;
 

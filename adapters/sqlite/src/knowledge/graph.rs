@@ -32,7 +32,7 @@ impl KnowledgeGraphRepository for SqlKnowledgeStore {
             .and_then(|v| v.get("documentId"))
             .and_then(|v| v.as_str())
         {
-            super::guarded_source_write::reject_unfenced_write(
+            super::guarded_source_write::reject_code_unfenced_write(
                 &connection,
                 CodeSourceRecordKind::Document,
                 document,

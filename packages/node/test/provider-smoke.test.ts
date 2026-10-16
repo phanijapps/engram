@@ -15,6 +15,31 @@ import {loadNativeBinding} from "../src/binding.js";
 const ADDON_PATH = fileURLToPath(new URL("../engram_node.node", import.meta.url));
 
 describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (real addon)", () => {
+  it("reports the shared Rust code snapshot with explicit launch precedence", async () => {
+    const base=mkdtempSync(join(tmpdir(),"engram-code-config-"));
+    const path=join(base,"code.json");
+    writeFileSync(path,JSON.stringify({profile:"fast-v1",fusion:{rrf_k:42},evidence:{token_budget:1200,weak_parent_order:"scorer"},local_scorer:{max_parents:24,max_candidates:60}}));
+    try {
+      const transport=createNativeProviderTransport({configJson:JSON.stringify({
+        storage_path:join(base,"store"),trusted_root:base,scope_policy:"Strict",enable_vector:false,
+        embedding_provider:{provider_type:"none",model:"none",dimensions:384,prompt_profile:"query"},
+        migration_mode:"DryRun",capability_policy:"FailClosed"
+      }),codeConfigPath:path,codeIntelligence:{evidence:{token_budget:1024}}});
+      const snapshot=await transport.codeConfiguration();
+      expect(snapshot?.effective.profile).toBe("fast-v1");
+      expect(snapshot?.effective.fusion.rrf_k).toBe(42);
+      expect(snapshot?.effective.evidence.token_budget).toBe(1024);
+      expect(snapshot?.effective.evidence.weak_parent_order).toBe("scorer");
+      expect(snapshot?.origins["evidence.weak_parent_order"]).toBe("file");
+      expect(snapshot?.effective.local_scorer.max_parents).toBe(24);
+      expect(snapshot?.effective.local_scorer.max_candidates).toBe(60);
+      expect(snapshot?.origins["local_scorer.max_parents"]).toBe("file");
+      expect(snapshot?.origins["fusion.rrf_k"]).toBe("file");
+      expect(snapshot?.origins["evidence.token_budget"]).toBe("explicit");
+      expect(snapshot?.hash).toMatch(/^[a-f0-9]{64}$/);
+    } finally {rmSync(base,{recursive:true,force:true});}
+  });
+
   it("constructs from config, scans a repo, and runs consolidation execution", async () => {
     const base = mkdtempSync(join(tmpdir(), "engram-smoke-"));
     const store = join(base, "store");
@@ -242,4 +267,44 @@ describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (re
     }
   }, 60_000);
 
+});
+
+describe.skipIf(!existsSync(ADDON_PATH) || process.env.ENGRAM_LIVE_FASTEMBED !== "1")("real code evidence native API", () => {
+  it("runs the actual local scorer, binds immutable authority and rejects query-side overrides", async () => {
+    const base=mkdtempSync(join(tmpdir(),"engram-evidence-native-"));
+    const repo=join(base,"repo");mkdirSync(repo);
+    writeFileSync(join(repo,"user.ts"),"export class UserService { async getUser(id:string) { return this.db.query('SELECT * FROM users WHERE id = ?',id); } async deleteUser(id:string) { return this.db.query('DELETE FROM users WHERE id = ?',id); } }\n");
+    const config={storage_path:join(base,"store"),trusted_root:base,scope_policy:"Strict",embedding_provider:{provider_type:"fastembed",model:"BAAI/bge-small-en-v1.5",dimensions:384,prompt_profile:"query"},migration_mode:"Apply",capability_policy:"FailClosed",enable_vector:true};
+    try {
+      const native=new (loadNativeBinding().NativeProvider)(JSON.stringify(config));
+      const transport=createNativeProviderTransport({provider:native});
+      const scope={tenant:"native-evidence",workspace:"users"};
+      const context={scope,requester:{actor:{id:"host",kind:"agent" as const}},readerVersion:1 as const};
+      expect(await transport.capabilities()).toMatchObject({code_evidence:"Supported",code_scorer:"Supported"});
+      await transport.scan({path:repo,scope});
+      const indexed=await transport.backfillEmbeddings({scope,requester:{actor:{id:"engram-node",kind:"agent"}},limit:64});
+      expect(indexed.codeEmbedded).toBeGreaterThan(0);expect(indexed.remaining).toBe(0);
+      const api=native.requireCodeEvidenceApi(JSON.stringify(context));
+      context.scope.workspace="unrelated";
+      const packet=JSON.parse(api.evidenceJson(JSON.stringify({query:"delete a user from the database using their ID"})));
+      expect(packet.items.length).toBeGreaterThan(0);
+      expect(packet.diagnostics).toMatchObject({scorerState:"ready",effectiveReranker:"cross_encoder",calibrationState:"unvalidated",reindexRequired:false});
+      expect(packet.diagnostics.scoredPairs).toBeGreaterThan(0);
+      expect(packet.diagnostics.parentDecisions.length).toBeGreaterThan(0);
+      for (const decision of packet.diagnostics.parentDecisions) {
+        expect(decision.appliedThreshold).toBeNull();
+        expect(decision.rerankScore).toEqual(expect.any(Number));
+        expect(decision.reason === "selected").toBe(packet.items.some((item:{parentUnitId:string}) => item.parentUnitId === decision.parentUnitId));
+      }
+      expect(packet.evidenceStatus).toBe("insufficient_evidence");
+      expect(packet.items.some((item:{excerpts:Array<{text:string}>})=>item.excerpts.some(e=>e.text.includes("DELETE FROM users")))).toBe(true);
+      for(const extra of [{scope},{requester:context.requester},{model:"remote"},{calibration:{}},{query:"é".repeat(8193)}]) {
+        expect(()=>api.evidenceJson(JSON.stringify({query:"valid",...extra}))).toThrow();
+      }
+      const denied=JSON.parse(native.requireCodeEvidenceApi(JSON.stringify(context)).evidenceJson(JSON.stringify({query:"delete a user"})));
+      expect(denied.items).toHaveLength(0);
+      expect(denied.diagnostics.parentDecisions ?? []).toHaveLength(0);
+      expect(()=>native.requireCodeEvidenceApi(JSON.stringify({...context,readerVersion:2}))).toThrow();
+    } finally {rmSync(base,{recursive:true,force:true});}
+  },120_000);
 });

@@ -1,0 +1,101 @@
+{
+  "checkpoint": "T5 vector-only query-format selection",
+  "split": "development",
+  "runState": "complete",
+  "featureShipped": false,
+  "runtimeEvidenceValidated": false,
+  "selectionRule": "mean answerable MRR10, then nDCG10, then recall10; ties prefer legacy-v1, none, bge-retrieval-v1",
+  "selectedInstruction": "none",
+  "macroMeans": {
+    "legacy-v1": {
+      "offlineMrr10": 0.4783730158730159,
+      "offlineNdcg10": 0.5455612397130799,
+      "offlineRequiredUnitRecall10": 0.7666666666666666
+    },
+    "none": {
+      "offlineMrr10": 0.5009656084656084,
+      "offlineNdcg10": 0.5553043293270332,
+      "offlineRequiredUnitRecall10": 0.75
+    },
+    "bge-retrieval-v1": {
+      "offlineMrr10": 0.491521164021164,
+      "offlineNdcg10": 0.5659312942272757,
+      "offlineRequiredUnitRecall10": 0.7999999999999999
+    }
+  },
+  "uniqueAnswerableQueries": 30,
+  "uniqueNegativeQueries": 15,
+  "totalFormatEvaluations": 135,
+  "negativeRuntimeJudgmentsAvailable": false,
+  "finalFusedOrScoredQualityAvailable": false,
+  "manifestSha256": "a78489ada1947213c5a5719a7ac9661c9ea37e66168bd95f0f3bfbc856de8feb",
+  "mcpSha256": "ef61f8c7dd8f1177687f3b80201f31e7f124744db84021dd9b09370f20aa1c95",
+  "probeSha256": "383bfbdb93be63ceb4f3469f846c63c04f04bc728ca619e08fa96e58c1f1d4ae",
+  "inputs": {
+    "flask": {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/flask-query-ablation-t5-v2-2026-10-15.json",
+      "sha256": "5f472f8e3dd157ce79dda72b6e6d7c2d86ca5ade30dea5903109a84de9f11602",
+      "summary": {
+        "legacy-v1": {
+          "offlineMrr10": 0.725,
+          "offlineNdcg10": 0.7625698405663439,
+          "offlineRequiredUnitRecall10": 0.9
+        },
+        "none": {
+          "offlineMrr10": 0.7083333333333333,
+          "offlineNdcg10": 0.7317529365307934,
+          "offlineRequiredUnitRecall10": 0.85
+        },
+        "bge-retrieval-v1": {
+          "offlineMrr10": 0.7444444444444445,
+          "offlineNdcg10": 0.8106660811958921,
+          "offlineRequiredUnitRecall10": 1.0
+        }
+      }
+    },
+    "vite": {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/vite-query-ablation-t5-2026-10-15.json",
+      "sha256": "fba8b7eef241be29754c9c8f33d6ae8d7be6e45a365f0085183bb5c2a29fe1c0",
+      "summary": {
+        "legacy-v1": {
+          "offlineMrr10": 0.28095238095238095,
+          "offlineNdcg10": 0.3807607214692293,
+          "offlineRequiredUnitRecall10": 0.7
+        },
+        "none": {
+          "offlineMrr10": 0.44361111111111107,
+          "offlineNdcg10": 0.5003347679684251,
+          "offlineRequiredUnitRecall10": 0.7
+        },
+        "bge-retrieval-v1": {
+          "offlineMrr10": 0.37083333333333335,
+          "offlineNdcg10": 0.44585558090751665,
+          "offlineRequiredUnitRecall10": 0.7
+        }
+      }
+    },
+    "engram": {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/engram-query-ablation-t5-2026-10-15.json",
+      "sha256": "cec719beee6c18eeb2e73c848754db57976b5f227479f133184c574ad86d897f",
+      "summary": {
+        "legacy-v1": {
+          "offlineMrr10": 0.4291666666666667,
+          "offlineNdcg10": 0.4933531571036666,
+          "offlineRequiredUnitRecall10": 0.7
+        },
+        "none": {
+          "offlineMrr10": 0.35095238095238096,
+          "offlineNdcg10": 0.4338252834818812,
+          "offlineRequiredUnitRecall10": 0.7
+        },
+        "bge-retrieval-v1": {
+          "offlineMrr10": 0.3592857142857143,
+          "offlineNdcg10": 0.4412722205784183,
+          "offlineRequiredUnitRecall10": 0.7
+        }
+      }
+    }
+  },
+  "heldoutUsedForSelection": false,
+  "tradeoff": "None maximizes the declared mean MRR10 objective; its top-ten required-unit recall is slightly lower than legacy and BGE retrieval instruction. This does not establish final pipeline acceptance."
+}

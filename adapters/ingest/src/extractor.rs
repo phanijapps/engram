@@ -652,21 +652,10 @@ impl GraphExtractor {
                 engram_code::resolve_refs(index, &mut extracted.relationships, repo, path);
         }
 
-        repository.put_graph(extracted.graph.clone()).await?;
-        for entity in &extracted.entities {
-            repository.put_entity(entity.clone()).await?;
-        }
-        for relationship in &extracted.relationships {
-            repository.put_relationship(relationship.clone()).await?;
-        }
-        // Re-persist chunks with their entity refs stamped (Part A).
-        for (chunk_idx, entity_refs) in &extracted.chunk_entities {
-            if let Some(chunk) = chunks.get(*chunk_idx) {
-                let mut updated = chunk.clone();
-                updated.entities = entity_refs.clone();
-                repository.put_chunk(updated).await?;
-            }
-        }
+        crate::document_graph_persistence::persist(
+            repository, source, document, chunks, &extracted,
+        )
+        .await?;
         Ok(extracted)
     }
 }

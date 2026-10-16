@@ -29,8 +29,50 @@ impl FastEmbedEmbeddingProvider {
 
 #[cfg(feature = "fastembed")]
 impl EmbeddingProvider for FastEmbedEmbeddingProvider {
+    fn asset_identity(&self) -> Option<&str> {
+        Some(self.inner.model_manifest_id())
+    }
+    fn tokenize_untruncated(
+        &self,
+        text: &str,
+        special_tokens: bool,
+    ) -> CoreResult<engram_retrieval::TextTokenization> {
+        if self.space.dimensions != self.inner.dimensions() {
+            return Err(engram_runtime::CoreError::InvalidRequest {
+                reason: "declared embedding dimensions differ from the actual local model".into(),
+            });
+        }
+        self.inner.tokenize_untruncated(text, special_tokens)
+    }
+    fn embed_prepared_code_query(
+        &self,
+        query: &crate::code_query::PreparedCodeQuery,
+    ) -> CoreResult<Vec<f32>> {
+        // BGE uses the same encoder for passages and explicitly prepared queries.
+        // The exact prepared text already includes its selected instruction.
+        let actual = self.tokenize_untruncated(&query.text, true)?;
+        if actual.tokenizer_id != query.tokenizer_id
+            || actual.window != query.window
+            || actual.total_tokens() != query.coverage.total_tokens as usize
+            || actual.total_tokens() > actual.window as usize
+        {
+            return Err(engram_runtime::CoreError::InvalidRequest {
+                reason: "prepared query tokenizer contract changed".into(),
+            });
+        }
+        self.inner.embed_passage(&query.text)
+    }
+
     fn is_local(&self) -> bool {
-        true
+        self.space.provider == "fastembed"
+            && matches!(
+                self.space.model.as_str(),
+                "BAAI/bge-small-en-v1.5"
+                    | "Xenova/bge-small-en-v1.5"
+                    | "fastembed/bge-small-en-v1.5"
+                    | "bge-small-en-v1.5"
+            )
+            && self.space.dimensions == self.inner.dimensions()
     }
 
     fn provider_id(&self) -> &str {

@@ -145,3 +145,39 @@ fn request(query: &str) -> RetrievalRequest {
         include_explanations: Some(true),
     }
 }
+
+/// Explicitly provisioned pinned assets; factory performs no runtime download.
+#[test]
+#[ignore = "requires explicitly provisioned offline BGE assets"]
+fn offline_bge_has_verified_identity_complete_tokenizer_and_normalized_vectors() {
+    let provider = FastEmbedBgeSmallQueryProvider::new().unwrap();
+    assert!(
+        provider
+            .model_manifest_id()
+            .starts_with("model-manifest-v1/")
+    );
+    let text = "source grounded code evidence";
+    let vector = provider.embed_passage(text).unwrap();
+    let tokens = provider.tokenize_untruncated(text, true).unwrap();
+    assert_eq!(vector.len(), 384);
+    assert!(vector.iter().all(|n| n.is_finite()));
+    let norm = vector.iter().map(|n| n * n).sum::<f32>().sqrt();
+    assert!((norm - 1.0).abs() < 1e-5);
+    assert_eq!(tokens.window, 512);
+    assert_eq!(tokens.special_tokens, 2);
+    let long = provider
+        .tokenize_untruncated(&"function ".repeat(700), true)
+        .unwrap();
+    assert!(
+        long.total_tokens() > 512,
+        "tokenizer must report complete untruncated input"
+    );
+    eprintln!(
+        "ACTUAL_OFFLINE_BGE={{\"manifestId\":\"{}\",\"dimensions\":{},\"norm\":{},\"window\":{},\"longTokens\":{}}}",
+        provider.model_manifest_id(),
+        vector.len(),
+        norm,
+        tokens.window,
+        long.total_tokens()
+    );
+}

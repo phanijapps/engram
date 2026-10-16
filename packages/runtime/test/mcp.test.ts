@@ -151,6 +151,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
       "build_maintenance_plan",
       "capability_report",
       "change_impact",
+      "code",
       "code_health",
       "code_sources",
       "consolidate",
@@ -225,7 +226,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     // The tool surface gained file_dependencies + explore (Phase 2) — 38.
     // is a new op value on maintenance_run, NOT a new tool).
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(44);
+    expect(tools.length).toBe(45);
       // Cross-server tool-list parity (engram-code spec, ADR-0022): the TS
       // HTTP tool table must match the shared fixture asserted by the Rust
       // registry test. PRE-EXISTING drift: 11 tools differ (6 Rust-only, 5
@@ -278,7 +279,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     // Still exactly 36 tools — hierarchy-build is a new op value on
     // maintenance_run, NOT a new tool.
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(44);
+    expect(tools.length).toBe(45);
 
     // maintenance_run op=hierarchy-build dispatches to transport.buildHierarchy
     // (deterministic Louvain cluster→persist, no LLM — so no provider/key needed).
@@ -463,6 +464,7 @@ describe("trusted embedding reindex", () => {
       const capability = await client.callTool({name:"capability_report",arguments:{}});
       expect(capability.content).toEqual([{type:"text",text:JSON.stringify({
         code_embeddings:{Unsupported:{reason:"ProviderUnavailable"}},
+        code_evidence:{Unsupported:{reason:"ProviderUnavailable"}},
         code_source_preservation:{Unsupported:{reason:"ProviderUnavailable"}}
       })}]);
       const result = await client.callTool({name:"maintenance_run",arguments:{op:"reindex"}});
@@ -485,6 +487,42 @@ describe("trusted embedding reindex", () => {
         expect(result.isError).toBe(true);
       }
       expect(transport.backfillEmbeddings).not.toHaveBeenCalled();
+    } finally { await client.close(); }
+  });
+});
+
+describe("code evidence HTTP authority", () => {
+  const context = {scope:{tenant:"t",workspace:"evidence"},requester:{actor:{id:"operator",kind:"agent" as const}},readerVersion:1 as const};
+  async function connectEvidence(bound:boolean) {
+    const transport = mockTransport();
+    transport.codeEvidence = vi.fn(async () => ({items:[],supportingUnits:[],evidenceStatus:"insufficient_evidence",diagnostics:{calibrationState:"unvalidated"}} as never));
+    const server = await startMcpHttpServer({transport,port:0,...(bound?{sourceContext:context}:{})});
+    servers.push(server);
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("missing address");
+    const client = new Client({name:"evidence-test",version:"1"});
+    await client.connect(new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${address.port}/mcp`)));
+    return {client,transport};
+  }
+  it("returns the shared packet and rejects authority/model/calibration fields before dispatch", async () => {
+    const {client,transport} = await connectEvidence(true);
+    try {
+      const result = await client.callTool({name:"code",arguments:{op:"evidence",query:"reject expired credentials",resultLimit:3}});
+      expect(result.isError).not.toBe(true);
+      expect(transport.codeEvidence).toHaveBeenCalledExactlyOnceWith({query:"reject expired credentials",resultLimit:3},context);
+      for (const extra of [{scope:context.scope},{requester:context.requester},{model:"remote"},{calibration:{}},{profile:"fast-v1"},{resultLimit:0},{query:""}]) {
+        const result = await client.callTool({name:"code",arguments:{op:"evidence",query:"valid",...extra}});
+        expect(result.isError).toBe(true);
+      }
+      expect(transport.codeEvidence).toHaveBeenCalledTimes(1);
+    } finally { await client.close(); }
+  });
+  it("does not invoke evidence without trusted launch context", async () => {
+    const {client,transport} = await connectEvidence(false);
+    try {
+      const result = await client.callTool({name:"code",arguments:{op:"evidence",query:"valid"}});
+      expect(result.isError).toBe(true);
+      expect(transport.codeEvidence).not.toHaveBeenCalled();
     } finally { await client.close(); }
   });
 });

@@ -252,8 +252,116 @@ wired.
   `sqlite3 ~/.engram/myproject/engram_data.db "PRAGMA journal_mode;"` → `wal`.
 - **Edit the ontology/taxonomy** — change the JSON and **restart** the server
   (they’re read at launch).
-- **Start over** — delete `engram_data.db` (and any `-wal`/`-shm` sidecars) and
-  re-scan. The data is regenerable.
+- **Rebuild embeddings** — back up the store, then use `maintain` with
+  `{"op":"reindex","limit":1024}` in the `full` tool profile until the backlog
+  drains. Retain `engram_data.db`, its history and existing vector namespaces.
+  A vector rebuild does not require deleting canonical data.
+
+## Configure natural-language code evidence
+
+The `core` and `full` tool profiles expose `code` with `op: "evidence"`.
+This operation returns structured implementation excerpts, source hashes/ranges,
+supporting context and diagnostics. Its quality acceptance remains tracked in the
+[reliable code intelligence spec](../../docs/specs/reliable-code-intelligence/spec.md).
+An available operation or scorer does not establish a passing retrieval score.
+
+Provision the admitted local assets explicitly before using vector retrieval or
+the cross-encoder. These commands verify the installed manifest's pinned sizes
+and hashes; normal model inference reads local files:
+
+```bash
+python3 scripts/dev/provision_code_models.py --model bge-small-en-v1.5 --download
+python3 scripts/dev/provision_code_models.py --model jina-reranker-v1-turbo-en --download
+```
+
+Use `--from-cache /absolute/path/to/huggingface/hub` instead of `--download` to
+import matching artifacts from a Hugging Face hub cache root containing
+`models--.../snapshots/<revision>/...`. `ENGRAM_MODEL_CACHE` selects the operator-owned asset
+directory; its default is `~/.cache/engram/models`. A build without the model
+features reports the missing capability. The default MCP build includes
+`fastembed` and `cross-encoder-rerank`.
+
+Create an explicitly selected code configuration file, for example
+`/absolute/path/to/code.json`:
+
+```json
+{
+  "profile": "balanced-v1",
+  "retrieval": { "result_limit": 8 },
+  "evidence": { "token_budget": 4000 }
+}
+```
+
+```bash
+target/release/engram-mcp \
+  --storage ~/.engram/myproject --project myproject --tools full \
+  --config /absolute/path/to/code.json
+```
+
+Omitted fields retain the selected profile's defaults. Settings resolve once at
+launch: profile defaults, selected JSON/TOML file, environment, then explicit SDK
+fields. `ENGRAM_CODE_CONFIG` selects the file and `ENGRAM_CODE_PROFILE` selects
+the profile. A scanned repository's config is not implicitly trusted as launch
+configuration. Restart after changing settings.
+
+| Setting | `balanced-v1` | `fast-v1` |
+|---|---|---|
+| Candidates per enabled lane | 50 | 20 |
+| Final primary limit | 10 | 10 |
+| Enabled lanes | vector, lexical | vector, lexical |
+| Anchored graph hops / neighbor bound | 1 / 20 | 0 / 20 |
+| Reranker | local cross-encoder | none |
+| Passage body / context token targets | 384 / 64 | 384 / 64 |
+| Query instruction | none | none |
+| Evidence token budget / per-file limit | 6000 / 4 | 6000 / 4 |
+| Supporting-unit limit | 20 | 20 |
+
+The scorer model is `jinaai/jina-reranker-v1-turbo-en`, with query/pair limits
+128/1024 tokens, at most 50 scored pairs and batches of 8. The default failure
+policy is `degrade`; `error` returns an error instead. Fast mode avoids loading
+the scorer. Both profiles share the same passage representation.
+
+Nested environment settings use double underscores and the Rust field names:
+
+```bash
+export ENGRAM_CODE_PROFILE=fast-v1
+export ENGRAM_CODE__RETRIEVAL__RESULT_LIMIT=8
+export ENGRAM_CODE__EVIDENCE__TOKEN_BUDGET=4000
+export ENGRAM_CODE__LOCAL_SCORER__ON_FAILURE=error
+```
+
+Unknown keys, invalid values and incompatible budgets fail validation. The
+generated `CodeIntelligenceConfigOverlay` contract describes the complete field
+set. Packets report profile, configuration hash and origins; the provider's
+configuration snapshot contains the full effective settings. Index-setting
+changes require building the compatible derived namespace. Complete canonical
+methods and retained history stay intact.
+
+Call the consolidated tool with a query only and optional allowed reductions:
+
+```json
+{"op":"evidence","query":"How does a failed import keep old source from becoming current?","resultLimit":5}
+```
+
+Scope and requester come from the trusted host. Query arguments cannot choose
+models, index representation or authorization context. Rust callers use
+`EngramProvider::code_evidence`; native TypeScript callers use
+`provider.codeEvidence(query, trustedSourceContext)`. The HTTP runtime dispatches
+the same `code` operation when its launch configuration supplies source context.
+
+Install an independently calibrated artifact with
+`--code-calibration /absolute/path/to/calibration.json`; native provider options
+use `codeCalibrationPath`, and Rust configuration uses
+`with_code_calibration_path`. Calibration binds the actual model, tokenizer,
+representation, scoring strategy and configuration. Fast mode needs its own
+artifact. Changing a bound setting invalidates the artifact.
+
+Without a matching validated artifact, or after scorer fallback, the packet
+reports `insufficient_evidence`. Authorized inspection candidates can still be
+present; they are not validated implementation proof. RRF and cross-encoder
+scores are ranking values, not confidence probabilities. Insufficiency does not
+assert that a feature is absent. Check `diagnostics` for calibration, scorer,
+coverage and reindex state, and `sourceFailures` for unavailable retrieval lanes.
 
 ---
 

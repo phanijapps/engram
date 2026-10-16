@@ -329,8 +329,8 @@ impl TreeSitterChunker {
 }
 
 impl TreeSitterChunker {
-    /// Exact source slices for mapped declarations. Synthesized doc prefixes
-    /// stay out of these slices; unmatched comments/imports become residuals.
+    /// Exact source slices for mapped declarations. Callable slices retain
+    /// attached grammar comments verbatim; unmatched comments remain residuals.
     pub fn covered_chunks_with_tree(
         &self,
         tree: &tree_sitter::Tree,
@@ -555,12 +555,16 @@ fn walk_declarations_with_receivers(
                         end: node.end_byte() as u64,
                     };
                     let ranges = if is_callable {
-                        vec![declaration]
+                        vec![CodeByteRange {
+                            start: super::attached_comments::start(node, source)
+                                .unwrap_or(declaration.start),
+                            end: declaration.end,
+                        }]
                     } else {
                         let mut excluded = Vec::new();
                         let mut cursor = node.walk();
                         for child in node.named_children(&mut cursor) {
-                            collect_declaration_ranges(&child, kind_map, &mut excluded);
+                            collect_declaration_ranges(&child, source, kind_map, &mut excluded);
                         }
                         source_residual_ranges(declaration.end, &excluded)
                             .expect("AST ranges are within source")
@@ -627,19 +631,26 @@ fn walk_declarations_with_receivers(
 
 fn collect_declaration_ranges(
     node: &tree_sitter::Node,
+    source: &[u8],
     kind_map: &HashMap<&str, &str>,
     ranges: &mut Vec<CodeByteRange>,
 ) {
-    if kind_map.contains_key(node.kind()) {
+    if let Some(keyword) = kind_map.get(node.kind()) {
+        let start = if matches!(*keyword, "fn" | "def" | "function") {
+            super::attached_comments::start(node, source)
+        } else {
+            None
+        }
+        .unwrap_or(node.start_byte() as u64);
         ranges.push(CodeByteRange {
-            start: node.start_byte() as u64,
+            start,
             end: node.end_byte() as u64,
         });
         return;
     }
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
-        collect_declaration_ranges(&child, kind_map, ranges);
+        collect_declaration_ranges(&child, source, kind_map, ranges);
     }
 }
 

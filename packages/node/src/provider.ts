@@ -1,5 +1,5 @@
 import type {
-  CodeSourceContext, CodeSourceQuery, CodeSourceReadResult, CodeSourceGeneration,
+  CodeEvidenceQuery, CodeEvidencePacket, CodeConfigurationSnapshot, CodeIntelligenceConfigOverlay, CodeSourceContext, CodeSourceQuery, CodeSourceReadResult, CodeSourceGeneration,
   ContextPayload, EmbeddingBackfillRequest, EmbeddingBackfillReport,
   RetrievalRequest,
   WriteMemoryRequest,
@@ -20,6 +20,11 @@ export interface NativeProviderTransportOptions {
   loader?: NativeBindingLoader;
   /** Serialized `EngramConfig` (v1 shape). Required when `provider` is not injected. */
   configJson?: string;
+  /** Explicit typed code fields applied by the shared Rust resolver. */
+  codeIntelligence?: CodeIntelligenceConfigOverlay;
+  codeConfigPath?: string;
+  /** Explicit operator calibration JSON, loaded once by Rust. */
+  codeCalibrationPath?: string;
   /** Inject an already-constructed `NativeProvider` (tests, or a shared provider). */
   provider?: NativeProviderBinding;
 }
@@ -85,6 +90,7 @@ export interface ScopeCounts {
 /** The typed transport over the native binding — every route in the TS MCP
  *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
+  codeEvidence(query: CodeEvidenceQuery, context: CodeSourceContext): Promise<CodeEvidencePacket>;
   exportAuthorized(context:CodeSourceContext):Promise<unknown>;
   dryRunImportAuthorized(data:unknown,context:CodeSourceContext):Promise<unknown>;
   applyImportAuthorized(manifest:unknown,context:CodeSourceContext):Promise<void>;
@@ -92,6 +98,7 @@ export interface NativeProviderTransport {
   listCodeSources(context:CodeSourceContext):Promise<CodeSourceGeneration[]>;
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
+  codeConfiguration(): Promise<CodeConfigurationSnapshot | null>;
   /** Unified recall (fused across lanes) → `ContextPayload`. */
   recall(request: RetrievalRequest): Promise<ContextPayload>;
   /** Write a memory + lifecycle event. */
@@ -203,6 +210,9 @@ export function createNativeProviderTransport(
   options: NativeProviderTransportOptions
 ): NativeProviderTransport {
   if (options.provider) {
+    if (options.codeIntelligence !== undefined || options.codeConfigPath !== undefined || options.codeCalibrationPath !== undefined) {
+      throw new Error("Code launch settings cannot reconfigure an injected provider");
+    }
     return new JsonNativeProviderTransport(options.provider);
   }
   if (!options.configJson) {
@@ -211,11 +221,23 @@ export function createNativeProviderTransport(
     );
   }
   const binding = options.binding ?? loadNativeBinding(options.loader);
-  return new JsonNativeProviderTransport(new binding.NativeProvider(options.configJson));
+  const config = JSON.parse(options.configJson) as Record<string, unknown>;
+  if (options.codeIntelligence !== undefined) config.code_intelligence = options.codeIntelligence;
+  if (options.codeConfigPath !== undefined) config.code_config_path = options.codeConfigPath;
+  if (options.codeCalibrationPath !== undefined) config.code_calibration_path = options.codeCalibrationPath;
+  return new JsonNativeProviderTransport(new binding.NativeProvider(JSON.stringify(config)));
 }
 
 class JsonNativeProviderTransport implements NativeProviderTransport {
   constructor(private readonly provider: NativeProviderBinding) {}
+
+  async codeEvidence(query: CodeEvidenceQuery, context: CodeSourceContext): Promise<CodeEvidencePacket> {
+    return decode<CodeEvidencePacket>(this.provider.requireCodeEvidenceApi(encode(context)).evidenceJson(encode(query)));
+  }
+
+  async codeConfiguration(): Promise<CodeConfigurationSnapshot | null> {
+    return decode(this.provider.codeConfigurationJson()) as CodeConfigurationSnapshot | null;
+  }
 
   async capabilities(): Promise<unknown> {
     return decode(this.provider.capabilitiesJson());

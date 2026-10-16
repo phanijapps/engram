@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use engram_belief::BeliefRepository;
-use engram_domain::{CapabilityReason, CapabilityState, RerankStrategy};
+use engram_domain::{CapabilityReason, CapabilityState};
 use engram_hierarchy::HierarchyRepository;
 use engram_knowledge::{
     GraphMaintenanceRepository, KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository,
@@ -126,6 +126,8 @@ impl SqliteLayoutPaths {
 /// Returns `CoreError::InvalidRequest` if configuration validation fails, or
 /// `CoreError::Adapter` if the storage directory cannot be created.
 pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvider> {
+    let code_configuration = config.resolve_code_configuration()?;
+    let code_calibration = config.load_code_calibration()?;
     config.validate().map_err(|e| CoreError::InvalidRequest {
         reason: format!("configuration validation failed: {e}"),
     })?;
@@ -186,6 +188,8 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut hierarchy: Option<Arc<dyn HierarchyRepository>> = None;
     let retrieval: Option<Arc<dyn engram_retrieval::RetrievalIndex>> = None;
     let mut vectors: Option<Arc<dyn engram_retrieval::VectorIndex>> = None;
+    #[allow(unused_mut)]
+    let mut code_vectors: Option<Arc<dyn engram_retrieval::VectorIndex>> = None;
     let mut provenance: Option<Arc<dyn crate::ProvenanceQuery>> = None;
     let mut batch: Option<Arc<dyn crate::BatchIngest>> = None;
     let mut recall: Option<Arc<dyn crate::UnifiedRecall>> = None;
@@ -319,29 +323,41 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     //   - vector — feature-gated behind `fastembed` (off by default).
     //   - beliefs — passed to the SqlUnifiedRecall constructor below.
     let mut retrieval_lanes: Vec<Arc<dyn engram_retrieval::RetrievalIndex>> = Vec::new();
+    let mut code_lanes = Vec::new();
     if let Some(knowledge_handle) = &knowledge_store {
         // Graph lane: SqlKnowledgeStore implements GraphCandidateSource. The
         // lane reads ENTITIES from the shared cache on a hit; chunks are always
         // loaded from the store (not part of the snapshot).
-        retrieval_lanes.push(Arc::new(
-            engram_store_sqlite::GraphRetrievalIndex::with_cache(
+        let graph_lane: Arc<dyn engram_retrieval::RetrievalIndex> =
+            Arc::new(engram_store_sqlite::GraphRetrievalIndex::with_cache(
                 knowledge_handle.clone(),
                 20,
                 graph_cache.clone(),
-            ),
-        ));
+            ));
+        retrieval_lanes.push(graph_lane.clone());
+        code_lanes.push((engram_retrieval::CodeRetrievalLane::Graph, graph_lane));
         // Associative-graph lane: PPR-ranked entities over the knowledge graph
         // (HippoRAG-style), fused alongside the other unified-recall lanes.
         // Populates the shared cache (entities + relationships) on a miss.
-        retrieval_lanes.push(recall_lanes::associative_recall_lane(
+        let associative_lane = recall_lanes::associative_recall_lane(
             knowledge_handle.clone(),
             Some(graph_cache.clone()),
+        );
+        retrieval_lanes.push(associative_lane.clone());
+        code_lanes.push((
+            engram_retrieval::CodeRetrievalLane::AssociativeGraph,
+            associative_lane,
         ));
         // Community-summary lane (GraphRAG): community detection + summary ranking.
         // Populates the shared cache (entities + relationships) on a miss.
-        retrieval_lanes.push(recall_lanes::community_summary_recall_lane(
+        let community_lane = recall_lanes::community_summary_recall_lane(
             knowledge_handle.clone(),
             Some(graph_cache.clone()),
+        );
+        retrieval_lanes.push(community_lane.clone());
+        code_lanes.push((
+            engram_retrieval::CodeRetrievalLane::CommunitySummary,
+            community_lane,
         ));
         // Lexical lane: a **file-backed** Tantivy index shared with the lexical
         // feed, persisted at `<storage_path>/lexical` so it survives process
@@ -373,10 +389,10 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
                     })?;
             }
             let lexical_index = Arc::new(lexical_index);
-            retrieval_lanes.push(recall_lanes::lexical_recall_lane(
-                knowledge_handle.clone(),
-                lexical_index.clone(),
-            ));
+            let lexical_lane =
+                recall_lanes::lexical_recall_lane(knowledge_handle.clone(), lexical_index.clone());
+            retrieval_lanes.push(lexical_lane.clone());
+            code_lanes.push((engram_retrieval::CodeRetrievalLane::Lexical, lexical_lane));
             lexical_feed = Some(Arc::new(crate::sqlite::lexical_feed::SqlLexicalFeed::new(
                 lexical_index,
                 knowledge_handle.clone(),
@@ -435,21 +451,48 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
                         let resolver =
                             recall_lanes::KnowledgeVectorResolver::new(knowledge_handle.clone());
                         let vec_index = Arc::new(vector_index);
-                        retrieval_lanes.push(Arc::new(
-                            engram_store_sqlite::VectorRetrievalIndex::new(
-                                (*vec_index).clone(),
+                        let embedder: Arc<dyn crate::EmbeddingProvider> =
+                            Arc::new(super::fastembed_embedding::FastEmbedEmbeddingProvider::new(
                                 provider_arc.clone(),
-                                Arc::new(resolver),
-                            ),
-                        ));
+                                space.clone(),
+                            ));
+                        match super::code_index::open(
+                            &paths.vectors,
+                            embedder.as_ref(),
+                            &code_configuration.effective.index,
+                        ) {
+                            Ok((code_index, representation)) => {
+                                retrieval_lanes.push(Arc::new(
+                                    super::code_index::CompatibleVectorLane {
+                                        base: vec_index.clone(),
+                                        code: code_index.clone(),
+                                        query: provider_arc.clone(),
+                                        store: knowledge_handle.clone(),
+                                        representation,
+                                        code_instruction: code_configuration
+                                            .effective
+                                            .query
+                                            .instruction,
+                                        embedder: embedder.clone(),
+                                    },
+                                ));
+                                code_vectors = Some(code_index);
+                            }
+                            Err(error @ CoreError::InvalidRequest { .. }) => return Err(error),
+                            Err(error) => {
+                                eprintln!("engram: code-vector index unavailable: {error}");
+                                retrieval_lanes.push(Arc::new(
+                                    engram_store_sqlite::VectorRetrievalIndex::new(
+                                        (*vec_index).clone(),
+                                        provider_arc.clone(),
+                                        Arc::new(resolver),
+                                    ),
+                                ));
+                            }
+                        }
                         vectors = Some(vec_index as Arc<dyn engram_retrieval::VectorIndex>);
                         vectors_state = CapabilityState::Supported;
-                        embedding_provider = Some(Arc::new(
-                            super::fastembed_embedding::FastEmbedEmbeddingProvider::new(
-                                provider_arc,
-                                space,
-                            ),
-                        ));
+                        embedding_provider = Some(embedder);
                     }
                     Err(e) => {
                         eprintln!("engram-mcp: FastEmbed init failed — vector lane disabled: {e}");
@@ -460,6 +503,12 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             }
         }
     }
+    let code_scorer = super::reranking::construct_scorer(
+        config,
+        &code_configuration.effective,
+        embedding_provider.is_some(),
+    );
+
     if let (Some(memory_handle), Some(belief_handle)) = (&memory_store, &belief_store)
         && conformance::recall_ok()
     {
@@ -482,12 +531,13 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         // `EmbeddingProvider` (fastembed on); it degrades to relevance-only
         // with a warning when absent, never a panic. Cross-encoder is behind
         // its feature gate; it warns + falls back when no scorer is wired.
-        let reranker = select_reranker(
+        let reranker = super::reranking::select_reranker(
             config
                 .recall_fusion
                 .as_ref()
                 .and_then(|c| c.rerank.as_ref()),
             embedding_provider.as_ref(),
+            code_scorer.as_ref(),
         );
         let mut unified = SqlUnifiedRecall::with_reranker(
             memory_handle.clone(),
@@ -654,11 +704,13 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let report = CapabilityReport::builder()
         .code_embeddings(crate::embedding_backfill::capability(
             embedding_provider.as_deref(),
+            code_vectors.as_deref(),
             vectors.as_deref(),
             knowledge_query.is_some(),
             knowledge
                 .as_ref()
-                .is_some_and(|k| k.code_sources().is_some()),
+                .is_some_and(|k| k.code_sources().is_some() && k.code_segments().is_some()),
+            &code_configuration.effective.index,
         ))
         .code_source_preservation(code_source_state)
         .memory(memory_state)
@@ -702,8 +754,15 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
 
     let mut builder = EngramProviderBuilder::new(report)
+        .code_configuration(code_configuration)
         .schema_version(SCHEMA_VERSION)
         .adapter_version(ADAPTER_VERSION);
+    for (lane, handle) in code_lanes {
+        builder = builder.code_retrieval_lane(lane, handle);
+    }
+    if let Some(scorer) = code_scorer {
+        builder = builder.code_scorer(scorer);
+    }
     if let Some(h) = memory {
         builder = builder.memory(h);
     }
@@ -747,6 +806,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     if let Some(h) = vectors {
         builder = builder.vectors(h);
     }
+    if let Some(h) = code_vectors {
+        builder = builder.code_vectors(h);
+    }
     if let Some(h) = embedding_provider {
         builder = builder.embedding_provider(h);
     }
@@ -779,7 +841,11 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // is always present under the SQLite backend (no fallback when a lane is
     // absent — it is a benign empty cache in that case).
     builder = builder.graph_cache(graph_cache);
-    Ok(builder.build())
+    let provider = builder.build();
+    Ok(match code_calibration {
+        Some(a) => provider.with_code_calibration(a),
+        None => provider,
+    })
 }
 
 /// The fixed diagnostic scope used by the wired observability handle.
@@ -795,108 +861,6 @@ fn diagnostic_scope() -> engram_domain::Scope {
         workspace: None,
         session: None,
         environment: None,
-    }
-}
-
-// ---- RFC-0019 T3/T4: reranker dispatch -----------------------------------
-// Selects the reranker for unified recall from the operator-facing
-// `recall_fusion.rerank` config. ADR-0022: this is the engine-specific wiring
-// site (names adapter crates + the integration `EmbeddingProvider`); the
-// reranker port + dispatch contract stay engine-neutral.
-
-/// Selects the reranker by `rerank.strategy`. Returns `None` (no rerank) when
-/// no rerank config is set, strategy is `None`, or the selected reranker's
-/// prerequisites are unmet (MMR without an embedder; cross-encoder without its
-/// feature/scorer). Unmet prerequisites degrade with a warning, never a panic.
-fn select_reranker(
-    rerank: Option<&engram_retrieval::RerankConfig>,
-    embedding_provider: Option<&Arc<dyn crate::EmbeddingProvider>>,
-) -> Option<Arc<dyn engram_retrieval::RetrievalReranker>> {
-    let cfg = rerank?;
-    match cfg.strategy {
-        RerankStrategy::None => None,
-        RerankStrategy::Mmr => select_mmr(embedding_provider, cfg.lambda),
-        RerankStrategy::CrossEncoder => select_cross_encoder(),
-        // `LlmJudge` / `PolicyPriority` are not dispatched by engram today.
-        _ => None,
-    }
-}
-
-/// MMR needs an `EmbeddingProvider` to embed candidate texts (RFC-0019 D4 — the
-/// `RetrievalReranker` port exposes no embeddings). The embedder is wired only
-/// under the `fastembed` feature; without it (or when construction failed), MMR
-/// degrades to relevance-only ordering with a warning.
-fn select_mmr(
-    embedding_provider: Option<&Arc<dyn crate::EmbeddingProvider>>,
-    lambda: f32,
-) -> Option<Arc<dyn engram_retrieval::RetrievalReranker>> {
-    #[cfg(feature = "fastembed")]
-    {
-        if let Some(emb) = embedding_provider {
-            // Bridge the integration `EmbeddingProvider` to the MMR adapter's
-            // local `MmrEmbedder` trait (the adapter cannot depend on the
-            // facade without a package cycle — see `engram-rerank-mmr` docs).
-            let embedder: Arc<dyn engram_rerank_mmr::MmrEmbedder> =
-                Arc::new(FastEmbedMmrEmbedder { inner: emb.clone() });
-            return Some(Arc::new(engram_rerank_mmr::MmrReranker::new(
-                Some(embedder),
-                lambda,
-            )));
-        }
-        eprintln!(
-            "engram-mcp: MMR reranker selected but no embedding provider is wired \
-             (enable the `fastembed` feature); falling back to no rerank"
-        );
-        None
-    }
-    #[cfg(not(feature = "fastembed"))]
-    {
-        let _ = embedding_provider;
-        let _ = lambda;
-        eprintln!(
-            "engram-mcp: MMR reranker selected but the `fastembed` feature is disabled \
-             (no embedding provider); falling back to no rerank"
-        );
-        None
-    }
-}
-
-/// Cross-encoder is behind the `cross-encoder-rerank` feature (RFC-0019 T4 /
-/// D2.1c). The adapter is constructible when a deployer wires a `RerankScorer`;
-/// no model ships in-tree today (backlog `cross-encoder-rerank`), so selection
-/// warns + falls back to no rerank rather than inventing a scorer.
-fn select_cross_encoder() -> Option<Arc<dyn engram_retrieval::RetrievalReranker>> {
-    #[cfg(feature = "cross-encoder-rerank")]
-    {
-        eprintln!(
-            "engram-mcp: cross-encoder reranker selected but no RerankScorer model is \
-             wired; falling back to no rerank (see backlog `cross-encoder-rerank`)"
-        );
-        None
-    }
-    #[cfg(not(feature = "cross-encoder-rerank"))]
-    {
-        eprintln!(
-            "engram-mcp: cross-encoder reranker selected but the `cross-encoder-rerank` \
-             feature is disabled; falling back to no rerank"
-        );
-        None
-    }
-}
-
-/// Bridge: adapts the integration [`crate::EmbeddingProvider`] to the MMR
-/// adapter's local `MmrEmbedder` trait. Only the fastembed build wires an
-/// embedding provider, so the bridge lives behind that feature.
-#[cfg(feature = "fastembed")]
-struct FastEmbedMmrEmbedder {
-    inner: Arc<dyn crate::EmbeddingProvider>,
-}
-
-#[cfg(feature = "fastembed")]
-impl engram_rerank_mmr::MmrEmbedder for FastEmbedMmrEmbedder {
-    fn embed(&self, text: &str) -> CoreResult<Vec<f32>> {
-        // Candidate texts are passages (not queries), so embed as a passage.
-        self.inner.embed_passage(text)
     }
 }
 

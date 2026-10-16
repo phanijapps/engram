@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "modelId": "jinaai/jina-reranker-v1-turbo-en",
+  "artifactRepository": "jinaai/jina-reranker-v1-turbo-en",
+  "revision": "b8c14f4e723d9e0aab4732a7b7b93741eeeb77c2",
+  "license": "Apache-2.0",
+  "licenseSource": "https://huggingface.co/jinaai/jina-reranker-v1-turbo-en/blob/b8c14f4e723d9e0aab4732a7b7b93741eeeb77c2/README.md",
+  "nativeWindow": 8192,
+  "dimensions": null,
+  "pooling": null,
+  "normalization": null,
+  "inputContract": "roberta-query-document/4-specials/pad-id-1/untruncated-preflight-v1/fastembed-5.17.2/ort-2.0.0-rc12/cpu-intra1",
+  "scoreContract": "logits-column-0/raw-v1",
+  "assets": [
+    {
+      "path": "onnx/model.onnx",
+      "bytes": 151296975,
+      "sha256": "c1296c66c119de645fa9cdee536d8637740efe85224cfa270281e50f213aa565"
+    },
+    {
+      "path": "config.json",
+      "bytes": 1206,
+      "sha256": "e050ff6a15ae9295e84882fa0e98051bd8754856cd5201395ebf00ce9f2d609b"
+    },
+    {
+      "path": "tokenizer.json",
+      "bytes": 2030772,
+      "sha256": "0046da43cc8c424b317f56b092b0512aaaa65c4f925d2f16af9d9eeb4d0ef902"
+    },
+    {
+      "path": "special_tokens_map.json",
+      "bytes": 280,
+      "sha256": "06e405a36dfe4b9604f484f6a1e619af1a7f7d09e34a8555eb0b77b66318067f"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "bytes": 1215,
+      "sha256": "d291c6652d96d56ffdbcf1ea19d9bae5ed79003f7648c627e725a619227ce8fa"
+    }
+  ],
+  "externalData": []
+}

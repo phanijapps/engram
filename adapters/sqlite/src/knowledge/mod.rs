@@ -12,15 +12,30 @@
 //! backend can evolve (or move to Postgres / a graph store) without coupling.
 
 mod candidate_text;
+mod code_segments;
+mod code_segments_schema;
+mod code_segments_state;
+mod code_segments_validation;
 mod code_source;
+mod code_source_provenance;
+mod connection_options;
+mod document_code_head;
+mod document_derived_write;
+mod document_head;
+mod document_head_legacy;
+mod document_head_records;
+mod document_head_state;
 mod graph;
 mod guarded_source_write;
 mod identity;
 #[allow(clippy::module_inception)]
 mod knowledge;
+#[cfg(test)]
+mod legacy_delete_tests;
 mod maintenance;
 mod ontology;
 mod record_writes;
+mod repository_contract;
 mod retrieval;
 mod schema;
 mod scope;
@@ -34,3 +49,4 @@ mod taxonomy;
 pub use identity::SqlIdentityStore;
 pub use retrieval::{GraphCandidateSource, GraphRetrievalIndex};
 pub use service::SqlKnowledgeStore;
+pub use source_access::SourceTargetAccess;

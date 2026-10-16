@@ -39,10 +39,8 @@ pub(super) fn validate_inventory(
     m: &CodeSourceGeneration,
     key: &str,
 ) -> CoreResult<String> {
-    let stale:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM code_source_contributions WHERE file_key=?1 AND attempt_id<>?2)",rusqlite::params![key,m.attempt_id],|r|r.get(0)).map_err(sql_error)?;
-    if stale {
-        return Err(invalid("superseded source inventory has not been cleaned"));
-    }
+    // Historical attempts remain persisted. Only the current fenced attempt
+    // contributes to activation and retrieval eligibility.
     if m.snapshot_ids.is_empty() {
         return Err(invalid("source snapshot inventory is empty"));
     }
@@ -230,11 +228,20 @@ pub(super) fn validate_inventory(
             last_end = range.end;
         }
         if let Some(span) = code.declaration_range {
+            // A callable may own an exact attached-comment prefix while its
+            // declaration remains the AST node span. Only a single complete
+            // callable slice gets this bounded prefix allowance; no suffix or
+            // container expansion is authorized. The parser owns attachment.
+            let callable_prefix = code.role == CodeChunkRole::Symbol
+                && code.ranges.len() == 1
+                && code.ranges[0].start <= span.start
+                && span.start - code.ranges[0].start <= 8192
+                && code.ranges[0].end == span.end;
             if text.get(span.start as usize..span.end as usize).is_none()
                 || code
                     .ranges
                     .iter()
-                    .any(|r| r.start < span.start || r.end > span.end)
+                    .any(|r| (r.start < span.start && !callable_prefix) || r.end > span.end)
             {
                 return Err(invalid("declaration span does not contain source coverage"));
             }

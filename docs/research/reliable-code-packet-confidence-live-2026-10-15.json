@@ -1,0 +1,196 @@
+{
+  "date": "2026-10-15",
+  "scope": "sequential confidence-filter fix; development regression verification only",
+  "featureShipped": false,
+  "rootCause": "Calibration fits query-level maximum emitted scores, but runtime independently filtered each parent. Align the gate to the returnable primary packet and retain other bounded ranked parts of accepted packets.",
+  "behaviorContract": "code-evidence-binding-v2/packet-max-confidence; older calibration artifacts cannot validate",
+  "wireContractChanged": false,
+  "defaultModelRankingAndThresholdChanged": false,
+  "review": "focused self-review per owner request; no adversarial agent rounds",
+  "positiveCheck": {
+    "count": 5,
+    "beforeFullyRecovered": 0,
+    "afterFullyRecovered": 4,
+    "curatedRegressionSetNotOverallRecall": true
+  },
+  "negativeCheck": {
+    "count": 15,
+    "rejected": 14,
+    "required": 14
+  },
+  "negativeRejectionStatusChanges": [],
+  "oldPassingPrimaryItemsAndScoresPreserved": true,
+  "oldArtifactRejected": true,
+  "calibration": {
+    "oldConfigHash": "9deeaf51f2929468ffbb392afe93e6cad386d0911d563209049e93043c27a195",
+    "newConfigHash": "291b1f600f5c9b8c0591ed7e32bc640131e89ec12ba8ade974f7cc5c19cf8534",
+    "oldThreshold": -0.97909373,
+    "newThreshold": -0.9790937304496765,
+    "rejectedAtFit": 14,
+    "negativeTarget": 14,
+    "artifact": {
+      "schemaVersion": 1,
+      "id": "code-calibration-v1/753b7fa12de02ead2d6486367b287c394e5d922ab38be4e8bf0276149afe36c7",
+      "configHash": "291b1f600f5c9b8c0591ed7e32bc640131e89ec12ba8ade974f7cc5c19cf8534",
+      "queryRepresentationId": "code-query-v1/6425ffc2849dee5e5639446fb66325a46e63e9393f42f9b87fccf96bd216def8",
+      "passageRepresentationId": "code-passage-v1/6c565799a44ef61392aefa737eb3998c3078c98a3d32acfc3e1813d1dcb89348",
+      "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+      "scorerManifestId": "model-manifest-v1/5a313a5e79e3036626005ee29fec2090d7f5172bf2f925e9f803d14da835c962",
+      "tokenizerIdentity": "5749ef57b8429e89b0e8140093a2eb34e56de83945690b28944aa477db9523f6",
+      "scoreTransformation": "raw_logit",
+      "scoreSpace": "cross_encoder",
+      "threshold": -0.97909373,
+      "developmentLabelsSha256": "1a9f560d6097a81737deff341bf58e550324430801547da66d6e6ccc5ce9db29"
+    },
+    "fitSource": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/development.json",
+    "fitSourceSha256": "b3b29202e19d5b572325f433288177983021693cf989ef460dd4623f4ca6e031",
+    "note": "Recomputed identical maximum-score threshold from frozen development negative measurements; actual new-runtime negative rejection checked below."
+  },
+  "cases": [
+    {
+      "id": "engram-deny-path",
+      "corpus": "engram",
+      "requiredCount": 1,
+      "beforeRecovered": 0,
+      "requiredRecovered": 1,
+      "requiredDecisions": [
+        {
+          "anchor": "ScanFilter::is_denylisted",
+          "parentUnitId": "sha256:74839cb53b7a8629c19a91e87c6d7c57d704becd658ca4b4f26173121b08955b",
+          "reason": "selected",
+          "fusionScore": 0.011494253,
+          "rerankScore": -2.2439837,
+          "appliedThreshold": -0.97909373,
+          "retrievedSegments": 1,
+          "scoredSegments": 1
+        }
+      ]
+    },
+    {
+      "id": "vite-d01",
+      "corpus": "vite",
+      "requiredCount": 1,
+      "beforeRecovered": 0,
+      "requiredRecovered": 0,
+      "requiredDecisions": [
+        {
+          "anchor": "getEnvFilesForMode",
+          "parentUnitId": "sha256:80b97f9ef3a979fe3569444570e68c0aeec690ff22440d5bf3dbb8529761d7eb",
+          "reason": "result_limit",
+          "fusionScore": 0.030092072,
+          "rerankScore": -2.6768866,
+          "appliedThreshold": -0.97909373,
+          "retrievedSegments": 1,
+          "scoredSegments": 1
+        }
+      ]
+    },
+    {
+      "id": "vite-d02",
+      "corpus": "vite",
+      "requiredCount": 1,
+      "beforeRecovered": 0,
+      "requiredRecovered": 1,
+      "requiredDecisions": [
+        {
+          "anchor": "resolveEnvPrefix",
+          "parentUnitId": "sha256:08cddf31f5fe4425fcdc7903f6fed11ca3047e66dab37808a880a578767a0e74",
+          "reason": "selected",
+          "fusionScore": 0.030309988,
+          "rerankScore": -1.8735702,
+          "appliedThreshold": -0.97909373,
+          "retrievedSegments": 1,
+          "scoredSegments": 1
+        }
+      ]
+    },
+    {
+      "id": "vite-d04",
+      "corpus": "vite",
+      "requiredCount": 1,
+      "beforeRecovered": 0,
+      "requiredRecovered": 1,
+      "requiredDecisions": [
+        {
+          "anchor": "searchForPackageRoot",
+          "parentUnitId": "sha256:6713c9288e832f7bc0c8a6c684e0342607d080e21f6254b343d2b8655d416470",
+          "reason": "selected",
+          "fusionScore": 0.0125,
+          "rerankScore": -1.6283667,
+          "appliedThreshold": -0.97909373,
+          "retrievedSegments": 1,
+          "scoredSegments": 1
+        }
+      ]
+    },
+    {
+      "id": "vite-d09",
+      "corpus": "vite",
+      "requiredCount": 1,
+      "beforeRecovered": 0,
+      "requiredRecovered": 1,
+      "requiredDecisions": [
+        {
+          "anchor": "transformCjsImport",
+          "parentUnitId": "sha256:95a22618cfca3e0334abeac30054abec82940026e4868b6139c9546d2f26ea8c",
+          "reason": "selected",
+          "fusionScore": 0.027651515,
+          "rerankScore": -1.1252807,
+          "appliedThreshold": -0.97909373,
+          "retrievedSegments": 4,
+          "scoredSegments": 1
+        }
+      ]
+    }
+  ],
+  "sourceStoresUnchanged": true,
+  "selfStoreOpened": false,
+  "heldoutReassessedOrRetuned": false,
+  "runtimeBinarySha256": "501dd33a64ef8d31f1cc7f0a1e726d8baf596752ce07ae21c581c10e6d38efd2",
+  "probeSha256": "5a64d62f0b692ae656f3f6e87b4a1516483fe9d43439cc050dcb26f750bcb54f",
+  "repositoryGates": {
+    "passed": true,
+    "commands": 11,
+    "rustPassed": 1195,
+    "rustIgnored": 10
+  },
+  "harnessCorrection": "Compare serialized Rust f32 threshold values through f32, not Python f64 equality; preserve all completed before measurements.",
+  "limitations": [
+    "Five deliberately selected failed development queries are regression checks, not an estimate of overall or held-out recall.",
+    "getEnvFilesForMode remains rejected because no returnable parent passes; this change does not lower the threshold or fix all-low-score queries.",
+    "No new p95/performance or beta-readiness claim; the frozen failed assessment is preserved.",
+    "The actual retained self-store rollout remains unexecuted."
+  ],
+  "rawReceiptHashes": {
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/live.json": "fc0de4907e95a630d060616551ef95753baa1068c1121dcce37a975b9a11a7ac",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/balanced-packet-confidence-calibration.json": "9640109ff7fa00285fe9c4cc6cfe6ced4badfc84b0437c915694225611299304",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/before/receipt.json": "a73fee1f8fe7b55f7e05e1de1e7d9b8cf3d9ec9e41339b5d87d7d52df8f1ffa4",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/driver-v1.py": "76d2374916afac7e519c0a0640bed92e5699d569edb56f2e4327ca516e565bd8",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/driver-v1-f32-error.log": "28f38318dc3aa78279a71fb9279815d975c2a518711655ee1135aa96f47ea7d8",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/before-f32-harness-correction.json": "7238756adf8614ac6b42fdb3ab1c8f16ba8bcd88b9edf33692fa8d8b0e167c10",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/reliable_packet_confidence_live_v2.py": "5b70d14e86ec75d604acab812ba90a24d54e40e3de84dc3a47568b17228ff5ee",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/reliable-packet-confidence-live-v2.log": "45567fa5cdb3d9dffb30f31eb03012ba26b89dcf92d24f88cdeda01ced860d84",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/reliable-packet-confidence-red.log": "75c3e15085d119373511a2c195e278fff14483a14c1daa672727137b40bf17fe",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/reliable-packet-confidence-green.log": "814c7694f6838ff02b6784977828e1dbce411864e035a1d81f9b507c849c3d34",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/reliable-packet-confidence-operation-tests.log": "a24b5207217d3f92ee446f876d4dd393e3a5e8d564ef2b2bdc1e9ab8bf2786ff",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/reliable-packet-confidence-build-model.log": "669d4623475c29ca7c35521be6d7e7d7fcf16dfbdf2d2c32a4dce206a830b323",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/reliable-packet-confidence-mcp-build.log": "8324dd52f92cbb1a0990c2f29b95286b0301b10f2a28662117dac0e6849caa18",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/6-pnpm.log": "c6c880fd910eba4d4e99bee3fd4ec3516d0ad49017fd8420f8d558d2ecaa2eaf",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/10-scripts-ci-check-surface-parity.sh.log": "b3225247e8a41fa566bc9accdc9e582f14f89e2660d1334af844cbdcc1e894e9",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/2-cargo.log": "52c1a31f1060e9bd35637f5861bf436de017c5f944d9f92a3275a13496c04331",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/report.json": "03e2b1aa2fc69b83397cbafe7dabb88d4bbe43308c97e49616e827d9cc20c396",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/8-scripts-ci-check-docs.sh.log": "5a8199511e487d45222b8f4221b1f9254743f9419cc50bde4f81934cd2042f6f",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/9-scripts-ci-check-engine-neutrality.sh.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/5-pnpm.log": "907724774ec44ded34f18acc9376161ba02d97321f6c4609412750acf9de3de0",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/4-pnpm.log": "25a18ce9d9ddfd77e1d3cda55e63fceccc0fe6539dbf6b17c082ed175ee3392d",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/1-cargo.log": "eaab6922221c78f5e9dcfd3aae02aafe2e6553a1fdde85f45c80ec2bf8360c20",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/0-cargo.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/7-scripts-ci-check-contracts.sh.log": "fce86ba532e1d76036faf9bd6bbddb2d942388071b20bab4aaecbcfd90921aea",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/packet-confidence-2026-10-15/gates/3-pnpm.log": "2684eb0c2cdb2a307b40a553b72df0c4eeca9533b20880f44229a0370e93c1f7"
+  },
+  "statusLint": {
+    "globalHardViolations": 15,
+    "baselineKnownHardViolations": 15,
+    "featureHardViolations": []
+  }
+}

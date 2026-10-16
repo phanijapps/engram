@@ -480,6 +480,15 @@ fn orphan_sweep_heals_pending_references_on_later_scans() {
         "ghost reference must be ledgered: {pending:?}"
     );
     assert_eq!(pending[0].reference_name, "ghost_fn");
+    let old_reference: String = store
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT record_json FROM knowledge_unresolved_refs_records WHERE id=?1",
+            [pending[0].id.as_str()],
+            |row| row.get(0),
+        )
+        .unwrap();
 
     // Later scan: the defining file lands; caller.rs is unchanged (manifest
     // carries its hash so it is skipped — no re-ingest).
@@ -506,6 +515,13 @@ fn orphan_sweep_heals_pending_references_on_later_scans() {
         resolved.len(),
         1,
         "healed row flips to resolved: {resolved:?}"
+    );
+    let archived: i64 = store.lock().unwrap().query_row(
+        "SELECT count(*) FROM canonical_document_history WHERE kind='unresolved_reference' AND record_id=?1 AND record_json=?2",
+        [pending[0].id.as_str(),old_reference.as_str()],|row|row.get(0)).unwrap();
+    assert_eq!(
+        archived, 1,
+        "legitimate cross-file healing must retain the exact pending state once"
     );
 
     let rels = block_on(store.list_relationships(&scope())).expect("rels");

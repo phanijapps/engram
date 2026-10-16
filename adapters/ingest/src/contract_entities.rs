@@ -258,6 +258,16 @@ pub async fn retract_contract_op<R>(
 where
     R: KnowledgeRepository + ?Sized,
 {
+    if let Some(port) = repo.code_sources() {
+        return port
+            .retract_repository_contract(
+                scope,
+                stable_source_key,
+                &contract_entity_id(scope, normalized_key),
+                &exposes_rel_id(stable_source_key, normalized_key),
+            )
+            .await;
+    }
     // Delete the exposes edge (ignore "not found" — idempotent).
     let rel_id = exposes_rel_id(stable_source_key, normalized_key);
     let _ = repo.delete_relationship(&rel_id, scope).await;

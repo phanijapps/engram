@@ -31,6 +31,8 @@ use recall::PgUnifiedRecall;
 /// memory / knowledge+graph / beliefs / hierarchy / procedures / vectors /
 /// unified-recall — into one provider.
 pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
+    let code_configuration = config.resolve_code_configuration()?;
+    let code_calibration = config.load_code_calibration()?;
     let conn_str = config
         .pgvector_connection_string
         .as_deref()
@@ -147,6 +149,7 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .build();
 
     let mut provider_builder = EngramProviderBuilder::new(report)
+        .code_configuration(code_configuration)
         .memory(memory)
         .knowledge(knowledge.clone())
         .graph(knowledge)
@@ -161,5 +164,9 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     }
     let provider = provider_builder;
 
-    Ok(provider.build())
+    let provider = provider.build();
+    Ok(match code_calibration {
+        Some(a) => provider.with_code_calibration(a),
+        None => provider,
+    })
 }

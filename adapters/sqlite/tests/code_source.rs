@@ -1,5 +1,7 @@
 use engram_domain::*;
-use engram_knowledge::{CodeSourceRepository, CodeSourceWrite, KnowledgeRepository};
+use engram_knowledge::{
+    CodeSourceRepository, CodeSourceWrite, DocumentHeadRepository, KnowledgeRepository,
+};
 use engram_runtime::CoreError;
 use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
@@ -17,6 +19,30 @@ fn manifest(path: &str, attempt: &str, text: &str) -> CodeSourceGeneration {
         "policy":{"visibility":"private","retention":"durable","allowedUses":["retrieval"]},
         "provenance":{"source":"test","actor":{"id":"owner","kind":"agent"},"observedAt":"2026-10-14T00:00:00Z"}
     })).unwrap()
+}
+
+#[test]
+fn generic_head_cannot_supersede_code_source_authority() {
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    let m = manifest("a.ts", "first", "hello");
+    active(&store, &m, "hello");
+    let key = DocumentHeadKey {
+        scope: m.file.scope.clone(),
+        repository: m.file.repository.clone(),
+        source_key: m.file.path.clone(),
+    };
+    let mut h = block_on(store.get_document_head(&key)).unwrap().unwrap();
+    h.state = CodeSourceState::Updating;
+    h.attempt_id = "generic-overwrite".into();
+    assert!(block_on(store.begin_document_head(h, Some("first"))).is_err());
+    assert_eq!(
+        block_on(store.get_document_head(&key))
+            .unwrap()
+            .unwrap()
+            .attempt_id,
+        "first"
+    );
+    assert!(block_on(store.read_code_source(read(&m), &m.file.scope)).is_ok());
 }
 fn chunk(m: &CodeSourceGeneration, text: &str) -> KnowledgeChunk {
     serde_json::from_value(json!({
@@ -623,7 +649,11 @@ fn concurrent_source_schema_openers_all_acquire_durable_handles() {
         })
         .collect();
     for worker in workers {
-        assert!(worker.join().unwrap().is_ok());
+        let result = worker.join().unwrap();
+        assert!(
+            result.is_ok(),
+            "concurrent source-schema opener failed: {result:?}"
+        );
     }
 }
 
@@ -668,4 +698,294 @@ fn malformed_parent_unit_prevents_activation() {
         block_on(store.activate_code_source(m)),
         Err(CoreError::ValidationFailed { .. })
     ));
+}
+
+#[test]
+fn target_access_matches_full_access_for_every_owner_without_visiting_unrelated_rows() {
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    let first = manifest("first.ts", "one", "hello");
+    active(&store, &first, "hello");
+    let mut second = manifest("second.ts", "two", "world");
+    second.provenance.actor.id = Id::from("other");
+    active(&store, &second, "world");
+    {
+        let conn = store.lock().unwrap();
+        for (m, ids) in [
+            (&first, vec!["shared", "owner-only"]),
+            (&second, vec!["shared", "other-only"]),
+        ] {
+            for id in ids {
+                conn.execute(
+                    "INSERT INTO code_source_contributions VALUES(?1,?2,'entity',?3)",
+                    rusqlite::params![serde_json::to_string(&m.file).unwrap(), m.attempt_id, id],
+                )
+                .unwrap();
+            }
+        }
+        conn.execute("INSERT INTO code_source_contributions VALUES('unverified','legacy:unverified','entity','legacy-only')",[]).unwrap();
+    }
+    // A real generic document head owns the same ID as a code entity, with
+    // a different private actor. Kind-specific ownership must stay separate.
+    let mut doc_head = block_on(store.get_document_head(&DocumentHeadKey {
+        scope: first.file.scope.clone(),
+        repository: "repo".into(),
+        source_key: "first.ts".into(),
+    }))
+    .unwrap()
+    .unwrap();
+    doc_head.key.source_key = "README.md".into();
+    doc_head.attempt_id = "doc-attempt".into();
+    doc_head.state = CodeSourceState::Updating;
+    doc_head.document_id = Some(Id::from("generic-doc"));
+    doc_head.chunk_ids = vec![Id::from("owner-only")];
+    doc_head.provenance.actor.id = Id::from("other");
+    block_on(store.begin_document_head(doc_head.clone(), None)).unwrap();
+    let (mut source, mut doc) = parents(&first);
+    source.id = Id::from("generic-source");
+    source.policy = doc_head.policy.clone();
+    source.provenance = doc_head.provenance.clone();
+    doc.id = Id::from("generic-doc");
+    doc.source_id = source.id.clone();
+    doc.kind = SourceDocumentKind::Markdown;
+    doc.path = Some("README.md".into());
+    doc.policy = doc_head.policy.clone();
+    doc.provenance = doc_head.provenance.clone();
+    let paragraph:KnowledgeChunk=serde_json::from_value(json!({"id":"owner-only","documentId":doc.id,"sourceId":source.id,"kind":"paragraph","documentKind":"markdown","text":"owned documentation","contentHash":"doc-hash","policy":doc_head.policy,"provenance":doc_head.provenance,"createdAt":"2026-10-14T00:00:00Z"})).unwrap();
+    for payload in [
+        engram_knowledge::DocumentHeadWrite::Source(source),
+        engram_knowledge::DocumentHeadWrite::Document(doc),
+        engram_knowledge::DocumentHeadWrite::Chunk(paragraph),
+    ] {
+        block_on(store.write_document_record(&doc_head.key, &doc_head.attempt_id, payload))
+            .unwrap();
+    }
+    doc_head.state = CodeSourceState::Active;
+    block_on(store.activate_document_head(doc_head.clone())).unwrap();
+    {
+        let conn = store.lock().unwrap();
+        conn.execute(
+            "INSERT INTO document_head_records VALUES(?1,?2,'relationship','doc-edge')",
+            rusqlite::params![
+                serde_json::to_string(&doc_head.key).unwrap(),
+                doc_head.attempt_id
+            ],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO code_source_contributions VALUES(?1,?2,'relationship','code-edge')",
+            rusqlite::params![
+                serde_json::to_string(&first.file).unwrap(),
+                first.attempt_id
+            ],
+        )
+        .unwrap();
+    }
+    for actor in ["owner", "other", "stranger"] {
+        for scope in [
+            first.file.scope.clone(),
+            serde_json::from_value(json!({"tenant":"wrong"})).unwrap(),
+        ] {
+            let request:RetrievalRequest=serde_json::from_value(json!({"scope":scope,"query":"q","requester":{"actor":{"id":actor,"kind":"agent"}}})).unwrap();
+            let full = store.source_record_access(&request).unwrap();
+            if scope == first.file.scope && actor == "owner" {
+                assert!(full.allows(RetrievalTargetType::Entity, "owner-only"));
+                assert!(!full.allows(RetrievalTargetType::Chunk, "owner-only"));
+                assert!(
+                    full.policy(RetrievalTargetType::Relationship, "code-edge")
+                        .is_some()
+                );
+                assert!(!full.allows(RetrievalTargetType::Relationship, "doc-edge"));
+            }
+            if scope == first.file.scope && actor == "other" {
+                assert!(
+                    full.policy(RetrievalTargetType::Chunk, "owner-only")
+                        .is_some()
+                );
+                assert!(
+                    full.policy(RetrievalTargetType::Relationship, "doc-edge")
+                        .is_some()
+                );
+            }
+            for id in [
+                "shared",
+                "owner-only",
+                "other-only",
+                "legacy-only",
+                "unmanaged",
+                "doc-edge",
+                "code-edge",
+                first.snapshot_ids[0].as_str(),
+            ] {
+                let target = store.source_record_access_for_target(&request, id).unwrap();
+                for kind in [
+                    RetrievalTargetType::Entity,
+                    RetrievalTargetType::Chunk,
+                    RetrievalTargetType::Relationship,
+                ] {
+                    assert_eq!(
+                        target.allows(kind.clone()),
+                        full.allows(kind.clone(), id),
+                        "{actor} {id}"
+                    );
+                    assert_eq!(
+                        target.policy(kind.clone()),
+                        full.policy(kind, id),
+                        "{actor} {id}"
+                    );
+                }
+            }
+        }
+    }
+    // An unrelated broken ownership row cannot widen the target or make a
+    // bounded target read consult another record's unavailable manifest.
+    store
+        .lock()
+        .unwrap()
+        .execute(
+            "INSERT INTO code_source_contributions VALUES('broken','real','entity','unrelated')",
+            [],
+        )
+        .unwrap();
+    let request:RetrievalRequest=serde_json::from_value(json!({"scope":first.file.scope,"query":"q","requester":{"actor":{"id":"owner","kind":"agent"}}})).unwrap();
+    assert!(
+        store
+            .source_record_access_for_target(&request, "shared")
+            .unwrap()
+            .allows(RetrievalTargetType::Entity)
+    );
+    assert!(
+        store
+            .source_record_access_for_target(&request, "unrelated")
+            .is_err()
+    );
+}
+
+#[test]
+fn indexed_revision_is_authorized_current_metadata_with_document_source_fallbacks() {
+    let store = SqlKnowledgeStore::open_in_memory().unwrap();
+    for (path, document_version, source_version, revision, expected) in [
+        (
+            "doc.ts",
+            Some("doc-rev"),
+            Some("source-rev"),
+            Some("git-rev"),
+            Some("doc-rev"),
+        ),
+        (
+            "source.ts",
+            None,
+            Some("source-rev"),
+            Some("git-rev"),
+            Some("source-rev"),
+        ),
+        ("git.ts", None, None, Some("git-rev"), Some("git-rev")),
+        ("unknown.ts", None, None, None, None),
+    ] {
+        let mut m = manifest(path, "first", "hello");
+        block_on(store.begin_code_source(m.clone(), None)).unwrap();
+        block_on(store.stage_code_records(&m.file, &m.attempt_id, &m.records)).unwrap();
+        let (mut source, mut document) = parents(&m);
+        source.version = source_version.map(str::to_owned);
+        document.version = document_version.map(str::to_owned);
+        if let Some(revision) = revision {
+            source
+                .metadata
+                .as_mut()
+                .unwrap()
+                .insert("revision".into(), json!(revision));
+        }
+        for record in [
+            CodeSourceWrite::Source(source),
+            CodeSourceWrite::Document(document),
+            CodeSourceWrite::Chunk(chunk(&m, "hello")),
+        ] {
+            block_on(store.write_code_record(&m.file, &m.attempt_id, record)).unwrap();
+        }
+        m.state = CodeSourceState::Active;
+        block_on(store.activate_code_source(m.clone())).unwrap();
+        let requester = read(&m).requester;
+        assert_eq!(
+            block_on(store.indexed_code_revision(&m.file, &m.file.scope, &requester))
+                .unwrap()
+                .as_deref(),
+            expected
+        );
+        let stranger: Requester =
+            serde_json::from_value(json!({"actor":{"id":"stranger","kind":"agent"}})).unwrap();
+        assert!(
+            block_on(store.indexed_code_revision(&m.file, &m.file.scope, &stranger))
+                .unwrap()
+                .is_none()
+        );
+        let wrong: Scope = serde_json::from_value(json!({"tenant":"other"})).unwrap();
+        assert!(
+            block_on(store.indexed_code_revision(&m.file, &wrong, &requester))
+                .unwrap()
+                .is_none()
+        );
+        let prior = m.attempt_id.clone();
+        m.attempt_id = "next".into();
+        m.state = CodeSourceState::Updating;
+        block_on(store.begin_code_source(m.clone(), Some(&prior))).unwrap();
+        assert!(
+            block_on(store.indexed_code_revision(&m.file, &m.file.scope, &requester))
+                .unwrap()
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn callable_comment_prefix_can_activate_without_widening_declaration_span() {
+    for (role, comment_bytes, suffix, expected) in [
+        (CodeChunkRole::Symbol, 20, false, true),
+        (CodeChunkRole::ContainerContext, 20, false, false),
+        (CodeChunkRole::Symbol, 8193, false, false),
+        (CodeChunkRole::Symbol, 20, true, false),
+    ] {
+        let store = SqlKnowledgeStore::open_in_memory().unwrap();
+        let text = format!("//{}\nfunction run() {{}}", "x".repeat(comment_bytes));
+        let mut m = manifest("callable.ts", "comment", &text);
+        let mut unit = chunk(&m, &text);
+        unit.id = Id::from("callable-with-comment");
+        let code = unit.code.as_mut().unwrap();
+        code.role = role;
+        code.unit = Some("run".into());
+        code.declaration_range = Some(CodeByteRange {
+            start: text.find("function run").unwrap() as u64,
+            end: text.len() as u64 - u64::from(suffix),
+        });
+        let declaration = code.declaration_range;
+        m.records.push(CodeSourceRecord {
+            kind: CodeSourceRecordKind::Chunk,
+            id: unit.id.to_string(),
+        });
+        block_on(store.begin_code_source(m.clone(), None)).unwrap();
+        block_on(store.stage_code_records(&m.file, &m.attempt_id, &m.records)).unwrap();
+        guarded_parents(&store, &m);
+        for c in [chunk(&m, &text), unit] {
+            block_on(store.write_code_record(&m.file, &m.attempt_id, CodeSourceWrite::Chunk(c)))
+                .unwrap();
+        }
+        m.state = CodeSourceState::Active;
+        let result = block_on(store.activate_code_source(m.clone()));
+        assert_eq!(
+            result.is_ok(),
+            expected,
+            "role={role:?} prefix={comment_bytes} suffix={suffix}: {result:?}"
+        );
+        if expected {
+            assert_eq!(
+                block_on(store.read_code_source(read(&m), &m.file.scope))
+                    .unwrap()
+                    .text,
+                text
+            );
+            let loaded =
+                block_on(store.get_chunk(&Id::from("callable-with-comment"), &m.file.scope))
+                    .unwrap()
+                    .unwrap();
+            assert_eq!(loaded.code.unwrap().declaration_range, declaration);
+        }
+    }
 }

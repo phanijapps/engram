@@ -17,6 +17,7 @@ function mockProvider(): {
   };
   const recorded = (key: string): unknown[] => calls[key] ?? [];
   const provider = {
+    requireCodeEvidenceApi:(context:string)=>{capture("evidenceContext")(context);return {evidenceJson:capture("evidenceQuery")};},
     requireCodeSourceApi:(context:string)=>{
       capture("sourceContext")(context);
       return {readSourceJson:capture("sourceQuery"),listSourcesJson:()=>"[]"};
@@ -150,4 +151,17 @@ it("forwards typed embedding backfill unchanged and decodes its progress report"
     embedded: 3, newEmbeddings: 2, reused: 1, codeEmbedded: 2, remaining: 4
   });
   expect(recorded("backfillEmbeddings")).toEqual([request]);
+});
+
+
+describe("code evidence native transport", () => {
+  it("passes typed query separately from trusted context to the bound Rust handle", async () => {
+    const {provider,recorded} = mockProvider();
+    const transport = createNativeProviderTransport({provider});
+    const context = {scope:{tenant:"t",workspace:"w"},requester:{actor:{id:"host",kind:"agent" as const}},readerVersion:1 as const};
+    await transport.codeEvidence({query:"reject expired credentials",resultLimit:3},context);
+    expect(recorded("evidenceContext")).toEqual([context]);
+    expect(recorded("evidenceQuery")).toEqual([{query:"reject expired credentials",resultLimit:3}]);
+    expect(() => createNativeProviderTransport({provider,codeCalibrationPath:"/tmp/cal.json"})).toThrow("cannot reconfigure");
+  });
 });

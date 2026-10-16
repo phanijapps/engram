@@ -45,7 +45,7 @@ fn seeded_with_role(
     block_on(store.write_code_record(&m.file,&m.attempt_id,CodeSourceWrite::Source(serde_json::from_value(json!({"id":"source","kind":"filesystem","scope":m.file.scope,"name":"test","metadata":{"stableSourceKey":"repo"},"policy":policy,"provenance":provenance,"createdAt":"2026-10-14T00:00:00Z"})).unwrap()))).unwrap();
     block_on(store.write_code_record(&m.file,&m.attempt_id,CodeSourceWrite::Document(serde_json::from_value(json!({"id":"doc","sourceId":"source","kind":"code","path":"a.ts","contentHash":hash,"policy":policy,"provenance":provenance,"createdAt":"2026-10-14T00:00:00Z"})).unwrap()))).unwrap();
     for (id, role) in [("snapshot", "source_snapshot"), ("unit", role)] {
-        block_on(store.write_code_record(&m.file,&m.attempt_id,CodeSourceWrite::Chunk(serde_json::from_value(json!({"id":id,"sourceId":"source","documentId":"doc","kind":"code_block","documentKind":"code","text":"hello","contentHash":hash,"policy":policy,"provenance":provenance,"createdAt":"2026-10-14T00:00:00Z","code":{"role":role,"file":file,"generation":"v1","sourceHash":hash,"fingerprint":"code-v1","ranges":[{"start":0,"end":5}],"complete":true,"parseQuality":"clean"}})).unwrap()))).unwrap();
+        block_on(store.write_code_record(&m.file,&m.attempt_id,CodeSourceWrite::Chunk(serde_json::from_value(json!({"id":id,"sourceId":"source","documentId":"doc","kind":"code_block","documentKind":"code","text":"hello","contentHash":hash,"policy":policy,"provenance":provenance,"createdAt":"2026-10-14T00:00:00Z","code":{"role":role,"file":file,"generation":"v1","sourceHash":hash,"fingerprint":"code-v1","ranges":[{"start":0,"end":5}],"unit":if role == "source_snapshot" {None} else {Some("logical-unit")},"complete":true,"parseQuality":"clean"}})).unwrap()))).unwrap();
     }
     for (id, name) in [("one", "getUser"), ("two", "deleteUser")] {
         block_on(store.write_code_record(&m.file,&m.attempt_id,CodeSourceWrite::Entity(serde_json::from_value(json!({"id":id,"kind":"function","name":name,"scope":m.file.scope,"provenance":provenance,"createdAt":"2026-10-14T00:00:00Z"})).unwrap()))).unwrap();
@@ -338,6 +338,7 @@ mod local_embedding_backfill {
     struct RecordingModel {
         local: bool,
         inputs: Mutex<Vec<String>>,
+        tokenized: Mutex<Vec<String>>,
         batch_sizes: Mutex<Vec<usize>>,
         fail: AtomicBool,
         before_return: Mutex<Option<Box<dyn FnOnce() + Send>>>,
@@ -347,6 +348,7 @@ mod local_embedding_backfill {
             Self {
                 local,
                 inputs: Mutex::new(vec![]),
+                tokenized: Mutex::new(vec![]),
                 batch_sizes: Mutex::new(vec![]),
                 fail: AtomicBool::new(false),
                 before_return: Mutex::new(None),
@@ -354,6 +356,27 @@ mod local_embedding_backfill {
         }
     }
     impl EmbeddingProvider for RecordingModel {
+        fn tokenize_untruncated(
+            &self,
+            text: &str,
+            specials: bool,
+        ) -> CoreResult<engram_retrieval::TextTokenization> {
+            if !text.is_empty() {
+                self.tokenized.lock().unwrap().push(text.into());
+            }
+            Ok(engram_retrieval::TextTokenization {
+                offsets: text
+                    .char_indices()
+                    .map(|(start, ch)| CodeByteRange {
+                        start: start as u64,
+                        end: (start + ch.len_utf8()) as u64,
+                    })
+                    .collect(),
+                special_tokens: if specials { 2 } else { 0 },
+                window: 512,
+                tokenizer_id: "recording-scalars-v1".into(),
+            })
+        }
         fn is_local(&self) -> bool {
             self.local
         }
@@ -399,14 +422,74 @@ mod local_embedding_backfill {
                 .unwrap()
                 .with_embedding_space(model.embedding_space()),
         );
-        let provider =
+        let code = if model.local {
+            Some(Arc::new(
+                SqliteVectorIndex::open_in_memory(3)
+                    .unwrap()
+                    .with_embedding_space(code_space(model.as_ref())),
+            ))
+        } else {
+            None
+        };
+        let mut builder =
             EngramProviderBuilder::new(CapabilityReport::new(CapabilityState::Supported))
                 .knowledge(store.clone())
                 .knowledge_query(store)
                 .embedding_provider(model)
-                .vectors(index.clone())
-                .build();
+                .vectors(index.clone());
+        if let Some(code) = code {
+            builder = builder.code_vectors(code);
+        }
+        let provider = builder.build();
         (provider, index)
+    }
+    fn code_space(model: &dyn EmbeddingProvider) -> EmbeddingSpace {
+        engram_integration::code_representation::code_representation(
+            model,
+            &engram_retrieval::CodeIntelligenceConfig::for_profile(
+                CodeIntelligenceProfile::BalancedV1,
+            )
+            .index,
+        )
+        .unwrap()
+        .embedding_space
+    }
+    fn code_ids(provider: &EngramProvider) -> std::collections::HashSet<Id> {
+        provider
+            .code_vectors()
+            .map(|i| block_on(i.embedded_ids()).unwrap())
+            .unwrap_or_default()
+    }
+    fn embedded_code_parents(
+        provider: &EngramProvider,
+        request: &RetrievalRequest,
+    ) -> std::collections::HashSet<Id> {
+        let space = provider.code_vectors().unwrap().embedding_space();
+        block_on(async {
+            let mut parents = std::collections::HashSet::new();
+            for id in provider
+                .code_vectors()
+                .unwrap()
+                .embedded_ids()
+                .await
+                .unwrap()
+            {
+                let resolved = provider
+                    .code_segments()
+                    .unwrap()
+                    .resolve_code_segment(
+                        id.as_str(),
+                        &request.scope,
+                        &request.requester,
+                        &space.prompt_profile,
+                    )
+                    .await
+                    .unwrap()
+                    .expect("every embedded code target resolves to its current canonical parent");
+                parents.insert(resolved.parent.id);
+            }
+            parents
+        })
     }
     fn request(request: &RetrievalRequest) -> EmbeddingBackfillRequest {
         EmbeddingBackfillRequest {
@@ -427,9 +510,13 @@ mod local_embedding_backfill {
         assert_eq!(first.new_embeddings, 1);
         assert_eq!(first.code_embedded, 1);
         assert_eq!(first.remaining, 0);
-        assert_eq!(*model.inputs.lock().unwrap(), vec!["hello"]);
+        assert!(
+            block_on(index.embedded_ids()).unwrap().is_empty(),
+            "canonical code vectors must not be written to the generic index"
+        );
+        assert_eq!(*model.inputs.lock().unwrap(), vec!["path: a.ts\n\nhello"]);
         assert_eq!(
-            block_on(index.embedded_ids()).unwrap(),
+            embedded_code_parents(&provider, &retrieval),
             [Id::from("unit")].into_iter().collect()
         );
         let second = block_on(provider.backfill_embeddings(&request(&retrieval))).unwrap();
@@ -446,7 +533,12 @@ mod local_embedding_backfill {
         let report = block_on(provider.backfill_embeddings(&request(&retrieval))).unwrap();
         assert_eq!(report.embedded, 0);
         assert!(model.inputs.lock().unwrap().is_empty());
+        assert!(
+            model.tokenized.lock().unwrap().is_empty(),
+            "external tokenizers must receive no code"
+        );
         assert!(block_on(index.embedded_ids()).unwrap().is_empty());
+        assert!(code_ids(&provider).is_empty());
     }
 
     #[test]
@@ -468,7 +560,12 @@ mod local_embedding_backfill {
                 0
             );
             assert!(model.inputs.lock().unwrap().is_empty());
+            assert!(
+                model.tokenized.lock().unwrap().is_empty(),
+                "authorization must precede code tokenization"
+            );
             assert!(block_on(index.embedded_ids()).unwrap().is_empty());
+            assert!(code_ids(&provider).is_empty());
         }
         let (store, _, retrieval) = seeded();
         let model = Arc::new(RecordingModel::new(true));
@@ -482,7 +579,9 @@ mod local_embedding_backfill {
             0
         );
         assert!(model.inputs.lock().unwrap().is_empty());
+        assert!(model.tokenized.lock().unwrap().is_empty());
         assert!(block_on(index.embedded_ids()).unwrap().is_empty());
+        assert!(code_ids(&provider).is_empty());
     }
 
     #[test]
@@ -506,6 +605,7 @@ mod local_embedding_backfill {
             "race must actually happen during inference"
         );
         assert!(block_on(index.embedded_ids()).unwrap().is_empty());
+        assert!(code_ids(&provider).is_empty());
     }
 
     #[test]
@@ -516,6 +616,7 @@ mod local_embedding_backfill {
         let (provider, index) = provider(store, model.clone());
         assert!(block_on(provider.backfill_embeddings(&request(&retrieval))).is_err());
         assert!(block_on(index.embedded_ids()).unwrap().is_empty());
+        assert!(code_ids(&provider).is_empty());
         model.fail.store(false, Ordering::SeqCst);
         let retry = block_on(provider.backfill_embeddings(&request(&retrieval))).unwrap();
         assert_eq!(retry.embedded, 1);
@@ -534,12 +635,8 @@ mod local_embedding_backfill {
             let (provider, index) = provider(store, model.clone());
             let report = block_on(provider.backfill_embeddings(&request(&retrieval))).unwrap();
             assert_eq!(report.code_embedded, 1, "{role} should be embedded");
-            assert_eq!(*model.inputs.lock().unwrap(), vec!["hello"]);
-            assert!(
-                block_on(index.vector_for_target(&Id::from("unit")))
-                    .unwrap()
-                    .is_some()
-            );
+            assert_eq!(*model.inputs.lock().unwrap(), vec!["path: a.ts\n\nhello"]);
+            assert!(embedded_code_parents(&provider, &retrieval).contains(&Id::from("unit")));
             assert!(
                 block_on(index.vector_for_target(&Id::from("snapshot")))
                     .unwrap()
@@ -565,8 +662,9 @@ mod local_embedding_backfill {
         let report = block_on(provider.backfill_embeddings(&request(&retrieval))).unwrap();
         assert_eq!(report.code_embedded, 1);
         assert_eq!(model.inputs.lock().unwrap().len(), 1);
+        assert!(block_on(index.embedded_ids()).unwrap().is_empty());
         assert_eq!(
-            block_on(index.embedded_ids()).unwrap(),
+            embedded_code_parents(&provider, &retrieval),
             [Id::from("unit")].into_iter().collect()
         );
     }
@@ -703,6 +801,7 @@ mod local_embedding_backfill {
         );
         assert_eq!(result.embedded, 0);
         assert!(block_on(index.embedded_ids()).unwrap().is_empty());
+        assert!(code_ids(&provider).is_empty());
     }
 
     struct FailOnceVector {
@@ -757,11 +856,16 @@ mod local_embedding_backfill {
     fn vector_insertion_failure_is_reported_and_retry_converges() {
         let (store, _, retrieval) = seeded();
         let model = Arc::new(RecordingModel::new(true));
+        let base = Arc::new(
+            SqliteVectorIndex::open_in_memory(3)
+                .unwrap()
+                .with_embedding_space(model.embedding_space()),
+        );
         let index = Arc::new(FailOnceVector {
             inner: Arc::new(
                 SqliteVectorIndex::open_in_memory(3)
                     .unwrap()
-                    .with_embedding_space(model.embedding_space()),
+                    .with_embedding_space(code_space(model.as_ref())),
             ),
             fail: AtomicBool::new(true),
         });
@@ -770,7 +874,8 @@ mod local_embedding_backfill {
                 .knowledge(store.clone())
                 .knowledge_query(store)
                 .embedding_provider(model)
-                .vectors(index.clone())
+                .vectors(base)
+                .code_vectors(index.clone())
                 .build();
         let error = block_on(provider.backfill_embeddings(&request(&retrieval))).unwrap_err();
         assert!(matches!(error, CoreError::Adapter { adapter, .. } if adapter == "test_vector"));
@@ -780,7 +885,7 @@ mod local_embedding_backfill {
         assert_eq!(report.code_embedded, 1);
         assert_eq!(report.remaining, 0);
         assert_eq!(
-            block_on(index.embedded_ids()).unwrap(),
+            embedded_code_parents(&provider, &retrieval),
             [Id::from("unit")].into_iter().collect()
         );
     }

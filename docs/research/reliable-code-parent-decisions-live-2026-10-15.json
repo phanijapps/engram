@@ -1,0 +1,109 @@
+{
+  "date": "2026-10-15",
+  "scope": "sequential fix 1: bounded source-authorized parent-decision diagnostics",
+  "featureShipped": false,
+  "accuracyImprovementClaimed": false,
+  "runtimePresetThresholdAndModelChanged": false,
+  "review": "focused self-review per owner request; no adversarial agent rounds",
+  "selfReviewChecks": [
+    "Canonical chunk lookup identity differs from logical parent identity; regression fixture uses distinct identities.",
+    "Trace assembly follows existing selection; count/byte overflow removes diagnostics before evidence.",
+    "All candidate source authorization and final revision rechecks remain in the existing shared operation.",
+    "Scores are null for unscored parents; thresholds null without installed valid calibration.",
+    "Legacy packets decode with empty trace; generated optional TypeScript/schema additions match shared Rust packets."
+  ],
+  "publicContractChange": "compatible additive v1; diagnostics.parentDecisions (max200) and omittedParentDecisions; no query fields",
+  "gates": {
+    "rustWorkspacePassed": true,
+    "rustPassed": 1193,
+    "rustIgnored": 10,
+    "workspaceCheckPassed": true,
+    "workspaceTypecheckPassed": true,
+    "workspaceTsTestsPassedOnRerun": true,
+    "workspaceBuildPassed": true,
+    "focusedNativeActualModelTestsPassed": true,
+    "contractsDocsNeutralityParityPassed": true,
+    "fmtDiffPassed": true
+  },
+  "initialTsTestFailure": {
+    "test": "runtime MCP suffix resolver HTTP version negotiation",
+    "error": "fetch failed during local version negotiation probe",
+    "focusedRetry": "16/16 passed",
+    "fullSuiteRetryPassed": true
+  },
+  "live": {
+    "disposableStore": "/tmp/reliable-parent-decisions-live-z2nn6wvk",
+    "binarySha256": "7d2226352a37107590a800610fb045772a2a32408fbc5d30123b6eab6fb5d3f6",
+    "originalEvaluationStoreUnchanged": true,
+    "selfStoreOpened": false,
+    "developmentOnly": true,
+    "notALatencyBenchmark": true,
+    "cases": [
+      {
+        "id": "vite-d01",
+        "seconds": 14.884306346997619,
+        "evidenceUnchanged": true,
+        "sourceSchemaValidated": true,
+        "requiredDecisions": [
+          {
+            "anchor": "getEnvFilesForMode",
+            "parentUnitId": "sha256:80b97f9ef3a979fe3569444570e68c0aeec690ff22440d5bf3dbb8529761d7eb",
+            "reason": "below_threshold",
+            "fusionScore": 0.030092072,
+            "rerankScore": -2.6768866,
+            "appliedThreshold": -0.97909373,
+            "retrievedSegments": 1,
+            "scoredSegments": 1
+          }
+        ]
+      },
+      {
+        "id": "vite-d03",
+        "seconds": 9.822827163006878,
+        "evidenceUnchanged": true,
+        "sourceSchemaValidated": true,
+        "requiredDecisions": [
+          {
+            "anchor": "initPublicFiles",
+            "parentUnitId": "sha256:11210b7f2aa8ad3552bca5127c5901c13baafc0513e4e28f65fa3bb9a7bce7ab",
+            "reason": "selected",
+            "fusionScore": 0.030679155,
+            "rerankScore": -0.97173107,
+            "appliedThreshold": -0.97909373,
+            "retrievedSegments": 1,
+            "scoredSegments": 1
+          }
+        ]
+      }
+    ]
+  },
+  "preservedAssessmentExecutablesReceipt": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/preserved-executables-before-parent-decisions/receipt.json",
+  "rawReceiptHashes": {
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable_parent_decisions_live.py": "62f0b77e6b13c65c168f3b8b58476ed1777180a5f53da1d6f8e1ed7acc7947c3",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-live.json": "338b2e6bd96aa56e2feb3354a6362f126d050a407e8d2f3aea4bb587dbdbf98b",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-live.log": "3affa37fe282c9a3b85c8a0d610f314c9ceb19cba313aa049a087d35cd931688",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-red.log": "0be0448eeae833c5c25292da807c741fca1794a735e450c32230026c6d540c81",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-green.log": "a10efb848805e04483fdf156f9a95b31d888e3eed19c446e94e7e4a25de604bd",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-check.log": "ca771e7385265d09f533fbc05d90137440c8cdc101aaa3647794c424a1c978fd",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-contracts.log": "2684eb0c2cdb2a307b40a553b72df0c4eeca9533b20880f44229a0370e93c1f7",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-typecheck.log": "dfc072881657d44fd6e216c5f8382f3eeeaf32644c08447c6fc62e26f40a012e",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-workspace-tests.log": "a142fc3d5a8a1ed73a2ee320457624ba6aa8d305f8b7580868d2024530276333",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-ts-tests.log": "c3dbe2545659dd9d296b55fa6c83d760855f583dc0545515bda9b01000a1100b",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-http-retry.log": "a679b75b8b89e8fbd8eabf7a74066662a5f866e31cbb169d810d28b3c99553a5",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-ts-tests-retry.log": "912cda30c5e81ee85112bf13bcde8a7083fc3e3c1f8473c4ce5a3524e6a5d1e3",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-build.log": "de58b8f44166601cc56e7e7b1e7d37f77d512ff8e869dd46c038b3556261e993",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-mcp-build.log": "b55dd93c14e739caa14e0168f2bb06c9d4389c44b88d9cceaf0dee5e8ac0c904",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-native-live.log": "08ff3d056846d7920ce65fc6f1bf6018e0fda9a47c052cc127b78753ca0d1c92",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/parent-decisions-2026-10-15/reliable-parent-decisions-node-typecheck.log": "7dbdafe1dd17e1acf59cee23c46279419167026c10800db1a026eae2d628f094"
+  },
+  "remaining": "Calibration/ranking accuracy fix remains next; failed frozen acceptance result is unchanged and not retuned.",
+  "statusLint": {
+    "globalHardViolations": 15,
+    "baselineKnownHardViolations": 15,
+    "featureHardViolations": [],
+    "featureWarnings": [
+      "docs/specs/reliable-code-intelligence/spec.md:8: invariant (v) \u2014 contract 'contracts/v1/schemas/engram-v1.schema.json' lacks a backward x-spec/REGISTRY.md ref to docs/specs/reliable-code-intelligence (warn-only)",
+      "docs/specs/reliable-code-intelligence/spec.md:8: invariant (v) \u2014 contract 'contracts/v1/schemas/recall-fusion.schema.json' lacks a backward x-spec/REGISTRY.md ref to docs/specs/reliable-code-intelligence (warn-only)"
+    ]
+  }
+}

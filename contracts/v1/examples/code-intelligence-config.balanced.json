@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "profile": "balanced-v1",
+  "index": {
+    "body_token_target": 384,
+    "context_token_budget": 64
+  },
+  "retrieval": {
+    "candidates_per_lane": 50,
+    "result_limit": 10,
+    "enabled_lanes": [
+      "vector",
+      "lexical"
+    ],
+    "graph_hops": 1,
+    "graph_neighbor_limit": 20
+  },
+  "fusion": {
+    "rrf_k": 60,
+    "default_source_weight": 1.0,
+    "source_weights": {},
+    "rerank": {
+      "strategy": "cross_encoder",
+      "lambda": 0.5
+    }
+  },
+  "local_scorer": {
+    "model_id": "jinaai/jina-reranker-v1-turbo-en",
+    "query_token_limit": 128,
+    "pair_token_limit": 1024,
+    "max_candidates": 50,
+    "batch_size": 8,
+    "on_failure": "degrade"
+  },
+  "evidence": {
+    "token_budget": 6000,
+    "max_supporting_units": 20,
+    "max_per_file": 4
+  },
+  "query": {
+    "instruction": "none"
+  }
+}

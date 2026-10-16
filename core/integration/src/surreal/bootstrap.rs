@@ -36,6 +36,8 @@ use engram_store_surreal::{
 /// vectors, consolidation) wire in subsequent increments; until then they
 /// report `ProviderUnavailable` (fail-closed, conformance contract).
 pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvider> {
+    let code_configuration = config.resolve_code_configuration()?;
+    let code_calibration = config.load_code_calibration()?;
     let path = config.storage_path.to_string_lossy().to_string();
     // One shared Surreal connection; every Surreal cell (memory now, knowledge/
     // belief/hierarchy/vectors later) clones this Arc.
@@ -70,7 +72,8 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
         .ontology(CapabilityState::Supported)
         .vectors(CapabilityState::Supported)
         .build();
-    Ok(EngramProviderBuilder::new(report)
+    let provider = EngramProviderBuilder::new(report)
+        .code_configuration(code_configuration)
         .memory(memory)
         .hierarchy(hierarchy)
         .beliefs(beliefs)
@@ -79,7 +82,11 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
         .taxonomy(taxonomy)
         .ontology(ontology)
         .vectors(vectors)
-        .build())
+        .build();
+    Ok(match code_calibration {
+        Some(a) => provider.with_code_calibration(a),
+        None => provider,
+    })
 }
 
 #[cfg(test)]

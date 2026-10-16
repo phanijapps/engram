@@ -7,6 +7,9 @@
 //! I/O, git, storage, async runtime, or LLM; `adapters/ingest` consumes it to
 //! build the code graph.
 
+mod context;
+pub use context::{CodeUnitSyntax, analyze_code_unit, source_import_ranges};
+
 pub mod edges;
 pub mod frameworks;
 pub mod identity;
@@ -14,6 +17,11 @@ pub mod noise;
 pub mod parser;
 pub mod queries;
 pub mod resolution;
+mod segmentation;
+pub use segmentation::{
+    TokenSegmentPlan, segment_source_ranges, segment_source_ranges_with_context,
+    structural_boundaries,
+};
 
 pub use edges::{StructuralEdges, contains_pairs};
 pub use frameworks::{FrameworkFacts, RouteFact, extract_frameworks};
@@ -24,7 +32,8 @@ pub use noise::is_noise_symbol;
 pub use parser::chunking::{ChunkCandidate, Chunker};
 pub use parser::code_symbol::CodeSymbolChunker;
 pub use parser::source_coverage::{
-    CoveredCodeCandidate, snapshot_ranges, source_parse_outcome, source_residual_ranges,
+    CoveredCodeCandidate, SOURCE_COVERAGE_FINGERPRINT, snapshot_ranges, source_parse_outcome,
+    source_residual_ranges,
 };
 pub use parser::tree_sitter_chunker::TreeSitterChunker;
 pub use queries::{ExploreNode, FileDependency, explore, file_dependencies};

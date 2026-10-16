@@ -13,6 +13,12 @@ use engram_runtime::{CoreError, CoreResult};
 /// with memory safely.
 #[async_trait]
 pub trait KnowledgeRepository: Send + Sync {
+    fn code_segments(&self) -> Option<&dyn crate::CodeSegmentRepository> {
+        None
+    }
+    fn document_heads(&self) -> Option<&dyn crate::DocumentHeadRepository> {
+        None
+    }
     /// Optional source-generation capability; absence disables source-only writers.
     fn code_sources(&self) -> Option<&dyn crate::CodeSourceRepository> {
         None

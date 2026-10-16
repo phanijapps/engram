@@ -4,10 +4,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use engram_domain::{
-    CodeChunkRole, CodeSourceGeneration, CodeSourceRecordKind, CodeSourceState,
     EmbeddingBackfillReport, EmbeddingBackfillRequest, Id, KnowledgeChunkKind, SourceDocumentKind,
 };
-use engram_knowledge::code_source_retrieval_authorized;
 use engram_runtime::{CoreError, CoreResult};
 
 use crate::{ChunkRef, EngramProvider};
@@ -15,14 +13,20 @@ use crate::{ChunkRef, EngramProvider};
 pub(crate) fn capability(
     embedder: Option<&dyn crate::EmbeddingProvider>,
     index: Option<&dyn engram_retrieval::VectorIndex>,
+    generic_index: Option<&dyn engram_retrieval::VectorIndex>,
     query: bool,
     sources: bool,
+    config: &engram_retrieval::CodeIndexConfig,
 ) -> engram_domain::CapabilityState {
     if query
         && sources
         && embedder
-            .zip(index)
-            .is_some_and(|(e, i)| e.is_local() && &e.embedding_space() == i.embedding_space())
+            .zip(generic_index)
+            .is_some_and(|(e, i)| &e.embedding_space() == i.embedding_space())
+        && embedder.zip(index).is_some_and(|(e, i)| {
+            crate::code_representation::code_representation(e, config)
+                .is_ok_and(|r| &r.embedding_space == i.embedding_space())
+        })
     {
         engram_domain::CapabilityState::Supported
     } else {
@@ -34,7 +38,39 @@ pub(crate) fn capability(
 
 const INPUT_CHAR_LIMIT: usize = 8192;
 const BATCH_SIZE: usize = 64;
-type Sources = HashMap<(String, String), CodeSourceGeneration>;
+
+async fn head_attempt(
+    provider: &EngramProvider,
+    request: &EmbeddingBackfillRequest,
+    reference: &ChunkRef,
+) -> CoreResult<Option<Option<String>>> {
+    let Some(heads) = provider.require_knowledge()?.document_heads() else {
+        return Ok(if reference.code.is_none() {
+            Some(None)
+        } else {
+            None
+        });
+    };
+    if !heads.is_managed_chunk(&reference.id).await? {
+        return Ok(if reference.code.is_none() {
+            Some(None)
+        } else {
+            None
+        });
+    }
+    Ok(heads
+        .current_document_for_chunk(&reference.id, &request.scope)
+        .await?
+        .filter(|h| {
+            engram_knowledge::document_head_retrieval_authorized(
+                h,
+                &request.scope,
+                &request.requester,
+                chrono::Utc::now(),
+            )
+        })
+        .map(|h| Some(h.attempt_id)))
+}
 
 struct Prepared {
     reference: ChunkRef,
@@ -42,71 +78,33 @@ struct Prepared {
     attempt: Option<String>,
 }
 
-fn code_allowed(
-    reference: &ChunkRef,
-    manifest: &CodeSourceGeneration,
-    request: &EmbeddingBackfillRequest,
-) -> bool {
-    let Some(code) = &reference.code else {
-        return false;
-    };
-    code.role != CodeChunkRole::SourceSnapshot
-        && code.file == manifest.file
-        && code.generation == manifest.generation
-        && code.source_hash == manifest.source_hash
-        && code.fingerprint == manifest.fingerprint
-        && manifest.state == CodeSourceState::Active
-        && manifest
-            .records
-            .iter()
-            .any(|r| r.kind == CodeSourceRecordKind::Chunk && r.id == reference.id.as_str())
-        && code_source_retrieval_authorized(
-            manifest,
-            &request.requester,
-            &request.scope,
-            chrono::Utc::now(),
-        )
-}
-
 async fn eligible_refs(
     provider: &EngramProvider,
     request: &EmbeddingBackfillRequest,
 ) -> CoreResult<Vec<ChunkRef>> {
-    let local = provider.require_embedding_provider()?.is_local();
     let refs = provider
         .require_knowledge_query()?
         .list_chunk_refs(&request.scope)
         .await?;
-    let sources: Sources = if local && refs.iter().any(|r| r.code.is_some()) {
-        if let Some(port) = provider.code_sources() {
-            port.list_code_sources(&request.scope)
-                .await?
-                .into_iter()
-                .map(|m| ((m.file.repository.clone(), m.file.path.clone()), m))
-                .collect()
-        } else {
-            HashMap::new()
-        }
-    } else {
-        HashMap::new()
-    };
-    Ok(refs
+    // Code uses the separate tokenizer-complete representation path. Legacy
+    // canonical vectors and generic hash twins cannot satisfy it.
+    let refs: Vec<_> = refs.into_iter().filter(|r| r.code.is_none()).collect();
+    let refs: Vec<_> = refs
         .into_iter()
         .filter(|r| {
             if !r.semantic_eligible || !r.has_text {
                 return false;
             }
-            match &r.code {
-                Some(code) => {
-                    local
-                        && sources
-                            .get(&(code.file.repository.clone(), code.file.path.clone()))
-                            .is_some_and(|m| code_allowed(r, m, request))
-                }
-                None => r.model_eligible,
-            }
+            r.model_eligible
         })
-        .collect())
+        .collect();
+    let mut eligible = Vec::new();
+    for reference in refs {
+        if head_attempt(provider, request, &reference).await?.is_some() {
+            eligible.push(reference);
+        }
+    }
+    Ok(eligible)
 }
 
 // Resolve actual canonical content before every use. Never treat a source read
@@ -116,6 +114,9 @@ async fn prepare(
     request: &EmbeddingBackfillRequest,
     reference: &ChunkRef,
 ) -> CoreResult<Option<Prepared>> {
+    let Some(head_attempt) = head_attempt(provider, request, reference).await? else {
+        return Ok(None);
+    };
     let Some(chunk) = provider
         .require_knowledge()?
         .get_chunk(&reference.id, &request.scope)
@@ -129,35 +130,19 @@ async fn prepare(
     {
         return Ok(None);
     }
-    let attempt = if let Some(code) = &reference.code {
-        if !provider.require_embedding_provider()?.is_local() {
-            return Ok(None);
-        }
-        let Some(port) = provider.code_sources() else {
-            return Ok(None);
-        };
-        let Some(manifest) = port.get_code_source(&code.file).await? else {
-            return Ok(None);
-        };
-        if !code_allowed(reference, &manifest, request) {
-            return Ok(None);
-        }
-        Some(manifest.attempt_id)
-    } else {
-        // Includes old code with unknown coverage; it must be rescanned first.
-        if !reference.model_eligible
-            || chunk.document_kind == Some(SourceDocumentKind::Code)
-            || chunk.kind == KnowledgeChunkKind::CodeSymbol
-            || (chunk.kind == KnowledgeChunkKind::CodeBlock && chunk.document_kind.is_none())
-        {
-            return Ok(None);
-        }
-        None
-    };
+    // Includes old code with unknown coverage; it must be rescanned first.
+    if reference.code.is_some()
+        || !reference.model_eligible
+        || chunk.document_kind == Some(SourceDocumentKind::Code)
+        || chunk.kind == KnowledgeChunkKind::CodeSymbol
+        || (chunk.kind == KnowledgeChunkKind::CodeBlock && chunk.document_kind.is_none())
+    {
+        return Ok(None);
+    }
     Ok(Some(Prepared {
         reference: reference.clone(),
         text: chunk.text.trim().chars().take(INPUT_CHAR_LIMIT).collect(),
-        attempt,
+        attempt: head_attempt,
     }))
 }
 
@@ -233,7 +218,11 @@ pub(crate) async fn backfill(
         .filter(|r| in_delta(r) && !have.contains(&r.id))
         .collect();
     pending.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));
-    let mut report = EmbeddingBackfillReport::default();
+    let mut report = if provider.code_vectors().is_some() && embedder.is_local() {
+        crate::code_indexing::backfill(provider, request, request.limit).await?
+    } else {
+        EmbeddingBackfillReport::default()
+    };
     if pending.is_empty() {
         return Ok(report);
     }
@@ -247,7 +236,10 @@ pub(crate) async fn backfill(
         }
     }
     let mut groups: BTreeMap<String, Vec<Prepared>> = BTreeMap::new();
-    for reference in pending.into_iter().take(request.limit) {
+    for reference in pending
+        .into_iter()
+        .take(request.limit.saturating_sub(report.embedded))
+    {
         if let Some(prepared) = prepare(provider, request, reference).await? {
             let key = if reference.content_hash.is_empty() {
                 format!("id:{}", reference.id.as_str())
@@ -316,7 +308,7 @@ pub(crate) async fn backfill(
         }
     }
     let have = index.embedded_ids().await?;
-    report.remaining = eligible_refs(provider, request)
+    report.remaining += eligible_refs(provider, request)
         .await?
         .iter()
         .filter(|r| in_delta(r) && !have.contains(&r.id))

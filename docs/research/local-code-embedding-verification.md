@@ -44,6 +44,11 @@ All four self-search probes returned vector-attributed source chunks:
 
 This establishes real code-vector operation, not a relevance benchmark.
 
+A subsequent [adversarial self-evaluation](code-intelligence-self-evaluation.md)
+found poor broad implementation discovery, obsolete document candidates and a
+demonstrated long-function vector blind spot. Passing wiring checks should not
+be interpreted as passing those code-intelligence quality checks.
+
 ## Other surfaces and regression checks
 
 A disposable code-only stdio store embedded three code units and returned the

@@ -4,7 +4,14 @@
 //! on already-produced candidate results. It does not call stores, embedding
 //! providers, policy engines, graph databases, or model rerankers.
 
+mod code_candidates;
+pub mod code_config;
+pub use code_candidates::{
+    CodeParentRank, CodeRankedSegment, CodeScoringPool, code_parent_order, code_scoring_pool,
+    code_scoring_pool_with_coverage, code_scoring_pool_with_parent_limit,
+};
 mod composer;
+pub use code_config::*;
 mod config;
 mod graph_cache;
 mod record_access;
@@ -13,7 +20,11 @@ mod ports;
 mod predict;
 mod reciprocal;
 mod router;
+mod scorer;
+pub use scorer::{RerankScorer, RerankScorerIdentity};
+mod tokenization;
 mod vector_index;
+pub use tokenization::TextTokenization;
 mod weighted;
 
 pub use composer::{RetrievalCompositionInput, compose_context};

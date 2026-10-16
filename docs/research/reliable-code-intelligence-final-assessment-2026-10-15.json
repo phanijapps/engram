@@ -1,0 +1,525 @@
+{
+  "recordedDate": "2026-10-15",
+  "runState": "complete",
+  "featureShipped": false,
+  "acceptanceOutcome": "failed quality targets; rollout not executed",
+  "rawReceipts": {
+    "assessment.json": {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/assessment.json",
+      "sha256": "e550741ff82a57908c7278f9f905bb8c65068fa892eff131ef47b06befdd3eba"
+    },
+    "freeze.json": {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/freeze.json",
+      "sha256": "0190e449b06c5d14436ba71d0cf79d03593d6c0d700aecce86e4ec3e7cb04a25"
+    },
+    "assessment-started.json": {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/assessment-started.json",
+      "sha256": "06d189028858caee4fa457b6b31a99a4a6ccefd6b609709b6bafbc96132fa183"
+    },
+    "development.json": {
+      "path": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/development.json",
+      "sha256": "b3b29202e19d5b572325f433288177983021693cf989ef460dd4623f4ca6e031"
+    }
+  },
+  "manifestSha256": "a78489ada1947213c5a5719a7ac9661c9ea37e66168bd95f0f3bfbc856de8feb",
+  "frozenInputHashes": {
+    "/home/videogamer/projects/mem-alpha/core/eval/fixtures/code_intelligence/manifest.json": "a78489ada1947213c5a5719a7ac9661c9ea37e66168bd95f0f3bfbc856de8feb",
+    "/home/videogamer/projects/mem-alpha/target/release/examples/code_evidence_probe": "811f70e4f28edd1ca3ceef93b3912b1367f2a70f509754b5c159e9458aefa956",
+    "/home/videogamer/projects/mem-alpha/target/release/examples/code_calibration_seal": "c6eae3a833c69d0a51ef0c22d2a90904bc36a20e51a64f8ada356320daad1ca6",
+    "/home/videogamer/projects/mem-alpha/target/release/examples/code_metrics": "f180456fd346f92afac37e5eacf02336c3138c2454103e43101bf15c518a843a",
+    "/home/videogamer/projects/mem-alpha/target/release/engram-mcp": "90cd964ee22d8c09d06177fd40dee580f697099ac1d19bdfa6e5abfac7fc49f2",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/baseline-engram-mcp": "6f18a73f53d7c242150532d2ae0bf3451dacb55b66b11af659260166ec824de3",
+    "/home/videogamer/projects/mem-alpha/scripts/dev/code_evidence_eval_support.py": "778332b5b06734b15feb325f3f4560068a23bef51fbed5ea155eed4a12370603",
+    "/home/videogamer/projects/mem-alpha/docs/research/reliable-code-intelligence-baseline-2026-10-14.json": "a24ec8625d99590be3c93f4ccc50a698be9b5f76f218ba109f910aaa17ee8685",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/engram-baseline-original.json": "eeb110f32b08fbdc0a46bc304be806d4bb6fff7559e354d61f7fd50a53208bf5",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/engram-baseline-identifier.json": "0d2c25d6d2f4be886f242577ee4c51c8a7e96594b412283776c9443e510bd284",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/engram-baseline-development.json": "1691214bf1e3d43eff157ac56efd1c6f3fc0ce0fc0077c73d92c2bf8e7783f55",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/flask-baseline-development.json": "48a6e078a503013f6dfcb7cb0fa3d7c168a3210b3fd5da96ee3c90bcaefac968",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/vite-baseline-development.json": "baf421837b1ecb9172b2bbf077b687b2ae1dfdf857c15d73552919d578789756",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/authorization-baseline.json": "9c27f6d8daa9e721076530c7c617193cacde2c447121e2a7c75e19ccf4173f4d",
+    "/home/videogamer/projects/mem-alpha/scripts/dev/code_evidence_eval.py": "e50715e37e71766f843b4c4f1a8c4c3973e450b55d7b62131801f6ecb9172355",
+    "/home/videogamer/projects/mem-alpha/scripts/dev/code_evidence_baselines.py": "18d8650e9d88eec199f368788729aee37aa97950bc1ac2ae0e92dece19b98be5",
+    "/home/videogamer/projects/mem-alpha/scripts/dev/code_evidence_assessment.py": "bfac7cf4f636f8d47b30c38c272856ea73c10c509a533951e523fcec7542e330",
+    "/home/videogamer/projects/mem-alpha/scripts/dev/code_evidence_calibration.py": "d8735a39ed161f2d97bf6eda890f039d29afa9ce6923a97657a65fb44141e77a",
+    "/home/videogamer/projects/mem-alpha/scripts/dev/code_evidence_judgments.py": "b5ff96aa4dabe03485c18ca01b96d92b36e8c3abedad748bb29c32cdd1818c1f",
+    "/home/videogamer/projects/mem-alpha/scripts/dev/code_eval_corpus.py": "231462cf6abaf82c7fd522fc9f66318f1da22a471e3c485f4ab9ee5cb318e9b9",
+    "/home/videogamer/projects/mem-alpha/scripts/dev/code_intelligence_eval.py": "89d1d734d397c38d910c90c7e4534ea4633c19805c7092ac49a9d546f56947da",
+    "/home/videogamer/projects/mem-alpha/scripts/dev/code_query_ablation.py": "4ceb884e5ac9c14ab062e908ed01fd1395de373e54b46958f37e023886889597"
+  },
+  "frozenRuntimeArtifactHashes": {
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/development.json": "b3b29202e19d5b572325f433288177983021693cf989ef460dd4623f4ca6e031",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/segmented-config.json": "68d0422f5de4991e04c5325478563b1a030100f12a6feef65ae2f2140169be9b",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/segmented-calibration.json": "89986b987c44cc5501e2db023f9eeb203bdb557fbaa81a5fe35f9827385ebd24",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/balanced-config.json": "ba7e5943f4c99255bdf2a5e8d43d04ca648b56469b4a85f096ceeb1b7ce311dc",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/balanced-calibration.json": "ab07e49b2e295ecd62f95ec5a4b79c3a89859f0471177ce6272f4b2b583ff6dd",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/fast-config.json": "fdb595379b9844f8fefad280ee947fa40a38fbd51dd73f54d58a0fce50f95a42",
+    "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/t10-evidence-v2/fast-calibration.json": "6f0c835141bc48455cd60683ef88361e8d758289c229dce65fad3a912d445329"
+  },
+  "observedBindingTemplates": {
+    "segmented": {
+      "configHash": "4a3f9977950dfcbb93135c5fdac50c101014fbde9ba9c47397bbea86e6b53f9d",
+      "developmentLabelsSha256": "",
+      "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+      "id": "",
+      "passageRepresentationId": "code-passage-v1/6c565799a44ef61392aefa737eb3998c3078c98a3d32acfc3e1813d1dcb89348",
+      "queryRepresentationId": "code-query-v1/6425ffc2849dee5e5639446fb66325a46e63e9393f42f9b87fccf96bd216def8",
+      "schemaVersion": 1,
+      "scoreSpace": "rrf",
+      "scoreTransformation": "none",
+      "scorerManifestId": null,
+      "threshold": 0.0,
+      "tokenizerIdentity": "ffe69311cd4af801e45731c6c236867b1648281b730a38eb7587f5b4ea8a9968"
+    },
+    "balanced": {
+      "configHash": "9deeaf51f2929468ffbb392afe93e6cad386d0911d563209049e93043c27a195",
+      "developmentLabelsSha256": "",
+      "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+      "id": "",
+      "passageRepresentationId": "code-passage-v1/6c565799a44ef61392aefa737eb3998c3078c98a3d32acfc3e1813d1dcb89348",
+      "queryRepresentationId": "code-query-v1/6425ffc2849dee5e5639446fb66325a46e63e9393f42f9b87fccf96bd216def8",
+      "schemaVersion": 1,
+      "scoreSpace": "cross_encoder",
+      "scoreTransformation": "raw_logit",
+      "scorerManifestId": "model-manifest-v1/5a313a5e79e3036626005ee29fec2090d7f5172bf2f925e9f803d14da835c962",
+      "threshold": 0.0,
+      "tokenizerIdentity": "5749ef57b8429e89b0e8140093a2eb34e56de83945690b28944aa477db9523f6"
+    },
+    "fast": {
+      "configHash": "24a9a5d725c3f03d86b602580bbc5a3b6bb443b884e5db886915505a4573da27",
+      "developmentLabelsSha256": "",
+      "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+      "id": "",
+      "passageRepresentationId": "code-passage-v1/6c565799a44ef61392aefa737eb3998c3078c98a3d32acfc3e1813d1dcb89348",
+      "queryRepresentationId": "code-query-v1/6425ffc2849dee5e5639446fb66325a46e63e9393f42f9b87fccf96bd216def8",
+      "schemaVersion": 1,
+      "scoreSpace": "rrf",
+      "scoreTransformation": "none",
+      "scorerManifestId": null,
+      "threshold": 0.0,
+      "tokenizerIdentity": "ffe69311cd4af801e45731c6c236867b1648281b730a38eb7587f5b4ea8a9968"
+    }
+  },
+  "caseInventories": {
+    "baseline": {
+      "cases": 74,
+      "failedCalls": 0
+    },
+    "segmented": {
+      "cases": 74,
+      "failedCalls": 0
+    },
+    "balanced": {
+      "cases": 74,
+      "failedCalls": 0
+    },
+    "fast": {
+      "cases": 74,
+      "failedCalls": 0
+    }
+  },
+  "warmMcp": {
+    "measuredRequests": 60,
+    "p95Seconds": 10.800065221003024,
+    "operationalPass": true,
+    "packetMismatches": []
+  },
+  "gates": {
+    "originalAllRequiredAtLeast8of10": false,
+    "identifierBothRankOne": true,
+    "heldoutCandidateRecall50": true,
+    "heldoutRequiredUnitRecall10": false,
+    "heldoutPerRepositoryRecall": false,
+    "heldoutNegatives18of20": true,
+    "rerankerNdcgNonregression": true,
+    "allVariantCaseInventoriesComplete": true,
+    "allVariantCallsValid": true,
+    "baselineStartupsAndWarmupsValid": true,
+    "warmBalancedP95": true,
+    "frozenStoresPreserved": true
+  },
+  "summaries": {
+    "baseline": {
+      "heldout": {
+        "answerableCount": 40,
+        "negativeCount": 20,
+        "failedCalls": 0,
+        "candidateRecallAt50": null,
+        "requiredUnitRecallAt10": 0.425,
+        "requiredRangeCoverage": 0.1234244687314194,
+        "mrrAt10": 0.26919642857142856,
+        "ndcgAt10": 0.3051139178030652,
+        "allRequiredRecovered": 17,
+        "negativeInsufficient": 0,
+        "unjudgedPrimaryItems": 547,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 10,
+            "requiredUnitRecallAt10": 0.5
+          },
+          "flask": {
+            "answerableCount": 15,
+            "requiredUnitRecallAt10": 0.4666666666666667
+          },
+          "vite": {
+            "answerableCount": 15,
+            "requiredUnitRecallAt10": 0.3333333333333333
+          }
+        }
+      },
+      "original": {
+        "answerableCount": 10,
+        "negativeCount": 2,
+        "failedCalls": 0,
+        "candidateRecallAt50": null,
+        "requiredUnitRecallAt10": 0.15,
+        "requiredRangeCoverage": 0.038410643653362095,
+        "mrrAt10": 0.08333333333333333,
+        "ndcgAt10": 0.09375033499541867,
+        "allRequiredRecovered": 1,
+        "negativeInsufficient": 0,
+        "unjudgedPrimaryItems": 112,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 10,
+            "requiredUnitRecallAt10": 0.15
+          },
+          "flask": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          },
+          "vite": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          }
+        }
+      },
+      "identifier": {
+        "answerableCount": 2,
+        "negativeCount": 0,
+        "failedCalls": 0,
+        "candidateRecallAt50": null,
+        "requiredUnitRecallAt10": 1.0,
+        "requiredRangeCoverage": 0.0,
+        "mrrAt10": 1.0,
+        "ndcgAt10": 1.0,
+        "allRequiredRecovered": 2,
+        "negativeInsufficient": 0,
+        "unjudgedPrimaryItems": 11,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 2,
+            "requiredUnitRecallAt10": 1.0
+          },
+          "flask": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          },
+          "vite": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          }
+        }
+      }
+    },
+    "segmented": {
+      "heldout": {
+        "answerableCount": 40,
+        "negativeCount": 20,
+        "failedCalls": 0,
+        "candidateRecallAt50": 0.925,
+        "requiredUnitRecallAt10": 0.05,
+        "requiredRangeCoverage": 0.05,
+        "mrrAt10": 0.05,
+        "ndcgAt10": 0.05,
+        "allRequiredRecovered": 2,
+        "negativeInsufficient": 20,
+        "unjudgedPrimaryItems": 10,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 10,
+            "requiredUnitRecallAt10": 0.0
+          },
+          "flask": {
+            "answerableCount": 15,
+            "requiredUnitRecallAt10": 0.06666666666666667
+          },
+          "vite": {
+            "answerableCount": 15,
+            "requiredUnitRecallAt10": 0.06666666666666667
+          }
+        }
+      },
+      "original": {
+        "answerableCount": 10,
+        "negativeCount": 2,
+        "failedCalls": 0,
+        "candidateRecallAt50": 0.7,
+        "requiredUnitRecallAt10": 0.0,
+        "requiredRangeCoverage": 0.0,
+        "mrrAt10": 0.0,
+        "ndcgAt10": 0.0,
+        "allRequiredRecovered": 0,
+        "negativeInsufficient": 2,
+        "unjudgedPrimaryItems": 0,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 10,
+            "requiredUnitRecallAt10": 0.0
+          },
+          "flask": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          },
+          "vite": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          }
+        }
+      },
+      "identifier": {
+        "answerableCount": 2,
+        "negativeCount": 0,
+        "failedCalls": 0,
+        "candidateRecallAt50": 1.0,
+        "requiredUnitRecallAt10": 0.0,
+        "requiredRangeCoverage": 0.0,
+        "mrrAt10": 0.0,
+        "ndcgAt10": 0.0,
+        "allRequiredRecovered": 0,
+        "negativeInsufficient": 0,
+        "unjudgedPrimaryItems": 2,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 2,
+            "requiredUnitRecallAt10": 0.0
+          },
+          "flask": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          },
+          "vite": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          }
+        }
+      }
+    },
+    "balanced": {
+      "heldout": {
+        "answerableCount": 40,
+        "negativeCount": 20,
+        "failedCalls": 0,
+        "candidateRecallAt50": 0.925,
+        "requiredUnitRecallAt10": 0.6,
+        "requiredRangeCoverage": 0.5831756675425719,
+        "mrrAt10": 0.49375,
+        "ndcgAt10": 0.5077904927865399,
+        "allRequiredRecovered": 23,
+        "negativeInsufficient": 19,
+        "unjudgedPrimaryItems": 125,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 10,
+            "requiredUnitRecallAt10": 0.6
+          },
+          "flask": {
+            "answerableCount": 15,
+            "requiredUnitRecallAt10": 0.7333333333333333
+          },
+          "vite": {
+            "answerableCount": 15,
+            "requiredUnitRecallAt10": 0.4666666666666667
+          }
+        }
+      },
+      "original": {
+        "answerableCount": 10,
+        "negativeCount": 2,
+        "failedCalls": 0,
+        "candidateRecallAt50": 0.7,
+        "requiredUnitRecallAt10": 0.1,
+        "requiredRangeCoverage": 0.05999310225901018,
+        "mrrAt10": 0.1,
+        "ndcgAt10": 0.1,
+        "allRequiredRecovered": 1,
+        "negativeInsufficient": 0,
+        "unjudgedPrimaryItems": 10,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 10,
+            "requiredUnitRecallAt10": 0.1
+          },
+          "flask": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          },
+          "vite": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          }
+        }
+      },
+      "identifier": {
+        "answerableCount": 2,
+        "negativeCount": 0,
+        "failedCalls": 0,
+        "candidateRecallAt50": 1.0,
+        "requiredUnitRecallAt10": 1.0,
+        "requiredRangeCoverage": 0.7392937640871525,
+        "mrrAt10": 1.0,
+        "ndcgAt10": 1.0,
+        "allRequiredRecovered": 2,
+        "negativeInsufficient": 0,
+        "unjudgedPrimaryItems": 3,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 2,
+            "requiredUnitRecallAt10": 1.0
+          },
+          "flask": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          },
+          "vite": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          }
+        }
+      }
+    },
+    "fast": {
+      "heldout": {
+        "answerableCount": 40,
+        "negativeCount": 20,
+        "failedCalls": 0,
+        "candidateRecallAt50": 0.825,
+        "requiredUnitRecallAt10": 0.15,
+        "requiredRangeCoverage": 0.15,
+        "mrrAt10": 0.1375,
+        "ndcgAt10": 0.14077324383928644,
+        "allRequiredRecovered": 6,
+        "negativeInsufficient": 20,
+        "unjudgedPrimaryItems": 11,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 10,
+            "requiredUnitRecallAt10": 0.0
+          },
+          "flask": {
+            "answerableCount": 15,
+            "requiredUnitRecallAt10": 0.13333333333333333
+          },
+          "vite": {
+            "answerableCount": 15,
+            "requiredUnitRecallAt10": 0.26666666666666666
+          }
+        }
+      },
+      "original": {
+        "answerableCount": 10,
+        "negativeCount": 2,
+        "failedCalls": 0,
+        "candidateRecallAt50": 0.45,
+        "requiredUnitRecallAt10": 0.0,
+        "requiredRangeCoverage": 0.0,
+        "mrrAt10": 0.0,
+        "ndcgAt10": 0.0,
+        "allRequiredRecovered": 0,
+        "negativeInsufficient": 2,
+        "unjudgedPrimaryItems": 0,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 10,
+            "requiredUnitRecallAt10": 0.0
+          },
+          "flask": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          },
+          "vite": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          }
+        }
+      },
+      "identifier": {
+        "answerableCount": 2,
+        "negativeCount": 0,
+        "failedCalls": 0,
+        "candidateRecallAt50": 1.0,
+        "requiredUnitRecallAt10": 1.0,
+        "requiredRangeCoverage": 1.0,
+        "mrrAt10": 1.0,
+        "ndcgAt10": 1.0,
+        "allRequiredRecovered": 2,
+        "negativeInsufficient": 0,
+        "unjudgedPrimaryItems": 2,
+        "perRepository": {
+          "engram": {
+            "answerableCount": 2,
+            "requiredUnitRecallAt10": 1.0
+          },
+          "flask": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          },
+          "vite": {
+            "answerableCount": 0,
+            "requiredUnitRecallAt10": null
+          }
+        }
+      }
+    }
+  },
+  "allQualityAndWarmGatesPass": false,
+  "frozenEvaluationStoresPreserved": true,
+  "retainedSelfRollout": {
+    "executed": false,
+    "reason": "T10 quality prerequisites failed; no retained-self mutation authorized by a passing assessment",
+    "backupProof": "docs/research/reliable-code-intelligence-self-backup-2026-10-15.json",
+    "disposableHistoryProof": "docs/research/reliable-code-intelligence-history-corrections-2026-10-15.json",
+    "disposableRehearsalIsNotActualSelfRollout": true
+  },
+  "limitations": [
+    "Metrics use frozen agent-reviewed labels; recorded human source-label/citation review remains pending.",
+    "Historical baseline renderer reconstruction preserves ambiguous headers as unjudged original-rank placeholders; candidate metrics are unavailable for baseline.",
+    "New-profile positive metrics use runtime-calibrated validated primary evidence. Unvalidated inspection diagnostics are not acceptance evidence.",
+    "Comparator profiles have independently development-fitted thresholds; passing nDCG nonregression does not isolate a causal scorer-only gain.",
+    "V1 failed assessment preflight before heldout release; V2 reran all 270 development calls under corrected runner before its single assessment.",
+    "No runtime model, preset, target or heldout label was retuned after this assessment.",
+    "Final actual-self reindex, idle repeat and retained-store evidence battery were not executed because quality gates failed."
+  ],
+  "constructionEvidence": {
+    "repositoryGates": "docs/research/reliable-code-intelligence-history-corrections-2026-10-15.json",
+    "pairedTailLive": "docs/research/reliable-code-intelligence-paired-tail-live-2026-10-15.json",
+    "developmentDiagnosis": "docs/research/reliable-code-intelligence-development-diagnosis-2026-10-15.json"
+  },
+  "finalDocumentationChecks": {
+    "repositoryStatusLintExitCode": 1,
+    "hardViolations": [
+      "docs/specs/cc-ingest-control/spec.md: no `- **Status:**` header field found",
+      "docs/specs/cc-pi-mono-maintenance/spec.md: no `- **Status:**` header field found",
+      "docs/specs/engram-code/spec.md:151: invariant (iv) \u2014 (deferred: cross-server-mcp-tool-drift) does not resolve to a heading in docs/backlog.md",
+      "docs/specs/engram-mcp-code-intel/spec.md:59: invariant (iv) \u2014 (deferred: phase-2-napi-parity) does not resolve to a heading in docs/backlog.md",
+      "docs/specs/engram-mcp-p0-foundation/spec.md: invariant (i) \u2014 status 'Implemented' not in {Approved, Archived, Draft, Implementing, Shipped}",
+      "docs/specs/engram-mcp-p1-graph-tools/spec.md: invariant (i) \u2014 status 'Implemented' not in {Approved, Archived, Draft, Implementing, Shipped}",
+      "docs/specs/engram-mcp-p2-belief-hierarchy/spec.md: invariant (i) \u2014 status 'Implemented' not in {Approved, Archived, Draft, Implementing, Shipped}",
+      "docs/specs/engram-mcp-p3-distillation/spec.md: invariant (i) \u2014 status 'Implemented' not in {Approved, Archived, Draft, Implementing, Shipped}",
+      "docs/specs/engram-mcp-p4-scoping-unified/spec.md: invariant (i) \u2014 status 'Implemented' not in {Approved, Archived, Draft, Implementing, Shipped}",
+      "docs/specs/engram-procedures/spec.md: invariant (i) \u2014 status 'Foundation' not in {Approved, Archived, Draft, Implementing, Shipped}",
+      "docs/specs/knowledge-source-retraction/spec.md: no `- **Status:**` header field found",
+      "docs/specs/ownership-dependency-import/spec.md: no `- **Status:**` header field found",
+      "docs/specs/pgvector-backend/spec.md: no `- **Status:**` header field found",
+      "docs/specs/retrieval-completeness/spec.md: no `- **Status:**` header field found",
+      "docs/specs/scan-filter-config/spec.md: no `- **Status:**` header field found"
+    ],
+    "baselineHardViolationsIdentical": true,
+    "newHardViolations": [],
+    "featureWarnings": [
+      "docs/specs/reliable-code-intelligence/spec.md:8: invariant (v) \u2014 contract 'contracts/v1/schemas/engram-v1.schema.json' lacks a backward x-spec/REGISTRY.md ref to docs/specs/reliable-code-intelligence (warn-only)",
+      "docs/specs/reliable-code-intelligence/spec.md:8: invariant (v) \u2014 contract 'contracts/v1/schemas/recall-fusion.schema.json' lacks a backward x-spec/REGISTRY.md ref to docs/specs/reliable-code-intelligence (warn-only)"
+    ],
+    "documentationGatePassed": true,
+    "diffWhitespaceCheckPassed": true
+  }
+}

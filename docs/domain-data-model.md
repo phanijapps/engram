@@ -1941,6 +1941,7 @@ Fields:
 | Field | Required | Type | Meaning |
 |-------|----------|------|---------|
 | `source` | yes | string | Retrieval source name |
+| `rank` | no | positive integer | Final fused position; compatible schema promotion of the existing Rust field |
 | `sourceRank` | no | integer | Rank within source result list |
 | `sourceScore` | no | number | Score before fusion |
 | `fusionStrategy` | no | FusionStrategy | Fusion method |
@@ -2630,3 +2631,211 @@ inventories. Import ensures the root atomically without overwriting an existing
 identity-equivalent root; collisions are denied. A failed import may retain a
 new root under BestEffort, and retry reuses it. File retraction preserves roots
 while independent graphs still refer to them.
+
+## Reliable code-intelligence contracts
+
+These additive v1 shapes are governed by
+[`reliable-code-intelligence`](specs/reliable-code-intelligence/spec.md) and the
+accepted [`v1 schema`](../contracts/v1/schemas/engram-v1.schema.json). Contract
+acceptance does not imply the operation or model/quality gates have shipped.
+`CodeIntelligenceConfigOverlay` describes partial operator settings; the resolved
+`CodeIntelligenceConfig` contains every required field. Existing memory/recall
+payloads and canonical source-role enums are unchanged. Adding optional SDK
+configuration requires source updates to explicit Rust struct literals and
+custom transports as their wiring is implemented.
+
+`CodeIntelligenceConfig` is an optional, typed code-specific configuration on
+`EngramConfig`. It separates index representation, candidate retrieval, local
+reranking and evidence presentation. Its fusion member reuses
+`RecallFusionConfig`; generic memory recall keeps its existing defaults.
+Query formatting is a separate `query.instruction` field: `legacy-v1`, `none`,
+or `bge-retrieval-v1`. The initial legacy default was replaced by `none` after
+the frozen three-corpus development ablation selected it using mean MRR@10
+([evidence](research/reliable-code-intelligence-query-ablation-2026-10-15.json)). It changes
+query identity/calibration, never passage identity or a re-embedding requirement.
+Versioned profiles and field defaults have one Rust-owned definition. Hosts
+resolve file/environment/explicit overrides once and report configuration
+origin and hash as a `CodeConfigurationSnapshot` (`effective`, `hash`, and
+fieldwise `origins`). Query callers cannot override authorization or index/model
+identity. Transport casing is snake_case for configuration and camelCase for
+operation DTOs, as fixed by the accepted schema.
+
+`CodeEvidenceQuery` contains query text, optional repository restriction and
+bounded query-time result/candidate/evidence limits. Scope and requester come
+from a trusted host context. `CodeEvidencePacket` contains ranked parent units,
+supporting source ranges, indexed revision/hash/generation, relevance/fusion
+traces, evidence status and diagnostics. `candidates_available` indicates
+retrieval candidates, not proof of a complete answer or a feature's existence.
+`insufficient_evidence` indicates absent or rejected evidence. There is no
+portable confidence probability derived from normalized RRF.
+
+Primary items carry normalized per-unit `sourceCategory=implementation`;
+tests/generated/unknown/documentation units are supporting context. Structured
+excerpts map text to exact byte ranges. Bounded segment evidence carries
+contributing `FusionTrace`s, source ranges and embedding/rerank token coverage.
+`CodeSegmentEvidence.sources` always identifies the complete original embedding
+segment input ranges. Compatible optional `rerankSources` and `rerankContext`
+identify the exact source subranges and whole context facts used by a successful
+scorer pair, including deterministic continuations. They are absent on disabled
+or failed scoring. These derived scoring views never replace embedding segment
+identity, original coverage or canonical code. Multiple scored views of one
+embedding segment collapse to its best score; the emitted rerank ranges/coverage
+belong to that winning view. Context/unresolved-import facts have independently
+authorized sources. Current indexed revision metadata comes from the authorized
+canonical document version, source version or persisted source revision metadata;
+unknown or unauthorized revisions remain null. The knowledge source port owns
+this retrieval-only lookup; it grants no raw-source-read permission.
+Diagnostics distinguish strategy score spaces, scored pairs, omitted segments/
+parents, calibration identity/status and effective settings. Unvalidated or
+fallback packets are insufficient even when candidates remain for inspection.
+Calibration/model manifests are pinned derived artifacts, not probabilities.
+
+`CodeEmbeddingSegment` is derived from a canonical unit with typed parent,
+source ranges, source generation/attempt and representation fingerprint. Each
+segment has distinct `parentChunkId` (canonical repository lookup key) and
+`parentUnitId` (`CodeChunkDescriptor.unit`); both must resolve to the same
+current canonical parent. Source references preserve the accepted nonempty
+opaque string generation and sourceHash exactly; there is no numeric counter
+conversion or invented source digest.
+Complete methods and snapshots remain canonical source. Segment identities
+include representation identity; different tokenizer/context/model settings
+cannot reuse incompatible vectors merely because raw source hashes match.
+Segments are knowledge-owned derived records, never memory records, and are
+subject to the same source-ownership checks before model use and retrieval.
+
+`DocumentHead` identifies the current indexed document for a stable source
+within exact scope/repository, with generation, attempt, state and content hash.
+Its typed key contains exact scope, repository and opaque stable sourceKey;
+its value carries opaque generation/attempt, state, sourceHash, nullable current
+documentId, canonical chunkIds, policy and provenance.
+`CodeSegmentInventory` separately fences one representation and its segment IDs
+against the canonical source generation/attempt; it is not canonical inventory.
+Its segment IDs follow canonical parent inventory order, then ascending first
+source byte within each parent, including terminal continuations.
+
+`CodeModelManifest` carries schemaVersion, model/revision/license, admitted
+relative asset paths and SHA-256 digests, a versioned inputContractId identifying
+pair order/token preparation/output interpretation, tokenizer identity/window and score
+transformation. `CodeCalibrationArtifact` binds config, query/passage identities,
+embedding/scorer manifests, tokenizer/score transformation and strategy score
+space to a finite threshold and development-label digest. These descriptors
+carry no download URL, runtime code or authorization grant.
+
+Publication uses a guarded compare-and-swap after verifying the canonical
+inventory; vector/lexical records are projections, not current-version
+authority. Old document versions remain explicitly historical. Unverified
+legacy heads and updating/incomplete sources are excluded from current
+discovery. Historical requests require trusted-host authorization and do not
+weaken source policy. These contracts introduce no cross-store ACID guarantee.
+
+The integration SDK runtime capability map adds `code_evidence` (current source,
+segment, embedding and configured retrieval prerequisites) and `code_scorer`
+(actual admitted local cross-encoder handle and compatible pinned identity).
+These compatible keys do not certify calibration or quality gates. Missing
+configured retrieval lanes are degraded; missing source or local embedding
+authority is unsupported. A disabled scorer reports FeatureDisabled. Trusted
+host configuration may name `code_calibration_path`, a bounded JSON artifact
+loaded once at startup; queries cannot install or replace calibration. Native
+evidence handles bind the accepted CodeSourceContext separately from strict
+CodeEvidenceQuery inputs. HTTP and stdio expose `code op=evidence` with those
+query fields and return only CodeEvidencePacket.
+
+The scorer port additionally declares `supports_code_input` (default false for
+compatible generic scorers). Only an already constructed, admitted local model
+with implemented untruncated query/document/pair inspectors declares true.
+Readiness requires that declaration plus compatible actual model identity; the
+operation continues validating actual input coverage and authorization.
+
+### Code evidence parent decisions (compatible v1 addition)
+
+`CodeEvidenceDiagnostics.parentDecisions` optionally records up to 200 current,
+authorized implementation-parent decisions. Each `CodeParentDecision` identifies
+the opaque parent unit, selected/rejected reason, best fused score, nullable
+actual reranker score and applied threshold, and retrieved/scored segment counts.
+Reasons distinguish `selected`, `below_threshold`, `scorer_pool`, `result_limit`,
+`per_file_limit`, `evidence_budget`, `invalid_evidence`, and
+`serialized_byte_limit`. An unscored parent has a null reranker score; an
+unvalidated operation has a null applied threshold. No query/source text or
+additional source authorization is introduced. `omittedParentDecisions` counts
+decisions excluded by the trace count/serialized-byte bound. Legacy packets
+default to an empty trace and zero omitted decisions. Traces are attached after
+evidence selection and trimmed before evidence, preserving ranking, confidence,
+source checks and the existing total packet byte limit. The shared packet makes
+this additive diagnostic available through Rust, native/TypeScript, HTTP and
+stdio without changing query fields or calibration/configuration identities.
+
+The subsequent confidence-filter correction applies the development-fitted
+maximum-score threshold to the returnable primary packet, matching the negative
+calibration statistic. A passing packet retains other ranked implementation
+parts within existing budgets. If none of its returnable parents reaches the
+threshold, primary evidence is cleared and supporting-only evidence remains
+insufficient. Individual selected scores may be below the applied packet
+threshold. The versioned `code-evidence-binding-v2/packet-max-confidence` binding prevents earlier
+parent-filter calibration artifacts from validating silently. No model, source
+authority, frozen target or held-out label changes accompany this correction.
+
+### Independent scorer parent and view budgets (optional v1 config addition)
+
+`CodeLocalScorerConfig.max_parents` caps distinct implementation parents admitted
+in fused RRF order, independently of `max_candidates`, the total scored-pair
+budget including extra segments and continuations. Missing `max_parents` in
+existing full configuration files defaults to 50; overlays/files/environment
+resolve it through the shared configuration path. Both limits are positive and
+bounded by 200; effective parent admission also cannot exceed the pair budget.
+The balanced development preset uses 50 parents and at most 75 pairs; fast keeps
+its disabled scorer's 50-pair setting. Every admitted parent gets one segment
+before later segments are admitted in round-robin order. Index representation,
+models and calibration threshold values are unchanged; the changed effective
+configuration requires a separately sealed matching calibration artifact.
+
+
+Additional retrieved segments and lazy continuation views are eligible only for
+parents with typed `CodeChunkRole::Symbol` metadata. Container context retains
+its first scoring opportunity; extra interface/class context does not consume
+body-coverage slots. This is a language-neutral role policy, not a filename or
+symbol-name heuristic. The selection policy is included in calibration binding
+v3, so earlier artifacts require resealing against the new score distribution.
+
+
+### Attached callable source comments (derived-index correction)
+
+Exact AST callable source ranges retain up to five immediately adjacent grammar
+comment nodes, bounded to an 8,192-byte prefix. Bytes, delimiters and whitespace
+are preserved verbatim; no synthesized documentation is inserted. Detached
+file notices, trailing comments owned by prior statements, strings and
+preprocessor directives are not attached. Declaration ranges remain the AST
+node spans, so symbol and parent containment judgments remain structural.
+Container source slices exclude the attached comment prefixes of child
+callables. Unsupported or nonadjacent comment layouts stay in source residuals.
+No public fields change. The coverage fingerprint changes, invalidating passage
+and calibration identities: operators must rescan sources, reindex embeddings
+and seal a matching calibration after checking development negatives. Historical
+source generations remain historical; an old store is never silently reported
+as having the new comment-aware representation.
+
+The inventory validator admits this prefix only for a single contiguous Symbol
+slice ending exactly at the declaration end, with at most 8,192 bytes before
+the declaration. Container and suffix expansion remain invalid. Exact snapshot
+bytes, UTF-8 boundaries, content hashes, manifest membership, file/generation,
+actor and policy equality remain mandatory. AST attachment is produced by the
+code parser; declaration containment still determines the hierarchy.
+
+
+### Confidence-aware weak-part ordering (optional v1 config addition)
+
+Compatible v1 wire addition: `CodeEvidenceConfig.weak_parent_order` selects `best_lane_rank` (balanced default)
+or `scorer` (legacy ordering). With validated cross-encoder calibration,
+above-threshold parents retain scorer order. Below-threshold parents use their
+best observed lexical/vector source rank, then fused RRF score and original
+fused order. Graph expansion is not an independent retrieval rank. The fallback
+orders only already-admitted scored parents; it adds no candidates, rescoring,
+source grants or synthetic confidence. Existing per-file, evidence and result
+limits still apply. Query admission remains the maximum returnable raw model
+score; raw scores and score-space labels stay unchanged. This cutoff is a
+packet-admission calibration, not an individual-parent probability; using it
+as an ordering pivot does not assert per-parent calibration. Without validated
+cross-encoder calibration or with `scorer`, ordering is unchanged. The setting
+is optional on the wire, defaults through Rust, and resolves through the shared
+file/environment/explicit path. Calibration binding changes with this policy. Rust callers using exhaustive
+`CodeEvidenceConfig` struct literals must supply the new field; callers using
+profile constructors and existing serialized configs retain supported decoding.

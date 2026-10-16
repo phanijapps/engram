@@ -78,13 +78,13 @@ impl SqlHierarchyStore {
     pub fn open_with_options(options: SqliteOpenOptions) -> CoreResult<Self> {
         let connection = match &options.path {
             SqlitePath::File(path) => {
-                if options.create_parent_dirs {
-                    if let Some(parent) = path.parent() {
-                        std::fs::create_dir_all(parent).map_err(|e| CoreError::Adapter {
-                            adapter: "engram-store-hierarchy-sqlite".to_owned(),
-                            message: format!("failed to create parent directory: {}", e),
-                        })?;
-                    }
+                if options.create_parent_dirs
+                    && let Some(parent) = path.parent()
+                {
+                    std::fs::create_dir_all(parent).map_err(|e| CoreError::Adapter {
+                        adapter: "engram-store-hierarchy-sqlite".to_owned(),
+                        message: format!("failed to create parent directory: {}", e),
+                    })?;
                 }
                 Connection::open(path)
             }

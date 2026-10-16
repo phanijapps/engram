@@ -72,7 +72,7 @@ pub(crate) async fn stage(
             port.write_document_record(
                 &head.key,
                 &head.attempt_id,
-                DocumentHeadWrite::Chunk(chunk.clone()),
+                DocumentHeadWrite::Chunk(Box::new(chunk.clone())),
             )
             .await?;
         }
@@ -148,18 +148,19 @@ pub(crate) async fn exclude(
     policy: Option<&Policy>,
     actor: &Actor,
 ) -> CoreResult<()> {
-    if let Some(mut h) = port.get_document_head(key).await? {
-        if h.state == CodeSourceState::Active && policy.is_none_or(|p| p != &h.policy) {
-            let prior = h.attempt_id.clone();
-            h.attempt_id = attempt();
-            h.state = CodeSourceState::Updating;
-            if let Some(policy) = policy {
-                h.policy = policy.clone();
-                h.provenance.actor = actor.clone();
-            }
-            port.begin_document_head(h.clone(), Some(&prior)).await?;
-            port.fail_document_head(key, &h.attempt_id).await?;
+    if let Some(mut h) = port.get_document_head(key).await?
+        && h.state == CodeSourceState::Active
+        && policy.is_none_or(|p| p != &h.policy)
+    {
+        let prior = h.attempt_id.clone();
+        h.attempt_id = attempt();
+        h.state = CodeSourceState::Updating;
+        if let Some(policy) = policy {
+            h.policy = policy.clone();
+            h.provenance.actor = actor.clone();
         }
+        port.begin_document_head(h.clone(), Some(&prior)).await?;
+        port.fail_document_head(key, &h.attempt_id).await?;
     }
     Ok(())
 }

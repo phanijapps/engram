@@ -8,7 +8,7 @@ This tutorial is for someone using Engram for the first time as a memory layer. 
 
 You need:
 
-- Rust 1.85 or later, with Cargo
+- Rust 1.88 or later, with Cargo
 - A working knowledge of `async`/`await` in Rust
 - The Engram source, cloned locally (Engram is consumed from its workspace today; it is not yet published to crates.io)
 

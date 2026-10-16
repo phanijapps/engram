@@ -121,9 +121,15 @@ mod tests {
             value: "x".into(),
             sources: vec![],
         };
-        let (text, coverage) = build_input("ππππππππ", &[fact.clone()], &Scalar, &config, &rep)
-            .unwrap()
-            .unwrap();
+        let (text, coverage) = build_input(
+            "ππππππππ",
+            std::slice::from_ref(&fact),
+            &Scalar,
+            &config,
+            &rep,
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(text, "path: x\n\nππππππππ");
         assert_eq!(
             (

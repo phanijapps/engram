@@ -9,6 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -22,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -44,6 +48,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -58,6 +64,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -67,9 +75,9 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Check generated contract drift
         run: pnpm run contracts:check-generated
+      - name: Build workspace exports and native binding
+        run: pnpm run build
       - name: Typecheck
         run: pnpm run typecheck
       - name: Test
         run: pnpm run test
-      - name: Build
-        run: pnpm run build

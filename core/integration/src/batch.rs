@@ -383,15 +383,9 @@ mod tests {
     fn futures_block_on<F: std::future::Future>(f: F) -> F::Output {
         // The port crate depends on async-trait but not on a runtime; use a
         // minimal single-threaded poll loop so tests need no async executor.
-        use std::task::{Context, Poll, Wake, Waker};
+        use std::task::{Context, Poll, Waker};
 
-        struct NoopWake;
-        impl Wake for NoopWake {
-            fn wake(self: std::sync::Arc<Self>) {}
-        }
-
-        let waker = Waker::from(std::sync::Arc::new(NoopWake));
-        let mut cx = Context::from_waker(&waker);
+        let mut cx = Context::from_waker(Waker::noop());
         let mut fut = std::pin::pin!(f);
         loop {
             match fut.as_mut().poll(&mut cx) {

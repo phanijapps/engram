@@ -29,7 +29,7 @@ pub(crate) async fn persist<R: KnowledgeRepository + KnowledgeGraphRepository + 
                         .write_document_record(
                             &head.key,
                             &head.attempt_id,
-                            engram_knowledge::DocumentHeadWrite::Chunk(updated),
+                            engram_knowledge::DocumentHeadWrite::Chunk(Box::new(updated)),
                         )
                         .await?;
                 } else {

@@ -70,10 +70,10 @@ impl RerankScorer for Scorer {
         self.local
     }
     fn identity(&self) -> Option<RerankScorerIdentity> {
-        if self.identity_calls.fetch_add(1, Ordering::SeqCst) == 1 {
-            if let Some(hook) = &self.identity_hook {
-                hook();
-            }
+        if self.identity_calls.fetch_add(1, Ordering::SeqCst) == 1
+            && let Some(hook) = &self.identity_hook
+        {
+            hook();
         }
         Some(RerankScorerIdentity {
             model_id: "jinaai/jina-reranker-v1-turbo-en".into(),
@@ -265,7 +265,7 @@ fn successful_scoring_has_exact_winning_ranges_and_remains_insufficient_without_
         assert_eq!(item.source_category, CodePrimaryCategory::Implementation);
         for segment in &item.segments {
             assert!(segment.rerank_input.as_ref().unwrap().is_valid());
-            assert!(segment.rerank_sources.as_ref().unwrap().len() > 0);
+            assert!(!segment.rerank_sources.as_ref().unwrap().is_empty());
             assert!(segment.rerank_context.is_some());
             for part in &item.excerpts {
                 let text = std::fs::read_to_string(f._root.path().join(&part.source.path)).unwrap();

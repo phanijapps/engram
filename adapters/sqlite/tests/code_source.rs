@@ -754,7 +754,7 @@ fn target_access_matches_full_access_for_every_owner_without_visiting_unrelated_
     for payload in [
         engram_knowledge::DocumentHeadWrite::Source(source),
         engram_knowledge::DocumentHeadWrite::Document(doc),
-        engram_knowledge::DocumentHeadWrite::Chunk(paragraph),
+        engram_knowledge::DocumentHeadWrite::Chunk(Box::new(paragraph)),
     ] {
         block_on(store.write_document_record(&doc_head.key, &doc_head.attempt_id, payload))
             .unwrap();

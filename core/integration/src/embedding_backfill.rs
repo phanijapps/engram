@@ -264,23 +264,21 @@ pub(crate) async fn backfill(
                 continue;
             }
             let first = current[0];
-            if let Some(twin) = twins.get(first.reference.content_hash.as_str()) {
-                if prepare(provider, request, twin).await?.is_some() {
-                    if let Some(vector) = index.vector_for_target(&twin.id).await? {
-                        // Recheck reuse targets just as strictly as inference targets.
-                        let mut authorized = Vec::new();
-                        for target in current {
-                            if let Some(p) = prepare(provider, request, &target.reference).await? {
-                                if p.attempt == target.attempt {
-                                    authorized.push(p);
-                                }
-                            }
-                        }
-                        insert_current(provider, request, &authorized, &vector, true, &mut report)
-                            .await?;
-                        continue;
+            if let Some(twin) = twins.get(first.reference.content_hash.as_str())
+                && prepare(provider, request, twin).await?.is_some()
+                && let Some(vector) = index.vector_for_target(&twin.id).await?
+            {
+                // Recheck reuse targets just as strictly as inference targets.
+                let mut authorized = Vec::new();
+                for target in current {
+                    if let Some(p) = prepare(provider, request, &target.reference).await?
+                        && p.attempt == target.attempt
+                    {
+                        authorized.push(p);
                     }
                 }
+                insert_current(provider, request, &authorized, &vector, true, &mut report).await?;
+                continue;
             }
             fresh.push(current);
         }
@@ -298,10 +296,11 @@ pub(crate) async fn backfill(
             report.new_embeddings += 1;
             let mut authorized = Vec::new();
             for target in group {
-                if let Some(p) = prepare(provider, request, &target.reference).await? {
-                    if p.attempt == target.attempt && p.text == target.text {
-                        authorized.push(p);
-                    }
+                if let Some(p) = prepare(provider, request, &target.reference).await?
+                    && p.attempt == target.attempt
+                    && p.text == target.text
+                {
+                    authorized.push(p);
                 }
             }
             insert_current(provider, request, &authorized, &vector, false, &mut report).await?;

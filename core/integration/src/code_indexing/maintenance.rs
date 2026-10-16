@@ -26,10 +26,9 @@ async fn prepare(
     if let Some(set) = port
         .load_current_code_segments(&m.file, &representation.id, &request.requester)
         .await?
+        && set.lease.inventory.state != CodeSourceState::Incomplete
     {
-        if set.lease.inventory.state != CodeSourceState::Incomplete {
-            return Ok(set);
-        }
+        return Ok(set);
     }
     // Whole-source access uses its existing explicit authorization contract.
     // Never grant code:source:read to a caller merely because it can reindex.

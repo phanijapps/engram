@@ -262,10 +262,10 @@ pub fn validate_code_unit_hierarchy<'a>(
         reason: "code unit hierarchy is inconsistent".into(),
     };
     for code in &descriptors {
-        if let Some(unit) = &code.unit {
-            if unit.is_empty() || units.insert(unit.as_str(), *code).is_some() {
-                return Err(invalid());
-            }
+        if let Some(unit) = &code.unit
+            && (unit.is_empty() || units.insert(unit.as_str(), *code).is_some())
+        {
+            return Err(invalid());
         }
     }
     for code in descriptors {

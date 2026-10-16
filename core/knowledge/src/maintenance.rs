@@ -182,33 +182,33 @@ pub fn detect_low_confidence(
     };
     let mut out = Vec::new();
     for e in entities.iter().filter(|e| e.archived_at.is_none()) {
-        if let Some(c) = e.provenance.confidence {
-            if c < threshold {
-                out.push(MaintenanceCandidate {
-                    kind: CandidateKind::LowConfidence,
-                    target: MaintenanceTarget::Entity(e.id.clone()),
-                    reason: "entity_confidence_below_threshold".to_string(),
-                    confidence: Some(c),
-                    source_refs: e.source_refs.clone(),
-                    review_status: None,
-                    reviewer: None,
-                });
-            }
+        if let Some(c) = e.provenance.confidence
+            && c < threshold
+        {
+            out.push(MaintenanceCandidate {
+                kind: CandidateKind::LowConfidence,
+                target: MaintenanceTarget::Entity(e.id.clone()),
+                reason: "entity_confidence_below_threshold".to_string(),
+                confidence: Some(c),
+                source_refs: e.source_refs.clone(),
+                review_status: None,
+                reviewer: None,
+            });
         }
     }
     for r in relationships.iter().filter(|r| r.archived_at.is_none()) {
-        if let Some(c) = r.confidence.or(r.provenance.confidence) {
-            if c < threshold {
-                out.push(MaintenanceCandidate {
-                    kind: CandidateKind::LowConfidence,
-                    target: MaintenanceTarget::Relationship(r.id.clone()),
-                    reason: "relationship_confidence_below_threshold".to_string(),
-                    confidence: Some(c),
-                    source_refs: r.evidence.clone(),
-                    review_status: None,
-                    reviewer: None,
-                });
-            }
+        if let Some(c) = r.confidence.or(r.provenance.confidence)
+            && c < threshold
+        {
+            out.push(MaintenanceCandidate {
+                kind: CandidateKind::LowConfidence,
+                target: MaintenanceTarget::Relationship(r.id.clone()),
+                reason: "relationship_confidence_below_threshold".to_string(),
+                confidence: Some(c),
+                source_refs: r.evidence.clone(),
+                review_status: None,
+                reviewer: None,
+            });
         }
     }
     out

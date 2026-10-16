@@ -788,15 +788,14 @@ fn collect_calls_and_spans(
     let kind = node.kind();
 
     // Track function/method declarations for scope.
-    if kind_map.contains_key(kind) {
-        if let Some(name_node) = node
+    if kind_map.contains_key(kind)
+        && let Some(name_node) = node
             .child_by_field_name("name")
             .or_else(|| node.child_by_field_name("declarator"))
-        {
-            let name = extract_name(&name_node, source);
-            if !name.is_empty() {
-                fn_spans.push((node.start_position().row, node.end_position().row, name));
-            }
+    {
+        let name = extract_name(&name_node, source);
+        if !name.is_empty() {
+            fn_spans.push((node.start_position().row, node.end_position().row, name));
         }
     }
 
@@ -830,12 +829,12 @@ fn collect_calls_and_spans(
     // dead-code analytics flag them all as dead. Only PascalCase element
     // names count — lowercase names are DOM intrinsics (`<div>`, `<span>`),
     // not entities, and would otherwise flood the unresolved-refs ledger.
-    if kind == "jsx_opening_element" || kind == "jsx_self_closing_element" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = extract_name(&name_node, source);
-            if name.chars().next().is_some_and(char::is_uppercase) {
-                call_sites.push((node.start_position().row, name));
-            }
+    if (kind == "jsx_opening_element" || kind == "jsx_self_closing_element")
+        && let Some(name_node) = node.child_by_field_name("name")
+    {
+        let name = extract_name(&name_node, source);
+        if name.chars().next().is_some_and(char::is_uppercase) {
+            call_sites.push((node.start_position().row, name));
         }
     }
 
@@ -1058,16 +1057,15 @@ fn collect_registers_walk(
 
     // Track the innermost enclosing declaration as the registration site.
     let mut pushed_site = false;
-    if kind_map.contains_key(kind) {
-        if let Some(name_node) = node
+    if kind_map.contains_key(kind)
+        && let Some(name_node) = node
             .child_by_field_name("name")
             .or_else(|| node.child_by_field_name("declarator"))
-        {
-            let name = extract_name(&name_node, source);
-            if !name.is_empty() {
-                *site = name;
-                pushed_site = true;
-            }
+    {
+        let name = extract_name(&name_node, source);
+        if !name.is_empty() {
+            *site = name;
+            pushed_site = true;
         }
     }
 
@@ -1075,20 +1073,20 @@ fn collect_registers_walk(
         || kind.contains("method_invocation")
         || kind.contains("function_call")
         || kind == "call";
-    if is_call && !site.is_empty() {
-        if let Some(callee_node) = node
+    if is_call
+        && !site.is_empty()
+        && let Some(callee_node) = node
             .child_by_field_name("function")
             .or_else(|| node.child_by_field_name("name"))
             .or_else(|| node.named_child(0))
+    {
+        let callee_text = callee_node.utf8_text(source).unwrap_or("");
+        if is_register_flavored(callee_text)
+            && let Some(ty) = constructed_type_in_arguments(node, source)
         {
-            let callee_text = callee_node.utf8_text(source).unwrap_or("");
-            if is_register_flavored(callee_text) {
-                if let Some(ty) = constructed_type_in_arguments(node, source) {
-                    let fact = (site.clone(), ty);
-                    if !out.contains(&fact) {
-                        out.push(fact);
-                    }
-                }
+            let fact = (site.clone(), ty);
+            if !out.contains(&fact) {
+                out.push(fact);
             }
         }
     }
@@ -1126,40 +1124,38 @@ fn constructed_type_in_arguments(node: &tree_sitter::Node, source: &[u8]) -> Opt
 fn scan_for_constructor(node: &tree_sitter::Node, source: &[u8], found: &mut Option<String>) {
     let kind = node.kind();
     // `new T(..)` new-expression languages (JS/TS/Java).
-    if kind == "new_expression" {
-        if let Some(ctor) = node.child_by_field_name("constructor") {
-            let text = ctor.utf8_text(source).unwrap_or("");
-            if let Some(ty) = last_type_segment(text) {
-                *found = Some(ty);
-            }
+    if kind == "new_expression"
+        && let Some(ctor) = node.child_by_field_name("constructor")
+    {
+        let text = ctor.utf8_text(source).unwrap_or("");
+        if let Some(ty) = last_type_segment(text) {
+            *found = Some(ty);
         }
     }
     let is_call = kind.contains("call_expression")
         || kind.contains("method_invocation")
         || kind.contains("function_call")
         || kind == "call";
-    if is_call {
-        if let Some(callee_node) = node
+    if is_call
+        && let Some(callee_node) = node
             .child_by_field_name("function")
             .or_else(|| node.child_by_field_name("name"))
             .or_else(|| node.named_child(0))
-        {
-            let text = callee_node.utf8_text(source).unwrap_or("");
-            // Qualified constructor forms: `T::new`, `T::default` (Rust),
-            // `T.new` (Java), `T.create`? — keep v1 to new/default.
-            for sep in ["::", "."] {
-                if let Some((head, tail)) = text.rsplit_once(sep) {
-                    if tail == "new" || tail == "default" {
-                        if let Some(ty) = last_type_segment(head) {
-                            if !WRAPPER_CTORS.contains(&ty.as_str()) {
-                                // Prefer the deepest: keep overwriting, the
-                                // innermost constructor wins.
-                                *found = Some(ty);
-                            }
-                        }
-                    }
-                    break;
+    {
+        let text = callee_node.utf8_text(source).unwrap_or("");
+        // Qualified constructor forms: `T::new`, `T::default` (Rust),
+        // `T.new` (Java), `T.create`? — keep v1 to new/default.
+        for sep in ["::", "."] {
+            if let Some((head, tail)) = text.rsplit_once(sep) {
+                if (tail == "new" || tail == "default")
+                    && let Some(ty) = last_type_segment(head)
+                    && !WRAPPER_CTORS.contains(&ty.as_str())
+                {
+                    // Prefer the deepest: keep overwriting, the
+                    // innermost constructor wins.
+                    *found = Some(ty);
                 }
+                break;
             }
         }
     }
@@ -1336,14 +1332,14 @@ fn extract_inheritance(
 ) {
     match ext {
         "py" => {
-            if node.kind() == "class_definition" {
-                if let Some(supers) = node.child_by_field_name("superclasses") {
-                    let text = supers.utf8_text(source).unwrap_or("");
-                    for base in text.split(',') {
-                        let base = base.trim().trim_start_matches('(').trim_end_matches(')');
-                        if !base.is_empty() {
-                            edges.extends.push((qualified.to_owned(), base.to_owned()));
-                        }
+            if node.kind() == "class_definition"
+                && let Some(supers) = node.child_by_field_name("superclasses")
+            {
+                let text = supers.utf8_text(source).unwrap_or("");
+                for base in text.split(',') {
+                    let base = base.trim().trim_start_matches('(').trim_end_matches(')');
+                    if !base.is_empty() {
+                        edges.extends.push((qualified.to_owned(), base.to_owned()));
                     }
                 }
             }
@@ -1357,16 +1353,16 @@ fn extract_inheritance(
         }
         "rs" => {
             // `impl Trait for Type` → Type implements Trait.
-            if node.kind() == "impl_item" {
-                if let (Some(trait_node), Some(type_node)) = (
+            if node.kind() == "impl_item"
+                && let (Some(trait_node), Some(type_node)) = (
                     node.child_by_field_name("trait"),
                     node.child_by_field_name("type"),
-                ) {
-                    let trait_name = extract_name(&trait_node, source);
-                    let type_name = extract_name(&type_node, source);
-                    if !trait_name.is_empty() && !type_name.is_empty() {
-                        edges.implements.push((type_name, trait_name));
-                    }
+                )
+            {
+                let trait_name = extract_name(&trait_node, source);
+                let type_name = extract_name(&type_node, source);
+                if !trait_name.is_empty() && !type_name.is_empty() {
+                    edges.implements.push((type_name, trait_name));
                 }
             }
         }

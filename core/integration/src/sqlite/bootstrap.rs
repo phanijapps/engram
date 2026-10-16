@@ -302,12 +302,12 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     }
 
     // Procedures (RFC-0016 Layer 6).
-    if conformance::procedures_ok() {
-        if let Ok(store) = SqlProcedureStore::open_file(&paths.procedures) {
-            let store: Arc<SqlProcedureStore> = Arc::new(store);
-            procedures = Some(store);
-            procedures_state = CapabilityState::Supported;
-        }
+    if conformance::procedures_ok()
+        && let Ok(store) = SqlProcedureStore::open_file(&paths.procedures)
+    {
+        let store: Arc<SqlProcedureStore> = Arc::new(store);
+        procedures = Some(store);
+        procedures_state = CapabilityState::Supported;
     }
 
     // unified_recall (S4): construct the SqlUnifiedRecall handle from the wired
@@ -613,21 +613,19 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         );
         if let Ok(path_str) = path.to_str().ok_or_else(|| CoreError::InvalidRequest {
             reason: "vector db path is not valid unicode".to_string(),
-        }) {
-            if let Ok(index) =
-                engram_store_sqlite::SqliteVectorIndex::open_with_embedding_space(path_str, space)
-            {
-                if index.requires_reindex() {
-                    // The index was built under a different embedding space than
-                    // the configuration requests: existing vectors are
-                    // incompatible and must be rebuilt before use.
-                    vectors_state = CapabilityState::RequiresReindex {
-                        reason: CapabilityReason::EmbeddingSpaceMismatch,
-                    };
-                } else {
-                    vectors = Some(Arc::new(index));
-                    vectors_state = CapabilityState::Supported;
-                }
+        }) && let Ok(index) =
+            engram_store_sqlite::SqliteVectorIndex::open_with_embedding_space(path_str, space)
+        {
+            if index.requires_reindex() {
+                // The index was built under a different embedding space than
+                // the configuration requests: existing vectors are
+                // incompatible and must be rebuilt before use.
+                vectors_state = CapabilityState::RequiresReindex {
+                    reason: CapabilityReason::EmbeddingSpaceMismatch,
+                };
+            } else {
+                vectors = Some(Arc::new(index));
+                vectors_state = CapabilityState::Supported;
             }
         }
     }

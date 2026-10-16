@@ -28,8 +28,8 @@ pub struct BeliefEmbeddingScore<T> {
 /// The function rejects incomplete byte groups and non-finite values so ranking
 /// cannot silently treat malformed compatibility bytes as useful signal.
 pub fn decode_f32_le(bytes: &[u8]) -> CoreResult<Vec<f32>> {
-    let chunks = bytes.chunks_exact(4);
-    if !chunks.remainder().is_empty() {
+    let (chunks, remainder) = bytes.as_chunks::<4>();
+    if !remainder.is_empty() {
         return Err(CoreError::InvalidRequest {
             reason: "embedding byte length must be a multiple of 4".to_owned(),
         });
@@ -37,7 +37,7 @@ pub fn decode_f32_le(bytes: &[u8]) -> CoreResult<Vec<f32>> {
 
     let mut values = Vec::with_capacity(bytes.len() / 4);
     for chunk in chunks {
-        let value = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        let value = f32::from_le_bytes(*chunk);
         if !value.is_finite() {
             return Err(CoreError::InvalidRequest {
                 reason: "embedding values must be finite f32 numbers".to_owned(),

@@ -315,7 +315,7 @@ impl KnowledgeGraphRepository for SqlKnowledgeStore {
                 relationships.push(relationship);
             }
         }
-        relationships.sort_by(|left, right| left.id.to_string().cmp(&right.id.to_string()));
+        relationships.sort_by_key(|left| left.id.to_string());
         if let Some(limit) = limit {
             relationships.truncate(limit as usize);
         }

@@ -232,11 +232,11 @@ fn load_manifest(path: &std::path::Path, scope: &Scope) -> HashMap<String, Strin
 /// leaves either the old or the new file, never a truncated one. Write
 /// failures are non-fatal (next scan degrades to full) but surfaced.
 fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>, scope: &Scope) {
-    if let Some(parent) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            eprintln!("engram-mcp: scan manifest dir warning: {e}");
-            return;
-        }
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        eprintln!("engram-mcp: scan manifest dir warning: {e}");
+        return;
     }
     let tmp = path.with_extension("json.tmp");
     match engram_ingest::encode_scan_manifest(manifest, scope) {
@@ -1724,7 +1724,7 @@ pub fn architecture(app: &App, args: &Value) -> Result<Value, ToolError> {
         engram_codegraph_queries::call_communities(&graph, 3)
             .into_iter()
             .collect();
-    communities.sort_by(|a, b| b.1.cmp(&a.1));
+    communities.sort_by_key(|a| std::cmp::Reverse(a.1));
     communities.truncate(10);
     let stats = engram_codegraph_queries::repository_stats(&graph);
     Ok(protocol::text_content(format!(

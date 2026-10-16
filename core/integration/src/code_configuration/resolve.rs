@@ -61,7 +61,7 @@ pub fn resolve_code_config(
     let profile = overlays
         .iter()
         .filter_map(|(o, _)| o.and_then(|c| c.profile))
-        .last()
+        .next_back()
         .unwrap_or(CodeIntelligenceProfile::BalancedV1);
     let mut value = serde_json::to_value(CodeIntelligenceConfig::for_profile(profile))
         .map_err(|e| invalid(e.to_string()))?;

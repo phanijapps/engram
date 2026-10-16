@@ -11,4 +11,7 @@ Declining advisory ignores and disabled CI checks: these would conceal failures.
 - [x] Repair all workspace and feature Clippy errors on the CI toolchain.
 - [x] Upgrade vulnerable dependency paths and run the complete audit.
 - [x] Run gates, focused review and live MCP smoke.
-- [ ] Commit, push and verify GitHub CI.
+- [x] Commit and push PR #124.
+- [x] Diagnose the CI-only model-cache test failure and make the handler fixtures model-independent.
+
+Promotion remains gated on the latest commit’s green GitHub checks; the PR carries that live evidence.

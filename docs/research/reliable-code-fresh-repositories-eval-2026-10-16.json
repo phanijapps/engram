@@ -1,0 +1,3423 @@
+{
+  "completedAtUtc": "2026-10-16T01:06:25.367411+00:00",
+  "runtimeCommit": "35677457153e11ff9324829a5cfe9740841fa7bc",
+  "scope": "Fresh source-grounded challenge across Starlette (Python), Axum (Rust), Vitest (TypeScript); 20 positives and10negatives per corpus",
+  "featureShipped": false,
+  "noChangesToModelsConfigOrThreshold": true,
+  "configuration": {
+    "profile": "balanced-v1",
+    "local_scorer": {
+      "max_parents": 50,
+      "max_candidates": 75
+    },
+    "evidence": {
+      "weak_parent_order": "best_lane_rank"
+    }
+  },
+  "calibrationArtifact": {
+    "schemaVersion": 1,
+    "id": "code-calibration-v1/168355ae7260de568b168f538bc94b0607df41c024037d7a0f37e2252ec46ef8",
+    "configHash": "7457fd124cfdedbd44dcbea93a762a265fbb2a328bed26a8a7e7f54c3f9cf9c4",
+    "queryRepresentationId": "code-query-v1/6425ffc2849dee5e5639446fb66325a46e63e9393f42f9b87fccf96bd216def8",
+    "passageRepresentationId": "code-passage-v1/3999a5debee44e097a50795cbf3b0b8df4ae42a58c0fccfa016016e1ec6150f0",
+    "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+    "scorerManifestId": "model-manifest-v1/5a313a5e79e3036626005ee29fec2090d7f5172bf2f925e9f803d14da835c962",
+    "tokenizerIdentity": "5749ef57b8429e89b0e8140093a2eb34e56de83945690b28944aa477db9523f6",
+    "scoreTransformation": "raw_logit",
+    "scoreSpace": "cross_encoder",
+    "threshold": -0.97909373,
+    "developmentLabelsSha256": "1a9f560d6097a81737deff341bf58e550324430801547da66d6e6ccc5ce9db29"
+  },
+  "validation": {
+    "independentMetricCheckPassed": true,
+    "jsonSchemaValidatedQueries": 90,
+    "exactSourceExcerptChecksPassed": true,
+    "documentationChecksPassed": true,
+    "diffWhitespaceCheckPassed": true,
+    "productionCodeChanged": false
+  },
+  "binarySha256": "a4d714ba38f21c4589b87c79549ea02541c8fc2dc676ec3408c496dee45e03b6",
+  "configSha256": "1eb4549d6c2791a49b8a2e74fd66a37beea4e7df1c6583b8f445371720774d3d",
+  "calibrationSha256": "d6f7bb890616a327dd2479b05cbe05f587d72a1d319735eefc674b72f872f792",
+  "questionsSha256": "bb70d179058b04b7cacd3003c052975919023a65783625b9d4dc2afca00c5b7f",
+  "rawDirectory": "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16",
+  "independentMetricCheck": {
+    "queriesChecked": 90,
+    "passed": true,
+    "method": "Independent Python required-parent set recall and merged byte-range intersection, compared with Rust evaluator per query; labels/configuration/actual crossencoder/calibration/index state verified."
+  },
+  "failureDiagnostics": "Required functions rejected by the fixed confidence gate, dropped by presentation budgets, or absent from the bounded emitted parent decisions are reported separately. Absence from diagnostics does not prove absence from the complete initial candidate pool.",
+  "repos": {
+    "starlette": {
+      "failureCounts": {
+        "answerableRejected": 6,
+        "negativeAccepted": 5,
+        "missingRequiredUnitsWithNoEmittedDecision": 0
+      },
+      "revision": "7b2948fe7b7fff28bb018607d54cd4dfa518910e",
+      "filesVerified": 151,
+      "activeGenerations": 84,
+      "activeCanonicalUnits": 2365,
+      "summary": {
+        "positiveQuestions": 20,
+        "negativeQuestions": 10,
+        "macroRequiredUnitRecallAt10": 0.6,
+        "macroRequiredRangeCoverage": 0.6209290332018277,
+        "allRequiredUnitsQuestions": 11,
+        "anyRequiredUnitQuestions": 13,
+        "retrievedRequiredUnits": 14,
+        "totalRequiredUnits": 25,
+        "negativeRejected": 5,
+        "warmMedianSeconds": 6.276516280006035,
+        "sampleWarmP95Seconds": 9.148779754003044,
+        "timedRequests": 30,
+        "transportFailures": 0,
+        "allExcerptsVerified": true,
+        "calibrationValidatedAllQueries": true
+      },
+      "positiveRecallFloorMet": false,
+      "labelFreeze": {
+        "frozenAtUtc": "2026-10-16T00:29:13.560385+00:00",
+        "sha256": "0bf739155aa936c2b79ad88f33d43d66df4ac8df89798b5ba3ffc4c0f9c9a2e1",
+        "count": 30,
+        "method": "Source-authored frozen selectors resolved against canonical declaration metadata, no retrieval/model results inspected."
+      },
+      "scanSeconds": 323.4571457359998,
+      "scanText": "ScanSummary { scanned: 154, ingested: 123, unchanged: 0, skipped: 18, entities: 3039, relationships: 6771, errors: 0, admission_failures: [], git_remote: Some(\"https://github.com/Kludex/starlette.git\"), git_branch: Some(\"main\"), git_sha: Some(\"7b2948fe7b\") }\nno scan config; builtin filter\nembedded 256 chunks (707 more pending from this source \u2014 re-run scan_repo to continue)",
+      "reindexCalls": 3,
+      "finalReindex": "reindex: embedded 1 chunks (limit 1) (1 new + 0 reused from existing vectors) (0 code chunks)\n706 more pending \u2014 call reindex again to continue (deterministic order)",
+      "sdkPreparation": {
+        "activationAfterAllInference": true,
+        "actualNewEmbeddings": 250,
+        "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+        "files": 84,
+        "inferenceSeconds": 63.046383386,
+        "maximumAllowedParityDifference": 1e-05,
+        "missingInventories": 0,
+        "orderedInsertion": true,
+        "paritySamplesPerWorker": 3,
+        "representationId": "code-passage-v1/3999a5debee44e097a50795cbf3b0b8df4ae42a58c0fccfa016016e1ec6150f0",
+        "revisionFenced": true,
+        "sameProductionInputAssembler": true,
+        "seconds": 65.316816563,
+        "workers": 8
+      },
+      "stderrWarningsOrErrors": [],
+      "cases": [
+        {
+          "id": "starlette-fresh-01",
+          "query": "Can a request body be read repeatedly after it has been buffered, and what happens if the raw stream was already consumed?",
+          "polarity": "answerable",
+          "expectedAnswer": "Cached body is replayed; an uncached consumed stream errors; body joins and caches stream bytes.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "starlette/requests.py",
+              "anchor": "Request.stream"
+            },
+            {
+              "path": "starlette/requests.py",
+              "anchor": "Request.body"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:102c5c27961a0f06c054dfe00aebc7113cc45c1a6a9bd788d16f467556719d52",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  8189,
+                  8956
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:102c5c27961a0f06c054dfe00aebc7113cc45c1a6a9bd788d16f467556719d52",
+                  "reason": "below_threshold",
+                  "fusionScore": 0.03892959,
+                  "rerankScore": -1.4930506,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:419425ff1d91461c9a14685407fe4356bf5a7f826453fb407b9ad60c08fd7687",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  8962,
+                  9278
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:419425ff1d91461c9a14685407fe4356bf5a7f826453fb407b9ad60c08fd7687",
+                  "reason": "below_threshold",
+                  "fusionScore": 0.02813853,
+                  "rerankScore": -2.1785083,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 4.415603771994938
+        },
+        {
+          "id": "starlette-fresh-02",
+          "query": "How is parsed request JSON cached so repeated calls avoid reading and decoding the body again?",
+          "polarity": "answerable",
+          "expectedAnswer": "json method caches decoded body under _json.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:fe3706f3d0f3b4db00be653968e3519648244f42be1e9e7dd4a77f9b1e416cb9",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  9284,
+                  9477
+                ]
+              ],
+              "observedRanges": [
+                [
+                  9284,
+                  9477
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:fe3706f3d0f3b4db00be653968e3519648244f42be1e9e7dd4a77f9b1e416cb9",
+                  "reason": "selected",
+                  "fusionScore": 0.024634112,
+                  "rerankScore": -1.123893,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 5.9080930199997965
+        },
+        {
+          "id": "starlette-fresh-03",
+          "query": "How does form parsing choose between multipart and URL-encoded input, and how are parser errors exposed to an application?",
+          "polarity": "answerable",
+          "expectedAnswer": "Select content type, forward parser bounds, translate multipart exceptions to HTTP400 when app scope exists.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:b1eac727ea98dca9a7e94d2e428316df69584fdfb6fc41880dc02547b2f10b0f",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  9677,
+                  11556
+                ]
+              ],
+              "observedRanges": [
+                [
+                  9483,
+                  11267
+                ],
+                [
+                  11267,
+                  11556
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:b1eac727ea98dca9a7e94d2e428316df69584fdfb6fc41880dc02547b2f10b0f",
+                  "reason": "selected",
+                  "fusionScore": 0.015384615,
+                  "rerankScore": -0.25231382,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 2,
+                  "scoredSegments": 2
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 7.757343449993641
+        },
+        {
+          "id": "starlette-fresh-04",
+          "query": "What bounds uploaded file counts, ordinary field counts, and the size of a multipart text field?",
+          "polarity": "answerable",
+          "expectedAnswer": "Header completion increments file/field counts and raises on limits; part callback bounds text bytes.",
+          "requiredUnitRecallAt10": 0.5,
+          "requiredRangeCoverage": 0.7238723872387238,
+          "missingRequiredUnits": [
+            {
+              "path": "starlette/formparsers.py",
+              "anchor": "MultiPartParser.on_part_data"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:70b330d35f27c34f84a62b416c5083e10ea0c06ee2993b4442c2c5dc162dc406",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  8616,
+                  9932
+                ]
+              ],
+              "observedRanges": [
+                [
+                  8616,
+                  9932
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:70b330d35f27c34f84a62b416c5083e10ea0c06ee2993b4442c2c5dc162dc406",
+                  "reason": "selected",
+                  "fusionScore": 0.014705882,
+                  "rerankScore": -0.73626095,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:7163b5940dd015bd1ef0af39fe94c66df3859dd77d7cad5d455fc2ae2a823c35",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  6737,
+                  7239
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:7163b5940dd015bd1ef0af39fe94c66df3859dd77d7cad5d455fc2ae2a823c35",
+                  "reason": "per_file_limit",
+                  "fusionScore": 0.014285714,
+                  "rerankScore": -1.6087489,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 7.468528919009259
+        },
+        {
+          "id": "starlette-fresh-05",
+          "query": "How are cookies parsed when an entry has no equals sign or contains surrounding whitespace?",
+          "polarity": "answerable",
+          "expectedAnswer": "Split semicolon chunks, missing equals yields blank key, trim and unquote accepted key/value.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "starlette/requests.py",
+              "anchor": "cookie_parser"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:f96902ab74e0b2faba91b0135d032f64ef78df76ec3a7b9f84db98a95ea1013d",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  1462,
+                  2537
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:f96902ab74e0b2faba91b0135d032f64ef78df76ec3a7b9f84db98a95ea1013d",
+                  "reason": "below_threshold",
+                  "fusionScore": 0.015873017,
+                  "rerankScore": -1.6895316,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 5.428751891013235
+        },
+        {
+          "id": "starlette-fresh-06",
+          "query": "When are response content length and text charset headers generated, and when are caller-provided headers preserved?",
+          "polarity": "answerable",
+          "expectedAnswer": "Auto generate missing headers; omit length for <200,204,304; add charset to text if absent.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:e66016ca9ff7fca8b7ffb8f331da42e029d642600a4028f24bcdfc58ef0dd1eb",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  1668,
+                  2932
+                ]
+              ],
+              "observedRanges": [
+                [
+                  1668,
+                  2932
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:e66016ca9ff7fca8b7ffb8f331da42e029d642600a4028f24bcdfc58ef0dd1eb",
+                  "reason": "selected",
+                  "fusionScore": 0.028594771,
+                  "rerankScore": -0.5534877,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 4.904083138011629
+        },
+        {
+          "id": "starlette-fresh-07",
+          "query": "What prevents setting a partitioned cookie on an unsupported Python version, and how are same-site cookie values checked?",
+          "polarity": "answerable",
+          "expectedAnswer": "Assert lax/strict/none; partitioned requires Python3.14.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:7a7de6413baf6aa4e74b5f16226e705e78b1b594d81cb27c696277a1bce02d37",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  4216,
+                  4809
+                ]
+              ],
+              "observedRanges": [
+                [
+                  4505,
+                  4856
+                ],
+                [
+                  3130,
+                  4505
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:7a7de6413baf6aa4e74b5f16226e705e78b1b594d81cb27c696277a1bce02d37",
+                  "reason": "selected",
+                  "fusionScore": 0.04514652,
+                  "rerankScore": 0.12031901,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 2,
+                  "scoredSegments": 2
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 3.610321219995967
+        },
+        {
+          "id": "starlette-fresh-08",
+          "query": "How does deleting a cookie ensure that the browser expires it while retaining path and security options?",
+          "polarity": "answerable",
+          "expectedAnswer": "Delegates set_cookie with max_age0 and expires0 and forwards options.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:2c4687e86a0ccf5419bb60e32ffe74cbd490e8ef3280cb644233265f79f4837c",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  4862,
+                  5425
+                ]
+              ],
+              "observedRanges": [
+                [
+                  4862,
+                  5425
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:2c4687e86a0ccf5419bb60e32ffe74cbd490e8ef3280cb644233265f79f4837c",
+                  "reason": "selected",
+                  "fusionScore": 0.029213954,
+                  "rerankScore": 0.236866,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 4.781853699998464
+        },
+        {
+          "id": "starlette-fresh-09",
+          "query": "How are JSON response bytes produced, including non-ASCII text, invalid floating-point values, and formatting whitespace?",
+          "polarity": "answerable",
+          "expectedAnswer": "json.dumps ensure_asciiFalse allow_nanFalse indentNone compact separators; UTF8 encode.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:c9cc33cf208d820f6d6c5e24ac0a3caf7a88a89bfdf6912bf26c09cf3a548d79",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  6776,
+                  7011
+                ]
+              ],
+              "observedRanges": [
+                [
+                  6776,
+                  7011
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:c9cc33cf208d820f6d6c5e24ac0a3caf7a88a89bfdf6912bf26c09cf3a548d79",
+                  "reason": "selected",
+                  "fusionScore": 0.016129032,
+                  "rerankScore": -0.22306922,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.888112670989358
+        },
+        {
+          "id": "starlette-fresh-10",
+          "query": "How is a redirect location encoded while preserving URL punctuation?",
+          "polarity": "answerable",
+          "expectedAnswer": "RedirectResponse quote with reserved URL-safe punctuation then location header.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "starlette/responses.py",
+              "anchor": "RedirectResponse.__init__"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:11101876c99dc220a6aadb61dca04fedb5b3db9c83895d7d702ce54e02847c7e",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  7052,
+                  7432
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:11101876c99dc220a6aadb61dca04fedb5b3db9c83895d7d702ce54e02847c7e",
+                  "reason": "below_threshold",
+                  "fusionScore": 0.028624002,
+                  "rerankScore": -1.0615475,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 5.960205178998876
+        },
+        {
+          "id": "starlette-fresh-11",
+          "query": "How are string chunks encoded and the end of a streaming HTTP response signaled?",
+          "polarity": "answerable",
+          "expectedAnswer": "Start headers; encode non-bytes chunks; emit more_bodyTrue perchunk then emptyFalse.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:46359554084fffe3d75525d9ea82e38c875e62afd0f942e6b8745e155230ec25",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  8498,
+                  8989
+                ]
+              ],
+              "observedRanges": [
+                [
+                  8498,
+                  8989
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:46359554084fffe3d75525d9ea82e38c875e62afd0f942e6b8745e155230ec25",
+                  "reason": "selected",
+                  "fusionScore": 0.029083245,
+                  "rerankScore": -1.3209351,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 5.640614865988027
+        },
+        {
+          "id": "starlette-fresh-12",
+          "query": "When a file response receives overlapping byte ranges or too many ranges, how are they normalized?",
+          "polarity": "answerable",
+          "expectedAnswer": "Validate range unit/count/bounds, sort and merge overlaps; excessive count returns empty.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:1e31a08e32fb95d8b9e086b9d3282705828c39f4efca0b207dffa234d733853a",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  19905,
+                  21234
+                ]
+              ],
+              "observedRanges": [
+                [
+                  19905,
+                  21234
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:1e31a08e32fb95d8b9e086b9d3282705828c39f4efca0b207dffa234d733853a",
+                  "reason": "selected",
+                  "fusionScore": 0.016129032,
+                  "rerankScore": -0.79707044,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:6ddcdd2854234ebe5aab08e7ca3abd45b24cc93693b871ceb1ef9a2cfd6eee45",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  21257,
+                  22249
+                ]
+              ],
+              "observedRanges": [
+                [
+                  21257,
+                  22249
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:6ddcdd2854234ebe5aab08e7ca3abd45b24cc93693b871ceb1ef9a2cfd6eee45",
+                  "reason": "selected",
+                  "fusionScore": 0.03201844,
+                  "rerankScore": -1.87099,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 5.671421776001807
+        },
+        {
+          "id": "starlette-fresh-13",
+          "query": "How are typed URL parameters compiled, and what rejects duplicate parameter names in a route?",
+          "polarity": "answerable",
+          "expectedAnswer": "Build regex and convertor map; collect duplicates then raise ValueError.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "starlette/routing.py",
+              "anchor": "compile_path"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:d98f27d03f63056806c2a15aae2cc3e5e84df0576ce1528d0e476470a9841410",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  4107,
+                  5183
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:d98f27d03f63056806c2a15aae2cc3e5e84df0576ce1528d0e476470a9841410",
+                  "reason": "below_threshold",
+                  "fusionScore": 0.015151516,
+                  "rerankScore": -1.0350499,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 2,
+                  "scoredSegments": 2
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 6.6712459870032035
+        },
+        {
+          "id": "starlette-fresh-14",
+          "query": "How does routing convert captured path values and distinguish a path match with a disallowed HTTP method?",
+          "polarity": "answerable",
+          "expectedAnswer": "matches applies converters, merges params, returns PARTIAL for method mismatch.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:89090680d40b24352ae0fcb6339e3967f0d004445001619869a3f30e336cad3c",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  8579,
+                  9454
+                ]
+              ],
+              "observedRanges": [
+                [
+                  8579,
+                  9454
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:89090680d40b24352ae0fcb6339e3967f0d004445001619869a3f30e336cad3c",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": 0.20522603,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 7.819217844007653
+        },
+        {
+          "id": "starlette-fresh-15",
+          "query": "How is a method-not-allowed response formed, including the list of allowed methods?",
+          "polarity": "answerable",
+          "expectedAnswer": "Route.handle checks methods, builds Allow header, raises405 or emits405response.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:d3d29bde15200687adb469e4ecdda742a0aeedee42e1b4e0a4e69fbd863784a4",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  9945,
+                  10474
+                ]
+              ],
+              "observedRanges": [
+                [
+                  9945,
+                  10474
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:d3d29bde15200687adb469e4ecdda742a0aeedee42e1b4e0a4e69fbd863784a4",
+                  "reason": "selected",
+                  "fusionScore": 0.012820513,
+                  "rerankScore": -0.066486716,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 5.899526334993425
+        },
+        {
+          "id": "starlette-fresh-16",
+          "query": "When does the router redirect between a URL with a trailing slash and one without it?",
+          "polarity": "answerable",
+          "expectedAnswer": "After no full/partialmatch, flip slash and redirect only if route matches.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "starlette/routing.py",
+              "anchor": "Router.app"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:7ce305376e4bee80698a5757974cc9f5d08c16a15c95bca635376631af32a6d8",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  28430,
+                  29206
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:7ce305376e4bee80698a5757974cc9f5d08c16a15c95bca635376631af32a6d8",
+                  "reason": "below_threshold",
+                  "fusionScore": 0.026140526,
+                  "rerankScore": -1.5015149,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 2,
+                  "scoredSegments": 2
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 6.885122916995897
+        },
+        {
+          "id": "starlette-fresh-17",
+          "query": "How are exception handlers selected by HTTP status and exception inheritance, and what happens after response headers were already sent?",
+          "polarity": "answerable",
+          "expectedAnswer": "Status handler first then MRO handler; handled exception after response_started raises RuntimeError.",
+          "requiredUnitRecallAt10": 0.5,
+          "requiredRangeCoverage": 0.694708276797829,
+          "missingRequiredUnits": [
+            {
+              "path": "starlette/_exception_handler.py",
+              "anchor": "_lookup_exception_handler"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:293bb6da6a9552fba10661e15831dfa98639d24a66cfa2b55b1dcb9daf70fe9c",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  469,
+                  694
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:293bb6da6a9552fba10661e15831dfa98639d24a66cfa2b55b1dcb9daf70fe9c",
+                  "reason": "result_limit",
+                  "fusionScore": 0.009345794,
+                  "rerankScore": -1.1219068,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:cc8f77c499daf0b6e6be6491f598ad67b681104abf80a5f6565e5018c2d53b9e",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  1435,
+                  1947
+                ]
+              ],
+              "observedRanges": [
+                [
+                  1038,
+                  2232
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:cc8f77c499daf0b6e6be6491f598ad67b681104abf80a5f6565e5018c2d53b9e",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": -0.34823236,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.280382386001293
+        },
+        {
+          "id": "starlette-fresh-18",
+          "query": "Are response background tasks run sequentially, and how are synchronous callbacks kept off the event loop?",
+          "polarity": "answerable",
+          "expectedAnswer": "BackgroundTasks awaits each; BackgroundTask calls async directly or threadpool for sync.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "starlette/background.py",
+              "anchor": "BackgroundTasks.__call__"
+            },
+            {
+              "path": "starlette/background.py",
+              "anchor": "BackgroundTask.__call__"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:56b2ccb5c4c937f0d124e713c1828e55972fc1b6496247bdae2541f35c821771",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  1031,
+                  1121
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:56b2ccb5c4c937f0d124e713c1828e55972fc1b6496247bdae2541f35c821771",
+                  "reason": "below_threshold",
+                  "fusionScore": 0.024702381,
+                  "rerankScore": -1.8940499,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:63bb8a12be000896dfbabf4f8b1b1947066d387846f7dc0e58f63ee480e9f152",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  484,
+                  686
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:63bb8a12be000896dfbabf4f8b1b1947066d387846f7dc0e58f63ee480e9f152",
+                  "reason": "per_file_limit",
+                  "fusionScore": 0.011363637,
+                  "rerankScore": -2.1171181,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 5.7450300630007405
+        },
+        {
+          "id": "starlette-fresh-19",
+          "query": "How does host validation accept wildcard subdomains, redirect to a permitted www host, or reject an invalid host?",
+          "polarity": "answerable",
+          "expectedAnswer": "Match exact or wildcard suffix; optional www redirect; otherwise400.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:287a55d79b8d5089b2550438e5b196c98276a0c0ebcf664611ff627d1f37b071",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  1613,
+                  2455
+                ]
+              ],
+              "observedRanges": [
+                [
+                  1048,
+                  2455
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:287a55d79b8d5089b2550438e5b196c98276a0c0ebcf664611ff627d1f37b071",
+                  "reason": "selected",
+                  "fusionScore": 0.027884616,
+                  "rerankScore": -0.19998401,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.867180704008206
+        },
+        {
+          "id": "starlette-fresh-20",
+          "query": "How are insecure HTTP and WebSocket requests redirected to secure schemes, including default port handling?",
+          "polarity": "answerable",
+          "expectedAnswer": "http\u2192https ws\u2192wss; strip80/443; 307 response.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "starlette/middleware/httpsredirect.py",
+              "anchor": "HTTPSRedirectMiddleware.__call__"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:03ede7846cd8fcf38dd044474a033d76768d79e5787cfecfc3d4497b268de352",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  274,
+                  1022
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:03ede7846cd8fcf38dd044474a033d76768d79e5787cfecfc3d4497b268de352",
+                  "reason": "result_limit",
+                  "fusionScore": 0.014925373,
+                  "rerankScore": -1.3239703,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 9.148779754003044
+        },
+        {
+          "id": "starlette-fresh-21",
+          "query": "How does Starlette retry failed response background tasks durably after the server process restarts?",
+          "polarity": "negative",
+          "expectedAnswer": "BackgroundTask executesinprocess; no durable taskqueue/recovery.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.867729895995581
+        },
+        {
+          "id": "starlette-fresh-22",
+          "query": "How does Starlette replicate uploaded multipart files automatically to multiple Amazon S3 regions?",
+          "polarity": "negative",
+          "expectedAnswer": "Multipartparserbuffersfiles; no automatic S3replication.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 10.191894657007651
+        },
+        {
+          "id": "starlette-fresh-23",
+          "query": "How does Starlette implement a built-in Redis token-bucket rate limiter shared across workers?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inRedisrate-limiter implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 5.980495347001124
+        },
+        {
+          "id": "starlette-fresh-24",
+          "query": "How does Starlette verify upload contents using an integrated antivirus engine before accepting a file?",
+          "polarity": "negative",
+          "expectedAnswer": "No integratedantivirus engine.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 4.0291224909888115
+        },
+        {
+          "id": "starlette-fresh-25",
+          "query": "How does Starlette elect a new cluster leader using the Raft consensus protocol?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inRaftconsensus implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 7.676526741008274
+        },
+        {
+          "id": "starlette-fresh-26",
+          "query": "How does Starlette merge concurrent source edits using its own CRDT text document?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inCRDTtextdocument implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 6.816446658995119
+        },
+        {
+          "id": "starlette-fresh-27",
+          "query": "How does Starlette rotate encryption keys through a built-in AWS KMS integration?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inAWSKMSkeyrotation implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 7.761326809995808
+        },
+        {
+          "id": "starlette-fresh-28",
+          "query": "How does Starlette capture credit-card payments and issue financial refunds?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inpaymentprocessor/refund implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.9964043450017925
+        },
+        {
+          "id": "starlette-fresh-29",
+          "query": "How does Starlette diagnose diseases from medical imaging?",
+          "polarity": "negative",
+          "expectedAnswer": "No medicalimagingdiagnosis implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 4.615293617011048
+        },
+        {
+          "id": "starlette-fresh-30",
+          "query": "How does Starlette renew domain registrations through a built-in registrar billing service?",
+          "polarity": "negative",
+          "expectedAnswer": "No domainregistrarbilling implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 6.272650174010778
+        }
+      ]
+    },
+    "axum": {
+      "failureCounts": {
+        "answerableRejected": 3,
+        "negativeAccepted": 4,
+        "missingRequiredUnitsWithNoEmittedDecision": 4
+      },
+      "revision": "fc78d5bcdb276bd6fb53cf2db55e91757eabb469",
+      "filesVerified": 500,
+      "activeGenerations": 311,
+      "activeCanonicalUnits": 4528,
+      "summary": {
+        "positiveQuestions": 20,
+        "negativeQuestions": 10,
+        "macroRequiredUnitRecallAt10": 0.675,
+        "macroRequiredRangeCoverage": 0.664415867908327,
+        "allRequiredUnitsQuestions": 13,
+        "anyRequiredUnitQuestions": 14,
+        "retrievedRequiredUnits": 18,
+        "totalRequiredUnits": 26,
+        "negativeRejected": 6,
+        "warmMedianSeconds": 6.395200371996907,
+        "sampleWarmP95Seconds": 8.732824096994591,
+        "timedRequests": 30,
+        "transportFailures": 0,
+        "allExcerptsVerified": true,
+        "calibrationValidatedAllQueries": true
+      },
+      "positiveRecallFloorMet": false,
+      "labelFreeze": {
+        "frozenAtUtc": "2026-10-16T00:30:32.123426+00:00",
+        "sha256": "ecd59a1a0397f04880d629e2de15ec04506c7d034d564fb5fcb8374e4df71d94",
+        "count": 30,
+        "method": "Source-authored frozen selectors resolved against canonical declaration metadata, no retrieval/model results inspected."
+      },
+      "scanSeconds": 184.24374167200585,
+      "scanText": "ScanSummary { scanned: 679, ingested: 419, unchanged: 0, skipped: 70, entities: 4953, relationships: 10061, errors: 0, admission_failures: [], git_remote: Some(\"https://github.com/tokio-rs/axum.git\"), git_branch: Some(\"main\"), git_sha: Some(\"fc78d5bcdb\") }\nno scan config; builtin filter\nembedded 256 chunks (520 more pending from this source \u2014 re-run scan_repo to continue)",
+      "reindexCalls": 3,
+      "finalReindex": "reindex: embedded 1 chunks (limit 1) (1 new + 0 reused from existing vectors) (0 code chunks)\n519 more pending \u2014 call reindex again to continue (deterministic order)",
+      "sdkPreparation": {
+        "activationAfterAllInference": true,
+        "actualNewEmbeddings": 2592,
+        "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+        "files": 311,
+        "inferenceSeconds": 177.917185618,
+        "maximumAllowedParityDifference": 1e-05,
+        "missingInventories": 0,
+        "orderedInsertion": true,
+        "paritySamplesPerWorker": 3,
+        "representationId": "code-passage-v1/3999a5debee44e097a50795cbf3b0b8df4ae42a58c0fccfa016016e1ec6150f0",
+        "revisionFenced": true,
+        "sameProductionInputAssembler": true,
+        "seconds": 182.094979617,
+        "workers": 8
+      },
+      "stderrWarningsOrErrors": [],
+      "cases": [
+        {
+          "id": "axum-fresh-01",
+          "query": "Which media types qualify as JSON, including vendor-specific types with a JSON suffix?",
+          "polarity": "answerable",
+          "expectedAnswer": "application type plus json subtype or json suffix.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:1cfdc0cadeb94435b19e4383c3ba30dd8519352a0229f6179793f26780eac9aa",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  3904,
+                  4320
+                ]
+              ],
+              "observedRanges": [
+                [
+                  3904,
+                  4320
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:1cfdc0cadeb94435b19e4383c3ba30dd8519352a0229f6179793f26780eac9aa",
+                  "reason": "selected",
+                  "fusionScore": 0.014492754,
+                  "rerankScore": -0.66964304,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.290131376998033
+        },
+        {
+          "id": "axum-fresh-02",
+          "query": "How does JSON request decoding distinguish syntax failures from valid JSON that does not fit the requested data type?",
+          "polarity": "answerable",
+          "expectedAnswer": "from_bytes retries path-aware decoder; nested rejection maps Data\u2192JsonDataError and Syntax/Eof\u2192JsonSyntaxError.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 0.6315401621223287,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:5f9ad624480fae6c021620d842e948ed339a928cf977afe5b244a27fcc77c85a",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  5838,
+                  6338
+                ]
+              ],
+              "observedRanges": [
+                [
+                  4499,
+                  5739
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:5f9ad624480fae6c021620d842e948ed339a928cf977afe5b244a27fcc77c85a",
+                  "reason": "selected",
+                  "fusionScore": 0.02213255,
+                  "rerankScore": -0.7255201,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:3521931ed0307f4cf7455aa79dc821b7e8558bff750e53e7c5e60afcc0bd9949",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  4882,
+                  5739
+                ]
+              ],
+              "observedRanges": [
+                [
+                  4806,
+                  5739
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:3521931ed0307f4cf7455aa79dc821b7e8558bff750e53e7c5e60afcc0bd9949",
+                  "reason": "selected",
+                  "fusionScore": 0.015625,
+                  "rerankScore": -0.8575573,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 7.1961080899927765
+        },
+        {
+          "id": "axum-fresh-03",
+          "query": "For optional JSON input, when is no value returned and when does an invalid content type cause rejection?",
+          "polarity": "answerable",
+          "expectedAnswer": "Missing contenttype\u2192None; present invalid\u2192MissingJsonContentType; valid buffers and deserializes.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:7679d1f72bf0e893243a7dcdf8e17090e22c20e52ec275c3904627498ab1256f",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  3413,
+                  3900
+                ]
+              ],
+              "observedRanges": [
+                [
+                  3413,
+                  3900
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:7679d1f72bf0e893243a7dcdf8e17090e22c20e52ec275c3904627498ab1256f",
+                  "reason": "selected",
+                  "fusionScore": 0.015873017,
+                  "rerankScore": -0.78829587,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 5.243708330002846
+        },
+        {
+          "id": "axum-fresh-04",
+          "query": "How do form extractors handle GET or HEAD differently from other HTTP methods, including deserialization failures?",
+          "polarity": "answerable",
+          "expectedAnswer": "RawForm reads query forGET/HEAD else validates body contenttype; Form chooses request-vs-body rejection.",
+          "requiredUnitRecallAt10": 0.5,
+          "requiredRangeCoverage": 0.6567771960442117,
+          "missingRequiredUnits": [
+            {
+              "path": "axum/src/extract/raw_form.rs",
+              "anchor": "RawForm.from_request"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:fa58cac776273329757ff467aea81891457561a6b206300eecf7092ccce9eaee",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  827,
+                  1417
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:fa58cac776273329757ff467aea81891457561a6b206300eecf7092ccce9eaee",
+                  "reason": "result_limit",
+                  "fusionScore": 0.0201132,
+                  "rerankScore": -1.8132999,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:57f45929510a2009ae86e2ffd102cd31e68a02c02bc0bd8e7705ab1e7484781d",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  2335,
+                  3464
+                ]
+              ],
+              "observedRanges": [
+                [
+                  2335,
+                  3464
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:57f45929510a2009ae86e2ffd102cd31e68a02c02bc0bd8e7705ab1e7484781d",
+                  "reason": "selected",
+                  "fusionScore": 0.025849212,
+                  "rerankScore": -0.35291982,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.871482995004044
+        },
+        {
+          "id": "axum-fresh-05",
+          "query": "How does query-string extraction treat a missing query and report malformed typed parameters?",
+          "polarity": "answerable",
+          "expectedAnswer": "Emptyquery default, URLdecode serde_html_form, path-aware error FailedToDeserializeQueryString.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "axum/src/extract/query.rs",
+              "anchor": "Query.try_from_uri"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:0bb1c4ffab84dfd7f21aa834ae2b3fbf68e43ca77ee730a7b0a775c983d66509",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  2010,
+                  2423
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:0bb1c4ffab84dfd7f21aa834ae2b3fbf68e43ca77ee730a7b0a775c983d66509",
+                  "reason": "result_limit",
+                  "fusionScore": 0.03815739,
+                  "rerankScore": -1.0504584,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 4.4126231429982
+        },
+        {
+          "id": "axum-fresh-06",
+          "query": "How can a handler extract a smaller state object from the application state?",
+          "polarity": "answerable",
+          "expectedAnswer": "State extractor invokes InnerState::from_ref on outerstate.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:4bc8a5a8a3f36a5d56dad44b1704299e511d7003c855a01dfcffdacc5a86480c",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  8829,
+                  9045
+                ]
+              ],
+              "observedRanges": [
+                [
+                  8829,
+                  9045
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:4bc8a5a8a3f36a5d56dad44b1704299e511d7003c855a01dfcffdacc5a86480c",
+                  "reason": "selected",
+                  "fusionScore": 0.010526316,
+                  "rerankScore": -0.6112628,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 3.446554565001861
+        },
+        {
+          "id": "axum-fresh-07",
+          "query": "What happens when a required request extension is missing, and how is an available typed extension obtained?",
+          "polarity": "answerable",
+          "expectedAnswer": "Clone typedextension; required missing produces MissingExtension message.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "axum/src/extension.rs",
+              "anchor": "Extension.from_request_parts"
+            },
+            {
+              "path": "axum/src/extension.rs",
+              "anchor": "Extension.from_extensions"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:b6d3aacec3975bccdcdd35b7a2f6a8aab4c627bc3c442714cb8d4e1705119f54",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  2123,
+                  2515
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:b6d3aacec3975bccdcdd35b7a2f6a8aab4c627bc3c442714cb8d4e1705119f54",
+                  "reason": "below_threshold",
+                  "fusionScore": 0.043795843,
+                  "rerankScore": -1.183176,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:f10725f254ca9225b612881f99ef4ea1248234ea53a5e07e9b393d72232aa059",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  1838,
+                  1959
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:f10725f254ca9225b612881f99ef4ea1248234ea53a5e07e9b393d72232aa059",
+                  "reason": "result_limit",
+                  "fusionScore": 0.026470589,
+                  "rerankScore": -2.7242312,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 7.456087236001622
+        },
+        {
+          "id": "axum-fresh-08",
+          "query": "How are matched route templates combined across nested routers without exposing the internal tail capture?",
+          "polarity": "answerable",
+          "expectedAnswer": "append_nested_matched_path reads prior path, stripsnest tail; setter recordsnested orfinal path.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:f6c5855ca170b14ed01111a9e583951424dd68776b85f8abd03beea5a3b78fb8",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  3484,
+                  4042
+                ]
+              ],
+              "observedRanges": [
+                [
+                  3412,
+                  4042
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:f6c5855ca170b14ed01111a9e583951424dd68776b85f8abd03beea5a3b78fb8",
+                  "reason": "selected",
+                  "fusionScore": 0.032002047,
+                  "rerankScore": 0.41247347,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:a348f8058a204b1a0de4b1f79c0faa7004d4357ee184222b559e0d95c67c4af2",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  2642,
+                  3410
+                ]
+              ],
+              "observedRanges": [
+                [
+                  2642,
+                  3410
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:a348f8058a204b1a0de4b1f79c0faa7004d4357ee184222b559e0d95c67c4af2",
+                  "reason": "selected",
+                  "fusionScore": 0.026279628,
+                  "rerankScore": 0.07217479,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.225640916003613
+        },
+        {
+          "id": "axum-fresh-09",
+          "query": "How is the URL prefix removed for a nested service while retaining the original query string?",
+          "polarity": "answerable",
+          "expectedAnswer": "Match prefix segments and captures; slice path and preserve query in newURI.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "axum/src/routing/strip_prefix.rs",
+              "anchor": "strip_prefix"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:b637c864a3ff74bb7d2912c3e50be519e5625230b17d02f722e3aa476de57eb3",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  1375,
+                  4425
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": []
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 3.3008954289980466
+        },
+        {
+          "id": "axum-fresh-10",
+          "query": "How do route-prefix segments match embedded captures while treating doubled braces as literal text?",
+          "polarity": "answerable",
+          "expectedAnswer": "prefix_matches uses capture prefix/suffix; capture helper skips doubled braces.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:55f272b2133ebea8db832e28cb9b87c65519d364ca0200fa9a0b01c485f38111",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  5260,
+                  5540
+                ]
+              ],
+              "observedRanges": [
+                [
+                  5260,
+                  5540
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:55f272b2133ebea8db832e28cb9b87c65519d364ca0200fa9a0b01c485f38111",
+                  "reason": "selected",
+                  "fusionScore": 0.026140526,
+                  "rerankScore": -0.14831984,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:47e96c95d2355721f102f1d54a5116f2fed7110b839f4d32f5c3e44d91468234",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  5747,
+                  7643
+                ]
+              ],
+              "observedRanges": [
+                [
+                  5542,
+                  7017
+                ],
+                [
+                  7017,
+                  7643
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:47e96c95d2355721f102f1d54a5116f2fed7110b839f4d32f5c3e44d91468234",
+                  "reason": "selected",
+                  "fusionScore": 0.02591725,
+                  "rerankScore": 0.6316315,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 2,
+                  "scoredSegments": 2
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 8.732824096994591
+        },
+        {
+          "id": "axum-fresh-11",
+          "query": "How are server-sent event retry delays serialized in milliseconds, and can the delay be set twice?",
+          "polarity": "answerable",
+          "expectedAnswer": "HAS_RETRY preventsduplicate; seconds plus padded milliseconds then newline.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:72d006e86141e8ddd015ef2892df2e0efdb87562fe4c18fafb9ad62bd188244d",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  12805,
+                  13730
+                ]
+              ],
+              "observedRanges": [
+                [
+                  12640,
+                  13730
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:72d006e86141e8ddd015ef2892df2e0efdb87562fe4c18fafb9ad62bd188244d",
+                  "reason": "selected",
+                  "fusionScore": 0.032786883,
+                  "rerankScore": -0.7070181,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 7.226080362001085
+        },
+        {
+          "id": "axum-fresh-12",
+          "query": "What rejects null bytes or newline characters in a server-sent event identifier?",
+          "polarity": "answerable",
+          "expectedAnswer": "Event.id guardsduplicate andNUL; field rejectsCR/LF.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:8d7ebce3f2e5e702b964162d7e4a8d8e441a1e1d6c87678879134054b1c796e0",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  14338,
+                  14816
+                ]
+              ],
+              "observedRanges": [
+                [
+                  14147,
+                  14816
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:8d7ebce3f2e5e702b964162d7e4a8d8e441a1e1d6c87678879134054b1c796e0",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": 0.022872109,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:70634b2d599ae88334808ae6c2ec0fd793a48bd55c1a6f2db81dc893f2d59473",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  14822,
+                  15320
+                ]
+              ],
+              "observedRanges": [
+                [
+                  14822,
+                  15320
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:70634b2d599ae88334808ae6c2ec0fd793a48bd55c1a6f2db81dc893f2d59473",
+                  "reason": "selected",
+                  "fusionScore": 0.039712694,
+                  "rerankScore": -1.2280662,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.619197219988564
+        },
+        {
+          "id": "axum-fresh-13",
+          "query": "Which headers are applied when a stream is converted into a server-sent-events response?",
+          "polarity": "answerable",
+          "expectedAnswer": "text/event-stream and cache-control no-cache; wrapSseBody.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "axum/src/response/sse.rs",
+              "anchor": "Sse.into_response"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:84603d485b061d3268f46a01d707a8a572c2651d8c4204a597d1c4b0acd992c3",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  3494,
+                  3862
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": []
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.500269366995781
+        },
+        {
+          "id": "axum-fresh-14",
+          "query": "When an event stream is idle, how are keep-alive events emitted, and does normal traffic reset the timer?",
+          "polarity": "answerable",
+          "expectedAnswer": "Pollinner; normalOK resets; pending waits timer then emitsclone andresets.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:4f84e8b68c5da309d2adb699ed497978e9a12962a406c1522f5f8e54f10013ab",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  21093,
+                  21829
+                ]
+              ],
+              "observedRanges": [
+                [
+                  21093,
+                  21829
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:4f84e8b68c5da309d2adb699ed497978e9a12962a406c1522f5f8e54f10013ab",
+                  "reason": "selected",
+                  "fusionScore": 0.0408572,
+                  "rerankScore": -0.02221107,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 7.495892096005264
+        },
+        {
+          "id": "axum-fresh-15",
+          "query": "How is a custom request-body limit installed on an individual request?",
+          "polarity": "answerable",
+          "expectedAnswer": "DefaultBodyLimit::apply inserts kind into requestextensions.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:fee97ca8e1ac379184be644e1c374a7a0256157177a55f9cc43c8bad19f6d991",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  6120,
+                  6219
+                ]
+              ],
+              "observedRanges": [
+                [
+                  5960,
+                  6219
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:fee97ca8e1ac379184be644e1c374a7a0256157177a55f9cc43c8bad19f6d991",
+                  "reason": "selected",
+                  "fusionScore": 0.041118458,
+                  "rerankScore": -0.7634412,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 4.378447829003562
+        },
+        {
+          "id": "axum-fresh-16",
+          "query": "For an optional typed path extractor, when does missing path data return no value instead of a rejection?",
+          "polarity": "answerable",
+          "expectedAnswer": "Only zero_params deserialize rejection becomesNone; other errorspropagate.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "axum/src/extract/path/mod.rs",
+              "anchor": "Path.from_request_parts"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:1f20bbeeba31727a903a37898b4c32c27ab3f1aa013f47fec0bb0abd1bb87a5b",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  5164,
+                  5574
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": []
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 7.227900051992037
+        },
+        {
+          "id": "axum-fresh-17",
+          "query": "How can a handler retrieve the original URI even when nested routing has changed the current request URI?",
+          "polarity": "answerable",
+          "expectedAnswer": "OriginalUri extractor prefers stored extension, falls backparts.uri.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:0369e2d8b6d8addcf7d64a387d652392535b4a12fec0b29ff677da9cba92a2c8",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  2242,
+                  2529
+                ]
+              ],
+              "observedRanges": [
+                [
+                  2242,
+                  2529
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:0369e2d8b6d8addcf7d64a387d652392535b4a12fec0b29ff677da9cba92a2c8",
+                  "reason": "selected",
+                  "fusionScore": 0.02871795,
+                  "rerankScore": -0.7655045,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 3.315015771004255
+        },
+        {
+          "id": "axum-fresh-18",
+          "query": "How does converting a redirect into response parts handle a location that cannot be represented as an HTTP header?",
+          "polarity": "answerable",
+          "expectedAnswer": "HeaderValue conversion; successfulsetsstatuslocation; failure500 with invalidredirectlocation.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:ef1a51574266c08d0728f90f3d9ea982a5156aa2787563d8a44fb50a46d6ceb9",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  4336,
+                  4839
+                ]
+              ],
+              "observedRanges": [
+                [
+                  4205,
+                  4839
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:ef1a51574266c08d0728f90f3d9ea982a5156aa2787563d8a44fb50a46d6ceb9",
+                  "reason": "selected",
+                  "fusionScore": 0.047417976,
+                  "rerankScore": 0.80987906,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 3.996304496002267
+        },
+        {
+          "id": "axum-fresh-19",
+          "query": "How is shared middleware data inserted into each request before calling the next service?",
+          "polarity": "answerable",
+          "expectedAnswer": "AddExtension clonesstored value into req extensions then innercall.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "axum/src/extension.rs",
+              "anchor": "AddExtension.call"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:f4dccb4ceb9dfccb9331b0057de0f41ea662fe9254003dc7e5eacc3a84539507",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  4620,
+                  4775
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": []
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 7.325852303998545
+        },
+        {
+          "id": "axum-fresh-20",
+          "query": "What terminates each serialized server-sent event, and how are already-finalized buffers handled?",
+          "polarity": "answerable",
+          "expectedAnswer": "Finalizedbytes reused; activebuffer addsblank newline thenfreeze.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:331dbd6f19ce8de2723bdd498e59b4b29fcc1f363d0f64c780ed0da896528428",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  15460,
+                  15720
+                ]
+              ],
+              "observedRanges": [
+                [
+                  15326,
+                  15720
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:331dbd6f19ce8de2723bdd498e59b4b29fcc1f363d0f64c780ed0da896528428",
+                  "reason": "selected",
+                  "fusionScore": 0.04218709,
+                  "rerankScore": 0.1112113,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 8.347657026999514
+        },
+        {
+          "id": "axum-fresh-21",
+          "query": "How does Axum persist failed handler requests to a durable queue and replay them after a process restart?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-indurable HTTP requestreplay.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 4.110418944008416
+        },
+        {
+          "id": "axum-fresh-22",
+          "query": "How does Axum automatically roll back database writes when a handler panics, using its built-in transaction manager?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-in database transaction manager or automatic panic-triggered database rollback.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 7.590155621001031
+        },
+        {
+          "id": "axum-fresh-23",
+          "query": "How does Axum renew TLS certificates through its own built-in ACME client?",
+          "polarity": "negative",
+          "expectedAnswer": "No corebuilt-inACMErenewalclient; external integrations aredistinct.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 7.7667119309917325
+        },
+        {
+          "id": "axum-fresh-24",
+          "query": "How does Axum scan multipart uploads with a built-in antivirus engine?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inantivirusengine.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 4.0820066910091555
+        },
+        {
+          "id": "axum-fresh-25",
+          "query": "How does Axum elect a new cluster leader using the Raft consensus protocol?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inRaftconsensus implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 7.567406292990199
+        },
+        {
+          "id": "axum-fresh-26",
+          "query": "How does Axum merge concurrent source edits using its own CRDT text document?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inCRDTtextdocument implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 10.618128365997109
+        },
+        {
+          "id": "axum-fresh-27",
+          "query": "How does Axum rotate encryption keys through a built-in AWS KMS integration?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inAWSKMSkeyrotation implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 4.074986973006162
+        },
+        {
+          "id": "axum-fresh-28",
+          "query": "How does Axum capture credit-card payments and issue financial refunds?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inpaymentprocessor/refund implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 6.105310657992959
+        },
+        {
+          "id": "axum-fresh-29",
+          "query": "How does Axum diagnose diseases from medical imaging?",
+          "polarity": "negative",
+          "expectedAnswer": "No medicalimagingdiagnosis implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 2.39674302500498
+        },
+        {
+          "id": "axum-fresh-30",
+          "query": "How does Axum renew domain registrations through a built-in registrar billing service?",
+          "polarity": "negative",
+          "expectedAnswer": "No domainregistrarbilling implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 1.82483161399432
+        }
+      ]
+    },
+    "vitest": {
+      "failureCounts": {
+        "answerableRejected": 2,
+        "negativeAccepted": 6,
+        "missingRequiredUnitsWithNoEmittedDecision": 5
+      },
+      "revision": "7a825db43e2beca0b219d2eadaec334cb81af0c7",
+      "filesVerified": 3189,
+      "activeGenerations": 2434,
+      "activeCanonicalUnits": 10384,
+      "summary": {
+        "positiveQuestions": 20,
+        "negativeQuestions": 10,
+        "macroRequiredUnitRecallAt10": 0.725,
+        "macroRequiredRangeCoverage": 0.7166779882836845,
+        "allRequiredUnitsQuestions": 14,
+        "anyRequiredUnitQuestions": 15,
+        "retrievedRequiredUnits": 17,
+        "totalRequiredUnits": 26,
+        "negativeRejected": 4,
+        "warmMedianSeconds": 12.361462171502353,
+        "sampleWarmP95Seconds": 15.694128659000853,
+        "timedRequests": 30,
+        "transportFailures": 0,
+        "allExcerptsVerified": true,
+        "calibrationValidatedAllQueries": true
+      },
+      "positiveRecallFloorMet": true,
+      "labelFreeze": {
+        "frozenAtUtc": "2026-10-16T00:29:17.569640+00:00",
+        "sha256": "4d79b83b9077178beda8bbfd57488fa56d9ffb6d1fa06ac86fa129320d8d709c",
+        "count": 30,
+        "method": "Source-authored frozen selectors resolved against canonical declaration metadata, no retrieval/model results inspected."
+      },
+      "scanSeconds": 371.80317574800574,
+      "scanText": "ScanSummary { scanned: 3807, ingested: 2895, unchanged: 0, skipped: 193, entities: 16980, relationships: 23299, errors: 0, admission_failures: [], git_remote: Some(\"https://github.com/vitest-dev/vitest.git\"), git_branch: Some(\"main\"), git_sha: Some(\"7a825db43e\") }\nno scan config; builtin filter\nembedded 256 chunks (7158 more pending from this source \u2014 re-run scan_repo to continue)",
+      "reindexCalls": 2,
+      "finalReindex": "reindex: embedded 1 chunks (limit 1) (1 new + 0 reused from existing vectors) (0 code chunks)\n7157 more pending \u2014 call reindex again to continue (deterministic order)",
+      "sdkPreparation": {
+        "activationAfterAllInference": true,
+        "actualNewEmbeddings": 12190,
+        "embeddingManifestId": "model-manifest-v1/d89889ea8d6f46260b8d5a336dd9978f7a3951d7aa89c1ccb289fb7c7f3f42ad",
+        "files": 2434,
+        "inferenceSeconds": 556.248078541,
+        "maximumAllowedParityDifference": 1e-05,
+        "missingInventories": 0,
+        "orderedInsertion": true,
+        "paritySamplesPerWorker": 3,
+        "representationId": "code-passage-v1/3999a5debee44e097a50795cbf3b0b8df4ae42a58c0fccfa016016e1ec6150f0",
+        "revisionFenced": true,
+        "sameProductionInputAssembler": true,
+        "seconds": 568.559590914,
+        "workers": 8
+      },
+      "stderrWarningsOrErrors": [],
+      "cases": [
+        {
+          "id": "vitest-fresh-01",
+          "query": "How does the test runtime preserve real timer functions so fake timers do not interfere with internal scheduling?",
+          "polarity": "answerable",
+          "expectedAnswer": "setSafeTimers snapshots globals under privateSymbol; getSafeTimers prefers snapshot.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "packages/utils/src/timers.ts",
+              "anchor": "setSafeTimers"
+            },
+            {
+              "path": "packages/utils/src/timers.ts",
+              "anchor": "getSafeTimers"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:63b515aa9e6e4c6b6a96c4bd45e65241fc5ecb326be023f2dff6b4091273859a",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  1370,
+                  2111
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": []
+            },
+            {
+              "parentId": "sha256:6e8ffda0f115b0a54a8740b7b3bac9b1609d48ba885d286a49d0fe87d1fae6cb",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  585,
+                  1361
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": []
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 8.357682129993918
+        },
+        {
+          "id": "vitest-fresh-02",
+          "query": "How can test ordering be randomized reproducibly with a supplied seed?",
+          "polarity": "answerable",
+          "expectedAnswer": "InplaceFisherYates swaps with seeded sinrandom; incrementseed.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "packages/utils/src/random.ts",
+              "anchor": "shuffle"
+            },
+            {
+              "path": "packages/utils/src/random.ts",
+              "anchor": "random"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:98c7d62a5eb585d24bbdbb3b3abb88912f7d1a70ec7753a3cc3d80198259a366",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  129,
+                  430
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:98c7d62a5eb585d24bbdbb3b3abb88912f7d1a70ec7753a3cc3d80198259a366",
+                  "reason": "result_limit",
+                  "fusionScore": 0.009259259,
+                  "rerankScore": -1.8544278,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:02f540823023ddd48a565941ced168bc994364f2ae5b285704c9fdfd63e94661",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  23,
+                  120
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": []
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 9.177104828006122
+        },
+        {
+          "id": "vitest-fresh-03",
+          "query": "How are line-and-column locations converted to offsets when the source uses Windows line endings?",
+          "polarity": "answerable",
+          "expectedAnswer": "positionToOffset counts CRLFas2, outofrange line returnslength.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:aa8a8d28661c4befe855e6c1c32002a1c005b391cdfa5032e847579afd747256",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  51,
+                  425
+                ]
+              ],
+              "observedRanges": [
+                [
+                  51,
+                  425
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:aa8a8d28661c4befe855e6c1c32002a1c005b391cdfa5032e847579afd747256",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": -1.3956735,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 13.933864828999504
+        },
+        {
+          "id": "vitest-fresh-04",
+          "query": "What happens when converting a source offset beyond the end of the file into a line number?",
+          "polarity": "answerable",
+          "expectedAnswer": "offsetToLineNumber throws whenoffset>length.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "packages/utils/src/offset.ts",
+              "anchor": "offsetToLineNumber"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:755226f50a0a56da7313237d18cdfb2ad0690f44419d68a71739e74260ea8bd1",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  434,
+                  969
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:755226f50a0a56da7313237d18cdfb2ad0690f44419d68a71739e74260ea8bd1",
+                  "reason": "below_threshold",
+                  "fusionScore": 0.032786883,
+                  "rerankScore": -1.2458608,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 8.790247063996503
+        },
+        {
+          "id": "vitest-fresh-05",
+          "query": "How is a package classified as CommonJS or ESM without inheriting the application type across a node_modules boundary?",
+          "polarity": "answerable",
+          "expectedAnswer": "Ascenduntilfirstpackagejson ornode_modules; cachevisited; malformedreturnsnone.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:d69aafee462dd16b551f67315eb4369577502b2cc7f2780076ddbe65361a5019",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  398,
+                  1477
+                ]
+              ],
+              "observedRanges": [
+                [
+                  147,
+                  1477
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:d69aafee462dd16b551f67315eb4369577502b2cc7f2780076ddbe65361a5019",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": 0.26048142,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 9.076324552996084
+        },
+        {
+          "id": "vitest-fresh-06",
+          "query": "Where are snapshot files placed by default, and how can a caller override that location?",
+          "polarity": "answerable",
+          "expectedAnswer": "SnapshotManager resolvePath customresolver else __snapshots__/basename.snap.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "packages/snapshot/src/manager.ts",
+              "anchor": "SnapshotManager.resolvePath"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:1c26ba557c9a4e8290cfaf8158b7439900bfb2a7d937efe5c6f167fbc9b12819",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  514,
+                  879
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:1c26ba557c9a4e8290cfaf8158b7439900bfb2a7d937efe5c6f167fbc9b12819",
+                  "reason": "result_limit",
+                  "fusionScore": 0.013513514,
+                  "rerankScore": -2.2456546,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 8.581366652011639
+        },
+        {
+          "id": "vitest-fresh-07",
+          "query": "How are relative paths for raw snapshot files resolved compared with absolute paths?",
+          "polarity": "answerable",
+          "expectedAnswer": "Absolute unchanged; relative resolvedagainsttestdirname.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:ae97552aeb0eace11c4913420b94a715026d28917d50e7fdd84b78780593d46a",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  883,
+                  1025
+                ]
+              ],
+              "observedRanges": [
+                [
+                  883,
+                  1025
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:ae97552aeb0eace11c4913420b94a715026d28917d50e7fdd84b78780593d46a",
+                  "reason": "selected",
+                  "fusionScore": 0.029380456,
+                  "rerankScore": -0.06785948,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 7.8279029710101895
+        },
+        {
+          "id": "vitest-fresh-08",
+          "query": "How are per-file snapshot results accumulated into the overall summary, including unchecked keys?",
+          "polarity": "answerable",
+          "expectedAnswer": "Incrementfilecounters, sumcounts,total, appenduncheckedkeysbyfile.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:170db214e1e698a712022507d17c5fce8b445ab690f8aa02129382433cfbeacb",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  1497,
+                  2260
+                ]
+              ],
+              "observedRanges": [
+                [
+                  1497,
+                  2260
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:170db214e1e698a712022507d17c5fce8b445ab690f8aa02129382433cfbeacb",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": 0.31582335,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 13.286994745998527
+        },
+        {
+          "id": "vitest-fresh-09",
+          "query": "What prevents raw snapshots marked read-only from being written back?",
+          "polarity": "answerable",
+          "expectedAnswer": "saveRawSnapshots checks readonly beforeenvironment.saveSnapshotFile.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:8717e7007948606c9db6c15ea00638e84dacdfab42d6ae7055af8ce5d1ced5d8",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  245,
+                  541
+                ]
+              ],
+              "observedRanges": [
+                [
+                  245,
+                  541
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:8717e7007948606c9db6c15ea00638e84dacdfab42d6ae7055af8ce5d1ced5d8",
+                  "reason": "selected",
+                  "fusionScore": 0.027623285,
+                  "rerankScore": -0.71331733,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 12.412467346002813
+        },
+        {
+          "id": "vitest-fresh-10",
+          "query": "How are malformed snapshot keys rejected when deriving the original test name?",
+          "polarity": "answerable",
+          "expectedAnswer": "keyToTestName requires trailing space+digits thenremovesuffix.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:e0fe44d4a6db375fe2091930e596cf95e2bb634bd7a66cd0f1d133eb980a5066",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  751,
+                  926
+                ]
+              ],
+              "observedRanges": [
+                [
+                  751,
+                  926
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:e0fe44d4a6db375fe2091930e596cf95e2bb634bd7a66cd0f1d133eb980a5066",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": -1.5182741,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 12.310456997001893
+        },
+        {
+          "id": "vitest-fresh-11",
+          "query": "How are newline conventions normalized when snapshots are serialized?",
+          "polarity": "answerable",
+          "expectedAnswer": "serialize prettyformats then normalizeNewlines replacesCRLF/CRwithLF.",
+          "requiredUnitRecallAt10": 0.0,
+          "requiredRangeCoverage": 0.0,
+          "missingRequiredUnits": [
+            {
+              "path": "packages/snapshot/src/port/utils.ts",
+              "anchor": "serialize"
+            },
+            {
+              "path": "packages/snapshot/src/port/utils.ts",
+              "anchor": "normalizeNewlines"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:0e7c3677cd6fb4eb177158a1483fb3fb4ff4fbe91d2d8d7ab157b1735f78b922",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  2504,
+                  2793
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": []
+            },
+            {
+              "parentId": "sha256:f9052191cc0b20c90a2cd7d48c3dd669da0c41ecf64d9006cbc864b596103034",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  3081,
+                  3177
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": []
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 13.375291253003525
+        },
+        {
+          "id": "vitest-fresh-12",
+          "query": "How are snapshot property matchers deeply merged without treating asymmetric matchers as ordinary nested objects?",
+          "polarity": "answerable",
+          "expectedAnswer": "deepMergeSnapshot respects$$typeof; recursesobjects/arrays; deepMergeArray mergesbyindex.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:c328dcd02f74d8e0d728ca6bdb1c6b5072e37fa52e3763db329526c7d1ce9e13",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  4816,
+                  5616
+                ]
+              ],
+              "observedRanges": [
+                [
+                  4495,
+                  5616
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:c328dcd02f74d8e0d728ca6bdb1c6b5072e37fa52e3763db329526c7d1ce9e13",
+                  "reason": "selected",
+                  "fusionScore": 0.015625,
+                  "rerankScore": 0.4144916,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:53f45fe4a7f513630a5697ab8224aeefe98b10697eba8bfa5a19e2c6f20ae52d",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  3881,
+                  4493
+                ]
+              ],
+              "observedRanges": [
+                [
+                  3881,
+                  4493
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:53f45fe4a7f513630a5697ab8224aeefe98b10697eba8bfa5a19e2c6f20ae52d",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": -0.70147496,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 11.495275015986408
+        },
+        {
+          "id": "vitest-fresh-13",
+          "query": "When is indentation removed from an inline snapshot, and what causes the normalization to be abandoned?",
+          "polarity": "answerable",
+          "expectedAnswer": "Needindent,>=3lines,blankboundaries,allinnerlinesconsistentprefix; else unchanged.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:1d21b06e667da26feaec69241f643fc3630cfea0866e79bee52a701015133f7c",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  6596,
+                  7861
+                ]
+              ],
+              "observedRanges": [
+                [
+                  6596,
+                  7802
+                ],
+                [
+                  7802,
+                  7861
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:1d21b06e667da26feaec69241f643fc3630cfea0866e79bee52a701015133f7c",
+                  "reason": "selected",
+                  "fusionScore": 0.04767399,
+                  "rerankScore": -1.5930102,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 2,
+                  "scoredSegments": 2
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 13.448001305994694
+        },
+        {
+          "id": "vitest-fresh-14",
+          "query": "How does resetting evaluated modules preserve framework internals and optionally preserve mocked modules?",
+          "polarity": "answerable",
+          "expectedAnswer": "Skipvitestdist and mock:unlessresetMocks; clearpromise,exports,evaluated,importers.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:b089333e42a72922d64a17ec8c2985b3841f716b18a74198737f45dab6f2236b",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  1530,
+                  2066
+                ]
+              ],
+              "observedRanges": [
+                [
+                  1530,
+                  2066
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:b089333e42a72922d64a17ec8c2985b3841f716b18a74198737f45dab6f2236b",
+                  "reason": "selected",
+                  "fusionScore": 0.031280547,
+                  "rerankScore": -0.33613387,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 11.813820098002907
+        },
+        {
+          "id": "vitest-fresh-15",
+          "query": "What error explains importing the test API outside a running test worker?",
+          "polarity": "answerable",
+          "expectedAnswer": "getWorkerState requiresglobalworkerstate, throws detailedincorrectimportcontextmessage.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:1404b9d55e6cd4da85993a428d2cfa460026c0ffc88ad945dfe60a395587b13c",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  264,
+                  1008
+                ]
+              ],
+              "observedRanges": [
+                [
+                  264,
+                  1008
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:1404b9d55e6cd4da85993a428d2cfa460026c0ffc88ad945dfe60a395587b13c",
+                  "reason": "selected",
+                  "fusionScore": 0.013888889,
+                  "rerankScore": -1.290825,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 5.9932659799960675
+        },
+        {
+          "id": "vitest-fresh-16",
+          "query": "How does updating assertion state preserve getter properties such as the test path?",
+          "polarity": "answerable",
+          "expectedAnswer": "setState uses getOwnPropertyDescriptors+defineProperties; storesnewstate onlyifnocurrent.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:804ad15f851b39a4f1aa63491592da8de273a9c293be305aa722ecbc27f5538a",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  1305,
+                  1696
+                ]
+              ],
+              "observedRanges": [
+                [
+                  1305,
+                  1696
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:804ad15f851b39a4f1aa63491592da8de273a9c293be305aa722ecbc27f5538a",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": -0.6156031,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 12.925664947004407
+        },
+        {
+          "id": "vitest-fresh-17",
+          "query": "How does the framework detect an asynchronous assertion that the test never awaited?",
+          "polarity": "answerable",
+          "expectedAnswer": "recordAsyncExpect trackswrappedpromise,onFinishedcheck,resolvedflagsetbythen/catch/finally.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 0.6039823008849557,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:ef59bcb10bb30aa249ea8d101bc932294e436971a5ed60647c084c4b41f89d99",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  1647,
+                  2551
+                ]
+              ],
+              "observedRanges": [
+                [
+                  695,
+                  2193
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:ef59bcb10bb30aa249ea8d101bc932294e436971a5ed60647c084c4b41f89d99",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": -0.49953848,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 13.272980784997344
+        },
+        {
+          "id": "vitest-fresh-18",
+          "query": "What is the difference between clearing all mock call history and resetting all mock configurations?",
+          "polarity": "answerable",
+          "expectedAnswer": "clearAllMocks visitsdirtystates mockClear; resetAllMocks visitsstatesandconfigs mockReset.",
+          "requiredUnitRecallAt10": 0.5,
+          "requiredRangeCoverage": 0.7295774647887324,
+          "missingRequiredUnits": [
+            {
+              "path": "packages/spy/src/index.ts",
+              "anchor": "clearAllMocks"
+            }
+          ],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:f4b4d21e91e6c9f48d1452ca8bc90bcd6ac917e468845dc4a9164c9e8c9f102d",
+              "retrieved": false,
+              "requiredRanges": [
+                [
+                  24789,
+                  24885
+                ]
+              ],
+              "observedRanges": [],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:f4b4d21e91e6c9f48d1452ca8bc90bcd6ac917e468845dc4a9164c9e8c9f102d",
+                  "reason": "result_limit",
+                  "fusionScore": 0.025978409,
+                  "rerankScore": -1.7683762,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:a992b6e481338b0e154937b3612098763e8ecb421043e181ede33334c4efb0ac",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  24894,
+                  25153
+                ]
+              ],
+              "observedRanges": [
+                [
+                  24894,
+                  25153
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:a992b6e481338b0e154937b3612098763e8ecb421043e181ede33334c4efb0ac",
+                  "reason": "selected",
+                  "fusionScore": 0.028298203,
+                  "rerankScore": -1.8386416,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 17.361843104998115
+        },
+        {
+          "id": "vitest-fresh-19",
+          "query": "How do positive and negated project filters interact when choosing which test projects run?",
+          "polarity": "answerable",
+          "expectedAnswer": "Exclusionwins; absentpositivesmeansallremaining; wildcardpositiveOR.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:708f64d3bb09f74b68510c472aba624191391e28eb33841a2ffbb7423f4a851a",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  45363,
+                  45823
+                ]
+              ],
+              "observedRanges": [
+                [
+                  45363,
+                  45823
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:708f64d3bb09f74b68510c472aba624191391e28eb33841a2ffbb7423f4a851a",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": 0.16355187,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            },
+            {
+              "parentId": "sha256:a5156d003a96e830c6462854463966fb4256eab3d5f188ebf3a4d4af8b4296d1",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  45832,
+                  46173
+                ]
+              ],
+              "observedRanges": [
+                [
+                  45832,
+                  46173
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:a5156d003a96e830c6462854463966fb4256eab3d5f188ebf3a4d4af8b4296d1",
+                  "reason": "selected",
+                  "fusionScore": 0.031498015,
+                  "rerankScore": -0.57862943,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 15.694128659000853
+        },
+        {
+          "id": "vitest-fresh-20",
+          "query": "How are tag definitions shared between test projects while preserving project-local overrides?",
+          "polarity": "answerable",
+          "expectedAnswer": "Collectglobalfirstdefinitionwins includingroot; addmissingonlytoeachproject.",
+          "requiredUnitRecallAt10": 1.0,
+          "requiredRangeCoverage": 1.0,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [
+            {
+              "parentId": "sha256:2f5d9acceb8be79889f84802d6eb76eab59cfb50361658a9db5f1994d955b4fc",
+              "retrieved": true,
+              "requiredRanges": [
+                [
+                  118,
+                  1007
+                ]
+              ],
+              "observedRanges": [
+                [
+                  118,
+                  1007
+                ]
+              ],
+              "decisions": [
+                {
+                  "parentUnitId": "sha256:2f5d9acceb8be79889f84802d6eb76eab59cfb50361658a9db5f1994d955b4fc",
+                  "reason": "selected",
+                  "fusionScore": 0.016393442,
+                  "rerankScore": 0.4806377,
+                  "appliedThreshold": -0.97909373,
+                  "retrievedSegments": 1,
+                  "scoredSegments": 1
+                }
+              ]
+            }
+          ],
+          "evidenceStatus": "candidates_available",
+          "seconds": 11.235597819002578
+        },
+        {
+          "id": "vitest-fresh-21",
+          "query": "How does Vitest use a built-in language model to rewrite failing tests automatically?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inLLM automatic testrepair implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 8.919371092997608
+        },
+        {
+          "id": "vitest-fresh-22",
+          "query": "How does Vitest preserve and resume the exact instruction pointer of a test after the test process crashes?",
+          "polarity": "negative",
+          "expectedAnswer": "No durableexecutioncheckpoint/instructionpointerresume.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 10.00811763299862
+        },
+        {
+          "id": "vitest-fresh-23",
+          "query": "How does Vitest execute CUDA kernels directly through its built-in GPU test runner?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inCUDA kernelrunner.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 15.358314819997759
+        },
+        {
+          "id": "vitest-fresh-24",
+          "query": "How does Vitest automatically roll back production database transactions across all tests without user hooks?",
+          "polarity": "negative",
+          "expectedAnswer": "No automaticgenericproductionDBtransactionrollback implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 15.255127791999257
+        },
+        {
+          "id": "vitest-fresh-25",
+          "query": "How does Vitest elect a new cluster leader using the Raft consensus protocol?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inRaftconsensus implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 13.830354346995591
+        },
+        {
+          "id": "vitest-fresh-26",
+          "query": "How does Vitest merge concurrent source edits using its own CRDT text document?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inCRDTtextdocument implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 10.553479837995837
+        },
+        {
+          "id": "vitest-fresh-27",
+          "query": "How does Vitest rotate encryption keys through a built-in AWS KMS integration?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inAWSKMSkeyrotation implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 10.6850816669903
+        },
+        {
+          "id": "vitest-fresh-28",
+          "query": "How does Vitest capture credit-card payments and issue financial refunds?",
+          "polarity": "negative",
+          "expectedAnswer": "No built-inpaymentprocessor/refund implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 14.139870487997541
+        },
+        {
+          "id": "vitest-fresh-29",
+          "query": "How does Vitest diagnose diseases from medical imaging?",
+          "polarity": "negative",
+          "expectedAnswer": "No medicalimagingdiagnosis implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "insufficient_evidence",
+          "seconds": 12.499378243999672
+        },
+        {
+          "id": "vitest-fresh-30",
+          "query": "How does Vitest renew domain registrations through a built-in registrar billing service?",
+          "polarity": "negative",
+          "expectedAnswer": "No domainregistrarbilling implementation.",
+          "requiredUnitRecallAt10": null,
+          "requiredRangeCoverage": null,
+          "missingRequiredUnits": [],
+          "requiredParentDecisions": [],
+          "evidenceStatus": "candidates_available",
+          "seconds": 13.128347582998686
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "Source-based questions authored and deterministically graded by the same agent; no independent blind review.",
+    "Fresh repos/questions do not replace the original frozen cross-repository acceptance suite.",
+    "Tests retrieval of required code evidence, not downstream generated-answer correctness.",
+    "30 warm requests per repository are a latency sample; not the60-request operational certification.",
+    "Candidate Recall@50 unavailable from runtime-only responses and not reported from empty candidate arrays.",
+    "Generic non-code document embeddings are not fully backfilled; the representation-keyed code vector index is complete.",
+    "Only the pinned source revisions are covered; parser support beyond Python/Rust/TypeScript is not established.",
+    "Nearby negative controls plus several shared out-of-domain negative scenarios; these are not30independentfeaturefamilies."
+  ],
+  "preparationMethod": "Actual MCP scans and partial embeddings, then disposable-fixture SDK parallel inference with production input assembly, exact parity samples against actual MCP vectors, stable insertion order and source revision fences; activate after every current code vector is present; final MCP limit1 verifies no pending code chunks. Generic non-code document embedding backlogs remain and are outside this code evidence test.",
+  "preflightCorrection": {
+    "reason": "Source inspection found Diesel application examples that explicitly run startup migrations, making the initial absence question ambiguous for a full-repository index. Replaced with an absent built-in transaction-manager behavior before any retrieval query.",
+    "id": "axum-fresh-22",
+    "retrievalQueriesRun": 0,
+    "originalQuestionsSha256": "63c4b974d70fa428563b3b903ad57b0a51cc180977abd3553f7877de5853cb91",
+    "originalAxumLabelsSha256": "904f4b6503b6490a63135fa05071955dd406fdca8804ac13a1f6a99e60c3b01e",
+    "replacementQuery": "How does Axum automatically roll back database writes when a handler panics, using its built-in transaction manager?",
+    "originalsPreserved": true
+  },
+  "receiptHashes": {
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/live.json": "3d7014e129c67c12f4834a74a46f1dc9cc6abf4270dab2cf74a8a60ad9d800d7",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/preparation.json": "5c0f5750ffb2717bb91e5e4f0324b0c89a6fbcb117a6f5e6d2c5300017d4a030",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/questions-frozen.json": "bb70d179058b04b7cacd3003c052975919023a65783625b9d4dc2afca00c5b7f",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/questions-freeze-receipt.json": "47b8511e3bb41159a2b0831aa7fe4a45a32a75d73087e4bd5e69d3a1d5d65a4b",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/preflight-correction.json": "bfd424e23e1521891914640e0ea63f221321e2703a0e3a7d41700831ecc05258",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/config.json": "1eb4549d6c2791a49b8a2e74fd66a37beea4e7df1c6583b8f445371720774d3d",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/calibration.json": "d6f7bb890616a327dd2479b05cbe05f587d72a1d319735eefc674b72f872f792",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/negative-source-audit.json": "b3b0d67b76a7291c7311394f3a8f9c7190fed2141d3c7e4f1bdcb9b43cee717f",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/preparation-switch.json": "0f579afca9ba1f6205530f4518b099563a262c2c3a6ab77029a36a120d3c8ff3",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/independent-metric-check.json": "626d323a6e029e11ddbc727ce73ae1810fe7cb289dd81651f100faa953070e8a",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/starlette/sdk-preparation.json": "283e3027dffe94cc8b9daefa2437ed986ca0572300c38a1ce808b900c97a0f57",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/starlette/sdk-preparation.log": "b1458547be8273fb4e969771b71ab53c51e858a62de75f71159dc5aba80965aa",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/axum/sdk-preparation.json": "9add98201f5214aaa14f1940c73f5c4e1e4b3f282b544b2a8967c027abfc8131",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/axum/sdk-preparation.log": "dba11883583b49c4c02b846d1f125676db10edb4ba3531a2ad3e1f17b999f103",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/vitest/sdk-preparation.json": "6ba53a2994d643f84bf8c61959c84ee60180f38ee320808ec6265bd670522006",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/vitest/sdk-preparation.log": "0909e442579018b8f40d0a6d6b38a72203aab3c3f375df1b7453ee45f95d97d4",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/eval-prep/Cargo.toml": "7c13fa1ab286657db0af015600b341202d4d54cc2fbfc93df64fce1fd388604b",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/eval-prep/Cargo.lock": "169a4d932883eaae674d2193c35967df6342c48486c88c7482476db12e77d7e4",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/eval-prep/main.rs": "df9dd80201695c5c9c11e60aa5d3cb739e89f27624e1a98e1ba5ec2ce1750c6d",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/eval-prep/production_input.rs": "38eca02fbe5d0f7eee1a183755fa1eb2cb9ce9a61239b66282a2133d10692377",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/eval-prep/engram-eval-prep": "82cbc3121e18cbbb3458b4d24ecdb76513079f23e7296e577f7da4f0b5b033dc",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/starlette/labels.json": "0bf739155aa936c2b79ad88f33d43d66df4ac8df89798b5ba3ffc4c0f9c9a2e1",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/starlette/labels-freeze.json": "8f63d9c0ad48d48ef596bdb88ce4047fe52f5240ab863bb5223274612a56c2e7",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/starlette/corpus.json": "d66d41e1f1f399c7019cbd717371f356365fca537d5d27e28d863733f9a9d7aa",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/axum/labels.json": "ecd59a1a0397f04880d629e2de15ec04506c7d034d564fb5fcb8374e4df71d94",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/axum/labels-freeze.json": "c083845f135193227ac846470db6bdaae9408682d37347004dafa5186652b88e",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/axum/corpus.json": "74ad2b5ba355921d64593d646544b7a871f7caead2b6f8c49724c7650e1a7bdd",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/vitest/labels.json": "4d79b83b9077178beda8bbfd57488fa56d9ffb6d1fa06ac86fa129320d8d709c",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/vitest/labels-freeze.json": "ee938096434ddb694f4d24b9956ac873452674bc031e2b2fc2cfbb3249839219",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/results/vitest/corpus.json": "31b81691ad66b7758fed22991795b4b75d760bf0a1226c27ae2444212c895c30",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/prepare_three_repo_eval.py": "e637c241bbd8794bad031dbeb96f5a997fa8c59730e83344785bbd6c70e72714",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/three_repo_questions.py": "a6c2338675007b47dd140e1cd4f46fba150b4e27f302af18a460c0248d340e22",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/resolve_three_repo_labels.py": "cc20acc2ca160e24e13aa559e9e7bf38979cf8bcba18ebfd10446a3e6d3db12e",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/evaluate_three_repos.py": "4243eb813a0f7347dde824e491dc7c3a83cd5dfbb02243214a4c52452806d3c5",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/prepare-three-repo-eval.log": "2687a3d24ac7d7903193fbe3b3736d4f6d0c30da384496266dfe31febdd72eb1",
+    "/home/videogamer/.engram/evaluations/fresh-repositories-2026-10-16/evaluate-three-repos.log": "1ba80114623e983f94525337923a96b269b8cd2e99bab805875880fa0d2b27b0"
+  }
+}

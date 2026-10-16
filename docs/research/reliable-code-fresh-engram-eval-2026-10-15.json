@@ -1,0 +1,623 @@
+{
+  "completedAtUtc": "2026-10-16T00:04:29.228306+00:00",
+  "scope": "Fresh Engram natural-language code-evidence challenge; frozen existing corpus, latest accepted runtime",
+  "runtimeCommit": "35677457153e11ff9324829a5cfe9740841fa7bc",
+  "corpusRevision": "98fda3c6d1a84244658d4425728f112303218cd7",
+  "freeze": {
+    "frozenAtUtc": "2026-10-15T23:58:47.664921+00:00",
+    "labelsSha256": "5d0659325a549fb4e4181304c0a93329bf8ad50bb9b3717d2c2cb852b8230b4f",
+    "questions": 20,
+    "positiveQuestions": 15,
+    "negativeQuestions": 5,
+    "policy": "Single-pass fresh source-authored challenge set. No model/config/threshold changes, no retries/tuning. Same author grades deterministic source labels; not independent blind certification. Frozen corpus, latest accepted binary.",
+    "sourceStore": "/tmp/callable-comments-engram-12j91ivs",
+    "corpusRoot": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/corpora/engram",
+    "runtimeCommit": "35677457153e11ff9324829a5cfe9740841fa7bc",
+    "newQuestionsAndExpectedUnits": true,
+    "corpusRevision": "98fda3c6d1a84244658d4425728f112303218cd7"
+  },
+  "summary": {
+    "positiveQuestions": 15,
+    "negativeQuestions": 5,
+    "macroRequiredUnitRecallAt10": 0.8333333333333334,
+    "macroRequiredRangeCoverage": 0.8322084073416223,
+    "allRequiredUnitsQuestions": 12,
+    "anyRequiredUnitQuestions": 13,
+    "retrievedRequiredUnits": 15,
+    "totalRequiredUnits": 18,
+    "negativeRejected": 4,
+    "warmMedianSeconds": 10.868413959004101,
+    "sampleWarmP95Seconds": 12.841936127995723,
+    "timedRequests": 20,
+    "transportFailures": 0,
+    "allExcerptsVerified": true,
+    "calibrationValidatedAllQueries": true
+  },
+  "freshSampleEngramRecallFloorMet": true,
+  "validation": {
+    "documentationChecksPassed": true,
+    "diffWhitespaceCheckPassed": true,
+    "stderrWarningsOrErrors": false
+  },
+  "failureFindings": [
+    {
+      "id": "engram-fresh-02",
+      "finding": "Required helper absent from emitted parent decisions; runtime-only diagnostics cannot prove where it dropped."
+    },
+    {
+      "id": "engram-fresh-03",
+      "finding": "effective_max_items was retrieved and scored, then omitted by result_limit; companion composer was returned."
+    },
+    {
+      "id": "engram-fresh-13",
+      "finding": "Archive executor was retrieved and scored -3.2348752, omitted by result_limit; final packet insufficient_evidence."
+    },
+    {
+      "id": "engram-fresh-19",
+      "finding": "Unsupported distributed CUDA inference question admitted generic embedding implementation evidence."
+    }
+  ],
+  "sourceStoreUnchanged": true,
+  "corpusFilesVerified": 1299,
+  "binarySha256": "a4d714ba38f21c4589b87c79549ea02541c8fc2dc676ec3408c496dee45e03b6",
+  "inputHashes": {
+    "labels.json": "5d0659325a549fb4e4181304c0a93329bf8ad50bb9b3717d2c2cb852b8230b4f",
+    "config.json": "1eb4549d6c2791a49b8a2e74fd66a37beea4e7df1c6583b8f445371720774d3d",
+    "calibration.json": "d6f7bb890616a327dd2479b05cbe05f587d72a1d319735eefc674b72f872f792"
+  },
+  "cases": [
+    {
+      "id": "engram-fresh-01",
+      "query": "If one search source throws an error, can the caller still receive matches from the other sources, and how is the failure reported?",
+      "expectedAnswer": "Successful candidates accumulate; failed lane produces degraded source_error with source and mode.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:1179500f650d3a954d38994704167cc3a59cbf6fe94341bb73de59e38629a93a",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:1179500f650d3a954d38994704167cc3a59cbf6fe94341bb73de59e38629a93a",
+              "reason": "selected",
+              "fusionScore": 0.013157895,
+              "rerankScore": -0.6399717,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 11.581634505986585
+    },
+    {
+      "id": "engram-fresh-02",
+      "query": "What happens when a caller requests a search mode for which no index has been registered?",
+      "expectedAnswer": "Missing selected mode yields warning unsupported_mode and a degraded source report.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 0.0,
+      "requiredRangeCoverage": 0.0,
+      "missingRequiredUnits": [
+        {
+          "path": "core/retrieval/src/router.rs",
+          "anchor": "unsupported_mode_failures"
+        }
+      ],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:09619799ad55d80c59d5f6b122c3cde671b4e6c978a96ee063bb83b43f02a894",
+          "retrieved": false,
+          "decisions": []
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 10.761496766994242
+    },
+    {
+      "id": "engram-fresh-03",
+      "query": "When both the request and its context budget limit result counts, which limit wins, and are discarded results recorded?",
+      "expectedAnswer": "Minimum request/budget limit applies after fusion/reranking; overflow recorded BudgetExceeded.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 0.5,
+      "requiredRangeCoverage": 0.48312611012433393,
+      "missingRequiredUnits": [
+        {
+          "path": "core/retrieval/src/composer.rs",
+          "anchor": "effective_max_items"
+        }
+      ],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:879c6bfac169b95dcd9beae40b74a4dd4e81a8986b6abe55f753a6993371f3b7",
+          "retrieved": false,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:879c6bfac169b95dcd9beae40b74a4dd4e81a8986b6abe55f753a6993371f3b7",
+              "reason": "result_limit",
+              "fusionScore": 0.010869565,
+              "rerankScore": -1.0322924,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        },
+        {
+          "parentId": "sha256:1bc4461480d6b65e4323402da721cdbc07db7b8abea9827aa4ea483818ac1780",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:1bc4461480d6b65e4323402da721cdbc07db7b8abea9827aa4ea483818ac1780",
+              "reason": "selected",
+              "fusionScore": 0.032258064,
+              "rerankScore": 0.20638466,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 11.434689226007322
+    },
+    {
+      "id": "engram-fresh-04",
+      "query": "How does the agent anticipate useful context from its current task and recent searches without calling a language model?",
+      "expectedAnswer": "Tokenize task and recent query terms; deduplicate sorted terms and recent target IDs.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:f05b5fe790c8bd8b27d74cf9162d175410407a2410a1f559949effe6fa9ad3b1",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:f05b5fe790c8bd8b27d74cf9162d175410407a2410a1f559949effe6fa9ad3b1",
+              "reason": "selected",
+              "fusionScore": 0.030303031,
+              "rerankScore": -0.836222,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 12.406037484994158
+    },
+    {
+      "id": "engram-fresh-05",
+      "query": "How is memory retention calculated from elapsed time and stability, including a zero or negative stability setting?",
+      "expectedAnswer": "exp(-elapsed/stability); return 1 when stability <=0.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:5276a0f7752a114022231afb32651182ce5fa2b4b7e057cc9c7bad4b26ace27d",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:5276a0f7752a114022231afb32651182ce5fa2b4b7e057cc9c7bad4b26ace27d",
+              "reason": "selected",
+              "fusionScore": 0.031778056,
+              "rerankScore": 0.6574134,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 10.018930537000415
+    },
+    {
+      "id": "engram-fresh-06",
+      "query": "When several consolidation executors handle the same task, whose result is kept and what happens to tasks nobody handles?",
+      "expectedAnswer": "First non-Skipped per task is retained; unhandled planned task emits Skipped.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:bb27be8e803c08c039f4ba6fea26533151078fa81ee3cc0ad8188ff615624e92",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:bb27be8e803c08c039f4ba6fea26533151078fa81ee3cc0ad8188ff615624e92",
+              "reason": "selected",
+              "fusionScore": 0.015625,
+              "rerankScore": -0.104626566,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 2,
+              "scoredSegments": 2
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 10.189324690989451
+    },
+    {
+      "id": "engram-fresh-07",
+      "query": "How are failures in protected evaluation cases turned into actionable consolidation errors?",
+      "expectedAnswer": "Failed cases only; evaluation_failed, case ID, joined details or fallback text, recoverable.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:38ba2178ee998705b0eef015062cfcc6ae042278aee582e0073d26d3ed488704",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:38ba2178ee998705b0eef015062cfcc6ae042278aee582e0073d26d3ed488704",
+              "reason": "selected",
+              "fusionScore": 0.048395492,
+              "rerankScore": 0.49946177,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 9.464152960004867
+    },
+    {
+      "id": "engram-fresh-08",
+      "query": "What prevents consolidation mutations from running when the protected fixture fails or the apply authorization denies the plan?",
+      "expectedAnswer": "Run prefixture; return failed on preerrors; authorize plan; only then execute.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:347ded049150c53a0d708aabb995501d6f132485a45feb2d759ba911e238299d",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:347ded049150c53a0d708aabb995501d6f132485a45feb2d759ba911e238299d",
+              "reason": "selected",
+              "fusionScore": 0.011904762,
+              "rerankScore": 0.66714567,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 2,
+              "scoredSegments": 2
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 12.770332583007985
+    },
+    {
+      "id": "engram-fresh-09",
+      "query": "Can hierarchy navigation begin with an underlying member ID rather than a hierarchy node ID, and does the layer limit still apply?",
+      "expectedAnswer": "Seed matcher checks layer then node ID/source target/member ID.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:d7c50f14a8f011202198796abe26a056d1e09369ae7373b2c247d8de270bba45",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:d7c50f14a8f011202198796abe26a056d1e09369ae7373b2c247d8de270bba45",
+              "reason": "selected",
+              "fusionScore": 0.014925373,
+              "rerankScore": 0.10760081,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 12.425624985000468
+    },
+    {
+      "id": "engram-fresh-10",
+      "query": "How does hierarchy navigation find the nearest ancestor shared by all selected starting nodes?",
+      "expectedAnswer": "Build parent chains; first candidate in first chain present in every chain.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:4de0c3a11c3076c8d8c80c3b750dc2b2a5d4f44d86f7a3675ae644d99c2c1af1",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:4de0c3a11c3076c8d8c80c3b750dc2b2a5d4f44d86f7a3675ae644d99c2c1af1",
+              "reason": "selected",
+              "fusionScore": 0.016393442,
+              "rerankScore": 0.21840376,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 2,
+              "scoredSegments": 2
+            }
+          ]
+        },
+        {
+          "parentId": "sha256:30fe06a61cabaa013f702f1726b905b2b4011ed9f7afad2d3b551955f7a1a946",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:30fe06a61cabaa013f702f1726b905b2b4011ed9f7afad2d3b551955f7a1a946",
+              "reason": "selected",
+              "fusionScore": 0.032002047,
+              "rerankScore": 0.039328292,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 15.735623244007002
+    },
+    {
+      "id": "engram-fresh-11",
+      "query": "What checks stop a hierarchy build from storing missing parents, self-parenting, or cyclic parent chains?",
+      "expectedAnswer": "Validate pointers, lower parent layer, detect repeated node in chain.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:aa8bc8c35724ca26806a4fa11a1bf6bc5716ba1c5f4a3a888383a191e8da2b64",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:aa8bc8c35724ca26806a4fa11a1bf6bc5716ba1c5f4a3a888383a191e8da2b64",
+              "reason": "selected",
+              "fusionScore": 0.032786883,
+              "rerankScore": 0.2049757,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        },
+        {
+          "parentId": "sha256:d837a884e4e80368ce4a28a681754eb02d8f3b53ccc742190d02309de16170b8",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:d837a884e4e80368ce4a28a681754eb02d8f3b53ccc742190d02309de16170b8",
+              "reason": "selected",
+              "fusionScore": 0.01369863,
+              "rerankScore": -0.6243589,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 10.876533382004709
+    },
+    {
+      "id": "engram-fresh-12",
+      "query": "How does a reflection summary get a repeatable identity from memory contents and record that it was derived by reflection?",
+      "expectedAnswer": "Hash memory texts into ID; provenance source and method reflection.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:29f078eb4799006030e37eede58e55f6b3506d8d6142067357f3065d46eed7bd",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:29f078eb4799006030e37eede58e55f6b3506d8d6142067357f3065d46eed7bd",
+              "reason": "selected",
+              "fusionScore": 0.027619049,
+              "rerankScore": -0.43930095,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 2,
+              "scoredSegments": 2
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 10.860294536003494
+    },
+    {
+      "id": "engram-fresh-13",
+      "query": "Which memories are eligible for automatic archiving after inactivity, and how is the cutoff compared with their timestamps?",
+      "expectedAnswer": "Only Active; updated_at or created_at <= started_at minus stale_days; archive via forget.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 0.0,
+      "requiredRangeCoverage": 0.0,
+      "missingRequiredUnits": [
+        {
+          "path": "core/reflection/src/lifecycle_executor.rs",
+          "anchor": "MemoryLifecycleExecutor::execute"
+        }
+      ],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:b4fa45551597d5ea6372bd2721ac3c3560d2c2347e9248ffe88869ac765a476e",
+          "retrieved": false,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:b4fa45551597d5ea6372bd2721ac3c3560d2c2347e9248ffe88869ac765a476e",
+              "reason": "result_limit",
+              "fusionScore": 0.010752688,
+              "rerankScore": -3.2348752,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "insufficient_evidence",
+      "seconds": 9.084333867998794
+    },
+    {
+      "id": "engram-fresh-14",
+      "query": "When automatically extracted entities conflict with entities supplied by the caller, which ones survive and how are unnamed entities treated?",
+      "expectedAnswer": "Caller wins case insensitive name match; unnamed preserved.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:8dbedacf8cb8d681635e53cf892deca27867b7fa501f7225365d94cbf1e7745d",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:8dbedacf8cb8d681635e53cf892deca27867b7fa501f7225365d94cbf1e7745d",
+              "reason": "selected",
+              "fusionScore": 0.02848485,
+              "rerankScore": 0.123841934,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 1,
+              "scoredSegments": 1
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 12.841936127995723
+    },
+    {
+      "id": "engram-fresh-15",
+      "query": "How does a bounded traversal of transitive callers distinguish reaching the visit limit exactly from actually truncating exploration?",
+      "expectedAnswer": "Skip duplicate enqueues; truncated only on newly reachable node while already at capacity.",
+      "polarity": "answerable",
+      "requiredUnitRecallAt10": 1.0,
+      "requiredRangeCoverage": 1.0,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [
+        {
+          "parentId": "sha256:67ba283abf7805d6f49c8bdd4d38e8dc2388f9d68e2251b52ab0e3c88dd783e4",
+          "retrieved": true,
+          "decisions": [
+            {
+              "parentUnitId": "sha256:67ba283abf7805d6f49c8bdd4d38e8dc2388f9d68e2251b52ab0e3c88dd783e4",
+              "reason": "selected",
+              "fusionScore": 0.029380456,
+              "rerankScore": -0.23288997,
+              "appliedThreshold": -0.97909373,
+              "retrievedSegments": 2,
+              "scoredSegments": 2
+            }
+          ]
+        }
+      ],
+      "evidenceStatus": "candidates_available",
+      "seconds": 12.133710836002138
+    },
+    {
+      "id": "engram-fresh-16",
+      "query": "How does Engram elect a new cluster leader using Raft after the leader crashes?",
+      "expectedAnswer": "No consensus/leader election implementation in frozen production Rust.",
+      "polarity": "negative",
+      "requiredUnitRecallAt10": null,
+      "requiredRangeCoverage": null,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [],
+      "evidenceStatus": "insufficient_evidence",
+      "seconds": 11.326320439999108
+    },
+    {
+      "id": "engram-fresh-17",
+      "query": "Where does Engram rotate encrypted memory keys through AWS KMS?",
+      "expectedAnswer": "No AWS KMS integration or key rotation implementation.",
+      "polarity": "negative",
+      "requiredUnitRecallAt10": null,
+      "requiredRangeCoverage": null,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [],
+      "evidenceStatus": "insufficient_evidence",
+      "seconds": 6.934557507003774
+    },
+    {
+      "id": "engram-fresh-18",
+      "query": "How does Engram sandbox and execute user-supplied WebAssembly memory-processing plugins?",
+      "expectedAnswer": "No WASM runtime/plugin execution implementation.",
+      "polarity": "negative",
+      "requiredUnitRecallAt10": null,
+      "requiredRangeCoverage": null,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [],
+      "evidenceStatus": "insufficient_evidence",
+      "seconds": 10.166403483992326
+    },
+    {
+      "id": "engram-fresh-19",
+      "query": "How does Engram distribute code embedding inference across CUDA GPUs?",
+      "expectedAnswer": "Local CPU embedding implementation; no CUDA GPU distributed inference.",
+      "polarity": "negative",
+      "requiredUnitRecallAt10": null,
+      "requiredRangeCoverage": null,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [],
+      "evidenceStatus": "candidates_available",
+      "seconds": 8.216220194008201
+    },
+    {
+      "id": "engram-fresh-20",
+      "query": "How does Engram authenticate enterprise users through SAML single sign-on?",
+      "expectedAnswer": "No SAML authentication implementation.",
+      "polarity": "negative",
+      "requiredUnitRecallAt10": null,
+      "requiredRangeCoverage": null,
+      "missingRequiredUnits": [],
+      "requiredParentDecisions": [],
+      "evidenceStatus": "insufficient_evidence",
+      "seconds": 8.708973860993865
+    }
+  ],
+  "rawDirectory": "/home/videogamer/.engram/evaluations/reliable-code-intelligence/results/fresh-engram-2026-10-15",
+  "limitations": [
+    "20 newly authored questions, not a replacement for the previously frozen cross-repository acceptance suite.",
+    "Same agent authored source-based labels and ran deterministic grading; no independent blind review.",
+    "Tests evidence retrieval, not downstream generated-answer correctness.",
+    "Candidate Recall@50 unavailable from this runtime-only test; empty candidate lists are not reported as measured recall.",
+    "20 warm requests are a latency sample, not the 60-request operational gate.",
+    "Frozen Engram source revision differs from the runtime implementation commit; this evaluates the latest runtime over that preserved corpus.",
+    "No config, threshold, model, source implementation or label changes after the freeze; no retraining or tuning.",
+    "Required-unit macro recall, raw recovered-unit fraction, all-unit question success, and byte coverage are distinct metrics."
+  ],
+  "featureShipped": false,
+  "rawReceiptHashes": {
+    "live.json": "a2334da03ce3a9d8b2726b4486bcf03ab0778253604e5187b12b5770b470507a",
+    "labels.json": "5d0659325a549fb4e4181304c0a93329bf8ad50bb9b3717d2c2cb852b8230b4f",
+    "freeze.json": "eeb34b7b4d05baaabb2b87831e41005ecf87b821bf6754404e2b9d0a1290bb65",
+    "config.json": "1eb4549d6c2791a49b8a2e74fd66a37beea4e7df1c6583b8f445371720774d3d",
+    "calibration.json": "d6f7bb890616a327dd2479b05cbe05f587d72a1d319735eefc674b72f872f792",
+    "freeze_fresh_engram_eval.py": "f35c5def79561351e82580098064785e36c0877c4421d705d155d0146786099e",
+    "run_fresh_engram_eval.py": "b63627ada3a489b450cf671bb520bd63a4cc37a770a93cb70687ac0a70e5d4cd",
+    "fresh-engram-eval.log": "bc2d43bfdb9765383a004ba3a982c97334d27d91a49495a4f73955f039030daa",
+    "negative-source-audit.json": "2c5544178a491a22a3c2b63abee8566392aed3e4fa917d5141bcd42efea10a8a"
+  }
+}

@@ -8,10 +8,10 @@ pub(super) fn start(node: &Node<'_>, source: &[u8]) -> Option<u64> {
     let mut cursor = *node;
     // TypeScript exports put the function beneath an export wrapper. Include
     // its actual bytes between the attached comment and declaration.
-    if let Some(parent) = cursor.parent() {
-        if parent.kind() == "export_statement" {
-            cursor = parent;
-        }
+    if let Some(parent) = cursor.parent()
+        && parent.kind() == "export_statement"
+    {
+        cursor = parent;
     }
     let mut first = None;
     for _ in 0..5 {

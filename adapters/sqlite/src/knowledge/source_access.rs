@@ -180,19 +180,18 @@ impl SqlKnowledgeStore {
                     _ => RetrievalTargetType::Relationship,
                 };
                 access.restrict(kind.clone(), &id);
-                if let Some(h) = heads.get(&key) {
-                    if h.attempt_id == attempt
-                        && (kind != RetrievalTargetType::Chunk
-                            || h.chunk_ids.iter().any(|v| v.as_str() == id))
-                        && engram_knowledge::document_head_retrieval_authorized(
-                            h,
-                            &request.scope,
-                            &request.requester,
-                            now,
-                        )
-                    {
-                        access.permit(kind, &id, h.policy.clone());
-                    }
+                if let Some(h) = heads.get(&key)
+                    && h.attempt_id == attempt
+                    && (kind != RetrievalTargetType::Chunk
+                        || h.chunk_ids.iter().any(|v| v.as_str() == id))
+                    && engram_knowledge::document_head_retrieval_authorized(
+                        h,
+                        &request.scope,
+                        &request.requester,
+                        now,
+                    )
+                {
+                    access.permit(kind, &id, h.policy.clone());
                 }
             }
         }

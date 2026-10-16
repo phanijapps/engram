@@ -58,11 +58,11 @@ fn merge(mut ranges: Vec<CodeByteRange>) -> Vec<CodeByteRange> {
     ranges.sort_by_key(|r| (r.start, r.end));
     let mut out: Vec<CodeByteRange> = vec![];
     for r in ranges {
-        if let Some(last) = out.last_mut() {
-            if r.start <= last.end {
-                last.end = last.end.max(r.end);
-                continue;
-            }
+        if let Some(last) = out.last_mut()
+            && r.start <= last.end
+        {
+            last.end = last.end.max(r.end);
+            continue;
         }
         out.push(r);
     }

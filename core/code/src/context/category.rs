@@ -123,15 +123,15 @@ pub(super) fn classify(
                 }
             }
         }
-        if current.kind() == "call_expression" {
-            if let Some(function) = current.child_by_field_name("function") {
-                let name = node_text(source, function);
-                if ["test", "it", "describe"]
-                    .iter()
-                    .any(|base| name == *base || name.starts_with(&format!("{base}.")))
-                {
-                    return CodeSourceCategory::Test;
-                }
+        if current.kind() == "call_expression"
+            && let Some(function) = current.child_by_field_name("function")
+        {
+            let name = node_text(source, function);
+            if ["test", "it", "describe"]
+                .iter()
+                .any(|base| name == *base || name.starts_with(&format!("{base}.")))
+            {
+                return CodeSourceCategory::Test;
             }
         }
         let Some(parent) = current.parent() else {

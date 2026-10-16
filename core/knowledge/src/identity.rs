@@ -63,11 +63,7 @@ pub fn compute_identity_key(entity: &KnowledgeEntity, mode: &EntityIdentityMode)
     match mode {
         EntityIdentityMode::IdOnly => None,
         EntityIdentityMode::StableKey { key } => Some(format!("sk:{}", key)),
-        EntityIdentityMode::ScopedKindAndNormalizedName {
-            include_graph,
-            match_aliases: _,
-            ..
-        } => {
+        EntityIdentityMode::ScopedKindAndNormalizedName { include_graph, .. } => {
             let scope_part = &entity.scope.tenant;
             let kind_part = format!("{:?}", entity.kind);
             let name_part = normalize_name(&entity.name);

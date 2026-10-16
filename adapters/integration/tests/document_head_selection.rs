@@ -23,7 +23,7 @@ fn stage(
     for payload in [
         DocumentHeadWrite::Source(source),
         DocumentHeadWrite::Document(doc),
-        DocumentHeadWrite::Chunk(chunk),
+        DocumentHeadWrite::Chunk(Box::new(chunk)),
     ] {
         block_on(store.write_document_record(&h.key, attempt, payload)).unwrap();
     }

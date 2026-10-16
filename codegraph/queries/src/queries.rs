@@ -602,11 +602,11 @@ pub fn resolve_call_targets(
         if rel.predicate != "calls" || rel.object.id.is_some() {
             continue;
         }
-        if let Some(name) = &rel.object.name {
-            if let Some(id) = name_to_id.get(name) {
-                rel.object.id = Some(engram_domain::Id::from(id.clone()));
-                resolved += 1;
-            }
+        if let Some(name) = &rel.object.name
+            && let Some(id) = name_to_id.get(name)
+        {
+            rel.object.id = Some(engram_domain::Id::from(id.clone()));
+            resolved += 1;
         }
     }
     resolved
@@ -620,7 +620,7 @@ pub fn most_complex(sources: &[(String, String)], limit: usize) -> Vec<(String, 
         .iter()
         .map(|(name, source)| (name.clone(), cyclomatic_complexity(source)))
         .collect();
-    ranked.sort_by(|a, b| b.1.cmp(&a.1));
+    ranked.sort_by_key(|a| std::cmp::Reverse(a.1));
     ranked.truncate(limit);
     ranked
 }

@@ -89,9 +89,11 @@ pub(super) fn derive(
             let context = super::context::select(
                 parent,
                 parents,
-                syntax.signature_range,
-                &imports,
-                &source.text,
+                super::context::SyntaxContext {
+                    signature: syntax.signature_range,
+                    imports: &imports,
+                    source: &source.text,
+                },
                 &body,
                 model,
                 config,

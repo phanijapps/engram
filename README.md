@@ -361,7 +361,7 @@ docs/                Architecture, ADRs, RFCs, research, specs, domain model.
 
 ### Prerequisites
 
-- **Rust 1.85+** (edition 2024).
+- **Rust 1.88+** (edition 2024).
 - **Node 22+** and **pnpm 10** (`corepack enable && corepack prepare pnpm@10 --activate`).
 - Optional for LLM extraction + Q&A: an OpenAI-compatible endpoint.
 

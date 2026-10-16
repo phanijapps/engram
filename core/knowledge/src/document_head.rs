@@ -9,7 +9,7 @@ use engram_runtime::CoreResult;
 pub enum DocumentHeadWrite {
     Source(KnowledgeSource),
     Document(SourceDocument),
-    Chunk(KnowledgeChunk),
+    Chunk(Box<KnowledgeChunk>),
     Graph(engram_domain::KnowledgeGraph),
     Entity(engram_domain::KnowledgeEntity),
     Relationship(engram_domain::KnowledgeRelationship),

@@ -49,22 +49,23 @@ pub(super) async fn exclude_changed_policy(
     file: &CodeFileKey,
     opts: &ScanOptions,
 ) -> CoreResult<()> {
-    if let Some(mut prior) = port.get_code_source(file).await? {
-        if prior.policy != opts.policy && prior.state == CodeSourceState::Active {
-            let expected = prior.attempt_id.clone();
-            prior.attempt_id = format!(
-                "{}:{}:{}",
-                Utc::now().timestamp_nanos_opt().unwrap_or_default(),
-                std::process::id(),
-                ATTEMPT_COUNTER.fetch_add(1, Ordering::Relaxed)
-            );
-            prior.state = CodeSourceState::Updating;
-            prior.policy = opts.policy.clone();
-            prior.provenance.actor = opts.actor.clone();
-            port.begin_code_source(prior.clone(), Some(&expected))
-                .await?;
-            port.fail_code_source(file, &prior.attempt_id).await?;
-        }
+    if let Some(mut prior) = port.get_code_source(file).await?
+        && prior.policy != opts.policy
+        && prior.state == CodeSourceState::Active
+    {
+        let expected = prior.attempt_id.clone();
+        prior.attempt_id = format!(
+            "{}:{}:{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default(),
+            std::process::id(),
+            ATTEMPT_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
+        prior.state = CodeSourceState::Updating;
+        prior.policy = opts.policy.clone();
+        prior.provenance.actor = opts.actor.clone();
+        port.begin_code_source(prior.clone(), Some(&expected))
+            .await?;
+        port.fail_code_source(file, &prior.attempt_id).await?;
     }
     Ok(())
 }

@@ -45,7 +45,7 @@ impl CommunityQuery for SqlKnowledgeStore {
             *counts.entry(*label).or_default() += 1;
         }
         let mut ranked: Vec<(usize, usize)> = counts.into_iter().collect();
-        ranked.sort_unstable_by(|a, b| b.1.cmp(&a.1));
+        ranked.sort_unstable_by_key(|a| std::cmp::Reverse(a.1));
         let top_labels: std::collections::HashSet<usize> =
             ranked.iter().take(limit).map(|(l, _)| *l).collect();
 
@@ -78,7 +78,7 @@ impl CommunityQuery for SqlKnowledgeStore {
                 weight: w,
             })
             .collect();
-        meta_edges.sort_unstable_by(|a, b| b.weight.cmp(&a.weight));
+        meta_edges.sort_unstable_by_key(|a| std::cmp::Reverse(a.weight));
         meta_edges.truncate(communities_nodes.len().saturating_mul(4));
 
         Ok(CommunityOverview {
@@ -104,29 +104,25 @@ impl CommunityQuery for SqlKnowledgeStore {
         let is_symbol = |id: &str| !id.starts_with("graph-") && !id.starts_with("repo-");
         for (sn, si, on, oi) in &rels {
             // subject endpoint — push entity id if not already in the community
-            if let Some(key) = endpoint_key(sn, si) {
-                if let Some(&label) = name_to_label.get(&key) {
-                    if let Some(eid) = si {
-                        if is_symbol(eid) {
-                            let b = label_to_ids.entry(label).or_default();
-                            if b.len() < MEMBER_CAP && !b.contains(eid) {
-                                b.push(eid.clone());
-                            }
-                        }
-                    }
+            if let Some(key) = endpoint_key(sn, si)
+                && let Some(&label) = name_to_label.get(&key)
+                && let Some(eid) = si
+                && is_symbol(eid)
+            {
+                let b = label_to_ids.entry(label).or_default();
+                if b.len() < MEMBER_CAP && !b.contains(eid) {
+                    b.push(eid.clone());
                 }
             }
             // object endpoint
-            if let Some(key) = endpoint_key(on, oi) {
-                if let Some(&label) = name_to_label.get(&key) {
-                    if let Some(eid) = oi {
-                        if is_symbol(eid) {
-                            let b = label_to_ids.entry(label).or_default();
-                            if b.len() < MEMBER_CAP && !b.contains(eid) {
-                                b.push(eid.clone());
-                            }
-                        }
-                    }
+            if let Some(key) = endpoint_key(on, oi)
+                && let Some(&label) = name_to_label.get(&key)
+                && let Some(eid) = oi
+                && is_symbol(eid)
+            {
+                let b = label_to_ids.entry(label).or_default();
+                if b.len() < MEMBER_CAP && !b.contains(eid) {
+                    b.push(eid.clone());
                 }
             }
         }

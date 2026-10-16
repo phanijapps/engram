@@ -220,8 +220,8 @@ pub(super) async fn validate(
             {
                 return Err(invalid("bundle repository context identity mismatch"));
             }
-            if let Some(existing) = target.get_entity(&root.id, scope).await? {
-                if existing.kind != root.kind
+            if let Some(existing) = target.get_entity(&root.id, scope).await?
+                && (existing.kind != root.kind
                     || existing.scope != root.scope
                     || existing.name != root.name
                     || existing.graph_id.is_some()
@@ -232,12 +232,11 @@ pub(super) async fn validate(
                         != root
                             .metadata
                             .as_ref()
-                            .and_then(|v| v.get("stableSourceKey"))
-                {
-                    return Err(CoreError::Conflict {
-                        reason: "target repository context collision".into(),
-                    });
-                }
+                            .and_then(|v| v.get("stableSourceKey")))
+            {
+                return Err(CoreError::Conflict {
+                    reason: "target repository context collision".into(),
+                });
             }
         }
         let records: Vec<_> = payloads(b).iter().map(|p| p.record()).collect();

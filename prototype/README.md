@@ -23,7 +23,7 @@ session; the FastEmbed model downloads on first retrieval use, then is cached.)
 
 ## Prerequisites
 
-- Rust toolchain (rustc 1.85+; the workspace is Rust 2024).
+- Rust toolchain (rustc 1.88+; the workspace is Rust 2024).
 - Node 22+ and pnpm 10+.
 - The native addon is **host-specific** (OS + arch) — rebuild it on each machine.
 

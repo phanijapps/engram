@@ -33,14 +33,13 @@ pub(super) fn begin(
 ) -> CoreResult<()> {
     let h = head(m);
     let key = state::key(&h.key)?;
-    if let Some(prior) = state::load(conn, &key)? {
-        if expected.is_some_and(|v| v != prior.attempt_id)
-            || (expected.is_none() && prior.state == CodeSourceState::Updating)
-        {
-            return Err(state::conflict(
-                "document head and code-source lease differ",
-            ));
-        }
+    if let Some(prior) = state::load(conn, &key)?
+        && (expected.is_some_and(|v| v != prior.attempt_id)
+            || (expected.is_none() && prior.state == CodeSourceState::Updating))
+    {
+        return Err(state::conflict(
+            "document head and code-source lease differ",
+        ));
     }
     let reused:bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM document_head_attempts WHERE head_key=?1 AND attempt_id=?2)",params![key,h.attempt_id],|r|r.get(0)).map_err(sql_error)?;
     if reused {

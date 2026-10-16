@@ -23,17 +23,26 @@ fn reference(
     })
 }
 
+pub(super) struct SyntaxContext<'a> {
+    pub signature: Option<CodeByteRange>,
+    pub imports: &'a [CodeByteRange],
+    pub source: &'a str,
+}
+
 pub(super) fn select(
     parent: &KnowledgeChunk,
     parents: &[KnowledgeChunk],
-    signature: Option<CodeByteRange>,
-    imports: &[CodeByteRange],
-    source: &str,
+    syntax: SyntaxContext<'_>,
     body: &str,
     model: &dyn EmbeddingProvider,
     config: &CodeIndexConfig,
     representation: &CodeRepresentation,
 ) -> CoreResult<Vec<CodeContextFact>> {
+    let SyntaxContext {
+        signature,
+        imports,
+        source,
+    } = syntax;
     if config.context_token_budget == 0 {
         return Ok(vec![]);
     }
@@ -52,23 +61,23 @@ pub(super) fn select(
             .iter()
             .find(|p| p.code.as_ref().and_then(|c| c.unit.as_ref()) == Some(unit))
     });
-    if let Some(donor) = ancestor {
-        if let (Some(value), Some(range)) = (
+    if let Some(donor) = ancestor
+        && let (Some(value), Some(range)) = (
             donor.location.as_ref().and_then(|l| l.anchor.clone()),
             donor.code.as_ref().and_then(|c| c.ranges.first().copied()),
-        ) {
-            candidates.push((CodeContextKind::Parent, value, donor, range));
-        }
+        )
+    {
+        candidates.push((CodeContextKind::Parent, value, donor, range));
     }
-    if let Some(range) = signature {
-        if let Some(value) = source.get(range.start as usize..range.end as usize) {
-            candidates.push((
-                CodeContextKind::Signature,
-                value.trim().into(),
-                parent,
-                range,
-            ));
-        }
+    if let Some(range) = signature
+        && let Some(value) = source.get(range.start as usize..range.end as usize)
+    {
+        candidates.push((
+            CodeContextKind::Signature,
+            value.trim().into(),
+            parent,
+            range,
+        ));
     }
     let relevant_text = format!(
         "{}\n{}",

@@ -588,10 +588,10 @@ impl CodeSourceRepository for SqlKnowledgeStore {
                 )
                 .map_err(sql_error)?;
             let c: KnowledgeChunk = serde_json::from_str(&json).map_err(json_error)?;
-            if let Some(code) = c.code {
-                if code.role != CodeChunkRole::SourceSnapshot {
-                    coverage.push(code);
-                }
+            if let Some(code) = c.code
+                && code.role != CodeChunkRole::SourceSnapshot
+            {
+                coverage.push(code);
             }
         }
         tx.commit().map_err(sql_error)?;

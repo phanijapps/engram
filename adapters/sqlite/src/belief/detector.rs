@@ -71,7 +71,7 @@ impl ContradictionDetector for SqlBeliefStore {
                 updated_at: None,
             });
         }
-        findings.sort_by(|left, right| left.id.to_string().cmp(&right.id.to_string()));
+        findings.sort_by_key(|left| left.id.to_string());
         Ok(findings)
     }
 }

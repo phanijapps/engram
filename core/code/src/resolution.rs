@@ -64,24 +64,24 @@ fn resolve_one(
     // parsed from the .cls file, it's registered as 'Class::Method'. This
     // rung strips the @salesforce/apex/ prefix and converts the dot to ::
     // so the import resolves to the parsed Apex entity.
-    if let Some(stripped) = name.strip_prefix("@salesforce/apex/") {
-        if let Some((class, method)) = stripped.rsplit_once('.') {
-            let qualified = format!("{class}::{method}");
-            if let Resolution::Resolved(c) = index.resolve(&qualified, from_path, from_repo) {
-                return Resolution::Resolved(c);
-            }
-            if let Resolution::Resolved(c) = index.resolve(method, from_path, from_repo) {
-                return Resolution::Resolved(c);
-            }
+    if let Some(stripped) = name.strip_prefix("@salesforce/apex/")
+        && let Some((class, method)) = stripped.rsplit_once('.')
+    {
+        let qualified = format!("{class}::{method}");
+        if let Resolution::Resolved(c) = index.resolve(&qualified, from_path, from_repo) {
+            return Resolution::Resolved(c);
+        }
+        if let Resolution::Resolved(c) = index.resolve(method, from_path, from_repo) {
+            return Resolution::Resolved(c);
         }
     }
 
     // Same document first, then the SymbolIndex ladder (same repo / unique
     // survivor / ambiguity).
-    if let Some(path) = from_path {
-        if let Resolution::Resolved(c) = index.resolve(name, Some(path), from_repo) {
-            return Resolution::Resolved(c);
-        }
+    if let Some(path) = from_path
+        && let Resolution::Resolved(c) = index.resolve(name, Some(path), from_repo)
+    {
+        return Resolution::Resolved(c);
     }
     index.resolve(name, from_path, from_repo)
 }
@@ -123,28 +123,27 @@ pub fn resolve_refs(
         // bare `method` via bare_tail registration). If the bare name
         // resolves to exactly one same-document candidate, use it —
         // this is the LWC/Rust `this.x()` / `self.x()` case.
-        if !matches!(outcome, Resolution::Resolved(_)) {
-            if let Some(path) = path {
-                if let Some(bucket) = index.bucket(name) {
-                    let same_doc: Vec<_> = bucket
-                        .iter()
-                        .filter(|c| c.path.as_deref() == Some(path))
-                        .cloned()
-                        .collect();
-                    if same_doc.len() == 1 {
-                        outcome = Resolution::Resolved(same_doc[0].clone());
-                    }
-                }
+        if !matches!(outcome, Resolution::Resolved(_))
+            && let Some(path) = path
+            && let Some(bucket) = index.bucket(name)
+        {
+            let same_doc: Vec<_> = bucket
+                .iter()
+                .filter(|c| c.path.as_deref() == Some(path))
+                .cloned()
+                .collect();
+            if same_doc.len() == 1 {
+                outcome = Resolution::Resolved(same_doc[0].clone());
             }
         }
 
         // Receiver-hint attempt: `store.save` → `Store::save` when a
         // declaration with that receiver exists.
-        if !matches!(outcome, Resolution::Resolved(_)) {
-            if let Some(hint) = hint {
-                let qualified_attempt = format!("{}::{}", receiver_type_hint(hint), name);
-                outcome = resolve_one(index, &qualified_attempt, path, repo);
-            }
+        if !matches!(outcome, Resolution::Resolved(_))
+            && let Some(hint) = hint
+        {
+            let qualified_attempt = format!("{}::{}", receiver_type_hint(hint), name);
+            outcome = resolve_one(index, &qualified_attempt, path, repo);
         }
 
         match outcome {

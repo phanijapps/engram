@@ -21,7 +21,7 @@ fn write(store: &SqlKnowledgeStore, h: &DocumentHead) {
     for payload in [
         DocumentHeadWrite::Source(source),
         DocumentHeadWrite::Document(doc),
-        DocumentHeadWrite::Chunk(chunk),
+        DocumentHeadWrite::Chunk(Box::new(chunk)),
     ] {
         block_on(store.write_document_record(&h.key, &h.attempt_id, payload)).unwrap();
     }
@@ -169,8 +169,12 @@ fn a_managed_chunk_id_cannot_be_rebound_to_different_vector_content() {
         block_on(store.write_document_record(&b.key, "b", payload)).unwrap();
     }
     chunk.text = "different body under an already embedded ID".into();
-    let error = block_on(store.write_document_record(&b.key, "b", DocumentHeadWrite::Chunk(chunk)))
-        .unwrap_err();
+    let error = block_on(store.write_document_record(
+        &b.key,
+        "b",
+        DocumentHeadWrite::Chunk(Box::new(chunk)),
+    ))
+    .unwrap_err();
     assert!(error.to_string().contains("immutable per ID"), "{error}");
     b.state = CodeSourceState::Active;
     assert!(

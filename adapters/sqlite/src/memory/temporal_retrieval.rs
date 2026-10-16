@@ -153,7 +153,7 @@ impl TemporalMemorySource for SqlMemoryService {
     async fn recent_memories(&self, scope: &Scope, limit: u32) -> CoreResult<Vec<MemoryRecord>> {
         let mut records = self.list_memories_in_scope(scope)?;
         records.retain(|r| r.status == MemoryStatus::Active);
-        records.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        records.sort_by_key(|a| std::cmp::Reverse(a.created_at));
         records.truncate(limit.max(1) as usize);
         Ok(records)
     }

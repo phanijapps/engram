@@ -829,7 +829,9 @@ where
                                         .write_document_record(
                                             &manifest.key,
                                             &manifest.attempt_id,
-                                            engram_knowledge::DocumentHeadWrite::Chunk(updated),
+                                            engram_knowledge::DocumentHeadWrite::Chunk(Box::new(
+                                                updated,
+                                            )),
                                         )
                                         .await?;
                                 } else {
@@ -1097,12 +1099,11 @@ where
                 let reference = row.reference_name.clone();
                 let (hint, name) = engram_code::split_dotted(&reference);
                 let mut outcome = idx.resolve(name, None, None);
-                if !matches!(outcome, engram_code::Resolution::Resolved(_)) {
-                    if let Some(hint) = hint {
-                        let qualified =
-                            format!("{}::{}", engram_code::receiver_type_hint(hint), name);
-                        outcome = idx.resolve(&qualified, None, None);
-                    }
+                if !matches!(outcome, engram_code::Resolution::Resolved(_))
+                    && let Some(hint) = hint
+                {
+                    let qualified = format!("{}::{}", engram_code::receiver_type_hint(hint), name);
+                    outcome = idx.resolve(&qualified, None, None);
                 }
                 if let engram_code::Resolution::Resolved(candidate) = outcome {
                     let scope = row.scope.clone();
@@ -1391,10 +1392,10 @@ where
 
     // Emit contract manifest entries for files processed in this scan.
     for (rel, keys) in &current_contract_ops {
-        if !keys.is_empty() {
-            if let Ok(json) = serde_json::to_string(keys) {
-                new_manifest.insert(format!("{CONTRACT_PREFIX}{rel}"), json);
-            }
+        if !keys.is_empty()
+            && let Ok(json) = serde_json::to_string(keys)
+        {
+            new_manifest.insert(format!("{CONTRACT_PREFIX}{rel}"), json);
         }
     }
 

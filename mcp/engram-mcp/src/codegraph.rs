@@ -232,11 +232,11 @@ fn load_manifest(path: &std::path::Path, scope: &Scope) -> HashMap<String, Strin
 /// leaves either the old or the new file, never a truncated one. Write
 /// failures are non-fatal (next scan degrades to full) but surfaced.
 fn save_manifest(path: &std::path::Path, manifest: &HashMap<String, String>, scope: &Scope) {
-    if let Some(parent) = path.parent() {
-        if let Err(e) = std::fs::create_dir_all(parent) {
-            eprintln!("engram-mcp: scan manifest dir warning: {e}");
-            return;
-        }
+    if let Some(parent) = path.parent()
+        && let Err(e) = std::fs::create_dir_all(parent)
+    {
+        eprintln!("engram-mcp: scan manifest dir warning: {e}");
+        return;
     }
     let tmp = path.with_extension("json.tmp");
     match engram_ingest::encode_scan_manifest(manifest, scope) {
@@ -1724,7 +1724,7 @@ pub fn architecture(app: &App, args: &Value) -> Result<Value, ToolError> {
         engram_codegraph_queries::call_communities(&graph, 3)
             .into_iter()
             .collect();
-    communities.sort_by(|a, b| b.1.cmp(&a.1));
+    communities.sort_by_key(|a| std::cmp::Reverse(a.1));
     communities.truncate(10);
     let stats = engram_codegraph_queries::repository_stats(&graph);
     Ok(protocol::text_content(format!(
@@ -4296,46 +4296,8 @@ mod phase2_tool_tests {
 }
 
 #[cfg(test)]
-mod reindex_tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn reindex_rejects_wire_scope_widening_before_processing() {
-        let dir = tempfile::tempdir().unwrap();
-        let app = crate::tools::tests::test_app(dir.path());
-        let error = reindex(&app, &json!({"scope":{"tenant":"other"}})).unwrap_err();
-        assert!(error.message.contains("trusted launch scope"));
-    }
-
-    /// PS5: `reindex` over an empty store answers with the progress-report
-    /// shape (never errors, never pretends to embed) and its scope defaults
-    /// to the launch scope when omitted (same contract as the maintenance
-    /// tools' AC2 fix).
-    #[test]
-    fn reindex_answers_with_progress_shape_and_default_scope() {
-        let dir = tempfile::tempdir().unwrap();
-        let app = crate::tools::tests::test_app(dir.path());
-        let res = reindex(&app, &json!({})).unwrap();
-        let text = res["content"][0]["text"].as_str().unwrap();
-        assert!(
-            text.starts_with("reindex:") && text.contains("embedded 0 chunks"),
-            "progress-report shape: {text}"
-        );
-        // The runtime no-embedder path (--no-vector) returns the honest
-        // unavailable message — exercised live; here the stub provider
-        // reports the same never-error contract.
-        let res2 = reindex(&app, &json!({ "limit": 5 })).unwrap();
-        assert!(
-            res2["content"][0]["text"]
-                .as_str()
-                .unwrap()
-                .contains("limit 5"),
-            "limit threads through: {}",
-            res2["content"][0]["text"].as_str().unwrap()
-        );
-    }
-}
+#[path = "codegraph_reindex_tests.rs"]
+mod reindex_tests;
 
 /// Exact source access is a separate purpose from recall and model processing.
 pub fn source_read(app: &App, args: &Value) -> Result<Value, ToolError> {

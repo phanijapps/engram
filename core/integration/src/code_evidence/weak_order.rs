@@ -37,10 +37,10 @@ pub(super) fn parents<'a>(
                 .get(&trace.source)
                 .copied()
                 .unwrap_or(config.fusion.default_source_weight);
-            if weight > 0.0 {
-                if let Some(rank) = trace.source_rank.filter(|&rank| rank > 0) {
-                    entry.0 = entry.0.min(rank);
-                }
+            if weight > 0.0
+                && let Some(rank) = trace.source_rank.filter(|&rank| rank > 0)
+            {
+                entry.0 = entry.0.min(rank);
             }
         }
     }

@@ -240,15 +240,14 @@ where
      -> CoreResult<Option<TokenSegmentPlan>> {
         let mut ranges = left.ranges.clone();
         for range in &right.ranges {
-            if let Some(last) = ranges.last_mut() {
-                if last.end == range.start
-                    && canonical
-                        .iter()
-                        .any(|outer| outer.start <= last.start && outer.end >= range.end)
-                {
-                    last.end = range.end;
-                    continue;
-                }
+            if let Some(last) = ranges.last_mut()
+                && last.end == range.start
+                && canonical
+                    .iter()
+                    .any(|outer| outer.start <= last.start && outer.end >= range.end)
+            {
+                last.end = range.end;
+                continue;
             }
             ranges.push(*range);
         }
@@ -266,17 +265,17 @@ where
     let mut result: Vec<TokenSegmentPlan> = Vec::new();
     while let Some(plan) = queue.pop_front() {
         if text(&plan.ranges)?.trim().is_empty() {
-            if let Some(previous) = result.last_mut() {
-                if let Some(joined) = merge(previous, &plan, tokenize)? {
-                    *previous = joined;
-                    continue;
-                }
+            if let Some(previous) = result.last_mut()
+                && let Some(joined) = merge(previous, &plan, tokenize)?
+            {
+                *previous = joined;
+                continue;
             }
-            if let Some(next) = queue.front_mut() {
-                if let Some(joined) = merge(&plan, next, tokenize)? {
-                    *next = joined;
-                    continue;
-                }
+            if let Some(next) = queue.front_mut()
+                && let Some(joined) = merge(&plan, next, tokenize)?
+            {
+                *next = joined;
+                continue;
             }
             if !allow_context {
                 return Err(invalid(

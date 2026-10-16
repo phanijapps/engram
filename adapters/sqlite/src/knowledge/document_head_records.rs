@@ -165,7 +165,7 @@ pub(super) fn write(
         DocumentHeadWrite::Chunk(v) => {
             chunk(conn, h, &v)?;
             super::document_derived_write::immutable_chunk(conn, &v)?;
-            super::record_writes::put_chunk(conn, v)?;
+            super::record_writes::put_chunk(conn, *v)?;
         }
         derived => super::document_derived_write::write(conn, key, h, derived)?,
     }

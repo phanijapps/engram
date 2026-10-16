@@ -1,6 +1,6 @@
 ---
 name: new-guide
-description: Use this skill to draft a new user-facing guide under docs/guides paths, optionally organized by pack and Diataxis quadrant, following the Diátaxis framework. Triggers on "write a guide for X", "new tutorial", "new how-to", "new reference page", "new explanation". Settles the audience contract before any body is written, then scaffolds from the matching per-quadrant template. Do NOT use for feature contracts (use `new-spec`), cross-cutting proposals (use `new-rfc`), or recording decisions (use `new-adr`).
+description: Use this skill to draft a new user-facing guide under `docs/guides/{quadrant}/{slug}.md` (or `docs/guides/{pack}/{quadrant}/{slug}.md` when guides are organized by pack) following the Diátaxis framework. Triggers on "write a guide for X", "new tutorial", "new how-to", "new reference page", "new explanation". Settles the audience contract before any body is written, then scaffolds from the matching per-quadrant template. Do NOT use for feature contracts (use `new-spec`), cross-cutting proposals (use `new-rfc`), or recording decisions (use `new-adr`).
 ---
 
 # Skill: new-guide
@@ -190,7 +190,7 @@ If any check fails, push back rather than proceeding.
    - Tempted to recommend a best practice mid-reference → link to the
      explanation.
 
-   The link can be a placeholder (`<!-- pending link to … -->`) if the
+   The link can be a placeholder (`<!-- TODO: link to … -->`) if the
    adjacent piece doesn't exist yet; surface those placeholders in the
    final summary so the next guide gets written.
 
@@ -224,7 +224,7 @@ If any check fails, push back rather than proceeding.
    concept, the how-to that uses what reference describes (and vice
    versa), the explanation that says *why* — check whether the file
    exists. If it does, link it. If it doesn't, surface the gap in the
-   final summary as a follow-up item; don't write a broken link, and
+   final summary as a follow-up TODO; don't write a broken link, and
    don't synthesize a plausible-sounding path. From each existing
    sibling, add a reverse link to the new piece. Cross-links are a
    maintenance pact: when one rots, the others surface the drift.

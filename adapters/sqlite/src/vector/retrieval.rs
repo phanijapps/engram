@@ -33,6 +33,9 @@ pub trait VectorQueryProvider: Send + Sync {
 /// request and should be skipped.
 #[async_trait]
 pub trait VectorTargetResolver: Send + Sync {
+    async fn source_revision(&self, _request: &RetrievalRequest) -> CoreResult<u64> {
+        Ok(0)
+    }
     /// Resolves one sqlite-vec hit into a retrieval target.
     ///
     /// Async so implementors await canonical-record lookups (e.g. the store's
@@ -108,6 +111,7 @@ impl RetrievalIndex for VectorRetrievalIndex {
         &self,
         request: &RetrievalRequest,
     ) -> CoreResult<Vec<RetrievalResult>> {
+        let source_revision = self.target_resolver.source_revision(request).await?;
         let query = self.query_provider.query_vector(request)?;
         let limit = search_limit(request, self.default_limit);
         let hits = {
@@ -124,6 +128,11 @@ impl RetrievalIndex for VectorRetrievalIndex {
                 continue;
             };
             results.push(vector_result(rank, hit, target));
+        }
+        if self.target_resolver.source_revision(request).await? != source_revision {
+            return Err(CoreError::ProviderUnavailable {
+                provider: "code source changed during vector retrieval".into(),
+            });
         }
         Ok(results)
     }

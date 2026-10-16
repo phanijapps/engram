@@ -44,6 +44,7 @@ pub use repo_graph::KnowledgeRepoGraph;
 pub use request::{DocumentIngestRequest, DocumentMetadata};
 pub use scan_filter::{ConceptFilterConfig, DenyFilterConfig, ScanFilter, ScanFilterConfig};
 pub use scanner::{
-    ScanOptions, ScanProgress, ScanSummary, detect_workspace, scan_repository, scan_workspace,
+    ScanAdmissionFailure, ScanAdmissionFailureKind, ScanOptions, ScanProgress, ScanSummary,
+    decode_scan_manifest, detect_workspace, encode_scan_manifest, scan_repository, scan_workspace,
 };
 pub use source_key::{SOURCE_PATH_KEY, STABLE_SOURCE_KEY, stable_source_key};

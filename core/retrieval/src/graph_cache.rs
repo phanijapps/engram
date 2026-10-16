@@ -41,6 +41,8 @@ use tokio::sync::RwLock;
 /// stale snapshot never serves a newer graph.
 #[derive(Debug, Clone)]
 pub struct GraphSnapshot {
+    /// Source eligibility version captured with these records.
+    pub source_revision: u64,
     /// All knowledge-graph entities visible to the snapshot's scope.
     pub entities: Vec<KnowledgeEntity>,
     /// All knowledge-graph relationships visible to the snapshot's scope
@@ -188,6 +190,7 @@ mod tests {
 
     fn snapshot() -> Arc<GraphSnapshot> {
         Arc::new(GraphSnapshot {
+            source_revision: 0,
             entities: Vec::new(),
             relationships: Vec::new(),
             community_labels: None,

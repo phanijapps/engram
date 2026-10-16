@@ -113,6 +113,7 @@ impl RetrievalIndex for AssociativeGraphIndex {
             .or_else(|| request.budget.as_ref().and_then(|budget| budget.max_items))
             .unwrap_or(self.default_limit);
         let scope = &request.scope;
+        let source_revision = self.source.source_revision(scope).await?;
 
         // Cache hit: serve the in-scope entities + relationships from the
         // materialized snapshot, skipping the per-query store reload. A miss
@@ -120,11 +121,12 @@ impl RetrievalIndex for AssociativeGraphIndex {
         // cache. Because this lane reads BOTH entities and relationships, it
         // always populates a full snapshot — so a sibling lane sharing the same
         // cache (e.g. the community-summary lane) hits on its next query.
-        let (entities, relationships): (
+        let (mut entities, mut relationships): (
             Vec<engram_domain::KnowledgeEntity>,
             Vec<engram_domain::KnowledgeRelationship>,
         ) = if let Some(cache) = &self.cache
             && let Some(snap) = cache.get(scope).await
+            && snap.source_revision == source_revision
         {
             (snap.entities.clone(), snap.relationships.clone())
         } else {
@@ -140,6 +142,7 @@ impl RetrievalIndex for AssociativeGraphIndex {
                     .put(
                         scope,
                         Arc::new(GraphSnapshot {
+                            source_revision,
                             entities: ents.clone(),
                             relationships: rels.clone(),
                             community_labels: None,
@@ -149,6 +152,33 @@ impl RetrievalIndex for AssociativeGraphIndex {
             }
             (ents, rels)
         };
+
+        let access = self.source.access_for_request(request).await?;
+
+        entities
+            .retain(|e| access.allows(engram_domain::RetrievalTargetType::Entity, e.id.as_str()));
+        let visible_ids: std::collections::HashSet<_> =
+            entities.iter().map(|e| e.id.as_str()).collect();
+        relationships.retain(|r| {
+            access.allows(
+                engram_domain::RetrievalTargetType::Relationship,
+                r.id.as_str(),
+            ) && r
+                .subject
+                .id
+                .as_ref()
+                .is_some_and(|id| visible_ids.contains(id.as_str()))
+                && r.object
+                    .id
+                    .as_ref()
+                    .is_some_and(|id| visible_ids.contains(id.as_str()))
+        });
+
+        if self.source.source_revision(scope).await? != source_revision {
+            return Err(engram_runtime::CoreError::ProviderUnavailable {
+                provider: "code source changed during retrieval".into(),
+            });
+        }
 
         let entity_pairs: Vec<(String, String)> = entities
             .iter()
@@ -185,11 +215,21 @@ impl RetrievalIndex for AssociativeGraphIndex {
             .into_iter()
             .enumerate()
             .filter_map(|(rank, (key, ppr))| {
-                by_key
-                    .get(key.as_str())
-                    .map(|entity| build_result(rank, &key, ppr, entity, &seeds))
+                by_key.get(key.as_str()).map(|entity| {
+                    let mut result = build_result(rank, &key, ppr, entity, &seeds);
+                    if let Some(policy) = access.policy(RetrievalTargetType::Entity, &key) {
+                        result.policy = policy.clone();
+                    }
+                    result
+                })
             })
             .collect();
+        if self.source.source_revision(scope).await? != source_revision {
+            return Err(engram_runtime::CoreError::ProviderUnavailable {
+                provider: "code source changed during retrieval".into(),
+            });
+        }
+
         Ok(results)
     }
 }

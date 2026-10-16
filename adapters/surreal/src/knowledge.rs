@@ -104,6 +104,13 @@ impl KnowledgeRepository for SurrealKnowledgeStore {
     }
 
     async fn put_chunk(&self, chunk: KnowledgeChunk) -> CoreResult<KnowledgeChunk> {
+        if chunk.code.is_some() {
+            return Err(engram_runtime::CoreError::CapabilityUnsupported {
+                capability: "code_source_preservation".into(),
+                reason: "source-generation reader/writer is not available in this knowledge cell"
+                    .into(),
+            });
+        }
         self.put_record(CHUNK_TABLE, chunk.id.to_string(), &chunk)
             .await?;
         Ok(chunk)

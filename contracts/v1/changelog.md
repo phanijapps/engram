@@ -18,3 +18,16 @@
 - Required `MemoryRecord.status`.
 - Kept `Scope.subject` optional.
 - Kept embedded `Actor` in `Provenance`.
+
+## 2026-10-14 — Code source preservation
+
+- Added optional code/documentKind extensions and typed file/byte-range,
+  generation, contribution and source-read payloads under RFC-0021.
+- Existing record meanings and chunk-kind enum values remain unchanged;
+  source-reader/index activation is separately versioned and capability-gated.
+- Added the SQLite knowledge source cell, fenced per-file generations,
+  versioned scan sidecars, exact source reads, and typed `ImportData` source
+  bundles. Reads are bound to trusted scope/requester context; source read,
+  export, and import activation use separate authority checks. Snapshot chunks
+  are excluded from normal knowledge candidate listing and model-document
+  feeds.

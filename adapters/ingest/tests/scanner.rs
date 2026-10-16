@@ -90,8 +90,14 @@ fn empty_files_skip_cleanly_and_are_manifest_unchanged() {
         summary3.errors, 0,
         "became-empty not an error: {summary3:?}"
     );
-    assert_eq!(summary3.skipped, 1, "became-empty skipped: {summary3:?}");
-    assert_eq!(summary3.ingested, 0, "nothing ingested: {summary3:?}");
+    assert_eq!(
+        summary3.skipped, 0,
+        "accepted empty code is preserved: {summary3:?}"
+    );
+    assert_eq!(
+        summary3.ingested, 1,
+        "empty code snapshot ingested: {summary3:?}"
+    );
     let entities = block_on(store.list_entities(&scope())).expect("list");
     assert!(
         entities.iter().all(|e| e.name != "one"),
@@ -694,9 +700,18 @@ fn polyglot_scan_end_to_end_phase2() {
     );
     assert!(has("extends", "Repo", "Base"), "extends: {rels:?}");
     assert!(has("implements", "Repo", "Store"), "implements: {rels:?}");
+    // Parallel resolution and the serial healing pass may render an imported
+    // alias differently; both must point at the canonical qualified symbol.
+    let entities = block_on(store.list_entities(&scope())).expect("entities");
+    let helper = entities
+        .iter()
+        .find(|e| e.name == "inner::helper")
+        .expect("qualified helper");
     assert!(
-        has("routes_to", "GET /items", "helper"),
-        "routes_to: {rels:?}"
+        rels.iter().any(|r| r.predicate == "routes_to"
+            && r.subject.name.as_deref() == Some("GET /items")
+            && r.object.id.as_ref() == Some(&helper.id)),
+        "route must resolve to qualified helper: {rels:?}"
     );
     assert!(
         rels.iter()

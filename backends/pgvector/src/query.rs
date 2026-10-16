@@ -75,6 +75,7 @@ impl PgKnowledgeQuery {
         let sql = format!(
             "SELECT c.record_json FROM knowledge_chunks c \
              JOIN knowledge_sources s ON s.id = c.source_id \
+             LEFT JOIN knowledge_documents d ON d.id = c.document_id \
              WHERE s.{} ORDER BY c.id",
             Self::SCOPE_WHERE
         );
@@ -117,9 +118,11 @@ impl KnowledgeQuery for PgKnowledgeQuery {
             "SELECT c.id, \
                     jsonb_extract_path_text(c.record_json, 'provenance', 'source'), \
                     length(coalesce(jsonb_extract_path_text(c.record_json, 'text'), '')) > 0, \
-                    coalesce(jsonb_extract_path_text(c.record_json, 'contentHash'), '') \
+                    coalesce(jsonb_extract_path_text(c.record_json, 'contentHash'), ''), \
+                    (coalesce(d.record_json->>'kind','') != 'code' AND coalesce(c.record_json->>'kind','') != 'code_symbol' AND (coalesce(c.record_json->>'kind','') != 'code_block' OR d.record_json->>'kind' IS NOT NULL)) \
              FROM knowledge_chunks c \
              JOIN knowledge_sources s ON s.id = c.source_id \
+             LEFT JOIN knowledge_documents d ON d.id = c.document_id \
              WHERE s.{} ORDER BY c.id",
             Self::SCOPE_WHERE
         );
@@ -133,6 +136,9 @@ impl KnowledgeQuery for PgKnowledgeQuery {
         Ok(rows
             .iter()
             .map(|r| ChunkRef {
+                code: None,
+                semantic_eligible: true,
+                model_eligible: r.get(4),
                 id: engram_domain::ChunkId::from(r.get::<_, String>(0)),
                 source: r.get(1),
                 has_text: r.get(2),

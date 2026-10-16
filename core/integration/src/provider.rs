@@ -85,6 +85,15 @@ pub struct EngramProvider {
 }
 
 impl EngramProvider {
+    /// Backfills bounded retrieval embeddings; local code source guards are
+    /// shared by Rust embedders and every transport.
+    pub async fn backfill_embeddings(
+        &self,
+        request: &engram_domain::EmbeddingBackfillRequest,
+    ) -> CoreResult<engram_domain::EmbeddingBackfillReport> {
+        crate::embedding_backfill::backfill(self, request).await
+    }
+
     /// Validates configuration and returns a provider with no handles.
     ///
     /// This is the config-validation entry point. Every family is reported
@@ -235,6 +244,21 @@ impl EngramProvider {
     /// Returns the knowledge repository handle if supported.
     pub fn knowledge(&self) -> Option<&Arc<dyn KnowledgeRepository>> {
         self.knowledge.as_ref()
+    }
+
+    /// Exact source behavior is capability-gated independently of generic knowledge.
+    pub fn code_sources(&self) -> Option<&dyn engram_knowledge::CodeSourceRepository> {
+        if !self.capabilities.code_source_preservation.is_supported() {
+            return None;
+        }
+        self.knowledge.as_ref().and_then(|k| k.code_sources())
+    }
+    pub fn require_code_source(&self) -> CoreResult<&dyn engram_knowledge::CodeSourceRepository> {
+        self.code_sources()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "code_source_preservation".into(),
+                reason: "source-preserving cell is not wired".into(),
+            })
     }
 
     /// Returns the knowledge-graph repository handle if supported.
@@ -858,7 +882,17 @@ impl EngramProviderBuilder {
     }
 
     /// Builds the provider.
-    pub fn build(self) -> EngramProvider {
+    pub fn build(mut self) -> EngramProvider {
+        // Derive runtime readiness from held handles for custom compositions as
+        // well as backend recipes. Vector storage alone is not code embedding.
+        self.capabilities.code_embeddings = crate::embedding_backfill::capability(
+            self.embedding_provider.as_deref(),
+            self.vectors.as_deref(),
+            self.knowledge_query.is_some(),
+            self.knowledge
+                .as_ref()
+                .is_some_and(|k| k.code_sources().is_some()),
+        );
         EngramProvider {
             capabilities: self.capabilities,
             memory: self.memory,
@@ -1109,6 +1143,7 @@ mod tests {
         impl ExportImport for StubExportImport {
             async fn export(&self, _scope: &Scope) -> engram_runtime::CoreResult<ImportData> {
                 Ok(ImportData {
+                    code_sources: Vec::new(),
                     memories: Vec::new(),
                     knowledge_sources: Vec::new(),
                     knowledge_documents: Vec::new(),

@@ -8,7 +8,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { NativeProviderTransport } from "@engram/node";
 
-import { createLlmProvider } from "../src/maintenance/llm.js";
+import { createLlmProvider, type LlmProvider } from "../src/maintenance/llm.js";
 import { extractKnowledge, isNoiseConcept } from "../src/maintenance/extract_knowledge.js";
 
 function mockTransport(overrides: Partial<NativeProviderTransport> = {}): NativeProviderTransport {
@@ -309,4 +309,30 @@ describe("extractKnowledge", () => {
     expect(res.relationshipsWritten).toBe(0);
     expect(res.skipped).toBe(4); // 1 property + 1 relationship + 1 unknown-predicate rel + 1 unrelated tool call
   });
+  it("keeps every code role and legacy code out of automatic model input", async () => {
+    const codeChunks = [
+      {text: "poison-snapshot", documentKind: "code", code: {role: "source_snapshot"}},
+      {text: "legacy-body", documentKind: "code"},
+      {text: "symbol-body", code: {role: "symbol"}},
+      {text: "context-body", code: {role: "container_context"}},
+      {text: "residual-body", code: {role: "residual"}},
+      {text: "legacy-symbol", kind: "code_symbol"},
+      {text: "legacy-unknown-code-block", kind: "code_block"},
+    ];
+    const listGraphs = vi.fn(async () => codeChunks.map((_, i) => ({id: `g${i}`, metadata: {documentId: `d${i}`}})));
+    const listChunksByDocument = vi.fn(async (id: string) => [codeChunks[Number(id.slice(1))]]);
+    const llm = {complete: vi.fn(async () => ({toolCalls: []}))} as unknown as LlmProvider;
+    const t = mockTransport({listGraphs, listChunksByDocument});
+    const result = await extractKnowledge({transport: t,scope: {tenant: "t"},llm});
+    expect(llm.complete).not.toHaveBeenCalled();
+    expect(result.documentsRead).toBe(0);
+  });
+  it("preserves model input for a Markdown document containing a code block", async () => {
+    const listGraphs = vi.fn(async () => [{id: "g",metadata: {documentId: "d"}}]);
+    const listChunksByDocument = vi.fn(async () => [{text: "example code in prose",kind: "code_block",documentKind: "markdown"}]);
+    const llm = {complete: vi.fn(async () => ({toolCalls: []}))} as unknown as LlmProvider;
+    await extractKnowledge({transport: mockTransport({listGraphs,listChunksByDocument}),scope: {tenant: "t"},llm});
+    expect(llm.complete).toHaveBeenCalledOnce();
+  });
+
 });

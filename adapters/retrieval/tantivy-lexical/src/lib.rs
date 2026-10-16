@@ -16,4 +16,5 @@ mod tokenizer;
 
 pub use index::LexicalIndex;
 pub use retrieval::{LexicalResolvedTarget, LexicalRetrievalIndex, LexicalTargetResolver};
+
 pub use tokenizer::normalize_identifier_text;

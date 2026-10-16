@@ -22,10 +22,11 @@
 use engram_belief::{BeliefQuery, BeliefRepository};
 use engram_domain::{
     Actor, ActorKind, AllowedUse, ApplyMode, Belief, ConsolidationRequest, ContextPayload,
-    Contradiction, DeleteMode, EvidenceRef, EvidenceTargetType, ForgetRequest, ForgetResult, Id,
-    KnowledgeEntity, KnowledgeRelationship, MaintenancePlan, MaintenancePlanRequest,
-    MaintenancePolicy, MemoryRecord, Page, Policy, Procedure, Provenance, Retention,
-    RetrievalRequest, Scope, Sensitivity, Visibility, WriteMemoryRequest, WriteMemoryResponse,
+    Contradiction, DeleteMode, EmbeddingBackfillRequest, EvidenceRef, EvidenceTargetType,
+    ForgetRequest, ForgetResult, Id, KnowledgeEntity, KnowledgeRelationship, MaintenancePlan,
+    MaintenancePlanRequest, MaintenancePolicy, MemoryRecord, Page, Policy, Procedure, Provenance,
+    Retention, RetrievalRequest, Scope, Sensitivity, Visibility, WriteMemoryRequest,
+    WriteMemoryResponse,
 };
 use engram_hierarchy::HierarchyRepository;
 use engram_ingest::{
@@ -119,6 +120,14 @@ impl NativeProvider {
     #[napi(js_name = "capabilitiesJson")]
     pub fn capabilities_json(&self) -> Result<String> {
         encode(self.inner.capabilities())
+    }
+
+    /// Backfills eligible retrieval vectors through the shared SDK operation.
+    #[napi(js_name = "backfillEmbeddingsJson")]
+    pub fn backfill_embeddings_json(&self, request_json: String) -> Result<String> {
+        let request: EmbeddingBackfillRequest = decode(&request_json)?;
+        let report = block_on(self.inner.backfill_embeddings(&request)).map_err(to_napi_error)?;
+        encode(&report)
     }
 
     // ---- require_*: one per handle proxy. Each clones the Arc<dyn Trait>
@@ -267,6 +276,22 @@ impl NativeProvider {
             .map_err(to_napi_error)?
             .clone();
         Ok(NativeObservabilityApi { handle })
+    }
+
+    /// Host context is fixed for this source handle; query JSON cannot broaden it.
+    #[napi(js_name = "requireCodeSourceApi")]
+    pub fn require_code_source_api(
+        &self,
+        context_json: String,
+    ) -> Result<crate::code_source::NativeCodeSourceApi> {
+        self.inner.require_code_source().map_err(to_napi_error)?;
+        crate::code_source::NativeCodeSourceApi::new(
+            self.inner
+                .require_knowledge()
+                .map_err(to_napi_error)?
+                .clone(),
+            &context_json,
+        )
     }
 
     /// Returns a knowledge-query handle (engine-neutral entity/relationship
@@ -825,6 +850,26 @@ pub struct NativeExportImportApi {
 
 #[napi]
 impl NativeExportImportApi {
+    #[napi(js_name = "exportAuthorizedJson")]
+    pub fn export_authorized_json(&self, context_json: String) -> Result<String> {
+        let context: engram_domain::CodeSourceContext = decode(&context_json)?;
+        if context.reader_version != 1 {
+            return Err(to_napi_error(
+                engram_runtime::CoreError::CapabilityUnsupported {
+                    capability: "code_source_transfer".into(),
+                    reason: "reader version unsupported".into(),
+                },
+            ));
+        }
+        encode(
+            &block_on(
+                self.handle
+                    .export_authorized(&context.requester, &context.scope),
+            )
+            .map_err(to_napi_error)?,
+        )
+    }
+
     /// Exports the semantic state visible to a scope into one `ImportData`
     /// payload. Takes a `Scope` JSON, returns an `ImportData` JSON ready for
     /// `MigrationService::dry_run_import`.
@@ -909,7 +954,10 @@ impl NativeKnowledgeQueryApi {
         let scope = scope_field(&value)?;
         let result = block_on(self.handle.list_chunks_by_document(&document_id, &scope))
             .map_err(to_napi_error)?;
-        encode(&result)
+        crate::knowledge_chunks::encode_chunk_projection(
+            &result,
+            value.get("readerVersion").and_then(|v| v.as_u64()),
+        )
     }
 }
 
@@ -1359,6 +1407,56 @@ pub struct NativeMigrationApi {
 
 #[napi]
 impl NativeMigrationApi {
+    #[napi(js_name = "dryRunImportAuthorizedJson")]
+    pub fn dry_run_import_authorized_json(
+        &self,
+        data_json: String,
+        context_json: String,
+    ) -> Result<String> {
+        let context: engram_domain::CodeSourceContext = decode(&context_json)?;
+        if context.reader_version != 1 {
+            return Err(to_napi_error(
+                engram_runtime::CoreError::CapabilityUnsupported {
+                    capability: "code_source_transfer".into(),
+                    reason: "reader version unsupported".into(),
+                },
+            ));
+        }
+        let data: engram_integration::ImportData = decode(&data_json)?;
+        encode(
+            &block_on(self.handle.dry_run_import_authorized(
+                &data,
+                &context.requester,
+                &context.scope,
+            ))
+            .map_err(to_napi_error)?,
+        )
+    }
+    #[napi(js_name = "applyImportAuthorizedJson")]
+    pub fn apply_import_authorized_json(
+        &self,
+        manifest_json: String,
+        context_json: String,
+    ) -> Result<String> {
+        let context: engram_domain::CodeSourceContext = decode(&context_json)?;
+        if context.reader_version != 1 {
+            return Err(to_napi_error(
+                engram_runtime::CoreError::CapabilityUnsupported {
+                    capability: "code_source_transfer".into(),
+                    reason: "reader version unsupported".into(),
+                },
+            ));
+        }
+        let manifest: engram_integration::MigrationManifest = decode(&manifest_json)?;
+        block_on(self.handle.apply_import_authorized(
+            &manifest,
+            &context.requester,
+            &context.scope,
+        ))
+        .map_err(to_napi_error)?;
+        Ok("null".into())
+    }
+
     #[napi(js_name = "dryRunImportJson")]
     pub fn dry_run_import_json(&self, import_json: String) -> Result<String> {
         let import: engram_integration::ImportData = decode(&import_json)?;
@@ -1436,7 +1534,14 @@ fn scan_via_provider(
         actor: scan_actor(),
         source_name: "engram-node-scan".to_owned(),
         max_bytes: 0,
-        manifest: std::collections::HashMap::new(),
+        manifest: if let Some(port) = repo.code_sources() {
+            block_on(port.list_code_sources(&request.scope))?
+                .into_iter()
+                .map(|m| (m.file.path, m.source_hash))
+                .collect()
+        } else {
+            std::collections::HashMap::new()
+        },
         scan_filter,
     };
     let (summary, _manifest) =

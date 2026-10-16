@@ -5,6 +5,7 @@
 //! calls observe the same scoped state. The methods are JSON transports over
 //! the `engram-knowledge` ports; TypeScript owns ergonomics.
 
+use crate::to_napi_error;
 use engram_store_lexical::LexicalIndex;
 use engram_store_sqlite::SqlKnowledgeStore;
 use futures::executor::block_on;
@@ -15,9 +16,9 @@ use std::sync::{Arc, Mutex};
 // Import plain functions from operation modules
 use crate::codegraph::{
     blast_radius_json, bridge_symbols_json, call_communities_json, central_symbols_json,
-    cyclomatic_complexity_json, dead_code_json, dependency_path_json, explore_json,
-    file_dependencies_json, find_api_calls_json, find_endpoints_json, find_entry_points_json,
-    match_api_topology_json, process_flow_json,
+    cyclomatic_complexity_json, dead_code_classified_json, dead_code_json, dependency_path_json,
+    explore_json, file_dependencies_json, find_api_calls_json, find_endpoints_json,
+    find_entry_points_json, match_api_topology_json, process_flow_json,
 };
 use crate::knowledge_chunks::{
     get_chunk_json, list_chunks_by_document_json, list_chunks_json, put_chunk_json,
@@ -53,11 +54,19 @@ use crate::knowledge_sources::{list_sources_json, put_source_json};
 #[napi]
 pub struct NativeKnowledgeEngine {
     store: Arc<SqlKnowledgeStore>,
-    lexical: Mutex<Option<LexicalIndex>>,
+    lexical: Mutex<Option<(engram_domain::Scope, u64, LexicalIndex)>>,
 }
 
 #[napi]
 impl NativeKnowledgeEngine {
+    #[napi(js_name = "requireCodeSourceApi")]
+    pub fn require_code_source_api(
+        &self,
+        context_json: String,
+    ) -> Result<crate::code_source::NativeCodeSourceApi> {
+        crate::code_source::NativeCodeSourceApi::new(self.store.clone(), &context_json)
+    }
+
     /// Opens a SQLite knowledge engine. Pass a path for a durable file-backed
     /// store (shared with other engines that use the same file); omit for
     /// in-memory.
@@ -99,6 +108,13 @@ impl NativeKnowledgeEngine {
     #[napi(js_name = "deadCodeJson")]
     pub fn dead_code_json(&self, request_json: String) -> Result<String> {
         dead_code_json(&self.store, request_json)
+    }
+
+    /// `{scope}` -> `{bucket: [name, ...]}` dead-code classification
+    /// (code-liveness; mirrors MCP `code op=health classify=true`).
+    #[napi(js_name = "deadCodeClassifiedJson")]
+    pub fn dead_code_classified_json(&self, request_json: String) -> Result<String> {
+        dead_code_classified_json(&self.store, request_json)
     }
 
     /// `{scope}` -> file-level import graph with module→file resolution
@@ -187,6 +203,10 @@ impl NativeKnowledgeEngine {
     pub fn index_for_search_json(&self, request_json: String) -> Result<String> {
         let scope: engram_domain::Scope =
             serde_json::from_str(&request_json).map_err(|e| Error::from_reason(e.to_string()))?;
+        let revision = self
+            .store
+            .code_source_revision()
+            .map_err(|e| Error::from_reason(e.to_string()))?;
         let entities = block_on(self.store.list_entities(&scope))
             .map_err(|e| Error::from_reason(e.to_string()))?;
         let index = LexicalIndex::new().map_err(|e| Error::from_reason(e.to_string()))?;
@@ -209,7 +229,15 @@ impl NativeKnowledgeEngine {
             .lexical
             .lock()
             .map_err(|_| Error::from_reason("lexical lock poisoned".to_string()))?;
-        *guard = Some(index);
+        if self
+            .store
+            .code_source_revision()
+            .map_err(|e| Error::from_reason(e.to_string()))?
+            != revision
+        {
+            return Err(Error::from_reason("code source changed during indexing"));
+        }
+        *guard = Some((scope, revision, index));
         Ok(format!(r#"{{"indexed":{}}}"#, entities.len()))
     }
 
@@ -224,18 +252,65 @@ impl NativeKnowledgeEngine {
             .lexical
             .lock()
             .map_err(|_| Error::from_reason("lexical lock poisoned".to_string()))?;
-        let index = guard.as_ref().ok_or_else(|| {
+        let (index_scope, indexed_revision, index) = guard.as_ref().ok_or_else(|| {
             Error::from_reason(
                 "lexical index not built — call indexForSearchJson first".to_string(),
             )
         })?;
+        if self
+            .store
+            .code_source_revision()
+            .map_err(|e| Error::from_reason(e.to_string()))?
+            != *indexed_revision
+        {
+            return Err(Error::from_reason(
+                "code source index is stale — call indexForSearchJson again",
+            ));
+        }
         let hits = index
             .search(query, limit)
             .map_err(|e| Error::from_reason(e.to_string()))?;
-        let results: Vec<serde_json::Value> = hits
-            .iter()
-            .map(|(id, score)| serde_json::json!({ "id": id, "score": score }))
-            .collect();
+        let revision = self
+            .store
+            .code_source_revision()
+            .map_err(|e| Error::from_reason(e.to_string()))?;
+        let has_requester = value.get("requester").is_some();
+        let request:engram_domain::RetrievalRequest=serde_json::from_value(serde_json::json!({"scope":index_scope,"query":query,"requester":value.get("requester").cloned().unwrap_or_else(||serde_json::json!({"actor":{"id":"legacy-native-reader","kind":"agent"}}))})).map_err(|e|Error::from_reason(e.to_string()))?;
+        let access = self
+            .store
+            .source_record_access(&request)
+            .map_err(to_napi_error)?;
+        let mut results = Vec::new();
+        for (id, score) in hits {
+            if !access.allows(engram_domain::RetrievalTargetType::Entity, &id)
+                || (!has_requester
+                    && self
+                        .store
+                        .has_code_contribution(&id)
+                        .map_err(to_napi_error)?)
+            {
+                continue;
+            }
+
+            if block_on(engram_knowledge::KnowledgeRepository::get_entity(
+                self.store.as_ref(),
+                &engram_domain::Id::from(id.as_str()),
+                index_scope,
+            ))
+            .map_err(|e| Error::from_reason(e.to_string()))?
+            .is_some()
+            {
+                results.push(serde_json::json!({"id":id,"score":score}));
+            }
+        }
+        if self
+            .store
+            .code_source_revision()
+            .map_err(|e| Error::from_reason(e.to_string()))?
+            != revision
+        {
+            return Err(Error::from_reason("code source changed during search"));
+        }
         serde_json::to_string(&results).map_err(|e| Error::from_reason(e.to_string()))
     }
 

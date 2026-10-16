@@ -22,6 +22,12 @@ use serde::{Deserialize, Serialize};
 /// ship — they are present and explicit, never silently absent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CapabilityReport {
+    /// Local retrieval embedding backfill for source-authorized code chunks.
+    #[serde(default = "default_code_graph")]
+    pub code_embeddings: CapabilityState,
+    /// Exact source reads, source generations and authorized transfer.
+    #[serde(default = "default_code_graph")]
+    pub code_source_preservation: CapabilityState,
     /// Memory read/write/retrieve operations.
     pub memory: CapabilityState,
 
@@ -131,6 +137,8 @@ impl CapabilityReport {
     /// Creates a new capability report with all fields set to the given state.
     pub fn new(state: CapabilityState) -> Self {
         Self {
+            code_embeddings: state.clone(),
+            code_source_preservation: state.clone(),
             memory: state.clone(),
             knowledge: state.clone(),
             graph: state.clone(),
@@ -162,7 +170,9 @@ impl CapabilityReport {
     /// This is a convenient helper for applications that require all features
     /// to be available before proceeding.
     pub fn all_supported(&self) -> bool {
-        self.memory.is_supported()
+        self.code_embeddings.is_supported()
+            && self.code_source_preservation.is_supported()
+            && self.memory.is_supported()
             && self.knowledge.is_supported()
             && self.graph.is_supported()
             && self.graph_maintenance.is_supported()
@@ -328,6 +338,8 @@ impl CapabilityReportBuilder {
         };
         Self {
             report: CapabilityReport {
+                code_embeddings: feature_disabled.clone(),
+                code_source_preservation: feature_disabled.clone(),
                 memory: provider_unavailable.clone(),
                 knowledge: provider_unavailable.clone(),
                 graph: provider_unavailable.clone(),
@@ -353,6 +365,17 @@ impl CapabilityReportBuilder {
                 code_graph: feature_disabled,
             },
         }
+    }
+
+    pub fn code_source_preservation(mut self, state: CapabilityState) -> Self {
+        self.report.code_source_preservation = state;
+        self
+    }
+
+    /// Sets local code-vector backfill readiness for a backend recipe.
+    pub fn code_embeddings(mut self, state: CapabilityState) -> Self {
+        self.report.code_embeddings = state;
+        self
     }
 
     /// Sets the memory capability state.
@@ -561,6 +584,7 @@ mod tests {
         // Verify all 20 capability keys are present in the serialized report.
         let json = serde_json::to_string(&report).unwrap();
         for key in [
+            "code_embeddings",
             "memory",
             "knowledge",
             "graph",

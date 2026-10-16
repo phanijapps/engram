@@ -44,6 +44,7 @@ pub mod community_query;
 pub mod config;
 pub mod dto;
 pub mod embedding;
+mod embedding_backfill;
 pub mod export_import;
 pub mod hierarchy_build;
 pub mod knowledge_query;

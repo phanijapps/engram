@@ -11,6 +11,30 @@ use rusqlite::Connection;
 
 /// Creates the SQLite tables required by the knowledge adapter.
 pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
+    // Acquire the writer reservation before schema inspection. A deferred
+    // savepoint can otherwise fail to upgrade after another opener commits.
+    let owned = connection.is_autocommit();
+    connection
+        .execute_batch(if owned {
+            "BEGIN IMMEDIATE"
+        } else {
+            "SAVEPOINT knowledge_source_schema"
+        })
+        .map_err(sql_error)?;
+    let result = initialize_inner(connection);
+    let finish = if owned {
+        if result.is_ok() { "COMMIT" } else { "ROLLBACK" }
+    } else if result.is_ok() {
+        "RELEASE knowledge_source_schema"
+    } else {
+        "ROLLBACK TO knowledge_source_schema; RELEASE knowledge_source_schema"
+    };
+    connection.execute_batch(finish).map_err(sql_error)?;
+    result
+}
+
+fn initialize_inner(connection: &Connection) -> CoreResult<()> {
+    super::source_schema::migrate_record_tables(connection)?;
     connection
         .execute_batch(
             r#"
@@ -30,14 +54,14 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 record_json TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS knowledge_chunks (
+            CREATE TABLE IF NOT EXISTS knowledge_chunks_records (
                 id TEXT PRIMARY KEY,
                 document_id TEXT NOT NULL,
                 source_id TEXT NOT NULL,
                 record_json TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS knowledge_entities (
+            CREATE TABLE IF NOT EXISTS knowledge_entities_records (
                 id TEXT PRIMARY KEY,
                 tenant TEXT NOT NULL,
                 subject TEXT,
@@ -49,7 +73,7 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 record_json TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS knowledge_relationships (
+            CREATE TABLE IF NOT EXISTS knowledge_relationships_records (
                 id TEXT PRIMARY KEY,
                 graph_id TEXT,
                 subject_id TEXT,
@@ -62,7 +86,7 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 record_json TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS knowledge_unresolved_refs (
+            CREATE TABLE IF NOT EXISTS knowledge_unresolved_refs_records (
                 id TEXT PRIMARY KEY,
                 graph_id TEXT,
                 tenant TEXT NOT NULL,
@@ -74,7 +98,7 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 record_json TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS knowledge_graphs (
+            CREATE TABLE IF NOT EXISTS knowledge_graphs_records (
                 id TEXT PRIMARY KEY,
                 tenant TEXT NOT NULL,
                 subject TEXT,
@@ -136,11 +160,11 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 record_json TEXT NOT NULL
             );
 
-            CREATE INDEX IF NOT EXISTS idx_chunks_document ON knowledge_chunks(document_id);
-            CREATE INDEX IF NOT EXISTS idx_chunks_source ON knowledge_chunks(source_id);
+            CREATE INDEX IF NOT EXISTS idx_chunks_document ON knowledge_chunks_records(document_id);
+            CREATE INDEX IF NOT EXISTS idx_chunks_source ON knowledge_chunks_records(source_id);
             CREATE INDEX IF NOT EXISTS idx_documents_source ON knowledge_documents(source_id);
             CREATE INDEX IF NOT EXISTS idx_relationships_graph_subject
-                ON knowledge_relationships(graph_id, subject_id);
+                ON knowledge_relationships_records(graph_id, subject_id);
             CREATE INDEX IF NOT EXISTS idx_concepts_scheme ON concepts(scheme_id);
             CREATE INDEX IF NOT EXISTS idx_concept_relations_scheme ON concept_relations(scheme_id);
             CREATE INDEX IF NOT EXISTS idx_ontology_classes ON ontology_classes(ontology_id);
@@ -159,13 +183,13 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
     // existing DB those columns do not exist until the ALTER TABLE succeeds,
     // and SQLite will return "no such column" if the index is created first.
     for sql in &[
-        "ALTER TABLE knowledge_graphs ADD COLUMN stable_source_key TEXT",
-        "ALTER TABLE knowledge_graphs ADD COLUMN path TEXT",
-        "ALTER TABLE knowledge_entities ADD COLUMN graph_id TEXT",
-        "ALTER TABLE knowledge_entities ADD COLUMN identity_key TEXT",
-        "ALTER TABLE knowledge_relationships ADD COLUMN relationship_key TEXT",
-        "ALTER TABLE knowledge_entities ADD COLUMN archived_at TEXT",
-        "ALTER TABLE knowledge_relationships ADD COLUMN archived_at TEXT",
+        "ALTER TABLE knowledge_graphs_records ADD COLUMN stable_source_key TEXT",
+        "ALTER TABLE knowledge_graphs_records ADD COLUMN path TEXT",
+        "ALTER TABLE knowledge_entities_records ADD COLUMN graph_id TEXT",
+        "ALTER TABLE knowledge_entities_records ADD COLUMN identity_key TEXT",
+        "ALTER TABLE knowledge_relationships_records ADD COLUMN relationship_key TEXT",
+        "ALTER TABLE knowledge_entities_records ADD COLUMN archived_at TEXT",
+        "ALTER TABLE knowledge_relationships_records ADD COLUMN archived_at TEXT",
     ] {
         match connection.execute_batch(sql) {
             Ok(_) => {}
@@ -180,18 +204,19 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
         .execute_batch(
             r#"
             CREATE INDEX IF NOT EXISTS idx_graphs_stable_source_key
-                ON knowledge_graphs(stable_source_key);
-            CREATE INDEX IF NOT EXISTS idx_graphs_path ON knowledge_graphs(path);
+                ON knowledge_graphs_records(stable_source_key);
+            CREATE INDEX IF NOT EXISTS idx_graphs_path ON knowledge_graphs_records(path);
             CREATE INDEX IF NOT EXISTS idx_entities_graph_id
-                ON knowledge_entities(graph_id);
+                ON knowledge_entities_records(graph_id);
             CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_identity
-                ON knowledge_entities(identity_key) WHERE identity_key IS NOT NULL;
+                ON knowledge_entities_records(identity_key) WHERE identity_key IS NOT NULL;
             CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_exact_key
-                ON knowledge_relationships(relationship_key) WHERE relationship_key IS NOT NULL;
+                ON knowledge_relationships_records(relationship_key) WHERE relationship_key IS NOT NULL;
             "#,
         )
         .map_err(sql_error)?;
 
+    super::source_schema::initialize_source_views(connection)?;
     Ok(())
 }
 

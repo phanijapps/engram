@@ -29,7 +29,9 @@
 | [0025](0025-framework-content-boundary.md) | Framework/content boundary: ship mechanism, not domain ontology content | Accepted |
 | [0026](0026-recall-fusion-config-contract.md) | `[recall_fusion]` config contract for externally tunable recall fusion | Accepted |
 | [0027](0027-knowledge-archive-and-restore.md) | Knowledge entity/relationship archive and restore (soft-delete over hard delete) | Accepted |
-| [0028](0028-engram-code-crate.md) | `engram-code` — dedicated code-indexing behavior crate (tree-sitter in-core exception) | Accepted |
+| [0028](0028-engram-code-crate.md) | `engram-code` — dedicated code-indexing behavior crate (tree-sitter in-core exception) | Superseded (parser-port deferral only) by 0029 |
+| [0029](0029-normalized-code-parser-port.md) | Code parsers return normalized facts | Accepted |
+| [0030](0030-code-derivation-layers.md) | Code explanations remain derived knowledge | Accepted |
 
 > **Note:** ADRs may reference feature specs that were consolidated into
 > [`docs/product/engram.md`](../product/engram.md). Those references are

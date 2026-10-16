@@ -5,6 +5,7 @@
 //! Rust memory service.
 
 mod belief;
+mod code_source;
 mod codegraph;
 mod consolidation;
 mod eval;

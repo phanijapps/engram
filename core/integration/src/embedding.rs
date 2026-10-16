@@ -35,6 +35,12 @@ pub enum EmbeddingError {
 /// embeddings. All implementations must provide stable provider and model
 /// identifiers, vector dimensions, and embedding space identity.
 pub trait EmbeddingProvider: Send + Sync {
+    /// True only for inference performed in this process, without transmitting
+    /// source to another service. Unknown/external providers fail closed.
+    fn is_local(&self) -> bool {
+        false
+    }
+
     /// Returns the stable provider identifier (e.g., "fastembed", "ollama", "openai").
     fn provider_id(&self) -> &str;
 

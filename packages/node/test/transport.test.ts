@@ -46,11 +46,17 @@ class FakeNativeMemoryEngine {
  *  The transport tests do not exercise the provider; this only satisfies the
  *  NativeBinding shape now that NativeProvider is a required member. */
 class StubNativeProvider {
+  requireExportImportApi() {return {exportAuthorizedJson:()=>"{}"};}
+  requireMigrationApi() {return {dryRunImportAuthorizedJson:()=>"{}",applyImportAuthorizedJson:()=>"null"};}
+  requireCodeSourceApi() {return {readSourceJson:()=>"{}",listSourcesJson:()=>"[]"};}
   fileDependenciesJson(): string { return "[]"; }
   exploreJson(): string { return "[]"; }
   constructor(_configJson?: string) {}
   capabilitiesJson(): string {
     return "{}";
+  }
+  backfillEmbeddingsJson(): string {
+    return '{"embedded":0,"newEmbeddings":0,"reused":0,"codeEmbedded":0,"remaining":0}';
   }
   consolidateJson(): string {
     return '{"status":"Complete","tasks":[]}';
@@ -245,11 +251,15 @@ describe("@engram/node", () => {
         }
       },
       NativeKnowledgeEngine: class {
+        requireCodeSourceApi() {return {readSourceJson:()=>"{}",listSourcesJson:()=>"[]"};}
+        deadCodeJson():string {return "[]";}
+        deadCodeClassifiedJson():string {return "[]";}
         fileDependenciesJson(): string { return "[]"; }
         exploreJson(): string { return "[]"; }
         putEntityJson(): string { return "null"; }
         putRelationshipJson(): string { return "null"; }
         getEntityJson(): string { return "null"; }
+        getChunkJson(): string { return "null"; }
         putGraphJson(): string { return "null"; }
         getGraphJson(): string { return "null"; }
         neighborsJson(): string { return "[]"; }
@@ -332,11 +342,15 @@ describe("@engram/node", () => {
       NativeProvider: StubNativeProvider,
       NativeMemoryEngine: class extends FakeNativeMemoryEngine {},
       NativeKnowledgeEngine: class {
+        requireCodeSourceApi() {return {readSourceJson:()=>"{}",listSourcesJson:()=>"[]"};}
+        deadCodeJson():string {return "[]";}
+        deadCodeClassifiedJson():string {return "[]";}
         fileDependenciesJson(): string { return "[]"; }
         exploreJson(): string { return "[]"; }
         putEntityJson(): string { return "null"; }
         putRelationshipJson(): string { return "null"; }
         getEntityJson(): string { return "null"; }
+        getChunkJson(): string { return "null"; }
         putGraphJson(): string { return "null"; }
         getGraphJson(): string { return "null"; }
         neighborsJson(): string { return "[]"; }

@@ -19,7 +19,7 @@
 import { createHash } from "node:crypto";
 
 import type { NativeProviderTransport } from "@engram/node";
-import type { Scope } from "@engram/contracts";
+import type { Scope, KnowledgeChunk } from "@engram/contracts";
 
 import { Type, createLlmProvider, type LlmProvider, type Tool } from "./llm.js";
 
@@ -159,9 +159,16 @@ export async function extractKnowledge(
     const documentId = readDocumentId(graph?.metadata);
     if (!documentId) continue; // graph not tied to a document — skip (T5 invariant).
 
-    const chunks = (await opts.transport.listChunksByDocument(documentId, scope)) as Array<{
-      text?: string;
-    }>;
+    const chunks = (await opts.transport.listChunksByDocument(documentId, scope)) as Array<Partial<Pick<KnowledgeChunk, "text" | "documentKind" | "kind" | "code">>>;
+    // Retrieval permission does not grant model egress. No enrichment grant
+    // exists in this slice, so code documents cannot enter automatic prompts.
+    // Unknown legacy code blocks fail closed; owning-document projections
+    // identify Markdown examples and keep their existing processing.
+    if (chunks.some((c) => c.code != null || c.documentKind === "code" ||
+      c.kind === "code_symbol" || (c.kind === "code_block" && !c.documentKind))) {
+      skipped++;
+      continue;
+    }
     const docText = chunks
       .map((c) => c?.text ?? "")
       .filter((t) => t.length > 0)

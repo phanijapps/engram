@@ -1,5 +1,6 @@
 import type {
-  ContextPayload,
+  CodeSourceContext, CodeSourceQuery, CodeSourceReadResult, CodeSourceGeneration,
+  ContextPayload, EmbeddingBackfillRequest, EmbeddingBackfillReport,
   RetrievalRequest,
   WriteMemoryRequest,
   WriteMemoryResponse
@@ -84,12 +85,19 @@ export interface ScopeCounts {
 /** The typed transport over the native binding — every route in the TS MCP
  *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
+  exportAuthorized(context:CodeSourceContext):Promise<unknown>;
+  dryRunImportAuthorized(data:unknown,context:CodeSourceContext):Promise<unknown>;
+  applyImportAuthorized(manifest:unknown,context:CodeSourceContext):Promise<void>;
+  readCodeSource(query:CodeSourceQuery,context:CodeSourceContext):Promise<CodeSourceReadResult>;
+  listCodeSources(context:CodeSourceContext):Promise<CodeSourceGeneration[]>;
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
   /** Unified recall (fused across lanes) → `ContextPayload`. */
   recall(request: RetrievalRequest): Promise<ContextPayload>;
   /** Write a memory + lifecycle event. */
   write(request: WriteMemoryRequest): Promise<WriteMemoryResponse>;
+  /** Index eligible chunks through the shared Rust embedding operation. */
+  backfillEmbeddings(request: EmbeddingBackfillRequest): Promise<EmbeddingBackfillReport>;
   /** Treesitter-index a repository into the project workspace. */
   scan(request: { path: string; scope: unknown; scanFilter?: unknown }): Promise<unknown>;
   /** Run a consolidation cycle (reflection + decay). A system requester is
@@ -223,6 +231,10 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
 
   async scan(request: { path: string; scope: unknown; scanFilter?: unknown }): Promise<unknown> {
     return decode(this.provider.scanRepositoryJson(encode(request)));
+  }
+
+  async backfillEmbeddings(request: EmbeddingBackfillRequest): Promise<EmbeddingBackfillReport> {
+    return decode<EmbeddingBackfillReport>(this.provider.backfillEmbeddingsJson(encode(request)));
   }
 
   async consolidate(request: {
@@ -386,6 +398,17 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
     return decode<unknown[]>(
       this.provider.requireKnowledgeQueryApi().listGraphsJson(encode(scope)),
     );
+  }
+
+  async exportAuthorized(context:CodeSourceContext):Promise<unknown> {return decode(this.provider.requireExportImportApi().exportAuthorizedJson(encode(context)));}
+  async dryRunImportAuthorized(data:unknown,context:CodeSourceContext):Promise<unknown> {return decode(this.provider.requireMigrationApi().dryRunImportAuthorizedJson(encode(data),encode(context)));}
+  async applyImportAuthorized(manifest:unknown,context:CodeSourceContext):Promise<void> {this.provider.requireMigrationApi().applyImportAuthorizedJson(encode(manifest),encode(context));}
+
+  async readCodeSource(query:CodeSourceQuery,context:CodeSourceContext):Promise<CodeSourceReadResult> {
+    return decode(this.provider.requireCodeSourceApi(encode(context)).readSourceJson(encode(query))) as CodeSourceReadResult;
+  }
+  async listCodeSources(context:CodeSourceContext):Promise<CodeSourceGeneration[]> {
+    return decode(this.provider.requireCodeSourceApi(encode(context)).listSourcesJson()) as CodeSourceGeneration[];
   }
 
   async listChunksByDocument(documentId: string, scope: unknown): Promise<unknown[]> {

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import type {CodeSourceContext} from "@engram/contracts";
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
@@ -8,6 +9,7 @@ import { startMcpHttpServer } from "./server.js";
 const { values } = parseArgs({
   options: {
     config: { type: "string" },
+    "source-context": {type:"string"},
     port: { type: "string" },
     host: { type: "string" },
     "auth-token": { type: "string" },
@@ -54,7 +56,9 @@ const taxonomyConfig = values.taxonomy
   ? JSON.parse(readFileSync(values.taxonomy, "utf8"))
   : undefined;
 
+const sourceContext=values["source-context"]===undefined?undefined:JSON.parse(readFileSync(values["source-context"],"utf8")) as CodeSourceContext;
 const server = await startMcpHttpServer({
+  ...(sourceContext===undefined?{}:{sourceContext}),
   configJson,
   port,
   host,

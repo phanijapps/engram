@@ -17,10 +17,15 @@ pub mod resolution;
 
 pub use edges::{StructuralEdges, contains_pairs};
 pub use frameworks::{FrameworkFacts, RouteFact, extract_frameworks};
-pub use identity::{Resolution, SymbolCandidate, SymbolIndex, bare_tail, qualified_name};
+pub use identity::{
+    Resolution, SymbolCandidate, SymbolIndex, bare_tail, qualified_name, repository_entity_id,
+};
 pub use noise::is_noise_symbol;
 pub use parser::chunking::{ChunkCandidate, Chunker};
 pub use parser::code_symbol::CodeSymbolChunker;
+pub use parser::source_coverage::{
+    CoveredCodeCandidate, snapshot_ranges, source_parse_outcome, source_residual_ranges,
+};
 pub use parser::tree_sitter_chunker::TreeSitterChunker;
 pub use queries::{ExploreNode, FileDependency, explore, file_dependencies};
 pub use resolution::{receiver_type_hint, resolve_refs, split_dotted};

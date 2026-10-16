@@ -36,6 +36,8 @@ pub struct ValidationReport {
 /// Row counts by data family.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RowCounts {
+    #[serde(default)]
+    pub code_sources: usize,
     /// Number of memory records.
     pub memory: usize,
 
@@ -141,6 +143,9 @@ pub struct MigrationManifest {
 /// Import data organized by family.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImportData {
+    /// Versioned full code-source bundles; omitted by legacy exports.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub code_sources: Vec<engram_domain::CodeSourceBundle>,
     /// Memory records to import.
     pub memories: Vec<MemoryImportRecord>,
 
@@ -461,7 +466,34 @@ pub fn record_key_hash(key_fields: &str) -> String {
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+#[async_trait::async_trait]
 pub trait MigrationService: Send + Sync {
+    /// Host-authorized source transfer; legacy implementations fail closed.
+    async fn dry_run_import_authorized(
+        &self,
+        data: &ImportData,
+        requester: &engram_domain::Requester,
+        scope: &engram_domain::Scope,
+    ) -> CoreResult<ValidationReport> {
+        let _ = (data, requester, scope);
+        Err(engram_runtime::CoreError::CapabilityUnsupported {
+            capability: "code_source_import".into(),
+            reason: "authorized import not supported".into(),
+        })
+    }
+    async fn apply_import_authorized(
+        &self,
+        manifest: &MigrationManifest,
+        requester: &engram_domain::Requester,
+        scope: &engram_domain::Scope,
+    ) -> CoreResult<()> {
+        let _ = (manifest, requester, scope);
+        Err(engram_runtime::CoreError::CapabilityUnsupported {
+            capability: "code_source_import".into(),
+            reason: "authorized import not supported".into(),
+        })
+    }
+
     /// Performs a dry-run validation of the import data.
     ///
     /// This method validates the import data without making any changes to the
@@ -507,6 +539,7 @@ mod tests {
     fn test_validation_report_serialization() {
         let report = ValidationReport {
             row_counts: RowCounts {
+                code_sources: 0,
                 memory: 10,
                 knowledge_sources: 5,
                 knowledge_documents: 3,
@@ -547,6 +580,7 @@ mod tests {
     #[test]
     fn test_import_data_empty() {
         let data = ImportData {
+            code_sources: Vec::new(),
             memories: vec![],
             knowledge_sources: vec![],
             knowledge_documents: vec![],

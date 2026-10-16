@@ -428,3 +428,68 @@ fn non_code_documents_emit_no_graph_entities() {
         "graph record must be persisted for non-code documents"
     );
 }
+
+/// code-liveness T2: a receiver-qualified constructor (`impl T { fn new }`)
+/// IS emitted as an entity. The bare-tail noise filter used to drop every
+/// `Type::new` declaration (bare tail `new` = bare-generic noise), starving
+/// cross-file resolution — the agentzero `DelegateToZbotTool` false negative
+/// (registration call extracted fine, ledger row pending forever, no entity
+/// to resolve to) and the mem-alpha `FastEmbedEmbeddingProvider` false
+/// positive both trace here. A bare top-level `fn new()` stays dropped.
+#[test]
+fn qualified_constructor_entities_are_emitted() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    // Mirror the scanner's tree-sitter path: ts candidates (receiver-qualified
+    // anchors) are the chunk input, exactly as scan_repository does it.
+    let text = "pub struct Tool { n: i32 }\nimpl Tool {\n    pub fn new(n: i32) -> Self { Self { n } }\n    pub fn run(&self) {}\n}\nfn new() {}\n";
+    let ts = engram_ingest::TreeSitterChunker::new().expect("ts chunker");
+    let tree = ts.parse(text, "rs").expect("parse");
+    let candidates = ts.chunk_with_tree(&tree, text, "rs").expect("candidates");
+    let request = DocumentIngestRequest {
+        source_kind: SourceKind::Filesystem,
+        source_name: "demo".to_owned(),
+        scope: scope(),
+        document_kind: SourceDocumentKind::Code,
+        document: DocumentMetadata {
+            path: Some("tools.rs".to_owned()),
+            ..Default::default()
+        },
+        text: text.to_owned(),
+        policy: policy(),
+        actor: Actor {
+            id: Id::from("agent-1"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        },
+        stable_source_key: Some("ctor-file".to_owned()),
+        source_metadata: None,
+    };
+    let ingested = block_on(
+        KnowledgeIngestor::new(CodeSymbolChunker)
+            .ingest_with_candidates(&store, request, candidates),
+    )
+    .expect("ingest");
+    let extracted = block_on(GraphExtractor::new().extract_into(
+        &store,
+        &ingested.source,
+        &ingested.document,
+        &ingested.chunks,
+        None,
+    ))
+    .expect("extract");
+
+    let names: Vec<String> = extracted.entities.iter().map(|e| e.name.clone()).collect();
+    assert!(
+        names.contains(&"Tool::new".to_owned()),
+        "qualified constructor must be emitted: {names:?}"
+    );
+    assert!(
+        names.contains(&"Tool::run".to_owned()),
+        "sibling impl method must be emitted: {names:?}"
+    );
+    assert!(
+        !names.iter().any(|n| n == "new"),
+        "bare top-level fn new() stays noise-dropped: {names:?}"
+    );
+}

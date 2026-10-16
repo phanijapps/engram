@@ -13,7 +13,8 @@ use engram_runtime::CoreResult;
 /// Write port: feed searchable text into the lexical (BM25) lane.
 #[async_trait]
 pub trait LexicalFeed: Send + Sync {
-    /// Upsert one searchable document (`target_id` → `text`).
+    /// Upsert one searchable knowledge target. The adapter resolves eligibility
+    /// and canonical text; supplied text cannot authorize snapshot indexing.
     async fn upsert(&self, target_id: &str, text: &str) -> CoreResult<()>;
 
     /// Upsert many `(target_id, text)` entries at once.

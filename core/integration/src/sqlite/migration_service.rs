@@ -25,23 +25,89 @@ use crate::{
 /// no longer match) before any write.
 pub struct SqlMigrationService {
     expected_dimensions: u32,
+    code_target: Option<std::sync::Arc<dyn engram_knowledge::KnowledgeRepository>>,
+    code_target_id: String,
     schema_version: String,
     adapter_version: String,
 }
 
 impl SqlMigrationService {
+    pub fn with_code_source_target(
+        mut self,
+        target: std::sync::Arc<dyn engram_knowledge::KnowledgeRepository>,
+    ) -> Self {
+        self.code_target = Some(target);
+        self
+    }
     /// Creates a new migration service expecting vectors of `expected_dimensions`.
     pub fn new(expected_dimensions: u32) -> Self {
         Self {
             expected_dimensions,
+            code_target: None,
+            code_target_id: super::code_source_import::identity(),
             schema_version: "2026.01".to_string(),
             adapter_version: "0.1.0".to_string(),
         }
     }
 }
 
+#[async_trait::async_trait]
 impl MigrationService for SqlMigrationService {
+    async fn dry_run_import_authorized(
+        &self,
+        data: &ImportData,
+        requester: &engram_domain::Requester,
+        scope: &engram_domain::Scope,
+    ) -> CoreResult<ValidationReport> {
+        let target = self
+            .code_target
+            .as_ref()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "code_source_import".into(),
+                reason: "target source cell is not wired".into(),
+            })?;
+        super::code_source_import::validate(data, requester, scope, target).await?;
+        let mut legacy = data.clone();
+        legacy.code_sources.clear();
+        let mut report = self.dry_run_import(&legacy)?;
+        report.row_counts.code_sources = data.code_sources.len();
+        report.manifest_fingerprint =
+            super::code_source_import::fingerprint(data, requester, scope, &self.code_target_id)?;
+        Ok(report)
+    }
+    async fn apply_import_authorized(
+        &self,
+        manifest: &MigrationManifest,
+        requester: &engram_domain::Requester,
+        scope: &engram_domain::Scope,
+    ) -> CoreResult<()> {
+        let current = self
+            .dry_run_import_authorized(&manifest.import_data, requester, scope)
+            .await?;
+        if current.manifest_fingerprint != manifest.validation_report.manifest_fingerprint {
+            return Err(CoreError::MigrationManifestStale {
+                expected: manifest.validation_report.manifest_fingerprint.clone(),
+                actual: current.manifest_fingerprint,
+            });
+        }
+        if !current.unsupported_mappings.is_empty()
+            || current.scope_translation.failed_count != 0
+            || !current.embedding_space_validation.is_valid
+        {
+            return Err(CoreError::ValidationFailed {
+                reason: "import has unsupported mappings".into(),
+            });
+        }
+        super::code_source_import::apply(&manifest.import_data, self.code_target.as_ref().unwrap())
+            .await
+    }
+
     fn dry_run_import(&self, import_data: &ImportData) -> CoreResult<ValidationReport> {
+        if !import_data.code_sources.is_empty() {
+            return Err(CoreError::PolicyDenied {
+                reason: "code-source import requires authorized path".into(),
+            });
+        }
         let row_counts = count_rows(import_data);
         let content_hashes = collect_key_hashes(import_data);
 
@@ -103,6 +169,11 @@ impl MigrationService for SqlMigrationService {
     }
 
     fn apply_import(&self, manifest: &MigrationManifest) -> CoreResult<()> {
+        if !manifest.import_data.code_sources.is_empty() {
+            return Err(CoreError::PolicyDenied {
+                reason: "code-source import requires authorized path".into(),
+            });
+        }
         // Re-derive the fingerprint from the import data the manifest carries
         // and reject the apply if it no longer matches the dry-run fingerprint.
         let row_counts = count_rows(&manifest.import_data);
@@ -133,6 +204,7 @@ impl MigrationService for SqlMigrationService {
 
 fn count_rows(data: &ImportData) -> RowCounts {
     RowCounts {
+        code_sources: 0,
         memory: data.memories.len(),
         knowledge_sources: data.knowledge_sources.len(),
         knowledge_documents: data.knowledge_documents.len(),
@@ -217,6 +289,7 @@ mod tests {
 
     fn empty_data() -> ImportData {
         ImportData {
+            code_sources: Vec::new(),
             memories: Vec::new(),
             knowledge_sources: Vec::new(),
             knowledge_documents: Vec::new(),

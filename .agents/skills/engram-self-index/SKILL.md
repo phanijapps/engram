@@ -22,7 +22,7 @@ Do not wipe it casually; a wipe resets the temporal baseline.
 ```bash
 python3 scripts/dev/mcp_driver.py --storage ~/.engram/mem-alpha-self \
   --project mem-alpha-self --no-vector \
-  call scan_repo '{"path": "/home/videogamer/projects/mem-alpha"}'
+  call scan '{"path": "/home/videogamer/projects/mem-alpha", "target": "repo"}'
 ```
 
 Expect sub-second on unchanged trees; `errors: 0` always (empty files skip,
@@ -33,10 +33,10 @@ minified assets filter — any error is a regression).
 ```bash
 python3 scripts/dev/mcp_driver.py --storage ~/.engram/mem-alpha-self \
   --project mem-alpha-self --no-vector \
-  call architecture '{"limit": 10}' \
-  call code_health '{}' \
-  call whats_changed '{}' \
-  call change_impact '{"target": "<top-bridge-symbol>", "depth": 2}'
+  call code '{"op": "architecture", "limit": 10}' \
+  call code '{"op": "health"}' \
+  call code '{"op": "changed"}' \
+  call code '{"op": "impact", "symbol": "<top-bridge-symbol>", "depth": 2}'
 ```
 
 Read it like this:
@@ -51,7 +51,13 @@ Read it like this:
 3. **VERIFY against source before believing anything.** The 2026-08-28 run
    flagged `FastEmbedEmbeddingProvider` dead — grep proved it called from
    BOTH backends (qualified-path + self-method calls under-resolve; see the
-   `[receiver-resolution-gap]` backlog item). For every dead-code candidate:
+   `[receiver-resolution-gap]` backlog item). The 2026-09-03 run added the
+   trait-object-dispatch subclass: `MemoryLifecycleExecutor::execute` and
+   `CompositeConsolidationExecutor` report dead while both are constructed
+   and registered into the consolidation composite at
+   `core/integration/src/sqlite/bootstrap.rs:505-506` — dispatch through
+   `Arc<dyn ConsolidationMutationExecutor>` leaves no static call edge.
+   For every dead-code candidate:
 
 ```bash
 grep -rn "<SymbolName>" --include="*.rs" --include="*.ts" | grep -v "fn <name>"

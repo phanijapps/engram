@@ -38,6 +38,8 @@ pub struct SqlKnowledgeStore {
 /// between them).
 #[derive(Debug, Clone)]
 pub struct ChunkRefLite {
+    pub model_eligible: bool,
+    pub code: Option<CodeChunkDescriptor>,
     pub id: ChunkId,
     pub source: String,
     pub has_text: bool,
@@ -354,7 +356,9 @@ impl SqlKnowledgeStore {
             "SELECT c.id, \
                     coalesce(json_extract(c.record_json, '$.provenance.source'), ''), \
                     length(coalesce(json_extract(c.record_json, '$.text'), '')) > 0, \
-                    coalesce(json_extract(c.record_json, '$.contentHash'), '') \
+                    coalesce(json_extract(c.record_json, '$.contentHash'), ''), \
+                    json_extract(c.record_json, '$.code'), \
+                    (json_extract(c.record_json, '$.code') IS NULL AND json_extract(c.record_json, '$.documentKind') IS NOT 'code' AND json_extract(c.record_json, '$.kind') != 'code_symbol' AND (json_extract(c.record_json, '$.kind') != 'code_block' OR json_extract(c.record_json, '$.documentKind') IS NOT NULL)) \
              FROM knowledge_chunks c \
              WHERE c.source_id IN (\
                  SELECT id FROM knowledge_sources WHERE {predicate}\
@@ -365,6 +369,19 @@ impl SqlKnowledgeStore {
         let rows = statement
             .query_map(param_refs.as_slice(), |row| {
                 Ok(ChunkRefLite {
+                    model_eligible: row.get::<_, bool>(5)?,
+                    code: row
+                        .get::<_, Option<String>>(4)?
+                        .map(|json| {
+                            serde_json::from_str(&json).map_err(|e| {
+                                rusqlite::Error::FromSqlConversionFailure(
+                                    4,
+                                    rusqlite::types::Type::Text,
+                                    Box::new(e),
+                                )
+                            })
+                        })
+                        .transpose()?,
                     id: ChunkId::from(row.get::<_, String>(0)?),
                     source: row.get::<_, String>(1)?,
                     has_text: row.get::<_, bool>(2)?,

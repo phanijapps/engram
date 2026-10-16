@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Exact code-source snapshots, typed semantic coverage and per-file activation /
+  recovery, with authorized source reads through Rust, Node and both MCP servers.
+  Existing export/import can transfer source bundles without widening policy;
+  snapshots remain excluded from normal retrieval and automatic model feeds.
+  See [source preservation](../specs/code-source-preservation/spec.md).
+
 - **CI runs a live Postgres+pgvector service** and the pgvector recipe's
   conformance tests in the gate; the engine-neutrality and surface-parity
   lints are enforced in CI (they had been referenced but never wired, and the

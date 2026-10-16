@@ -25,6 +25,20 @@ use crate::LexicalIndex;
 /// this request and should be skipped.
 #[async_trait]
 pub trait LexicalTargetResolver: Send + Sync {
+    async fn source_revision(&self, _request: &RetrievalRequest) -> CoreResult<u64> {
+        Ok(0)
+    }
+    /// Source-aware resolvers bind the stored normalized projection to current
+    /// canonical content before scoring. Legacy indexes may supply no text.
+    async fn projection_is_current(
+        &self,
+        _target_id: &str,
+        _indexed_text: Option<&str>,
+        _request: &RetrievalRequest,
+    ) -> CoreResult<bool> {
+        Ok(true)
+    }
+
     /// Resolves one BM25 hit's target id into a retrieval target.
     ///
     /// Async so implementors await canonical-record lookups (e.g. the store's
@@ -96,21 +110,34 @@ impl RetrievalIndex for LexicalRetrievalIndex {
         &self,
         request: &RetrievalRequest,
     ) -> CoreResult<Vec<RetrievalResult>> {
+        let source_revision = self.target_resolver.source_revision(request).await?;
         let limit = search_limit(request, self.default_limit) as usize;
         let hits = self
             .index
-            .search(&request.query, limit)
+            .search_projections(&request.query, limit)
             .map_err(|e| CoreError::Adapter {
                 adapter: "engram-store-lexical".to_owned(),
                 message: e.to_string(),
             })?;
 
         let mut results = Vec::with_capacity(hits.len());
-        for (rank, (target_id, score)) in hits.into_iter().enumerate() {
+        for (rank, (target_id, score, indexed_text)) in hits.into_iter().enumerate() {
+            if !self
+                .target_resolver
+                .projection_is_current(&target_id, indexed_text.as_deref(), request)
+                .await?
+            {
+                continue;
+            }
             let Some(target) = self.target_resolver.resolve(&target_id, request).await? else {
                 continue;
             };
             results.push(lexical_result(rank, &target_id, score, target));
+        }
+        if self.target_resolver.source_revision(request).await? != source_revision {
+            return Err(CoreError::ProviderUnavailable {
+                provider: "code source changed during lexical retrieval".into(),
+            });
         }
         Ok(results)
     }

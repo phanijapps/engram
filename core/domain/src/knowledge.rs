@@ -145,6 +145,10 @@ pub struct SourceLocation {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KnowledgeChunk {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<crate::CodeChunkDescriptor>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_kind: Option<SourceDocumentKind>,
     pub id: ChunkId,
     pub document_id: DocumentId,
     pub source_id: SourceId,
@@ -269,17 +273,19 @@ pub enum CodeEdgeKind {
     Extends,
     Implements,
     RoutesTo,
+    Registers,
 }
 
 impl CodeEdgeKind {
     /// The closed set, in canonical order.
-    pub const ALL: [CodeEdgeKind; 6] = [
+    pub const ALL: [CodeEdgeKind; 7] = [
         CodeEdgeKind::Calls,
         CodeEdgeKind::Imports,
         CodeEdgeKind::Contains,
         CodeEdgeKind::Extends,
         CodeEdgeKind::Implements,
         CodeEdgeKind::RoutesTo,
+        CodeEdgeKind::Registers,
     ];
 
     /// Predicate string as persisted on `KnowledgeRelationship.predicate`.
@@ -291,6 +297,7 @@ impl CodeEdgeKind {
             CodeEdgeKind::Extends => "extends",
             CodeEdgeKind::Implements => "implements",
             CodeEdgeKind::RoutesTo => "routes_to",
+            CodeEdgeKind::Registers => "registers",
         }
     }
 }

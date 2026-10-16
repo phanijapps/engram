@@ -754,6 +754,8 @@ Fields:
 | `kind` | yes | KnowledgeChunkKind | Chunk category |
 | `text` | yes | string | Chunk text for retrieval/composition |
 | `summary` | no | string | Optional generated summary |
+| `documentKind` | no | SourceDocumentKind | Owning document category; supplied by code-source-aware readers for legacy rows |
+| `code` | no | CodeChunkDescriptor | Typed source role, exact coverage and file-generation association |
 | `location` | no | SourceLocation | Location within source |
 | `entities` | no | EntityRef[] | Extracted or linked entities |
 | `concepts` | no | ConceptRef[] | Linked taxonomy concepts |
@@ -764,6 +766,50 @@ Fields:
 | `createdAt` | yes | Timestamp | Creation time |
 | `updatedAt` | no | Timestamp | Last update |
 | `metadata` | no | object | Adapter-specific metadata |
+
+### Code source preservation (RFC-0021)
+
+Code source descriptors are optional extensions to knowledge records. Missing
+code descriptors mean legacy coverage is unknown, never verified complete.
+They do not change memory, belief, existing chunk kinds or legacy location offsets.
+
+| Type | Fields and semantics |
+| --- | --- |
+| `CodeFileKey` | Exact `scope`, stable `repository` identity and normalized relative `path`; file generations never use repository alone. |
+| `CodeByteRange` | `start`, `end`: zero-based end-exclusive UTF-8 byte offsets, `end >= start`; [0,0) represents an empty snapshot. |
+| `CodeChunkRole` | `source_snapshot`, `symbol`, `container_context`, `residual`; snapshot-only records are excluded from semantic/model candidate feeds. |
+| `CodeParseQuality` | `clean`, `recovered`, `fallback`, `failed`; independent of snapshot completeness. |
+| `CodeChunkDescriptor` | Required role, file, generation, sourceHash, fingerprint, ranges, complete, parseQuality; optional sliceSeparator (exact rendering separator, default empty), declarationRange (full span, independent of rendered slices), unit, parentUnit, unsupportedFeatures. Ranges describe actual raw source slices, not a synthesized enclosing span. |
+| `CodeSourceState` | `updating`, `incomplete`, `active`; reads use only active matching attempts. |
+| `CodeSourceGeneration` | File key, generation, attemptId, sourceHash, fingerprint, state, byteLength, optional documentId, ordered snapshotIds, policy, provenance and record inventory. |
+| `CodeSourceRecord` | Typed record kind (`source`, `chunk`, `entity`, `relationship`, `graph`, `document`) plus record ID; generation contributions are staged before record writes. |
+| `CodeSourceReadRequest` | File, requester, optional generation and maxBytes; effective scope is resolved by a trusted host, exact null dimensions are not wildcards. |
+| `CodeSourceReadResult` | Active manifest and reconstructed UTF-8 text; retained historical views require matching evidence, otherwise unavailable. |
+
+Generation compare-and-set uses attempt IDs, not just a content fingerprint,
+so an old attempt cannot activate after a superseding attempt with the same
+bytes. Snapshot/source checks are independent of semantic feature coverage.
+Only admitted UTF-8 bytes become snapshots; current file custody/size controls
+apply before mutation. Policy/source restriction removes current eligibility
+before cleanup. Failed cleanup remains retryable; writes across cells are
+BestEffort, with no cross-store rollback guarantee.
+
+Source-read permission does not authorize external model egress. Validated
+semantic code chunks can enter an explicitly in-process local embedding
+provider for retrieval under exact source scope, policy, expiry and current
+generation checks. Snapshots and legacy code without validated generations
+remain excluded. External code model feeds require separate per-source/
+destination enrichment authorization. Optional fields are
+additive for negotiated wire readers; strict old schemas and Rust literals
+require updated projections/callers. New byte ranges leave `SourceLocation`
+meaning unchanged. Source-generation storage and exact source reads belong to
+knowledge ports/adapters. SQL and providers do not enter portable types.
+
+`EmbeddingBackfillRequest` carries `scope`, `requester`, `limit` (default 256,
+1–1024) and optional `sourceFilter`. `EmbeddingBackfillReport` carries integer
+counts `embedded`, `newEmbeddings`, `reused`, `codeEmbedded` and `remaining`.
+These additive retrieval-maintenance DTOs do not grant external processing.
+Finite model input windows are independent of complete stored source coverage.
 
 ### KnowledgeChunkKind
 
@@ -903,6 +949,15 @@ Enum (closed; RFC-0020 Phase 2):
 - `implements` — class-implements-interface edge
 - `routes_to` — framework route (an `Endpoint`-kind entity) wired to its
   handler
+- `registers` — registration-site declaration → registered type: emitted
+  for register-flavored call sites (`registry.register(..)`, builder
+  `with_*(..)`) whose arguments construct a type (`T::new`, `T::default`,
+  `new T(..)`). Registration is liveness evidence for the type and —
+  because dispatch through registries and `Arc<dyn Trait>` leaves no static
+  call edge — for the type's `impl` methods (classified `dynamic`, never
+  `confirmed-unused`, by the dead-code classifier). Kept OUT of the
+  calls-analytics edge set (PageRank/betweenness stay calls-only, like
+  `contains`).
 
 Code entities use existing `EntityKind` values (`Function`, `Method`, `Class`,
 `Struct`, `Interface`, `Trait`, `Enum`, `TypeAlias`, `Module`, `File`,
@@ -2549,3 +2604,29 @@ defer their schemas and storage until after the first vertical slice:
   classification, or be exposed only through higher-level SDK helpers?
 - What compatibility guarantees should capability keys carry across versions?
 - Should future policy contracts add a governance model for training export?
+
+`CodeSourceBundle` is the version-1 source-transfer family of the existing
+`ImportData` envelope. It contains one active manifest and complete typed
+sources, documents, chunks, graphs, entities, relationships and unresolved
+references for exactly its contribution inventory. Export requires the distinct
+`code:source:export` grant as well as source-read policy. Authorized import
+requires `code:source:write` and `code:source:activate`, rechecked at apply.
+The trusted target scope is bound into the preview fingerprint; this version
+supports exact scope preservation only and rejects translations or policy
+collisions. Original policies/provenance remain unchanged. Legacy import methods
+reject this family; authorized apply uses a new fenced target attempt, leaves
+failed partial writes incomplete, and activates only after inventory verification.
+
+Source transports accept `CodeSourceQuery` (repository, path, optional generation,
+maxBytes) within a trusted host `CodeSourceContext` (exact scope, requester,
+readerVersion=1). Tool input cannot replace that context. `CodeSourceReadResult`
+also reports the semantic descriptors in `coverage`, independently of the exact
+snapshot text. Unsupported reader versions fail before source materialization.
+
+Source bundles may include `contextEntities`: only the repository-owned root
+referenced by their `belongs_to` relationships, with exact scope, stable key and
+existing repository identity. These roots remain outside file contribution
+inventories. Import ensures the root atomically without overwriting an existing
+identity-equivalent root; collisions are denied. A failed import may retain a
+new root under BestEffort, and retry reuses it. File retraction preserves roots
+while independent graphs still refer to them.

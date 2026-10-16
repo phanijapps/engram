@@ -656,6 +656,8 @@ pub fn index_docs(app: &App, args: &Value) -> Result<Value, ToolError> {
         .map(|(i, c)| {
             let chunk_hash = content_hash(&c.text);
             KnowledgeChunk {
+                code: None,
+                document_kind: None,
                 id: Id::from(format!("{doc_id}#{i}")),
                 document_id: doc_id.clone(),
                 source_id: source_id.clone(),
@@ -760,6 +762,9 @@ pub(crate) mod tests {
             .provider
             .require_lexical_feed()
             .expect("lexical_feed handle");
+        for name in ["Zorblax", "a", "b"] {
+            put_entity(&app, &json!({"name":name,"kind":"function"})).unwrap();
+        }
         block_on(feed.upsert("Zorblax", "Zorblax function")).expect("upsert");
         block_on(feed.upsert_batch(&[("a".into(), "alpha".into()), ("b".into(), "beta".into())]))
             .expect("upsert_batch");

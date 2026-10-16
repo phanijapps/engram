@@ -279,3 +279,22 @@ mod formation_tests {
         assert_eq!(qualified_name(&[], "parse"), "parse");
     }
 }
+
+/// Existing repository identity, shared by extraction and source transfer.
+/// This is independent of file generations and retains the prior hash scheme.
+pub fn repository_entity_id(scope: &engram_domain::Scope, key: &str) -> engram_domain::EntityId {
+    use sha2::{Digest, Sha256};
+    let input = format!(
+        "{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{}\u{1f}{key}",
+        scope.tenant,
+        scope.subject.as_deref().unwrap_or(""),
+        scope.workspace.as_deref().unwrap_or(""),
+        scope.session.as_deref().unwrap_or(""),
+        scope.environment.as_deref().unwrap_or("")
+    );
+    let hex: String = Sha256::digest(input.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    engram_domain::Id::from(format!("repo-{hex}"))
+}

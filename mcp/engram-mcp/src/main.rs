@@ -640,6 +640,8 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
         }),
         handler: procedures::procedure_increment,
     });
+    registry.register(ToolRecord{name:"source_read",description:"Read exact accepted code source and typed coverage in the trusted project scope.",input_schema:json!({"type":"object","additionalProperties":false,"properties":{"repository":{"type":"string"},"path":{"type":"string"},"generation":{"type":"string"},"maxBytes":{"type":"integer","minimum":1,"maximum":1048576}},"required":["repository","path"]}),handler:codegraph::source_read});
+    registry.register(ToolRecord{name:"code_sources",description:"List authorized source generations and availability in the trusted project scope.",input_schema:json!({"type":"object","additionalProperties":false,"properties":{}}),handler:codegraph::code_sources});
     registry.register(ToolRecord {
         name: "symbol_context",
         description: "Callers, callees, and community for one symbol — or, when `symbol` is an array, for each symbol in one call (batch).",
@@ -810,12 +812,16 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
         input_schema: json!({
             "type": "object",
             "properties": {
-                "op": { "type": "string", "enum": ["search", "context", "impact", "health", "architecture", "changed", "explore", "dependencies"],
+                "op": { "type": "string", "enum": ["search", "context", "impact", "health", "architecture", "changed", "explore", "dependencies", "source_read", "sources"],
                         "description": "Code intelligence operation." },
+                "repository":{"type":"string","description":"Repository stable key for source_read."},
+                "path":{"type":"string","description":"Normalized relative source path."},
+                "generation":{"type":"string"},"maxBytes":{"type":"integer","minimum":1,"maximum":1048576},
                 "symbol": { "type": "string", "description": "Target symbol (context/impact modes)." },
                 "query": { "type": "string", "description": "Search query (explore mode)." },
                 "depth": { "type": "number", "description": "Traversal depth (default 1-2)." },
                 "limit": { "type": "number", "description": "Result cap." },
+                "classify": { "type": "boolean", "description": "health mode: add the evidence-backed dead-code classification (confirmed-unused / dynamic / test-only / external)." },
                 "to": { "type": "string", "description": "Dependency path endpoint (impact mode)." }
             },
             "required": ["op"]
@@ -1083,6 +1089,8 @@ fn consolidated_code(app: &App, args: &Value) -> Result<Value, ToolError> {
             }),
         ),
         "dependencies" => crate::codegraph::file_dependencies(app, args),
+        "source_read" => crate::codegraph::source_read(app, args),
+        "sources" => crate::codegraph::code_sources(app, args),
         _ => crate::codegraph::symbol_context(
             app,
             &json!({
@@ -1106,7 +1114,19 @@ fn consolidated_scan(app: &App, args: &Value) -> Result<Value, ToolError> {
                 "content": args.get("content").cloned().unwrap_or(json!(""))
             }),
         ),
-        _ => crate::codegraph::scan_repo(app, &json!({"path": args["path"]})),
+        _ => crate::codegraph::scan_repo(app, &{
+            // Forward the full repo-scan surface: dropping `force` here
+            // silently broke force re-ingestion on the consolidated `scan`
+            // tool (the schema advertises it — code-liveness T6 caught it).
+            let mut forwarded = json!({"path": args["path"]});
+            if let Some(force) = args.get("force") {
+                forwarded["force"] = force.clone();
+            }
+            if let Some(cfg) = args.get("scan_config") {
+                forwarded["scan_config"] = cfg.clone();
+            }
+            forwarded
+        }),
     }
 }
 

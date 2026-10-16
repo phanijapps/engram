@@ -235,6 +235,8 @@ fn chunk_resolution_remains_unchanged_with_entity_aware_resolver() {
     }))
     .expect("put source");
     let chunk = KnowledgeChunk {
+        code: None,
+        document_kind: None,
         id: ChunkId::from("chunk-doc"),
         document_id: DocumentId::from("doc-1"),
         source_id: SourceId::from("src-1"),

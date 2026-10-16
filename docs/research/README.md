@@ -46,6 +46,7 @@ policy/provenance/scope governance baked into every path. See
 | [`zbot-engram-belief-bitemporal-cutover.md`](./zbot-engram-belief-bitemporal-cutover.md) | bi-temporal belief synthesis (valid-time vs record-time) | implemented |
 | [`cross-repo-linkage.md`](./cross-repo-linkage.md) | source-grounded knowledge graph; stable source keys; re-ingest convergence | implemented |
 | [`codegraph-parity-audit.md`](./codegraph-parity-audit.md) | the on-top codegraph layer ([RFC-0012](../rfcs/)) capability parity | implemented |
+| [`ast-aware-code-chunking-audit.md`](./ast-aware-code-chunking-audit.md) | verified AST chunking, source coverage gaps and proposed PM behavior summaries | applied audit |
 | [`graphmind-prior-art-survey.md`](./graphmind-prior-art-survey.md) | competitive positioning vs Mem0/Zep/Letta/GraphRAG | reference |
 | [`memtrace-survey.md`](./memtrace-survey.md) | prior-art survey (memory trace + visualization) | reference |
 | [`engram-framing-synthesis.md`](./engram-framing-synthesis.md) | how engram is framed for techno-functional + functional audiences | reference |

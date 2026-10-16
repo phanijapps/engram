@@ -44,6 +44,16 @@ pub(crate) struct KnowledgeRelationshipSource(pub(crate) Arc<SqlKnowledgeStore>)
 
 #[async_trait]
 impl GraphRelationshipSource for KnowledgeRelationshipSource {
+    async fn access_for_request(
+        &self,
+        request: &RetrievalRequest,
+    ) -> CoreResult<engram_retrieval::RecordAccess> {
+        self.0.source_record_access(request)
+    }
+
+    async fn source_revision(&self, _scope: &Scope) -> CoreResult<u64> {
+        self.0.code_source_revision()
+    }
     async fn entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>> {
         self.0.list_entities(scope).await
     }

@@ -30,6 +30,13 @@ rots. See `CONVENTIONS.md` § 4 (Spec metadata contract).
 
 ---
 
+## code-source-preservation
+
+- **Subsequent accepted direction:** parser registry/context hydration,
+  model-budgeted segmentation/retrieval and Silver generation need separate
+  specs after the shipped [source-preservation foundation](specs/code-source-preservation/spec.md). ADR-0029 and ADR-0030 record the architectural
+  decisions; they do not install parsers or select an LLM.
+
 ## viz-non-graph-view-types
 
 - **Non-graph view-types (deferred: viz-non-graph-view-types):** `BeliefView`,
@@ -705,6 +712,44 @@ re-scans ~0.
 
 ## self-index-findings (2026-08-28, mem-alpha indexed into ~/.engram/mem-alpha-self)
 
+### 2026-10-14 AST chunking audit
+
+Evidence and proposed sequencing:
+[`AST-aware code chunking audit`](research/ast-aware-code-chunking-audit.md).
+Direction: [RFC-0021: Structural code context](rfcs/0021-structural-code-context.md)
+(Accepted; includes additive language/parser registration and polyglot validation).
+Live self scan: 1,220 entries, six ingested, zero errors; graph 3,162 nodes /
+7,192 edges. A separate live fixture verified method source and graph links.
+
+Source preservation and outer-function body loss are now fixed on
+`codex/code-source-preservation` (`22013a1`); the real self-index verified
+620 exact file reads and a complete nested Rust callable. See
+[live verification](research/code-source-preservation-self-verification.md).
+- **[code-context-and-summary] Context enrichment is incomplete:** method
+  anchors carry class names, and `contains`/`imports` exist in the graph, but
+  method chunks do not carry hydrated field/constructor/import bindings and
+  scan leaves `summary` unset. Reuse graph facts and the TS maintenance LLM
+  seam for evidence-linked behavior summaries. Needs a context/derived-output
+  contract and specs; preserve Rust/N-API/MCP surface parity.
+- **[code-embedding-coverage] Source coverage differs from vector coverage:**
+  source-aware local code embeddings are implemented by
+  [local-code-embeddings](specs/local-code-embeddings/spec.md), including
+  code-only native/HTTP/stdio vector recall. Snapshots and unknown-generation
+  legacy code remain excluded; external code model feeds still need separate
+  enrichment authorization. Remaining work is model-aware token budgeting
+  and linked AST segments, with semantic retrieval of behavior near a large
+  method's end. The 8,192-character input cap and the model's token window do
+  not guarantee complete-code vector coverage; source remains complete.
+- **[source-generation-reconciliation-cost] Full source-format refresh is slow:**
+  the retained self store's first refresh took 861.75 seconds for 992 files;
+  an unchanged second scan took 6.19 seconds (zero errors in both). Source
+  files activated before the long reference-healing tail completed. The sweep
+  lists all manifests and refreshes a guarded file attempt per healed
+  reference; 2,072 references were resolved at completion. Profile Rust phases
+  before changing this path, then consider batching per-file healing while
+  preserving ownership, CAS fencing and failure visibility. No optimization
+  or definitive phase-cost attribution was made in this verification.
+
 Dogfood run: mem-alpha scanned into a dedicated SQLite store (9,703 entities /
 27,000 rels / 0 errors) and the code-intel battery turned on itself.
 
@@ -716,6 +761,9 @@ Dogfood run: mem-alpha scanned into a dedicated SQLite store (9,703 entities /
   to it). Blast radius is bounded and test-protected (N-API + ~15 scanner
   tests), so a phase-split (walk / prepass / ingest-phase / sweep) is safe.
   Blocked on nothing — the highest-value refactor the self-index names.
+  **2026-10-14 refresh:** scanner orchestration is 1,336 lines; bridge score
+  8,878.13 versus 3,678.81 for `bootstrap_sqlite` (2.41×). Two-hop impact
+  includes both MCP and native scan entry points, confirmed against source.
 - **[receiver-resolution-gap] VERIFIED: `self.`-method and qualified-path
   calls under-resolve → dead-code false positives.** Concrete: 
   `FastEmbedEmbeddingProvider` (called from BOTH the pg recipe and the
@@ -741,6 +789,51 @@ Dogfood run: mem-alpha scanned into a dedicated SQLite store (9,703 entities /
   short-name centrality noise, known register item (per-repo/id-keyed
   helps); `PgConnection::block_on` is by-design funneling (every PG call
   shims sync→async) — central but correct.
+
+### 2026-09-03 re-run (post skill-reconciliation + Phase 3.x merges)
+
+Scan: 1,213 files, 20 ingested incrementally, `errors: 0`. Graph 2,984
+nodes / 5,653 edges. Dead-code list 960 (was 999) — bulk still test
+doubles / public-API / UI per the triage below.
+
+- **[scanner-god-module] persists and grew**: `scan_repository` betweenness
+  3737 (was 3687) vs 699 for the next symbol — still ~5.3×, still the named
+  refactor target, still unshipped. Blast radius verified again: 2 production
+  callers (`IngestOps::start_scan_job_json`, `NativeProvider::scan_repository_json`)
+  + ~36 scanner tests — the phase-split remains safe and test-protected.
+- **[receiver-resolution-gap] EXTENDED — trait-object dispatch subclass.**
+  `MemoryLifecycleExecutor::execute` and `CompositeConsolidationExecutor`
+  report dead while both are constructed and registered into the consolidation
+  composite at `core/integration/src/sqlite/bootstrap.rs:505-506`; dispatch
+  through `Arc<dyn ConsolidationMutationExecutor>` leaves no static call edge.
+  `KnowledgeIngestor::ingest` same class (dyn dispatch at
+  `core/integration/src/sqlite/conformance.rs:303`).
+  `FastEmbedEmbeddingProvider::embed_batch` STILL in the dead list — the
+  2026-08-28 qualified-path fix has not landed. The fix ladder needs a third
+  rung: instance-constructed-and-registered (registration-path analysis for
+  `Arc<dyn Trait>` composites), on top of self-receivers and qualified paths.
+- **`whats_changed` flat-score expectation FALSIFIED + schema drift.** After
+  ≥4 scan baselines every Recent score is still identical (0.069 — implying a
+  uniform `valid_from` ≈ 54 days ago for all symbols, which cannot be right).
+  AND the handler `whats_changed(app, _args)` in `mcp/engram-mcp/src/codegraph.rs:1866`
+  ignores ALL arguments while the unified `code` schema advertises `limit`.
+  Fix both: honor `limit`; investigate entity `valid_from` population on
+  re-scan (unchanged entities may be re-versioned, flattening recency).
+- **[driver-error-swallowing] FIXED this session**: `mcp_driver.py` rendered
+  JSON-RPC errors (e.g. `tool not found`) as empty output — errors now print.
+- **[skill-tool-name-drift] FIXED this session**: `engram-self-index` still
+  taught the retired 44-tool names (`scan_repo`/`architecture`/`code_health`/
+  `whats_changed`/`change_impact`); updated to the unified `scan`/`code`
+  surface. Lesson for the 44→7 class: skills referencing tool names must be
+  swept on tool consolidation.
+- **AGENTS.md shape drift FIXED**: `adapters/surreal/` (workspace member since
+  2026-07-30, feature-gated `surreal` recipe in `core/integration`) was
+  missing from the target repository shape. ADR-0022 and
+  `docs/architecture/overview.md` already cover it.
+- Minor: `architecture` Communities top-10 reports sizes ~721-725 while
+  `changed` Overview reports `largest_community_size: 88` — two different
+  community metrics in one battery, unlabeled; make the display name its
+  metric.
 
 ## code-graph-perfection
 
@@ -828,3 +921,46 @@ self-improvement. Engram's memory layer carries the context.
       engram-perf-audit, engram-store-ops
 - [ ] Store summary back to engram memory (workspace: agentzero for
       cross-project continuity, or odyssey for odyssey-specific context)
+
+## code-liveness-followups
+
+Deferred from the code-liveness spec (2026-09-03) + follow-ups surfaced
+during live verification:
+
+- **[self-ctor-attribution]** `Self::new(...)` / `Self { .. }` calls extract
+  as bare `new` (self receivers carry no hint) → the constructor stays
+  unresolved → force re-scan dead lists inflate with never-called-looking
+  `X::new` symbols (mem-alpha: 960 → 2198 raw, of which confirmed-unused
+  1273). Same-document impl-block candidate (`Self::new` inside
+  `impl X` → `X::new`) is the fix shape.
+- **[outer-span-attribution]** call-site attribution breaks on the FIRST
+  containing declaration span in walk order — an `impl`/struct span can
+  shadow the inner method (observed: `DelegateToZbotTool` → `::new` edge
+  attributed to the struct, not the enclosing method in executor.rs).
+  Prefer the INNERMOST containing function span.
+- **[dead-code-provenance]** per-symbol provenance fields (`#[cfg(test)]`,
+  `pub`, generated-file paths) don't exist in extraction; the classifier
+  currently buckets test-only by name-shape + `tests`-module containment.
+  Provenance fields would unlock the deferred `generated` and
+  `inconclusive` buckets and harden `test-only`.
+- **[whats_changed-defects]** (separate spec, unchanged): handler ignores
+  all args (`limit` advertised); recency scores uniform across cohorts.
+
+## dependency-security-baseline
+
+- `cargo audit` on 2026-10-14 reports 16 vulnerable locked packages on both
+  the pre-source-preservation baseline and this branch, plus existing warning
+  classes. The pinned `cap-std` addition introduces no additional advisory ID /
+  package / version tuple. Audit used a fresh temporary RustSec checkout because
+  the user-level advisory cache could not initialize. Dependency remediation is
+  a separate workspace upgrade: update affected transitive chains and rerun
+  feature/backend regression suites; this source feature does not waive the
+  baseline findings or claim a green security-audit gate.
+
+## legacy-spec-metadata-lint
+
+The work-loop status linter reports 15 pre-existing hard violations in legacy
+spec redirects lacking Status headers. A clean HEAD archive reproduces the
+same 15; local-code-embeddings and code-source-preservation introduce none.
+Align the linter with consolidated spec redirects or normalize their metadata
+in a separate documentation change. Evidence: /tmp/engram-code-embedding-spec-lint-baseline.json.

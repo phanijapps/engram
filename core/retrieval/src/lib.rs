@@ -7,6 +7,8 @@
 mod composer;
 mod config;
 mod graph_cache;
+mod record_access;
+pub use record_access::RecordAccess;
 mod ports;
 mod predict;
 mod reciprocal;

@@ -24,6 +24,7 @@ describe.skipIf(!ready)("engram-maintain CLI (subprocess, real addon)", () => {
       storage_path: join(store, "db"),
       trusted_root: store,
       scope_policy: "Strict",
+      enable_vector: false,
       embedding_provider: {
         provider_type: "none",
         model: "none",

@@ -36,6 +36,9 @@ impl KnowledgeRepoGraph {
 
 #[async_trait]
 impl KnowledgeRepository for KnowledgeRepoGraph {
+    fn code_sources(&self) -> Option<&dyn engram_knowledge::CodeSourceRepository> {
+        self.knowledge.code_sources()
+    }
     async fn put_source(&self, source: KnowledgeSource) -> CoreResult<KnowledgeSource> {
         self.knowledge.put_source(source).await
     }

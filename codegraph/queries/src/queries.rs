@@ -85,6 +85,10 @@ pub struct AnalyticsGraph {
     /// NOT in `edges()` — other analytics (centrality, betweenness) stays
     /// calls-only so containers don't skew structural scores.
     contains_edges: Vec<(String, String)>,
+    /// Registration edges (registration site → registered type) for liveness
+    /// evidence in dead_code. Same partition rule as `contains_edges`:
+    /// registrations are NOT calls and never enter centrality/betweenness.
+    registers_edges: Vec<(String, String)>,
     names: HashMap<String, String>,
 }
 
@@ -95,10 +99,11 @@ impl AnalyticsGraph {
         let mut names: HashMap<String, String> = HashMap::new();
         let mut edges: Vec<(String, String)> = Vec::new();
         let mut contains_edges: Vec<(String, String)> = Vec::new();
+        let mut registers_edges: Vec<(String, String)> = Vec::new();
         for r in relationships.iter().filter(|r| {
             matches!(
                 r.predicate.as_str(),
-                "calls" | "sends_request" | "handled_by" | "contains"
+                "calls" | "sends_request" | "handled_by" | "contains" | "registers"
             )
         }) {
             let (Some(subject_id), Some(object_id)) = (&r.subject.id, &r.object.id) else {
@@ -114,15 +119,16 @@ impl AnalyticsGraph {
             if s == o {
                 continue;
             }
-            if r.predicate == "contains" {
-                contains_edges.push((s, o));
-            } else {
-                edges.push((s, o));
+            match r.predicate.as_str() {
+                "contains" => contains_edges.push((s, o)),
+                "registers" => registers_edges.push((s, o)),
+                _ => edges.push((s, o)),
             }
         }
         Self {
             edges,
             contains_edges,
+            registers_edges,
             names,
         }
     }
@@ -133,6 +139,10 @@ impl AnalyticsGraph {
     }
 
     /// Contains edges (Class → method) — liveness evidence for dead_code only.
+    pub fn registers_edges(&self) -> &[(String, String)] {
+        &self.registers_edges
+    }
+
     pub fn contains_edges(&self) -> &[(String, String)] {
         &self.contains_edges
     }
@@ -179,33 +189,13 @@ impl AnalyticsGraph {
 }
 
 pub fn dead_code(graph: &AnalyticsGraph) -> Vec<String> {
-    let edges = graph.edges();
-    let in_degree = engram_graph_analytics::in_degree(edges);
-    let mut defined: HashSet<String> = HashSet::new();
-    for (caller, callee) in edges {
-        defined.insert(caller.clone());
-        defined.insert(callee.clone());
-    }
-    let mut dead_ids: Vec<&str> = defined
-        .iter()
-        .filter(|node| !in_degree.contains_key(*node))
-        .map(|n| n.as_str())
-        .collect();
-
-    // Phase 3.3: contains-edge liveness — a container (class/module) whose
-    // children (methods) are alive is NOT dead. Previously every class with
-    // called methods still reported dead because classes receive no incoming
-    // `calls` edges (methods do, not their containers).
-    let live_ids: HashSet<&str> = in_degree.keys().map(|k| k.as_str()).collect();
-    dead_ids.retain(|id| {
-        !graph
-            .contains_edges()
-            .iter()
-            .any(|(parent, child)| parent == id && live_ids.contains(child.as_str()))
-    });
-
-    dead_ids.sort_unstable(); // deterministic #2/#3 disambiguation assignment
-    let mut dead = graph.display_all(dead_ids);
+    // code-liveness: zero-caller detection with every liveness input —
+    // call in-degree (direct), contains-liveness (a container with live
+    // children is alive), and registration (`registers` targets are live:
+    // registries and `Arc<dyn Trait>` dispatch leave no static call edges).
+    // Test-shaped symbols stay listed here; the classifier
+    // (`liveness::classify_dead`) separates the buckets.
+    let mut dead = crate::liveness::raw_dead_code(graph);
     dead.sort();
     dead
 }

@@ -17,7 +17,7 @@ use crate::knowledge::{schema::sql_error, service::SqlKnowledgeStore};
 /// Read the persisted `archived_at` for a record (if any), so a re-put preserves a
 /// prior maintenance archive instead of silently un-archiving (ingestion always
 /// passes `archived_at = None`). Keeps the column and `record_json` in lockstep.
-fn persisted_archived_at(
+pub(super) fn persisted_archived_at(
     conn: &Connection,
     table: &str,
     id: &str,
@@ -45,83 +45,67 @@ fn persisted_archived_at(
 
 #[async_trait]
 impl KnowledgeRepository for SqlKnowledgeStore {
+    fn code_sources(&self) -> Option<&dyn engram_knowledge::CodeSourceRepository> {
+        Some(self)
+    }
     async fn put_source(&self, source: KnowledgeSource) -> CoreResult<KnowledgeSource> {
-        let json = serde_json::to_string(&source).map_err(crate::knowledge::schema::json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_sources
-                    (id, tenant, subject, workspace, session, environment, record_json)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                ON CONFLICT(id) DO UPDATE SET
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json
-                "#,
-                rusqlite::params![
-                    source.id.to_string(),
-                    source.scope.tenant,
-                    source.scope.subject,
-                    source.scope.workspace,
-                    source.scope.session,
-                    source.scope.environment,
-                    json
-                ],
-            )
+        let mut guard = self.lock()?;
+        let connection = guard
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(sql_error)?;
-        Ok(source)
+        super::guarded_source_write::reject_unfenced_write(
+            &connection,
+            CodeSourceRecordKind::Source,
+            source.id.as_str(),
+        )?;
+        let result = super::record_writes::put_source(&connection, source)?;
+        connection.commit().map_err(sql_error)?;
+        Ok(result)
     }
 
     async fn put_document(&self, document: SourceDocument) -> CoreResult<SourceDocument> {
-        let json =
-            serde_json::to_string(&document).map_err(crate::knowledge::schema::json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_documents (id, source_id, record_json)
-                VALUES (?1, ?2, ?3)
-                ON CONFLICT(id) DO UPDATE SET
-                    source_id = excluded.source_id,
-                    record_json = excluded.record_json
-                "#,
-                rusqlite::params![
-                    document.id.to_string(),
-                    document.source_id.to_string(),
-                    json
-                ],
-            )
+        let mut guard = self.lock()?;
+        let connection = guard
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(sql_error)?;
-        Ok(document)
+        super::guarded_source_write::reject_unfenced_write(
+            &connection,
+            CodeSourceRecordKind::Document,
+            document.id.as_str(),
+        )?;
+        super::guarded_source_write::reject_unfenced_write(
+            &connection,
+            CodeSourceRecordKind::Source,
+            document.source_id.as_str(),
+        )?;
+        let result = super::record_writes::put_document(&connection, document)?;
+        connection.commit().map_err(sql_error)?;
+        Ok(result)
     }
 
     async fn put_chunk(&self, chunk: KnowledgeChunk) -> CoreResult<KnowledgeChunk> {
-        let json = serde_json::to_string(&chunk).map_err(crate::knowledge::schema::json_error)?;
-        let connection = self.lock()?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_chunks
-                    (id, document_id, source_id, record_json)
-                VALUES (?1, ?2, ?3, ?4)
-                ON CONFLICT(id) DO UPDATE SET
-                    document_id = excluded.document_id,
-                    source_id = excluded.source_id,
-                    record_json = excluded.record_json
-                "#,
-                rusqlite::params![
-                    chunk.id.to_string(),
-                    chunk.document_id.to_string(),
-                    chunk.source_id.to_string(),
-                    json
-                ],
-            )
+        let mut guard = self.lock()?;
+        let connection = guard
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(sql_error)?;
-        Ok(chunk)
+        if chunk.code.is_some() {
+            return Err(CoreError::Conflict {
+                reason: "typed code writes require a source attempt".into(),
+            });
+        }
+        super::guarded_source_write::reject_unfenced_write(
+            &connection,
+            CodeSourceRecordKind::Chunk,
+            chunk.id.as_str(),
+        )?;
+        super::guarded_source_write::reject_unfenced_write(
+            &connection,
+            CodeSourceRecordKind::Document,
+            chunk.document_id.as_str(),
+        )?;
+        let result = super::record_writes::put_chunk(&connection, chunk)?;
+        connection.commit().map_err(sql_error)?;
+        Ok(result)
     }
 
     async fn get_chunk(&self, id: &ChunkId, scope: &Scope) -> CoreResult<Option<KnowledgeChunk>> {
@@ -198,136 +182,94 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     /// Hard-deletes a document by id. The reconcile path is scope-bounded
     /// (the document id was read from a scope-filtered prior graph), so this
     /// deletes by id directly.
-    async fn delete_document(&self, id: &DocumentId, _scope: &Scope) -> CoreResult<bool> {
-        let connection = self.lock()?;
+    async fn delete_document(&self, id: &DocumentId, scope: &Scope) -> CoreResult<bool> {
+        let mut guard = self.lock()?;
+        let connection = guard
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+        super::guarded_source_write::authorize_owned_mutation(
+            &connection,
+            CodeSourceRecordKind::Document,
+            id.as_str(),
+            scope,
+        )?;
         let n = connection
             .execute(
                 "DELETE FROM knowledge_documents WHERE id = ?1",
                 rusqlite::params![id.to_string()],
             )
             .map_err(sql_error)?;
+        connection.commit().map_err(sql_error)?;
         Ok(n > 0)
     }
 
     /// Hard-deletes a single chunk by id (scope-bounded by the reconcile caller).
-    async fn delete_chunk(&self, id: &ChunkId, _scope: &Scope) -> CoreResult<bool> {
-        let connection = self.lock()?;
+    async fn delete_chunk(&self, id: &ChunkId, scope: &Scope) -> CoreResult<bool> {
+        let mut guard = self.lock()?;
+        let connection = guard
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+        super::guarded_source_write::authorize_owned_mutation(
+            &connection,
+            CodeSourceRecordKind::Chunk,
+            id.as_str(),
+            scope,
+        )?;
         let n = connection
             .execute(
-                "DELETE FROM knowledge_chunks WHERE id = ?1",
+                "DELETE FROM knowledge_chunks_records WHERE id = ?1",
                 rusqlite::params![id.to_string()],
             )
             .map_err(sql_error)?;
+        connection.commit().map_err(sql_error)?;
         Ok(n > 0)
     }
 
     async fn put_entity(&self, entity: KnowledgeEntity) -> CoreResult<KnowledgeEntity> {
-        let connection = self.lock()?;
-        let graph_id = entity
-            .graph_id
-            .as_ref()
-            .map(ToString::to_string)
-            .unwrap_or_default();
-        // Preserve a prior maintenance archive across re-put (ingestion passes
-        // archived_at = None); keep the column and record_json in lockstep.
-        let preserved =
-            persisted_archived_at(&connection, "knowledge_entities", &entity.id.to_string())?;
-        let mut stored = entity;
-        if let Some(ts) = preserved {
-            stored.archived_at = Some(ts);
-        }
-        let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_entities
-                    (id, graph_id, tenant, subject, workspace, session, environment, record_json, archived_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-                ON CONFLICT(id) DO UPDATE SET
-                    graph_id = excluded.graph_id,
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json,
-                    archived_at = excluded.archived_at
-                "#,
-                rusqlite::params![
-                    stored.id.to_string(),
-                    graph_id,
-                    stored.scope.tenant,
-                    stored.scope.subject,
-                    stored.scope.workspace,
-                    stored.scope.session,
-                    stored.scope.environment,
-                    json,
-                    stored.archived_at.map(|t| t.to_rfc3339())
-                ],
-            )
+        let mut guard = self.lock()?;
+        let connection = guard
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(sql_error)?;
-        Ok(stored)
+        super::guarded_source_write::reject_unfenced_write(
+            &connection,
+            CodeSourceRecordKind::Entity,
+            entity.id.as_str(),
+        )?;
+        if let Some(graph) = &entity.graph_id {
+            super::guarded_source_write::reject_unfenced_write(
+                &connection,
+                CodeSourceRecordKind::Graph,
+                graph.as_str(),
+            )?;
+        }
+        let result = super::record_writes::put_entity(&connection, entity)?;
+        connection.commit().map_err(sql_error)?;
+        Ok(result)
     }
 
     async fn put_relationship(
         &self,
         relationship: KnowledgeRelationship,
     ) -> CoreResult<KnowledgeRelationship> {
-        let connection = self.lock()?;
-        let graph_id = relationship
-            .graph_id
-            .as_ref()
-            .map(ToString::to_string)
-            .unwrap_or_default();
-        let subject_id = relationship
-            .subject
-            .id
-            .as_ref()
-            .map(ToString::to_string)
-            .unwrap_or_default();
-        // Preserve a prior maintenance archive across re-put.
-        let preserved = persisted_archived_at(
-            &connection,
-            "knowledge_relationships",
-            &relationship.id.to_string(),
-        )?;
-        let mut stored = relationship;
-        if let Some(ts) = preserved {
-            stored.archived_at = Some(ts);
-        }
-        let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
-        connection
-            .execute(
-                r#"
-                INSERT INTO knowledge_relationships
-                    (id, graph_id, subject_id, tenant, subject, workspace, session, environment, record_json, archived_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-                ON CONFLICT(id) DO UPDATE SET
-                    graph_id = excluded.graph_id,
-                    subject_id = excluded.subject_id,
-                    tenant = excluded.tenant,
-                    subject = excluded.subject,
-                    workspace = excluded.workspace,
-                    session = excluded.session,
-                    environment = excluded.environment,
-                    record_json = excluded.record_json,
-                    archived_at = excluded.archived_at
-                "#,
-                rusqlite::params![
-                    stored.id.to_string(),
-                    graph_id,
-                    subject_id,
-                    stored.scope.tenant,
-                    stored.scope.subject,
-                    stored.scope.workspace,
-                    stored.scope.session,
-                    stored.scope.environment,
-                    json,
-                    stored.archived_at.map(|t| t.to_rfc3339())
-                ],
-            )
+        let mut guard = self.lock()?;
+        let connection = guard
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(sql_error)?;
-        Ok(stored)
+        super::guarded_source_write::reject_unfenced_write(
+            &connection,
+            CodeSourceRecordKind::Relationship,
+            relationship.id.as_str(),
+        )?;
+        if let Some(graph) = &relationship.graph_id {
+            super::guarded_source_write::reject_unfenced_write(
+                &connection,
+                CodeSourceRecordKind::Graph,
+                graph.as_str(),
+            )?;
+        }
+        let result = super::record_writes::put_relationship(&connection, relationship)?;
+        connection.commit().map_err(sql_error)?;
+        Ok(result)
     }
 
     async fn get_entity(
@@ -393,11 +335,20 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     }
 
     async fn delete_entity(&self, id: &EntityId, scope: &Scope) -> CoreResult<bool> {
-        let connection = self.lock()?;
+        let mut guard = self.lock()?;
+        let connection = guard
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+        super::guarded_source_write::authorize_owned_mutation(
+            &connection,
+            CodeSourceRecordKind::Entity,
+            id.as_str(),
+            scope,
+        )?;
         let affected = connection
             .execute(
                 r#"
-                DELETE FROM knowledge_entities
+                DELETE FROM knowledge_entities_records
                 WHERE id = ?1
                     AND tenant = ?2
                     AND (subject IS NULL OR subject = ?3)
@@ -406,15 +357,25 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                 rusqlite::params![id.to_string(), scope.tenant, scope.subject, scope.workspace,],
             )
             .map_err(sql_error)?;
+        connection.commit().map_err(sql_error)?;
         Ok(affected > 0)
     }
 
     async fn delete_relationship(&self, id: &RelationshipId, scope: &Scope) -> CoreResult<bool> {
-        let connection = self.lock()?;
+        let mut guard = self.lock()?;
+        let connection = guard
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(sql_error)?;
+        super::guarded_source_write::authorize_owned_mutation(
+            &connection,
+            CodeSourceRecordKind::Relationship,
+            id.as_str(),
+            scope,
+        )?;
         let affected = connection
             .execute(
                 r#"
-                DELETE FROM knowledge_relationships
+                DELETE FROM knowledge_relationships_records
                 WHERE id = ?1
                     AND tenant = ?2
                     AND (subject IS NULL OR subject = ?3)
@@ -423,6 +384,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                 rusqlite::params![id.to_string(), scope.tenant, scope.subject, scope.workspace,],
             )
             .map_err(sql_error)?;
+        connection.commit().map_err(sql_error)?;
         Ok(affected > 0)
     }
 }

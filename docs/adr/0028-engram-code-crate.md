@@ -1,6 +1,6 @@
 # ADR-0028: `engram-code` — a dedicated code-indexing behavior crate
 
-- **Status:** Accepted
+- **Status:** Superseded (parser-port deferral only) by [ADR-0029](0029-normalized-code-parser-port.md)
 - **Date:** 2026-08-23
 - **Decision-makers:** phanijapps
 - **Related:** RFC-0020 (unified knowledge indexing — Phase 2 vehicle), RFC-0012 (codegraph on-top layer), ADR-0022 (engine neutrality + surface parity), ADR-0017 (multi-repo scope model), `docs/specs/engram-code/` (the feature spec), ADR-0003 (implementation stack)

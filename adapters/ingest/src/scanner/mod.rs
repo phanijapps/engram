@@ -29,9 +29,22 @@ use crate::{
 };
 
 mod contract_phase;
+mod manifest;
+mod source_assembly;
+pub use manifest::{decode_scan_manifest, encode_scan_manifest};
+mod source_generation;
+mod source_reader;
 mod workspace;
 
 pub use workspace::{detect_workspace, scan_workspace};
+
+/// Native path separators never enter the portable file/source identity.
+fn portable_relative_path(path: &Path) -> String {
+    path.components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
 
 /// `true` for Markdown extensions routed through the structure-aware chunker.
 fn is_markdown_ext(ext: &str) -> bool {
@@ -46,6 +59,19 @@ const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
 /// `contract:...` cannot collide with contract-op manifest entries.
 const CONTRACT_PREFIX: &str = "\u{1f}contract:";
 
+/// Admission failures have a stable machine-readable reason.
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ScanAdmissionFailureKind {
+    UnsupportedEncoding,
+    ReadFailed,
+}
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ScanAdmissionFailure {
+    pub path: String,
+    pub kind: ScanAdmissionFailureKind,
+}
+
 /// Summary returned by a scan.
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct ScanSummary {
@@ -56,6 +82,7 @@ pub struct ScanSummary {
     pub entities: usize,
     pub relationships: usize,
     pub errors: usize,
+    pub admission_failures: Vec<ScanAdmissionFailure>,
     pub git_remote: Option<String>,
     pub git_branch: Option<String>,
     pub git_sha: Option<String>,
@@ -137,6 +164,12 @@ where
     let root_canonical = std::fs::canonicalize(root).map_err(|e| CoreError::InvalidRequest {
         reason: format!("cannot canonicalize scan root {}: {e}", root.display()),
     })?;
+
+    let admitted_reader =
+        source_reader::SourceReader::open(&root_canonical).map_err(|_| CoreError::Adapter {
+            adapter: "filesystem_ingest".into(),
+            message: "cannot open trusted source root".into(),
+        })?;
 
     let mut summary = ScanSummary::default();
 
@@ -242,7 +275,7 @@ where
                 // deleted and only re-ingested next scan). The path is still skipped
                 // for this scan; new/transient files remain skip-and-forget.
                 if let Ok(rel) = path.strip_prefix(&root_canonical) {
-                    let rel = rel.to_string_lossy().to_string();
+                    let rel = portable_relative_path(rel);
                     if !rel.is_empty() && opts.manifest.contains_key(&rel) {
                         observed_paths.insert(rel);
                     }
@@ -255,13 +288,13 @@ where
             summary.skipped += 1;
             continue;
         }
-        let rel = canonical
-            .strip_prefix(&root_canonical)
-            .map_err(|e| CoreError::InvalidRequest {
-                reason: format!("rel path: {e}"),
-            })?
-            .to_string_lossy()
-            .to_string();
+        let relative =
+            canonical
+                .strip_prefix(&root_canonical)
+                .map_err(|e| CoreError::InvalidRequest {
+                    reason: format!("rel path: {e}"),
+                })?;
+        let rel = portable_relative_path(relative);
         // Observe the path BEFORE any filter that could skip it so that
         // skipped-but-present files are never classified as removals (FIX 3).
         observed_paths.insert(rel.clone());
@@ -315,11 +348,13 @@ where
         rel: String,
         content: Vec<u8>,
         hash: String,
+        source: Option<CodeSourceGeneration>,
     }
 
     let mut unchanged_rels: Vec<String> = Vec::new();
     let mut delete_failed: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut to_ingest: Vec<ReadyToIngest> = Vec::new();
+    let mut admission_failed: HashSet<String> = HashSet::new();
     // Trim-empty files (0-byte or whitespace-only): nothing to index, but the
     // path still goes through prior-graph retraction + manifest recording so
     // a file that BECAME empty retracts cleanly and later scans treat it as
@@ -327,11 +362,27 @@ where
     // text by contract — surfacing as scan `errors` (empty-file-fix).
     let mut empty_rels: Vec<(String, String)> = Vec::new();
 
-    for (canonical, kind, rel) in &readable {
-        let bytes = match std::fs::read(canonical) {
+    for (_canonical, kind, rel) in &readable {
+        let file = source_generation::file_key(opts, &source_key, rel);
+        let source_port = if *kind == FileKind::Code {
+            repo.code_sources()
+        } else {
+            None
+        };
+        if let Some(port) = source_port {
+            // Policy retraction is independent of whether replacement bytes
+            // can be admitted. Failure propagates rather than leaving old access.
+            block_on(source_generation::exclude_changed_policy(port, &file, opts))?;
+        }
+        let bytes = match admitted_reader.read(rel, max_bytes) {
             Ok(b) => b,
             Err(_) => {
                 summary.errors += 1;
+                admission_failed.insert(rel.clone());
+                summary.admission_failures.push(ScanAdmissionFailure {
+                    path: rel.clone(),
+                    kind: ScanAdmissionFailureKind::ReadFailed,
+                });
                 continue;
             }
         };
@@ -350,10 +401,48 @@ where
             filtered_paths.insert(rel.clone());
             continue;
         }
-        let text = String::from_utf8_lossy(&bytes).into_owned();
-        let hash = content_hash(&text);
-        if opts.manifest.get(rel.as_str()).is_some_and(|h| h == &hash) {
+        let text = match std::str::from_utf8(&bytes) {
+            Ok(text) => text,
+            Err(_) => {
+                summary.errors += 1;
+                admission_failed.insert(rel.clone());
+                summary.admission_failures.push(ScanAdmissionFailure {
+                    path: rel.clone(),
+                    kind: ScanAdmissionFailureKind::UnsupportedEncoding,
+                });
+                continue;
+            }
+        };
+        let hash = content_hash(&bytes);
+        let current = source_port
+            .map(|port| block_on(source_generation::is_current(port, &file, &hash, opts)))
+            .transpose()?;
+        if opts.manifest.get(rel.as_str()).is_some_and(|h| h == &hash)
+            && current.is_none_or(|value| value)
+        {
             unchanged_rels.push(rel.clone());
+            continue;
+        }
+        if let Some(port) = source_port {
+            match block_on(source_generation::begin(
+                port,
+                file,
+                &hash,
+                bytes.len() as u64,
+                opts,
+            )) {
+                Ok(source) => to_ingest.push(ReadyToIngest {
+                    kind: *kind,
+                    rel: rel.clone(),
+                    content: bytes,
+                    hash,
+                    source: Some(source),
+                }),
+                Err(_) => {
+                    summary.errors += 1;
+                    delete_failed.insert(rel.clone());
+                }
+            }
             continue;
         }
         // File is new or changed — delete prior graph(s) before writing.
@@ -377,6 +466,7 @@ where
                         rel: rel.clone(),
                         content: bytes,
                         hash,
+                        source: None,
                     })
                 }
             }
@@ -447,7 +537,8 @@ where
                 // already checked).
                 return (rel.clone(), Outcome::Skipped, Vec::new());
             }
-            let text = String::from_utf8_lossy(&item.content).into_owned();
+            let text = String::from_utf8(item.content.clone()).expect("pre-admitted UTF-8");
+            let mut source_manifest = item.source.clone();
             let text_for_ast = text.clone(); // keep a copy for AST call extraction
             let hash = item.hash.clone();
             let document_kind = match kind {
@@ -476,11 +567,26 @@ where
             // share the tree across chunking, call extraction, and structural
             // extraction (previously 3 independent parses here + 1 in the
             // pre-pass name collection — 4× the dominant scan CPU).
-            let shared_tree = ts_chunker
-                .as_ref()
-                .filter(|ts| ts.supports(ext))
-                .and_then(|ts| ts.parse(&text_for_ast, ext).ok());
-            let ingested = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
+            let attempt = match ts_chunker.as_ref() {
+                Some(ts) if ts.supports(ext) => Some(ts.parse(&text_for_ast, ext)),
+                Some(_) => None,
+                None => Some(Err(CoreError::ProviderUnavailable {
+                    provider: "code_parser".into(),
+                })),
+            };
+            let (shared_tree, quality) = engram_code::source_parse_outcome(attempt);
+            let ingested = if let Some(manifest) = source_manifest.as_mut() {
+                let units =
+                    if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
+                        ts.covered_chunks_with_tree(tree, &text, ext)
+                            .unwrap_or_default()
+                    } else {
+                        vec![]
+                    };
+                let mut req = request;
+                req.text = text;
+                source_assembly::prepare(req, manifest, units, quality)
+            } else if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
                 let candidates = match ts.chunk_with_tree(tree, &text, ext) {
                     Ok(c) => c,
                     Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
@@ -501,51 +607,49 @@ where
             };
             let ingested = match ingested {
                 Ok(i) => i,
-                Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
+                Err(_) => {
+                    if let Some(m) = &source_manifest {
+                        let _ = block_on(
+                            repo.code_sources()
+                                .unwrap()
+                                .fail_code_source(&m.file, &m.attempt_id),
+                        );
+                    }
+                    return (rel.clone(), Outcome::Error, Vec::new());
+                }
             };
             // AST-level call extraction using the GLOBAL entity name set (not
             // just this file's symbols). This preserves cross-file call edges.
-            let ast_calls = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
-                // Run whenever the grammar supports the file — an empty
-                // global name set yields empty calls, NOT a fallback to the
-                // fact-less extract_into path (which silently dropped all
-                // Phase-2 structural/framework facts for declaration-free
-                // files; final-review sweep pin caught it).
-                ts.extract_calls_tree(tree, &text_for_ast, ext, &global_entity_names)
-                    .ok()
-            } else {
-                None
-            };
+            let ast_calls =
+                if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
+                    // Run whenever the grammar supports the file — an empty
+                    // global name set yields empty calls, NOT a fallback to the
+                    // fact-less extract_into path (which silently dropped all
+                    // Phase-2 structural/framework facts for declaration-free
+                    // files; final-review sweep pin caught it).
+                    ts.extract_calls_tree(tree, &text_for_ast, ext, &global_entity_names)
+                        .ok()
+                } else {
+                    None
+                };
             let frameworks = {
                 let facts = engram_code::extract_frameworks(&text_for_ast, ext);
                 if facts.is_empty() { None } else { Some(facts) }
             };
-            let structural = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
-                ts.extract_structural_tree(tree, &text_for_ast, ext).ok()
-            } else {
-                None
-            };
-            let extracted_result = if let Some(ref calls) = ast_calls {
-                extractor
-                    .extract_with_calls(
-                        &ingested.source,
-                        &ingested.document,
-                        &ingested.chunks,
-                        Some(calls),
-                        structural.as_ref(),
-                        frameworks.as_ref(),
-                    )
-                    .map(|graph| {
-                        // Persist manually (extract_with_calls doesn't persist).
-                        let graph2 = graph.clone();
-                        (graph, graph2)
-                    })
-                    .map(|(graph, _)| graph)
-            } else {
-                core::result::Result::Err(CoreError::InvalidRequest {
-                    reason: "no ast calls".to_owned(),
-                })
-            };
+            let structural =
+                if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
+                    ts.extract_structural_tree(tree, &text_for_ast, ext).ok()
+                } else {
+                    None
+                };
+            let extracted_result = extractor.extract_with_calls(
+                &ingested.source,
+                &ingested.document,
+                &ingested.chunks,
+                ast_calls.as_deref(),
+                structural.as_ref(),
+                frameworks.as_ref(),
+            );
             let extracted = match extracted_result {
                 Ok(mut g) => {
                     // C1: cross-file resolution — register entities + resolve refs.
@@ -561,36 +665,130 @@ where
                         g.unresolved =
                             engram_code::resolve_refs(&idx, &mut g.relationships, repo, path);
                     }
-                    // Persist the graph + entities + relationships + ledger.
-                    let _ = block_on(async {
-                        repo.put_graph(g.graph.clone()).await?;
-                        for entity in &g.entities {
-                            repo.put_entity(entity.clone()).await?;
-                        }
-                        for rel in &g.relationships {
-                            repo.put_relationship(rel.clone()).await?;
-                        }
-                        if !g.unresolved.is_empty() {
-                            if let Err(e) = repo.put_unresolved_refs(g.unresolved.clone()).await {
-                                // Sibling pattern of the five warning-tagged
-                                // scans below: surface, never swallow.
-                                eprintln!(
-                                    "[engram-ingest] warning: failed to persist ledger rows for '{rel}': {e}"
-                                );
+                    // Required failures leave this file unavailable, never stamp it unchanged.
+                    let persistence = block_on(async {
+                        if let Some(manifest) = source_manifest.as_mut() {
+                            let port = repo.code_sources().expect("source lease has a port");
+                            manifest.records.push(CodeSourceRecord {
+                                kind: CodeSourceRecordKind::Graph,
+                                id: g.graph.id.to_string(),
+                            });
+                            manifest.records.extend(
+                                g.entities
+                                    .iter()
+                                    .filter(|v| v.kind != EntityKind::Repository)
+                                    .map(|v| CodeSourceRecord {
+                                        kind: CodeSourceRecordKind::Entity,
+                                        id: v.id.to_string(),
+                                    }),
+                            );
+                            manifest.records.extend(g.relationships.iter().map(|v| {
+                                CodeSourceRecord {
+                                    kind: CodeSourceRecordKind::Relationship,
+                                    id: v.id.to_string(),
+                                }
+                            }));
+                            manifest.records.extend(g.unresolved.iter().map(|v| {
+                                CodeSourceRecord {
+                                    kind: CodeSourceRecordKind::UnresolvedReference,
+                                    id: v.id.to_string(),
+                                }
+                            }));
+                            source_generation::persist(port, manifest, &ingested).await?;
+                            port.write_code_record(
+                                &manifest.file,
+                                &manifest.attempt_id,
+                                engram_knowledge::CodeSourceWrite::Graph(g.graph.clone()),
+                            )
+                            .await?;
+                            for entity in &g.entities {
+                                if entity.kind == EntityKind::Repository {
+                                    repo.put_entity(entity.clone()).await?;
+                                } else {
+                                    port.write_code_record(
+                                        &manifest.file,
+                                        &manifest.attempt_id,
+                                        engram_knowledge::CodeSourceWrite::Entity(entity.clone()),
+                                    )
+                                    .await?;
+                                }
                             }
+                            for relationship in &g.relationships {
+                                port.write_code_record(
+                                    &manifest.file,
+                                    &manifest.attempt_id,
+                                    engram_knowledge::CodeSourceWrite::Relationship(
+                                        relationship.clone(),
+                                    ),
+                                )
+                                .await?;
+                            }
+                        } else {
+                            repo.put_graph(g.graph.clone()).await?;
+                            for entity in &g.entities {
+                                repo.put_entity(entity.clone()).await?;
+                            }
+                            for rel in &g.relationships {
+                                repo.put_relationship(rel.clone()).await?;
+                            }
+                        }
+                        if let Some(manifest) = &source_manifest {
+                            for reference in &g.unresolved {
+                                repo.code_sources()
+                                    .unwrap()
+                                    .write_code_record(
+                                        &manifest.file,
+                                        &manifest.attempt_id,
+                                        engram_knowledge::CodeSourceWrite::UnresolvedReference(
+                                            reference.clone(),
+                                        ),
+                                    )
+                                    .await?;
+                            }
+                        } else if !g.unresolved.is_empty() {
+                            repo.put_unresolved_refs(g.unresolved.clone()).await?;
                         }
                         for (chunk_idx, entity_refs) in &g.chunk_entities {
                             if let Some(chunk) = ingested.chunks.get(*chunk_idx) {
                                 let mut updated = chunk.clone();
                                 updated.entities = entity_refs.clone();
-                                repo.put_chunk(updated).await?;
+                                if let Some(manifest) = &source_manifest {
+                                    repo.code_sources()
+                                        .unwrap()
+                                        .write_code_record(
+                                            &manifest.file,
+                                            &manifest.attempt_id,
+                                            engram_knowledge::CodeSourceWrite::Chunk(updated),
+                                        )
+                                        .await?;
+                                } else {
+                                    repo.put_chunk(updated).await?;
+                                }
                             }
                         }
                         Ok::<(), CoreError>(())
                     });
+                    if persistence.is_err() {
+                        if let Some(m) = &source_manifest {
+                            let _ = block_on(
+                                repo.code_sources()
+                                    .unwrap()
+                                    .fail_code_source(&m.file, &m.attempt_id),
+                            );
+                        }
+                        return (rel.clone(), Outcome::Error, Vec::new());
+                    }
                     g
                 }
                 Err(_) => {
+                    if let Some(m) = &source_manifest {
+                        let _ = block_on(
+                            repo.code_sources()
+                                .unwrap()
+                                .fail_code_source(&m.file, &m.attempt_id),
+                        );
+                        return (rel.clone(), Outcome::Error, Vec::new());
+                    }
                     let mut idx = name_index.lock().unwrap();
                     match block_on(extractor.extract_into(
                         repo,
@@ -618,6 +816,17 @@ where
                     &ingested.source.provenance,
                 );
 
+            if let Some(mut m) = source_manifest {
+                m.state = CodeSourceState::Active;
+                if block_on(repo.code_sources().unwrap().activate_code_source(m.clone())).is_err() {
+                    let _ = block_on(
+                        repo.code_sources()
+                            .unwrap()
+                            .fail_code_source(&m.file, &m.attempt_id),
+                    );
+                    return (rel.clone(), Outcome::Error, Vec::new());
+                }
+            }
             let emitted_entities = extracted.entities.clone();
             (
                 rel.clone(),
@@ -647,8 +856,17 @@ where
     // Exclude `contract:*` manifest entries — they are metadata keys, not file
     // paths, so they must never be treated as "removed files" and must not
     // trigger a `delete_prior_graphs_for_path` call.
-    let removed_paths: Vec<String> = opts
-        .manifest
+    let mut removal_manifest = opts.manifest.clone();
+    if let Some(port) = repo.code_sources() {
+        for m in block_on(port.list_code_sources(&opts.scope))? {
+            if m.file.repository == source_key
+                && (m.state == CodeSourceState::Active || !m.records.is_empty())
+            {
+                removal_manifest.entry(m.file.path).or_insert(m.source_hash);
+            }
+        }
+    }
+    let removed_paths: Vec<String> = removal_manifest
         .keys()
         .filter(|k| {
             !k.starts_with(CONTRACT_PREFIX)
@@ -659,6 +877,30 @@ where
     let mut removed_delete_failed: std::collections::HashSet<String> =
         std::collections::HashSet::new();
     for removed_path in &removed_paths {
+        if let Some(port) = repo.code_sources() {
+            let file = source_generation::file_key(opts, &source_key, removed_path);
+            if let Some(prior) = block_on(port.get_code_source(&file))? {
+                match block_on(source_generation::begin(
+                    port,
+                    file,
+                    &prior.source_hash,
+                    prior.byte_length,
+                    opts,
+                )) {
+                    Ok(m) => {
+                        if block_on(port.fail_code_source(&m.file, &m.attempt_id)).is_err() {
+                            summary.errors += 1;
+                            removed_delete_failed.insert(removed_path.clone());
+                        }
+                    }
+                    Err(_) => {
+                        summary.errors += 1;
+                        removed_delete_failed.insert(removed_path.clone());
+                    }
+                }
+                continue;
+            }
+        }
         match block_on(reconcile::delete_prior_graphs_for_path(
             repo,
             &opts.scope,
@@ -693,6 +935,11 @@ where
 
     // Build the emitted manifest from this scan's outcomes.
     let mut new_manifest = std::collections::HashMap::new();
+    for path in admission_failed {
+        if let Some(hash) = opts.manifest.get(&path) {
+            new_manifest.insert(path, hash.clone());
+        }
+    }
 
     // Accumulate contract keys emitted during the parallel phase so we can do
     // RFC-0020 Phase 2 orphan sweep: re-attempt every pending ledger
@@ -778,6 +1025,31 @@ where
                         updated_at: None,
                         archived_at: None,
                     };
+                    if let Some(port) = repo.code_sources() {
+                        let owner = block_on(port.list_code_sources(&opts.scope))?
+                            .into_iter()
+                            .find(|m| {
+                                m.state == CodeSourceState::Active
+                                    && row.graph_id.as_ref().is_some_and(|graph| {
+                                        m.records.iter().any(|r| {
+                                            r.kind == CodeSourceRecordKind::Graph
+                                                && r.id == graph.as_str()
+                                        })
+                                    })
+                            });
+                        if let Some(owner) = owner {
+                            if let Err(error) =
+                                block_on(source_generation::heal_reference(port, owner, rel, row))
+                            {
+                                eprintln!(
+                                    "[engram-ingest] source reference refresh failed: {}",
+                                    error.to_redacted()
+                                );
+                                summary.errors += 1;
+                            }
+                            continue;
+                        }
+                    }
                     let row_id = row.id.clone();
                     if (block_on(async {
                         repo.put_relationship(rel).await?;

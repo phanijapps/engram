@@ -15,6 +15,8 @@
 
 mod batch;
 mod bootstrap;
+mod code_source_conformance;
+mod code_source_import;
 mod community;
 mod conformance;
 mod consolidation_adapters;

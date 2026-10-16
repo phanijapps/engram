@@ -483,6 +483,8 @@ mod tests {
 
     fn k_chunk(id: &str, document_id: &str, source_id: &str) -> KnowledgeChunk {
         KnowledgeChunk {
+            code: None,
+            document_kind: None,
             id: Id::from(id),
             document_id: Id::from(document_id),
             source_id: Id::from(source_id),

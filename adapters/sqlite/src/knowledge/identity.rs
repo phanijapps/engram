@@ -55,7 +55,7 @@ impl SqlIdentityStore {
             .map(|g| g.to_string())
             .unwrap_or_default();
         conn.execute(
-            r#"INSERT INTO knowledge_entities
+            r#"INSERT INTO knowledge_entities_records
                (id, graph_id, tenant, subject, workspace, session, environment, identity_key, record_json)
                VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)
                ON CONFLICT(id) DO UPDATE SET
@@ -106,7 +106,7 @@ impl SqlIdentityStore {
             .map(|i| i.to_string())
             .unwrap_or_default();
         conn.execute(
-            r#"INSERT INTO knowledge_relationships
+            r#"INSERT INTO knowledge_relationships_records
                (id, graph_id, subject_id, tenant, subject, workspace, session, environment, relationship_key, record_json)
                VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)
                ON CONFLICT(id) DO UPDATE SET
@@ -139,7 +139,7 @@ impl EntityIdentityRepository for SqlIdentityStore {
                 if !request.entity.id.to_string().is_empty() {
                     let conn = self.lock()?;
                     let _ = conn.execute(
-                        "UPDATE knowledge_entities SET identity_key = NULL WHERE id = ?1",
+                        "UPDATE knowledge_entities_records SET identity_key = NULL WHERE id = ?1",
                         params![request.entity.id.to_string()],
                     );
                 }
@@ -295,7 +295,7 @@ impl EntityIdentityRepository for SqlIdentityStore {
                 .optional()
                 .map_err(sql_error)?;
             tx.execute(
-                "UPDATE knowledge_entities SET record_json = ?1 WHERE id = ?2",
+                "UPDATE knowledge_entities_records SET record_json = ?1 WHERE id = ?2",
                 params![merged_json, &canonical_id],
             )
             .map_err(sql_error)?;
@@ -303,7 +303,7 @@ impl EntityIdentityRepository for SqlIdentityStore {
             // Redirect relationships: subject_id.
             redirected += tx
                 .execute(
-                    "UPDATE knowledge_relationships SET subject_id = ?1 WHERE subject_id = ?2",
+                    "UPDATE knowledge_relationships_records SET subject_id = ?1 WHERE subject_id = ?2",
                     params![&canonical_id, &dup_id_str],
                 )
                 .map_err(sql_error)?;
@@ -335,7 +335,7 @@ impl EntityIdentityRepository for SqlIdentityStore {
                             let new_json = serde_json::to_string(&rel).unwrap_or(rel_json);
                             let new_key = compute_relationship_key(&rel);
                             tx.execute(
-                                "UPDATE knowledge_relationships SET record_json = ?1, relationship_key = ?2 WHERE id = ?3",
+                                "UPDATE knowledge_relationships_records SET record_json = ?1, relationship_key = ?2 WHERE id = ?3",
                                 params![new_json, new_key, rel_id],
                             ).map_err(sql_error)?;
                         }
@@ -346,8 +346,8 @@ impl EntityIdentityRepository for SqlIdentityStore {
             // Coalesce: delete duplicate relationships by relationship_key.
             coalesced += tx
                 .execute(
-                    "DELETE FROM knowledge_relationships WHERE rowid NOT IN (
-                    SELECT MIN(rowid) FROM knowledge_relationships
+                    "DELETE FROM knowledge_relationships_records WHERE rowid NOT IN (
+                    SELECT MIN(rowid) FROM knowledge_relationships_records
                     WHERE relationship_key IS NOT NULL
                     GROUP BY relationship_key
                 ) AND relationship_key IS NOT NULL",
@@ -357,7 +357,7 @@ impl EntityIdentityRepository for SqlIdentityStore {
 
             // Delete the duplicate entity.
             tx.execute(
-                "DELETE FROM knowledge_entities WHERE id = ?1",
+                "DELETE FROM knowledge_entities_records WHERE id = ?1",
                 params![&dup_id_str],
             )
             .map_err(sql_error)?;

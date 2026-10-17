@@ -722,6 +722,7 @@ pub(crate) mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_owned(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,

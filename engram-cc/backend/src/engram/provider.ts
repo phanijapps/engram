@@ -9,6 +9,7 @@
 
 import {
   createNativeProviderTransport,
+  resolveEmbeddingConfig,
   type NativeProviderTransport,
 } from "@engram/node";
 
@@ -20,7 +21,7 @@ export function buildConfigJson(cfg: VizConfig): string {
     trusted_root: cfg.storageDir,
     scope_policy: "Strict",
     embedding_provider: cfg.enableVector
-      ? { provider_type: "fastembed", model: "BAAI/bge-small-en-v1.5", dimensions: 384, prompt_profile: "query" }
+      ? resolveEmbeddingConfig({ useEnvironment: true })
       : { provider_type: "none", model: "none", dimensions: 384, prompt_profile: "query" },
     migration_mode: cfg.migrationMode,
     capability_policy: "FailClosed",

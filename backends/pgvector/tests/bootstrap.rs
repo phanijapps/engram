@@ -26,6 +26,7 @@ fn pg_config() -> EngramConfig {
             dimensions: 384,
             prompt_profile: "passage".to_owned(),
             normalization: Some("l2".to_owned()),
+            ..Default::default()
         },
         MigrationMode::DryRun,
         CapabilityPolicy::FailClosed,
@@ -496,6 +497,7 @@ fn pg_recipe_sqlite_export_import_round_trip() {
             dimensions: 384,
             prompt_profile: "query".to_owned(),
             normalization: None,
+            ..Default::default()
         },
         MigrationMode::Apply,
         CapabilityPolicy::FailClosed,

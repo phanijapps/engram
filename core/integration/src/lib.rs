@@ -25,6 +25,7 @@
 //!     dimensions: 384,
 //!     prompt_profile: "query".to_string(),
 //!     normalization: None,
+//!     ..Default::default()
 //! };
 //!
 //! let config = EngramConfig::new(
@@ -44,6 +45,12 @@ pub mod community_query;
 pub mod config;
 pub mod dto;
 pub mod embedding;
+pub mod embedding_config;
+mod embedding_runtime;
+pub use embedding_runtime::{PreparedEmbedding, prepare_embedding};
+#[cfg(feature = "http-embeddings")]
+mod http_embedding;
+pub use embedding_config::{EmbeddingOptions, EmbeddingOverrides};
 pub mod export_import;
 pub mod hierarchy_build;
 pub mod knowledge_query;

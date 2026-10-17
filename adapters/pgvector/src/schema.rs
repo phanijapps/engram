@@ -119,8 +119,17 @@ CREATE TABLE IF NOT EXISTS vectors (
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_vectors_embedding
-    ON vectors USING hnsw (embedding vector_cosine_ops);
+-- pgvector HNSW vector indexes support up to 2000 dimensions. Wider
+-- supported vectors retain exact cosine search, without an approximate index.
+-- Inspect the actual column too: IF NOT EXISTS can retain an older dimension.
+DO $vector_index$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'vectors'::regclass
+               AND attname = 'embedding' AND atttypmod BETWEEN 1 AND 2000) THEN
+        CREATE INDEX IF NOT EXISTS idx_vectors_embedding
+            ON vectors USING hnsw (embedding vector_cosine_ops);
+    END IF;
+END $vector_index$;
 
 -- === Belief + Contradiction ===
 CREATE TABLE IF NOT EXISTS beliefs (

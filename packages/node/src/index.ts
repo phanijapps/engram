@@ -2,6 +2,7 @@ export {
   loadNativeBinding,
   type NativeBinding,
   type NativeBindingLoader,
+  type NativeEmbeddingProviderApiBinding,
   type NativeBatchApiBinding,
   type NativeBeliefsApiBinding,
   type NativeGraphApiBinding,
@@ -69,3 +70,15 @@ export {
   type RecordCounts,
   type ScopeCounts
 } from "./provider.js";
+
+export {
+  resolveEmbeddingConfig,
+  type EmbeddingConfigOverrides,
+  type ResolvedEmbeddingConfig,
+  type ResolveEmbeddingConfigOptions,
+} from "./embedding-config.js";
+
+export {
+  createNativeEmbeddingProviderTransport,
+  type NativeEmbeddingProviderTransport,
+} from "./embedding-provider.js";

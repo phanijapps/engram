@@ -1,0 +1,1112 @@
+{
+  "flask": [
+    {
+      "id": "flask-h01",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "What happens to a browser session when its signed cookie has been tampered with?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/sessions.py",
+          "qualifiedAnchor": "SecureCookieSessionInterface.open_session",
+          "startByte": 12728,
+          "endByte": 13268,
+          "requiredRanges": [
+            {
+              "startByte": 13024,
+              "endByte": 13268
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Invalid signatures return an empty session."
+    },
+    {
+      "id": "flask-h02",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "Where is the browser cookie removed when all session data is cleared, and where is caching told that the response varies by cookie?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/sessions.py",
+          "qualifiedAnchor": "SecureCookieSessionInterface.save_session",
+          "startByte": 13274,
+          "endByte": 14954,
+          "requiredRanges": [
+            {
+              "startByte": 13775,
+              "endByte": 14413
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Access adds Vary; modified empty sessions delete the cookie and add Vary."
+    },
+    {
+      "id": "flask-h03",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "When is an unchanged permanent browser session renewed on a response?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/sessions.py",
+          "qualifiedAnchor": "SessionInterface.should_set_cookie",
+          "startByte": 9286,
+          "endByte": 9922,
+          "requiredRanges": [
+            {
+              "startByte": 9786,
+              "endByte": 9922
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Modified sessions or permanent sessions with configured per-request refresh qualify."
+    },
+    {
+      "id": "flask-h04",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How are older secret keys retained while a new key is used for signing browser session cookies?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/sessions.py",
+          "qualifiedAnchor": "SecureCookieSessionInterface.get_signing_serializer",
+          "startByte": 12063,
+          "endByte": 12722,
+          "requiredRanges": [
+            {
+              "startByte": 12142,
+              "endByte": 12722
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Fallback keys are followed by the current key in the timed serializer."
+    },
+    {
+      "id": "flask-h05",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "Where does an unhandled request failure get re-raised in debug or testing mode, but become a logged server-error response otherwise?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/app.py",
+          "qualifiedAnchor": "Flask.handle_exception",
+          "startByte": 35864,
+          "endByte": 38072,
+          "requiredRanges": [
+            {
+              "startByte": 37163,
+              "endByte": 38072
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Propagation derives from testing/debug by default; otherwise it logs and finalizes an error response."
+    },
+    {
+      "id": "flask-h06",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How are routing redirects kept out of ordinary HTTP error handlers?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/app.py",
+          "qualifiedAnchor": "Flask.handle_http_exception",
+          "startByte": 33294,
+          "endByte": 34655,
+          "requiredRanges": [
+            {
+              "startByte": 34121,
+              "endByte": 34655
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Routing exceptions return before registered error-handler lookup."
+    },
+    {
+      "id": "flask-h07",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does the framework answer an automatic HTTP OPTIONS request without running the route handler, including the advertised allowed methods?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/app.py",
+          "qualifiedAnchor": "Flask.dispatch_request",
+          "startByte": 38653,
+          "endByte": 39928,
+          "requiredRanges": [
+            {
+              "startByte": 39205,
+              "endByte": 39928
+            }
+          ],
+          "grade": 3
+        },
+        {
+          "path": "src/flask/app.py",
+          "qualifiedAnchor": "Flask.make_default_options_response",
+          "startByte": 42219,
+          "endByte": 42687,
+          "requiredRanges": [
+            {
+              "startByte": 42522,
+              "endByte": 42687
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Dispatch bypasses the view for automatic OPTIONS; the response builder populates Allow."
+    },
+    {
+      "id": "flask-h08",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How are a nested route group's URL prefix, subdomain and dotted registration name combined with its parent?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/sansio/blueprints.py",
+          "qualifiedAnchor": "Blueprint.register",
+          "startByte": 10928,
+          "endByte": 15259,
+          "requiredRanges": [
+            {
+              "startByte": 13989,
+              "endByte": 15259
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Nested groups combine URL prefixes/subdomains and inherit dotted registration names."
+    },
+    {
+      "id": "flask-h09",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "Where are route-group setup changes rejected after the group has already been registered?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/sansio/blueprints.py",
+          "qualifiedAnchor": "Blueprint._check_setup_finished",
+          "startByte": 8299,
+          "endByte": 8825,
+          "requiredRanges": [
+            {
+              "startByte": 8353,
+              "endByte": 8825
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "The registered-once flag rejects later setup changes."
+    },
+    {
+      "id": "flask-h10",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How do prefixed environment settings become typed values and nested configuration dictionaries?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/config.py",
+          "qualifiedAnchor": "Config.from_prefixed_env",
+          "startByte": 4172,
+          "endByte": 6289,
+          "requiredRanges": [
+            {
+              "startByte": 5410,
+              "endByte": 6289
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Loads sorted prefixed settings, attempts typed conversion and traverses double-underscore nesting."
+    },
+    {
+      "id": "flask-h11",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does a streamed response retain the active request context and close the underlying iterator when streaming ends?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/helpers.py",
+          "qualifiedAnchor": "stream_with_context",
+          "startByte": 1675,
+          "endByte": 4764,
+          "requiredRanges": [
+            {
+              "startByte": 3958,
+              "endByte": 4764
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "The wrapper captures context, yields from the source iterator and closes it in finally."
+    },
+    {
+      "id": "flask-h12",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How can a background callable receive an independent copy of the request context that was active when it was decorated?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/ctx.py",
+          "qualifiedAnchor": "copy_current_request_context",
+          "startByte": 4392,
+          "endByte": 6551,
+          "requiredRanges": [
+            {
+              "startByte": 5943,
+              "endByte": 6551
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Captures the original context and copies it for each wrapped invocation."
+    },
+    {
+      "id": "flask-h13",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "Where can a before-request callback return a response that stops subsequent callbacks and the route handler?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/app.py",
+          "qualifiedAnchor": "Flask.preprocess_request",
+          "startByte": 54901,
+          "endByte": 56057,
+          "requiredRanges": [
+            {
+              "startByte": 55472,
+              "endByte": 56057
+            }
+          ],
+          "grade": 3
+        },
+        {
+          "path": "src/flask/app.py",
+          "qualifiedAnchor": "Flask.full_dispatch_request",
+          "startByte": 39934,
+          "endByte": 40987,
+          "requiredRanges": [
+            {
+              "startByte": 40613,
+              "endByte": 40987
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Returns the first callback response; full dispatch invokes the route only for a None result."
+    },
+    {
+      "id": "flask-h14",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does the command-line application selector safely interpret a factory call with literal arguments and reject invalid application results?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/cli.py",
+          "qualifiedAnchor": "find_app_by_string",
+          "startByte": 3429,
+          "endByte": 6072,
+          "requiredRanges": [
+            {
+              "startByte": 3675,
+              "endByte": 6072
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Parses a simple name or simple-name call, literal-evaluates arguments, calls the factory and verifies its result."
+    },
+    {
+      "id": "flask-h15",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does leaving the final nested context run request cleanup and application cleanup even if individual teardown steps raise errors?",
+      "requiredUnits": [
+        {
+          "path": "src/flask/ctx.py",
+          "qualifiedAnchor": "AppContext.pop",
+          "startByte": 15235,
+          "endByte": 17292,
+          "requiredRanges": [
+            {
+              "startByte": 16633,
+              "endByte": 17292
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "The final pop collects individual teardown errors and raises them after remaining cleanup."
+    }
+  ],
+  "vite": [
+    {
+      "id": "vite-h01",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How are environment values exposed to browser code filtered, and which source wins when a file value conflicts with a value already present in the running process?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/env.ts",
+          "qualifiedAnchor": "loadEnv",
+          "startByte": 1077,
+          "endByte": 3637,
+          "requiredRanges": [
+            {
+              "startByte": 2936,
+              "endByte": 3622
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Prefix filtering precedes process-environment overwrite."
+    },
+    {
+      "id": "vite-h02",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does the development server decide whether a filesystem path may be read when strict file access is enabled?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/server/middlewares/static.ts",
+          "qualifiedAnchor": "isFileLoadingAllowed",
+          "startByte": 9624,
+          "endByte": 10876,
+          "requiredRanges": [
+            {
+              "startByte": 9714,
+              "endByte": 10875
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Rejects alias, colon and deny patterns before safe-module and allowed-directory checks."
+    },
+    {
+      "id": "vite-h03",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How are special browser requests for files outside the project root converted into filesystem-root requests, and how is denied access handled?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/server/middlewares/static.ts",
+          "qualifiedAnchor": "serveRawFsMiddleware",
+          "startByte": 6200,
+          "endByte": 7583,
+          "requiredRanges": [
+            {
+              "startByte": 6861,
+              "endByte": 7538
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Decodes the special URL, rewrites its path and handles the denied-file error."
+    },
+    {
+      "id": "vite-h04",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does the asset lookup recognize a public-directory file while preventing a requested path from escaping that directory?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/publicDir.ts",
+          "qualifiedAnchor": "checkPublicFile",
+          "startByte": 916,
+          "endByte": 1755,
+          "requiredRanges": [
+            {
+              "startByte": 1169,
+              "endByte": 1754
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Uses the public-file inventory or normalized-path containment before checking the filesystem."
+    },
+    {
+      "id": "vite-h05",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does workspace discovery walk upward from a project directory and stop at a workspace marker, with a fallback when it reaches the filesystem root?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/server/searchRoot.ts",
+          "qualifiedAnchor": "searchForWorkspaceRoot",
+          "startByte": 2132,
+          "endByte": 2537,
+          "requiredRanges": [
+            {
+              "startByte": 2244,
+              "endByte": 2536
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Checks workspace markers, recursively ascends and returns the fallback at the filesystem root."
+    },
+    {
+      "id": "vite-h06",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How are simultaneous requests to transform the same module reused, and how is an in-flight request replaced after module invalidation?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/server/transformRequest.ts",
+          "qualifiedAnchor": "transformRequest",
+          "startByte": 2312,
+          "endByte": 4931,
+          "requiredRanges": [
+            {
+              "startByte": 3702,
+              "endByte": 4450
+            },
+            {
+              "startByte": 4455,
+              "endByte": 4930
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Compares the pending timestamp with invalidation, restarts stale work and manages pending-request cleanup."
+    },
+    {
+      "id": "vite-h07",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "Before reprocessing a module, how does the server prefer a recovered soft-invalidated transformation and otherwise reuse a cached result?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/server/transformRequest.ts",
+          "qualifiedAnchor": "getCachedTransformResult",
+          "startByte": 6282,
+          "endByte": 7067,
+          "requiredRanges": [
+            {
+              "startByte": 6508,
+              "endByte": 7066
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Attempts soft-invalidation recovery before the direct transformation cache."
+    },
+    {
+      "id": "vite-h08",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does a changed module stop propagating through an importer that explicitly accepts that dependency, while continuing through other importers?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/server/hmr.ts",
+          "qualifiedAnchor": "propagateUpdate",
+          "startByte": 23023,
+          "endByte": 25711,
+          "requiredRanges": [
+            {
+              "startByte": 24785,
+              "endByte": 25182
+            },
+            {
+              "startByte": 25535,
+              "endByte": 25710
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Accepted dependencies establish boundaries; other importers are traversed recursively."
+    },
+    {
+      "id": "vite-h09",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How are hot-update dependency arguments read as quoted names or arrays, and why are interpolated template arguments rejected?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/server/hmr.ts",
+          "qualifiedAnchor": "lexAcceptedHmrDeps",
+          "startByte": 29319,
+          "endByte": 32205,
+          "requiredRanges": [
+            {
+              "startByte": 29888,
+              "endByte": 30839
+            },
+            {
+              "startByte": 31637,
+              "endByte": 32116
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "The state machine recognizes literal arguments and rejects template interpolation."
+    },
+    {
+      "id": "vite-h10",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "When importing a package by its root name, how are export mappings, configured entry fields, the main field, and default entry filenames prioritized?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/plugins/resolve.ts",
+          "qualifiedAnchor": "resolvePackageEntry",
+          "startByte": 29122,
+          "endByte": 31703,
+          "requiredRanges": [
+            {
+              "startByte": 29532,
+              "endByte": 30679
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Exports take priority over configured fields, main and default index entries."
+    },
+    {
+      "id": "vite-h11",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does package resolution block a nested import when the package export map does not expose that subpath?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/plugins/resolve.ts",
+          "qualifiedAnchor": "resolveDeepImport",
+          "startByte": 33063,
+          "endByte": 35014,
+          "requiredRanges": [
+            {
+              "startByte": 33492,
+              "endByte": 34297
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "An unexposed export-map path is rejected before filesystem fallback."
+    },
+    {
+      "id": "vite-h12",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How is a variable-based dynamic import converted into a module glob expression with a normalized path relative to the importing file?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/plugins/dynamicImportVars.ts",
+          "qualifiedAnchor": "transformDynamicImport",
+          "startByte": 3220,
+          "endByte": 4753,
+          "requiredRanges": [
+            {
+              "startByte": 4045,
+              "endByte": 4752
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Normalizes the parsed pattern and constructs the module-glob expression."
+    },
+    {
+      "id": "vite-h13",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "What rules decide whether an asset becomes embedded data instead of a separate output file, including explicit URL flags, entry files, SVG fragments and size limits?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/plugins/asset.ts",
+          "qualifiedAnchor": "shouldInline",
+          "startByte": 22935,
+          "endByte": 24099,
+          "requiredRanges": [
+            {
+              "startByte": 23173,
+              "endByte": 24098
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Explicit controls and build checks precede extension, size and Git-LFS checks."
+    },
+    {
+      "id": "vite-h14",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does a web-worker source become a bundle whose entry code is saved as an output asset?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/plugins/worker.ts",
+          "qualifiedAnchor": "workerFileToUrl",
+          "startByte": 14649,
+          "endByte": 15085,
+          "requiredRanges": [
+            {
+              "startByte": 14748,
+              "endByte": 15084
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "Bundles the worker entry and saves its filename and source in the output-asset inventory."
+    },
+    {
+      "id": "vite-h15",
+      "split": "heldout",
+      "polarity": "answerable",
+      "query": "How does a development proxy rule choose between regular-expression matching and simple URL-prefix matching?",
+      "requiredUnits": [
+        {
+          "path": "packages/vite/src/node/server/middlewares/proxy.ts",
+          "qualifiedAnchor": "createProxyContextMatcher",
+          "startByte": 2373,
+          "endByte": 2602,
+          "requiredRanges": [
+            {
+              "startByte": 2453,
+              "endByte": 2601
+            }
+          ],
+          "grade": 3
+        }
+      ],
+      "rationale": "A leading caret selects regular-expression matching; other rules use a prefix."
+    }
+  ],
+  "engram": [
+    {
+      "id": "engram-fresh-01",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "If one search source throws an error, can the caller still receive matches from the other sources, and how is the failure reported?",
+      "expectedAnswer": "Successful candidates accumulate; failed lane produces degraded source_error with source and mode.",
+      "requiredUnits": [
+        {
+          "path": "core/retrieval/src/router.rs",
+          "qualifiedAnchor": "RetrievalRouter::retrieve",
+          "startByte": 3763,
+          "endByte": 4917,
+          "requiredRanges": [
+            {
+              "startByte": 4188,
+              "endByte": 4835
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "ef9dc1dd397eac03d0f75c575d2d29209bb801751972e8f5a4d736c57eb4d770"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-02",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "What happens when a caller requests a search mode for which no index has been registered?",
+      "expectedAnswer": "Missing selected mode yields warning unsupported_mode and a degraded source report.",
+      "requiredUnits": [
+        {
+          "path": "core/retrieval/src/router.rs",
+          "qualifiedAnchor": "unsupported_mode_failures",
+          "startByte": 5395,
+          "endByte": 6286,
+          "requiredRanges": [
+            {
+              "startByte": 5640,
+              "endByte": 6284
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "ef9dc1dd397eac03d0f75c575d2d29209bb801751972e8f5a4d736c57eb4d770"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-03",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "When both the request and its context budget limit result counts, which limit wins, and are discarded results recorded?",
+      "expectedAnswer": "Minimum request/budget limit applies after fusion/reranking; overflow recorded BudgetExceeded.",
+      "requiredUnits": [
+        {
+          "path": "core/retrieval/src/composer.rs",
+          "qualifiedAnchor": "effective_max_items",
+          "startByte": 2573,
+          "endByte": 2864,
+          "requiredRanges": [
+            {
+              "startByte": 2573,
+              "endByte": 2864
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "c693b0eae469184029585a113aeb04696eff7c878c150560f4ec51a3ee072f6b"
+        },
+        {
+          "path": "core/retrieval/src/composer.rs",
+          "qualifiedAnchor": "compose_context",
+          "startByte": 1512,
+          "endByte": 2571,
+          "requiredRanges": [
+            {
+              "startByte": 2124,
+              "endByte": 2396
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "c693b0eae469184029585a113aeb04696eff7c878c150560f4ec51a3ee072f6b"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-04",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "How does the agent anticipate useful context from its current task and recent searches without calling a language model?",
+      "expectedAnswer": "Tokenize task and recent query terms; deduplicate sorted terms and recent target IDs.",
+      "requiredUnits": [
+        {
+          "path": "core/retrieval/src/predict.rs",
+          "qualifiedAnchor": "RecentActivityPredictor::predict_context",
+          "startByte": 2776,
+          "endByte": 3494,
+          "requiredRanges": [
+            {
+              "startByte": 2868,
+              "endByte": 3365
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "57232a51d3f5e0551f2e897c8b94674e17b4086e234d1e1ad609fee6a6dcd7da"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-05",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "How is memory retention calculated from elapsed time and stability, including a zero or negative stability setting?",
+      "expectedAnswer": "exp(-elapsed/stability); return 1 when stability <=0.",
+      "requiredUnits": [
+        {
+          "path": "core/consolidation/src/composite.rs",
+          "qualifiedAnchor": "ebbinghaus_retention",
+          "startByte": 946,
+          "endByte": 1139,
+          "requiredRanges": [
+            {
+              "startByte": 946,
+              "endByte": 1139
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "c35d44a9467c4c5ac02ec08aad2e036ab7ea5d84985039232d099ca229121164"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-06",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "When several consolidation executors handle the same task, whose result is kept and what happens to tasks nobody handles?",
+      "expectedAnswer": "First non-Skipped per task is retained; unhandled planned task emits Skipped.",
+      "requiredUnits": [
+        {
+          "path": "core/consolidation/src/composite.rs",
+          "qualifiedAnchor": "CompositeConsolidationExecutor::execute",
+          "startByte": 1858,
+          "endByte": 4220,
+          "requiredRanges": [
+            {
+              "startByte": 2635,
+              "endByte": 4084
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "c35d44a9467c4c5ac02ec08aad2e036ab7ea5d84985039232d099ca229121164"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-07",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "How are failures in protected evaluation cases turned into actionable consolidation errors?",
+      "expectedAnswer": "Failed cases only; evaluation_failed, case ID, joined details or fallback text, recoverable.",
+      "requiredUnits": [
+        {
+          "path": "core/consolidation/src/consolidation/evaluation_gate.rs",
+          "qualifiedAnchor": "evaluation_errors",
+          "startByte": 1648,
+          "endByte": 2438,
+          "requiredRanges": [
+            {
+              "startByte": 1648,
+              "endByte": 2438
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "80c0cc6cbbed4491ad9dba7c15eaafa2a3f4721cea632fdba21828be99b830c8"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-08",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "What prevents consolidation mutations from running when the protected fixture fails or the apply authorization denies the plan?",
+      "expectedAnswer": "Run prefixture; return failed on preerrors; authorize plan; only then execute.",
+      "requiredUnits": [
+        {
+          "path": "core/consolidation/src/consolidation/mutating.rs",
+          "qualifiedAnchor": "GatedConsolidationService::consolidate",
+          "startByte": 5504,
+          "endByte": 8952,
+          "requiredRanges": [
+            {
+              "startByte": 6323,
+              "endByte": 7509
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "1c743df357aa8c29ffeba93b3d49c7d7526a8ea642cb59eda0c9ba990cd39cf3"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-09",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "Can hierarchy navigation begin with an underlying member ID rather than a hierarchy node ID, and does the layer limit still apply?",
+      "expectedAnswer": "Seed matcher checks layer then node ID/source target/member ID.",
+      "requiredUnits": [
+        {
+          "path": "core/hierarchy/src/navigation.rs",
+          "qualifiedAnchor": "find_seed_node",
+          "startByte": 2170,
+          "endByte": 2642,
+          "requiredRanges": [
+            {
+              "startByte": 2170,
+              "endByte": 2642
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "3a78ef63051def15993c295a680fd7ca855b3651bae3f3180504b52b2db13918"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-10",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "How does hierarchy navigation find the nearest ancestor shared by all selected starting nodes?",
+      "expectedAnswer": "Build parent chains; first candidate in first chain present in every chain.",
+      "requiredUnits": [
+        {
+          "path": "core/hierarchy/src/navigation.rs",
+          "qualifiedAnchor": "navigate",
+          "startByte": 842,
+          "endByte": 2168,
+          "requiredRanges": [
+            {
+              "startByte": 1099,
+              "endByte": 1325
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "3a78ef63051def15993c295a680fd7ca855b3651bae3f3180504b52b2db13918"
+        },
+        {
+          "path": "core/hierarchy/src/navigation.rs",
+          "qualifiedAnchor": "common_ancestor",
+          "startByte": 3220,
+          "endByte": 3534,
+          "requiredRanges": [
+            {
+              "startByte": 3220,
+              "endByte": 3534
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "3a78ef63051def15993c295a680fd7ca855b3651bae3f3180504b52b2db13918"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-11",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "What checks stop a hierarchy build from storing missing parents, self-parenting, or cyclic parent chains?",
+      "expectedAnswer": "Validate pointers, lower parent layer, detect repeated node in chain.",
+      "requiredUnits": [
+        {
+          "path": "core/hierarchy/src/validation.rs",
+          "qualifiedAnchor": "validate_hierarchy_parentage",
+          "startByte": 622,
+          "endByte": 1421,
+          "requiredRanges": [
+            {
+              "startByte": 833,
+              "endByte": 1419
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "3d31e121b5b864f1a1719e74be173d40b1f69c7548986bb5b3f1575ca1815f7c"
+        },
+        {
+          "path": "core/hierarchy/src/validation.rs",
+          "qualifiedAnchor": "detect_cycle",
+          "startByte": 1423,
+          "endByte": 1940,
+          "requiredRanges": [
+            {
+              "startByte": 1423,
+              "endByte": 1940
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "3d31e121b5b864f1a1719e74be173d40b1f69c7548986bb5b3f1575ca1815f7c"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-12",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "How does a reflection summary get a repeatable identity from memory contents and record that it was derived by reflection?",
+      "expectedAnswer": "Hash memory texts into ID; provenance source and method reflection.",
+      "requiredUnits": [
+        {
+          "path": "core/reflection/src/belief_build.rs",
+          "qualifiedAnchor": "reflection_belief",
+          "startByte": 918,
+          "endByte": 3260,
+          "requiredRanges": [
+            {
+              "startByte": 1209,
+              "endByte": 1450
+            },
+            {
+              "startByte": 2696,
+              "endByte": 3202
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "227c04a073ec7e69d774a71fa1265db2ce10f2593e9786382a70308b5081a507"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-13",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "Which memories are eligible for automatic archiving after inactivity, and how is the cutoff compared with their timestamps?",
+      "expectedAnswer": "Only Active; updated_at or created_at <= started_at minus stale_days; archive via forget.",
+      "requiredUnits": [
+        {
+          "path": "core/reflection/src/lifecycle_executor.rs",
+          "qualifiedAnchor": "MemoryLifecycleExecutor::execute",
+          "startByte": 1689,
+          "endByte": 6403,
+          "requiredRanges": [
+            {
+              "startByte": 2333,
+              "endByte": 3694
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "6fad6d4e8b0b594933dd9184ae27abb5faca3ee2b8ca65f6dee233c5d9faab92"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-14",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "When automatically extracted entities conflict with entities supplied by the caller, which ones survive and how are unnamed entities treated?",
+      "expectedAnswer": "Caller wins case insensitive name match; unnamed preserved.",
+      "requiredUnits": [
+        {
+          "path": "core/memory/src/extraction.rs",
+          "qualifiedAnchor": "merge_entities",
+          "startByte": 1556,
+          "endByte": 2138,
+          "requiredRanges": [
+            {
+              "startByte": 1556,
+              "endByte": 2138
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "cf4261fdec2c1959743bcd48c33f1a343899af5041a37de7429f43f4f997dbc7"
+        }
+      ]
+    },
+    {
+      "id": "engram-fresh-15",
+      "split": "fresh",
+      "corpus": "engram",
+      "polarity": "answerable",
+      "query": "How does a bounded traversal of transitive callers distinguish reaching the visit limit exactly from actually truncating exploration?",
+      "expectedAnswer": "Skip duplicate enqueues; truncated only on newly reachable node while already at capacity.",
+      "requiredUnits": [
+        {
+          "path": "core/graph-analytics/src/reachability.rs",
+          "qualifiedAnchor": "ancestors_bounded",
+          "startByte": 3919,
+          "endByte": 5368,
+          "requiredRanges": [
+            {
+              "startByte": 4567,
+              "endByte": 5366
+            }
+          ],
+          "grade": 3,
+          "sourceSha256": "f85e0a850a9772bd2348bb5f5e7876fe18231c319ab21b7e3574d14bd6640bdc"
+        }
+      ]
+    }
+  ]
+}

@@ -29,6 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             dimensions: 384,
             prompt_profile: "query".to_string(),
             normalization: None,
+            ..Default::default()
         },
         MigrationMode::DryRun,
         CapabilityPolicy::FailClosed,

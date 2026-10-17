@@ -57,11 +57,12 @@ mod tests {
             std::env::temp_dir(),
             ScopeMappingStrategy::Strict,
             EmbeddingProviderConfig {
-                provider_type: "test".to_string(),
+                provider_type: "none".to_string(),
                 model: "test_model".to_string(),
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -265,11 +266,12 @@ mod tests {
             std::env::temp_dir(),
             ScopeMappingStrategy::Strict,
             EmbeddingProviderConfig {
-                provider_type: "test".to_string(),
+                provider_type: "none".to_string(),
                 model: "test_model".to_string(),
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -367,11 +369,12 @@ mod tests {
             std::env::temp_dir(),
             ScopeMappingStrategy::Strict,
             EmbeddingProviderConfig {
-                provider_type: "test".to_string(),
+                provider_type: "none".to_string(),
                 model: "test_model".to_string(),
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,

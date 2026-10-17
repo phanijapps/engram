@@ -1390,6 +1390,38 @@ impl NativeEmbeddingProviderApi {
         self.handle.provider_id().to_owned()
     }
 
+    /// Generate a query embedding through the configured Rust provider.
+    #[napi(js_name = "embedQuery")]
+    pub fn embed_query(&self, text: String) -> Result<Vec<f64>> {
+        self.handle
+            .embed_query(&text)
+            .map(|vector| vector.into_iter().map(f64::from).collect())
+            .map_err(to_napi_error)
+    }
+
+    /// Generate an indexed passage embedding through the configured Rust provider.
+    #[napi(js_name = "embedPassage")]
+    pub fn embed_passage(&self, text: String) -> Result<Vec<f64>> {
+        self.handle
+            .embed_passage(&text)
+            .map(|vector| vector.into_iter().map(f64::from).collect())
+            .map_err(to_napi_error)
+    }
+
+    /// Generate passage embeddings in the provider's original batch order.
+    #[napi(js_name = "embedBatch")]
+    pub fn embed_batch(&self, texts: Vec<String>) -> Result<Vec<Vec<f64>>> {
+        self.handle
+            .embed_batch(&texts)
+            .map(|vectors| {
+                vectors
+                    .into_iter()
+                    .map(|vector| vector.into_iter().map(f64::from).collect())
+                    .collect()
+            })
+            .map_err(to_napi_error)
+    }
+
     #[napi(js_name = "ping")]
     pub fn ping(&self) -> Result<String> {
         Ok("embedding_provider".to_owned())
@@ -1486,11 +1518,12 @@ mod tests {
             dir.clone(),
             ScopeMappingStrategy::Strict,
             EmbeddingProviderConfig {
-                provider_type: "test".to_owned(),
+                provider_type: "none".to_owned(),
                 model: "test_model".to_owned(),
                 dimensions: 384,
                 prompt_profile: "query".to_owned(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,

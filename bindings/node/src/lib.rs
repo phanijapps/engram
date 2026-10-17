@@ -7,6 +7,7 @@
 mod belief;
 mod codegraph;
 mod consolidation;
+mod embedding_config;
 mod eval;
 mod hierarchy;
 mod ingest;

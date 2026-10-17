@@ -2549,3 +2549,7 @@ defer their schemas and storage until after the first vertical slice:
   classification, or be exposed only through higher-level SDK helpers?
 - What compatibility guarantees should capability keys carry across versions?
 - Should future policy contracts add a governance model for training export?
+
+## Embedding provider configuration (host configuration)
+
+Embedding model selection is host configuration, separate from portable memory and knowledge truth. The additive `EmbeddingProviderConfig` options accept provider/model/output dimensions, endpoint, environment-variable credential reference, query/passage instructions and bounded timeout/batch settings. BGE Small EN v1.5/384 is the default. Credentials never enter embedding identity or portable records. Missing dimensions resolve before vector-index construction; finite output size is validated for every model response. Model, dimensions and semantic formatting define incompatible embedding spaces; old vectors require explicit reindexing or a separate store when these change. See [embedding-model-config](specs/embedding-model-config/spec.md).

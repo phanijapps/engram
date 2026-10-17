@@ -146,6 +146,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_owned(),
                 normalization: None,
+                ..Default::default()
             },
             migration_mode: MigrationMode::DryRun,
             capability_policy: CapabilityPolicy::FailClosed,

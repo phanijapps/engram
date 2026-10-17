@@ -212,6 +212,15 @@ export interface NativeProceduresApiBinding {
   incrementFailureJson(requestJson: string): string;
 }
 
+/** Native handle for configured Rust embedding inference and space identity. */
+export interface NativeEmbeddingProviderApiBinding {
+  embeddingSpace(): string;
+  providerId(): string;
+  embedQuery(text: string): number[];
+  embedPassage(text: string): number[];
+  embedBatch(texts: string[]): number[][];
+}
+
 /**
  * Native class shape for the held `EngramProvider`
  * (`bindings/node/src/provider.rs`): one provider opened from a config, reaching
@@ -227,6 +236,8 @@ export interface NativeProviderBinding {
   exploreJson(requestJson: string): string;
   consolidateJson(requestJson: string): string;
   scanRepositoryJson(requestJson: string): string;
+  /** Optional for compatibility with older injected test bindings. */
+  requireEmbeddingProviderApi?(): NativeEmbeddingProviderApiBinding;
   requireMemoryApi(): NativeMemoryApiBinding;
   requireRecallApi(): NativeRecallApiBinding;
   requireGraphApi(): NativeGraphApiBinding;
@@ -248,6 +259,8 @@ export interface NativeProviderConstructor {
 
 /** Native addon surface consumed by `@engram/node`. */
 export interface NativeBinding {
+  /** Optional for compatibility with injected bindings built before config resolution. */
+  resolveEmbeddingConfig?(profileJson: string | null, overridesJson: string | null, useEnvironment: boolean): string;
   NativeProvider: NativeProviderConstructor;
   NativeMemoryEngine: NativeMemoryEngineConstructor;
   NativeKnowledgeEngine: NativeKnowledgeEngineConstructor;

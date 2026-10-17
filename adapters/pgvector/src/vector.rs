@@ -10,14 +10,35 @@ use engram_runtime::{CoreError, CoreResult};
 
 use crate::connection::PgConnection;
 
+#[path = "vector_space.rs"]
+mod vector_space;
+
 pub struct PgVectorIndex {
     conn: PgConnection,
     space: EmbeddingSpace,
 }
 
 impl PgVectorIndex {
+    /// Raw constructor for callers that manage schema/identity externally.
+    /// Backend recipes must use `new_checked` to fence persisted spaces.
     pub fn new(conn: PgConnection, space: EmbeddingSpace) -> Self {
         Self { conn, space }
+    }
+
+    /// Verify and durably bind this store to one embedding space before use.
+    /// Mismatches preserve all data and require a new store or explicit reindex.
+    pub fn new_checked(mut conn: PgConnection, space: EmbeddingSpace) -> CoreResult<Self> {
+        vector_space::verify(&mut conn, &space)?;
+        Ok(Self { conn, space })
+    }
+
+    fn validate_vector(&self, vector: &[f32]) -> CoreResult<()> {
+        if vector.len() != self.space.dimensions as usize || vector.iter().any(|v| !v.is_finite()) {
+            return Err(CoreError::InvalidRequest {
+                reason: "vector dimensions or finite-value validation failed".into(),
+            });
+        }
+        Ok(())
     }
 
     fn pg_err(e: String) -> CoreError {
@@ -54,13 +75,14 @@ impl VectorIndex for PgVectorIndex {
                 reason: "embedding_space_mismatch".into(),
             });
         }
+        self.validate_vector(&vector)?;
         let vec_text = Self::vec_to_text(&vector);
         let content_hash = crate::content_hash(&vector);
         self.conn.block_on(async {
             self.conn.client.execute(
                 "INSERT INTO vectors (id, embedding, target_type, target_id, model, dimensions, content_hash) \
                  VALUES ($1, $2::text::vector, 'chunk', $1, $3, $4, $5) \
-                 ON CONFLICT (id) DO UPDATE SET embedding=EXCLUDED.embedding, content_hash=EXCLUDED.content_hash, last_updated_at=now()",
+                 ON CONFLICT (id) DO UPDATE SET embedding=EXCLUDED.embedding, model=EXCLUDED.model, dimensions=EXCLUDED.dimensions, content_hash=EXCLUDED.content_hash, last_updated_at=now()",
                 &[&target_id.to_string(), &vec_text, &space.model, &(space.dimensions as i32), &content_hash],
             ).await.map_err(|e| Self::pg_err(e.to_string()))?;
             Ok::<_, CoreError>(())
@@ -78,6 +100,10 @@ impl VectorIndex for PgVectorIndex {
                 reason: "embedding_space_mismatch".into(),
             });
         }
+        self.validate_vector(&query)?;
+        let limit = i64::try_from(limit).map_err(|_| CoreError::InvalidRequest {
+            reason: "vector search limit exceeds supported range".into(),
+        })?;
         let q_text = Self::vec_to_text(&query);
         self.conn.block_on(async {
             let rows = self
@@ -86,7 +112,7 @@ impl VectorIndex for PgVectorIndex {
                 .query(
                     "SELECT id, 1 - (embedding <=> $1::text::vector) AS score FROM vectors \
                  ORDER BY embedding <=> $1::text::vector LIMIT $2",
-                    &[&q_text, &(limit as i64)],
+                    &[&q_text, &limit],
                 )
                 .await
                 .map_err(|e| Self::pg_err(e.to_string()))?;

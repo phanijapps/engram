@@ -102,7 +102,7 @@ fn normalize_repository_key(repository: &str) -> String {
 /// sides are lowercased; the repository is reduced to its `org/name` core (see
 /// [`normalize_repository_key`]) before a substring test against the source. An
 /// empty key (bare host / empty input) matches nothing.
-fn source_matches_repository(source: &str, repository: &str) -> bool {
+pub(crate) fn source_matches_repository(source: &str, repository: &str) -> bool {
     let needle = normalize_repository_key(repository);
     if needle.is_empty() {
         return false;

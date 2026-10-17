@@ -18,6 +18,7 @@ mod codegraph;
 mod config;
 mod dependencies;
 mod embedding_config;
+mod fetch_content;
 mod graph;
 mod hierarchy;
 mod maintenance;
@@ -91,12 +92,12 @@ fn main() {
 /// stays focused. Pass via `--tools <profile>`.
 fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
     match profile {
-        // DEFAULT — the top-20 granular surface: the highest-leverage
+        // DEFAULT — the top-21 granular surface: the highest-leverage
         // discovery, code-intel, write, decision, and correction tools from
         // the 44-tool granular set (frequency-in-loop × decision leverage ×
         // non-redundancy). Consolidated verbs stay reachable via
         // `--tools full` (10) or `--tools consolidated` (7).
-        "core" | "" => Some(TOP20_TOOLS),
+        "core" | "" => Some(DEFAULT_TOOLS),
         // Consolidated + specialist: 10 tools for maintenance work.
         "full" => Some(FULL_TOOLS),
         // Legacy granular surface: all 44 tools. Superseded — kept for
@@ -105,28 +106,29 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
         // The original 7-verb consolidated surface ("remember"/"recall"/…).
         // Escape hatch for deployments tuned to the old default.
         "consolidated" => Some(CORE_TOOLS),
-        // Legacy granular profiles — superseded by the top-20 default. Still
+        // Legacy granular profiles — superseded by the default surface. Still
         // work for existing deployments but are deprecated.
         "investigate" | "read" | "scan" | "write" | "maintain" => {
             eprintln!(
-                "engram-mcp: --tools {profile} is superseded by the core (top-20) surface; \
+                "engram-mcp: --tools {profile} is superseded by the core (default) surface; \
                  using core"
             );
-            Some(TOP20_TOOLS)
+            Some(DEFAULT_TOOLS)
         }
         other => {
             eprintln!(
-                "engram-mcp: unknown --tools profile '{other}'; using core (20 tools). \
+                "engram-mcp: unknown --tools profile '{other}'; using core (21 tools). \
                  Options: core | full | all | consolidated"
             );
-            Some(TOP20_TOOLS)
+            Some(DEFAULT_TOOLS)
         }
     }
 }
 
-/// The top-20 granular tools — the DEFAULT (`--tools core`) agent surface.
-/// Selected from the 44 granular tools by frequency-in-loop × decision
-/// leverage × non-redundancy:
+/// The 21 default granular tools — the DEFAULT (`--tools core`) agent surface.
+/// The original top-20 selected from the 44 granular tools by
+/// frequency-in-loop × decision leverage × non-redundancy, plus
+/// `fetch_content` (content stitching):
 ///   discovery (4)  — get_context, recall, search, explore
 ///   code intel (4) — symbol_context, change_impact, architecture, whats_changed
 ///   write (6)      — scan_repo, index_docs, store_knowledge, put_entity,
@@ -138,7 +140,7 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
 /// (consolidate, reindex, scan_* post-passes), maintenance machinery,
 /// belief writes (synthesis-owned), hierarchy, and tools redundant with a
 /// keeper.
-pub static TOP20_TOOLS: &[&str] = &[
+pub static DEFAULT_TOOLS: &[&str] = &[
     // Discovery — the first calls of any task.
     "get_context",
     "recall",
@@ -161,9 +163,10 @@ pub static TOP20_TOOLS: &[&str] = &[
     "contradiction_list",
     "procedure_put",
     "procedure_list",
-    // Correct / monitor.
+    // Correct / monitor + content stitching.
     "forget",
     "graph_health",
+    "fetch_content",
 ];
 
 /// The 7 consolidated core tools — the prior default, now behind
@@ -200,7 +203,7 @@ fn register_all(registry: &mut ToolRegistry<App>, profile: &str) {
             register_specialist_tools(registry);
         }
         allowed => {
-            // Granular surface — the DEFAULT (top-20 core profile) plus
+            // Granular surface — the DEFAULT (top-21 core profile) plus
             // all/investigate/read/scan/write/maintain: register everything,
             // filter by the allowed list.
             register_all_tools(registry);
@@ -773,6 +776,26 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
             "required": ["focus"]
         }),
         handler: codegraph::get_context,
+    });
+    registry.register(ToolRecord {
+        name: "fetch_content",
+        description: "Stitch one indexed file's full content back from stored chunks and return \
+                      it. Doc files (Markdown/text) reassemble from document sections; code \
+                      files reassemble from symbol chunks (best-effort reconstruction — \
+                      container bodies are graph-only anchors). Capped at 100 KiB by default; \
+                      pass max_bytes (1..=1048576) to change. In multi-repo scopes, pass the \
+                      `repository` filter (same format as search) when a path is indexed \
+                      from several sources.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "path": { "type": "string", "description": "Indexed relative path (as scan stamped it, e.g. 'src/lib.rs' or 'docs/guide.md')." },
+                "repository": { "type": "string", "description": "Optional repository filter (e.g. \"org/name\") — resolves ambiguity in shared scopes." },
+                "max_bytes": { "type": "integer", "minimum": 1, "maximum": 1048576, "description": "Content cap in bytes (default 102400 = 100 KiB)." }
+            },
+            "required": ["path"]
+        }),
+        handler: fetch_content::fetch_content,
     });
     registry.register(ToolRecord {
         name: "capability_report",

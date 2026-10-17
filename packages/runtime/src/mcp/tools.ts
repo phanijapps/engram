@@ -979,6 +979,25 @@ export function registerTools(
   );
 
   server.registerTool(
+    "fetch_content",
+    {
+      description:
+        "Stitch one indexed file's content back from stored chunks. NOT YET SUPPORTED in the TS HTTP MCP — needs the per-path chunk listing, which is not wired on this transport. Registered for surface parity with the Rust stdio MCP (real implementation there).",
+      inputSchema: z.object({
+        path: z.string(),
+        repository: z.string().optional(),
+        maxBytes: z.number().int().min(1).max(1048576).optional(),
+      }),
+    },
+    async () =>
+      textResult({
+        supported: false,
+        reason:
+          "fetch_content is implemented on the Rust stdio MCP; the TS HTTP transport does not expose per-path chunk listing yet",
+      }),
+  );
+
+  server.registerTool(
     "whats_changed",
     {
       description:

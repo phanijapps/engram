@@ -1,6 +1,6 @@
 ---
 name: engram-store-ops
-description: Use when operating engram stores on this machine — inventory, wipes, backups, scope wiring, the MCP/BFF two-database trap, or deciding which store a query hits. Triggers on "which store", "clean the store", "start the server", "point the UI at", "backup", "where does the data live". Encodes the operational map established 2026-08-28: four SQLite stores, one Postgres, their scopes, and the traps that bit.
+description: 'Use when operating engram stores on this machine — inventory, wipes, backups, scope wiring, the MCP/BFF two-database trap, or deciding which store a query hits. Triggers on "which store", "clean the store", "start the server", "point the UI at", "backup", "where does the data live". Encodes the operational map established 2026-08-28: four SQLite stores, one Postgres, their scopes, and the traps that bit.'
 ---
 
 # Skill: engram-store-ops

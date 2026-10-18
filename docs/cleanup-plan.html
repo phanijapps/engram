@@ -1,0 +1,497 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>engram — docs cleanup plan</title>
+<meta name="description" content="Detailed, evidence-backed cleanup plan for the engram docs tree: fix live documents that reference retired code, sync drifted shape contracts, relocate historical roadmaps, consolidate stubs.">
+<style>
+/* ============================================================================
+   engram docs cleanup plan — interactive planning artifact
+   Aesthetic reference: Raycast (data-dense / terminal — near-black surface,
+   high contrast, flat fills, single red accent, mono numerals). Same design
+   family as docs/knowledge-graph.html for artifact consistency.
+   Evidence: file inventory + git last-touch dates + retired-path reference
+   scan gathered 2026-10-17 against main@5dd1a37. Every number is measured.
+   ========================================================================== */
+
+:root {
+  --px-black:        #0b0d12;
+  --px-surface:      #10131a;
+  --px-surface-2:    #161a23;
+  --px-surface-3:    #1d2230;
+  --px-line:         #262c3a;
+  --px-ink:          #e6edf3;
+  --px-ink-muted:    #9aa4b2;
+  --px-ink-faint:    #8b96a5;
+  --px-red:          #ff5c57;
+  --px-cyan:         #4cc9d6;
+  --px-green:        #52d273;
+  --px-amber:        #f0a53e;
+  --px-magenta:      #e0679f;
+  --px-violet:       #a68bfa;
+  --px-slate:        #8d99ab;
+  --px-rose:         #ff8a7a;
+
+  --ds-color-surface:     var(--px-black);
+  --ds-color-surface-alt: var(--px-surface);
+  --ds-color-surface-3:   var(--px-surface-3);
+  --ds-color-on-surface:  var(--px-ink);
+  --ds-color-on-surface-2:var(--px-ink-muted);
+  --ds-color-on-surface-3:var(--px-ink-faint);
+  --ds-color-outline:     var(--px-line);
+  --ds-color-primary:     var(--px-red);
+  --ds-color-on-primary:  var(--px-black);
+  --ds-color-focus:       var(--px-cyan);
+
+  --sev-p0: var(--px-red);
+  --sev-p1: var(--px-amber);
+  --sev-p2: var(--px-violet);
+  --sev-p3: var(--px-slate);
+  --ok:     var(--px-green);
+
+  --ds-space-1: 4px;  --ds-space-2: 8px;  --ds-space-3: 12px;
+  --ds-space-4: 16px; --ds-space-5: 24px; --ds-space-6: 32px;
+
+  --ds-text-xs:  0.6875rem; --ds-text-sm: 0.75rem;  --ds-text-base: 0.8125rem;
+  --ds-text-lg:  0.9375rem; --ds-text-xl:  1.125rem; --ds-text-2xl: 1.5rem;
+
+  --ds-font-regular: 400; --ds-font-medium: 500; --ds-font-bold: 600;
+  --ds-leading-tight: 1.25; --ds-leading-normal: 1.5;
+
+  --ds-radius-sm: 4px; --ds-radius-md: 8px; --ds-radius-lg: 12px;
+  --ds-radius-full: 9999px;
+
+  --ds-shadow-md: 0 4px 8px rgba(0,0,0,0.45);
+  --ds-shadow-lg: 0 12px 32px rgba(0,0,0,0.55);
+
+  --ds-duration-quick: 120ms; --ds-duration-moderate: 200ms;
+  --ds-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --z-base: 0; --z-panel: 100; --z-tooltip: 200;
+  --ds-size-control: 220px;
+  --ds-bp-panel: 900px;
+  --ds-pad-hairline: 1px;
+  --ds-size-sr-clip: 1px;
+  --ds-size-bar-track: 4px; --ds-size-bar-max: 100%;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--ds-color-surface);
+  color: var(--ds-color-on-surface);
+  font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: var(--ds-text-base);
+  line-height: var(--ds-leading-normal);
+}
+main { max-width: 1080px; margin: 0 auto; padding: var(--ds-space-5) var(--ds-space-4) var(--ds-space-7); }
+h1, h2, h3 { line-height: var(--ds-leading-tight); }
+h1 { font-size: var(--ds-text-2xl); margin: 0 0 var(--ds-space-2) 0; }
+h2 { font-size: var(--ds-text-xl); margin: var(--ds-space-6) 0 var(--ds-space-3) 0; }
+h3 { font-size: var(--ds-text-lg); margin: var(--ds-space-4) 0 var(--ds-space-2) 0; }
+p { margin: 0 0 var(--ds-space-3) 0; color: var(--ds-color-on-surface-2); max-width: 78ch; }
+code { font-family: var(--font-mono); font-size: var(--ds-text-sm); color: var(--ds-color-on-surface); background: var(--ds-color-surface-3); border-radius: var(--ds-radius-sm); padding: var(--ds-pad-hairline) var(--ds-space-1); }
+:focus-visible { outline: var(--ds-size-sr-clip) solid var(--ds-color-focus); outline-offset: var(--ds-size-sr-clip); border-radius: var(--ds-radius-sm); }
+
+header.bar {
+  border-bottom: var(--ds-pad-hairline) solid var(--ds-color-outline);
+  background: var(--ds-color-surface-alt);
+}
+header.bar .inner { max-width: 1080px; margin: 0 auto; padding: var(--ds-space-4); display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-space-3); }
+.brand .tag { font-family: var(--font-mono); font-size: var(--ds-text-xs); color: var(--ds-color-on-surface-3); border: var(--ds-pad-hairline) solid var(--ds-color-outline); padding: var(--ds-pad-hairline) var(--ds-space-2); border-radius: var(--ds-radius-full); }
+ul.stats { display: flex; flex-wrap: wrap; gap: var(--ds-space-2) var(--ds-space-4); margin: 0 0 0 auto; padding: 0; list-style: none; }
+li.stat { display: flex; flex-direction: column; min-width: 72px; }
+.stat b { font-family: var(--font-mono); font-weight: var(--ds-font-medium); }
+.stat span { font-size: var(--ds-text-xs); color: var(--ds-color-on-surface-3); text-transform: uppercase; letter-spacing: 0.04em; }
+.stat b.bad { color: var(--sev-p0); }
+
+.controls { display: flex; flex-wrap: wrap; gap: var(--ds-space-2); margin: var(--ds-space-4) 0 var(--ds-space-2) 0; }
+.chip {
+  background: transparent;
+  border: var(--ds-pad-hairline) solid var(--ds-color-outline);
+  border-radius: var(--ds-radius-full);
+  color: var(--ds-color-on-surface-2);
+  font-size: var(--ds-text-sm);
+  padding: var(--ds-space-1) var(--ds-space-3);
+  cursor: pointer;
+}
+.chip[aria-pressed="true"] { border-color: currentColor; }
+.chip .dot { display: inline-block; width: var(--ds-size-dot, 8px); height: var(--ds-size-dot, 8px); border-radius: var(--ds-radius-full); margin-right: var(--ds-space-1); }
+.chip[data-sev="P0"][aria-pressed="true"] { color: var(--sev-p0); }
+.chip[data-sev="P1"][aria-pressed="true"] { color: var(--sev-p1); }
+.chip[data-sev="P2"][aria-pressed="true"] { color: var(--sev-p2); }
+.chip[data-sev="P3"][aria-pressed="true"] { color: var(--sev-p3); }
+.search input {
+  background: var(--ds-color-surface-3);
+  border: var(--ds-pad-hairline) solid var(--ds-color-outline);
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-color-on-surface);
+  font-family: var(--font-mono); font-size: var(--ds-text-sm);
+  padding: var(--ds-space-1) var(--ds-space-3);
+  width: var(--ds-size-control);
+}
+.search input::placeholder { color: var(--ds-color-on-surface-3); }
+#count { font-size: var(--ds-text-sm); color: var(--ds-color-on-surface-3); margin-left: auto; align-self: center; }
+
+.sev { display: inline-block; font-family: var(--font-mono); font-size: var(--ds-text-xs); font-weight: var(--ds-font-bold); padding: var(--ds-pad-hairline) var(--ds-space-2); border-radius: var(--ds-radius-full); border: var(--ds-pad-hairline) solid currentColor; }
+.sev-P0 { color: var(--sev-p0); }
+.sev-P1 { color: var(--sev-p1); }
+.sev-P2 { color: var(--sev-p2); }
+.sev-P3 { color: var(--sev-p3); }
+.sev-OK  { color: var(--ok); }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--ds-space-3); margin: var(--ds-space-3) 0; }
+.card {
+  background: var(--ds-color-surface-alt);
+  border: var(--ds-pad-hairline) solid var(--ds-color-outline);
+  border-left: 3px solid var(--sev-p3);
+  border-radius: var(--ds-radius-md);
+  padding: var(--ds-space-3) var(--ds-space-4);
+}
+.card[data-sev="P0"] { border-left-color: var(--sev-p0); }
+.card[data-sev="P1"] { border-left-color: var(--sev-p1); }
+.card[data-sev="P2"] { border-left-color: var(--sev-p2); }
+.card h3 { margin: var(--ds-space-1) 0; display: flex; align-items: center; gap: var(--ds-space-2); }
+.card .where { font-family: var(--font-mono); font-size: var(--ds-text-xs); color: var(--ds-color-on-surface-3); }
+.card p { margin: 0; font-size: var(--ds-text-sm); }
+
+.phase { border: var(--ds-pad-hairline) solid var(--ds-color-outline); border-radius: var(--ds-radius-lg); padding: var(--ds-space-4); margin: var(--ds-space-4) 0; background: var(--ds-color-surface-alt); }
+.phase-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--ds-space-2); }
+.phase-head .n { font-family: var(--font-mono); color: var(--ds-color-on-surface-3); font-weight: var(--ds-font-bold); }
+.phase-head .effort { margin-left: auto; font-family: var(--font-mono); font-size: var(--ds-text-xs); color: var(--ds-color-on-surface-3); }
+ol.steps { margin: var(--ds-space-3) 0 0 0; padding: 0 0 0 var(--ds-space-5); color: var(--ds-color-on-surface-2); }
+ol.steps li { margin-bottom: var(--ds-space-3); }
+ol.steps li strong { color: var(--ds-color-on-surface); }
+ol.steps .verify { display: block; margin-top: var(--ds-space-1); font-size: var(--ds-text-sm); color: var(--ds-color-on-surface-3); }
+ol.steps .verify::before { content: "✓ verify: "; font-family: var(--font-mono); color: var(--ok); }
+
+.bar-track { height: var(--ds-size-bar-track); background: var(--ds-color-surface-3); border-radius: var(--ds-radius-full); overflow: hidden; margin-top: var(--ds-space-2); }
+.bar-fill { height: var(--ds-size-bar-track); border-radius: var(--ds-radius-full); background: var(--sev-p1); width: var(--ds-size-bar-max); }
+
+.table-wrap { overflow-x: auto; border: var(--ds-pad-hairline) solid var(--ds-color-outline); border-radius: var(--ds-radius-lg); margin-top: var(--ds-space-3); }
+table { border-collapse: collapse; width: var(--ds-size-bar-max); font-size: var(--ds-text-sm); }
+th, td { text-align: left; padding: var(--ds-space-2) var(--ds-space-3); border-bottom: var(--ds-pad-hairline) solid var(--ds-color-outline); white-space: nowrap; }
+th { font-size: var(--ds-text-xs); text-transform: uppercase; letter-spacing: 0.05em; color: var(--ds-color-on-surface-3); position: sticky; top: 0; background: var(--ds-color-surface-alt); }
+td.num { font-family: var(--font-mono); text-align: right; }
+td.path { font-family: var(--font-mono); font-size: var(--ds-text-xs); }
+td .act { font-family: var(--font-mono); font-size: var(--ds-text-xs); }
+tr[hidden] { display: none; }
+#no-results { color: var(--ds-color-on-surface-3); padding: var(--ds-space-4); }
+#no-results[hidden] { display: none; }
+
+ul.gates { list-style: none; margin: 0; padding: 0; }
+ul.gates li { display: flex; gap: var(--ds-space-2); align-items: baseline; padding: var(--ds-space-1) 0; color: var(--ds-color-on-surface-2); }
+ul.gates .cmd { font-family: var(--font-mono); font-size: var(--ds-text-xs); color: var(--ds-color-on-surface); }
+
+footer.note { margin-top: var(--ds-space-6); border-top: var(--ds-pad-hairline) solid var(--ds-color-outline); padding-top: var(--ds-space-3); font-size: var(--ds-text-xs); color: var(--ds-color-on-surface-3); }
+
+.visually-hidden { position: absolute; width: var(--ds-size-sr-clip); height: var(--ds-size-sr-clip); margin: calc(var(--ds-size-sr-clip) * -1); padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .chip, .card { transition: border-color var(--ds-duration-quick) var(--ds-ease-standard); }
+}
+@media (max-width: var(--ds-bp-panel)) {
+  .search input { width: var(--ds-size-bar-max); }
+  .search { flex: 1 1 100%; }
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="inner">
+    <div class="brand">
+      <h1>docs cleanup plan</h1>
+      <span class="tag">main@5dd1a37 · 2026-10-17</span>
+    </div>
+    <ul class="stats" aria-label="Cleanup scope statistics">
+      <li class="stat"><b class="bad">6</b><span>lying refs</span></li>
+      <li class="stat"><b>12</b><span>frozen files</span></li>
+      <li class="stat"><b>17</b><span>root files</span></li>
+      <li class="stat"><b>4</b><span>phases</span></li>
+      <li class="stat"><b>~2</b><span>sessions</span></li>
+    </ul>
+  </div>
+</header>
+
+<main>
+  <p><strong>Goal:</strong> make the docs tree stop lying, stop drifting, and stop hoarding —
+  without losing a byte of history. Every finding below was verified against the working tree
+  on 2026-10-17: retired-path references grepped, last-touch dates read from git, crate lists
+  diffed against <code>AGENTS.md</code> and the CI scripts. Nothing here is speculative.</p>
+
+  <div class="controls" role="group" aria-label="Filter findings and inventory">
+    <button type="button" class="chip" data-sev="P0" aria-pressed="false"><span class="dot" style="background:var(--sev-p0)"></span>P0 · live docs lying</button>
+    <button type="button" class="chip" data-sev="P1" aria-pressed="false"><span class="dot" style="background:var(--sev-p1)"></span>P1 · shape drift</button>
+    <button type="button" class="chip" data-sev="P2" aria-pressed="false"><span class="dot" style="background:var(--sev-p2)"></span>P2 · relocate history</button>
+    <button type="button" class="chip" data-sev="P3" aria-pressed="false"><span class="dot" style="background:var(--sev-p3)"></span>P3 · consolidate</button>
+    <div class="search">
+      <label class="visually-hidden" for="q">Search findings and files</label>
+      <input id="q" type="search" placeholder="filter files / findings">
+    </div>
+    <span id="count" role="status" aria-live="polite"></span>
+  </div>
+
+  <section aria-labelledby="findings-h">
+    <h2 id="findings-h">Findings</h2>
+    <div class="cards" id="cards">
+      <div class="card" data-sev="P0">
+        <span class="sev sev-P0">P0</span>
+        <h3>Active how-to points at deleted code</h3>
+        <p class="where">docs/guides/how-to/connect-via-mcp.md</p>
+        <p>The live connection guide references <code>memory/mcp-server/</code> and
+        <code>codegraph/mcp-server/src/main.rs</code> — both retired and deleted. Any reader
+        following it lands in nothing. Rewrite around <code>mcp/engram-mcp</code> (single server,
+        default 21-tool surface, <code>.mcp.json</code> example).</p>
+      </div>
+      <div class="card" data-sev="P0">
+        <span class="sev sev-P0">P0</span>
+        <h3>Architecture overview names retired servers</h3>
+        <p class="where">docs/architecture/overview.md</p>
+        <p>Describes the two-server era. Update to the unified <code>engram-mcp</code> shape;
+        keep <code>overview.upstream.md</code> untouched as the historical baseline.</p>
+      </div>
+      <div class="card" data-sev="P0">
+        <span class="sev sev-P0">P0</span>
+        <h3>CI gate scans a ghost directory</h3>
+        <p class="where">scripts/ci/check-engine-neutrality.sh:39</p>
+        <p>Still scans <code>core/orchestration/src</code> — the crate was retired and the
+        directory no longer exists. The gate passes by accident. Remove the line so the scan
+        list matches reality.</p>
+      </div>
+      <div class="card" data-sev="P1">
+        <span class="sev sev-P1">P1</span>
+        <h3>AGENTS.md shape is stale on both ends</h3>
+        <p class="where">AGENTS.md · Target Repository Shape</p>
+        <p>Lists retired <code>core/orchestration/</code>; missing real crates
+        <code>adapters/embedding</code> (PR #125) and <code>adapters/retrieval/mmr-rerank</code>.
+        The shape is the boundary contract — sync it.</p>
+      </div>
+      <div class="card" data-sev="P1">
+        <span class="sev sev-P1">P1</span>
+        <h3>database-schema.md frozen mid-July</h3>
+        <p class="where">docs/database-schema.md · last touch 2026-07-29</p>
+        <p>The SQLite schema gained embedding-config tables (PR #125) after this doc froze.
+        Either regenerate from the adapters or mark it generated-by with a refresh command;
+        domain-data-model.md stays the source of truth either way.</p>
+      </div>
+      <div class="card" data-sev="P2">
+        <span class="sev sev-P2">P2</span>
+        <h3>~2,900 lines of frozen roadmaps at docs root</h3>
+        <p class="where">implementation-roadmap.md (999) · CONVENTIONS.upstream.md (1,228) · codegraph-parity-roadmap.md (274) · arch_divergence.md (95)</p>
+        <p>All frozen since July 19–31, zero unchecked action items among them (verified —
+        nothing to fold into the backlog). Move to <code>docs/history/</code> loss-free via
+        <code>git mv</code>; history stays greppable, root starts breathing.</p>
+      </div>
+      <div class="card" data-sev="P2">
+        <span class="sev sev-P2">P2</span>
+        <h3>Upstream derivatives squat at root</h3>
+        <p class="where">CHARTER.upstream.md · CONVENTIONS.upstream.md · architecture/overview.upstream.md</p>
+        <p>Point-in-time upstream snapshots mixed with living docs. Relocate beside the other
+        history; keep the living <code>CHARTER.md</code>/<code>CONVENTIONS.md</code> at root.</p>
+      </div>
+      <div class="card" data-sev="P3">
+        <span class="sev sev-P3">P3</span>
+        <h3>Stubs duplicating directory content</h3>
+        <p class="where">architecture.md (22 lines) vs architecture/ · benchmarks.md (37) vs perf/</p>
+        <p>Two-line stubs whose content lives in directories. Fold into the directory READMEs
+        or convert to redirects.</p>
+      </div>
+      <div class="card" data-sev="P3">
+        <span class="sev sev-P3">P3</span>
+        <h3>Opaque directories need labels</h3>
+        <p class="where">superpowers/ · context/ · knowledge/ · assets/</p>
+        <p>Purpose not obvious from the tree. Audit contents; either add a one-line README each
+        or fold into an existing area. Verify none are referenced before removing.</p>
+      </div>
+      <div class="card" data-sev="OK">
+        <span class="sev sev-OK">KEEP</span>
+        <h3>Living documents — do not touch</h3>
+        <p class="where">backlog.md · domain-data-model.md · release-checklist.md · adr/ · rfcs/ · specs/ · guides/ (except the P0) · perf/ · research/</p>
+        <p>These are current and load-bearing. RFC/spec references to retired servers stay —
+        they are historical records, not instructions.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="phases-h">
+    <h2 id="phases-h">Execution phases</h2>
+
+    <div class="phase" data-sev="P0">
+      <div class="phase-head">
+        <span class="n">Phase 1</span>
+        <h3 style="margin:0">Correct the wrong — live docs stop lying</h3>
+        <span class="effort">~45 min · risk: low · PR #1</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:18%"></div></div>
+      <ol class="steps">
+        <li><strong>Rewrite the MCP connection guide</strong> around the unified server:
+          launch flags, <code>.mcp.json</code> example with <code>npx</code>-ready framing,
+          the 21-tool default surface, <code>--tools core|full|all|consolidated</code>.
+          <span class="verify">grep the guide for <code>mcp-server</code> → 0 hits</span></li>
+        <li><strong>Update architecture/overview.md</strong> to the one-server shape.
+          <span class="verify">grep <code>memory/mcp-server\|codegraph/mcp-server</code> in live docs → 0</span></li>
+        <li><strong>Sync AGENTS.md shape</strong>: drop <code>core/orchestration/</code>,
+          add <code>adapters/embedding</code> + <code>adapters/retrieval/mmr-rerank</code>.
+          <span class="verify">crate list from <code>find -name Cargo.toml</code> ≡ shape section</span></li>
+        <li><strong>Remove the ghost scan line</strong> from the neutrality script.
+          <span class="verify">scripts/ci/check-engine-neutrality.sh passes; every scanned path exists</span></li>
+      </ol>
+    </div>
+
+    <div class="phase" data-sev="P1">
+      <div class="phase-head">
+        <span class="n">Phase 2</span>
+        <h3 style="margin:0">Verify generated docs against reality</h3>
+        <span class="effort">~30 min · risk: low · PR #1 (same)</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:12%"></div></div>
+      <ol class="steps">
+        <li><strong>database-schema.md</strong>: diff against the live SQLite DDL
+          (<code>sqlite3 &lt;store&gt; .schema</code>); regenerate the drift or stamp it
+          generated-by with the refresh command.
+          <span class="verify">schema doc matches <code>adapters/sqlite</code> DDL or carries a refresh note</span></li>
+        <li><strong>Sweep the whole tree</strong> for other silently-frozen generated docs
+          (contract paths, capability lists).
+          <span class="verify">scripts/ci/check-docs.sh green; manual spot-check of 3 random generated claims</span></li>
+      </ol>
+    </div>
+
+    <div class="phase" data-sev="P2">
+      <div class="phase-head">
+        <span class="n">Phase 3</span>
+        <h3 style="margin:0">Relocate history — zero content loss</h3>
+        <span class="effort">~30 min · risk: very low · PR #2</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:10%"></div></div>
+      <ol class="steps">
+        <li><strong>mkdir docs/history/</strong> and <code>git mv</code>: implementation-roadmap.md,
+          codegraph-parity-roadmap.md, arch_divergence.md, technical-debt.md,
+          sql-adapter-design.md, CHARTER.upstream.md, CONVENTIONS.upstream.md,
+          architecture/overview.upstream.md.
+          <span class="verify">git log --follow reaches the original commits; no broken relative links</span></li>
+        <li><strong>Pre-move check</strong>: grep the repo for references to moved paths
+          (guides, specs, CI) and update them.
+          <span class="verify">rg '&lt;old path&gt;' → only docs/history/ hits</span></li>
+      </ol>
+    </div>
+
+    <div class="phase" data-sev="P3">
+      <div class="phase-head">
+        <span class="n">Phase 4</span>
+        <h3 style="margin:0">Consolidate stubs + label opaque dirs</h3>
+        <span class="effort">~45 min · risk: low · PR #2 (same)</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" style="width:14%"></div></div>
+      <ol class="steps">
+        <li><strong>Fold stubs</strong>: architecture.md → architecture/README.md;
+          benchmarks.md → perf/README.md.
+          <span class="verify">root contains only living docs + artifacts</span></li>
+        <li><strong>Audit opaque dirs</strong> (superpowers/, context/, knowledge/, assets/):
+          one-line README or fold; delete only after a reference check.
+          <span class="verify">every docs/ dir has a stated purpose</span></li>
+        <li><strong>Final gates</strong> across both PRs.
+          <span class="verify">check-docs.sh + check-contracts.sh + check-engine-neutrality.sh green; docs tree snapshot diff reviewed</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <section aria-labelledby="inv-h">
+    <h2 id="inv-h">Inventory — every docs-root file, measured</h2>
+    <div class="table-wrap">
+      <table>
+        <caption class="visually-hidden">Docs root inventory with last-touch date, size, finding, and planned action</caption>
+        <thead>
+          <tr><th scope="col">File</th><th scope="col">Last touch</th><th scope="col">Size</th><th scope="col">Finding</th><th scope="col">Action</th><th scope="col">Destination</th></tr>
+        </thead>
+        <tbody id="inv">
+          <tr data-sev="P0"><td class="path">guides/how-to/connect-via-mcp.md</td><td>—</td><td class="num">—</td><td><span class="sev sev-P0">P0</span></td><td class="act">rewrite</td><td class="act">in place</td></tr>
+          <tr data-sev="P0"><td class="path">architecture/overview.md</td><td>—</td><td class="num">—</td><td><span class="sev sev-P0">P0</span></td><td class="act">update</td><td class="act">in place</td></tr>
+          <tr data-sev="P0"><td class="path">scripts/ci/check-engine-neutrality.sh</td><td>—</td><td class="num">—</td><td><span class="sev sev-P0">P0</span></td><td class="act">remove ghost path</td><td class="act">in place</td></tr>
+          <tr data-sev="P1"><td class="path">AGENTS.md</td><td>—</td><td class="num">—</td><td><span class="sev sev-P1">P1</span></td><td class="act">sync shape</td><td class="act">in place</td></tr>
+          <tr data-sev="P1"><td class="path">database-schema.md</td><td>2026-07-29</td><td class="num">24K</td><td><span class="sev sev-P1">P1</span></td><td class="act">regenerate or stamp</td><td class="act">in place</td></tr>
+          <tr data-sev="P2"><td class="path">implementation-roadmap.md</td><td>2026-07-19</td><td class="num">40K · 999 lines</td><td><span class="sev sev-P2">P2</span></td><td class="act">git mv</td><td class="act">docs/history/</td></tr>
+          <tr data-sev="P2"><td class="path">CONVENTIONS.upstream.md</td><td>2026-07-31</td><td class="num">64K · 1228 lines</td><td><span class="sev sev-P2">P2</span></td><td class="act">git mv</td><td class="act">docs/history/</td></tr>
+          <tr data-sev="P2"><td class="path">codegraph-parity-roadmap.md</td><td>2026-07-19</td><td class="num">20K · 274 lines</td><td><span class="sev sev-P2">P2</span></td><td class="act">git mv</td><td class="act">docs/history/</td></tr>
+          <tr data-sev="P2"><td class="path">arch_divergence.md</td><td>2026-07-19</td><td class="num">12K · 95 lines</td><td><span class="sev sev-P2">P2</span></td><td class="act">git mv</td><td class="act">docs/history/</td></tr>
+          <tr data-sev="P2"><td class="path">CHARTER.upstream.md</td><td>2026-07-31</td><td class="num">4K · 78 lines</td><td><span class="sev sev-P2">P2</span></td><td class="act">git mv</td><td class="act">docs/history/</td></tr>
+          <tr data-sev="P2"><td class="path">architecture/overview.upstream.md</td><td>—</td><td class="num">—</td><td><span class="sev sev-P2">P2</span></td><td class="act">git mv</td><td class="act">docs/history/</td></tr>
+          <tr data-sev="P2"><td class="path">technical-debt.md</td><td>2026-07-19</td><td class="num">4K · 32 lines</td><td><span class="sev sev-P2">P2</span></td><td class="act">git mv</td><td class="act">docs/history/</td></tr>
+          <tr data-sev="P2"><td class="path">sql-adapter-design.md</td><td>2026-07-19</td><td class="num">4K · 63 lines</td><td><span class="sev sev-P2">P2</span></td><td class="act">git mv</td><td class="act">docs/history/</td></tr>
+          <tr data-sev="P3"><td class="path">architecture.md</td><td>2026-07-19</td><td class="num">4K · 22 lines</td><td><span class="sev sev-P3">P3</span></td><td class="act">fold</td><td class="act">architecture/README.md</td></tr>
+          <tr data-sev="P3"><td class="path">benchmarks.md</td><td>2026-07-19</td><td class="num">4K · 37 lines</td><td><span class="sev sev-P3">P3</span></td><td class="act">fold</td><td class="act">perf/README.md</td></tr>
+          <tr data-sev="P3"><td class="path">superpowers/ · context/ · knowledge/ · assets/</td><td>—</td><td class="num">—</td><td><span class="sev sev-P3">P3</span></td><td class="act">audit + label</td><td class="act">in place</td></tr>
+          <tr data-sev="OK"><td class="path">backlog.md</td><td>2026-10-17</td><td class="num">56K</td><td><span class="sev sev-OK">KEEP</span></td><td class="act">none — living</td><td class="act">—</td></tr>
+          <tr data-sev="OK"><td class="path">domain-data-model.md</td><td>2026-10-17</td><td class="num">84K</td><td><span class="sev sev-OK">KEEP</span></td><td class="act">none — source of truth</td><td class="act">—</td></tr>
+          <tr data-sev="OK"><td class="path">CHARTER.md · CONVENTIONS.md · about.md</td><td>2026-07-19</td><td class="num">4–8K</td><td><span class="sev sev-OK">KEEP</span></td><td class="act">none — identity docs</td><td class="act">—</td></tr>
+          <tr data-sev="OK"><td class="path">release-checklist.md</td><td>2026-07-19</td><td class="num">4K</td><td><span class="sev sev-OK">KEEP</span></td><td class="act">none — process doc</td><td class="act">—</td></tr>
+          <tr data-sev="OK"><td class="path">engram-deck.html · knowledge-graph.html</td><td>2026-08/10</td><td class="num">32K · 1.4M</td><td><span class="sev sev-OK">KEEP</span></td><td class="act">none — artifacts</td><td class="act">—</td></tr>
+          <tr data-sev="OK"><td class="path">adr/ · rfcs/ · specs/ · research/ · guides/ · perf/</td><td>mixed</td><td class="num">—</td><td><span class="sev sev-OK">KEEP</span></td><td class="act">none — structured areas</td><td class="act">—</td></tr>
+        </tbody>
+      </table>
+      <p id="no-results" hidden>No items match the current filter.</p>
+    </div>
+  </section>
+
+  <section aria-labelledby="gates-h">
+    <h2 id="gates-h">Verification gates (every PR)</h2>
+    <ul class="gates">
+      <li><span aria-hidden="true">✓</span><span class="cmd">scripts/ci/check-docs.sh</span> — docs structure + parity drift</li>
+      <li><span aria-hidden="true">✓</span><span class="cmd">scripts/ci/check-contracts.sh</span> — contract generation intact</li>
+      <li><span aria-hidden="true">✓</span><span class="cmd">scripts/ci/check-engine-neutrality.sh</span> — after the ghost-line fix</li>
+      <li><span aria-hidden="true">✓</span><span class="cmd">rg 'memory/mcp-server|codegraph/mcp-server' docs/</span> — hits only inside rfcs/specs/history (records, not instructions)</li>
+      <li><span aria-hidden="true">✓</span><span class="cmd">git log --follow</span> on every moved file — history preserved</li>
+    </ul>
+  </section>
+
+  <footer class="note">
+    Generated 2026-10-17 from measured evidence: git last-touch dates, retired-path greps,
+    line counts, and crate-list diffs (find -name Cargo.toml vs AGENTS.md shape; CI script
+    scan list). Out of scope: RFC/ADR/spec historical content (records stay as written),
+    the docs/domain-data-model.md contract (source of truth), and any code change.
+  </footer>
+</main>
+
+<script>
+"use strict";
+(function () {
+  const chips = [...document.querySelectorAll(".chip[data-sev]")];
+  const q = document.getElementById("q");
+  const rows = [...document.querySelectorAll("#inv tr[data-sev]")];
+  const cards = [...document.querySelectorAll(".card[data-sev]")];
+  const count = document.getElementById("count");
+  const noRes = document.getElementById("no-results");
+  const active = new Set();
+
+  function apply() {
+    const term = q.value.trim().toLowerCase();
+    let shownRows = 0, shownCards = 0;
+    rows.forEach((r) => {
+      const ok = (!active.size || active.has(r.dataset.sev)) &&
+                 (!term || r.textContent.toLowerCase().includes(term));
+      r.hidden = !ok;
+      if (ok) shownRows++;
+    });
+    cards.forEach((c) => {
+      const ok = (!active.size || active.has(c.dataset.sev)) &&
+                 (!term || c.textContent.toLowerCase().includes(term));
+      c.style.display = ok ? "" : "none";
+      if (ok) shownCards++;
+    });
+    noRes.hidden = shownRows > 0;
+    count.textContent = `${shownRows} items · ${shownCards} findings`;
+  }
+
+  chips.forEach((chip) => chip.addEventListener("click", () => {
+    const sev = chip.dataset.sev;
+    if (active.has(sev)) { active.delete(sev); chip.setAttribute("aria-pressed", "false"); }
+    else { active.add(sev); chip.setAttribute("aria-pressed", "true"); }
+    apply();
+  }));
+  q.addEventListener("input", apply);
+  apply();
+})();
+</script>
+</body>
+</html>

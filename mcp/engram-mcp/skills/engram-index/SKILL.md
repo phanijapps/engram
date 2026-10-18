@@ -8,12 +8,16 @@ description: Index a codebase AND memorize what matters about it — build the c
 Index the code graph, then **memorize the codebase** — the graph alone is
 structure; memory is understanding. Evidence-first, always.
 
+Depth on demand: `references/rea-process.md` (the full evidence-first
+process) · `references/memorization-catalog.md` (exact write formats).
+
 ## Contract
 
 1. Structure comes from `scan_repo` — never from reading files by hand first.
 2. Every memorized claim carries an evidence label: `[proven]`, `[likely]`, or `[guessed]`.
 3. Every memory written is read back — **an index that cannot be recalled is not an index.**
 4. No claim without a tool call behind it. If you cannot prove it, label it `[guessed]` or omit it.
+5. Recurring workflows become procedures — an index without runbooks is only half an index.
 
 ## Workflow
 
@@ -43,7 +47,8 @@ do NOT open files to "get a feel".
 
 ### 2. Memorize
 
-Write memories — one concern per memory, title first:
+Write memories — one concern per memory, title first. Exact formats:
+`references/memorization-catalog.md`. In short:
 
 ```
 write_memory({ "content": "[proven] <claim> — evidence: <tool + what it showed>" })
@@ -55,7 +60,9 @@ Memorize, in order of value:
 - **Sharp edges** — bridge symbols ("change_impact shows X is a bridge; touching it ripples into N areas"), god modules, known-tricky paths (`[proven]` via `change_impact`)
 - **Core abstractions** — the top 3-5 central symbols, one line each on their role
 
-Memorize procedures — the commands that build/test/verify:
+Memorize procedures — the commands that build/test/verify, AND the
+recurring workflows this repo actually performs (indexing, triage,
+release, dogfood — whatever the repo's rhythm is):
 
 ```
 procedure_put({ "name": "verify", "trigger": "before handoff", "steps": ["<exact command>", ...] })
@@ -63,6 +70,8 @@ procedure_put({ "name": "verify", "trigger": "before handoff", "steps": ["<exact
 
 Only procedures you have seen work (from READMEs, CI configs, or this
 session). Label untested steps in the trigger field ("untested").
+Check what already exists first — `procedure_list({})` — and re-put to
+update, don't duplicate.
 
 Optionally, entities + relationships for the top abstractions:
 

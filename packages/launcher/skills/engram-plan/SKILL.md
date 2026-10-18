@@ -1,117 +1,106 @@
 ---
 name: engram-plan
-description: Plan a change (story, feature, bug fix) by mining the engram index first — similar past work, repo invariants, blast radius — then produce a fixed-section plan: Overview, Findings (evidence-labeled), Risks, Steps, Open Questions. Trigger when asked to solve/plan/implement anything non-trivial, before editing.
+description: Plan a change by mining the engram index first — past issues, patterns, invariants, blast radius — using the right workflow for the job. Triage (classify + route), Bugfix (root cause + regression guard), or Story/Feature (precedents + per-layer steps). Trigger when asked to solve/plan/triage/implement anything non-trivial, before editing.
 ---
 
 # engram-plan
 
 Plan from evidence, not vibes. The index already knows this repo's
-structure, invariants, and history — mine it before writing a line of
-the plan.
+structure, invariants, history, and past failures — mine it before
+writing a line of the plan.
+
+**Pick the workflow first** — they are different disciplines:
+
+| The request smells like… | Workflow | Reference |
+|---|---|---|
+| "this is broken", unclear severity, red CI | **Triage** — classify + route, don't fix | `references/plan-triage.md` |
+| Reproduced failure, regression, crash | **Bugfix** — root cause + regression guard | `references/plan-bugfix.md` |
+| New capability, story, integration | **Story/Feature** — precedents + per-layer steps | `references/plan-story.md` |
+
+All three share the moves below; the references carry each one's
+specific discipline.
 
 ## Contract
 
-1. Mine before writing: past work, invariants, blast radius, tensions.
-2. Findings are evidence-labeled; risks are quantified from the graph.
-3. Every step is independently verifiable — it names the command that proves it.
-4. The plan is written to memory so `engram-implement` can recall it.
+1. Mine before writing: past work, past failures, invariants, blast radius, tensions.
+2. **Every plan starts with a past-pattern search** — a fix/feature that ignores how this repo solved it before is planning amnesia.
+3. Findings are evidence-labeled; risks are quantified from the graph.
+4. Every step is independently verifiable — it names the command that proves it.
+5. The plan is written to memory so `engram-implement` can recall it; recurring shapes become procedures.
 
-## Workflow
+## Workflow (shared moves)
 
 ### 1. Frame the change
 
-One paragraph: what changes, for whom, and what "done" means. If the
-request is ambiguous, list the interpretation you're planning against in
-Open Questions — don't silently pick.
+One paragraph: what changes, for whom, what "done" means. Ambiguity →
+list your interpretation in Open Questions; don't silently pick.
 
-### 2. Mine the index
+### 2. Search the past (engram-search discipline)
 
 ```
-recall({ "query": "<the change's domain terms + 'invariants decisions'>" })
+recall({ "query": "<domain terms> fix design decisions" })
 search({ "query": "<likely touchpoint symbols>" })
-architecture({ "limit": 15 })
-```
-
-For each likely-touched symbol:
-
-```
-change_impact({ "target": "<symbol>" })
-symbol_context({ "symbol": "<symbol>", "depth": 2 })
-```
-
-Check known tensions:
-
-```
+procedure_list({})
 contradiction_list({})
 ```
 
-What you're mining for: Has this repo already decided something about
-this area? Which invariants does the change threaten? What's the blast
-radius of each touchpoint?
+Mine for: past fixes with the same symptom · precedents for the same
+feature shape · indexed invariants the change must respect · existing
+runbooks (if one covers this, following it beats planning) · open
+tensions. **Record the search result either way** — "no past
+occurrences" is a finding.
 
-### 3. Write the plan (fixed sections)
-
-**Overview** — one paragraph in the repo's own vocabulary (the words its
-graph uses, not generic ones).
-
-**Findings** — evidence-labeled facts:
+### 3. Map the surface
 
 ```
-- [proven] scanner entry point is scan_repository in codegraph.rs
-  — symbol_context: 14 callers, the top traffic path
-- [likely] CI enforces engine-neutrality on this crate — recall hit
-  from ADR-0022 memory (indexed Oct 2026)
+architecture({ "limit": 15 })
+symbol_context({ "symbol": "<touchpoint>", "depth": 2 })
+change_impact({ "target": "<touchpoint>" })
 ```
 
-**Risks** — each with blast radius and why it matters:
+Blast radius per touchpoint → Risks. Crossed layers → explicit
+per-layer steps.
+
+### 4. Write the plan (fixed sections)
+
+**Overview** (the repo's vocabulary) · **Findings** (labeled, including
+the past-pattern search result) · **Risks** (blast radius + invariants
+threatened + mitigations) · **Steps** (ordered, each with its verify
+command) · **Open Questions** (what the index could NOT answer).
+
+### 5. Persist plan + workflow
 
 ```
-- Risk: touching X (bridge symbol, 12 dependents; change_impact)
-  Mitigation: ...
-- Risk: violates invariant "domain must not name engines" ([likely])
-  Mitigation: run scripts/ci/check-engine-neutrality.sh at step N
+write_memory({ "content": "PLAN <slug>: <overview>. Precedents: <found |
+  none>. Steps: <N>. Top risks: <...>" })
 ```
 
-**Steps** — ordered, small, each with its verification command:
+When this shape recurs, capture the workflow that worked:
 
 ```
-1. Add the port method to core/<crate>/ports.rs
-   Verify: cargo check -p engram-<crate>
-2. Implement in adapters/.../impl.rs
-   Verify: cargo test -p engram-<adapter>
-3. Wire the tool (mcp/engram-mcp/src/tools.rs)
-   Verify: cargo test -p engram-mcp + driver call
+procedure_put({ "name": "plan-<workflow-type>", "trigger": "<when this
+  shape appears>", "steps": ["<the moves that worked, in order>"] })
 ```
-
-**Open Questions** — what the index could NOT answer. Unanswered ≠
-unknown; it's explicitly listed.
-
-### 4. Persist the plan
-
-```
-write_memory({ "content": "PLAN <slug>: <overview>. Steps: <one-line
-  summary>. Risks: <top risks>." })
-```
-
-Then implement can `recall({ "query": "PLAN <slug>" })`.
 
 ## When it fails
 
-- No index (recall/search empty) → plan against `scan_repo` + file reads,
-  and mark findings `[guessed]` where the graph would have proven them.
+- No index (recall/search empty) → plan against `scan_repo` + reads,
+  findings marked `[guessed]` where the graph would have proven them.
   Suggest engram-index.
-- Ambiguous symbols in change_impact → disambiguate via `symbol_context`
-  before ranking risk; don't guess which of N same-name symbols.
+- A recalled past fix contradicts the request's assumptions → surface
+  it before planning; the past fix is evidence, not noise.
 
 ## Anti-patterns
 
-- Plans with steps that have no verification command.
-- Findings without evidence labels.
-- Risks without blast radius ("this might be tricky" is not a risk).
-- Skipping the contradiction check before large refactors.
+- Skipping the past-pattern search (the #1 planning failure).
+- Triage that fixes, bugfix plans without a regression test, story
+  plans without a precedent search.
+- Steps with no verification command.
+- Risks without graph evidence ("might be tricky" is not a risk).
+- Planning past an open contradiction without flagging it.
 
 ## Final check
 
+- Right workflow for the request?
+- Did the past-pattern search run, and is its result in Findings?
 - Could a fresh agent implement from Findings + Steps alone?
-- Does every risk name its graph evidence?
-- Are open questions honest (not rhetorical)?

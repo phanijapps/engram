@@ -32,6 +32,10 @@ def main() -> int:
     ap.add_argument("--storage", required=True)
     ap.add_argument("--project", default="default")
     ap.add_argument("--no-vector", action="store_true")
+    ap.add_argument("--tools", default=None,
+                    help="--tools profile passthrough (core|full|all|consolidated); "
+                         "default = server default (21-tool surface). Pass 'all' for "
+                         "cut granular tools (code_health, etc.)")
     ap.add_argument("--wait", type=float, default=3.0,
                     help="seconds to wait for boot before sending (12+ with vector on)")
     ap.add_argument("calls", nargs=argparse.REMAINDER,
@@ -58,6 +62,8 @@ def main() -> int:
            "--project", args.project]
     if args.no_vector:
         cmd.append("--no-vector")
+    if args.tools:
+        cmd += ["--tools", args.tools]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, text=True, bufsize=1)
     time.sleep(args.wait)

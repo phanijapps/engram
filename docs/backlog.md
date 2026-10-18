@@ -828,3 +828,47 @@ self-improvement. Engram's memory layer carries the context.
       engram-perf-audit, engram-store-ops
 - [ ] Store summary back to engram memory (workspace: agentzero for
       cross-project continuity, or odyssey for odyssey-specific context)
+
+## self-index-findings (2026-10-17, post #125/#126 merge, main@d152176c)
+
+Dogfood run: 998 files ingested (1,272 scanned), 10,235 entities / 29,018
+rels / **0 errors**, git provenance stamped. First scan of the rebuilt
+self store → single-baseline.
+
+- **[scanner-god-module] WORSE, not better: `scan_repository` bridge 3,687 →
+  4,360 while the next symbol fell 739 → 727 (~6× gap now).** Two merged
+  PRs (#125 embedding wiring, #126 fetch_content) added scanner-adjacent
+  surface without the phase split. Blast radius re-measured: 41 direct
+  callers — 5 production entry points (`scan_repo`, `consolidated_scan`,
+  `NativeProvider::scan_repository_json`, `IngestOps::start_scan_job_json`,
+  `scan_workspace`) + 36 scanner tests as the regression net. Still the
+  highest-value named refactor; still blocked on nothing.
+- **[receiver-resolution-gap] NEW reproductions from the #125 embedding
+  work — the gap now covers *ordinary inferred-receiver method calls*:**
+  - `EmbeddingProviderConfig::validate` reported DEAD despite 4 direct
+    `config.validate()` call sites (sqlite/bootstrap.rs:129,
+    embedding_config/selection.rs:38+53, fastembed_embedding.rs:31). This
+    is a plain `receiver.method()` ladder miss — wider than the known
+    `self.`/qualified-path classes.
+  - `ConfiguredHttpEmbedding::embed_batch/embed_query/embed_passage` DEAD
+    but alive via `dyn EmbeddingProvider` dispatch (constructed at
+    embedding_runtime.rs:63, trait impl http_embedding.rs:59) — trait-
+    object dispatch is invisible to call edges.
+  - `EmbeddingProviderConfig::from_toml_file` DEAD but alive as a
+    function-value argument (`.map(EmbeddingProviderConfig::from_toml_file)`,
+    mcp/embedding_config.rs:28) — function references passed as values
+    produce no call edge.
+  Fix candidates: `resolve_one` ladder + a trait-impl dispatch edge kind +
+  value-position function-ref extraction. Impact: dead list is 962 rows
+  and an unknown fraction is this class.
+- **Dead-code triage (unchanged honest bulk):** CapabilityReport::* public
+  accessors, Failing*/Fake* test doubles, prototype UI components
+  (Dashboard, DropdownMenu*, Dialog*), and generic-name param-type
+  artifacts (`App`, `Graph`, `Chat`, `Input` — type-position usage makes
+  no call edge). Still want the `#[cfg(test)]`/`pub`-aware annotation.
+- **TS tool-registration funnels are the TS-side bridges:**
+  `registerTools` 543 / `createMcpServer` 470 / `startMcpHttpServer` 429 —
+  one function owns the whole tool table (mirrors Rust
+  `register_all_tools`). Lower priority than the scanner split.
+- `whats_changed` flat on the fresh single-scan baseline (expected);
+  temporal discrimination starts next run.

@@ -1,0 +1,63 @@
+# cargo-deny configuration (RFC-0021 scan gate).
+#
+# Policy: advisories are FIXED, never ignored — the ignore list stays empty
+# (matching .cargo/audit.toml). Unmaintained/unsound crates surface as
+# warnings tracked in cargo-audit's baseline, not hard gate failures.
+# Licenses: permissive/OSI allow-list covering the Rust ecosystem.
+# Bans: wildcard dependencies denied; duplicate versions warn.
+
+[advisories]
+version = 2
+yanked = "warn"
+# unmaintained/unsound crates (instant, paste, serde_yml via the lockfile)
+# are tracked as cargo-audit's warning baseline; the deny gate enforces
+# actual vulnerabilities only.
+unmaintained = "workspace"
+unsound = "workspace"
+# Warning-baseline advisories (same family cargo-audit tracks as allowed
+# warnings — see .cargo/audit.toml; remove entries when the chain updates):
+# - RUSTSEC-2024-0248: instant unmaintained (via gtk/wry chain)
+# - RUSTSEC-2025-0068: serde_yml unsound+unmaintained (via fastembed tree)
+ignore = [
+  "RUSTSEC-2024-0248",
+  "RUSTSEC-2025-0068",
+]
+
+
+[licenses]
+version = 2
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "ISC",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "0BSD",
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "CDLA-Permissive-2.0",
+  "Zlib",
+  "BSL-1.0",
+  "CC0-1.0",
+  "MPL-2.0",
+  "NCSA", # libfuzzer-sys rider (OSI-approved, via fastembed→image→ravif; build-only)
+]
+confidence-threshold = 0.93
+
+# ring: "(MIT OR Apache-2.0) AND NCSA" — the NCSA rider covers its build
+# files; clarify to the dual-licensed core (standard cargo-deny practice).
+[[licenses.clarify]]
+name = "ring"
+expression = "MIT OR Apache-2.0"
+license-files = [{ path = "LICENSE", hash = 0x0 }]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

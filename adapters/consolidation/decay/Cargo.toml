@@ -8,9 +8,9 @@ rust-version.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
-engram-domain = { path = "../../../core/domain" }
-engram-consolidation = { path = "../../../core/consolidation" }
-engram-runtime = { path = "../../../core/runtime" }
+engram-domain = { path = "../../../core/domain", version = "0.1.0" }
+engram-consolidation = { path = "../../../core/consolidation", version = "0.1.0" }
+engram-runtime = { path = "../../../core/runtime", version = "0.1.0" }
 
 [dev-dependencies]
 chrono.workspace = true

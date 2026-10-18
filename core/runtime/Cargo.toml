@@ -6,6 +6,6 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-engram-domain = { path = "../domain" }
+engram-domain = { path = "../domain", version = "0.1.0" }
 regex = "1"
 thiserror.workspace = true

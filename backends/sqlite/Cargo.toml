@@ -6,5 +6,5 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-engram-integration = { path = "../../core/integration", features = ["sqlite"] }
-engram-runtime = { path = "../../core/runtime" }
+engram-integration = { path = "../../core/integration", version = "0.1.0", features = ["sqlite"] }
+engram-runtime = { path = "../../core/runtime", version = "0.1.0" }

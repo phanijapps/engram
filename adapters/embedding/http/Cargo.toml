@@ -1,11 +1,12 @@
 [package]
 name = "engram-embedding-http"
 version = "0.1.0"
+license = "MIT"
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-engram-runtime = { path = "../../../core/runtime" }
+engram-runtime = { path = "../../../core/runtime", version = "0.1.0" }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

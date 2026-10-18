@@ -1,0 +1,101 @@
+name: Security
+
+# RFC-0021 scan gate: cargo-deny (advisories+licenses+bans), CodeQL SAST
+# (Rust + TypeScript), gitleaks (secrets), Trivy (tree scan + SBOM), and a
+# zero-tolerance pnpm audit for the launcher's dependency tree.
+# Runs on PRs, main pushes, and weekly (advisory databases drift).
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-deny:
+    name: cargo-deny (advisories · licenses · bans)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+      - name: Check advisories, licenses, bans, sources
+        run: cargo deny --deny.toml deny.toml check
+
+  codeql:
+    name: CodeQL (rust · typescript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: rust, javascript-typescript
+      - uses: Swatinem/rust-cache@v2
+      - name: Build Rust for extraction
+        run: cargo check --workspace
+      - uses: github/codeql-action/analyze@v3
+
+  gitleaks:
+    name: gitleaks (secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trivy:
+    name: Trivy (vulns · SBOM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+      - name: Generate SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: cyclonedx
+          output: sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+
+  launcher-audit:
+    name: pnpm audit (launcher tree)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Audit production dependency tree
+        # The launcher is zero-dependency by design — this gate exists so a
+        # future dependency addition is a deliberate, reviewed act.
+        run: pnpm install --frozen-lockfile && pnpm audit --prod

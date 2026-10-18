@@ -6,20 +6,20 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-engram-domain = { path = "../../core/domain" }
-engram-runtime = { path = "../../core/runtime" }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
 # Enable the `sqlite` backend so the port impls (`Sql*`) and `EngramProvider::open`
 # are available to this crate's fixtures + wiring delegate. The engine-specific
 # code lives in `core/integration/src/sqlite/`; this crate keeps the conformance
 # harness + fixtures (test infrastructure).
-engram-integration = { path = "../../core/integration", features = ["sqlite"] }
-engram-memory = { path = "../../core/memory" }
-engram-knowledge = { path = "../../core/knowledge" }
-engram-hierarchy = { path = "../../core/hierarchy" }
-engram-belief = { path = "../../core/belief" }
-engram-retrieval = { path = "../../core/retrieval" }
-engram-store-sqlite = { path = "../sqlite" }
-engram-store-lexical = { path = "../retrieval/tantivy-lexical" }
+engram-integration = { path = "../../core/integration", version = "0.1.0", features = ["sqlite"] }
+engram-memory = { path = "../../core/memory", version = "0.1.0" }
+engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
+engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
+engram-belief = { path = "../../core/belief", version = "0.1.0" }
+engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
+engram-store-sqlite = { path = "../sqlite", version = "0.1.0" }
+engram-store-lexical = { path = "../retrieval/tantivy-lexical", version = "0.1.0" }
 async-trait.workspace = true
 chrono.workspace = true
 futures.workspace = true

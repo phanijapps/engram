@@ -7,9 +7,9 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
-engram-domain = { path = "../domain" }
-engram-eval = { path = "../eval" }
-engram-runtime = { path = "../runtime" }
+engram-domain = { path = "../domain", version = "0.1.0" }
+engram-eval = { path = "../eval", version = "0.1.0" }
+engram-runtime = { path = "../runtime", version = "0.1.0" }
 serde_json.workspace = true
 
 [dev-dependencies]

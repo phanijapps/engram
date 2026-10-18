@@ -10,14 +10,14 @@ async-trait.workspace = true
 chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-engram-domain = { path = "../../core/domain" }
-engram-runtime = { path = "../../core/runtime" }
-engram-integration = { path = "../../core/integration" }
-engram-store-pgvector = { path = "../../adapters/pgvector" }
-engram-belief = { path = "../../core/belief" }
-engram-memory = { path = "../../core/memory" }
-engram-retrieval = { path = "../../core/retrieval" }
-engram-knowledge = { path = "../../core/knowledge" }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
+engram-integration = { path = "../../core/integration", version = "0.1.0" }
+engram-store-pgvector = { path = "../../adapters/pgvector", version = "0.1.0" }
+engram-belief = { path = "../../core/belief", version = "0.1.0" }
+engram-memory = { path = "../../core/memory", version = "0.1.0" }
+engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
+engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
 
 [features]
 # PS2: the vector recall lane (query embedding via FastEmbed + pgvector
@@ -27,8 +27,8 @@ fastembed = ["engram-integration/fastembed"]
 http-embeddings = ["engram-integration/http-embeddings"]
 
 [dev-dependencies]
-engram-domain = { path = "../../core/domain" }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
 # sqlite feature: the PS4 migration round-trip exports FROM a SQLite provider.
-engram-integration = { path = "../../core/integration", features = ["sqlite"] }
+engram-integration = { path = "../../core/integration", version = "0.1.0", features = ["sqlite"] }
 futures.workspace = true
 tempfile = "3"

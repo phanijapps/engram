@@ -1,23 +1,24 @@
 [package]
 name = "engram-integration"
 version = "0.1.0"
+license = "MIT"
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-engram-code = { path = "../code" }
-engram-domain = { path = "../domain" }
-engram-runtime = { path = "../runtime" }
-engram-graph-analytics = { path = "../graph-analytics" }
-engram-memory = { path = "../memory" }
-engram-knowledge = { path = "../knowledge" }
-engram-hierarchy = { path = "../hierarchy" }
-engram-belief = { path = "../belief" }
-engram-procedures = { path = "../procedures" }
-engram-retrieval = { path = "../retrieval" }
-engram-consolidation = { path = "../consolidation" }
-engram-reflection = { path = "../reflection", optional = true }
-engram-eval = { path = "../eval", optional = true }
+engram-code = { path = "../code", version = "0.1.0" }
+engram-domain = { path = "../domain", version = "0.1.0" }
+engram-runtime = { path = "../runtime", version = "0.1.0" }
+engram-graph-analytics = { path = "../graph-analytics", version = "0.1.0" }
+engram-memory = { path = "../memory", version = "0.1.0" }
+engram-knowledge = { path = "../knowledge", version = "0.1.0" }
+engram-hierarchy = { path = "../hierarchy", version = "0.1.0" }
+engram-belief = { path = "../belief", version = "0.1.0" }
+engram-procedures = { path = "../procedures", version = "0.1.0" }
+engram-retrieval = { path = "../retrieval", version = "0.1.0" }
+engram-consolidation = { path = "../consolidation", version = "0.1.0" }
+engram-reflection = { path = "../reflection", version = "0.1.0", optional = true }
+engram-eval = { path = "../eval", version = "0.1.0", optional = true }
 async-trait.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -30,19 +31,19 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 # …), never on engram-integration, so the optional edge introduces no cycle.
 # ADR-0022: the engine-specific code lives under src/sqlite/ and is intentionally
 # exempt from the engine-neutrality gate.
-engram-store-sqlite = { path = "../../adapters/sqlite", optional = true }
-engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical", optional = true }
-engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph", optional = true }
-engram-store-community-summary = { path = "../../adapters/retrieval/community-summary", optional = true }
-engram-decay = { path = "../../adapters/consolidation/decay", optional = true }
+engram-store-sqlite = { path = "../../adapters/sqlite", version = "0.1.0", optional = true }
+engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical", version = "0.1.0", optional = true }
+engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph", version = "0.1.0", optional = true }
+engram-store-community-summary = { path = "../../adapters/retrieval/community-summary", version = "0.1.0", optional = true }
+engram-decay = { path = "../../adapters/consolidation/decay", version = "0.1.0", optional = true }
 # Reranker adapters (RFC-0019 T3/T4). MMR is a tiny pure-Rust crate, available
 # wherever sqlite recall runs (it degrades to relevance-only when no embedder
 # is wired — e.g. fastembed off). The cross-encoder adapter is opt-in via its
 # own feature; it carries no in-tree model, so construction is deferred to a
 # deployer-provided `RerankScorer` (see backlog `cross-encoder-rerank`).
-engram-rerank-mmr = { path = "../../adapters/retrieval/mmr-rerank", optional = true }
-engram-rerank-cross-encoder = { path = "../../adapters/retrieval/cross-encoder-rerank", optional = true }
-engram-ingest = { path = "../../adapters/ingest", optional = true }
+engram-rerank-mmr = { path = "../../adapters/retrieval/mmr-rerank", version = "0.1.0", optional = true }
+engram-rerank-cross-encoder = { path = "../../adapters/retrieval/cross-encoder-rerank", version = "0.1.0", optional = true }
+engram-ingest = { path = "../../adapters/ingest", version = "0.1.0", optional = true }
 # Non-optional: the `hierarchy_build` facade (Louvain cluster→persist, shared by
 # the stdio MCP + N-API binding) stamps `Utc::now()` on built nodes/relations,
 # and `provenance.rs`/`provider.rs` already reference `chrono::Utc` in tests/base.
@@ -51,7 +52,7 @@ engram-ingest = { path = "../../adapters/ingest", optional = true }
 chrono.workspace = true
 futures = { workspace = true, optional = true }
 
-engram-embedding-http = { path = "../../adapters/embedding/http", optional = true }
+engram-embedding-http = { path = "../../adapters/embedding/http", version = "0.1.0", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

@@ -8,9 +8,9 @@ rust-version.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
-engram-code = { path = "../../core/code" }
-engram-domain = { path = "../../core/domain" }
-engram-knowledge = { path = "../../core/knowledge" }
+engram-code = { path = "../../core/code", version = "0.1.0" }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
 futures.workspace = true
 ignore.workspace = true
 rayon.workspace = true
@@ -20,6 +20,6 @@ serde_yml = "0.0.12"
 sha2.workspace = true
 
 [dev-dependencies]
-engram-store-sqlite = { path = "../sqlite" }
+engram-store-sqlite = { path = "../sqlite", version = "0.1.0" }
 futures.workspace = true
 tempfile = "3"

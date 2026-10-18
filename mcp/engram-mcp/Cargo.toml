@@ -10,15 +10,15 @@ name = "engram-mcp"
 path = "src/main.rs"
 
 [dependencies]
-engram-domain = { path = "../../core/domain" }
-engram-ingest = { path = "../../adapters/ingest" }
-engram-integration = { path = "../../core/integration", features = ["sqlite"] }
-engram-knowledge = { path = "../../core/knowledge" }
-engram-retrieval = { path = "../../core/retrieval" }
-engram-belief = { path = "../../core/belief" }
-engram-hierarchy = { path = "../../core/hierarchy" }
-engram-codegraph-queries = { path = "../../codegraph/queries" }
-engram-codegraph-temporal = { path = "../../codegraph/temporal" }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-ingest = { path = "../../adapters/ingest", version = "0.1.0" }
+engram-integration = { path = "../../core/integration", version = "0.1.0", features = ["sqlite"] }
+engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
+engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
+engram-belief = { path = "../../core/belief", version = "0.1.0" }
+engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
+engram-codegraph-queries = { path = "../../codegraph/queries", version = "0.1.0" }
+engram-codegraph-temporal = { path = "../../codegraph/temporal", version = "0.1.0" }
 async-trait = { workspace = true }
 chrono = { workspace = true }
 futures = { workspace = true }

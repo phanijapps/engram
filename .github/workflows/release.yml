@@ -212,3 +212,18 @@ jobs:
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Keep `latest` pointing at the newest published version so the npm
+      # landing page reflects the current release (the --tag publish above
+      # only moves the channel tag, e.g. `alpha`; `latest` would drift).
+      - name: npm dist-tag — sync latest
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: |
+          V="${{ env.VERSION }}"
+          npm dist-tag add "@engramlabs/mcp@$V" latest
+          for tgz in $(find artifacts -name 'mcp-*.tgz' -type f); do
+            pkg=$(basename "$tgz" .tgz)   # mcp-linux-x64-gnu → @engramlabs/mcp-linux-x64-gnu
+            npm dist-tag add "@engramlabs/$pkg@$V" latest
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

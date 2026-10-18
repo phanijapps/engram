@@ -1,8 +1,14 @@
 # Database Persistence — Schema & ER Reference
 
+> **Freshness**: last verified against the adapter DDL on 2026-10-17 (main).
+> Refresh check: `grep -rh 'CREATE TABLE' adapters/sqlite/src adapters/pgvector/src | sort -u`
+> and diff against §6. `docs/domain-data-model.md` remains the source of truth
+> for the logical model; this file is the physical view.
+
 > Physical persistence layer for engram. This documents **every object that is
 > written to disk** by the storage adapters: the SQLite backend (the active
-> default) and the embedded SurrealDB backend (`engram-store-surreal`).
+> default), the pgvector backend (Postgres), and the embedded SurrealDB backend
+> (`engram-store-surreal`).
 >
 > This is the *physical* view. For the logical/domain model see
 > [`docs/domain-data-model.md`](domain-data-model.md); for adapter design
@@ -17,12 +23,14 @@ and disk-backed. A backend is selected by configuration at
 | Backend | Crate | Engine | Physical layout | Tables created by |
 |---|---|---|---|---|
 | **SQLite** (active default) | `engram-store-sqlite` (`adapters/sqlite`) | rusqlite + `sqlite-vec` | One `.db` file per capability family (default `MultiFileDirectory`), or one shared file (`SingleFile`) | `adapters/sqlite/src/<family>/schema.rs` + `vector/index.rs` |
+| **pgvector** | `engram-backend-pgvector` (`backends/pgvector` composing `adapters/pgvector` cells) | Postgres + `pgvector` extension | One Postgres database; 15 tables incl. native `vector` column storage | `adapters/pgvector/src/schema.rs` (single DDL, `schema_meta` version stamp) |
 | **SurrealDB** | `engram-store-surreal` (`adapters/surreal`) | embedded **SurrealKV**, namespace `engram` / database `engram` | One SurrealKV store at the configured path; tables are schemaless and auto-created on first record write | `adapters/surreal/src/<cell>.rs` (implicit) |
 
 Wiring (which adapters get constructed and which tables therefore get created on
 first use) lives in:
 - SQLite: [`core/integration/src/sqlite/bootstrap.rs`](../core/integration/src/sqlite/bootstrap.rs)
 - Surreal: [`core/integration/src/surreal/bootstrap.rs`](../core/integration/src/surreal/bootstrap.rs)
+- pgvector: [`backends/pgvector/src/lib.rs`](../backends/pgvector/src/lib.rs) (the recipe crate composes the adapter cells and owns connection lifecycle)
 
 ### 1.1 The two cross-cutting conventions
 
@@ -486,15 +494,23 @@ Several runtime capabilities deliberately keep **no** database tables:
 
 ## 6. Complete table inventory (quick index)
 
-**SQLite (21 regular tables + 1 virtual table = 22 objects)**
+**SQLite (23 regular tables + 1 virtual table = 24 objects)**
 `memory.db`: `memories`, `memory_events`, `write_idempotency` ·
 `knowledge.db`: `knowledge_sources`, `knowledge_documents`, `knowledge_chunks`,
-`knowledge_entities`, `knowledge_relationships`, `knowledge_graphs`,
-`concept_schemes`, `concepts`, `concept_relations`, `ontologies`,
-`ontology_classes`, `ontology_properties`, `ontology_axioms` ·
+`knowledge_unresolved_refs`, `knowledge_entities`, `knowledge_relationships`,
+`knowledge_graphs`, `concept_schemes`, `concepts`, `concept_relations`,
+`ontologies`, `ontology_classes`, `ontology_properties`, `ontology_axioms` ·
 `belief.db`: `beliefs`, `contradictions` ·
 `hierarchy.db`: `hierarchy_nodes`, `hierarchy_relations` ·
+`procedures.db`: `procedures` ·
 `vectors.db`: `vectors` (vec0), `vector_meta`.
+
+**pgvector (15 tables + version stamp, one Postgres database)** — mirrors the
+SQLite families in a single database: `memories`, `memory_events`,
+`knowledge_sources`, `knowledge_documents`, `knowledge_chunks`,
+`knowledge_entities`, `knowledge_relationships`, `knowledge_graphs`, `beliefs`,
+`contradictions`, `hierarchy_nodes`, `hierarchy_relations`, `procedures`,
+`vectors` (native `vector` column), `schema_meta` (schema version stamp).
 
 **Surreal (20 tables)** — `memory`, `memory_event`, `knowledge_source`,
 `knowledge_document`, `knowledge_chunk`, `knowledge_entity`,

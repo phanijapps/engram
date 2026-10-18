@@ -31,7 +31,7 @@ core/                      Storage-neutral Rust crates.
   consolidation/           Consolidation planning, gated mutation, decay, audit.
   reflection/              Reflection synthesizer + consolidation executor (derived beliefs).
   retrieval/               Retrieval composition and fusion ports.
-  orchestration/           Orchestration facade and compatibility re-exports.
+  procedures/              Procedural memory: runbook storage + success/failure counters.
   procedures/              Procedural memory: runbook storage + success/failure counters.
   integration/             SDK facade: EngramProvider, EngramConfig, CapabilityReport.
   eval/                    Deterministic fixtures and regression harness.
@@ -44,6 +44,7 @@ core/                      Storage-neutral Rust crates.
 
 adapters/                  Replaceable infrastructure crates.
   ingest/                  Filesystem/Git ingestion adapter until split.
+  embedding/http/          HTTP embedding provider cell (configurable models).
   memory/sqlite/           SQLite memory persistence adapter.
   knowledge/sqlite/        SQLite knowledge, graph, taxonomy, and ontology adapter.
   hierarchy/sqlite/        SQLite hierarchy persistence adapter.
@@ -51,6 +52,7 @@ adapters/                  Replaceable infrastructure crates.
   retrieval/sqlite-vec/    sqlite-vec retrieval index adapter.
   retrieval/tantivy-lexical/       BM25 lexical retrieval index adapter (keyword mode).
   retrieval/cross-encoder-rerank/  Cross-encoder reranker adapter.
+  retrieval/mmr-rerank/           MMR (maximal marginal relevance) reranker adapter.
   retrieval/associative-graph/     Associative (Personalized PageRank) retrieval index adapter.
   retrieval/community-summary/     Community-summary (GraphRAG) retrieval index adapter.
   consolidation/decay/      Decay consolidation executor (policy-expiry, Ebbinghaus curve).

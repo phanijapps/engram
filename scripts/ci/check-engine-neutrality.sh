@@ -36,7 +36,7 @@ else
     "$ROOT/core/belief/src"
     "$ROOT/core/hierarchy/src"
     "$ROOT/core/consolidation/src"
-    "$ROOT/core/orchestration/src"
+    "$ROOT/core/procedures/src"
     "$ROOT/core/integration/src/provider.rs"
     "$ROOT/core/integration/src/capability.rs"
     "$ROOT/core/integration/src/provenance.rs"

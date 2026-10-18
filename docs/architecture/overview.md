@@ -133,19 +133,23 @@ surface and leaving the other unwired is not allowed.
 ├── contracts/            # portable JSON schemas + generated contract outputs (v1/)
 ├── core/                 # storage-neutral Rust crates (the deterministic brain)
 │   ├── domain/  runtime/  memory/  knowledge/  belief/  hierarchy/
-│   ├── consolidation/  reflection/  retrieval/  integration/  eval/
+│   ├── consolidation/  reflection/  retrieval/  procedures/  integration/  eval/
+│   ├── code/             # deterministic tree-sitter code behavior (ADR-0028)
 │   └── graph-analytics/  # pure graph algorithms (PageRank, betweenness, communities, reachability)
 ├── adapters/             # replaceable infrastructure crates (behind traits)
 │   ├── sqlite/           # engram-store-sqlite — ALL SQLite calls (memory/knowledge/belief/hierarchy/vector)
+│   ├── pgvector/         # Postgres/pgvector engine cells
 │   ├── surreal/          # engram-store-surreal — SurrealDB engine cell (SurrealKV embedded)
+│   ├── embedding/http/   # HTTP embedding provider cell (configurable models)
 │   ├── ingest/           # filesystem/git ingestion + tree-sitter AST chunking
-│   ├── retrieval/        # sqlite-vec · tantivy-lexical (BM25) · associative-graph (PPR) · community-summary (GraphRAG) · cross-encoder-rerank
+│   ├── retrieval/        # sqlite-vec · tantivy-lexical (BM25) · associative-graph (PPR) · community-summary (GraphRAG) · cross-encoder-rerank · mmr-rerank
 │   ├── consolidation/    # decay executor (policy-expiry, Ebbinghaus)
 │   └── integration/      # backend recipe / conformance composition (SQLite wiring home until backends/ split)
+├── backends/             # backend recipe crates (ADR-0022): sqlite + pgvector
 ├── bindings/node/        # N-API JSON transport (engram-node) — a transport, not a second impl
+├── mcp/engram-mcp/       # the ONE unified MCP server (RFC-0015): memory + knowledge + beliefs + hierarchy + code intel
 ├── codegraph/            # on-top codegraph layer (RFC-0012): code-specific crates on engram
-│   ├── queries/  temporal/  mcp-server/
-├── memory/mcp-server/    # memory MCP server: write_memory/recall/forget/put_entity/put_relationship
+│   ├── queries/  temporal/
 ├── packages/             # TypeScript workspace (contracts / client / node / adapters / eval)
 ├── prototype/            # enterprise knowledge-platform demo (RFC-0004): Hono backend + React frontend + MCP
 ├── engram-cc/           # web-based code-graph visualization workspace (engram-cc spec)

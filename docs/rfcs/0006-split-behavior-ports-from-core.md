@@ -6,7 +6,7 @@
 - **Date opened:** 2026-07-01
 - **Date closed:** 2026-07-01
 - **Decision weight:** standard
-- **Related:** [ADR-0001](../adr/0001-workspace-boundaries.md), [docs/arch_divergence.md](../arch_divergence.md) (Area 1 = the "Memory/knowledge separation" row; Area 2 = the "Rust crate modularity" row), implementation-roadmap.md Phases 10-12
+- **Related:** [ADR-0001](../adr/0001-workspace-boundaries.md), [docs/arch_divergence.md](../history/arch_divergence.md) (Area 1 = the "Memory/knowledge separation" row; Area 2 = the "Rust crate modularity" row), implementation-roadmap.md Phases 10-12
 
 ## Reviewer brief
 

@@ -4,7 +4,7 @@
     "docs/architecture"
   ],
   "scan_files": [
-    "docs/arch_divergence.md"
+    "docs/history/arch_divergence.md"
   ],
   "deny": [
     {
@@ -12,7 +12,7 @@
       "path_globs": [
         "docs/research/*.md",
         "docs/research/**/*.md",
-        "docs/arch_divergence.md",
+        "docs/history/arch_divergence.md",
         "docs/architecture/*.md",
         "docs/architecture/**/*.md"
       ],
@@ -33,7 +33,7 @@
       "path_globs": [
         "docs/research/*.md",
         "docs/research/**/*.md",
-        "docs/arch_divergence.md",
+        "docs/history/arch_divergence.md",
         "docs/architecture/*.md",
         "docs/architecture/**/*.md"
       ],
@@ -49,7 +49,7 @@
     {
       "id": "consolidation-trigger-undecided",
       "path_globs": [
-        "docs/arch_divergence.md",
+        "docs/history/arch_divergence.md",
         "docs/architecture/*.md",
         "docs/architecture/**/*.md"
       ],
@@ -100,7 +100,7 @@
     {
       "id": "automatic-consolidation-triggers",
       "status": "deferred",
-      "path": "docs/arch_divergence.md",
+      "path": "docs/history/arch_divergence.md",
       "section_regex": "ADR-0011.*?explicit-command baseline.*?automatic triggers deferred",
       "must_contain": [
         "deferred"

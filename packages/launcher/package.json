@@ -1,0 +1,29 @@
+{
+  "name": "engram-mcp",
+  "version": "0.1.0",
+  "description": "Local-first agentic memory: the engram MCP server launcher. Memory + knowledge graph + beliefs + code intelligence for any MCP client.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phanijapps/engram.git"
+  },
+  "bin": {
+    "engram-mcp": "./bin.js"
+  },
+  "files": [
+    "bin.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "memory",
+    "agent-memory",
+    "knowledge-graph",
+    "code-intelligence",
+    "local-first"
+  ],
+  "private": true
+}

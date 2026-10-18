@@ -1,47 +1,24 @@
 # @engramlabs/mcp
 
-Local-first agentic **knowledge & memory layer** for AI agents — via MCP.
+Local-first **knowledge & memory layer** for AI agents — via MCP.
 
-Engram gives your agent durable memory, source-grounded knowledge, a code
-graph, beliefs with contradiction detection, and governed retrieval — all in
-SQLite files on your machine. No cloud, no telemetry, no network calls on
-the default path.
+Durable memory, a code graph, beliefs, and governed retrieval in SQLite
+files on your machine. No cloud, no telemetry.
 
-## Install
+## Quick start
 
 ```bash
 npm install -g @engramlabs/mcp@alpha
+engram-mcp install --agent claude    # skills + hooks + red-forman subagent
 ```
 
-## Enable your MCP host + agent bundle
+Hosts: `claude` · `claude-desktop` · `cursor` · `codex` · `pi` · `copilot` · `all`
 
-One command — no JSON editing:
+MCP server only (no skills/hooks): `engram-mcp install --client <host>`
 
-```bash
-engram-mcp install --agent claude          # skills + hooks + red-forman subagent
-# or: codex, copilot, pi, all
-```
+Or run directly: `npx @engramlabs/mcp@alpha --storage ~/.engram`
 
-MCP server registration only:
-
-```bash
-engram-mcp install --client claude          # Claude Code
-engram-mcp install --client claude-desktop  # Claude Desktop
-engram-mcp install --client cursor          # Cursor
-engram-mcp install --client codex           # Codex CLI
-engram-mcp install --client pi              # pi
-engram-mcp install --client copilot         # GitHub Copilot / VS Code
-```
-
-Or run directly:
-
-```bash
-npx @engramlabs/mcp@alpha --storage ~/.engram
-```
-
-### Manual configuration
-
-Add to your `.mcp.json` (or your host's config):
+### Manual config
 
 ```json
 {
@@ -58,40 +35,22 @@ Add to your `.mcp.json` (or your host's config):
 
 | | |
 |---|---|
-| **Remember** | `write_memory`, `store_knowledge` — decisions, observations, facts |
-| **Recall** | `recall`, `search`, `get_context` — fused multi-lane retrieval |
-| **Understand code** | `scan_repo` → `symbol_context`, `change_impact`, `architecture` |
-| **Read source** | `fetch_content` — stitch any indexed file's content back |
-| **Track beliefs** | `belief_get`, `contradiction_list` — derived stances, open tensions |
-| **Runbooks** | `procedure_put`, `procedure_list` — replayable with success/fail counters |
-| **Correct** | `forget`, `graph_health` — remove wrong data, monitor health |
-| **Adversarial review** | `red-forman` subagent — severity-tagged findings on any diff before you declare done |
+| **Memory** | remember decisions, gotchas, invariants — recall them automatically |
+| **Code graph** | index a repo → symbols, blast radius, architecture |
+| **Skills** | `engram-index/learn/search/plan/implement` — evidence-labeled workflows |
+| **Auto-recall** | hooks inject relevant memory per prompt; irrelevant stays silent |
+| **Adversarial review** | `red-forman` subagent — severity-tagged findings before you ship |
 
 ## Platforms
 
-| OS | Architecture | Binary size |
-|---|---|---|
-| Linux | x86-64 | ~49 MB |
-| Linux | ARM64 | ~49 MB |
-| macOS | Apple Silicon | ~49 MB |
-| Windows | x86-64 | ~49 MB |
-
-Platform binaries install automatically as optional dependencies — you
-don't need to pick one.
+Linux x64/ARM64 · macOS Apple Silicon · Windows x64 — binaries install
+automatically per machine.
 
 ## Privacy
 
-- All data lives in SQLite files under `--storage` (default: `~/.engram`)
-- No telemetry, ever
-- No cloud calls on the default path
-- Delete the storage directory = everything is gone
+All data in SQLite under `~/.engram`. No telemetry, no cloud. Delete
+the directory = everything is gone.
 
-## Learn more
+## Links
 
-- [GitHub](https://github.com/phanijapps/engram) — source, architecture, docs
-- [HOW-TO](https://github.com/phanijapps/engram/blob/main/mcp/engram-mcp/HOW-TO.md) — full setup guide
-- [RFC-0021](https://github.com/phanijapps/engram/blob/main/docs/rfcs/0021-npm-distribution-rollout.md) — distribution design
-
-## License
-
-MIT
+[GitHub](https://github.com/phanijapps/engram) · [Setup guide](https://github.com/phanijapps/engram/blob/main/mcp/engram-mcp/HOW-TO.md) · MIT

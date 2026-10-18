@@ -109,6 +109,16 @@ impl SymbolIndex {
                 return Resolution::Resolved(same_doc[0].clone());
             }
         }
+        // Exact-name rung (determinism): a candidate whose own name IS the
+        // requested name beats bare-tail registrations of qualified
+        // siblings — `helper` (store.rs) must never lose to `inner::helper`
+        // (engine.rs, registered under bare tail `helper`) by bucket order.
+        // Found as the polyglot_scan_end_to_end_phase2 CI flake: file-walk
+        // order decided which candidate the ladder reached first.
+        let exact: Vec<_> = bucket.iter().filter(|c| c.name == name).cloned().collect();
+        if exact.len() == 1 {
+            return Resolution::Resolved(exact[0].clone());
+        }
         if let Some(repo) = from_repo {
             let same_repo: Vec<_> = bucket
                 .iter()
@@ -162,6 +172,44 @@ mod tests {
             repo: repo.map(str::to_owned),
             path: path.map(str::to_owned),
         }
+    }
+
+    #[test]
+    fn exact_name_beats_bare_tail_sibling_deterministically() {
+        // The polyglot CI flake: `helper` (store.rs, exact) vs
+        // `inner::helper` (engine.rs, registered under bare tail `helper`).
+        // Resolution must pick the exact-name candidate regardless of
+        // bucket insertion order (file-walk order).
+        let mut index = SymbolIndex::new();
+        let helper = SymbolCandidate {
+            id: "e-store-helper".to_owned(),
+            name: "helper".to_owned(),
+            repo: Some("polyglot".to_owned()),
+            path: Some("src/store.rs".to_owned()),
+        };
+        let inner = SymbolCandidate {
+            id: "e-engine-inner-helper".to_owned(),
+            name: "inner::helper".to_owned(),
+            repo: Some("polyglot".to_owned()),
+            path: Some("src/engine.rs".to_owned()),
+        };
+        // Register in BOTH orders — outcome must be identical.
+        for (first, second) in [
+            (helper.clone(), inner.clone()),
+            (inner.clone(), helper.clone()),
+        ] {
+            let mut idx = SymbolIndex::new();
+            idx.register(&first.name, first.clone());
+            idx.register(&second.name, second.clone());
+            match idx.resolve("helper", Some("src/api.ts"), Some("polyglot")) {
+                Resolution::Resolved(c) => assert_eq!(
+                    c.name, "helper",
+                    "exact-name candidate must win regardless of registration order"
+                ),
+                other => panic!("expected Resolved(helper), got {other:?}"),
+            }
+        }
+        let _ = &mut index;
     }
 
     #[test]

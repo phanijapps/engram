@@ -14,7 +14,10 @@
   "files": [
     "bin.js",
     "install.js",
-    "README.md"
+    "agent-install.js",
+    "README.md",
+    "hooks/",
+    "skills/"
   ],
   "engines": {
     "node": ">=18"

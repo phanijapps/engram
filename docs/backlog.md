@@ -901,6 +901,17 @@ tools emit full Recent/Impact/Compound sections.
 
 Both blocked on nothing; small, high-leverage for the temporal tools.
 
+## scanner-god-module-RESOLVED (2026-10-18, PR #133)
+
+**Measured payoff, post-split self-index scan (#4, main@651d858):**
+`scan_repository` betweenness **4,360 → 221.5** (−95%), dropping out of
+the top-25 bridges entirely. The orchestrator now routes through the
+phase modules (`walk_and_classify`, `serial_prepass`, `parallel_ingest`,
+sweep), distributing what used to be one chokepoint. Remaining top
+bridges are honest: `search` 1,725 (MCP search fusion), `connect` 1,340
+(pg), `Fixture::connection`/`count` (test doubles — the next-real layer),
+`registerTools` 676 (TS tool table). Closed.
+
 ## surreal-retired (2026-10-18, ADR-0030)
 
 `adapters/surreal` + the `surreal` integration feature retired (ADR-0030):

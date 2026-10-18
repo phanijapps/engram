@@ -13,7 +13,7 @@ mod filesystem;
 mod git;
 mod git_detect;
 mod hash;
-mod ingestor;
+pub(crate) mod ingestor;
 mod markdown_chunker;
 mod openapi_types;
 mod reconcile;

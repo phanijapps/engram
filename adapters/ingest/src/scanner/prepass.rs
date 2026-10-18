@@ -155,14 +155,19 @@ where
 /// Global entity-name pre-collection: every tree-sitter-supported file's
 /// symbol names (qualified + bare tail) so AST call extraction can match
 /// cross-file callees (RFC-0020 Phase 2).
-pub(super) fn collect_global_entity_names(
+pub(super) fn collect_global_symbols(
     to_ingest: &[ReadyToIngest],
     ts_chunker: Option<&crate::TreeSitterChunker>,
+    name_index: &mut engram_code::SymbolIndex,
+    ingest_request_seed: &crate::DocumentIngestRequest,
 ) -> HashSet<String> {
     // Pre-pass: collect ALL entity names globally so AST call extraction can
-    // match cross-file callees. Without this, extract_calls only knows about
-    // symbols declared in the current file, dropping most cross-file edges.
-    to_ingest
+    // match cross-file callees — and PRE-SEED the shared symbol index so
+    // per-file resolution during the parallel phase is order-independent
+    // (the polyglot_scan_end_to_end_phase2 CI flake: a route handler in an
+    // early file resolved against only symbols registered so far, picking a
+    // bare-tail sibling over the not-yet-registered exact match).
+    let registrations: Vec<(Vec<String>, String, String)> = to_ingest
         .par_iter()
         .filter_map(|item| {
             let ext = item.rel.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
@@ -172,30 +177,64 @@ pub(super) fn collect_global_entity_names(
             }
             let text = String::from_utf8_lossy(&item.content);
             let candidates = ts.chunk_with_ext(&text, ext).ok()?;
-            Some(
-                candidates
-                    .iter()
-                    .filter_map(|c| {
-                        c.location
-                            .as_ref()
-                            .and_then(|l| l.anchor.as_deref())
-                            // Anchor name part — receiver-qualified (`Foo::bar`)
-                            // for nested declarations. Emit BOTH the qualified
-                            // form and the bare tail: AST callees are bare, so
-                            // extract_calls matches the tail (RFC-0020 Phase 2).
-                            .and_then(|a| a.split_once(' ').map(|x| x.1))
-                            .map(|name| {
-                                let mut names = vec![name.to_owned()];
-                                if let Some(tail) = engram_code::bare_tail(name) {
-                                    names.push(tail.to_owned());
-                                }
-                                names
-                            })
-                    })
-                    .flatten()
-                    .collect::<Vec<String>>(),
-            )
+            let anchors: Vec<String> = candidates
+                .iter()
+                .filter_map(|c| {
+                    c.location
+                        .as_ref()
+                        .and_then(|l| l.anchor.as_deref())
+                        // Anchor name part — receiver-qualified (`Foo::bar`) for
+                        // nested declarations. Both the qualified form and the
+                        // bare tail matter: AST callees are bare (RFC-0020 P2).
+                        .and_then(|a| a.split_once(' ').map(|x| x.1))
+                        .map(|name| name.to_owned())
+                })
+                .collect();
+            if anchors.is_empty() {
+                return None;
+            }
+            // Deterministic pre-ingest identity: document/graph ids derive
+            // from the content hash (extractor contract), so the ids seeded
+            // here match what extraction registers later — the parallel-phase
+            // register_entities re-register dedupes by id, adding kind/repo.
+            let doc_hash = crate::content_hash(text.as_bytes());
+            // Exact ingestor chain: source_id -> document_id -> graph_id.
+            // The seed request carries scope/source-name/kind; per-file path
+            // + hash slot into document_id exactly as ingest will.
+            let mut req = ingest_request_seed.clone();
+            req.document.path = Some(item.rel.clone());
+            req.text = text.to_string();
+            let src_id = crate::ingestor::source_id(&req);
+            let doc_id = crate::ingestor::document_id(&src_id, &req.document, &doc_hash);
+            // graph_id_for reads only document.id: "graph-" + hash(id).
+            // Replicated inline (kept in lockstep with extractor::graph_id_for).
+            let graph_id = format!(
+                "graph-{}",
+                crate::content_hash(doc_id.as_str()).trim_start_matches("sha256:")
+            );
+            let path = item.rel.clone();
+            Some((anchors, graph_id, path))
         })
-        .flatten()
-        .collect()
+        .collect();
+
+    let mut names: HashSet<String> = HashSet::new();
+    for (anchors, graph_id, path) in registrations {
+        for qualified in anchors {
+            names.insert(qualified.clone());
+            if let Some(tail) = engram_code::bare_tail(&qualified) {
+                names.insert(tail.to_owned());
+            }
+            let id = crate::extractor::symbol_entity_id(&graph_id, &qualified);
+            name_index.register(
+                &qualified,
+                engram_code::SymbolCandidate {
+                    id,
+                    name: qualified.clone(),
+                    repo: None,
+                    path: Some(path.clone()),
+                },
+            );
+        }
+    }
+    names
 }

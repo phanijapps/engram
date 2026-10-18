@@ -3,29 +3,96 @@
   &nbsp;Engram
 </h2>
 
-<p align="center"><em>Contract-first agentic memory — structured, durable recall for AI agents that need more than a context window.</em></p>
+<p align="center"><em>Local-first agentic knowledge &amp; memory layer — structured, durable recall for AI agents that need more than a context window.</em></p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
-  <a href="Cargo.toml"><img src="https://img.shields.io/badge/rust-2024-orange.svg" alt="Rust"></a>
-  <a href="packages"><img src="https://img.shields.io/badge/typescript-sdk-blue.svg" alt="TypeScript"></a>
-  <a href="#status"><img src="https://img.shields.io/badge/status-pre--1.0-yellow.svg" alt="Status"></a>
+  <a href="https://www.npmjs.com/package/@engramlabs/mcp"><img src="https://img.shields.io/npm/v/@engramlabs/mcp.svg?color=cb3837" alt="npm"></a>
+  <a href="https://github.com/phanijapps/engram/actions/workflows/ci.yml"><img src="https://github.com/phanijapps/engram/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/phanijapps/engram/actions/workflows/security.yml"><img src="https://github.com/phanijapps/engram/actions/workflows/security.yml/badge.svg" alt="Security"></a>
+  <a href="#status"><img src="https://img.shields.io/badge/status-alpha-orange.svg" alt="Status: Alpha"></a>
 </p>
 
 <p align="center">
   <img src="docs/assets/engram-pipeline.svg" alt="Engram architecture — build path (one-way): agent → ingest → construct → store. Retrieve path (bidirectional): agent ↔ context path ↔ retrieve ↔ store." width="900">
 </p>
 
-Engram is an open-source **agentic memory layer**: a Rust core that owns
-deterministic memory, knowledge-graph, belief, hierarchy, and retrieval
-behavior, with TypeScript bindings — so agents get reliable, structured,
-long-lived memory instead of opaque, disposable context windows.
+Engram is an open-source **agentic knowledge and memory layer**: a Rust core
+that owns deterministic memory, knowledge-graph, belief, hierarchy, and
+retrieval behavior, with TypeScript bindings — so agents get reliable,
+structured, long-lived knowledge and memory instead of opaque, disposable
+context windows.
 
 It is **not a vector database** (vectors are one retrieval mode among six). It
-is **not a knowledge store** (knowledge is source-grounded, not free-floating).
-It is the layer where raw observations become **durable beliefs**, where
-retrieval is **composed** (not single-mode), and where **policy, provenance, and
-scope** govern every read and write — so memory is auditable, not accidental.
+is **not just a memory store** (knowledge is source-grounded, not
+free-floating; memory is experiential, not factual). It is the layer where raw
+observations become **durable beliefs**, where code becomes a **queryable
+graph**, and where **policy, provenance, and scope** govern every read and
+write — so both knowledge and memory are auditable, not accidental.
+
+## Install
+
+### Quick start (any MCP host)
+
+```bash
+# Install the server (alpha)
+npm install -g @engramlabs/mcp@alpha
+
+# Register with your agent — one command, no JSON editing
+engram-mcp install --client claude          # Claude Code (project scope)
+engram-mcp install --client claude-desktop  # Claude Desktop (user scope)
+engram-mcp install --client cursor          # Cursor (project scope)
+engram-mcp install --client codex           # Codex CLI (user scope)
+engram-mcp install --client pi              # pi (project scope)
+engram-mcp install --client copilot         # GitHub Copilot / VS Code
+
+# Or run directly without installing
+npx @engramlabs/mcp@alpha --storage ~/.engram
+```
+
+### What you get
+
+Your agent gains these MCP tools:
+
+| Category | Tools | What they do |
+|---|---|---|
+| **Discover** | `recall`, `search`, `get_context`, `explore` | Find anything across memory, knowledge, code — one query, fused results |
+| **Understand code** | `symbol_context`, `change_impact`, `architecture`, `whats_changed` | Who calls this? What breaks if I change it? What's the map? |
+| **Learn** | `scan_repo`, `index_docs`, `write_memory`, `store_knowledge` | Index a codebase, ingest documents, remember decisions |
+| **Decide** | `belief_get`, `contradiction_list`, `procedure_put`, `procedure_list` | Track derived stances, open tensions, replayable runbooks |
+| **Content** | `fetch_content` | Stitch any indexed file's full content back — docs or code |
+| **Correct** | `forget`, `graph_health` | Remove wrong data, monitor store health |
+
+### Platform support
+
+| OS | Architecture | Status |
+|---|---|---|
+| Linux | x86-64 (glibc) | ✅ |
+| Linux | ARM64 (glibc) | ✅ |
+| macOS | Apple Silicon (M1–M4) | ✅ |
+| Windows | x86-64 | ✅ |
+
+> **Privacy:** engram is local-first. All data lives in SQLite files on your
+> machine. No telemetry, no cloud calls, no network on the default path —
+> the code has no network usage outside optional HTTP embeddings you
+> configure yourself.
+
+### Manual MCP configuration
+
+If you prefer editing config files yourself:
+
+```json
+{
+  "mcpServers": {
+    "engram": {
+      "command": "npx",
+      "args": ["-y", "@engramlabs/mcp@alpha", "--storage", "~/.engram"]
+    }
+  }
+}
+```
+
+See [mcp/engram-mcp/HOW-TO.md](mcp/engram-mcp/HOW-TO.md) for the full guide.
 
 ## What engram is for
 
@@ -33,9 +100,8 @@ For product, data, and strategy teams — the problems engram solves, in plain t
 
 - **Long-horizon agent memory.** An agent that remembers decisions, constraints,
   and stakeholder preferences across sessions, days, or months — without
-  re-reading its entire history every turn (the problem Microsoft Research's
-  [Memora](https://www.microsoft.com/en-us/research/blog/memora-a-harmonic-memory-representation-balancing-abstraction-and-specificity/)
-  names). Less context burned, better answers on multi-hop questions.
+  re-reading its entire history every turn. Less context burned, better answers
+  on multi-hop questions.
 - **Source-grounded knowledge, not hallucinated facts.** Ask questions grounded
   in your code repositories and documents; every answer traces back to a chunk
   and its source. Memory (agent experience) stays distinct from knowledge

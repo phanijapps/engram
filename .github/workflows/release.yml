@@ -199,7 +199,7 @@ jobs:
       - name: npm publish — platform packages
         if: github.event_name == 'push' || inputs.dry_run == false
         run: |
-          for tgz in artifacts/*/mcp-*.tgz; do
+          find artifacts -name 'mcp-*.tgz' -type f | while read tgz; do
             npm publish "$tgz" --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
           done
         env:

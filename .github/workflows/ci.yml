@@ -6,6 +6,12 @@ on:
     branches:
       - main
 
+# Lightweight + fast: superseded runs on the same ref are cancelled instead of
+# queueing behind each other.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   contract:
     name: Contract validation
@@ -15,18 +21,65 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
       - name: Install Python dev dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Validate contracts
         run: scripts/ci/check-contracts.sh
 
+  changes:
+    name: Path changes
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    outputs:
+      pgvector: ${{ steps.filter.outputs.pgvector }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            pgvector:
+              - 'adapters/pgvector/**'
+              - 'backends/pgvector/**'
+              - 'Cargo.lock'
+              - '.github/workflows/ci.yml'
+
   rust:
     name: Rust
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all --check
+      # Clippy --all-targets compiles the whole workspace incl. tests, which
+      # subsumes a separate `cargo check --workspace` pass.
+      - name: Clippy (workspace + tests)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test
+        run: cargo test --workspace
+      - name: Engine-neutrality lint (ADR-0022 rule 1)
+        run: scripts/ci/check-engine-neutrality.sh
+      - name: Surface-parity lint (Rust facade <-> N-API binding)
+        run: scripts/ci/check-surface-parity.sh
+      # The fastembed-gated vector-lane checks are intentionally NOT run in
+      # CI: they compile fastembed + ONNX for rarely-changing feature-gated
+      # code. Keep them local (`cargo clippy -p engram-store-sqlite
+      # --features fastembed-tests --tests`) when touching that module.
+
+  pgvector:
+    name: pgvector conformance (live Postgres)
+    needs: changes
+    if: needs.changes.outputs.pgvector == 'true'
+    runs-on: ubuntu-latest
     # PS3 (pgvector-backend): a live Postgres+pgvector service so the recipe's
-    # Docker-gated conformance tests run in the gate. The fastembed-gated
-    # vector-lane test stays local/Docker (CI has no model cache; the recipe
-    # degrades without it by design).
+    # Docker-gated conformance tests run in the gate — but only when pgvector
+    # paths actually change, instead of taxing every run.
     services:
       postgres:
         image: pgvector/pgvector:pg17
@@ -44,27 +97,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Format
-        run: cargo fmt --all --check
-      - name: Check
-        run: cargo check --workspace
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-      - name: Test
-        run: cargo test --workspace
       - name: pgvector recipe conformance (live Postgres service)
         run: cargo test -p engram-backend-pgvector -- --ignored --test-threads=1
-      - name: Engine-neutrality lint (ADR-0022 rule 1)
-        run: scripts/ci/check-engine-neutrality.sh
-      - name: Surface-parity lint (Rust facade <-> N-API binding)
-        run: scripts/ci/check-surface-parity.sh
-      - name: Check vector FastEmbed feature tests
-        run: cargo check -p engram-store-sqlite --features fastembed-tests --tests
-      - name: Clippy vector FastEmbed feature tests
-        run: cargo clippy -p engram-store-sqlite --features fastembed-tests --tests -- -D warnings
 
   docs:
     name: Documentation
@@ -74,7 +109,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - uses: dtolnay/rust-toolchain@stable
+          cache: pip
       - name: Install Python dev dependencies
         run: python -m pip install -r requirements-dev.txt
       - name: Check docs
@@ -85,11 +120,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Enable pnpm
+        run: corepack enable
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Enable pnpm
-        run: corepack enable
+          cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Generate contracts
@@ -108,9 +144,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Install cargo-audit
-        run: cargo install cargo-audit
+      # Prebuilt binary — no cargo/rustup install or compile per run.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
       - name: Audit dependencies
         run: cargo audit

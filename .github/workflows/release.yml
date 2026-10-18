@@ -185,18 +185,15 @@ jobs:
       - name: npm publish — launcher
         if: github.event_name == 'push' || inputs.dry_run == false
         run: |
-          cd artifacts/launcher
-          npm publish --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
+          npm publish artifacts/launcher/*.tgz --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: npm publish — platform packages
         if: github.event_name == 'push' || inputs.dry_run == false
         run: |
-          for dir in artifacts/*/; do
-            if ls "$dir"/*.tgz >/dev/null 2>&1 && [[ "$dir" != *"launcher"* ]]; then
-              (cd "$dir" && npm publish --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }})
-            fi
+          for tgz in artifacts/*/mcp-*.tgz; do
+            npm publish "$tgz" --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

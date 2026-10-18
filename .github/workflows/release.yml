@@ -58,9 +58,6 @@ jobs:
           - target: darwin-arm64
             runner: macos-latest
             variant: full
-          - target: darwin-x64
-            runner: macos-13
-            variant: slim
           - target: win32-x64
             runner: windows-latest
             variant: slim

@@ -148,6 +148,8 @@ importers:
 
   packages/contracts: {}
 
+  packages/launcher: {}
+
   packages/node:
     dependencies:
       '@engram/contracts':

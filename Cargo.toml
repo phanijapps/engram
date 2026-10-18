@@ -61,3 +61,10 @@ sha2 = "0.11.0"
 sqlite-vec = "=0.1.9"
 tantivy = "0.22"
 thiserror = "2"
+
+[profile.release]
+# Distribution hygiene (RFC-0021): strip symbols, thin LTO, single codegen
+# unit. Measured 2026-10-18: 86 MB -> see PR. No behavior change.
+strip = true
+lto = "thin"
+codegen-units = 1

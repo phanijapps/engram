@@ -13,6 +13,8 @@
    Data source: mcp_driver calls against ~/.engram/mem-alpha-self
    (architecture / search / get_context / change_impact / code_health),
    main@d152176c, 2026-10-17. Every number in this file is measured.
+   49-node curated sample (24 layer + 25 symbol nodes) of the 3,052-node
+   analytics view.
    ========================================================================== */
 
 /* --- Primitives (raw values live ONLY here) ----------------------------- */
@@ -247,6 +249,7 @@ aside.panel {
 }
 
 .skeleton { position: absolute; inset: 0; display: grid; place-items: center; background: var(--ds-color-surface); z-index: var(--z-panel); }
+.skeleton[hidden] { display: none; } /* author display beats UA [hidden] without this */
 .skeleton .pulse {
   width: var(--ds-size-control); height: var(--ds-space-1); border-radius: var(--ds-radius-full);
   background: var(--ds-color-surface-3); position: relative; overflow: hidden;
@@ -322,7 +325,7 @@ footer.note {
   <div class="stage">
     <main class="viz" aria-label="Knowledge graph canvas. Use the node list in the side panel to explore nodes by keyboard.">
       <canvas id="graph"></canvas>
-      <div class="skeleton" id="skeleton" aria-hidden="true"><div><div class="pulse"></div><p>laying out 118 nodes…</p></div></div>
+      <div class="skeleton" id="skeleton" aria-hidden="true"><div><div class="pulse"></div><p>laying out 49 nodes…</p></div></div>
       <div class="overlay-msg" id="no-results" hidden>
         <p class="mono" id="no-results-query"></p>
         <p>No nodes match the current search or filters.</p>
@@ -471,8 +474,9 @@ footer.note {
 /* ============================================================================
    Force-directed knowledge graph — vanilla, self-contained.
    Layout: velocity-Verlet with layer hubs pinned in a ring; symbols orbit
-   their layer. Interactions: hover tooltip, click select, drag, wheel zoom,
-   pan. Reduced motion: layout is computed once (deterministic), no drift.
+   their layer. 49 nodes (24 layers + 25 measured symbols). Interactions:
+   hover tooltip, click select, drag, wheel zoom, pan. Reduced motion:
+   layout is computed once (deterministic), no drift.
    ========================================================================== */
 (function () {
   const $ = (id) => document.getElementById(id);
@@ -889,6 +893,12 @@ footer.note {
   /* ---- boot -------------------------------------------------------------------- */
   buildGraph();
   const boot = () => {
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+      // window still sizing (opened minimized / off-screen): retry next frame
+      requestAnimationFrame(boot);
+      return;
+    }
     resize();
     layout();
     renderLegend();

@@ -888,10 +888,16 @@ tools emit full Recent/Impact/Compound sections.
    Fix: `put_entity` preserves the prior `validFrom` when the incoming
    entity is semantically identical (same name/kind/graph/source-refs);
    the stamp moves only on real change.
-2. **Impact is noise-dominated:** `"scope"`, `"provenance"`, `"super::*"`,
-   `"crate"` rank as top impact hubs — doc-ingestion noise entities enter
-   the analytics graph. Fix direction: filter non-symbol kinds (or
-   doc-derived entities) from the temporal view's version set.
+2. **Impact noise — MOSTLY FIXED (2026-10-18):** import-module noise
+   (`super::*`, `crate`, `std::*`) and test-fixture floods (33 duplicate
+   `scope` rows) are gone from `whats_changed` via a symbol-kind allowlist,
+   test-path exclusion, and by-key dedup. Remaining, inherent: **name-keyed
+   degrees cross-contaminate** — a src-file `fn scope()` inherits the edges
+   of every same-named test fixture, so ubiquitous helper names still top
+   impact. Proper fix: path-qualified version keys in
+   `engram-codegraph-temporal` (VersionedSymbol.key = path::name or a
+   path-qualified display) — a focused crate change, blocked on nothing.
+   Recent/Compound views are already clean and actionable.
 
 Both blocked on nothing; small, high-leverage for the temporal tools.
 

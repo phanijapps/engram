@@ -1863,12 +1863,55 @@ pub fn architecture(app: &App, args: &Value) -> Result<Value, ToolError> {
 
 /// `whats_changed`: temporal recency + impact + compound + overview.
 /// (`directional` deferred — needs scan-baseline retention.)
+/// Kinds included in the temporal view (`whats_changed`). Import modules
+/// (`module` — `use std::sync::Arc` / `crate::x` / `super::*` targets) and
+/// bookkeeping kinds (repository/graph) have huge import-fan-in that swamps
+/// impact ranking without telling the reader anything about change — the
+/// measured noise class (whats-changed-temporal-flat defect #2): `scope`,
+/// `crate`, `super::*`, `std::sync::Arc` ranked as top impact hubs.
+const TEMPORAL_SYMBOL_KINDS: &[engram_domain::EntityKind] = &[
+    engram_domain::EntityKind::Function,
+    engram_domain::EntityKind::Struct,
+    engram_domain::EntityKind::Class,
+    engram_domain::EntityKind::Interface,
+    engram_domain::EntityKind::Enum,
+    engram_domain::EntityKind::Trait,
+    engram_domain::EntityKind::TypeAlias,
+    engram_domain::EntityKind::File,
+    engram_domain::EntityKind::Endpoint,
+    engram_domain::EntityKind::Api,
+];
+
 pub fn whats_changed(app: &App, _args: &Value) -> Result<Value, ToolError> {
     let query = app.provider.require_knowledge_query().map_err(internal)?;
     let entities = block_on(query.list_entities(&app.scope)).unwrap_or_default();
     let rels = fetch_rels(app)?;
+    // Version-set hygiene (whats-changed-temporal-flat defect #2/#3):
+    // - kind allowlist (TEMPORAL_SYMBOL_KINDS) excludes import-module noise
+    // - test-fixture paths are excluded: a corpus of scanner tests each
+    //   defining `fn scope()` ranked 33 identical rows at the top of impact
+    // - duplicate names across graphs collapse into one version (degrees
+    //   summed) so the ranking lists symbols, not name-collision copies
     let versions: Vec<engram_codegraph_temporal::VersionedSymbol> = entities
         .iter()
+        .filter(|e| TEMPORAL_SYMBOL_KINDS.contains(&e.kind))
+        .filter(|e| {
+            !e.source_refs
+                .first()
+                .and_then(|r| r.location.as_ref())
+                .and_then(|l| l.path.as_deref())
+                .map(|p| {
+                    let p = p.replace('\\', "/");
+                    p.starts_with("tests/")
+                        || p.contains("/tests/")
+                        || p.starts_with("test/")
+                        || p.contains("/test/")
+                        || p.ends_with("_test.rs")
+                        || p.ends_with(".test.ts")
+                        || p.ends_with(".spec.ts")
+                })
+                .unwrap_or(false)
+        })
         .map(|e| {
             let name = e.name.as_str();
             engram_codegraph_temporal::VersionedSymbol {
@@ -1886,6 +1929,24 @@ pub fn whats_changed(app: &App, _args: &Value) -> Result<Value, ToolError> {
             }
         })
         .collect();
+    // Collapse duplicate keys across graphs (degrees summed, newest
+    // validity wins) so impact ranks symbols, not name-collision copies.
+    let mut by_key: std::collections::HashMap<String, engram_codegraph_temporal::VersionedSymbol> =
+        std::collections::HashMap::new();
+    for v in versions {
+        by_key
+            .entry(v.key.clone())
+            .and_modify(|existing| {
+                existing.in_degree += v.in_degree;
+                existing.out_degree += v.out_degree;
+                if v.valid_from > existing.valid_from {
+                    existing.valid_from = v.valid_from;
+                    existing.valid_until = v.valid_until;
+                }
+            })
+            .or_insert(v);
+    }
+    let versions: Vec<_> = by_key.into_values().collect();
     let now = chrono::Utc::now();
     let recent = engram_codegraph_temporal::recent(&versions, now, 14.0);
     let impact = engram_codegraph_temporal::impact(&versions);

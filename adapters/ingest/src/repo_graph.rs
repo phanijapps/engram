@@ -77,6 +77,13 @@ impl KnowledgeRepository for KnowledgeRepoGraph {
     async fn delete_relationship(&self, id: &RelationshipId, scope: &Scope) -> CoreResult<bool> {
         self.knowledge.delete_relationship(id, scope).await
     }
+    async fn list_entities_by_graph(
+        &self,
+        graph_id: &KnowledgeGraphId,
+        scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        self.knowledge.list_entities_by_graph(graph_id, scope).await
+    }
 }
 
 #[async_trait]

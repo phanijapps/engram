@@ -23,17 +23,28 @@ use crate::{extractor::repo_entity_id, source_key::DOCUMENT_ID_KEY, source_key::
 /// a changed file replaces rather than duplicates its predecessor.
 ///
 /// Idempotent: if no prior graph exists, returns `Ok(())` without error.
+/// Temporal carry-over: `"<kind>::<name>" -> validFrom` for every prior-graph
+/// entity that carries a stamp. The scanner applies these to the replacement
+/// entities so unchanged symbols keep their original validity across
+/// content-driven graph-id churn (whats-changed-temporal-flat fix).
+pub(crate) type PriorValidity = std::collections::HashMap<String, Timestamp>;
+
+pub(crate) fn validity_key(kind: &str, name: &str) -> String {
+    format!("{kind}\u{1f}{name}")
+}
+
 pub(crate) async fn delete_prior_graphs_for_path<R>(
     repo: &R,
     scope: &Scope,
     stable_source_key: &str,
     path: &str,
-) -> CoreResult<()>
+) -> CoreResult<PriorValidity>
 where
     R: KnowledgeRepository + KnowledgeGraphRepository + ?Sized,
 {
+    let mut prior_validity = PriorValidity::new();
     if stable_source_key.is_empty() {
-        return Ok(());
+        return Ok(prior_validity);
     }
 
     // Find prior graphs for this (key, path) pair.
@@ -72,6 +83,19 @@ where
             }
             let _ = repo.delete_document(&doc_id, scope).await;
         }
+        // Temporal carry-over: capture the prior entities' validity stamps
+        // before the cascade deletes them, so the replacement graph's
+        // unchanged symbols can inherit their original `validFrom`.
+        if let Ok(prior_entities) = repo.list_entities_by_graph(&graph.id, scope).await {
+            for entity in prior_entities {
+                if let Some(vf) = entity.valid_from {
+                    prior_validity.insert(
+                        validity_key(&format!("{:?}", entity.kind), &entity.name),
+                        vf,
+                    );
+                }
+            }
+        }
         // Hard-delete: entities and relationships cascade inside delete_graph.
         repo.delete_graph(&graph.id, scope).await?;
     }
@@ -84,7 +108,7 @@ where
     // serial removed-path post-pass calls `maybe_delete_repo_node` explicitly
     // after all deletions are complete.
 
-    Ok(())
+    Ok(prior_validity)
 }
 
 /// If no document graphs remain for `stable_source_key`, deletes the

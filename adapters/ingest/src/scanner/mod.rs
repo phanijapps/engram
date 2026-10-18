@@ -315,6 +315,9 @@ where
         rel: String,
         content: Vec<u8>,
         hash: String,
+        /// Prior-graph validity stamps ("<kind>::<name>" -> validFrom) for
+        /// unchanged-symbol carry-over (temporal discrimination).
+        prior_validity: reconcile::PriorValidity,
     }
 
     let mut unchanged_rels: Vec<String> = Vec::new();
@@ -363,7 +366,7 @@ where
             &source_key,
             rel,
         )) {
-            Ok(()) => {
+            Ok(prior_validity) => {
                 if text.trim().is_empty() {
                     // Empty-file-fix: skip ingest (the chunker rejects empty
                     // text by contract); count as skipped and remember the
@@ -377,6 +380,7 @@ where
                         rel: rel.clone(),
                         content: bytes,
                         hash,
+                        prior_validity,
                     })
                 }
             }
@@ -561,6 +565,22 @@ where
                         g.unresolved =
                             engram_code::resolve_refs(&idx, &mut g.relationships, repo, path);
                     }
+                    // Temporal carry-over (whats-changed-temporal-flat): a
+                    // re-ingested file gets a brand-new graph id, so every
+                    // entity id churns even when the symbol is unchanged.
+                    // Inherit the prior graph's validFrom for symbols whose
+                    // (kind, name) identity survives — `recent` then moves
+                    // only for genuinely new/renamed symbols, not for the
+                    // 95% unchanged siblings of a changed file.
+                    for entity in &mut g.entities {
+                        let key = reconcile::validity_key(
+                            &format!("{:?}", entity.kind),
+                            &entity.name,
+                        );
+                        if let Some(prior) = item.prior_validity.get(&key) {
+                            entity.valid_from = Some(*prior);
+                        }
+                    }
                     // Persist the graph + entities + relationships + ledger.
                     let _ = block_on(async {
                         repo.put_graph(g.graph.clone()).await?;
@@ -665,7 +685,7 @@ where
             &source_key,
             removed_path,
         )) {
-            Ok(()) => {}
+            Ok(_prior_validity_of_removed_path) => {}
             Err(_) => {
                 // Surface the error and keep the path in the manifest so it
                 // is retried next scan rather than silently orphaned (FIX 2).

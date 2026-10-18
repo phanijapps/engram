@@ -186,6 +186,22 @@ impl KnowledgeRepository for PgKnowledgeStore {
         self.get_scoped("knowledge_relationships", &id.to_string(), scope)
     }
 
+    async fn list_entities_by_graph(
+        &self,
+        graph_id: &KnowledgeGraphId,
+        scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        self.conn.block_on(async {
+            let rows = self.conn.client.query(
+                "SELECT record_json FROM knowledge_entities                  WHERE graph_id=$1 AND tenant=$2 AND (subject IS NULL OR subject=$3) AND (workspace IS NULL OR workspace=$4)",
+                &[&graph_id.to_string(), &scope.tenant, &scope.subject, &scope.workspace],
+            ).await.map_err(|e| Self::pg_err(e.to_string()))?;
+            rows.iter().map(|r| {
+                serde_json::from_value::<KnowledgeEntity>(r.get(0)).map_err(|e| Self::pg_err(e.to_string()))
+            }).collect()
+        })
+    }
+
     async fn list_chunks_by_document(
         &self,
         doc_id: &DocumentId,

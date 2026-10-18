@@ -91,6 +91,18 @@ pub trait KnowledgeRepository: Send + Sync {
         })
     }
 
+    /// Lists the entities attached to a graph, within the caller's scope —
+    /// the identity carry-over read for re-ingest (temporal discrimination:
+    /// unchanged symbols keep their original `validFrom` across graph
+    /// replacement). Default: empty (unsupported).
+    async fn list_entities_by_graph(
+        &self,
+        _graph_id: &KnowledgeGraphId,
+        _scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        Ok(Vec::new())
+    }
+
     /// Lists the chunks belonging to a document, within the caller's scope.
     /// Used by source-reingest retraction to find a prior document's chunks
     /// before deleting them + their embeddings. Default: empty (unsupported).

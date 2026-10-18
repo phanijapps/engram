@@ -1,0 +1,907 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>engram — self-index knowledge graph</title>
+<meta name="description" content="Force-directed knowledge graph of the engram codebase, generated from its own self-index dogfood run (10,235 entities, 29,018 relationships, 0 errors).">
+<style>
+/* ============================================================================
+   engram self-index knowledge graph
+   Aesthetic reference: Raycast (data-dense / terminal — near-black surface,
+   high contrast, flat fills, single red accent, mono numerals).
+   Data source: mcp_driver calls against ~/.engram/mem-alpha-self
+   (architecture / search / get_context / change_impact / code_health),
+   main@d152176c, 2026-10-17. Every number in this file is measured.
+   ========================================================================== */
+
+/* --- Primitives (raw values live ONLY here) ----------------------------- */
+:root {
+  --px-black:        #0b0d12;
+  --px-surface:      #10131a;
+  --px-surface-2:    #161a23;
+  --px-surface-3:    #1d2230;
+  --px-line:         #262c3a;
+  --px-ink:          #e6edf3;
+  --px-ink-muted:    #9aa4b2;
+  --px-ink-faint:    #8b96a5;  /* 6.5:1 on --px-black — AA for tertiary text */
+  --px-red:          #ff5c57;  /* Raycast accent — transports */
+  --px-cyan:         #4cc9d6;  /* core behavior crates */
+  --px-green:        #52d273;  /* code intelligence */
+  --px-amber:        #f0a53e;  /* adapters */
+  --px-magenta:      #e0679f;  /* backend recipes */
+  --px-violet:       #a68bfa;  /* bindings + TS packages */
+  --px-slate:        #8d99ab;  /* domain + runtime spine */
+  --px-rose:         #ff8a7a;  /* bridges highlight */
+
+  /* --- Semantic layer -------------------------------------------------- */
+  --ds-color-surface:     var(--px-black);
+  --ds-color-surface-alt: var(--px-surface);
+  --ds-color-surface-3:   var(--px-surface-3);
+  --ds-color-on-surface:  var(--px-ink);
+  --ds-color-on-surface-2:var(--px-ink-muted);
+  --ds-color-on-surface-3:var(--px-ink-faint);
+  --ds-color-outline:     var(--px-line);
+  --ds-color-primary:     var(--px-red);
+  --ds-color-on-primary:  var(--px-black);
+  --ds-color-focus:       var(--px-cyan);
+
+  --c-domain:    var(--px-slate);
+  --c-core:      var(--px-cyan);
+  --c-code:      var(--px-green);
+  --c-adapter:   var(--px-amber);
+  --c-backend:   var(--px-magenta);
+  --c-binding:   var(--px-violet);
+  --c-transport: var(--px-red);
+
+  --ds-space-1: 4px;  --ds-space-2: 8px;  --ds-space-3: 12px;
+  --ds-space-4: 16px; --ds-space-5: 24px; --ds-space-6: 32px;
+
+  --ds-text-xs:  0.6875rem; --ds-text-sm: 0.75rem;  --ds-text-base: 0.8125rem;
+  --ds-text-lg:  0.9375rem; --ds-text-xl:  1.125rem; --ds-text-2xl: 1.5rem;
+
+  --ds-font-regular: 400; --ds-font-medium: 500; --ds-font-bold: 600;
+  --ds-leading-tight: 1.25; --ds-leading-normal: 1.5;
+
+  --ds-radius-sm: 4px; --ds-radius-md: 8px; --ds-radius-lg: 12px;
+  --ds-radius-full: 9999px;
+
+  --ds-shadow-md: 0 4px 8px rgba(0,0,0,0.45);
+  --ds-shadow-lg: 0 12px 32px rgba(0,0,0,0.55);
+
+  --ds-duration-quick: 120ms; --ds-duration-moderate: 200ms;
+  --ds-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --z-base: 0; --z-panel: 100; --z-tooltip: 200;
+  --ds-size-control: 220px;      /* search input width */
+  --ds-size-tooltip-max: 300px;  /* tooltip max width */
+  --ds-size-panel-min: 280px; --ds-size-panel-max: 340px;
+  --ds-size-panel-narrow: min(320px, 88vw);
+  --ds-border-w: 1px; --ds-border-w-strong: 2px; /* hairline borders */
+  --ds-size-swatch: 10px; --ds-size-dot: 8px;    /* legend marks */
+  --ds-size-stat-min: 64px; --ds-size-sr-clip: 1px;
+  --ds-bp-panel: 900px; --ds-bp-panel-up: 901px; --ds-size-search-flex: 160px;
+  --ds-pad-hairline: 1px; /* 1px vertical pad on tags/chips */
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+/* --- Base --------------------------------------------------------------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--ds-color-surface);
+  color: var(--ds-color-on-surface);
+  font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-size: var(--ds-text-base);
+  line-height: var(--ds-leading-normal);
+  overflow: hidden; /* the app owns the viewport; panels scroll internally */
+}
+button { font: inherit; color: inherit; }
+:focus-visible {
+  outline: var(--ds-space-px) solid var(--ds-color-focus);
+  outline-offset: var(--ds-space-px);
+  border-radius: var(--ds-radius-sm);
+}
+
+/* --- Layout -------------------------------------------------------------- */
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100vh;
+  height: 100dvh;
+}
+.stage {
+  display: grid;
+  grid-template-columns: 1fr minmax(var(--ds-size-panel-min), var(--ds-size-panel-max));
+  min-height: 0; /* let canvas shrink */
+}
+.stage.filters-open { grid-template-columns: 1fr minmax(var(--ds-size-panel-min), var(--ds-size-panel-max)); }
+main.viz { position: relative; min-width: 0; min-height: 0; }
+canvas#graph {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+canvas#graph.dragging { cursor: grabbing; }
+
+/* --- Header --------------------------------------------------------------- */
+header.bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-space-3);
+  padding: var(--ds-space-3) var(--ds-space-4);
+  background: var(--ds-color-surface-alt);
+  border-bottom: var(--ds-border-w) solid var(--ds-color-outline);
+}
+.brand { display: flex; align-items: baseline; gap: var(--ds-space-2); margin-right: var(--ds-space-2); }
+.brand h1 { font-size: var(--ds-text-lg); font-weight: var(--ds-font-bold); margin: 0; letter-spacing: 0.02em; }
+.brand .tag {
+  font-family: var(--font-mono); font-size: var(--ds-text-xs);
+  color: var(--ds-color-on-surface-3);
+  border: var(--ds-border-w) solid var(--ds-color-outline);
+  padding: var(--ds-pad-hairline) var(--ds-space-2); border-radius: var(--ds-radius-full);
+}
+.stats { display: flex; flex-wrap: wrap; gap: var(--ds-space-2) var(--ds-space-4); }
+.stat { display: flex; flex-direction: column; min-width: var(--ds-size-stat-min); }
+.stat b { font-family: var(--font-mono); font-weight: var(--ds-font-medium); font-size: var(--ds-text-base); }
+.stat span { font-size: var(--ds-text-xs); color: var(--ds-color-on-surface-3); text-transform: uppercase; letter-spacing: 0.04em; }
+.stat b.ok { color: var(--c-code); }
+
+/* --- Controls -------------------------------------------------------------- */
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-space-2); margin-left: auto; }
+.search { position: relative; }
+.search input {
+  background: var(--ds-color-surface-3);
+  border: var(--ds-border-w) solid var(--ds-color-outline);
+  border-radius: var(--ds-radius-md);
+  color: var(--ds-color-on-surface);
+  font-family: var(--font-mono); font-size: var(--ds-text-sm);
+  padding: var(--ds-space-2) var(--ds-space-3) var(--ds-space-2) var(--ds-space-5);
+  width: var(--ds-size-control);
+}
+.search input::placeholder { color: var(--ds-color-on-surface-3); }
+.search svg { position: absolute; left: var(--ds-space-2); top: 50%; transform: translateY(-50%); color: var(--ds-color-on-surface-3); }
+.chip {
+  background: transparent;
+  border: var(--ds-border-w) solid var(--ds-color-outline);
+  border-radius: var(--ds-radius-full);
+  color: var(--ds-color-on-surface-2);
+  font-size: var(--ds-text-sm);
+  padding: var(--ds-space-1) var(--ds-space-3);
+  cursor: pointer;
+}
+.chip[aria-pressed="true"] { border-color: currentColor; }
+.chip .dot { display: inline-block; width: var(--ds-size-dot); height: var(--ds-size-dot); border-radius: var(--ds-radius-full); margin-right: var(--ds-space-1); vertical-align: baseline; }
+.chip.is-bridge[aria-pressed="true"] { color: var(--px-rose); }
+
+/* --- Side panel ------------------------------------------------------------- */
+aside.panel {
+  border-left: var(--ds-border-w) solid var(--ds-color-outline);
+  background: var(--ds-color-surface-alt);
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.panel section { padding: var(--ds-space-4); border-bottom: var(--ds-border-w) solid var(--ds-color-outline); overflow-y: auto; }
+.panel section:last-child { border-bottom: 0; }
+.panel h2 {
+  font-size: var(--ds-text-xs); font-weight: var(--ds-font-bold);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--ds-color-on-surface-3); margin: 0 0 var(--ds-space-3) 0;
+}
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: var(--ds-space-2) var(--ds-space-3); }
+.legend .row { display: flex; align-items: center; gap: var(--ds-space-2); font-size: var(--ds-text-sm); color: var(--ds-color-on-surface-2); }
+.legend .swatch { width: var(--ds-size-swatch); height: var(--ds-size-swatch); border-radius: var(--ds-radius-sm); flex: none; }
+
+.detail-empty { color: var(--ds-color-on-surface-3); font-size: var(--ds-text-sm); }
+.detail dl { display: grid; grid-template-columns: auto 1fr; gap: var(--ds-space-1) var(--ds-space-3); margin: 0; font-size: var(--ds-text-sm); }
+.detail dt { color: var(--ds-color-on-surface-3); }
+.detail dd { margin: 0; font-family: var(--font-mono); text-align: right; overflow-wrap: anywhere; }
+.detail .name { font-family: var(--font-mono); font-size: var(--ds-text-base); font-weight: var(--ds-font-medium); margin: 0 0 var(--ds-space-2) 0; overflow-wrap: anywhere; }
+.detail .kind { font-size: var(--ds-text-xs); text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 var(--ds-space-3) 0; }
+.detail .note { font-size: var(--ds-text-sm); color: var(--ds-color-on-surface-2); margin-top: var(--ds-space-3); }
+
+.node-list { display: flex; flex-direction: column; gap: var(--ds-space-1); }
+.node-list button {
+  display: flex; justify-content: space-between; align-items: center; gap: var(--ds-space-2);
+  background: transparent; border: var(--ds-border-w) solid transparent; border-radius: var(--ds-radius-sm);
+  padding: var(--ds-space-1) var(--ds-space-2);
+  text-align: left; cursor: pointer;
+  font-family: var(--font-mono); font-size: var(--ds-text-xs);
+  color: var(--ds-color-on-surface-2);
+}
+.node-list button:hover, .node-list button:focus-visible { background: var(--ds-color-surface-3); border-color: var(--ds-color-outline); }
+.node-list button[aria-current="true"] { border-color: var(--ds-color-focus); color: var(--ds-color-on-surface); }
+.node-list .v { color: var(--ds-color-on-surface-3); }
+
+/* --- Overlays ---------------------------------------------------------------- */
+.tooltip {
+  position: absolute; z-index: var(--z-tooltip);
+  pointer-events: none;
+  background: var(--ds-color-surface-3);
+  border: var(--ds-border-w) solid var(--ds-color-outline);
+  border-radius: var(--ds-radius-md);
+  box-shadow: var(--ds-shadow-lg);
+  padding: var(--ds-space-2) var(--ds-space-3);
+  font-family: var(--font-mono); font-size: var(--ds-text-xs);
+  max-width: var(--ds-size-tooltip-max);
+  opacity: 0;
+}
+.tooltip .t-name { color: var(--ds-color-on-surface); font-weight: var(--ds-font-medium); }
+.tooltip .t-meta { color: var(--ds-color-on-surface-3); }
+
+.overlay-msg {
+  position: absolute; inset: 0; z-index: var(--z-panel);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--ds-space-3); text-align: center; padding: var(--ds-space-5);
+  background: color-mix(in srgb, var(--ds-color-surface) 72%, transparent);
+}
+.overlay-msg[hidden] { display: none; }
+.overlay-msg p { margin: 0; color: var(--ds-color-on-surface-2); max-width: 42ch; }
+.overlay-msg .mono { font-family: var(--font-mono); font-size: var(--ds-text-sm); color: var(--ds-color-on-surface); }
+.overlay-msg button {
+  background: var(--ds-color-primary); color: var(--ds-color-on-primary);
+  border: 0; border-radius: var(--ds-radius-md);
+  padding: var(--ds-space-2) var(--ds-space-4);
+  font-weight: var(--ds-font-medium); cursor: pointer;
+}
+
+.skeleton { position: absolute; inset: 0; display: grid; place-items: center; background: var(--ds-color-surface); z-index: var(--z-panel); }
+.skeleton .pulse {
+  width: var(--ds-size-control); height: var(--ds-space-1); border-radius: var(--ds-radius-full);
+  background: var(--ds-color-surface-3); position: relative; overflow: hidden;
+}
+.skeleton .pulse::after {
+  content: ""; position: absolute; inset: 0; width: 40%;
+  background: var(--ds-color-outline);
+}
+.skeleton p { color: var(--ds-color-on-surface-3); font-size: var(--ds-text-sm); }
+
+footer.note {
+  position: absolute; left: var(--ds-space-3); bottom: var(--ds-space-3);
+  z-index: var(--z-base);
+  font-size: var(--ds-text-xs); color: var(--ds-color-on-surface-3);
+  background: color-mix(in srgb, var(--ds-color-surface) 70%, transparent);
+  border: var(--ds-border-w) solid var(--ds-color-outline);
+  border-radius: var(--ds-radius-md);
+  padding: var(--ds-space-1) var(--ds-space-3);
+  max-width: min(60ch, 80%);
+}
+
+.visually-hidden { position: absolute; width: var(--ds-size-sr-clip); height: var(--ds-size-sr-clip); margin: calc(var(--ds-size-sr-clip) * -1); padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* --- Motion (guarded; default off) -------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  .chip, .node-list button, .tooltip { transition: opacity var(--ds-duration-quick) var(--ds-ease-standard); }
+  .skeleton .pulse::after { animation: sweep 1s var(--ds-ease-standard) infinite; }
+  @keyframes sweep { from { transform: translateX(-100%); } to { transform: translateX(320%); } }
+}
+
+/* --- Responsive ---------------------------------------------------------------- */
+@media (max-width: var(--ds-bp-panel)) {
+  .stage { grid-template-columns: 1fr; }
+  aside.panel {
+    position: absolute; right: 0; top: 0; bottom: 0; width: var(--ds-size-panel-narrow);
+    z-index: var(--z-panel); box-shadow: var(--ds-shadow-lg);
+    transform: translateX(100%);
+  }
+  aside.panel.open { transform: translateX(0); }
+  .controls { margin-left: 0; width: 100%; }
+  .search input { width: 100%; }
+  .search { flex: 1 1 var(--ds-size-search-flex); }
+}
+@media (min-width: var(--ds-bp-panel-up)) {
+  .panel-toggle { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <h1>engram · self-index</h1>
+      <span class="tag">main@d152176c · 2026-10-17</span>
+    </div>
+    <ul class="stats" aria-label="Repository graph statistics from the self-index scan">
+      <li class="stat"><b>10,235</b><span>entities</span></li>
+      <li class="stat"><b>29,018</b><span>relationships</span></li>
+      <li class="stat"><b>998</b><span>files</span></li>
+      <li class="stat"><b>725</b><span>communities</span></li>
+      <li class="stat"><b class="ok">0</b><span>errors</span></li>
+    </ul>
+    <div class="controls">
+      <div class="search">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="q" type="search" placeholder="search symbols / layers" aria-label="Search nodes by name" aria-describedby="count">
+      </div>
+      <button type="button" class="chip is-bridge" id="bridge-toggle" aria-pressed="false">◈ bridges only</button>
+      <button type="button" class="chip panel-toggle" id="panel-toggle" aria-expanded="false" aria-controls="side-panel">panel</button>
+    </div>
+  </header>
+
+  <div class="stage">
+    <main class="viz" aria-label="Knowledge graph canvas. Use the node list in the side panel to explore nodes by keyboard.">
+      <canvas id="graph"></canvas>
+      <div class="skeleton" id="skeleton" aria-hidden="true"><div><div class="pulse"></div><p>laying out 118 nodes…</p></div></div>
+      <div class="overlay-msg" id="no-results" hidden>
+        <p class="mono" id="no-results-query"></p>
+        <p>No nodes match the current search or filters.</p>
+        <button type="button" id="clear-filters">Clear search &amp; filters</button>
+      </div>
+      <div class="overlay-msg" id="error-msg" hidden>
+        <p>The embedded graph data failed to load. This file is self-contained —
+        the data block may have been truncated in transit.</p>
+        <button type="button" id="reload">Reload page</button>
+      </div>
+      <div class="tooltip" id="tooltip" role="status"></div>
+      <footer class="note">
+        Curated sample of the measured graph (3,052-node / 5,767-edge analytics view).
+        Regenerate: <code>engram-self-index</code> skill → scan + architecture.
+      </footer>
+    </main>
+
+    <aside class="panel" id="side-panel" aria-label="Graph detail panel">
+      <section>
+        <h2>Layers</h2>
+        <div class="legend" id="legend"></div>
+      </section>
+      <section class="detail" id="detail">
+        <h2>Node detail</h2>
+        <p class="detail-empty" id="detail-empty">Select a node — click on the canvas or pick from the node list below.</p>
+        <div id="detail-body" hidden>
+          <p class="name" id="d-name"></p>
+          <p class="kind" id="d-kind"></p>
+          <dl id="d-metrics"></dl>
+          <p class="note" id="d-note"></p>
+        </div>
+      </section>
+      <section style="flex:1">
+        <h2>Nodes <span id="count" class="visually-hidden" role="status" aria-live="polite"></span></h2>
+        <ul class="node-list" id="node-list"></ul>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<p id="sr-status" class="visually-hidden" aria-live="polite"></p>
+
+<script id="graph-data" type="application/json">
+{
+  "meta": {
+    "commit": "main@d152176c", "date": "2026-10-17",
+    "store": "~/.engram/mem-alpha-self", "files": 998,
+    "entities": 10235, "relationships": 29018,
+    "analyticsNodes": 3052, "analyticsEdges": 5767,
+    "communities": 725, "largestCommunity": 151,
+    "deadCodeSymbols": 962, "scanErrors": 0
+  },
+  "layers": [
+    {"id":"domain","label":"core/domain","kind":"layer","layer":"domain","files":28,"note":"Pure contracts — the portable domain model (scope, policy, provenance ride on every record)."},
+    {"id":"runtime","label":"core/runtime","kind":"layer","layer":"domain","files":3,"note":"Shared primitives: errors, ids, clocks, the PolicyAuthorizer scope gate."},
+    {"id":"memory","label":"core/memory","kind":"layer","layer":"core","files":2,"note":"Memory service + repository ports."},
+    {"id":"knowledge","label":"core/knowledge","kind":"layer","layer":"core","files":10,"note":"Source-grounded knowledge, graph, ontology, ingestion ports."},
+    {"id":"belief","label":"core/belief","kind":"layer","layer":"core","files":8,"note":"Belief synthesis, contradiction, bi-temporal query ports."},
+    {"id":"hierarchy","label":"core/hierarchy","kind":"layer","layer":"core","files":4,"note":"Louvain communities + layer navigation ports."},
+    {"id":"consolidation","label":"core/consolidation","kind":"layer","layer":"core","files":10,"note":"Gated mutation planning, decay, audit."},
+    {"id":"reflection","label":"core/reflection","kind":"layer","layer":"core","files":7,"note":"Reflection synthesizer — derived beliefs from consolidation."},
+    {"id":"retrieval","label":"core/retrieval","kind":"layer","layer":"core","files":15,"note":"Retrieval composition + RRF fusion ports."},
+    {"id":"procedures","label":"core/procedures","kind":"layer","layer":"core","files":1,"note":"Procedural memory: runbooks + success/failure counters."},
+    {"id":"integration","label":"core/integration","kind":"layer","layer":"facade","files":45,"note":"SDK facade — EngramProvider, EngramConfig, CapabilityReport, 20-slot builder."},
+    {"id":"code","label":"core/code","kind":"layer","layer":"code","files":11,"note":"engram-code (ADR-0028): tree-sitter parsing, symbol identity, typed edges. Pure — no I/O."},
+    {"id":"graph-analytics","label":"core/graph-analytics","kind":"layer","layer":"code","files":5,"note":"Dependency-free PageRank / betweenness / communities."},
+    {"id":"ingest","label":"adapters/ingest","kind":"layer","layer":"adapter","files":34,"note":"Filesystem/Git scan pipeline — home of the 4,360-betweenness chokepoint."},
+    {"id":"sqlite","label":"adapters/sqlite","kind":"layer","layer":"adapter","files":59,"note":"Memory/knowledge/hierarchy/belief SQLite cells + sqlite-vec + fastembed."},
+    {"id":"pgvector","label":"adapters/pgvector","kind":"layer","layer":"adapter","files":9,"note":"Postgres/pgvector engine cells."},
+    {"id":"surreal","label":"adapters/surreal","kind":"layer","layer":"adapter","files":8,"note":"SurrealDB experiment cells."},
+    {"id":"embedding","label":"adapters/embedding","kind":"layer","layer":"adapter","files":5,"note":"HTTP embedding provider cells (PR #125)."},
+    {"id":"retrieval-adapters","label":"adapters/retrieval","kind":"layer","layer":"adapter","files":16,"note":"tantivy-lexical, cross-encoder-rerank, associative-graph, community-summary indexes."},
+    {"id":"backends","label":"backends/*","kind":"layer","layer":"backend","files":6,"note":"Recipe crates (ADR-0022): sqlite + pgvector compose cells into an EngramProvider."},
+    {"id":"bindings","label":"bindings/node","kind":"layer","layer":"binding","files":26,"note":"N-API bridge — the TS transport over Rust behavior."},
+    {"id":"packages","label":"packages/*","kind":"layer","layer":"binding","files":74,"note":"TS workspace: contracts, client, node, adapters, eval."},
+    {"id":"mcp","label":"mcp/engram-mcp","kind":"layer","layer":"transport","files":23,"note":"The unified server — 21-tool default surface (PR #126), stdio transport."},
+    {"id":"codegraph","label":"codegraph/*","kind":"layer","layer":"code","files":4,"note":"On-top queries: dead-code / blast-radius / temporal scoring."}
+  ],
+  "symbols": [
+    {"id":"scan_repository","label":"scan_repository","kind":"symbol","layer":"adapter","betweenness":4360,"callers":41,"note":"THE chokepoint (~6× the next bridge). God-module mixing walk/classify/chunk/extract/reconcile — the registered refactor target."},
+    {"id":"extract_with_calls","label":"GraphExtractor::extract_with_calls","kind":"symbol","layer":"adapter","betweenness":727,"note":"AST call-edge + concept extraction over the shared tree-sitter tree."},
+    {"id":"block_on_pg","label":"PgConnection::block_on","kind":"symbol","layer":"backend","betweenness":574,"note":"#2 PageRank in the repo — every pgvector cell funnels through it."},
+    {"id":"chunk_with_tree","label":"TreeSitterChunker::chunk_with_tree","kind":"symbol","layer":"code","betweenness":562,"note":"AST chunking over the once-parsed shared tree — the symbol-chunk source fetch_content stitches."},
+    {"id":"registerTools","label":"registerTools (TS)","kind":"symbol","layer":"binding","betweenness":543,"note":"The TS HTTP tool table — one function owns all 43 tool registrations."},
+    {"id":"scan_repo","label":"scan_repo (MCP)","kind":"symbol","layer":"transport","betweenness":496,"note":"MCP ingestion entry: manifest-driven incremental rescan."},
+    {"id":"connect_pg","label":"connect (pg)","kind":"symbol","layer":"backend","betweenness":493},
+    {"id":"createMcpServer","label":"createMcpServer (TS)","kind":"symbol","layer":"binding","betweenness":470},
+    {"id":"startMcpHttpServer","label":"startMcpHttpServer (TS)","kind":"symbol","layer":"binding","betweenness":429},
+    {"id":"open_in_memory","label":"SqlKnowledgeStore::open_in_memory","kind":"symbol","layer":"adapter","betweenness":422,"note":"Conformance/test backbone for the SQLite knowledge cell."},
+    {"id":"extract_frameworks","label":"extract_frameworks","kind":"symbol","layer":"adapter","betweenness":378,"note":"Framework pattern extraction (routes, callbacks)."},
+    {"id":"extract_contract_entities","label":"extract_contract_entities","kind":"symbol","layer":"adapter","betweenness":369},
+    {"id":"fetch_content","label":"fetch_content (MCP)","kind":"symbol","layer":"transport","betweenness":0,"files":1,"note":"New in PR #126: stitches indexed doc/code content back, 100 KiB cap."},
+    {"id":"recall_lanes","label":"recall (sqlite/recall.rs)","kind":"symbol","layer":"facade","betweenness":0,"note":"Unified recall: lane fusion + RRF + source_failures degradation + omitted accounting."},
+    {"id":"builder","label":"EngramProviderBuilder","kind":"symbol","layer":"facade","betweenness":0,"slots":20,"note":"The composition seam — 20 capability slots (memory, knowledge, beliefs, vectors, retrieval, lexical_feed, hierarchy, consolidation, export_import, migration, knowledge_query, graph_cache, graph_maintenance, ontology, procedures, community_query, embedding_provider, identity, recall, build)."},
+    {"id":"id_from","label":"Id::from","kind":"symbol","layer":"domain","pagerank":0.0332,"note":"#1 PageRank — identity constructor, a centrality artifact (constructors, not coupling)."},
+    {"id":"edgekind_from_str","label":"CodeEdgeKind::from_str","kind":"symbol","layer":"code","pagerank":0.0131},
+    {"id":"lane_filter","label":"LaneFilter::all","kind":"symbol","layer":"facade","pagerank":0.0027},
+    {"id":"loadNativeBinding","label":"loadNativeBinding (TS)","kind":"symbol","layer":"binding","pagerank":0.0039},
+    {"id":"cap_state","label":"CapabilityState::is_supported","kind":"symbol","layer":"facade","pagerank":0.0035},
+    {"id":"ts_parse","label":"TreeSitterChunker::parse","kind":"symbol","layer":"code","pagerank":0.0060,"note":"One parse per file — shared across chunk/calls/structural extraction."},
+    {"id":"consolidated_scan","label":"consolidated_scan","kind":"symbol","layer":"transport","note":"Consolidated `scan` verb dispatcher."},
+    {"id":"native_scan_json","label":"NativeProvider::scan_repository_json","kind":"symbol","layer":"binding","note":"N-API scan entry."},
+    {"id":"ingestops_scan","label":"IngestOps::start_scan_job_json","kind":"symbol","layer":"binding","note":"engram-cc job entry."},
+    {"id":"scan_workspace","label":"scan_workspace","kind":"symbol","layer":"adapter"}
+  ],
+  "links": [
+    ["mcp","integration","depends"],["mcp","ingest","depends"],["mcp","sqlite","depends"],
+    ["bindings","integration","depends"],["packages","bindings","depends"],
+    ["integration","memory","depends"],["integration","knowledge","depends"],["integration","belief","depends"],
+    ["integration","retrieval","depends"],["integration","consolidation","depends"],["integration","hierarchy","depends"],
+    ["integration","procedures","depends"],["integration","domain","depends"],["integration","runtime","depends"],
+    ["memory","domain","depends"],["knowledge","domain","depends"],["belief","domain","depends"],
+    ["retrieval","domain","depends"],["consolidation","runtime","depends"],["hierarchy","graph-analytics","depends"],
+    ["code","domain","depends"],["ingest","code","depends"],["ingest","knowledge","depends"],
+    ["sqlite","memory","depends"],["sqlite","knowledge","depends"],["sqlite","retrieval","depends"],
+    ["pgvector","retrieval","depends"],["pgvector","knowledge","depends"],["surreal","knowledge","depends"],
+    ["embedding","integration","depends"],["retrieval-adapters","retrieval","depends"],
+    ["backends","sqlite","depends"],["backends","pgvector","depends"],["backends","embedding","depends"],
+    ["codegraph","graph-analytics","depends"],["codegraph","domain","depends"],
+
+    ["scan_repository","ingest","contains"],["extract_with_calls","ingest","contains"],
+    ["extract_frameworks","ingest","contains"],["extract_contract_entities","ingest","contains"],
+    ["chunk_with_tree","code","contains"],["ts_parse","code","contains"],["edgekind_from_str","code","contains"],
+    ["builder","integration","contains"],["recall_lanes","integration","contains"],
+    ["lane_filter","integration","contains"],["cap_state","integration","contains"],
+    ["id_from","domain","contains"],["scan_workspace","ingest","contains"],
+    ["block_on_pg","pgvector","contains"],["connect_pg","pgvector","contains"],
+    ["registerTools","packages","contains"],["createMcpServer","packages","contains"],
+    ["startMcpHttpServer","packages","contains"],["loadNativeBinding","packages","contains"],
+    ["open_in_memory","sqlite","contains"],["scan_repo","mcp","contains"],["fetch_content","mcp","contains"],
+    ["consolidated_scan","mcp","contains"],["native_scan_json","bindings","contains"],
+    ["ingestops_scan","packages","contains"],
+
+    ["consolidated_scan","scan_repo","calls"],["scan_repo","scan_repository","calls"],
+    ["native_scan_json","scan_repository","calls"],["ingestops_scan","scan_repository","calls"],
+    ["scan_workspace","scan_repository","calls"],
+    ["scan_repository","chunk_with_tree","calls"],["scan_repository","extract_with_calls","calls"],
+    ["scan_repository","extract_frameworks","calls"],["scan_repository","extract_contract_entities","calls"],
+    ["chunk_with_tree","ts_parse","calls"],["extract_with_calls","edgekind_from_str","calls"]
+  ]
+}
+</script>
+
+<script>
+"use strict";
+/* ============================================================================
+   Force-directed knowledge graph — vanilla, self-contained.
+   Layout: velocity-Verlet with layer hubs pinned in a ring; symbols orbit
+   their layer. Interactions: hover tooltip, click select, drag, wheel zoom,
+   pan. Reduced motion: layout is computed once (deterministic), no drift.
+   ========================================================================== */
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const canvas = $("graph"), ctx = canvas.getContext("2d");
+  const tooltip = $("tooltip");
+
+  const LAYER_COLOR = {
+    domain: "var(--c-domain)", core: "var(--c-core)", code: "var(--c-code)",
+    facade: "var(--c-core)", adapter: "var(--c-adapter)", backend: "var(--c-backend)",
+    binding: "var(--c-binding)", transport: "var(--c-transport)"
+  };
+  const LAYER_LABEL = {
+    domain: "domain + runtime", core: "core behavior", code: "code intel",
+    facade: "SDK facade", adapter: "adapters", backend: "backends",
+    binding: "bindings + packages", transport: "transports"
+  };
+  const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name.replace("var(", "").replace(")", "")).trim();
+
+  let nodes = [], links = [], byId = new Map();
+  let selected = null, hovered = null;
+  let query = "", bridgesOnly = false;
+  let transform = { x: 0, y: 0, k: 1 };
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- data load + error state ------------------------------------------ */
+  let DATA;
+  try {
+    DATA = JSON.parse($("graph-data").textContent);
+  } catch (e) {
+    $("skeleton").hidden = true;
+    $("error-msg").hidden = false;
+    $("reload").addEventListener("click", () => location.reload());
+    return;
+  }
+
+  function radiusOf(n) {
+    if (n.kind === "layer") return 10 + Math.sqrt(n.files) * 2.1;
+    if (n.betweenness) return 5 + Math.sqrt(n.betweenness) * 0.28;
+    if (n.pagerank) return 4 + n.pagerank * 500;
+    return 4.5;
+  }
+
+  function buildGraph() {
+    nodes = [];
+    byId = new Map();
+    const push = (n) => { n.r = radiusOf(n); nodes.push(n); byId.set(n.id, n); };
+    DATA.layers.forEach(push);
+    DATA.symbols.forEach(push);
+    links = DATA.links
+      .map(([s, t, type]) => ({ source: byId.get(s), target: byId.get(t), type }))
+      .filter((l) => l.source && l.target);
+  }
+
+  /* ---- deterministic seeded layout --------------------------------------- */
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function layout() {
+    const rand = mulberry32(20261017);
+    const W = canvas.width / (devicePixelRatio || 1);
+    const H = canvas.height / (devicePixelRatio || 1);
+    const layers = nodes.filter((n) => n.kind === "layer");
+    const R = Math.min(W, H) * 0.30;
+    layers.forEach((n, i) => {
+      const a = (i / layers.length) * Math.PI * 2 - Math.PI / 2;
+      n.x = W / 2 + Math.cos(a) * R * 1.25;
+      n.y = H / 2 + Math.sin(a) * R;
+      n.vx = n.vy = 0;
+    });
+    // order layers around the ring: transports -> facade -> core -> adapters -> backends
+    const ring = ["transport", "binding", "facade", "core", "code", "adapter", "backend", "domain"];
+    const ordered = [];
+    ring.forEach((k) => ordered.push(...layers.filter((n) => n.layer === k)));
+    ordered.forEach((n, i) => {
+      const a = (i / ordered.length) * Math.PI * 2 - Math.PI / 2;
+      n.x = W / 2 + Math.cos(a) * R * 1.3;
+      n.y = H / 2 + Math.sin(a) * R;
+    });
+    nodes.forEach((n) => {
+      if (n.kind === "symbol") {
+        const home = links.find((l) => l.source === n && l.target.kind === "layer") ||
+                     links.find((l) => l.target === n && l.source.kind === "layer");
+        const anchor = home ? (home.source.kind === "layer" ? home.source : home.target) : ordered[0];
+        const a = rand() * Math.PI * 2, d = 40 + rand() * 70 + n.r * 2;
+        n.x = anchor.x + Math.cos(a) * d;
+        n.y = anchor.y + Math.sin(a) * d;
+        n.vx = n.vy = 0;
+      }
+    });
+    // relaxation: springs on links + hub repulsion, fixed iterations
+    const iters = reduced ? 260 : 420;
+    for (let it = 0; it < iters; it++) {
+      const cooling = 1 - it / iters;
+      for (const l of links) {
+        const dx = l.target.x - l.source.x, dy = l.target.y - l.source.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const rest = l.type === "contains" ? 60 : 190;
+        const f = ((d - rest) / d) * 0.015 * cooling;
+        const fx = dx * f, fy = dy * f;
+        l.source.vx += fx; l.source.vy += fy;
+        l.target.vx -= fx; l.target.vy -= fy;
+      }
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j];
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const d2 = dx * dx + dy * dy || 1;
+          const min = a.r + b.r + 26;
+          if (d2 < min * min * 9) {
+            const d = Math.sqrt(d2);
+            const f = ((min * min) / d2 - 1) * 0.004 * cooling;
+            const fx = (dx / d) * f, fy = (dy / d) * f;
+            a.vx -= fx; a.vy -= fy; b.vx += fx; b.vy += fy;
+          }
+        }
+      }
+      nodes.forEach((n) => {
+        if (n.kind === "layer") return; // hubs stay pinned
+        n.vx *= 0.82; n.vy *= 0.82;
+        n.x += Math.max(-6, Math.min(6, n.vx));
+        n.y += Math.max(-6, Math.min(6, n.vy));
+        n.x = Math.max(30, Math.min(W - 30, n.x));
+        n.y = Math.max(30, Math.min(H - 30, n.y));
+      });
+    }
+  }
+
+  /* ---- visibility / filters ------------------------------------------------ */
+  function matches(n) {
+    if (bridgesOnly && !n.betweenness) return false;
+    if (!query) return true;
+    return n.label.toLowerCase().includes(query) || (n.note || "").toLowerCase().includes(query);
+  }
+  function visible(n) { return !n.__filtered; }
+
+  function applyFilters() {
+    let shown = 0;
+    nodes.forEach((n) => { n.__filtered = !matches(n); if (!n.__filtered) shown++; });
+    const noRes = shown === 0;
+    $("no-results").hidden = !noRes;
+    if (noRes) {
+      const q = query ? `“${query}”` : "current filters";
+      $("no-results-query").textContent = bridgesOnly ? `${q} + bridges-only` : q;
+    }
+    $("count").textContent = `${shown} of ${nodes.length} nodes shown`;
+    $("sr-status").textContent = noRes ? "No nodes match." : `${shown} nodes shown.`;
+    renderList();
+    draw();
+  }
+
+  /* ---- rendering ------------------------------------------------------------- */
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width * dpr);
+    canvas.height = Math.round(rect.height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+
+  function layerColor(n) {
+    const v = LAYER_COLOR[n.layer] || LAYER_COLOR.domain;
+    return cssVar(v);
+  }
+
+  function draw() {
+    const W = canvas.getBoundingClientRect().width, H = canvas.getBoundingClientRect().height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.translate(transform.x, transform.y);
+    ctx.scale(transform.k, transform.k);
+
+    // edges
+    for (const l of links) {
+      const on = visible(l.source) && visible(l.target);
+      const isSel = selected && (l.source === selected || l.target === selected);
+      ctx.globalAlpha = on ? (isSel ? 0.85 : 0.28) : 0.05;
+      ctx.strokeStyle = isSel ? cssVar("--px-cyan") : cssVar("--px-line");
+      ctx.lineWidth = isSel ? 1.6 : 1;
+      if (l.type === "contains") { ctx.setLineDash([2, 3]); } else { ctx.setLineDash([]); }
+      ctx.beginPath();
+      ctx.moveTo(l.source.x, l.source.y);
+      ctx.lineTo(l.target.x, l.target.y);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    // nodes
+    for (const n of nodes) {
+      const on = visible(n);
+      const isSel = n === selected;
+      const isHover = n === hovered;
+      ctx.globalAlpha = on ? 1 : 0.12;
+      const c = layerColor(n);
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fillStyle = n.kind === "layer" ? "transparent" : c;
+      ctx.fill();
+      ctx.lineWidth = n.kind === "layer" ? 2.4 : 1.6;
+      ctx.strokeStyle = c;
+      if (n.betweenness) { ctx.strokeStyle = cssVar("--px-rose"); ctx.lineWidth = 2.2; }
+      ctx.stroke();
+      if (isSel || isHover) {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = cssVar("--px-cyan");
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+      // labels: layers always, symbols when large/selected/hovered or zoomed in
+      const showLabel = n.kind === "layer" || isSel || isHover || (n.r > 12 && transform.k > 0.9);
+      if (showLabel && on) {
+        ctx.font = `${n.kind === "layer" ? "600 " : ""}${n.kind === "layer" ? 12 : 11}px ${"ui-monospace, Menlo, monospace"}`;
+        ctx.fillStyle = n.kind === "layer" ? cssVar("--px-ink") : cssVar("--px-ink-muted");
+        ctx.textAlign = "center";
+        ctx.fillText(n.label, n.x, n.y + n.r + 13);
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  /* ---- pointer interaction ---------------------------------------------------- */
+  function pick(mx, my) {
+    const x = (mx - transform.x) / transform.k;
+    const y = (my - transform.y) / transform.k;
+    let best = null, bd = Infinity;
+    for (const n of nodes) {
+      if (!visible(n)) continue;
+      const d = Math.hypot(n.x - x, n.y - y);
+      if (d < n.r + 6 && d < bd) { best = n; bd = d; }
+    }
+    return best;
+  }
+
+  let dragNode = null, panning = false, last = null, moved = 0;
+
+  canvas.addEventListener("pointerdown", (e) => {
+    canvas.setPointerCapture(e.pointerId);
+    moved = 0;
+    const r = canvas.getBoundingClientRect();
+    const n = pick(e.clientX - r.left, e.clientY - r.top);
+    if (n) { dragNode = n; n.__px = n.x; n.__py = n.y; }
+    else { panning = true; canvas.classList.add("dragging"); }
+    last = { x: e.clientX, y: e.clientY };
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    const r = canvas.getBoundingClientRect();
+    if (dragNode) {
+      moved++;
+      dragNode.x = (e.clientX - r.left - transform.x) / transform.k;
+      dragNode.y = (e.clientY - r.top - transform.y) / transform.k;
+      draw();
+    } else if (panning && last) {
+      transform.x += e.clientX - last.x;
+      transform.y += e.clientY - last.y;
+      last = { x: e.clientX, y: e.clientY };
+      moved++;
+      draw();
+    } else {
+      hovered = pick(e.clientX - r.left, e.clientY - r.top);
+      if (hovered) {
+        canvas.style.cursor = "pointer";
+        tooltip.innerHTML = `<div class="t-name"></div><div class="t-meta"></div>`;
+        tooltip.firstChild.nextSibling.textContent = hovered.label;
+        tooltip.lastChild.textContent = hovered.kind === "layer"
+          ? `${hovered.files} files · layer ${LAYER_LABEL[hovered.layer]}`
+          : (hovered.betweenness ? `betweenness ${hovered.betweenness.toLocaleString()}` : hovered.pagerank ? `pagerank ${hovered.pagerank.toFixed(4)}` : hovered.layer);
+        tooltip.style.opacity = "1";
+        const tw = 280;
+        tooltip.style.left = Math.min(e.clientX - r.left + 14, r.width - tw - 8) + "px";
+        tooltip.style.top = (e.clientY - r.top + 14) + "px";
+      } else {
+        canvas.style.cursor = "grab";
+        tooltip.style.opacity = "0";
+      }
+      draw();
+    }
+  });
+  canvas.addEventListener("pointerup", (e) => {
+    if (dragNode && moved < 4) select(dragNode);
+    else if (!dragNode && panning && moved < 4) select(null);
+    if (dragNode && moved >= 4 && !reduced) { /* keep dragged position */ }
+    dragNode = null; panning = false; canvas.classList.remove("dragging");
+  });
+  canvas.addEventListener("pointerleave", () => { hovered = null; tooltip.style.opacity = "0"; draw(); });
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const k = Math.max(0.35, Math.min(3, transform.k * (e.deltaY < 0 ? 1.12 : 0.89)));
+    transform.x = mx - ((mx - transform.x) / transform.k) * k;
+    transform.y = my - ((my - transform.y) / transform.k) * k;
+    transform.k = k;
+    draw();
+  }, { passive: false });
+
+  canvas.addEventListener("dblclick", () => {
+    transform = { x: 0, y: 0, k: 1 };
+    layout();
+    draw();
+  });
+
+  /* ---- selection / detail -------------------------------------------------- */
+  function select(n) {
+    selected = n;
+    renderDetail();
+    renderList();
+    draw();
+    if (n) $("sr-status").textContent = `Selected ${n.label}.`;
+  }
+
+  function renderDetail() {
+    const empty = $("detail-empty"), body = $("detail-body");
+    if (!selected) { empty.hidden = false; body.hidden = true; return; }
+    empty.hidden = true; body.hidden = false;
+    $("d-name").textContent = selected.label;
+    $("d-kind").textContent = `${selected.kind} · ${LAYER_LABEL[selected.layer] || selected.layer}`;
+    $("d-kind").style.color = layerColor(selected);
+    const dl = $("d-metrics");
+    dl.innerHTML = "";
+    const rows = [];
+    if (selected.files != null) rows.push(["files", selected.files.toLocaleString()]);
+    if (selected.betweenness) rows.push(["betweenness", selected.betweenness.toLocaleString()]);
+    if (selected.pagerank) rows.push(["pagerank (repo #1 is 0.0332)", selected.pagerank.toFixed(4)]);
+    if (selected.callers) rows.push(["direct callers", selected.callers]);
+    if (selected.slots) rows.push(["capability slots", selected.slots]);
+    if (selected.kind === "layer") {
+      const syms = DATA.symbols.filter((s) => links.some((l) => l.source.id === s.id && l.target.id === selected.id));
+      rows.push(["indexed symbols here", syms.length]);
+    }
+    const deg = links.filter((l) => l.source === selected || l.target === selected).length;
+    rows.push(["edges in view", deg]);
+    for (const [k, v] of rows) {
+      const dt = document.createElement("dt"); dt.textContent = k;
+      const dd = document.createElement("dd"); dd.textContent = v;
+      dl.append(dt, dd);
+    }
+    $("d-note").textContent = selected.note || "";
+  }
+
+  /* ---- node list (keyboard path) ---------------------------------------------- */
+  function renderList() {
+    const listEl = $("node-list");
+    listEl.innerHTML = "";
+    const shown = nodes.filter(visible).sort((a, b) => (b.betweenness || 0) - (a.betweenness || 0) || (b.files || 0) - (a.files || 0));
+    const frag = document.createDocumentFragment();
+    for (const n of shown) {
+      const li = document.createElement("li");
+      li.setAttribute("role", "listitem");
+      const b = document.createElement("button");
+      b.type = "button";
+      if (n === selected) b.setAttribute("aria-current", "true");
+      const left = document.createElement("span");
+      left.textContent = n.label;
+      const right = document.createElement("span");
+      right.className = "v";
+      right.textContent = n.betweenness ? n.betweenness.toLocaleString() : n.files ? `${n.files}f` : "";
+      b.append(left, right);
+      b.addEventListener("click", () => select(n));
+      li.appendChild(b);
+      frag.appendChild(li);
+    }
+    listEl.appendChild(frag);
+  }
+
+  /* ---- legend ----------------------------------------------------------------- */
+  function renderLegend() {
+    const el = $("legend");
+    el.innerHTML = "";
+    Object.entries(LAYER_LABEL).forEach(([key, label]) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = cssVar(LAYER_COLOR[key]);
+      const t = document.createElement("span");
+      t.textContent = label;
+      row.append(sw, t);
+      el.appendChild(row);
+    });
+    const hint = document.createElement("div");
+    hint.className = "row";
+    hint.style.gridColumn = "1 / -1";
+    hint.innerHTML = `<span class="swatch" style="background:var(--px-rose)"></span><span>rose ring = bridge (top betweenness)</span>`;
+    el.appendChild(hint);
+  }
+
+  /* ---- controls ---------------------------------------------------------------- */
+  $("q").addEventListener("input", (e) => { query = e.target.value.trim().toLowerCase(); applyFilters(); });
+  $("bridge-toggle").addEventListener("click", (e) => {
+    bridgesOnly = !bridgesOnly;
+    e.currentTarget.setAttribute("aria-pressed", String(bridgesOnly));
+    applyFilters();
+  });
+  $("clear-filters").addEventListener("click", () => {
+    query = ""; $("q").value = "";
+    bridgesOnly = false; $("bridge-toggle").setAttribute("aria-pressed", "false");
+    applyFilters();
+  });
+  const panelToggle = $("panel-toggle");
+  panelToggle.addEventListener("click", () => {
+    const open = $("side-panel").classList.toggle("open");
+    panelToggle.setAttribute("aria-expanded", String(open));
+  });
+
+  /* ---- boot -------------------------------------------------------------------- */
+  buildGraph();
+  const boot = () => {
+    resize();
+    layout();
+    renderLegend();
+    applyFilters();
+    $("skeleton").hidden = true;
+  };
+  if (document.fonts && document.fonts.ready && !reduced) {
+    Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 400))]).then(boot);
+  } else {
+    boot();
+  }
+  window.addEventListener("resize", () => { resize(); if (reduced) layout(); draw(); });
+})();
+</script>
+</body>
+</html>

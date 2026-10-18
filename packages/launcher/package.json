@@ -12,6 +12,7 @@
   },
   "files": [
     "bin.js",
+    "install.js",
     "README.md"
   ],
   "engines": {

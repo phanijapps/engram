@@ -147,7 +147,7 @@ jobs:
           find artifacts -name "*.sha256" -exec cat {} \; >> CHECKSUMS.md
           find artifacts -name "*.tgz" -exec sha256sum {} \; >> CHECKSUMS.md
 
-      - name: Detect pre-release
+      - name: Detect pre-release + tag context
         id: prerelease
         run: |
           if [[ "${{ env.VERSION }}" =~ -(alpha|beta|rc|pre|dev) ]]; then
@@ -157,8 +157,15 @@ jobs:
             echo "is_prerelease=false" >> $GITHUB_OUTPUT
             echo "npm_tag=latest" >> $GITHUB_OUTPUT
           fi
+          # workflow_dispatch from a branch has no tag — skip release creation
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "has_tag=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_tag=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create GitHub Release
+        if: steps.prerelease.outputs.has_tag == 'true'
         uses: softprops/action-gh-release@v2
         with:
           draft: ${{ inputs.dry_run != false }}

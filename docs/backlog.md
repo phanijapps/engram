@@ -873,19 +873,27 @@ self store → single-baseline.
 - `whats_changed` flat on the fresh single-scan baseline (expected);
   temporal discrimination starts next run.
 
-## whats-changed-temporal-flat (found 2026-10-18, second self-index scan)
+## whats-changed-temporal-flat (found 2026-10-18; data claim CORRECTED same day)
 
-**The temporal layer is structurally flat: `whats_changed` returns only the
-overview no matter how many scans run.** Verified against
-`~/.engram/mem-alpha-self` after the second scan: only 2 of 9,176 entities
-carry `valid_from` — the scan/ingest path (`put_entity` upserts) never stamps
-entity `valid_from`, so `engram_codegraph_temporal::recent/impact/compound`
-(§ RFC-0012) see no versioned symbols and emit empty sections. The
-self-index skill's assumption ("temporal discrimination starts at scan #2")
-is wrong at the data level. Fix direction: either stamp `valid_from` on
-re-ingest when `content_hash` changes (bi-temporal entities, ADR-0019) or
-feed the temporal layer from the scan manifest diff (path → changed-since).
-Blocked on nothing; small, high-leverage for the temporal tools.
+**Original claim retracted:** "only 2 of 9,176 entities carry valid_from"
+was a measurement artifact — the record JSON is camelCase (`validFrom`);
+the grep used snake_case. 8,954 of 8,966 entities ARE stamped, and the
+tools emit full Recent/Impact/Compound sections.
+
+**The real defects, measured 2026-10-18:**
+1. **No discrimination:** re-ingest re-stamps `validFrom` for every symbol
+   in a re-ingested file — even symbols whose body did not change — so
+   `recent` returns a uniform ~1.6e-8 score across the whole repo.
+   File-level manifest granularity leaks into symbol-level validity.
+   Fix: `put_entity` preserves the prior `validFrom` when the incoming
+   entity is semantically identical (same name/kind/graph/source-refs);
+   the stamp moves only on real change.
+2. **Impact is noise-dominated:** `"scope"`, `"provenance"`, `"super::*"`,
+   `"crate"` rank as top impact hubs — doc-ingestion noise entities enter
+   the analytics graph. Fix direction: filter non-symbol kinds (or
+   doc-derived entities) from the temporal view's version set.
+
+Both blocked on nothing; small, high-leverage for the temporal tools.
 
 ## surreal-retired (2026-10-18, ADR-0030)
 

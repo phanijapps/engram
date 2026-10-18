@@ -945,3 +945,81 @@ async fn store_pending(
         .list_unresolved_refs(&scope(), UnresolvedReferenceStatus::Pending)
         .await
 }
+
+#[test]
+fn reingest_carries_validity_for_unchanged_symbols() {
+    // whats-changed-temporal-flat fix: a changed file churns every entity id
+    // (graph id derives from content), but symbols whose (kind, name) identity
+    // survives must keep their ORIGINAL validFrom — only new symbols stamp now.
+    let root = std::env::temp_dir().join(format!("engram-scan-{}-validity", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).expect("create root");
+    fs::write(root.join("lib.rs"), "pub fn alpha() -> u8 { 1 }\n").expect("write v1");
+
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let mut opts = ScanOptions {
+        scope: scope(),
+        policy: policy(),
+        actor: actor(),
+        source_name: "validity".to_owned(),
+        max_bytes: 1024 * 1024,
+        manifest: Default::default(),
+        scan_filter: engram_ingest::ScanFilter::default(),
+    };
+    let (_s1, manifest) = scan_repository(&root, &opts, &store, |_| {}).expect("scan v1");
+    let entities_v1 = block_on(list_entities(&store)).expect("list v1");
+    let alpha_v1 = entities_v1
+        .iter()
+        .find(|e| e.name == "alpha")
+        .expect("alpha present v1");
+    let alpha_valid_from_v1 = alpha_v1.valid_from.expect("v1 stamps validFrom");
+
+    // Change the file: alpha stays identical, beta is new.
+    std::thread::sleep(std::time::Duration::from_millis(15));
+    fs::write(
+        root.join("lib.rs"),
+        "pub fn alpha() -> u8 { 1 }\npub fn beta() -> u8 { 2 }\n",
+    )
+    .expect("write v2");
+    opts.manifest = manifest;
+    let (summary2, _) = scan_repository(&root, &opts, &store, |_| {}).expect("scan v2");
+    assert_eq!(
+        summary2.ingested, 1,
+        "changed file re-ingested: {summary2:?}"
+    );
+
+    let entities_v2 = block_on(list_entities(&store)).expect("list v2");
+    let alpha_v2 = entities_v2
+        .iter()
+        .find(|e| e.name == "alpha")
+        .expect("alpha present v2");
+    let beta_v2 = entities_v2
+        .iter()
+        .find(|e| e.name == "beta")
+        .expect("beta present v2");
+    assert_eq!(
+        alpha_v2.valid_from,
+        Some(alpha_valid_from_v1),
+        "unchanged symbol keeps its original validFrom across re-ingest"
+    );
+    assert!(
+        beta_v2.valid_from.unwrap() > alpha_valid_from_v1,
+        "new symbol stamps fresh validity"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
+
+async fn list_entities(
+    store: &SqlKnowledgeStore,
+) -> engram_knowledge::CoreResult<Vec<engram_domain::KnowledgeEntity>> {
+    use engram_knowledge::KnowledgeRepository as _;
+    // The port has no list-all; go through graph listing via the graphs of the
+    // scan's stable source key — simplest: every entity of every graph.
+    use engram_knowledge::KnowledgeGraphRepository as _;
+    let graphs = store.list_graphs_by_source(&scope(), "validity").await?;
+    let mut all = Vec::new();
+    for g in graphs {
+        all.extend(store.list_entities_by_graph(&g.id, &scope()).await?);
+    }
+    Ok(all)
+}

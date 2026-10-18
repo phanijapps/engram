@@ -17,6 +17,41 @@ use crate::knowledge::{schema::sql_error, service::SqlKnowledgeStore};
 /// Read the persisted `archived_at` for a record (if any), so a re-put preserves a
 /// prior maintenance archive instead of silently un-archiving (ingestion always
 /// passes `archived_at = None`). Keeps the column and `record_json` in lockstep.
+/// Temporal discrimination helper: when the stored entity is semantically
+/// identical to the incoming one (same name, kind, graph, source refs, and
+/// metadata — ignoring provenance timestamps/created_at/updated_at/validFrom),
+/// return the STORED `validFrom` so an unchanged symbol keeps its original
+/// validity stamp across re-ingests. `None` means "no prior row, or the
+/// entity genuinely changed" — the caller keeps the incoming stamp.
+fn persisted_semantically_identical(
+    conn: &Connection,
+    id: &str,
+    incoming: &KnowledgeEntity,
+) -> CoreResult<Option<Timestamp>> {
+    let sql = "SELECT record_json FROM knowledge_entities WHERE id = ?1";
+    let stored: Option<String> = conn
+        .query_row(sql, rusqlite::params![id], |row| row.get(0))
+        .optional()
+        .map_err(sql_error)?;
+    let Some(json) = stored else {
+        return Ok(None);
+    };
+    let Ok(prior) = serde_json::from_str::<KnowledgeEntity>(&json) else {
+        return Ok(None);
+    };
+    let unchanged = prior.name == incoming.name
+        && prior.kind == incoming.kind
+        && prior.graph_id == incoming.graph_id
+        && prior.source_refs == incoming.source_refs
+        && prior.metadata == incoming.metadata
+        && prior.aliases == incoming.aliases;
+    if unchanged {
+        Ok(prior.valid_from)
+    } else {
+        Ok(None)
+    }
+}
+
 fn persisted_archived_at(
     conn: &Connection,
     table: &str,
@@ -157,6 +192,43 @@ impl KnowledgeRepository for SqlKnowledgeStore {
 
     /// Lists a document's chunks within `scope` (scope resolved via the source
     /// join, mirroring `get_chunk`). Used by retraction to find prior chunks.
+    async fn list_entities_by_graph(
+        &self,
+        graph_id: &KnowledgeGraphId,
+        scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        let connection = self.lock()?;
+        let mut stmt = connection
+            .prepare(
+                r#"
+                SELECT record_json FROM knowledge_entities
+                WHERE graph_id = ?1
+                    AND tenant = ?2
+                    AND (subject IS NULL OR subject = ?3)
+                    AND (workspace IS NULL OR workspace = ?4)
+                "#,
+            )
+            .map_err(sql_error)?;
+        let rows = stmt
+            .query_map(
+                rusqlite::params![
+                    graph_id.to_string(),
+                    scope.tenant,
+                    scope.subject,
+                    scope.workspace,
+                ],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(sql_error)?;
+        let mut entities = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            entities
+                .push(serde_json::from_str(&json).map_err(crate::knowledge::schema::json_error)?);
+        }
+        Ok(entities)
+    }
+
     async fn list_chunks_by_document(
         &self,
         document_id: &DocumentId,
@@ -236,6 +308,17 @@ impl KnowledgeRepository for SqlKnowledgeStore {
         if let Some(ts) = preserved {
             stored.archived_at = Some(ts);
         }
+        // Temporal discrimination (whats-changed-temporal-flat): re-ingest
+        // re-derives every symbol in a changed file, and a wholesale
+        // validFrom re-stamp made `recent` uniformly score the whole repo.
+        // When the incoming entity is semantically identical to the stored
+        // one, keep the stored validFrom — the stamp moves only on a real
+        // change (kind, graph, source-refs, or metadata).
+        stored.valid_from =
+            match persisted_semantically_identical(&connection, &stored.id.to_string(), &stored)? {
+                Some(prior_valid_from) => Some(prior_valid_from),
+                None => stored.valid_from,
+            };
         let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
         connection
             .execute(

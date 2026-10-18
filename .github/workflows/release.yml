@@ -150,10 +150,22 @@ jobs:
           find artifacts -name "*.sha256" -exec cat {} \; >> CHECKSUMS.md
           find artifacts -name "*.tgz" -exec sha256sum {} \; >> CHECKSUMS.md
 
+      - name: Detect pre-release
+        id: prerelease
+        run: |
+          if [[ "${{ env.VERSION }}" =~ -(alpha|beta|rc|pre|dev) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "npm_tag=alpha" >> $GITHUB_OUTPUT
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "npm_tag=latest" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: ${{ inputs.dry_run != false }}
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
           files: |
             artifacts/**/*.tgz
           body_path: CHECKSUMS.md
@@ -170,7 +182,7 @@ jobs:
         if: inputs.dry_run == false
         run: |
           cd artifacts/launcher
-          npm publish --provenance --access public
+          npm publish --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -179,7 +191,7 @@ jobs:
         run: |
           for dir in artifacts/*/; do
             if ls "$dir"/*.tgz >/dev/null 2>&1 && [[ "$dir" != *"launcher"* ]]; then
-              (cd "$dir" && npm publish --provenance --access public)
+              (cd "$dir" && npm publish --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }})
             fi
           done
         env:

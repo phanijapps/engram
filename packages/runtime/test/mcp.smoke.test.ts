@@ -44,11 +44,10 @@ describe.skipIf(!ready)("engram-mcp-http (real addon)", () => {
         new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
       );
       const { tools } = await client.listTools();
-      // test-hygiene fix: the surface is 42 tools now (maintenance trio +
-      // graph_health + explore/file_dependencies). The stale list previously
-      // threw, skipped client.close(), and left server.close() waiting on the
-      // open connection — surfacing as a confusing 15s TIMEOUT instead of the
-      // assertion failure.
+      // test-hygiene fix: the surface is 43 tools now (42 + fetch_content,
+      // PR #126). The stale list previously threw, skipped client.close(),
+      // and left server.close() waiting on the open connection — surfacing
+      // as a confusing 15s TIMEOUT instead of the assertion failure.
       expect(tools.map((t) => t.name).sort()).toEqual([
         "apply_maintenance_plan",
         "architecture",
@@ -65,6 +64,7 @@ describe.skipIf(!ready)("engram-mcp-http (real addon)", () => {
         "contradiction_detect",
         "contradiction_list",
         "explore",
+        "fetch_content",
         "file_dependencies",
         "forget",
         "get_context",

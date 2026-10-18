@@ -185,7 +185,14 @@ jobs:
       - name: npm publish — launcher
         if: github.event_name == 'push' || inputs.dry_run == false
         run: |
-          npm publish artifacts/launcher/*.tgz --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
+          cd packages/launcher
+          node -e "
+            const p = require('./package.json');
+            p.version = '${{ env.VERSION }}'.replace('v','');
+            delete p.private;
+            require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+          npm publish --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -193,7 +200,7 @@ jobs:
         if: github.event_name == 'push' || inputs.dry_run == false
         run: |
           for tgz in artifacts/*/mcp-*.tgz; do
-            npm publish "$tgz" --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
+            npm publish "$tgz" --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

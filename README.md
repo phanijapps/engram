@@ -66,6 +66,13 @@ What lands on your machine:
 
 Per-platform notes: Codex agents use YAML (`~/.codex/agents/*.yaml`); Copilot command hooks cannot inject per-prompt context (platform limitation — session-start recall only, honestly documented); pi gets an in-process extension.
 
+**Project scope** — install the bundle into the repo instead (committed, shared with the team):
+
+```bash
+cd your-repo
+engram-mcp install --agent all --scope project
+```
+
 ### What you get
 
 Your agent gains these MCP tools:

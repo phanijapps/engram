@@ -147,16 +147,17 @@ function mergeClaudeHooks(file, entries, remove) {
 }
 
 const HOSTS = {
+  // USER scope installs to the home directory (available everywhere);
+  // PROJECT scope installs into the current repo (committed, per-team).
   claude: {
     label: 'Claude Code',
-    skillsDir: (home) => path.join(home, '.claude', 'skills'),
-    agentFile: (home) => [path.join(home, '.claude', 'agents'), 'red-forman.md'],
-    install(home, remove, written) {
-      copySkills(this.skillsDir(home), written);
-      const [agentDir, agentName] = this.agentFile(home);
-      if (remove) { try { fs.rmSync(path.join(agentDir, agentName)); } catch {} }
-      else copyAgent(agentDir, 'red-forman.claude.md', agentName, written);
-      const settings = path.join(home, '.claude', 'settings.json');
+    install(home, remove, written, cwd, scope) {
+      const root = scope === 'project' ? path.join(cwd, '.claude') : path.join(home, '.claude');
+      copySkills(path.join(root, 'skills'), written);
+      const agentDir = path.join(root, 'agents');
+      if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
+      else copyAgent(agentDir, 'red-forman.claude.md', 'red-forman.md', written);
+      const settings = path.join(root, 'settings.json');
       const recall = hookScript('recall-context.cjs');
       const stale = hookScript('stale-index.cjs');
       mergeClaudeHooks(
@@ -173,40 +174,70 @@ const HOSTS = {
   },
   codex: {
     label: 'Codex',
-    skillsDir: (home) => path.join(home, '.agents', 'skills'),
-    install(home, remove, written) {
-      copySkills(this.skillsDir(home), written);
-      // Codex agents: ~/.codex/agents/*.yaml (YAML form — the TOML
-      // spelling is deprecated).
+    install(home, remove, written, cwd, scope) {
+      // Skills: the cross-tool .agents/skills dir (project) or ~/.agents/skills (user).
+      copySkills(
+        scope === 'project' ? path.join(cwd, '.agents', 'skills') : path.join(home, '.agents', 'skills'),
+        written,
+      );
+      // Agents: Codex discovers agents at user level only (~/.codex/agents,
+      // YAML form) — no documented project-agent location.
       const agentDir = path.join(home, '.codex', 'agents');
       if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.yaml')); } catch {} }
-      else copyAgent(agentDir, 'red-forman.codex.yaml', 'red-forman.yaml', written);
+      else {
+        copyAgent(agentDir, 'red-forman.codex.yaml', 'red-forman.yaml', written);
+        if (scope === 'project') {
+          process.stdout.write('  note: Codex agents are user-scope (no project-agent discovery)\n');
+        }
+      }
       const recall = hookScript('recall-context.cjs');
       const stale = hookScript('stale-index.cjs');
-      const body = remove
-        ? null
-        : [
-            '[[hooks.UserPromptSubmit]]',
-            '  [[hooks.UserPromptSubmit.hooks]]',
-            '  type = "command"',
-            `  command = 'node "${recall}"'`,
-            '  async = true',
-            '  statusMessage = "engram recall"',
-            '',
-            '[[hooks.Stop]]',
-            '  [[hooks.Stop.hooks]]',
-            '  type = "command"',
-            `  command = 'node "${stale}"'`,
-            '',
-            '[[hooks.SessionStart]]',
-            '  matcher = "startup|resume"',
-            '  [[hooks.SessionStart.hooks]]',
-            '  type = "command"',
-            `  command = 'node "${recall}"'`,
-            '  additionalContextLimit = 2000',
-          ].join('\n');
-      writeTomlSection(path.join(home, '.codex', 'config.toml'), 'hooks', body);
-      written.push(path.join(home, '.codex', 'config.toml'));
+      if (scope === 'project') {
+        // Project hooks live in <repo>/.codex/hooks.json (JSON, not TOML).
+        const file = path.join(cwd, '.codex', 'hooks.json');
+        if (remove) {
+          try { fs.rmSync(file); } catch {}
+        } else {
+          writeJson(file, {
+            description: 'engram agent bundle (skills + hooks + subagent)',
+            hooks: {
+              UserPromptSubmit: [
+                { hooks: [{ type: 'command', command: `node "${recall}"`, async: true, statusMessage: 'engram recall' }] },
+              ],
+              Stop: [{ hooks: [{ type: 'command', command: `node "${stale}"` }] }],
+              SessionStart: [
+                { matcher: 'startup|resume', hooks: [{ type: 'command', command: `node "${recall}"`, additionalContextLimit: 2000 }] },
+              ],
+            },
+          });
+          written.push(file);
+        }
+      } else {
+        const body = remove
+          ? null
+          : [
+              '[[hooks.UserPromptSubmit]]',
+              '  [[hooks.UserPromptSubmit.hooks]]',
+              '  type = "command"',
+              `  command = 'node "${recall}"'`,
+              '  async = true',
+              '  statusMessage = "engram recall"',
+              '',
+              '[[hooks.Stop]]',
+              '  [[hooks.Stop.hooks]]',
+              '  type = "command"',
+              `  command = 'node "${stale}"'`,
+              '',
+              '[[hooks.SessionStart]]',
+              '  matcher = "startup|resume"',
+              '  [[hooks.SessionStart.hooks]]',
+              '  type = "command"',
+              `  command = 'node "${recall}"'`,
+              '  additionalContextLimit = 2000',
+            ].join('\n');
+        writeTomlSection(path.join(home, '.codex', 'config.toml'), 'hooks', body);
+        written.push(path.join(home, '.codex', 'config.toml'));
+      }
       if (!remove) {
         process.stdout.write('  note: run /hooks inside Codex to trust the new hooks\n');
       }
@@ -214,20 +245,24 @@ const HOSTS = {
   },
   copilot: {
     label: 'GitHub Copilot',
-    skillsDir: (home) => path.join(home, '.agents', 'skills'),
-    install(home, remove, written, cwd) {
-      copySkills(this.skillsDir(home), written);
-      // Copilot custom agents are repo-scoped: .github/agents/.
+    install(home, remove, written, cwd, scope) {
+      // Skills: .agents/skills (project, cross-tool) or ~/.agents/skills (user).
+      copySkills(
+        scope === 'project' ? path.join(cwd, '.agents', 'skills') : path.join(home, '.agents', 'skills'),
+        written,
+      );
+      // Agents: repo-scoped either way (.github/agents/).
       const agentDir = path.join(cwd || process.cwd(), '.github', 'agents');
       if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
       else copyAgent(agentDir, 'red-forman.copilot.md', 'red-forman.md', written);
       // Per-prompt injection is not available to Copilot command hooks
       // (output dropped by design) — sessionStart only. Honest limitation.
-      const file = path.join(home, '.copilot', 'hooks', 'engram.json');
+      const file =
+        scope === 'project'
+          ? path.join(cwd, '.github', 'hooks', 'engram.json')
+          : path.join(home, '.copilot', 'hooks', 'engram.json');
       if (remove) {
-        try {
-          fs.rmSync(file);
-        } catch {}
+        try { fs.rmSync(file); } catch {}
       } else {
         writeJson(file, {
           version: 1,
@@ -241,17 +276,31 @@ const HOSTS = {
         });
         written.push(file);
       }
+      if (scope === 'project' && !remove) {
+        process.stdout.write('  note: commit .github/ and .agents/ so the team gets the bundle\n');
+      }
     },
   },
   pi: {
     label: 'pi',
-    skillsDir: (home) => path.join(home, '.pi', 'agent', 'skills'),
-    install(home, remove, written) {
-      copySkills(this.skillsDir(home), written);
-      const agentDir = path.join(home, '.pi', 'agent', 'agents');
+    install(home, remove, written, cwd, scope) {
+      // Skills: pi reads the cross-tool .agents/skills at project level
+      // (same dir codex/copilot read) or ~/.pi/agent/skills at user level.
+      copySkills(
+        scope === 'project' ? path.join(cwd, '.agents', 'skills') : path.join(home, '.pi', 'agent', 'skills'),
+        written,
+      );
+      // Agents: .pi/agents/ (project) or ~/.pi/agent/agents/ (user).
+      const agentDir =
+        scope === 'project' ? path.join(cwd, '.pi', 'agents') : path.join(home, '.pi', 'agent', 'agents');
       if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
       else copyAgent(agentDir, 'red-forman.pi.md', 'red-forman.md', written);
-      const ext = path.join(home, '.pi', 'agent', 'extensions', 'engram-recall.cjs');
+      // Extensions are pi's hook mechanism: .pi/extensions/ (project)
+      // or ~/.pi/agent/extensions/ (user).
+      const ext =
+        scope === 'project'
+          ? path.join(cwd, '.pi', 'extensions', 'engram-recall.cjs')
+          : path.join(home, '.pi', 'agent', 'extensions', 'engram-recall.cjs');
       if (remove) {
         try {
           fs.rmSync(ext);
@@ -270,23 +319,30 @@ function agentInstall(args) {
   const cwd = process.cwd();
   let target = null;
   let remove = false;
+  let scope = 'user';
   let storage = process.env.ENGRAM_STORAGE || path.join(home, '.engram');
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--agent') target = args[++i];
     else if (args[i] === '--remove') remove = true;
+    else if (args[i] === '--scope') scope = args[++i];
     else if (args[i] === '--storage') storage = args[++i];
+  }
+  if (scope !== 'user' && scope !== 'project') {
+    process.stderr.write(`engram-mcp install: --scope must be 'user' or 'project'\n`);
+    process.exit(1);
   }
   if (!target || (target !== 'all' && !HOSTS[target])) {
     process.stderr.write(
       `engram-mcp install: ${target ? `unknown agent '${target}'` : 'missing --agent'}\n` +
         `Agents: ${Object.keys(HOSTS).join(', ')}, all\n` +
-        `Usage: engram-mcp install --agent <id> [--remove] [--storage <path>]\n`,
+        `Usage: engram-mcp install --agent <id> [--scope user|project] [--remove] [--storage <path>]\n`,
     );
     process.exit(1);
   }
   const ids = target === 'all' ? Object.keys(HOSTS) : [target];
   process.stdout.write(
     `${remove ? 'Removing' : 'Installing'} engram agent bundle (skills + hooks + subagents)\n` +
+      `  scope: ${scope}${scope === 'project' ? ` (${cwd})` : ''}\n` +
       `  storage: ${storage}\n\n`,
   );
   for (const id of ids) {
@@ -294,7 +350,7 @@ function agentInstall(args) {
     process.stdout.write(`[${host.label}]\n`);
     const written = [];
     try {
-      host.install(home, remove, written, cwd);
+      host.install(home, remove, written, cwd, scope);
       for (const w of written) process.stdout.write(`  ${remove ? 'cleaned' : 'wrote'}: ${w}\n`);
       if (id === 'copilot' && !remove) {
         process.stdout.write(

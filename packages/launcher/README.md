@@ -14,6 +14,17 @@ engram-mcp install --agent claude    # skills + hooks + red-forman subagent
 
 Hosts: `claude` · `claude-desktop` · `cursor` · `codex` · `pi` · `copilot` · `all`
 
+**Project scope** — install skills, hooks, and agents into the repo
+(committed, shared with the team) instead of your home directory:
+
+```bash
+cd your-repo
+engram-mcp install --agent claude --scope project
+```
+
+Lands in `.claude/`, `.agents/skills/` (Codex + Copilot + pi read this
+cross-tool dir), `.codex/hooks.json`, `.github/hooks/`, `.pi/`.
+
 MCP server only (no skills/hooks): `engram-mcp install --client <host>`
 
 Or run directly: `npx @engramlabs/mcp@alpha --storage ~/.engram`

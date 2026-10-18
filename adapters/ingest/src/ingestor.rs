@@ -199,7 +199,7 @@ fn validate_request(request: &DocumentIngestRequest) -> CoreResult<()> {
     Ok(())
 }
 
-fn source_id(request: &DocumentIngestRequest) -> SourceId {
+pub(crate) fn source_id(request: &DocumentIngestRequest) -> SourceId {
     Id::from(format!(
         "source-{}",
         content_hash(format!(
@@ -213,7 +213,7 @@ fn source_id(request: &DocumentIngestRequest) -> SourceId {
     ))
 }
 
-fn document_id(
+pub(crate) fn document_id(
     source_id: &SourceId,
     metadata: &DocumentMetadata,
     document_hash: &str,

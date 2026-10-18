@@ -799,11 +799,16 @@ fn kind_label(kind: EntityKind) -> String {
     .to_owned()
 }
 
-fn graph_id_for(document: &SourceDocument) -> KnowledgeGraphId {
+pub(crate) fn graph_id_for(document: &SourceDocument) -> KnowledgeGraphId {
     Id::from(format!(
         "graph-{}",
         content_hash(document.id.as_str()).trim_start_matches("sha256:")
     ))
+}
+
+/// Public wrapper for pre-ingest id determinism (scanner prepass pre-seeds
+pub(crate) fn symbol_entity_id(graph_id_str: &str, name: &str) -> String {
+    entity_id(&KnowledgeGraphId::from(graph_id_str.to_owned()), name).to_string()
 }
 
 fn entity_id(graph_id: &KnowledgeGraphId, name: &str) -> EntityId {

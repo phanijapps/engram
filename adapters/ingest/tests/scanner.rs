@@ -694,8 +694,13 @@ fn polyglot_scan_end_to_end_phase2() {
     );
     assert!(has("extends", "Repo", "Base"), "extends: {rels:?}");
     assert!(has("implements", "Repo", "Store"), "implements: {rels:?}");
+    // Route handler resolution is now ORDER-INDEPENDENT (prepass pre-seeds
+    // the shared symbol index): the bare `helper` reference deterministically
+    // resolves to its only declaration, the bare-tail sibling `inner::helper`
+    // (store.rs `mod inner { pub fn helper }`) — previously the edge kept its
+    // as-written name only when api.ts happened to process before store.rs.
     assert!(
-        has("routes_to", "GET /items", "helper"),
+        has("routes_to", "GET /items", "inner::helper"),
         "routes_to: {rels:?}"
     );
     assert!(

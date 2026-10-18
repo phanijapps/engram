@@ -14,8 +14,9 @@ use engram_domain::*;
 use engram_knowledge::{CoreError, CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
 
 use crate::{
-    CodeSymbolChunker, GraphExtractor, KnowledgeIngestor, MarkdownChunker, PlainTextChunker,
-    PlainTextChunkerOptions, git_detect::detect_git, scan_filter::ScanFilter, stable_source_key,
+    CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
+    MarkdownChunker, PlainTextChunker, PlainTextChunkerOptions, git_detect::detect_git,
+    scan_filter::ScanFilter, stable_source_key,
 };
 
 mod contract_phase;
@@ -214,13 +215,29 @@ where
         &mut filtered_paths,
         &mut summary,
     );
-    let global_entity_names: Arc<HashSet<String>> = Arc::new(prepass::collect_global_entity_names(
-        &to_ingest,
-        ts_chunker.as_ref(),
-    ));
-
     let name_index: Arc<Mutex<engram_code::SymbolIndex>> =
         Arc::new(Mutex::new(engram_code::SymbolIndex::new()));
+    let global_entity_names: Arc<HashSet<String>> = {
+        let mut idx = name_index.lock().unwrap_or_else(|e| e.into_inner());
+        let seed = DocumentIngestRequest {
+            source_kind: doc_source_kind.clone(),
+            source_name: source_name.clone(),
+            scope: opts.scope.clone(),
+            document_kind: engram_domain::SourceDocumentKind::Code,
+            document: DocumentMetadata::default(),
+            text: String::new(),
+            policy: opts.policy.clone(),
+            actor: opts.actor.clone(),
+            stable_source_key: Some(source_key.clone()),
+            source_metadata: None,
+        };
+        Arc::new(prepass::collect_global_symbols(
+            &to_ingest,
+            ts_chunker.as_ref(),
+            &mut idx,
+            &seed,
+        ))
+    };
     let outcomes = ingest_phase::parallel_ingest(
         &ingest_phase::IngestCtx {
             repo,

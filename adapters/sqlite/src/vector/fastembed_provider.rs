@@ -207,7 +207,7 @@ impl FastEmbedBgeSmallQueryProvider {
         // Re-expand into the original slot order; empty-trimmed slots get an
         // empty vec so callers can skip them as in the per-item path.
         let mut out: Vec<Vec<f32>> = vec![Vec::new(); texts.len()];
-        for (slot, emb) in live.iter().zip(embeddings.into_iter()) {
+        for (slot, emb) in live.iter().zip(embeddings) {
             out[slot.0] = emb;
         }
         Ok(out)

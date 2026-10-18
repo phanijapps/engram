@@ -630,7 +630,7 @@ pub fn most_complex(sources: &[(String, String)], limit: usize) -> Vec<(String, 
         .iter()
         .map(|(name, source)| (name.clone(), cyclomatic_complexity(source)))
         .collect();
-    ranked.sort_by(|a, b| b.1.cmp(&a.1));
+    ranked.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
     ranked.truncate(limit);
     ranked
 }

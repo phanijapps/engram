@@ -1,0 +1,18 @@
+# cargo-audit configuration — documented advisory baseline.
+#
+# Policy: vulnerabilities are FIXED, never ignored, unless (a) no
+# semver-compatible patch exists AND (b) the affected code path is not
+# compiled into any supported build target. Every ignore below carries its
+# rationale and an owner action; remove the entry when the action lands.
+
+[advisories]
+ignore = [
+    # rkyv 0.7.46 — RUSTSEC-2026-0235 (insufficient archive validation,
+    # OOB read). Patch requires rkyv >=0.8 (breaking). `cargo tree -i rkyv`
+    # on the host target resolves NOTHING: the crate enters the lockfile
+    # only through a target-conditional dependency and is not compiled
+    # into any supported build target (linux/mac/windows, all features).
+    # Action: re-check on the next surrealdb/tantivy major bump; drop the
+    # ignore the moment a compatible path disappears.
+    "RUSTSEC-2026-0235",
+]

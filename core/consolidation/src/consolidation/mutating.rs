@@ -58,6 +58,8 @@ impl ConsolidationMutationOutcome {
 /// Core orchestration supplies the validated request, the planned task kinds,
 /// and the run start timestamp. Implementations own repository/model work and
 /// must return task-level audit records for anything they mutate.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait ConsolidationMutationExecutor: Send + Sync {
     /// Executes planned consolidation tasks and reports durable outcomes.
@@ -74,6 +76,8 @@ pub trait ConsolidationMutationExecutor: Send + Sync {
 /// Implementations should perform policy, tenancy, idempotency, and operational
 /// gate checks that are independent of the concrete mutation executor. Returning
 /// an error prevents executor work and produces an auditable failed run.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait ConsolidationApplyGate: Send + Sync {
     /// Authorizes the planned operations for this request.

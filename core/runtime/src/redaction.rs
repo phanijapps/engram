@@ -121,7 +121,7 @@ pub fn redact_path(path: &str) -> String {
                     let redacted_creds = format!("{}:[REDACTED]", parts[0]);
                     result = result.replace(
                         &format!("{}{}@", &result[..start + 3], credential_part),
-                        &format!("{}{}@", &result[..start + 3], &redacted_creds),
+                        &format!("{}{}@", &result[..start + 3], redacted_creds),
                     );
                 }
             }

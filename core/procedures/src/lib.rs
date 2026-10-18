@@ -12,6 +12,10 @@ use engram_runtime::CoreResult;
 ///
 /// The server records outcomes (the caller drives [`Self::increment_success`] /
 /// [`Self::increment_failure`]); it does not decide when a procedure applies.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the
+// boxed-future helper while CoreResult is already must_use — newer clippy
+// flags the combination; nothing to fix in source.
 #[async_trait]
 pub trait ProcedureRepository: Send + Sync {
     /// Stores or updates a procedure (upsert by id).

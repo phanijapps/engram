@@ -66,6 +66,8 @@ pub struct GraphSnapshot {
 /// Implementations MUST be safe to call concurrently from the three graph
 /// lanes (which run together inside unified recall). [`InMemoryGraphCache`]
 /// satisfies this with a `tokio::sync::RwLock`.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait GraphCache: Send + Sync {
     /// Returns the cached snapshot for the scope, if present.

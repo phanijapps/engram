@@ -18,6 +18,8 @@ use engram_runtime::CoreResult;
 /// choice; the trait stays mechanism-agnostic so backends are interchangeable
 /// (a graph index may be backed by Neo4j traversal or pgvector semantics).
 /// Final fusion and context-budget decisions are handled later in the pipeline.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait RetrievalIndex: Send + Sync {
     /// Retrieves candidates for the request without composing the final context.

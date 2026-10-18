@@ -993,16 +993,16 @@ fn extract_inheritance(
         }
         "rs" => {
             // `impl Trait for Type` → Type implements Trait.
-            if node.kind() == "impl_item" {
-                if let (Some(trait_node), Some(type_node)) = (
+            if node.kind() == "impl_item"
+                && let (Some(trait_node), Some(type_node)) = (
                     node.child_by_field_name("trait"),
                     node.child_by_field_name("type"),
-                ) {
-                    let trait_name = extract_name(&trait_node, source);
-                    let type_name = extract_name(&type_node, source);
-                    if !trait_name.is_empty() && !type_name.is_empty() {
-                        edges.implements.push((type_name, trait_name));
-                    }
+                )
+            {
+                let trait_name = extract_name(&trait_node, source);
+                let type_name = extract_name(&type_node, source);
+                if !trait_name.is_empty() && !type_name.is_empty() {
+                    edges.implements.push((type_name, trait_name));
                 }
             }
         }

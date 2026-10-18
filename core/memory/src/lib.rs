@@ -19,6 +19,8 @@ pub use engram_runtime::{
 /// and keep status changes auditable through `MemoryEvent`. SQL, event-sourced,
 /// document, or in-memory adapters may choose different internal layouts, but
 /// they must not persist knowledge graph or ontology state through this port.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait MemoryRepository: Send + Sync {
     /// Stores a memory record and returns the persisted representation.
@@ -62,6 +64,8 @@ pub trait MemoryRepository: Send + Sync {
 /// consolidation, and debugging need history without direct mutation access.
 /// Implementations must preserve event ordering as recorded by the adapter and
 /// apply the supplied scope boundary before returning events.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait MemoryEventRepository: Send + Sync {
     /// Looks up a lifecycle event by ID inside the caller-provided scope.
@@ -84,6 +88,8 @@ pub trait MemoryEventRepository: Send + Sync {
 /// services enforce scope and policy for writes, retrieval, and forgetting while
 /// delegating storage to memory repositories and retrieval composition to higher
 /// layers. Knowledge graph storage belongs behind knowledge ports, not here.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait MemoryService: MemoryRepository + MemoryEventRepository + Send + Sync {
     /// Writes a memory and records the corresponding lifecycle event.

@@ -17,7 +17,7 @@ mapfile -t marker_paths < <(
 # Only tracked repository docs and tracked repository skills are validated here.
 # Developer-local untracked skills may contain examples or placeholders that are
 # outside this repository's release surface.
-if (( ${#marker_paths[@]} > 0 )) && rg -n "$marker_pattern" "${marker_paths[@]}"; then
+if (( ${#marker_paths[@]} > 0 )) && grep -nE "$marker_pattern" "${marker_paths[@]}"; then
   echo "unresolved documentation or skill placeholder markers found" >&2
   exit 1
 fi

@@ -48,6 +48,8 @@ use crate::migration::ImportData;
 /// where no concrete list method exists.
 ///
 /// [`MigrationService`]: crate::migration::MigrationService
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait ExportImport: Send + Sync {
     /// Exports the semantic state visible to `scope` into one [`ImportData`]

@@ -10,6 +10,8 @@ use engram_runtime::{CoreError, CoreResult};
 /// physical graph technology. Neo4j labels, RDF triples, SQL joins, or embedded
 /// graph indexes are adapter details; callers see scoped graph records and
 /// relationship paths with domain provenance.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait KnowledgeGraphRepository: Send + Sync {
     /// Stores or updates a graph identity record.

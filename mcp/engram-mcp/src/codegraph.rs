@@ -414,7 +414,7 @@ fn flush_batch(
     match embedder.embed_batch(&texts) {
         Ok(vectors) => {
             let mut inserted = 0usize;
-            for ((_text, ids), vector) in batch.iter().zip(vectors.into_iter()) {
+            for ((_text, ids), vector) in batch.iter().zip(vectors) {
                 if vector.is_empty() {
                     continue;
                 }
@@ -1853,7 +1853,7 @@ pub fn architecture(app: &App, args: &Value) -> Result<Value, ToolError> {
         engram_codegraph_queries::call_communities(&graph, 3)
             .into_iter()
             .collect();
-    communities.sort_by(|a, b| b.1.cmp(&a.1));
+    communities.sort_by_key(|(_, size)| std::cmp::Reverse(*size));
     communities.truncate(10);
     let stats = engram_codegraph_queries::repository_stats(&graph);
     Ok(protocol::text_content(format!(

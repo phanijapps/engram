@@ -45,7 +45,7 @@ impl CommunityQuery for SqlKnowledgeStore {
             *counts.entry(*label).or_default() += 1;
         }
         let mut ranked: Vec<(usize, usize)> = counts.into_iter().collect();
-        ranked.sort_unstable_by(|a, b| b.1.cmp(&a.1));
+        ranked.sort_unstable_by_key(|a| std::cmp::Reverse(a.1));
         let top_labels: std::collections::HashSet<usize> =
             ranked.iter().take(limit).map(|(l, _)| *l).collect();
 
@@ -78,7 +78,7 @@ impl CommunityQuery for SqlKnowledgeStore {
                 weight: w,
             })
             .collect();
-        meta_edges.sort_unstable_by(|a, b| b.weight.cmp(&a.weight));
+        meta_edges.sort_unstable_by_key(|e| std::cmp::Reverse(e.weight));
         meta_edges.truncate(communities_nodes.len().saturating_mul(4));
 
         Ok(CommunityOverview {

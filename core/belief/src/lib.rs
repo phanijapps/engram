@@ -35,6 +35,8 @@ pub use temporal::{interval_contains, live_at};
 /// Beliefs should be recomputable from evidence or explicitly marked as manual.
 /// Contradictions are review records; writing one must not silently mutate the
 /// targets in conflict.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait BeliefRepository: Send + Sync {
     /// Stores a derived or manually asserted belief.
@@ -147,6 +149,8 @@ pub trait BeliefRepository: Send + Sync {
 ///
 /// Synthesizers should keep evidence links intact and mark beliefs stale or
 /// superseded rather than destructively rewriting unsupported conclusions.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait BeliefSynthesizer: Send + Sync {
     /// Produces belief candidates for a consolidation request.
@@ -157,6 +161,8 @@ pub trait BeliefSynthesizer: Send + Sync {
 ///
 /// Detection is advisory. Implementations should create contradiction records
 /// with severity and reasoning, leaving resolution to a later explicit step.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait ContradictionDetector: Send + Sync {
     /// Returns contradictions found in the supplied belief set.

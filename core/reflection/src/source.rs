@@ -11,6 +11,8 @@ use engram_domain::{Belief, Scope};
 use engram_runtime::CoreResult;
 
 /// Read access to a scope's active memory texts for reflection.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait ActiveMemorySource: Send + Sync {
     /// Returns the text content of all `MemoryStatus::Active` memories visible
@@ -21,6 +23,8 @@ pub trait ActiveMemorySource: Send + Sync {
 /// Write access for persisting reflection-derived beliefs (mirrors
 /// `BeliefRepository::put_belief`). Narrow so tests stub one method instead of
 /// 13; production wiring adapts `BeliefRepository` to this trait.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait BeliefSink: Send + Sync {
     /// Persists a derived belief, returning the stored record.

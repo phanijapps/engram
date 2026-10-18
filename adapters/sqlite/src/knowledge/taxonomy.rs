@@ -139,7 +139,7 @@ impl TaxonomyRepository for SqlKnowledgeStore {
             let json = row.map_err(sql_error)?;
             concepts.push(serde_json::from_str::<Concept>(&json).map_err(json_error)?);
         }
-        concepts.sort_by(|left, right| left.id.to_string().cmp(&right.id.to_string()));
+        concepts.sort_by_key(|c| c.id.to_string());
         Ok(concepts)
     }
 }

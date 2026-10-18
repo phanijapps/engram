@@ -21,6 +21,8 @@ use engram_runtime::{CoreError, CoreResult};
 /// All methods default to "not supported" (or empty, for reads) so a stub/test
 /// backend overrides only what it exercises; the real behavior is the SQLite
 /// adapter. A host never needs direct store access — this port is the only path.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait GraphMaintenanceRepository: Send + Sync {
     /// List entities matching a filter with cursor pagination. Active records

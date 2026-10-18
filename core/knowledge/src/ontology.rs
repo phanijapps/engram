@@ -10,6 +10,8 @@ use engram_runtime::CoreResult;
 /// relationships: classes, properties, axioms, imports, and validation findings.
 /// Validation is advisory unless an adapter or policy chooses to reject writes
 /// based on returned findings.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait OntologyRepository: Send + Sync {
     /// Stores or updates an ontology identity record.

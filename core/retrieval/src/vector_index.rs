@@ -21,6 +21,8 @@ use std::collections::HashSet;
 /// Implementations must reject insert and search operations when embedding
 /// spaces don't match, transitioning capability state to RequiresReindex
 /// when the configured space changes.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait VectorIndex: Send + Sync {
     /// Returns the embedding space identity for this index.

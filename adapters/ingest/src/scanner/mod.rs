@@ -7,28 +7,24 @@
 //! and must not be relaxed.
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use engram_domain::*;
 use engram_knowledge::{CoreError, CoreResult, KnowledgeGraphRepository, KnowledgeRepository};
 use futures::executor::block_on;
-use rayon::prelude::*;
 
 use crate::{
-    CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
-    MarkdownChunker, PlainTextChunker, PlainTextChunkerOptions,
-    classifier::{
-        classify_file, is_secret_file, is_within_root, looks_minified_bytes, looks_minified_name,
-    },
-    content_hash, contract,
-    git_detect::detect_git,
-    reconcile,
-    scan_filter::ScanFilter,
+    CodeSymbolChunker, GraphExtractor, KnowledgeIngestor, MarkdownChunker, PlainTextChunker,
+    PlainTextChunkerOptions, contract, git_detect::detect_git, scan_filter::ScanFilter,
     stable_source_key,
 };
 
 mod contract_phase;
+mod ingest_phase;
+mod prepass;
+mod sweep;
+mod walk;
 mod workspace;
 
 pub use workspace::{detect_workspace, scan_workspace};
@@ -37,8 +33,6 @@ pub use workspace::{detect_workspace, scan_workspace};
 fn is_markdown_ext(ext: &str) -> bool {
     matches!(ext.to_ascii_lowercase().as_str(), "md" | "markdown")
 }
-
-pub use crate::classifier::FileKind;
 
 const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
 /// Prefix for contract-op manifest keys. Uses the ASCII Unit Separator (U+001F)
@@ -200,516 +194,67 @@ where
     let ts_chunker = crate::TreeSitterChunker::new().ok();
     let extractor = GraphExtractor::new();
 
-    // Walk + filter (sequential).
-    let walker = ignore::WalkBuilder::new(&root_canonical)
-        .follow_links(false)
-        .build();
-    let mut readable: Vec<(PathBuf, FileKind, String)> = Vec::new();
-    // FIX 3: Track every rel path observed during the walk — including files
-    // that pass canonicalization but are subsequently skipped by the denylist,
-    // classifier, or size-bound filters.  Removed-path detection uses this set
-    // so that a transiently-filtered or newly-oversize file present on disk is
-    // NOT mistaken for a genuinely-absent removal (adversarial Concern 4).
-    let mut observed_paths: std::collections::HashSet<String> = std::collections::HashSet::new();
-    // code-graph-quality [minified-vendor-noise]: paths filtered THIS scan by
-    // the minified-asset rules (name or content). A path here that was in the
-    // prior manifest was previously indexed and is retracted below — filter
-    // upgrades clean existing stores instead of leaving stale bundle symbols.
-    let mut filtered_paths: HashSet<String> = HashSet::new();
-    for entry in walker {
-        let entry = match entry {
-            Ok(e) => e,
-            Err(_) => {
-                summary.errors += 1;
-                continue;
-            }
-        };
-        summary.scanned += 1;
-        let ft = match entry.file_type() {
-            Some(ft) => ft,
-            None => continue,
-        };
-        if !ft.is_file() {
-            continue;
-        }
-        let path = entry.path();
-        // Path confinement: canonicalize + assert within root (catches symlink escape).
-        let canonical = match std::fs::canonicalize(path) {
-            Ok(c) => c,
-            Err(_) => {
-                // Retain a prior-manifest path hit by a transient canonicalize/I/O
-                // error so it is NOT mistaken for a removal (otherwise its graph is
-                // deleted and only re-ingested next scan). The path is still skipped
-                // for this scan; new/transient files remain skip-and-forget.
-                if let Ok(rel) = path.strip_prefix(&root_canonical) {
-                    let rel = rel.to_string_lossy().to_string();
-                    if !rel.is_empty() && opts.manifest.contains_key(&rel) {
-                        observed_paths.insert(rel);
-                    }
-                }
-                summary.skipped += 1;
-                continue;
-            }
-        };
-        if !is_within_root(&canonical, &root_canonical) {
-            summary.skipped += 1;
-            continue;
-        }
-        let rel = canonical
-            .strip_prefix(&root_canonical)
-            .map_err(|e| CoreError::InvalidRequest {
-                reason: format!("rel path: {e}"),
-            })?
-            .to_string_lossy()
-            .to_string();
-        // Observe the path BEFORE any filter that could skip it so that
-        // skipped-but-present files are never classified as removals (FIX 3).
-        observed_paths.insert(rel.clone());
-        if opts.scan_filter.is_denylisted(&rel) || is_secret_file(&rel) {
-            summary.skipped += 1;
-            continue;
-        }
-        // code-graph-quality [minified-vendor-noise]: minified/bundled asset
-        // names are a stable, non-transient filter signal. Skipped at walk
-        // time; if such a file was previously INGESTED (present in the prior
-        // manifest) the pre-pass retracts its graph — a filter upgrade must
-        // clean existing stores, not just future ones.
-        if looks_minified_name(&rel) {
-            summary.skipped += 1;
-            filtered_paths.insert(rel.clone());
-            continue;
-        }
-        let Some(kind) = classify_file(&rel) else {
-            summary.skipped += 1;
-            continue;
-        };
-        let size = match std::fs::metadata(path) {
-            Ok(m) => m.len(),
-            Err(_) => {
-                summary.skipped += 1;
-                continue;
-            }
-        };
-        if size > opts.max_bytes() {
-            summary.skipped += 1;
-            continue;
-        }
-        readable.push((canonical, kind, rel));
-    }
+    // Walk + filter (phase 1 — see scanner/walk.rs).
+    let walk::WalkOutput {
+        readable,
+        observed_paths,
+        mut filtered_paths,
+    } = walk::walk_and_classify(&root_canonical, opts, &mut summary)?;
 
-    // FIX 1(a) + FIX 2: Serial pre-pass — read each file, detect changed vs
-    // unchanged, and for changed/new files delete their prior graph(s) BEFORE
-    // the parallel write pass (serializes the reconcile to eliminate the
-    // list→delete→recount→delete-repo-node race).
-    //
-    // On delete failure: increment `summary.errors` and do NOT forward the
-    // path to ingest — keeping the prior graph intact prevents duplicates
-    // (AC-4).  The old hash is preserved in the manifest below so the path is
-    // retried next scan (adversarial Concern 2 / FIX 2).
-    let max_bytes = opts.max_bytes();
-
-    // File content read in this pass is carried through to the parallel phase
-    // so bytes are not read twice.
-    struct ReadyToIngest {
-        kind: FileKind,
-        rel: String,
-        content: Vec<u8>,
-        hash: String,
-        /// Prior-graph validity stamps ("<kind>::<name>" -> validFrom) for
-        /// unchanged-symbol carry-over (temporal discrimination).
-        prior_validity: reconcile::PriorValidity,
-    }
-
-    let mut unchanged_rels: Vec<String> = Vec::new();
-    let mut delete_failed: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut to_ingest: Vec<ReadyToIngest> = Vec::new();
-    // Trim-empty files (0-byte or whitespace-only): nothing to index, but the
-    // path still goes through prior-graph retraction + manifest recording so
-    // a file that BECAME empty retracts cleanly and later scans treat it as
-    // unchanged. Previously these reached the chunker, which rejects empty
-    // text by contract — surfacing as scan `errors` (empty-file-fix).
-    let mut empty_rels: Vec<(String, String)> = Vec::new();
-
-    for (canonical, kind, rel) in &readable {
-        let bytes = match std::fs::read(canonical) {
-            Ok(b) => b,
-            Err(_) => {
-                summary.errors += 1;
-                continue;
-            }
-        };
-        if bytes.len() as u64 > max_bytes {
-            // File grew between the stat-based walk check and the read
-            // (TOCTOU edge).  Treat as skipped; prior graph persists.
-            summary.skipped += 1;
-            continue;
-        }
-        // code-graph-quality [minified-vendor-noise]: content heuristic —
-        // bundled assets with innocuous names (e.g. `app.js`) are caught by
-        // their shape: very long average lines. Skipped, and retracted when
-        // previously ingested.
-        if looks_minified_bytes(&bytes) {
-            summary.skipped += 1;
-            filtered_paths.insert(rel.clone());
-            continue;
-        }
-        let text = String::from_utf8_lossy(&bytes).into_owned();
-        let hash = content_hash(&text);
-        if opts.manifest.get(rel.as_str()).is_some_and(|h| h == &hash) {
-            unchanged_rels.push(rel.clone());
-            continue;
-        }
-        // File is new or changed — delete prior graph(s) before writing.
-        match block_on(reconcile::delete_prior_graphs_for_path(
-            repo,
-            &opts.scope,
-            &source_key,
-            rel,
-        )) {
-            Ok(prior_validity) => {
-                if text.trim().is_empty() {
-                    // Empty-file-fix: skip ingest (the chunker rejects empty
-                    // text by contract); count as skipped and remember the
-                    // hash for the manifest so the next scan is a no-op for
-                    // this path. The prior-graph delete above already ran, so
-                    // a file that shrank to empty retracts its old graph.
-                    empty_rels.push((rel.clone(), hash));
-                } else {
-                    to_ingest.push(ReadyToIngest {
-                        kind: *kind,
-                        rel: rel.clone(),
-                        content: bytes,
-                        hash,
-                        prior_validity,
-                    })
-                }
-            }
-            Err(_) => {
-                // Delete failed: surface the error, skip the write (no
-                // duplicate graph), retain old hash in manifest for retry.
-                summary.errors += 1;
-                delete_failed.insert(rel.clone());
-            }
-        }
-    }
-
-    // FIX 1(b): Parallel ingest — no reconcile / delete calls inside this
-    // closure.  Content was already read and prior graphs were already deleted
-    // in the serial pre-pass above.
-
-    // Pre-pass: collect ALL entity names globally so AST call extraction can
-    // match cross-file callees. Without this, extract_calls only knows about
-    // symbols declared in the current file, dropping most cross-file edges.
-    let global_entity_names: Arc<HashSet<String>> = Arc::new(
-        to_ingest
-            .par_iter()
-            .filter_map(|item| {
-                let ext = item.rel.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
-                let ts = ts_chunker.as_ref()?;
-                if !ts.supports(ext) {
-                    return None;
-                }
-                let text = String::from_utf8_lossy(&item.content);
-                let candidates = ts.chunk_with_ext(&text, ext).ok()?;
-                Some(
-                    candidates
-                        .iter()
-                        .filter_map(|c| {
-                            c.location
-                                .as_ref()
-                                .and_then(|l| l.anchor.as_deref())
-                                // Anchor name part — receiver-qualified (`Foo::bar`)
-                                // for nested declarations. Emit BOTH the qualified
-                                // form and the bare tail: AST callees are bare, so
-                                // extract_calls matches the tail (RFC-0020 Phase 2).
-                                .and_then(|a| a.split_once(' ').map(|x| x.1))
-                                .map(|name| {
-                                    let mut names = vec![name.to_owned()];
-                                    if let Some(tail) = engram_code::bare_tail(name) {
-                                        names.push(tail.to_owned());
-                                    }
-                                    names
-                                })
-                        })
-                        .flatten()
-                        .collect::<Vec<String>>(),
-                )
-            })
-            .flatten()
-            .collect(),
+    // Serial pre-pass (phase 2 — see scanner/prepass.rs).
+    let prepass::PrepassOutput {
+        to_ingest,
+        unchanged_rels,
+        empty_rels,
+        delete_failed,
+    } = prepass::serial_prepass(
+        repo,
+        opts,
+        &source_key,
+        &readable,
+        &mut filtered_paths,
+        &mut summary,
     );
+    let global_entity_names: Arc<HashSet<String>> = Arc::new(prepass::collect_global_entity_names(
+        &to_ingest,
+        ts_chunker.as_ref(),
+    ));
 
     let name_index: Arc<Mutex<engram_code::SymbolIndex>> =
         Arc::new(Mutex::new(engram_code::SymbolIndex::new()));
-    let outcomes: Vec<(String, Outcome, Vec<KnowledgeEntity>)> = to_ingest
-        .par_iter()
-        .map(|item| {
-            let rel = &item.rel;
-            let kind = item.kind;
-            if item.content.len() as u64 > max_bytes {
-                // Defense-in-depth TOCTOU guard (shouldn't fire; pre-pass
-                // already checked).
-                return (rel.clone(), Outcome::Skipped, Vec::new());
-            }
-            let text = String::from_utf8_lossy(&item.content).into_owned();
-            let text_for_ast = text.clone(); // keep a copy for AST call extraction
-            let hash = item.hash.clone();
-            let document_kind = match kind {
-                FileKind::Code => SourceDocumentKind::Code,
-                FileKind::Text => SourceDocumentKind::Text,
-            };
-            let request = DocumentIngestRequest {
-                source_kind: doc_source_kind.clone(),
-                source_name: source_name.clone(),
-                scope: opts.scope.clone(),
-                document_kind,
-                document: DocumentMetadata {
-                    path: Some(rel.clone()),
-                    ..Default::default()
-                },
-                text: String::new(), // placeholder — real text used for chunking below
-                policy: opts.policy.clone(),
-                actor: opts.actor.clone(),
-                stable_source_key: Some(source_key.clone()),
-                source_metadata: git_source_metadata.clone(),
-            };
-            // Tree-sitter chunking for supported extensions; fallback to the
-            // ingestor's internal chunker for others.
-            let ext = rel.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
-            // code-graph-quality [parse-multiplicity]: parse ONCE per file and
-            // share the tree across chunking, call extraction, and structural
-            // extraction (previously 3 independent parses here + 1 in the
-            // pre-pass name collection — 4× the dominant scan CPU).
-            let shared_tree = ts_chunker
-                .as_ref()
-                .filter(|ts| ts.supports(ext))
-                .and_then(|ts| ts.parse(&text_for_ast, ext).ok());
-            let ingested = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
-                let candidates = match ts.chunk_with_tree(tree, &text, ext) {
-                    Ok(c) => c,
-                    Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
-                };
-                let mut req = request;
-                req.text = text;
-                block_on(code_ingestor.ingest_with_candidates(repo, req, candidates))
-            } else {
-                let mut req = request;
-                req.text = text;
-                match kind {
-                    FileKind::Code => block_on(code_ingestor.ingest(repo, req)),
-                    FileKind::Text if is_markdown_ext(ext) => {
-                        block_on(markdown_ingestor.ingest(repo, req))
-                    }
-                    FileKind::Text => block_on(text_ingestor.ingest(repo, req)),
-                }
-            };
-            let ingested = match ingested {
-                Ok(i) => i,
-                Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
-            };
-            // AST-level call extraction using the GLOBAL entity name set (not
-            // just this file's symbols). This preserves cross-file call edges.
-            let ast_calls = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
-                // Run whenever the grammar supports the file — an empty
-                // global name set yields empty calls, NOT a fallback to the
-                // fact-less extract_into path (which silently dropped all
-                // Phase-2 structural/framework facts for declaration-free
-                // files; final-review sweep pin caught it).
-                ts.extract_calls_tree(tree, &text_for_ast, ext, &global_entity_names)
-                    .ok()
-            } else {
-                None
-            };
-            let frameworks = {
-                let facts = engram_code::extract_frameworks(&text_for_ast, ext);
-                if facts.is_empty() { None } else { Some(facts) }
-            };
-            let structural = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
-                ts.extract_structural_tree(tree, &text_for_ast, ext).ok()
-            } else {
-                None
-            };
-            let extracted_result = if let Some(ref calls) = ast_calls {
-                extractor
-                    .extract_with_calls(
-                        &ingested.source,
-                        &ingested.document,
-                        &ingested.chunks,
-                        Some(calls),
-                        structural.as_ref(),
-                        frameworks.as_ref(),
-                    )
-                    .map(|graph| {
-                        // Persist manually (extract_with_calls doesn't persist).
-                        let graph2 = graph.clone();
-                        (graph, graph2)
-                    })
-                    .map(|(graph, _)| graph)
-            } else {
-                core::result::Result::Err(CoreError::InvalidRequest {
-                    reason: "no ast calls".to_owned(),
-                })
-            };
-            let extracted = match extracted_result {
-                Ok(mut g) => {
-                    // C1: cross-file resolution — register entities + resolve refs.
-                    if let Ok(mut idx) = name_index.lock() {
-                        let repo = ingested
-                            .source
-                            .metadata
-                            .as_ref()
-                            .and_then(|m| m.get(crate::source_key::REPOSITORY_KEY))
-                            .and_then(|v| v.as_str());
-                        let path = ingested.document.path.as_deref();
-                        crate::extractor::register_entities(&mut idx, &g.entities, repo, path);
-                        g.unresolved =
-                            engram_code::resolve_refs(&idx, &mut g.relationships, repo, path);
-                    }
-                    // Temporal carry-over (whats-changed-temporal-flat): a
-                    // re-ingested file gets a brand-new graph id, so every
-                    // entity id churns even when the symbol is unchanged.
-                    // Inherit the prior graph's validFrom for symbols whose
-                    // (kind, name) identity survives — `recent` then moves
-                    // only for genuinely new/renamed symbols, not for the
-                    // 95% unchanged siblings of a changed file.
-                    for entity in &mut g.entities {
-                        let key = reconcile::validity_key(
-                            &format!("{:?}", entity.kind),
-                            &entity.name,
-                        );
-                        if let Some(prior) = item.prior_validity.get(&key) {
-                            entity.valid_from = Some(*prior);
-                        }
-                    }
-                    // Persist the graph + entities + relationships + ledger.
-                    let _ = block_on(async {
-                        repo.put_graph(g.graph.clone()).await?;
-                        for entity in &g.entities {
-                            repo.put_entity(entity.clone()).await?;
-                        }
-                        for rel in &g.relationships {
-                            repo.put_relationship(rel.clone()).await?;
-                        }
-                        if !g.unresolved.is_empty() {
-                            if let Err(e) = repo.put_unresolved_refs(g.unresolved.clone()).await {
-                                // Sibling pattern of the five warning-tagged
-                                // scans below: surface, never swallow.
-                                eprintln!(
-                                    "[engram-ingest] warning: failed to persist ledger rows for '{rel}': {e}"
-                                );
-                            }
-                        }
-                        for (chunk_idx, entity_refs) in &g.chunk_entities {
-                            if let Some(chunk) = ingested.chunks.get(*chunk_idx) {
-                                let mut updated = chunk.clone();
-                                updated.entities = entity_refs.clone();
-                                repo.put_chunk(updated).await?;
-                            }
-                        }
-                        Ok::<(), CoreError>(())
-                    });
-                    g
-                }
-                Err(_) => {
-                    let mut idx = name_index.lock().unwrap();
-                    match block_on(extractor.extract_into(
-                        repo,
-                        &ingested.source,
-                        &ingested.document,
-                        &ingested.chunks,
-                        Some(&mut *idx),
-                    )) {
-                        Ok(e) => e,
-                        Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
-                    }
-                }
-            };
-            // Contract extraction (T4/T5/T6): for YAML/JSON files, attempt
-            // OpenAPI detection and emit EntityKind::Api entities + exposes edges.
-            // Uses `text_for_ast` (a pre-move clone of the file text) so we do
-            // not need to read the content a second time.
-            let (contract_keys, contract_parse_failed, contract_had_write_error) =
-                contract_phase::extract_contract_entities(
-                    repo,
-                    &opts.scope,
-                    &source_key,
-                    &text_for_ast,
-                    ext,
-                    &ingested.source.provenance,
-                );
-
-            let emitted_entities = extracted.entities.clone();
-            (
-                rel.clone(),
-                Outcome::Ingested {
-                    entities: extracted.entities.len(),
-                    relationships: extracted.relationships.len(),
-                    hash: (rel.clone(), hash),
-                    contract_keys,
-                    contract_parse_failed,
-                    contract_had_write_error,
-                },
-                emitted_entities,
-            )
-        })
-        .collect();
+    let outcomes = ingest_phase::parallel_ingest(
+        &ingest_phase::IngestCtx {
+            repo,
+            opts,
+            source_name: &source_name,
+            doc_source_kind,
+            source_key: &source_key,
+            git_source_metadata: &git_source_metadata,
+            code_ingestor: &code_ingestor,
+            markdown_ingestor: &markdown_ingestor,
+            text_ingestor: &text_ingestor,
+            ts_chunker: ts_chunker.as_ref(),
+            extractor: &extractor,
+            global_entity_names: &global_entity_names,
+            name_index: &name_index,
+        },
+        &to_ingest,
+    );
 
     // RFC-0020 T3: the doc↔code `describes` bridge is removed — non-code
     // documents no longer emit Concept entities, so there is nothing to bridge.
     // Document↔code association is computed at recall time (chunk lane matches
     // on symbol text/path), not stored as topology.
 
-    // FIX 1(c): Serial post-pass — delete graphs for paths that were in the
-    // prior manifest but were never observed during this scan (genuinely-absent
-    // files).  Uses `observed_paths` (FIX 3) rather than `readable` so that
-    // oversize / denylisted / unclassifiable files that are still present on
-    // disk are not treated as removals.
-    // Exclude `contract:*` manifest entries — they are metadata keys, not file
-    // paths, so they must never be treated as "removed files" and must not
-    // trigger a `delete_prior_graphs_for_path` call.
-    let removed_paths: Vec<String> = opts
-        .manifest
-        .keys()
-        .filter(|k| {
-            !k.starts_with(CONTRACT_PREFIX)
-                && (!observed_paths.contains(*k) || filtered_paths.contains(*k))
-        })
-        .cloned()
-        .collect();
-    let mut removed_delete_failed: std::collections::HashSet<String> =
-        std::collections::HashSet::new();
-    for removed_path in &removed_paths {
-        match block_on(reconcile::delete_prior_graphs_for_path(
-            repo,
-            &opts.scope,
-            &source_key,
-            removed_path,
-        )) {
-            Ok(_prior_validity_of_removed_path) => {}
-            Err(_) => {
-                // Surface the error and keep the path in the manifest so it
-                // is retried next scan rather than silently orphaned (FIX 2).
-                summary.errors += 1;
-                removed_delete_failed.insert(removed_path.clone());
-            }
-        }
-    }
-    // GC: check whether the per-source Repository node can be pruned now that
-    // all removed-path deletions are complete.  Run once here — never before a
-    // replacement write — because a replacement write re-puts the repo node via
-    // upsert so pre-write GC would only widen the transient-absence window
-    // (FIX 1 / adversarial Nit 6). A failed GC leaves a harmless orphan repo
-    // node that converges on the next scan; surface it for observability
-    // instead of swallowing it.
-    if block_on(reconcile::maybe_delete_repo_node(
+    // Post-pass sweeps (phase 4 — see scanner/sweep.rs).
+    let removed_delete_failed = sweep::retract_removed_paths(
         repo,
-        &opts.scope,
+        opts,
         &source_key,
-    ))
-    .is_err()
-    {
-        summary.errors += 1;
-    }
+        &observed_paths,
+        &filtered_paths,
+        &mut summary,
+    );
 
     // Build the emitted manifest from this scan's outcomes.
     let mut new_manifest = std::collections::HashMap::new();
@@ -1050,6 +595,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::classifier::is_within_root;
 
     #[test]
     fn within_root_checks_prefix() {

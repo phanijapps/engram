@@ -7,8 +7,8 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
-engram-domain = { path = "../domain" }
-engram-runtime = { path = "../runtime" }
+engram-domain = { path = "../domain", version = "0.1.0" }
+engram-runtime = { path = "../runtime", version = "0.1.0" }
 serde = { workspace = true }
 # tokio::sync::RwLock backs the default InMemoryGraphCache (the shared graph
 # snapshot cache). Only `sync` is needed — no runtime pulled into this

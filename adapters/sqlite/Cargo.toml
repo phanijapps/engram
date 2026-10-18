@@ -1,6 +1,7 @@
 [package]
 name = "engram-store-sqlite"
 version = "0.1.0"
+license = "MIT"
 edition.workspace = true
 rust-version.workspace = true
 
@@ -11,21 +12,21 @@ chrono.workspace = true
 futures.workspace = true
 rusqlite.workspace = true
 serde_json.workspace = true
-engram-domain = { path = "../../core/domain" }
-engram-memory = { path = "../../core/memory" }
-engram-runtime = { path = "../../core/runtime" }
-engram-knowledge = { path = "../../core/knowledge" }
-engram-retrieval = { path = "../../core/retrieval" }
-engram-belief = { path = "../../core/belief" }
-engram-hierarchy = { path = "../../core/hierarchy" }
-engram-procedures = { path = "../../core/procedures" }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-memory = { path = "../../core/memory", version = "0.1.0" }
+engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
+engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
+engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
+engram-belief = { path = "../../core/belief", version = "0.1.0" }
+engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
+engram-procedures = { path = "../../core/procedures", version = "0.1.0" }
 sha2.workspace = true
 # Vector cell — folded in from engram-store-vector (T5):
 sqlite-vec.workspace = true
 fastembed = { version = "5.17.2", optional = true }
 
 [dev-dependencies]
-engram-eval = { path = "../../core/eval" }
+engram-eval = { path = "../../core/eval", version = "0.1.0" }
 futures.workspace = true
 tempfile = "3"
 

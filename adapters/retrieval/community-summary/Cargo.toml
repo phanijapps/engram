@@ -7,11 +7,11 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
-engram-domain = { path = "../../../core/domain" }
-engram-retrieval = { path = "../../../core/retrieval" }
-engram-runtime = { path = "../../../core/runtime" }
-engram-graph-analytics = { path = "../../../core/graph-analytics" }
-engram-store-associative-graph = { path = "../associative-graph" }
+engram-domain = { path = "../../../core/domain", version = "0.1.0" }
+engram-retrieval = { path = "../../../core/retrieval", version = "0.1.0" }
+engram-runtime = { path = "../../../core/runtime", version = "0.1.0" }
+engram-graph-analytics = { path = "../../../core/graph-analytics", version = "0.1.0" }
+engram-store-associative-graph = { path = "../associative-graph", version = "0.1.0" }
 futures.workspace = true
 
 [dev-dependencies]

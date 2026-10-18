@@ -8,8 +8,8 @@ rust-version.workspace = true
 [dependencies]
 chrono.workspace = true
 serde.workspace = true
-engram-domain = { path = "../domain" }
-engram-runtime = { path = "../runtime" }
+engram-domain = { path = "../domain", version = "0.1.0" }
+engram-runtime = { path = "../runtime", version = "0.1.0" }
 tree-sitter = "0.26"
 tree-sitter-bash = "0.25"
 tree-sitter-c = "0.24"

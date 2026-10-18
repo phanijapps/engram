@@ -8,11 +8,11 @@ rust-version.workspace = true
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
-engram-domain = { path = "../domain" }
-engram-belief = { path = "../belief" }
-engram-consolidation = { path = "../consolidation" }
-engram-memory = { path = "../memory" }
-engram-runtime = { path = "../runtime" }
+engram-domain = { path = "../domain", version = "0.1.0" }
+engram-belief = { path = "../belief", version = "0.1.0" }
+engram-consolidation = { path = "../consolidation", version = "0.1.0" }
+engram-memory = { path = "../memory", version = "0.1.0" }
+engram-runtime = { path = "../runtime", version = "0.1.0" }
 
 [dev-dependencies]
 futures.workspace = true

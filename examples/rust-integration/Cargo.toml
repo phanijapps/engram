@@ -1,12 +1,13 @@
 [package]
 name = "engram-integration-example"
 version = "0.1.0"
+license = "MIT"
 edition = "2024"
 
 [dependencies]
-engram-domain = { path = "../../core/domain" }
-engram-conformance = { path = "../../adapters/integration" }
-engram-integration = { path = "../../core/integration" }
-engram-memory = { path = "../../core/memory" }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-conformance = { path = "../../adapters/integration", version = "0.1.0" }
+engram-integration = { path = "../../core/integration", version = "0.1.0" }
+engram-memory = { path = "../../core/memory", version = "0.1.0" }
 chrono = "0.4"
 tokio = { version = "1", features = ["full"] }

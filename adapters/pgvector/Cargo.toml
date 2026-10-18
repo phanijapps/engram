@@ -6,15 +6,15 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-engram-domain = { path = "../../core/domain" }
-engram-runtime = { path = "../../core/runtime" }
-engram-memory = { path = "../../core/memory" }
-engram-knowledge = { path = "../../core/knowledge" }
-engram-belief = { path = "../../core/belief" }
-engram-hierarchy = { path = "../../core/hierarchy" }
-engram-procedures = { path = "../../core/procedures" }
-engram-retrieval = { path = "../../core/retrieval" }
-engram-consolidation = { path = "../../core/consolidation" }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
+engram-memory = { path = "../../core/memory", version = "0.1.0" }
+engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
+engram-belief = { path = "../../core/belief", version = "0.1.0" }
+engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
+engram-procedures = { path = "../../core/procedures", version = "0.1.0" }
+engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
+engram-consolidation = { path = "../../core/consolidation", version = "0.1.0" }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true, features = ["with-serde_json-1", "with-chrono-0_4"] }
 serde = { workspace = true }

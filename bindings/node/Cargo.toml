@@ -11,24 +11,24 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 async-trait.workspace = true
 chrono.workspace = true
-engram-codegraph-queries = { path = "../../codegraph/queries" }
-engram-domain = { path = "../../core/domain" }
-engram-belief = { path = "../../core/belief" }
-engram-consolidation = { path = "../../core/consolidation" }
-engram-eval = { path = "../../core/eval" }
-engram-hierarchy = { path = "../../core/hierarchy" }
-engram-procedures = { path = "../../core/procedures" }
-engram-conformance = { path = "../../adapters/integration" }
-engram-integration = { path = "../../core/integration", features = ["sqlite"] }
+engram-codegraph-queries = { path = "../../codegraph/queries", version = "0.1.0" }
+engram-domain = { path = "../../core/domain", version = "0.1.0" }
+engram-belief = { path = "../../core/belief", version = "0.1.0" }
+engram-consolidation = { path = "../../core/consolidation", version = "0.1.0" }
+engram-eval = { path = "../../core/eval", version = "0.1.0" }
+engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
+engram-procedures = { path = "../../core/procedures", version = "0.1.0" }
+engram-conformance = { path = "../../adapters/integration", version = "0.1.0" }
+engram-integration = { path = "../../core/integration", version = "0.1.0", features = ["sqlite"] }
 engram-backend-pgvector = { path = "../../backends/pgvector", optional = true }
-engram-ingest = { path = "../../adapters/ingest" }
-engram-knowledge = { path = "../../core/knowledge" }
-engram-memory = { path = "../../core/memory" }
-engram-retrieval = { path = "../../core/retrieval" }
-engram-runtime = { path = "../../core/runtime" }
-engram-store-sqlite = { path = "../../adapters/sqlite" }
-engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph" }
-engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical" }
+engram-ingest = { path = "../../adapters/ingest", version = "0.1.0" }
+engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
+engram-memory = { path = "../../core/memory", version = "0.1.0" }
+engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
+engram-runtime = { path = "../../core/runtime", version = "0.1.0" }
+engram-store-sqlite = { path = "../../adapters/sqlite", version = "0.1.0" }
+engram-store-associative-graph = { path = "../../adapters/retrieval/associative-graph", version = "0.1.0" }
+engram-store-lexical = { path = "../../adapters/retrieval/tantivy-lexical", version = "0.1.0" }
 futures.workspace = true
 napi.workspace = true
 napi-derive.workspace = true

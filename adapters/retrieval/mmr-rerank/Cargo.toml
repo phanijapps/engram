@@ -6,9 +6,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-engram-domain = { path = "../../../core/domain" }
-engram-retrieval = { path = "../../../core/retrieval" }
-engram-runtime = { path = "../../../core/runtime" }
+engram-domain = { path = "../../../core/domain", version = "0.1.0" }
+engram-retrieval = { path = "../../../core/retrieval", version = "0.1.0" }
+engram-runtime = { path = "../../../core/runtime", version = "0.1.0" }
 
 [dev-dependencies]
 chrono.workspace = true

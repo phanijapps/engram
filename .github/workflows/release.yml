@@ -118,8 +118,12 @@ jobs:
           # Remove private flag for publish
           node -e "
             const p = require('./package.json');
-            p.version = '${{ env.VERSION }}'.replace('v','');
+            const v = '${{ env.VERSION }}'.replace('v','');
+            p.version = v;
             delete p.private;
+            for (const k of Object.keys(p.optionalDependencies || {})) {
+              p.optionalDependencies[k] = v;
+            }
             require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
           "
           npm pack
@@ -188,8 +192,12 @@ jobs:
           cd packages/launcher
           node -e "
             const p = require('./package.json');
-            p.version = '${{ env.VERSION }}'.replace('v','');
+            const v = '${{ env.VERSION }}'.replace('v','');
+            p.version = v;
             delete p.private;
+            for (const k of Object.keys(p.optionalDependencies || {})) {
+              p.optionalDependencies[k] = v;
+            }
             require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
           "
           npm publish --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}

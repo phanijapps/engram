@@ -11,6 +11,7 @@ code_health
 consolidate
 contradiction_list
 explore
+fetch_content
 file_dependencies
 forget
 get_context

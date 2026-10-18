@@ -120,7 +120,7 @@ describe("engram-mcp-http guard", () => {
 });
 
 describe("engram-mcp-http client (MCP protocol)", () => {
-  it("lists the 42 tools and recall dispatches to the facade", async () => {
+  it("lists the 43 tools and recall dispatches to the facade", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -133,10 +133,12 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     );
 
     const { tools } = await client.listTools();
-    // 42 = the pre-existing 40 (incl the 4 maintenance/graph-health tools
-    // this array had missed) + the Phase-2 pair. Cross-server drift with the
-    // Rust registry (43) is pre-existing and recorded in the engram-code
-    // spec notes — the parity fixture intersection is asserted below.
+    // 43 = the pre-existing 42 (incl the 4 maintenance/graph-health tools
+    // this array had missed + the Phase-2 pair) + fetch_content (content
+    // stitching; stubbed here, real implementation on the Rust stdio MCP).
+    // Cross-server drift with the Rust registry is pre-existing and recorded
+    // in the engram-code spec notes — the parity fixture intersection is
+    // asserted below.
     expect(tools.map((x) => x.name).sort()).toEqual([
       "apply_maintenance_plan",
       "architecture",
@@ -153,6 +155,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
       "contradiction_detect",
       "contradiction_list",
       "explore",
+      "fetch_content",
       "file_dependencies",
       "forget",
       "get_context",
@@ -205,7 +208,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     await client.close();
   }, 15000);
 
-  it("maintenance_run op=extract-knowledge dispatches to the op (42-tool list unchanged)", async () => {
+  it("maintenance_run op=extract-knowledge dispatches to the op (43-tool list unchanged)", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -220,7 +223,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     // The tool surface gained file_dependencies + explore (Phase 2) — 38.
     // is a new op value on maintenance_run, NOT a new tool).
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(42);
+    expect(tools.length).toBe(43);
       // Cross-server tool-list parity (engram-code spec, ADR-0022): the TS
       // HTTP tool table must match the shared fixture asserted by the Rust
       // registry test. PRE-EXISTING drift: 11 tools differ (6 Rust-only, 5
@@ -258,7 +261,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     await client.close();
   }, 15000);
 
-  it("maintenance_run op=hierarchy-build dispatches to buildHierarchy (42-tool list unchanged)", async () => {
+  it("maintenance_run op=hierarchy-build dispatches to buildHierarchy (43-tool list unchanged)", async () => {
     const t = mockTransport();
     const port = await start(t);
 
@@ -273,7 +276,7 @@ describe("engram-mcp-http client (MCP protocol)", () => {
     // Still exactly 36 tools — hierarchy-build is a new op value on
     // maintenance_run, NOT a new tool.
     const { tools } = await client.listTools();
-    expect(tools.length).toBe(42);
+    expect(tools.length).toBe(43);
 
     // maintenance_run op=hierarchy-build dispatches to transport.buildHierarchy
     // (deterministic Louvain cluster→persist, no LLM — so no provider/key needed).

@@ -1,0 +1,186 @@
+name: Release
+
+# RFC-0021 Phase 4: tag-driven release pipeline.
+#   1. Build matrix (native runners — no cross-compilation fragility)
+#   2. Scan gate must have passed (security.yml on main)
+#   3. Stamp platform npm tarballs + checksums + SBOM
+#   4. GitHub Release with signed artifacts
+#   5. npm publish with provenance (gated on dry_run input)
+#
+# Dry-run: workflow_dispatch with dry_run=true — everything runs except npm
+# publish and release visibility (draft release). The first real release
+# should always be a dry-run pass.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (no npm publish, draft release)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  id-token: write # npm provenance
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  VERSION: ${{ github.ref_name }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}${{ matrix.variant == 'full' && ' (full)' || '' }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64-gnu
+            runner: ubuntu-latest
+            variant: slim
+          - target: linux-x64-gnu
+            runner: ubuntu-latest
+            variant: full
+          - target: linux-arm64-gnu
+            runner: ubuntu-24.04-arm
+            variant: slim
+          - target: linux-arm64-gnu
+            runner: ubuntu-24.04-arm
+            variant: full
+          - target: darwin-arm64
+            runner: macos-latest
+            variant: slim
+          - target: darwin-arm64
+            runner: macos-latest
+            variant: full
+          - target: darwin-x64
+            runner: macos-13
+            variant: slim
+          - target: win32-x64
+            runner: windows-latest
+            variant: slim
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target == 'linux-arm64-gnu' && 'aarch64-unknown-linux-gnu' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}-${{ matrix.variant }}
+
+      - name: Build (slim — no fastembed)
+        if: matrix.variant == 'slim'
+        run: cargo build --release -p engram-mcp --no-default-features --features http-embeddings
+
+      - name: Build (full — fastembed)
+        if: matrix.variant == 'full'
+        run: cargo build --release -p engram-mcp
+
+      - name: Stamp platform package
+        shell: bash
+        run: |
+          BIN=target/release/engram-mcp
+          [ "${{ matrix.target }}" = "win32-x64" ] && BIN=target/release/engram-mcp.exe
+          python3 scripts/release/stamp-platform-package.py \
+            "$BIN" \
+            "${{ matrix.target }}" \
+            "${{ env.VERSION }}" \
+            ${{ matrix.variant == 'full' && '--full' || '' }}
+          # emit checksum for the release manifest
+          sha256sum "$BIN" > "$BIN.sha256"
+          cp "$BIN.sha256" target/release/pkg/ 2>/dev/null || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}-${{ matrix.variant }}
+          path: |
+            target/release/pkg/*.tgz
+            target/release/*.sha256
+
+  launcher:
+    name: Build launcher package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Enable pnpm
+        run: corepack enable
+      - name: Pack launcher
+        run: |
+          cd packages/launcher
+          # Remove private flag for publish
+          node -e "
+            const p = require('./package.json');
+            p.version = '${{ env.VERSION }}'.replace('v','');
+            delete p.private;
+            require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+          npm pack
+          mkdir -p artifacts && mv *.tgz artifacts/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: launcher
+          path: packages/launcher/artifacts/*.tgz
+
+  release:
+    name: GitHub Release + npm publish
+    needs: [build, launcher]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect checksums
+        run: |
+          echo "## Artifact checksums" > CHECKSUMS.md
+          echo "" >> CHECKSUMS.md
+          find artifacts -name "*.sha256" -exec cat {} \; >> CHECKSUMS.md
+          find artifacts -name "*.tgz" -exec sha256sum {} \; >> CHECKSUMS.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: ${{ inputs.dry_run != false }}
+          files: |
+            artifacts/**/*.tgz
+          body_path: CHECKSUMS.md
+          generate_release_notes: true
+
+      - name: Publish to npm (with provenance)
+        if: inputs.dry_run == false
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+
+      - name: npm publish — launcher
+        if: inputs.dry_run == false
+        run: |
+          cd artifacts/launcher
+          npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: npm publish — platform packages
+        if: inputs.dry_run == false
+        run: |
+          for dir in artifacts/*/; do
+            if ls "$dir"/*.tgz >/dev/null 2>&1 && [[ "$dir" != *"launcher"* ]]; then
+              (cd "$dir" && npm publish --provenance --access public)
+            fi
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

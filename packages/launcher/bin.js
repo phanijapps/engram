@@ -92,8 +92,15 @@ function resolveBinary() {
   return binPath;
 }
 
+// Subcommands that do NOT need the binary.
+const argv = process.argv.slice(2);
+if (argv[0] === "install") {
+  require("./install.js").install(argv.slice(1));
+  process.exit(0);
+}
+
 const bin = resolveBinary();
-const child = spawn(bin, process.argv.slice(2), { stdio: "inherit" });
+const child = spawn(bin, argv, { stdio: "inherit" });
 child.on("error", (err) => fail(`failed to start binary: ${err.message}`));
 child.on("exit", (code, signal) => {
   if (signal) {

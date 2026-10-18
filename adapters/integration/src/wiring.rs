@@ -51,7 +51,14 @@ mod tests {
     };
 
     fn cfg() -> EngramConfig {
-        let dir = std::env::temp_dir().join(format!("engram-wiring-test-{}", std::process::id()));
+        // Unique per call: multiple tests in this binary bootstrap concurrently,
+        // and a shared pid-keyed dir raced with cleanup (a sibling test's
+        // remove_dir_all flipped another's bootstrap conformance to Failed on
+        // CI — never reproducible locally where the race window is tiny).
+        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("engram-wiring-test-{}-{}", std::process::id(), n));
         EngramConfig::new(
             dir,
             std::env::temp_dir(),

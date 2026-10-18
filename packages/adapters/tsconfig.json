@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": ".",
+    
     "outDir": "dist",
     "paths": {
       "@engram/client": ["../client/src/index.ts"],

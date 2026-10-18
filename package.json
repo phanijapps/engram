@@ -9,7 +9,6 @@
   "scripts": {
     "backend": "pnpm --filter prototype-backend dev",
     "backend:start": "pnpm --filter prototype-backend start",
-    "cc": "bash engram-cc/dev.sh",
     "mcp": "bash mcp/dev.sh",
     "build": "pnpm run build:native && pnpm -r --if-present build",
     "build:native": "pnpm --filter @engram/node build:native",
@@ -24,7 +23,7 @@
     "@types/node": "^26.6.5",
     "json-schema-to-typescript": "^16.0.0",
     "tsup": "^9.0.0",
-    "typescript": "^7.0.2",
+    "typescript": "^5.9.3",
     "vitest": "^5.0.5"
   },
   "pnpm": {

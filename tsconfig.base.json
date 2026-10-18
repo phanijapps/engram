@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "allowSyntheticDefaultImports": false,
+    
     "declaration": true,
     "declarationMap": true,
     "exactOptionalPropertyTypes": true,

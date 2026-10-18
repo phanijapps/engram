@@ -11,6 +11,8 @@ use engram_runtime::CoreResult;
 /// carry their own scope; their visibility is governed by the owning concept
 /// scheme's scope, mirroring how knowledge chunks inherit visibility from their
 /// source.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait TaxonomyRepository: Send + Sync {
     /// Stores or updates a concept scheme.

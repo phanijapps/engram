@@ -43,6 +43,8 @@ pub struct RetrievalHints {
 ///
 /// Implementations may use recent activity, expectation models, or prediction
 /// errors. The contract is storage- and model-agnostic.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait PredictiveRetriever: Send + Sync {
     /// Returns the retrieval hints predicted from the supplied agent state.

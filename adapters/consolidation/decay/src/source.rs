@@ -18,6 +18,8 @@ pub struct DecayCandidate {
 
 /// Read access to scoped active memories for decay evaluation + write access to
 /// expire them. Production wiring adapts `MemoryRepository` / `MemoryService`.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait DecayMemorySource: Send + Sync {
     /// Returns all in-scope memories (the executor filters active + expired-by-policy).

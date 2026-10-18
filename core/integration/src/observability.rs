@@ -102,6 +102,8 @@ pub struct DiagnosticsSnapshot {
 /// versions, and record counts (via listing) into one [`DiagnosticsSnapshot`].
 /// It degrades — never errors — when a store is unavailable: that type's count
 /// is reported as `0` and the snapshot still returns `Ok`.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait Observability: Send + Sync {
     /// Returns a point-in-time [`DiagnosticsSnapshot`] of this provider.

@@ -96,12 +96,12 @@ jobs:
         run: pnpm run contracts:generate
       - name: Check generated contract drift
         run: git diff --exit-code -- packages/contracts/src/generated
+      - name: Build packages
+        run: pnpm run build
       - name: Typecheck
         run: pnpm run typecheck
       - name: Test
         run: pnpm run test
-      - name: Build
-        run: pnpm run build
 
   audit:
     name: Security audit (cargo-audit)

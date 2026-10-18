@@ -13,6 +13,8 @@ use engram_runtime::{CoreError, CoreResult};
 
 /// Read port for the community aggregate (Louvain + meta-edges + member index).
 /// Default methods return `CapabilityUnsupported` — the SQLite adapter overrides.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait CommunityQuery: Send + Sync {
     /// The top-N communities + inter-community meta-edges + total count.

@@ -25,6 +25,8 @@ use crate::knowledge::SqlKnowledgeStore;
 /// The trait lets `GraphRetrievalIndex` be tested without SQLite (a stub source
 /// stands in) and lets a future backend (Neo4j, pgvector-graph) plug in by
 /// implementing the same two reads.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait GraphCandidateSource: Send + Sync {
     async fn entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>>;

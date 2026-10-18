@@ -27,6 +27,8 @@ pub use consolidation::{
 /// Consolidation may synthesize memories, beliefs, contradictions, hierarchy
 /// nodes, or taxonomy changes. Any durable mutation should be represented in a
 /// `ConsolidationRun` with task-level outcomes and recoverable errors.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait ConsolidationService: Send + Sync {
     /// Executes one consolidation cycle for the requested scope and strategy.

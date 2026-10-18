@@ -23,6 +23,8 @@ use crate::LexicalIndex;
 /// Resolvers own canonical record lookup and policy-aware target visibility.
 /// Returning `Ok(None)` means the indexed target is stale or not visible for
 /// this request and should be skipped.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait LexicalTargetResolver: Send + Sync {
     /// Resolves one BM25 hit's target id into a retrieval target.

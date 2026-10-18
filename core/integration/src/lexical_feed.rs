@@ -11,6 +11,8 @@ use async_trait::async_trait;
 use engram_runtime::CoreResult;
 
 /// Write port: feed searchable text into the lexical (BM25) lane.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait LexicalFeed: Send + Sync {
     /// Upsert one searchable document (`target_id` → `text`).

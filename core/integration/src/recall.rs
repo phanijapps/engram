@@ -36,6 +36,8 @@ use engram_runtime::CoreResult;
 /// Free-text queries that do not verbatim match a stored subject key will yield
 /// `None` from this lane — fuzzy / entity-alias mapping is a follow-up (see
 /// `docs/backlog.md`, `unified-recall-taxonomy-episodes`).
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait UnifiedRecall: Send + Sync {
     /// Fans `request` across the v1 lanes and returns one fused [`ContextPayload`].

@@ -18,6 +18,8 @@ pub use validation::validate_hierarchy_parentage;
 /// Hierarchy adapters may materialize trees, DAG-like relation sets, or cached
 /// paths internally. The public results must still expose explainable nodes,
 /// relations, and provenance for navigation and context compression.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait HierarchyRepository: Send + Sync {
     /// Stores a hierarchy node from a build or manual curation step.
@@ -40,6 +42,8 @@ pub trait HierarchyRepository: Send + Sync {
 /// Builders may use clustering, taxonomy, graph structure, or model-assisted
 /// summaries internally. Outputs must preserve algorithm provenance and avoid
 /// creating multiple parent pointers inside a single tree version.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait HierarchyBuilder: Send + Sync {
     /// Builds hierarchy nodes for a scope using a recorded build configuration.

@@ -11,6 +11,8 @@ use engram_runtime::{CoreError, CoreResult};
 /// document-oriented, relational, graph-native, or process-local, but it must
 /// preserve provenance, policy, and scope so retrieval can compose knowledge
 /// with memory safely.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait KnowledgeRepository: Send + Sync {
     /// Stores or updates a registered knowledge source.

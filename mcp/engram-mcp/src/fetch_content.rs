@@ -182,8 +182,7 @@ fn normalize_path(p: &str) -> String {
 /// search-style matcher alone can never resolve them) or the flexible
 /// `search`-style `org/name` substring match for git-backed sources.
 fn source_filter_matches(source: &str, repository: &str) -> bool {
-    source_matches_repository(source, repository)
-        || source.to_ascii_lowercase() == repository.to_ascii_lowercase()
+    source_matches_repository(source, repository) || source.eq_ignore_ascii_case(repository)
 }
 
 /// Cut `text` to at most `max_bytes` on a UTF-8 char boundary.

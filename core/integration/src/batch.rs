@@ -210,6 +210,8 @@ pub struct BatchIngestRequest {
 ///
 /// The port is engine-neutral (ADR-0022): it names no engine type. The SQLite
 /// implementation composes `Sql*` stores in the adapters layer.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait BatchIngest: Send + Sync {
     /// The transactional guarantee this backend provides.
@@ -383,15 +385,10 @@ mod tests {
     fn futures_block_on<F: std::future::Future>(f: F) -> F::Output {
         // The port crate depends on async-trait but not on a runtime; use a
         // minimal single-threaded poll loop so tests need no async executor.
-        use std::task::{Context, Poll, Wake, Waker};
+        use std::task::{Context, Poll, Waker};
 
-        struct NoopWake;
-        impl Wake for NoopWake {
-            fn wake(self: std::sync::Arc<Self>) {}
-        }
-
-        let waker = Waker::from(std::sync::Arc::new(NoopWake));
-        let mut cx = Context::from_waker(&waker);
+        let waker = Waker::noop();
+        let mut cx = Context::from_waker(waker);
         let mut fut = std::pin::pin!(f);
         loop {
             match fut.as_mut().poll(&mut cx) {

@@ -10,6 +10,8 @@ use engram_runtime::CoreResult;
 /// APIs into `SourceDocument` records and document content. They should report
 /// adapter failures explicitly instead of returning partial reads as complete
 /// ingestion.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait SourceReader: Send + Sync {
     /// Lists or discovers documents available from a registered source.
@@ -40,6 +42,8 @@ pub trait Chunker: Send + Sync {
 /// an idempotent source-to-knowledge pipeline. Dry runs should compute planned
 /// writes without persisting sources, documents, chunks, entities, or graph
 /// relationships.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait IngestionService: Send + Sync {
     /// Ingests a registered source and returns chunks written or planned.

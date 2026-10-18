@@ -66,7 +66,7 @@ required_sections=(
 )
 
 for section in "${required_sections[@]}"; do
-  if ! rg -q --fixed-strings "$section" docs/domain-data-model.md; then
+  if ! grep -qF "$section" docs/domain-data-model.md; then
     echo "missing required domain model section: $section" >&2
     exit 1
   fi
@@ -80,7 +80,7 @@ else
   echo "warning: jq not found; skipped JSON syntax validation" >&2
 fi
 
-if rg -n '"training_export"' contracts/v1/schemas docs/domain-data-model.md; then
+if grep -nF '"training_export"' contracts/v1/schemas docs/domain-data-model.md; then
   echo "training_export is excluded from accepted v1 contract artifacts" >&2
   exit 1
 fi

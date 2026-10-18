@@ -26,6 +26,8 @@ use engram_runtime::CoreResult;
 /// `scope` is allowed to see. Because the Personalized PageRank walk runs only
 /// over edges this trait returns, out-of-scope nodes are unreachable by
 /// construction — there is no second scope gate inside the walk.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait GraphRelationshipSource: Send + Sync {
     /// All knowledge-graph entities visible to `scope`.

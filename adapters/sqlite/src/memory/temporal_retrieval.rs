@@ -27,6 +27,8 @@ use crate::memory::SqlMemoryService;
 
 /// Source of recent in-scope memories for the temporal lane. `SqlMemoryService`
 /// implements it; tests can stub it.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait TemporalMemorySource: Send + Sync {
     /// Recent active memories visible to `scope`, newest-first, capped at `limit`.
@@ -153,7 +155,7 @@ impl TemporalMemorySource for SqlMemoryService {
     async fn recent_memories(&self, scope: &Scope, limit: u32) -> CoreResult<Vec<MemoryRecord>> {
         let mut records = self.list_memories_in_scope(scope)?;
         records.retain(|r| r.status == MemoryStatus::Active);
-        records.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        records.sort_by_key(|r| std::cmp::Reverse(r.created_at));
         records.truncate(limit.max(1) as usize);
         Ok(records)
     }

@@ -32,6 +32,8 @@ pub use report_summary::{
 /// Runners should report positive recall failures, forbidden recall leaks,
 /// missing explanations, and score/ranking regressions separately so quality
 /// failures are actionable.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait EvaluationRunner: Send + Sync {
     /// Runs a fixture and returns per-case pass/fail details.

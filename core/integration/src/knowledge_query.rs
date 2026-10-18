@@ -33,6 +33,8 @@ pub struct ChunkRef {
     pub content_hash: String,
 }
 
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait KnowledgeQuery: Send + Sync {
     /// All entities in `scope`.

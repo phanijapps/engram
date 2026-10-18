@@ -16,6 +16,8 @@ use engram_runtime::CoreResult;
 /// Identity-aware entity + relationship operations, plus transactional
 /// consolidation. Storage-neutral; engine-private uniqueness indexes and
 /// transaction strategy are adapter-private.
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait EntityIdentityRepository: Send + Sync {
     /// Atomically resolve an entity under a declared identity policy.
@@ -63,11 +65,7 @@ pub fn compute_identity_key(entity: &KnowledgeEntity, mode: &EntityIdentityMode)
     match mode {
         EntityIdentityMode::IdOnly => None,
         EntityIdentityMode::StableKey { key } => Some(format!("sk:{}", key)),
-        EntityIdentityMode::ScopedKindAndNormalizedName {
-            include_graph,
-            match_aliases: _,
-            ..
-        } => {
+        EntityIdentityMode::ScopedKindAndNormalizedName { include_graph, .. } => {
             let scope_part = &entity.scope.tenant;
             let kind_part = format!("{:?}", entity.kind);
             let name_part = normalize_name(&entity.name);

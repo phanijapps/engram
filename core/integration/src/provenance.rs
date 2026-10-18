@@ -86,6 +86,8 @@ pub struct ProvenanceEntry {
 /// (ADR-0023) is the one write op — a port-level rewrite that appends an
 /// [`EvidenceRef`] to an already-stored record's provenance and returns the
 /// updated [`Provenance`].
+#[allow(clippy::double_must_use)]
+// async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait ProvenanceQuery: Send + Sync {
     /// Provenance carried by the record `target`/`id` in `scope`, or `None` if

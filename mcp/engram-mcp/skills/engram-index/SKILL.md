@@ -65,7 +65,7 @@ recurring workflows this repo actually performs (indexing, triage,
 release, dogfood — whatever the repo's rhythm is):
 
 ```
-procedure_put({ "name": "verify", "trigger": "before handoff", "steps": ["<exact command>", ...] })
+procedure_put({ "name": "verify", "trigger": "before handoff", "steps": ["<exact command>"] })
 ```
 
 Only procedures you have seen work (from READMEs, CI configs, or this

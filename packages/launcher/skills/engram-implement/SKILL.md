@@ -71,8 +71,7 @@ Report: steps done, verification results, diff summary, plan amendments
 made, risks re-checked. Then a quick learn pass — the durable bits only:
 
 ```
-write_memory({ "content": "Fixed <X>: root cause was <Y>. The plan's
-  step-N command was wrong (<what worked instead>)." })
+write_memory({ "content": "Fixed <X>: root cause was <Y>. Plan step-N command was wrong: <what worked instead>." })
 procedure_put({ "name": "<validated workflow, if one emerged>",
   "trigger": "<when>", "steps": ["..."] })
 ```

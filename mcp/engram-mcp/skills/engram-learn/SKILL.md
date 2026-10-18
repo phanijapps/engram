@@ -42,9 +42,7 @@ re-putting it.
 ### 3. Write
 
 ```
-write_memory({ "content": "Decided to gate the npm publish on the scan
-  gate because a package is the most-attacked surface an agent tool ships
-  on (lesson: OpenClaw). Context: RFC-0021." })
+write_memory({ "content": "Decided to gate npm publish on the scan gate: a package is the most-attacked surface (lesson: OpenClaw). Context: RFC-0021." })
 ```
 
 ```
@@ -66,8 +64,7 @@ overwrite a belief with history behind it.
 For source material (RFCs, ADRs, design docs) the project should recall:
 
 ```
-store_knowledge({ "entities": [...], "facts": [...],
-  "relationships": [...], "idempotency_key": "<doc-id>" })
+store_knowledge({ "entities": [], "facts": [], "relationships": [], "idempotency_key": "<doc-id>" })
 ```
 
 Bridge concepts to code where you can — a concept not linked to what

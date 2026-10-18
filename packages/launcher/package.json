@@ -37,5 +37,8 @@
     "@engramlabs/mcp-darwin-arm64": "0.1.1-alpha",
     "@engramlabs/mcp-darwin-x64": "0.1.1-alpha",
     "@engramlabs/mcp-win32-x64": "0.1.1-alpha"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.cjs"
   }
 }

@@ -71,15 +71,13 @@ command) · **Open Questions** (what the index could NOT answer).
 ### 5. Persist plan + workflow
 
 ```
-write_memory({ "content": "PLAN <slug>: <overview>. Precedents: <found |
-  none>. Steps: <N>. Top risks: <...>" })
+write_memory({ "content": "PLAN <slug>: <overview>. Precedents: <found|none>. Steps: <N>. Top risks: <top risks>." })
 ```
 
 When this shape recurs, capture the workflow that worked:
 
 ```
-procedure_put({ "name": "plan-<workflow-type>", "trigger": "<when this
-  shape appears>", "steps": ["<the moves that worked, in order>"] })
+procedure_put({ "name": "plan-<workflow-type>", "trigger": "<when this shape appears>", "steps": ["<the moves that worked, in order>"] })
 ```
 
 ## When it fails

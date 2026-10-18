@@ -1,5 +1,3 @@
 packages:
   - "packages/*"
   - "prototype/*"
-  - "engram-cc/backend"
-  - "engram-cc/frontend"

@@ -36,7 +36,7 @@ attention arrives.
 
 ## Goals
 
-- `npx engram-mcp@latest --storage ~/.engram` works on linux-x64/arm64
+- `npx @engramlabs/mcp@latest --storage ~/.engram` works on linux-x64/arm64
   (gnu), darwin-arm64, win32-x64.
 - Zero install scripts; launcher has zero dependencies.
 - Every artifact verifiable: npm provenance, SHA-256 checksums (signed
@@ -55,13 +55,13 @@ stance); publishing anywhere beyond npm + GitHub Releases.
 ## Package tree
 
 ```
-engram-mcp                    launcher: bin.js (zero deps) + install.ts
-@engram/mcp-linux-x64-gnu     binary + package.json {os,cpu,files:[engram-mcp]}
-@engram/mcp-linux-arm64-gnu
-@engram/mcp-darwin-arm64
-@engram/mcp-win32-x64
-engram-mcp-full + @engram/mcp-*-full     fastembed variant (separate launcher)
-@engram/client, @engram/node             existing TS workspace, published
+@engramlabs/mcp                launcher: bin.js (zero deps) + install.ts
+@engramlabs/mcp-linux-x64-gnu     binary + package.json {os,cpu,files:[engram-mcp]}
+@engramlabs/mcp-linux-arm64-gnu
+@engramlabs/mcp-darwin-arm64
+@engramlabs/mcp-win32-x64
+@engramlabs/mcp-full + @engramlabs/mcp-*-full     fastembed variant (separate launcher)
+@engramlabs/client, @engramlabs/node             existing TS workspace, published
 ```
 
 Launcher contract: resolve platform package → spawn with stdio inherit →
@@ -104,7 +104,7 @@ flowchart LR
 **Account-level hardening** (the real attack surface for a
 one-maintainer project): hardware-key 2FA, frozen publish tokens,
 CODEOWNERS + required review on release paths, defensive npm name
-registration (`engram`, `engram-mcp`, `engram-core`, `engram-harness`, `@engram` scope) *before*
+registration (`engram`, `engram-mcp`, `engram-core`, `engram-harness`, `@engramlabs` scope) *before*
 announcement, SECURITY.md with coordinated disclosure.
 
 ## Binary hygiene
@@ -117,7 +117,7 @@ the default binary's network surface before it is claimed.
 
 ## Launch stack (phases after the package floor)
 
-1. **install --client** + publish `@engram/client`/`@engram/node` (the
+1. **install --client** + publish `@engramlabs/client`/`@engramlabs/node` (the
    mem0 SDK loop: server is the hook, SDK is retention)
 2. **Trust visible**: badges (audit/CodeQL/provenance/signed), SECURITY.md,
    name defense, 2FA/token freeze

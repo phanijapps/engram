@@ -1,5 +1,5 @@
 {
-  "name": "engram-mcp",
+  "name": "@engramlabs/mcp",
   "version": "0.1.0",
   "description": "Local-first agentic memory: the engram MCP server launcher. Memory + knowledge graph + beliefs + code intelligence for any MCP client.",
   "license": "MIT",
@@ -10,6 +10,7 @@
   "bin": {
     "engram-mcp": "./bin.js"
   },
+  "funding": false,
   "files": [
     "bin.js",
     "install.js",

@@ -53,7 +53,7 @@ def main() -> int:
         return 1
 
     os_info = TARGET_MAP[target]
-    name = f"@engram/mcp-{target}" + ("-full" if is_full else "")
+    name = f"@engramlabs/mcp-{target}" + ("-full" if is_full else "")
     bin_name = os.path.basename(binary_path)
 
     # package.json from template

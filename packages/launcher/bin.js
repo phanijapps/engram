@@ -30,9 +30,9 @@ function fail(message) {
 /** Map process.platform/process.arch to the platform package suffix. */
 function platformPackage() {
   const { platform, arch } = process;
-  if (platform === "darwin" && arch === "arm64") return "@engram/mcp-darwin-arm64";
-  if (platform === "darwin" && arch === "x64") return "@engram/mcp-darwin-x64";
-  if (platform === "win32" && arch === "x64") return "@engram/mcp-win32-x64";
+  if (platform === "darwin" && arch === "arm64") return "@engramlabs/mcp-darwin-arm64";
+  if (platform === "darwin" && arch === "x64") return "@engramlabs/mcp-darwin-x64";
+  if (platform === "win32" && arch === "x64") return "@engramlabs/mcp-win32-x64";
   if (platform === "linux" && (arch === "x64" || arch === "arm64")) {
     // v1 ships gnu only (RFC-0021 non-goal: musl). Detect the runtime libc
     // so musl users get a precise error instead of a broken binary.
@@ -51,7 +51,7 @@ function platformPackage() {
           `https://github.com/phanijapps/engram/issues`
       );
     }
-    return arch === "x64" ? "@engram/mcp-linux-x64-gnu" : "@engram/mcp-linux-arm64-gnu";
+    return arch === "x64" ? "@engramlabs/mcp-linux-x64-gnu" : "@engramlabs/mcp-linux-arm64-gnu";
   }
   fail(
     `unsupported platform ${platform}-${arch}. ` +
@@ -74,7 +74,7 @@ function resolveBinary() {
     fail(
       `platform package ${pkg} is not installed.\n` +
         `This should have been installed automatically as an optionalDependency.\n` +
-        `Fix: npm install engram-mcp --force  (or: npm install ${pkg})`
+        `Fix: npm install @engramlabs/mcp --force  (or: npm install ${pkg})`
     );
   }
   const binPath = path.join(path.dirname(manifest), BIN_NAME);
@@ -86,7 +86,7 @@ function resolveBinary() {
   if (binVersion !== LAUNCHER_VERSION) {
     fail(
       `version mismatch: launcher ${LAUNCHER_VERSION} != platform package ${binVersion}.\n` +
-        `Mixed versions are unsupported. Fix: npm install engram-mcp@${LAUNCHER_VERSION}`
+        `Mixed versions are unsupported. Fix: npm install @engramlabs/mcp@${LAUNCHER_VERSION}`
     );
   }
   return binPath;

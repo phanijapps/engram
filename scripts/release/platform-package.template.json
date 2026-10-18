@@ -1,5 +1,5 @@
 {
-  "name": "@engram/mcp-__TARGET__",
+  "name": "@engramlabs/mcp-__TARGET__",
   "version": "__VERSION__",
   "description": "engram-mcp server binary for __TARGET__ (auto-selected via os/cpu; installed as an optionalDependency of engram-mcp — never install directly).",
   "license": "MIT",

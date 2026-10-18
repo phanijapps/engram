@@ -223,7 +223,8 @@ jobs:
           V="${V#v}"               # tag is v0.1.5-alpha; npm wants 0.1.5-alpha
           npm dist-tag add "@engramlabs/mcp@$V" latest
           for tgz in $(find artifacts -name 'mcp-*.tgz' -type f); do
-            pkg=$(basename "$tgz" .tgz)   # mcp-linux-x64-gnu → @engramlabs/mcp-linux-x64-gnu
+            pkg=$(basename "$tgz" .tgz)   # mcp-linux-x64-gnu-v0.1.6-alpha.tgz
+            pkg="${pkg%-v*}"              # → mcp-linux-x64-gnu
             npm dist-tag add "@engramlabs/$pkg@$V" latest
           done
         env:

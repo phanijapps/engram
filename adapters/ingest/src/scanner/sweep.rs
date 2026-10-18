@@ -6,6 +6,9 @@
 
 use std::collections::HashSet;
 
+use engram_domain::*;
+use engram_knowledge::CoreError;
+
 use engram_knowledge::{KnowledgeGraphRepository, KnowledgeRepository};
 use futures::executor::block_on;
 
@@ -81,4 +84,113 @@ where
     }
 
     removed_delete_failed
+}
+
+/// RFC-0020 Phase 2 orphan sweep: re-attempt every pending unresolved-ref
+/// ledger row against this scan's symbol table. A reference whose target
+/// landed in a LATER file resolves here — edge written, row flipped.
+/// Relocated verbatim from `scan_repository` (scanner god-module split).
+pub(super) fn heal_pending_refs<R>(
+    repo: &R,
+    opts: &ScanOptions,
+    name_index: &engram_code::SymbolIndex,
+    summary: &mut ScanSummary,
+) where
+    R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,
+{
+    {
+        let pending =
+            block_on(repo.list_unresolved_refs(&opts.scope, UnresolvedReferenceStatus::Pending))
+                .unwrap_or_default();
+        if !pending.is_empty() {
+            for row in pending {
+                let reference = row.reference_name.clone();
+                let (hint, name) = engram_code::split_dotted(&reference);
+                let mut outcome = name_index.resolve(name, None, None);
+                if !matches!(outcome, engram_code::Resolution::Resolved(_)) {
+                    if let Some(hint) = hint {
+                        let qualified =
+                            format!("{}::{}", engram_code::receiver_type_hint(hint), name);
+                        outcome = name_index.resolve(&qualified, None, None);
+                    }
+                }
+                if let engram_code::Resolution::Resolved(candidate) = outcome {
+                    let scope = row.scope.clone();
+                    let subject_id = row.from_entity_id.clone();
+                    let object_id = Id::from(candidate.id.clone());
+                    let graph_id = row.graph_id.clone();
+                    // The healed edge keeps the reference's own shape: an
+                    // Endpoint subject (a route) heals as `routes_to`,
+                    // everything else as `calls` (the row carries no
+                    // predicate; the kind comes from the subject entity).
+                    let subject_entity =
+                        block_on(repo.get_entity(&row.from_entity_id, &opts.scope))
+                            .ok()
+                            .flatten();
+                    let subject_kind = subject_entity.as_ref().map(|entity| entity.kind.clone());
+                    let predicate = match subject_kind {
+                        Some(engram_domain::EntityKind::Endpoint) => "routes_to",
+                        _ => "calls",
+                    };
+                    let rel = KnowledgeRelationship {
+                        id: RelationshipId::from(format!("sweep-{subject_id}-{object_id}")),
+                        graph_id,
+                        subject: EntityRef {
+                            id: Some(subject_id.clone()),
+                            kind: None,
+                            // Canonical names (code-graph-quality follow-up):
+                            // healed edges previously carried an EMPTY subject
+                            // name and the AS-WRITTEN bare object reference —
+                            // invisible to name-keyed navigation. Stamp both
+                            // endpoints with the resolved entities' names.
+                            name: subject_entity.as_ref().map(|e| e.name.clone()),
+                            aliases: Vec::new(),
+                        },
+                        predicate: predicate.to_owned(),
+                        object: EntityRef {
+                            id: Some(object_id.clone()),
+                            kind: None,
+                            name: Some(
+                                name_index
+                                    .lookup(object_id.as_str())
+                                    .map(|c| c.name.clone())
+                                    .unwrap_or(reference.clone()),
+                            ),
+                            aliases: Vec::new(),
+                        },
+                        scope: scope.clone(),
+                        evidence: Vec::new(),
+                        confidence: Some(0.9),
+                        provenance: Provenance {
+                            source: "engram-orphans-sweep".to_owned(),
+                            actor: opts.actor.clone(),
+                            observed_at: chrono::Utc::now(),
+                            evidence: Vec::new(),
+                            derivations: Vec::new(),
+                            confidence: None,
+                            method: Some("deterministic_orphan_sweep".to_owned()),
+                        },
+                        created_at: chrono::Utc::now(),
+                        updated_at: None,
+                        archived_at: None,
+                    };
+                    let row_id = row.id.clone();
+                    if (block_on(async {
+                        repo.put_relationship(rel).await?;
+                        repo.update_unresolved_status(
+                            &row_id,
+                            UnresolvedReferenceStatus::Resolved,
+                            &scope,
+                        )
+                        .await?;
+                        Ok::<(), CoreError>(())
+                    }))
+                    .is_err()
+                    {
+                        summary.errors += 1;
+                    }
+                }
+            }
+        }
+    }
 }

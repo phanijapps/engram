@@ -872,3 +872,25 @@ self store → single-baseline.
   `register_all_tools`). Lower priority than the scanner split.
 - `whats_changed` flat on the fresh single-scan baseline (expected);
   temporal discrimination starts next run.
+
+## whats-changed-temporal-flat (found 2026-10-18, second self-index scan)
+
+**The temporal layer is structurally flat: `whats_changed` returns only the
+overview no matter how many scans run.** Verified against
+`~/.engram/mem-alpha-self` after the second scan: only 2 of 9,176 entities
+carry `valid_from` — the scan/ingest path (`put_entity` upserts) never stamps
+entity `valid_from`, so `engram_codegraph_temporal::recent/impact/compound`
+(§ RFC-0012) see no versioned symbols and emit empty sections. The
+self-index skill's assumption ("temporal discrimination starts at scan #2")
+is wrong at the data level. Fix direction: either stamp `valid_from` on
+re-ingest when `content_hash` changes (bi-temporal entities, ADR-0019) or
+feed the temporal layer from the scan manifest diff (path → changed-since).
+Blocked on nothing; small, high-leverage for the temporal tools.
+
+## surreal-retired (2026-10-18, ADR-0030)
+
+`adapters/surreal` + the `surreal` integration feature retired (ADR-0030):
+never promoted to a backend recipe, absent from CI/conformance/bindings, and
+the sole source of the rkyv audit ignore + most advisory warnings. The
+`.cargo/audit.toml` ignore list is empty again. Returns only as a new
+additive cell + recipe per ADR-0022.

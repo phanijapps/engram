@@ -72,7 +72,7 @@ pub enum SqliteStorageLayout {
 ///
 /// A profile file's `[backend]` section deserializes into this enum. The active
 /// backend is `sqlite` (file-backed, behind the `sqlite` cargo feature); the
-/// `postgres` and `surreal` variants are parsed and validated so profile files
+/// `postgres` variants are parsed and validated so profile files
 /// stay forward-compatible, but opening a provider against them fails with
 /// [`engram_runtime::CoreError::CapabilityUnsupported`] until the matching
 /// backend feature ships.
@@ -95,14 +95,6 @@ pub enum BackendProfile {
     Postgres {
         /// Postgres connection string (e.g. `postgres://user@host/db`).
         connection_string: String,
-    },
-    /// Surreal backend (embedded, behind the `surreal` cargo feature). v1 is
-    /// in-process; `data_root` is the directory the store lives under, mirroring
-    /// the SQLite `data_root` shape. Select by compiling `--features surreal`
-    /// and setting `[backend] kind = "surreal"`.
-    Surreal {
-        /// Directory holding the embedded Surreal store.
-        data_root: String,
     },
 }
 
@@ -357,7 +349,7 @@ impl EngramConfig {
     /// ```
     ///
     /// `data_root` becomes `storage_path`; `trusted_root` defaults to its parent
-    /// directory. The `postgres` and `surreal` profile kinds are parsed and
+    /// directory. The `postgres` profile kind is parsed and
     /// validated but have no active backend yet — opening a provider against them
     /// fails with [`engram_runtime::CoreError::CapabilityUnsupported`] until the
     /// matching backend feature ships.
@@ -386,7 +378,6 @@ impl EngramConfig {
                      (engram_backend_pgvector::open); EngramProvider::open is sqlite-default"
                 ));
             }
-            BackendProfile::Surreal { data_root } => PathBuf::from(data_root),
         };
 
         // trusted_root defaults to the parent of data_root so path confinement

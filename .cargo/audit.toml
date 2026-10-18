@@ -2,17 +2,13 @@
 #
 # Policy: vulnerabilities are FIXED, never ignored, unless (a) no
 # semver-compatible patch exists AND (b) the affected code path is not
-# compiled into any supported build target. Every ignore below carries its
+# compiled into any supported build target. Every ignore carries its
 # rationale and an owner action; remove the entry when the action lands.
+#
+# Baseline history: the sole prior ignore (RUSTSEC-2026-0235, rkyv 0.7 —
+# target-conditional via SurrealDB) was removed when the SurrealDB
+# experiment cell was retired (ADR-0030): the advisory left the lockfile
+# with the crate. Currently no ignores.
 
 [advisories]
-ignore = [
-    # rkyv 0.7.46 — RUSTSEC-2026-0235 (insufficient archive validation,
-    # OOB read). Patch requires rkyv >=0.8 (breaking). `cargo tree -i rkyv`
-    # on the host target resolves NOTHING: the crate enters the lockfile
-    # only through a target-conditional dependency and is not compiled
-    # into any supported build target (linux/mac/windows, all features).
-    # Action: re-check on the next surrealdb/tantivy major bump; drop the
-    # ignore the moment a compatible path disappears.
-    "RUSTSEC-2026-0235",
-]
+ignore = []

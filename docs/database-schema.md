@@ -7,8 +7,8 @@
 
 > Physical persistence layer for engram. This documents **every object that is
 > written to disk** by the storage adapters: the SQLite backend (the active
-> default), the pgvector backend (Postgres), and the embedded SurrealDB backend
-> (`engram-store-surreal`).
+> default) and the pgvector backend (Postgres). The former SurrealDB
+> experiment cell was retired (ADR-0030); its section lives in git history.
 >
 > This is the *physical* view. For the logical/domain model see
 > [`docs/domain-data-model.md`](domain-data-model.md); for adapter design
@@ -24,12 +24,10 @@ and disk-backed. A backend is selected by configuration at
 |---|---|---|---|---|
 | **SQLite** (active default) | `engram-store-sqlite` (`adapters/sqlite`) | rusqlite + `sqlite-vec` | One `.db` file per capability family (default `MultiFileDirectory`), or one shared file (`SingleFile`) | `adapters/sqlite/src/<family>/schema.rs` + `vector/index.rs` |
 | **pgvector** | `engram-backend-pgvector` (`backends/pgvector` composing `adapters/pgvector` cells) | Postgres + `pgvector` extension | One Postgres database; 15 tables incl. native `vector` column storage | `adapters/pgvector/src/schema.rs` (single DDL, `schema_meta` version stamp) |
-| **SurrealDB** | `engram-store-surreal` (`adapters/surreal`) | embedded **SurrealKV**, namespace `engram` / database `engram` | One SurrealKV store at the configured path; tables are schemaless and auto-created on first record write | `adapters/surreal/src/<cell>.rs` (implicit) |
 
 Wiring (which adapters get constructed and which tables therefore get created on
 first use) lives in:
 - SQLite: [`core/integration/src/sqlite/bootstrap.rs`](../core/integration/src/sqlite/bootstrap.rs)
-- Surreal: [`core/integration/src/surreal/bootstrap.rs`](../core/integration/src/surreal/bootstrap.rs)
 - pgvector: [`backends/pgvector/src/lib.rs`](../backends/pgvector/src/lib.rs) (the recipe crate composes the adapter cells and owns connection lifecycle)
 
 ### 1.1 The two cross-cutting conventions
@@ -38,8 +36,7 @@ Everything below follows two rules. Understanding them makes the whole schema
 mechanical.
 
 **A. Lossless contract JSON + projected scope columns (SQLite).** Every record
-is stored *whole* as the accepted contract payload in a `record_json` (SQLite)
-or `data` (Surreal) column. On top of that, a few high-traffic lookup/scope
+is stored *whole* as the accepted contract payload in a `record_json` column. On top of that, a few high-traffic lookup/scope
 fields are **projected into real columns** so reads can filter/join without
 parsing JSON:
 
@@ -60,11 +57,6 @@ parsing JSON:
   scope) store only the owner's id and are filtered by joining to the owner.
 > See `adapters/sqlite/src/knowledge/schema.rs:1` header comment.
 
-**B. The `data`-wrapper (Surreal).** SurrealDB attaches its own record metadata
-to each thing (`id`, etc.), so every cell stores the full DTO under a single
-`data` field: `UPSERT type::thing('<table>', $key) SET data = $record`, and
-reads `SELECT data FROM <table>`. Logically each Surreal table is one engram
-record type; the field shape is identical to the matching SQLite `record_json`.
 
 ## 2. SQLite backend
 
@@ -370,7 +362,7 @@ erDiagram
 
 > Path navigation (`path_for`) loads visible nodes + relations and runs the
 > shared `engram_hierarchy::navigation::navigate` in Rust — identical logic to
-> the Surreal cell.
+> the retired Surreal cell (ADR-0030).
 
 ### 2.5 `vectors.db`
 
@@ -424,58 +416,22 @@ those two tables (`identity.rs:243`): it redirects `subject_id`, rewrites the
 `object`/`subject` refs inside relationship `record_json`, coalesces duplicate
 relationships by `relationship_key`, and deletes the duplicate entity rows.
 
-> In the Surreal backend, identity is **not yet wired**
-> (`bootstrap_surreal` reports `identity` only via the knowledge store; the
-> `EntityIdentityRepository` SQLite implementation has no Surreal counterpart
-> yet — see `core/integration/src/surreal/bootstrap.rs`).
 
-## 3. SurrealDB backend
-
-Source: `adapters/surreal/src/{memory,knowledge,belief,hierarchy,vector}.rs`.
-One embedded SurrealKV store, namespace `engram`, database `engram`
-(`adapters/surreal/src/connection.rs`). Tables are **schemaless** and are
-created implicitly on first `UPSERT`. Each record stores the full DTO under a
-`data` field, so the SQLite `record_json` and the Surreal `data` field carry the
-same payload — there is a one-to-one mapping from each SQLite table to a Surreal
-table (singular names). The logical relationships are identical to §2.
-
-| Capability | Surreal table(s) | Source |
-|---|---|---|
-| memory | `memory`, `memory_event` | `memory.rs:29` |
-| knowledge corpus | `knowledge_source`, `knowledge_document`, `knowledge_chunk` | `knowledge.rs:24` |
-| knowledge graph | `knowledge_entity`, `knowledge_relationship`, `knowledge_graph` | `knowledge.rs:27` |
-| taxonomy | `concept_scheme`, `concept`, `concept_relation` | `knowledge.rs:30` |
-| ontology | `ontology`, `ontology_class`, `ontology_property`, `ontology_axiom` | `knowledge.rs:33` |
-| belief | `belief`, `contradiction` | `belief.rs:24` |
-| hierarchy | `hierarchy_node`, `hierarchy_relation` | `hierarchy.rs:18` |
-| vectors | `vector_record` (+ `DEFINE INDEX vec_idx … MTREE DIMENSION D`) | `vector.rs:20`, `vector.rs:77` |
-
-Notable Surreal specifics:
-- **No `record_json`/scope columns.** The whole DTO (including its `scope`) is
-  under `data`; scope filtering happens in Rust after `SELECT data FROM <table>`.
-- **No write-idempotency table.** The Surreal memory cell mirrors the S7 stub
-  lifecycle and does not persist an idempotency cache.
-- **Vector index** is an MTREE index (`vec_idx`) defined lazily and idempotently
-  on first `insert`; KNN search uses the `<|k|>` operator. Cosine similarity is
-  computed in Rust from the returned embeddings.
-- **Schema/version metadata** (`SCHEMA_VERSION`, `ADAPTER_VERSION`) is reported
-  by the SQLite observability handle only; Surreal has no equivalent persisted
-  meta.
 
 ## 4. Backend comparison
 
-| Aspect | SQLite | SurrealDB |
+| Aspect | SQLite | pgvector |
 |---|---|---|
-| Schema definition | explicit `CREATE TABLE IF NOT EXISTS` in `schema.rs` | schemaless; implicit on first write |
-| Record body | `record_json` column | `data` field |
-| Scope filtering | projected `tenant`/`subject`/… columns + indexes | in-Rust over `data.scope` |
-| Relationships | projected FK-like columns (`source_id`, `graph_id`, …) | inside `data` DTO |
-| Referential integrity | none declared (no `FOREIGN KEY`) — app-layer enforced | n/a (schemaless) |
+| Schema definition | explicit `CREATE TABLE IF NOT EXISTS` in `schema.rs` | explicit DDL in `adapters/pgvector/src/schema.rs` + `schema_meta` version stamp |
+| Record body | `record_json` column | `record_json` column (one Postgres database) |
+| Scope filtering | projected `tenant`/`subject`/… columns + indexes | projected columns |
+| Relationships | projected FK-like columns (`source_id`, `graph_id`, …) | projected columns |
+| Referential integrity | none declared (no `FOREIGN KEY`) — app-layer enforced | none declared — app-layer enforced |
 | Idempotent writes | `write_idempotency` table | not persisted |
-| Vectors | `sqlite-vec` `vec0` virtual table + `vector_meta` | `vector_record` + MTREE index |
-| Identity dedup | UNIQUE partial indexes on `identity_key`/`relationship_key` | not wired |
-| Secondary indexes | knowledge family only (§2.2.1) | MTREE on vectors only |
-| File layout | 5 `.db` files (default) or 1 shared | 1 SurrealKV store |
+| Vectors | `sqlite-vec` `vec0` virtual table + `vector_meta` | native `vector` column |
+| Identity dedup | UNIQUE partial indexes on `identity_key`/`relationship_key` | unique constraints in DDL |
+| Secondary indexes | knowledge family only (§2.2.1) | per-DDA indexes |
+| File layout | 6 `.db` files (default) or 1 shared | 1 Postgres database |
 
 ## 5. What is NOT persisted
 
@@ -512,7 +468,7 @@ SQLite families in a single database: `memories`, `memory_events`,
 `contradictions`, `hierarchy_nodes`, `hierarchy_relations`, `procedures`,
 `vectors` (native `vector` column), `schema_meta` (schema version stamp).
 
-**Surreal (20 tables)** — `memory`, `memory_event`, `knowledge_source`,
+
 `knowledge_document`, `knowledge_chunk`, `knowledge_entity`,
 `knowledge_relationship`, `knowledge_graph`, `concept_scheme`, `concept`,
 `concept_relation`, `ontology`, `ontology_class`, `ontology_property`,

@@ -135,11 +135,12 @@ in core. *Specs: graph-analytics, codegraph-queries, codegraph-temporal.*
 Engine-neutral by design ([ADR-0022](../adr/0022-engine-grid-vs-backend-recipe.md)):
 one crate per backend, swapped by config. **SQLite** is the shipped reference
 (memory / knowledge / belief / hierarchy / vector + consolidation glue, all in
-`engram-store-sqlite`). **SurrealDB** (embedded SurrealKV, graph-native) is a
-draft sibling. No cross-engine migration (fresh store on switch).
+`engram-store-sqlite`), and **pgvector** (Postgres) is the second recipe.
+The former SurrealDB draft sibling was retired (ADR-0030). No cross-engine
+migration (fresh store on switch).
 Engine-agnostic adapters (lexical / associative / community / decay / ingest)
 are shared across engines. *Specs: sqlite-consolidation, sqlite-open-options,
-sqlite-file-backed-construction, surrealdb-backend.*
+sqlite-file-backed-construction, pgvector-backend.*
 
 ### Rust SDK + host-SDK ✅
 `EngramProvider` — the canonical Rust entry: a facade holding typed repository

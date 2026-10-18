@@ -23,7 +23,6 @@ members = [
     "adapters/retrieval/associative-graph",
     "adapters/retrieval/community-summary",
     "adapters/consolidation/decay",
-    "adapters/surreal",
     "adapters/sqlite",
     "adapters/pgvector",
     "bindings/node",

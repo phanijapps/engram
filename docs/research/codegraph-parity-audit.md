@@ -2,10 +2,10 @@
 
 Read-only capability audit confirming the exact implementation state of each
 borderline memtrace-parity capability, by reading code (not guessing). Feeds
-micro-spec scoping in `docs/codegraph-parity-roadmap.md`. Audit date: 2026-07-08.
+micro-spec scoping in `docs/history/codegraph-parity-roadmap.md`. Audit date: 2026-07-08.
 
 Method: targeted `grep`/`sed` over `core/`, `adapters/`, `docs/specs/` with
-file:line citations; cross-checked against `docs/implementation-roadmap.md`
+file:line citations; cross-checked against `docs/history/implementation-roadmap.md`
 phases and `docs/specs/` status.
 
 Legend: ✅ shipped · 🟡 partial · ❌ gap.

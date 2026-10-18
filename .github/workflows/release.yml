@@ -168,7 +168,7 @@ jobs:
         if: steps.prerelease.outputs.has_tag == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          draft: ${{ inputs.dry_run != false }}
+          draft: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run != false }}
           prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
           files: |
             artifacts/**/*.tgz
@@ -176,14 +176,14 @@ jobs:
           generate_release_notes: true
 
       - name: Publish to npm (with provenance)
-        if: inputs.dry_run == false
+        if: github.event_name == 'push' || inputs.dry_run == false
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           registry-url: https://registry.npmjs.org
 
       - name: npm publish — launcher
-        if: inputs.dry_run == false
+        if: github.event_name == 'push' || inputs.dry_run == false
         run: |
           cd artifacts/launcher
           npm publish --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
@@ -191,7 +191,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: npm publish — platform packages
-        if: inputs.dry_run == false
+        if: github.event_name == 'push' || inputs.dry_run == false
         run: |
           for dir in artifacts/*/; do
             if ls "$dir"/*.tgz >/dev/null 2>&1 && [[ "$dir" != *"launcher"* ]]; then

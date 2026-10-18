@@ -22,6 +22,7 @@ mod fetch_content;
 mod graph;
 mod hierarchy;
 mod maintenance;
+mod oneshot;
 mod ontology;
 mod ownership;
 mod predict;
@@ -39,6 +40,14 @@ use serde_json::{Value, json};
 
 fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
+
+    // One-shot subcommands (RFC-0022): `engram-mcp recall|status …` run a
+    // single query against the store and exit — no MCP server loop. Used by
+    // the recall-on-submit and stale-index hooks.
+    if oneshot::is_oneshot(&argv) {
+        std::process::exit(oneshot::run(&argv));
+    }
+
     let config = config::McpConfig::from_args(&argv).unwrap_or_else(|message| {
         eprintln!("engram-mcp: {message}");
         eprintln!(

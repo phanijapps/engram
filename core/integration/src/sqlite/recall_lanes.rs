@@ -41,7 +41,6 @@ use engram_store_lexical::{
     LexicalIndex, LexicalResolvedTarget, LexicalRetrievalIndex, LexicalTargetResolver,
 };
 use engram_store_sqlite::SqlKnowledgeStore;
-#[cfg(feature = "fastembed")]
 use engram_store_sqlite::{VectorResolvedTarget, VectorSearchResult, VectorTargetResolver};
 
 /// Orphan-rule wrapper adapting `SqlKnowledgeStore` to the associative-graph
@@ -171,12 +170,10 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
 
 /// Vector-lane target resolver backed by the knowledge store: rehydrates a
 /// sqlite-vec hit into its canonical `KnowledgeChunk`.
-#[cfg(feature = "fastembed")]
 pub(crate) struct KnowledgeVectorResolver {
     store: Arc<SqlKnowledgeStore>,
 }
 
-#[cfg(feature = "fastembed")]
 impl KnowledgeVectorResolver {
     /// Wraps a shared knowledge-store handle to resolve vector hits.
     pub(crate) fn new(store: Arc<SqlKnowledgeStore>) -> Self {
@@ -184,7 +181,6 @@ impl KnowledgeVectorResolver {
     }
 }
 
-#[cfg(feature = "fastembed")]
 #[async_trait]
 impl VectorTargetResolver for KnowledgeVectorResolver {
     async fn resolve(
@@ -203,7 +199,6 @@ impl VectorTargetResolver for KnowledgeVectorResolver {
 /// canonical source, so a stale or scope-invisible hit returns `None` (the lane
 /// skips it) rather than synthesizing a phantom candidate. (fastembed-only; the
 /// lexical resolver awaits `get_chunk` directly — see `KnowledgeLexicalResolver`.)
-#[cfg(feature = "fastembed")]
 async fn resolve_chunk(
     store: &Arc<SqlKnowledgeStore>,
     target_id: &str,
@@ -258,7 +253,6 @@ fn entity_symbol_policy() -> Policy {
 }
 
 /// Shapes a resolved chunk as a vector-lane retrieval target.
-#[cfg(feature = "fastembed")]
 fn chunk_to_vector(chunk: KnowledgeChunk) -> VectorResolvedTarget {
     VectorResolvedTarget {
         target_type: RetrievalTargetType::Chunk,
@@ -268,6 +262,14 @@ fn chunk_to_vector(chunk: KnowledgeChunk) -> VectorResolvedTarget {
         policy: chunk.policy,
         explanation: None,
         metadata: chunk.metadata,
+    }
+}
+
+/// Adapts the selected inference port to the vector candidate lane.
+pub(super) struct EmbeddingQueryProvider(pub Arc<dyn crate::EmbeddingProvider>);
+impl engram_store_sqlite::VectorQueryProvider for EmbeddingQueryProvider {
+    fn query_vector(&self, request: &engram_domain::RetrievalRequest) -> CoreResult<Vec<f32>> {
+        self.0.embed_query(&request.query)
     }
 }
 

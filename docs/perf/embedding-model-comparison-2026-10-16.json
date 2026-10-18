@@ -1,0 +1,3758 @@
+{
+  "date": "2026-10-16",
+  "environment": {
+    "logicalCpuCount": 72,
+    "cpuModel": "Intel(R) Xeon(R) Gold 6140 CPU @ 2.30GHz",
+    "dependencies": {
+      "fastembed": "5.17.2",
+      "ort": "2.0.0-rc.12",
+      "sqlite-vec": "0.1.9"
+    }
+  },
+  "runtimeBranch": "feat/embedding-model-config",
+  "baseCommit": "fbab016",
+  "binarySha256": "b8bee5e34e05bfc754bed91770438c7444e8c0e4a3a30515ebfc3a55b7797844",
+  "probeSha256": "b6ffba639b144543f05f3729f4ab9b214e9b761e774ab31399ef417d4d405519",
+  "modelAssets": {
+    "models--Xenova--bge-base-en-v1.5/snapshots/4d6cd88e18e51a5e020c2c305726d76ada9c03cf/onnx/model.onnx": {
+      "sha256": "9bc579acdba21c253c62a9bf866891355a63ffa3442b52c8a37d75b2ccb91848",
+      "bytes": 435811539
+    },
+    "models--Xenova--bge-small-en-v1.5/snapshots/ea104dacec62c0de699686887e3f920caeb4f3e3/onnx/model.onnx": {
+      "sha256": "828e1496d7fabb79cfa4dcd84fa38625c0d3d21da474a00f08db0f559940cf35",
+      "bytes": 133093490
+    }
+  },
+  "method": {
+    "questions": 45,
+    "positiveOnly": true,
+    "k": 10,
+    "queryRepeats": 1,
+    "labelsHumanReviewed": false,
+    "pairedBootstrapSamples": 5000,
+    "bootstrapSeed": 20261016
+  },
+  "sourceRevisions": {
+    "engram": {
+      "revision": "98fda3c6d1a84244658d4425728f112303218cd7",
+      "url": "https://github.com/phanijapps/engram",
+      "verifiedProductionFiles": 338
+    },
+    "flask": {
+      "revision": "d086db856be187255b8ec61ef409357393020f32",
+      "url": "https://github.com/pallets/flask",
+      "verifiedProductionFiles": 24
+    },
+    "vite": {
+      "revision": "c2c9ef4dcd05b3e4d88844ea3a13dc23819ca2a5",
+      "url": "https://github.com/vitejs/vite",
+      "verifiedProductionFiles": 142
+    }
+  },
+  "rawArtifactRoot": "/tmp/engram-bge-production-comparison-20261016",
+  "overall": {
+    "default": {
+      "vector": {
+        "hitAt1": 0.35555555555555557,
+        "hitAt5": 0.7111111111111111,
+        "hitAt10": 0.8,
+        "recallAt10": 0.7888888888888889,
+        "mrrAt10": 0.48450617283950614,
+        "ndcgAt10": 0.5489775100195061
+      },
+      "fused": {
+        "hitAt1": 0.28888888888888886,
+        "hitAt5": 0.6,
+        "hitAt10": 0.6444444444444445,
+        "recallAt10": 0.6222222222222222,
+        "mrrAt10": 0.41873015873015873,
+        "ndcgAt10": 0.45957377147749556
+      }
+    },
+    "local-alternative": {
+      "vector": {
+        "hitAt1": 0.4,
+        "hitAt5": 0.7111111111111111,
+        "hitAt10": 0.8,
+        "recallAt10": 0.8,
+        "mrrAt10": 0.5161375661375661,
+        "ndcgAt10": 0.5729405053567609
+      },
+      "fused": {
+        "hitAt1": 0.26666666666666666,
+        "hitAt5": 0.6,
+        "hitAt10": 0.7111111111111111,
+        "recallAt10": 0.6777777777777778,
+        "mrrAt10": 0.4174074074074074,
+        "ndcgAt10": 0.47073185702256276
+      }
+    },
+    "paired": {
+      "vector": {
+        "hitAt10": {
+          "delta": 0.0,
+          "pairedBootstrap95": [
+            -0.1111111111111111,
+            0.1111111111111111
+          ],
+          "wins": 3,
+          "losses": 3,
+          "ties": 39
+        },
+        "recallAt10": {
+          "delta": 0.011111111111111112,
+          "pairedBootstrap95": [
+            -0.1,
+            0.12222222222222222
+          ],
+          "wins": 4,
+          "losses": 3,
+          "ties": 38
+        },
+        "mrrAt10": {
+          "delta": 0.03163139329805997,
+          "pairedBootstrap95": [
+            -0.0464021164021164,
+            0.11094356261022928
+          ],
+          "wins": 12,
+          "losses": 10,
+          "ties": 23
+        },
+        "ndcgAt10": {
+          "delta": 0.0239629953372548,
+          "pairedBootstrap95": [
+            -0.05057810829757793,
+            0.09848277430107207
+          ],
+          "wins": 14,
+          "losses": 12,
+          "ties": 19
+        }
+      },
+      "fused": {
+        "hitAt10": {
+          "delta": 0.06666666666666667,
+          "pairedBootstrap95": [
+            0.0,
+            0.15555555555555556
+          ],
+          "wins": 3,
+          "losses": 0,
+          "ties": 42
+        },
+        "recallAt10": {
+          "delta": 0.05555555555555555,
+          "pairedBootstrap95": [
+            -0.011111111111111112,
+            0.13333333333333333
+          ],
+          "wins": 3,
+          "losses": 1,
+          "ties": 41
+        },
+        "mrrAt10": {
+          "delta": -0.0013227513227513235,
+          "pairedBootstrap95": [
+            -0.04469135802469136,
+            0.040035273368606704
+          ],
+          "wins": 6,
+          "losses": 6,
+          "ties": 33
+        },
+        "ndcgAt10": {
+          "delta": 0.011158085545067184,
+          "pairedBootstrap95": [
+            -0.0290580573548379,
+            0.05079294188155073
+          ],
+          "wins": 7,
+          "losses": 7,
+          "ties": 31
+        }
+      }
+    }
+  },
+  "corpora": {
+    "flask": {
+      "sourceFiles": 24,
+      "questions": 15,
+      "questionsSha256": "f782f6e2f79fbbf0d7b40dcde32b9664de977d3b00e3d92004c8325ce30aaf9a",
+      "sourceLabelsSha256": "8abc9408ddb7b5b3a5efc7f1a61d9a7539a2fdc3e881f5409568ff863a7392b6",
+      "chunks": 446,
+      "nonemptyChunks": 446,
+      "requiredUnits": 17,
+      "indexedRequiredUnits": 17,
+      "corpusUnchanged": true,
+      "paired": {
+        "vector": {
+          "hitAt10": {
+            "delta": 0.0,
+            "pairedBootstrap95": [
+              0.0,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 0,
+            "ties": 15
+          },
+          "recallAt10": {
+            "delta": 0.0,
+            "pairedBootstrap95": [
+              0.0,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 0,
+            "ties": 15
+          },
+          "mrrAt10": {
+            "delta": 0.042301587301587305,
+            "pairedBootstrap95": [
+              -0.1393650793650794,
+              0.21841269841269842
+            ],
+            "wins": 3,
+            "losses": 5,
+            "ties": 7
+          },
+          "ndcgAt10": {
+            "delta": 0.02146284994967694,
+            "pairedBootstrap95": [
+              -0.11895419960202949,
+              0.15444739496431897
+            ],
+            "wins": 4,
+            "losses": 6,
+            "ties": 5
+          }
+        },
+        "fused": {
+          "hitAt10": {
+            "delta": 0.06666666666666667,
+            "pairedBootstrap95": [
+              0.0,
+              0.2
+            ],
+            "wins": 1,
+            "losses": 0,
+            "ties": 14
+          },
+          "recallAt10": {
+            "delta": 0.03333333333333333,
+            "pairedBootstrap95": [
+              -0.1,
+              0.2
+            ],
+            "wins": 1,
+            "losses": 1,
+            "ties": 13
+          },
+          "mrrAt10": {
+            "delta": -0.018783068783068783,
+            "pairedBootstrap95": [
+              -0.11100529100529101,
+              0.05232804232804233
+            ],
+            "wins": 2,
+            "losses": 4,
+            "ties": 9
+          },
+          "ndcgAt10": {
+            "delta": -0.01201502351011677,
+            "pairedBootstrap95": [
+              -0.09370018574588775,
+              0.06809135093008828
+            ],
+            "wins": 2,
+            "losses": 5,
+            "ties": 8
+          }
+        }
+      },
+      "models": {
+        "default": {
+          "space": {
+            "dimensions": 384,
+            "model": "BAAI/bge-small-en-v1.5",
+            "normalization": null,
+            "prompt_profile": "query",
+            "provider": "fastembed"
+          },
+          "summary": {
+            "vector": {
+              "hitAt1": 0.4666666666666667,
+              "hitAt5": 0.8666666666666667,
+              "hitAt10": 0.9333333333333333,
+              "recallAt10": 0.9333333333333333,
+              "mrrAt10": 0.6188888888888889,
+              "ndcgAt10": 0.6817321692738919
+            },
+            "fused": {
+              "hitAt1": 0.3333333333333333,
+              "hitAt5": 0.8666666666666667,
+              "hitAt10": 0.9333333333333333,
+              "recallAt10": 0.9,
+              "mrrAt10": 0.533968253968254,
+              "ndcgAt10": 0.6178683688786535
+            }
+          },
+          "vectorRows": 446,
+          "indexToolSeconds": 26.691568324022228,
+          "databaseBytes": 6844416,
+          "queryTimings": {
+            "vector": {
+              "medianSeconds": 0.017895573,
+              "sampleP95Seconds": 0.021113128
+            },
+            "fused": {
+              "medianSeconds": 0.052432477,
+              "sampleP95Seconds": 0.057063489
+            }
+          },
+          "cases": [
+            {
+              "id": "flask-h01",
+              "query": "What happens to a browser session when its signed cookie has been tampered with?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.2,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h02",
+              "query": "Where is the browser cookie removed when all session data is cleared, and where is caching told that the response varies by cookie?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h03",
+              "query": "When is an unchanged permanent browser session renewed on a response?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.25,
+                  "ndcgAt10": 0.43067655807339306,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h04",
+              "query": "How are older secret keys retained while a new key is used for signing browser session cookies?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.14285714285714285,
+                  "ndcgAt10": 0.3333333333333333,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h05",
+              "query": "Where does an unhandled request failure get re-raised in debug or testing mode, but become a logged server-error response otherwise?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h06",
+              "query": "How are routing redirects kept out of ordinary HTTP error handlers?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h07",
+              "query": "How does the framework answer an automatic HTTP OPTIONS request without running the route handler, including the advertised allowed methods?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 0.7903864795495061,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 0.5,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 2
+                }
+              }
+            },
+            {
+              "id": "flask-h08",
+              "query": "How are a nested route group's URL prefix, subdomain and dotted registration name combined with its parent?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.2,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h09",
+              "query": "Where are route-group setup changes rejected after the group has already been registered?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.25,
+                  "ndcgAt10": 0.43067655807339306,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h10",
+              "query": "How do prefixed environment settings become typed values and nested configuration dictionaries?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h11",
+              "query": "How does a streamed response retain the active request context and close the underlying iterator when streaming ends?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h12",
+              "query": "How can a background callable receive an independent copy of the request context that was active when it was decorated?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h13",
+              "query": "Where can a before-request callback return a response that stops subsequent callbacks and the route handler?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.25,
+                  "ndcgAt10": 0.46845052016107697,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              }
+            },
+            {
+              "id": "flask-h14",
+              "query": "How does the command-line application selector safely interpret a factory call with literal arguments and reject invalid application results?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h15",
+              "query": "How does leaving the final nested context run request cleanup and application cleanup even if individual teardown steps raise errors?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.16666666666666666,
+                  "ndcgAt10": 0.3562071871080222,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            }
+          ]
+        },
+        "local-alternative": {
+          "space": {
+            "dimensions": 768,
+            "model": "BAAI/bge-base-en-v1.5",
+            "normalization": null,
+            "prompt_profile": "query/embedding-config-v1/fe44a8cccd89edae70b54c5e58399979bd7d8b12643a8396ad62d089a781b692",
+            "provider": "fastembed"
+          },
+          "summary": {
+            "vector": {
+              "hitAt1": 0.6,
+              "hitAt5": 0.8,
+              "hitAt10": 0.9333333333333333,
+              "recallAt10": 0.9333333333333333,
+              "mrrAt10": 0.6611904761904762,
+              "ndcgAt10": 0.7031950192235689
+            },
+            "fused": {
+              "hitAt1": 0.26666666666666666,
+              "hitAt5": 0.8666666666666667,
+              "hitAt10": 1.0,
+              "recallAt10": 0.9333333333333333,
+              "mrrAt10": 0.5151851851851852,
+              "ndcgAt10": 0.6058533453685366
+            }
+          },
+          "vectorRows": 446,
+          "indexToolSeconds": 54.45087329801754,
+          "databaseBytes": 8376320,
+          "queryTimings": {
+            "vector": {
+              "medianSeconds": 0.027304142,
+              "sampleP95Seconds": 0.031297954
+            },
+            "fused": {
+              "medianSeconds": 0.062243766,
+              "sampleP95Seconds": 0.066832712
+            }
+          },
+          "cases": [
+            {
+              "id": "flask-h01",
+              "query": "What happens to a browser session when its signed cookie has been tampered with?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.14285714285714285,
+                  "ndcgAt10": 0.3333333333333333,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h02",
+              "query": "Where is the browser cookie removed when all session data is cleared, and where is caching told that the response varies by cookie?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.2,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h03",
+              "query": "When is an unchanged permanent browser session renewed on a response?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h04",
+              "query": "How are older secret keys retained while a new key is used for signing browser session cookies?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.25,
+                  "ndcgAt10": 0.43067655807339306,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.1111111111111111,
+                  "ndcgAt10": 0.3010299956639812,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h05",
+              "query": "Where does an unhandled request failure get re-raised in debug or testing mode, but become a logged server-error response otherwise?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h06",
+              "query": "How are routing redirects kept out of ordinary HTTP error handlers?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h07",
+              "query": "How does the framework answer an automatic HTTP OPTIONS request without running the route handler, including the advertised allowed methods?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 0.8772153153380493,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 0.5,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 2
+                }
+              }
+            },
+            {
+              "id": "flask-h08",
+              "query": "How are a nested route group's URL prefix, subdomain and dotted registration name combined with its parent?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.16666666666666666,
+                  "ndcgAt10": 0.3562071871080222,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h09",
+              "query": "Where are route-group setup changes rejected after the group has already been registered?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.2,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h10",
+              "query": "How do prefixed environment settings become typed values and nested configuration dictionaries?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h11",
+              "query": "How does a streamed response retain the active request context and close the underlying iterator when streaming ends?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h12",
+              "query": "How can a background callable receive an independent copy of the request context that was active when it was decorated?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h13",
+              "query": "Where can a before-request callback return a response that stops subsequent callbacks and the route handler?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 0.8175295903539445,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 0.5,
+                  "mrrAt10": 0.25,
+                  "ndcgAt10": 0.2640681225725909,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 2
+                }
+              }
+            },
+            {
+              "id": "flask-h14",
+              "query": "How does the command-line application selector safely interpret a factory call with literal arguments and reject invalid application results?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.2,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "flask-h15",
+              "query": "How does leaving the final nested context run request cleanup and application cleanup even if individual teardown steps raise errors?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.125,
+                  "ndcgAt10": 0.31546487678572877,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            }
+          ]
+        }
+      },
+      "sourceManifest": {
+        "src/flask/__init__.py": "2daebda4dc29fed5cb36c912a6115a234e9a4b5f9c33fd795e4bfeffd0cc9386",
+        "src/flask/__main__.py": "6d8b7d7846a845059d7a3107143f11131f63c5511d669b44085b15ec5e3d2279",
+        "src/flask/app.py": "510b83880097af4450933561cba96e5a1c432bf53ea9264ca947da53752e3a2b",
+        "src/flask/blueprints.py": "a79404da5635f0622d6ddaff44a46967c0e8d7b8343ef4062206644940e15f69",
+        "src/flask/cli.py": "1f476f816464b4250caaf6cc6fdf3f5fc956456a7da61cb7d0a1e03e3e7e5f3b",
+        "src/flask/config.py": "3e2a85d033da9ba1d6d051f8087d61a574c17b7d0d4b38cf10ec2bcf56fa92dd",
+        "src/flask/ctx.py": "e21952d044159438765eb27848b0fe4c75f83faee8645181a09a1eccb1d5cab7",
+        "src/flask/debughelpers.py": "75c8258dc3487e1d0857dc5d3c7ca471fac1a254282570fa57e56d71aada037e",
+        "src/flask/globals.py": "1abe9a4e0a96c8bb28c232e2b08993fffdfb9bb694be2230755e54a46a40ca4d",
+        "src/flask/helpers.py": "4e2b647be02a93f655ddd058105c5ed8e9ffe3daef398ef3dd21e3a3817623fb",
+        "src/flask/json/__init__.py": "b402bd0b89b87250f932bf4b8e2bec7af7130a8ebdc3ff5a0bba3865e9984173",
+        "src/flask/json/provider.py": "cefdd0dfdde6bb6f73e7b853aa789de432e2af52a8c920c1c2af17228235b72c",
+        "src/flask/json/tag.py": "0e168dc2e20e85db7647be28382f58e19f19a6bc4562245be5d50fe5bcb220dc",
+        "src/flask/logging.py": "f2c33758c4ee6e2d5c05bd9cfe53e45a937427c74c02aae029160b2e2d5d0952",
+        "src/flask/sansio/app.py": "cf5df9f2972be7cad9878df7ea321804617d769f47823984abbe0a9b1cbc460b",
+        "src/flask/sansio/blueprints.py": "da960c5792daf2f1cef8c14113d9c95c8ce389a9689abb395fe867f4054d0ba1",
+        "src/flask/sansio/scaffold.py": "d6578d2b5f06d227482e4110f8b750d04c8d94c9525c8857f9183f727ee2858b",
+        "src/flask/sessions.py": "26fa7cc311b841f8409ad93933d3a3a52b068150c6f15fc3cd0c107e7a9aaf9d",
+        "src/flask/signals.py": "57b94c530c3b0aa809d93854067d4f89ab59b506a73b2b7b399a6ed86648fb7e",
+        "src/flask/templating.py": "3ed7a044a96c911267e855b7359d9f159f06321f75fbe678a6656923d5e0989e",
+        "src/flask/testing.py": "629d481658aaec7076a55913eda38c270ec45d430b34b2f9d38b2eec2b0ad3da",
+        "src/flask/typing.py": "ac3b0f12bf2a89e10c6b8f04d142b6103f9f1495030b8ff2c559d9952e060a00",
+        "src/flask/views.py": "d0d5ceecd117533169c924cdbb01ea5bb0ee74b7b1c4b22855f73f0e4dea0ee7",
+        "src/flask/wrappers.py": "8d492fe2655e93622ae21c3177846faab20c6faf41bf43c49438162e6779391a"
+      }
+    },
+    "vite": {
+      "sourceFiles": 142,
+      "questions": 15,
+      "questionsSha256": "28b901d13704b2e074506bd6fab7fd309094e91fd8ee1773115f0d05862a935a",
+      "sourceLabelsSha256": "a9e6397e9cd70ff4b67351736f76f8196ee3c20468afba1c703ee525e751506c",
+      "chunks": 1815,
+      "nonemptyChunks": 1815,
+      "requiredUnits": 15,
+      "indexedRequiredUnits": 15,
+      "corpusUnchanged": true,
+      "paired": {
+        "vector": {
+          "hitAt10": {
+            "delta": 0.06666666666666667,
+            "pairedBootstrap95": [
+              -0.2,
+              0.3333333333333333
+            ],
+            "wins": 3,
+            "losses": 2,
+            "ties": 10
+          },
+          "recallAt10": {
+            "delta": 0.06666666666666667,
+            "pairedBootstrap95": [
+              -0.2,
+              0.3333333333333333
+            ],
+            "wins": 3,
+            "losses": 2,
+            "ties": 10
+          },
+          "mrrAt10": {
+            "delta": 0.04111111111111111,
+            "pairedBootstrap95": [
+              -0.04555555555555555,
+              0.13333333333333333
+            ],
+            "wins": 4,
+            "losses": 2,
+            "ties": 9
+          },
+          "ndcgAt10": {
+            "delta": 0.04786905042027091,
+            "pairedBootstrap95": [
+              -0.0861353116146786,
+              0.1855847363328884
+            ],
+            "wins": 4,
+            "losses": 2,
+            "ties": 9
+          }
+        },
+        "fused": {
+          "hitAt10": {
+            "delta": 0.06666666666666667,
+            "pairedBootstrap95": [
+              0.0,
+              0.2
+            ],
+            "wins": 1,
+            "losses": 0,
+            "ties": 14
+          },
+          "recallAt10": {
+            "delta": 0.06666666666666667,
+            "pairedBootstrap95": [
+              0.0,
+              0.2
+            ],
+            "wins": 1,
+            "losses": 0,
+            "ties": 14
+          },
+          "mrrAt10": {
+            "delta": -0.014814814814814815,
+            "pairedBootstrap95": [
+              -0.1,
+              0.04074074074074074
+            ],
+            "wins": 2,
+            "losses": 1,
+            "ties": 12
+          },
+          "ndcgAt10": {
+            "delta": 0.005050170808494436,
+            "pairedBootstrap95": [
+              -0.06422786175957663,
+              0.06889589533359305
+            ],
+            "wins": 2,
+            "losses": 1,
+            "ties": 12
+          }
+        }
+      },
+      "models": {
+        "default": {
+          "space": {
+            "dimensions": 384,
+            "model": "BAAI/bge-small-en-v1.5",
+            "normalization": null,
+            "prompt_profile": "query",
+            "provider": "fastembed"
+          },
+          "summary": {
+            "vector": {
+              "hitAt1": 0.26666666666666666,
+              "hitAt5": 0.6,
+              "hitAt10": 0.6,
+              "recallAt10": 0.6,
+              "mrrAt10": 0.37777777777777777,
+              "ndcgAt10": 0.4328188579812162
+            },
+            "fused": {
+              "hitAt1": 0.13333333333333333,
+              "hitAt5": 0.4,
+              "hitAt10": 0.4666666666666667,
+              "recallAt10": 0.4666666666666667,
+              "mrrAt10": 0.26666666666666666,
+              "ndcgAt10": 0.31659976318815963
+            }
+          },
+          "vectorRows": 1815,
+          "indexToolSeconds": 104.47792323501199,
+          "databaseBytes": 29777920,
+          "queryTimings": {
+            "vector": {
+              "medianSeconds": 0.023426564,
+              "sampleP95Seconds": 0.027352151
+            },
+            "fused": {
+              "medianSeconds": 0.230705237,
+              "sampleP95Seconds": 0.242096282
+            }
+          },
+          "cases": [
+            {
+              "id": "vite-h01",
+              "query": "How are environment values exposed to browser code filtered, and which source wins when a file value conflicts with a value already present in the running process?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h02",
+              "query": "How does the development server decide whether a filesystem path may be read when strict file access is enabled?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h03",
+              "query": "How are special browser requests for files outside the project root converted into filesystem-root requests, and how is denied access handled?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h04",
+              "query": "How does the asset lookup recognize a public-directory file while preventing a requested path from escaping that directory?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h05",
+              "query": "How does workspace discovery walk upward from a project directory and stop at a workspace marker, with a fallback when it reaches the filesystem root?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h06",
+              "query": "How are simultaneous requests to transform the same module reused, and how is an in-flight request replaced after module invalidation?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.25,
+                  "ndcgAt10": 0.43067655807339306,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h07",
+              "query": "Before reprocessing a module, how does the server prefer a recovered soft-invalidated transformation and otherwise reuse a cached result?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h08",
+              "query": "How does a changed module stop propagating through an importer that explicitly accepts that dependency, while continuing through other importers?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h09",
+              "query": "How are hot-update dependency arguments read as quoted names or arrays, and why are interpolated template arguments rejected?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h10",
+              "query": "When importing a package by its root name, how are export mappings, configured entry fields, the main field, and default entry filenames prioritized?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h11",
+              "query": "How does package resolution block a nested import when the package export map does not expose that subpath?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.16666666666666666,
+                  "ndcgAt10": 0.3562071871080222,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h12",
+              "query": "How is a variable-based dynamic import converted into a module glob expression with a normalized path relative to the importing file?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h13",
+              "query": "What rules decide whether an asset becomes embedded data instead of a separate output file, including explicit URL flags, entry files, SVG fragments and size limits?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.25,
+                  "ndcgAt10": 0.43067655807339306,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h14",
+              "query": "How does a web-worker source become a bundle whose entry code is saved as an output asset?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h15",
+              "query": "How does a development proxy rule choose between regular-expression matching and simple URL-prefix matching?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            }
+          ]
+        },
+        "local-alternative": {
+          "space": {
+            "dimensions": 768,
+            "model": "BAAI/bge-base-en-v1.5",
+            "normalization": null,
+            "prompt_profile": "query/embedding-config-v1/fe44a8cccd89edae70b54c5e58399979bd7d8b12643a8396ad62d089a781b692",
+            "provider": "fastembed"
+          },
+          "summary": {
+            "vector": {
+              "hitAt1": 0.26666666666666666,
+              "hitAt5": 0.6666666666666666,
+              "hitAt10": 0.6666666666666666,
+              "recallAt10": 0.6666666666666666,
+              "mrrAt10": 0.41888888888888887,
+              "ndcgAt10": 0.4806879084014872
+            },
+            "fused": {
+              "hitAt1": 0.06666666666666667,
+              "hitAt5": 0.4666666666666667,
+              "hitAt10": 0.5333333333333333,
+              "recallAt10": 0.5333333333333333,
+              "mrrAt10": 0.2518518518518518,
+              "ndcgAt10": 0.3216499339966541
+            }
+          },
+          "vectorRows": 1815,
+          "indexToolSeconds": 214.06213306897553,
+          "databaseBytes": 32919552,
+          "queryTimings": {
+            "vector": {
+              "medianSeconds": 0.033582149,
+              "sampleP95Seconds": 0.03633222
+            },
+            "fused": {
+              "medianSeconds": 0.241301995,
+              "sampleP95Seconds": 0.247396899
+            }
+          },
+          "cases": [
+            {
+              "id": "vite-h01",
+              "query": "How are environment values exposed to browser code filtered, and which source wins when a file value conflicts with a value already present in the running process?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h02",
+              "query": "How does the development server decide whether a filesystem path may be read when strict file access is enabled?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.2,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h03",
+              "query": "How are special browser requests for files outside the project root converted into filesystem-root requests, and how is denied access handled?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h04",
+              "query": "How does the asset lookup recognize a public-directory file while preventing a requested path from escaping that directory?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h05",
+              "query": "How does workspace discovery walk upward from a project directory and stop at a workspace marker, with a fallback when it reaches the filesystem root?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h06",
+              "query": "How are simultaneous requests to transform the same module reused, and how is an in-flight request replaced after module invalidation?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h07",
+              "query": "Before reprocessing a module, how does the server prefer a recovered soft-invalidated transformation and otherwise reuse a cached result?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h08",
+              "query": "How does a changed module stop propagating through an importer that explicitly accepts that dependency, while continuing through other importers?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h09",
+              "query": "How are hot-update dependency arguments read as quoted names or arrays, and why are interpolated template arguments rejected?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h10",
+              "query": "When importing a package by its root name, how are export mappings, configured entry fields, the main field, and default entry filenames prioritized?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h11",
+              "query": "How does package resolution block a nested import when the package export map does not expose that subpath?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.25,
+                  "ndcgAt10": 0.43067655807339306,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h12",
+              "query": "How is a variable-based dynamic import converted into a module glob expression with a normalized path relative to the importing file?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h13",
+              "query": "What rules decide whether an asset becomes embedded data instead of a separate output file, including explicit URL flags, entry files, SVG fragments and size limits?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h14",
+              "query": "How does a web-worker source become a bundle whose entry code is saved as an output asset?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "vite-h15",
+              "query": "How does a development proxy rule choose between regular-expression matching and simple URL-prefix matching?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.1111111111111111,
+                  "ndcgAt10": 0.3010299956639812,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            }
+          ]
+        }
+      },
+      "sourceManifest": {
+        "packages/vite/src/client/bundledDevClient.ts": "c7488d2e727bb466dc7ed36ba4c89a0771c593b381023f1b48a88672c23d3176",
+        "packages/vite/src/client/bundledDevHmrClient.ts": "eb83659ddf5e223125224b05c448c02601da3610019b6e90d0f455496132b827",
+        "packages/vite/src/client/client.ts": "f3d448e0e5caadd770b6aa42c44d3a8aa33c422fc38a0e9bdac9142225d74e16",
+        "packages/vite/src/client/clientEntry.ts": "eae3d534b53116a2f672242cfee0cc34024d3a596059be46be06943b49e5dce5",
+        "packages/vite/src/client/env.ts": "5eb83c8492f0a8e68998a8eb778d58cee22246205319f8e48669185a47191c26",
+        "packages/vite/src/client/overlay.ts": "b1bb2b1d7ecca4ea0e8b4a25603d52b2eea554675bf58ff9d8ffe91a09fc9011",
+        "packages/vite/src/module-runner/__tests_dts__/importMeta.ts": "bc471a363b0832aa47f36be50a51f4967ae1a959ed55ca7a4aa9153b645c61dd",
+        "packages/vite/src/module-runner/constants.ts": "34be09845fbb29b7670917ba3226bcbc8ff4cf627a610a1cac4082a5e12993b1",
+        "packages/vite/src/module-runner/createImportMeta.ts": "7a09a97a56e6e4b671f50d60804c0e30a332d4b404ab80804ef0e88a0c5184bc",
+        "packages/vite/src/module-runner/esmEvaluator.ts": "1017125c90645e419392ac7cd0f382bb017f861b0c8eebff8c6484f624ce4e43",
+        "packages/vite/src/module-runner/evaluatedModules.ts": "5ba58952701c5af4b32830603d107d522901a831ffecd9efe6202d50d9e68294",
+        "packages/vite/src/module-runner/hmrHandler.ts": "2817ae9635dff166f1b6cae8b651d0aa1d8cf7aea99847abc251c965ca5c2ad2",
+        "packages/vite/src/module-runner/hmrLogger.ts": "f4467584563ecefec3d833b50596b12112e7fccb45e8420d217ae696a19d46ab",
+        "packages/vite/src/module-runner/importMetaResolver.ts": "1bcfebc69193e9b555dd7872b6f97c0b2f6562e8658b4c1e7f129f028798cca2",
+        "packages/vite/src/module-runner/index.ts": "607613e36d63cdf01950ec76497dee819426ae01b0f0d567b740b98d2e3306e0",
+        "packages/vite/src/module-runner/runner.ts": "1c95301a3bd57e64a5b4570ed588f00349f62318c21460d20fea295054ea86a9",
+        "packages/vite/src/module-runner/sourcemap/decoder.ts": "d064de5d0c504904253a2a213f96f046bcaa041fdd21987be731131795541d26",
+        "packages/vite/src/module-runner/sourcemap/index.ts": "1e671ea8348f3eae57729b7a05c841b0976f2d199b2d7643ef99411ac410fb52",
+        "packages/vite/src/module-runner/sourcemap/interceptor.ts": "9fe4aa2e9c72d169e2c396ea863e83acfcfca2143c6323317c4836b69aab226f",
+        "packages/vite/src/module-runner/types.ts": "44917fc3db1e233824b51b8d39ca662fb7e7532fb70c625a6d73f7cc3d6a3abf",
+        "packages/vite/src/module-runner/utils.ts": "5f0f9e37048e96e65d4bb13efd9c116e41ba9c44f430ba74b8311796f59a2d93",
+        "packages/vite/src/node/__tests_dts__/config.ts": "00056fec73a23358288c7be4f943ab4d384370c2a6e6ffaf323ffb5da976ac31",
+        "packages/vite/src/node/__tests_dts__/importGlob.ts": "1e9414549773c887d660c773e2dd3d184df2097da884f137207597a9a06e1f6b",
+        "packages/vite/src/node/__tests_dts__/plugin.ts": "48d82643c52255164a5d6fdb79934e7be0b8000092a685b444422c4ca5ed3173",
+        "packages/vite/src/node/__tests_dts__/postcss.ts": "fb373a228fa5060ff1b18bfe99e7d763cee1e02dba38ed7574e7f084314d6e05",
+        "packages/vite/src/node/__tests_dts__/typeOptions.ts": "ca159f0371381aea221f84faba43161d5e8ca67d73cd2d6e3859ee69ec6dfe26",
+        "packages/vite/src/node/__tests_dts__/utils.ts": "3d6b3a341c1f626dc95241c81c64f26fcc51def15679699790fb56e8643708c5",
+        "packages/vite/src/node/assetSource.ts": "e22488664e552d412f256e447c07cf5730cb167d2e199f0b7afb99bde1c64335",
+        "packages/vite/src/node/baseEnvironment.ts": "bc3d2d123be5615a7e6fc7014dce9b71a0b54f0dd17a986d3b458486d46f098c",
+        "packages/vite/src/node/build.ts": "739d2572ac3619de49b05e00090e1ca1871b0bc54d0fe918e0160b2b24e5a816",
+        "packages/vite/src/node/cli.ts": "b6f0d4b8c5f529a2cac341b6940b4c74e3d1bfcf099d4c2fd3709aaf85ec3080",
+        "packages/vite/src/node/config.ts": "639324cc0729d982065ab2d3b4f6f766914a5c08ed70c4b3ddb18036fd30b34d",
+        "packages/vite/src/node/constants.ts": "4c050a00ffd80d34767a250d02a991000950179b778ae75beedca8b76ef3d2d8",
+        "packages/vite/src/node/deprecations.ts": "f171ac001b4686e399a7de765f0abb5e6546c9e0191a3f183b944f1677081479",
+        "packages/vite/src/node/env.ts": "c34fe179f16534f2e50d0efa5466c44a6c910c51786af8708ad4e3302dab77fd",
+        "packages/vite/src/node/environment.ts": "775257ae84a9f4c613c6e8e94f9ba991548f6cdc756761bbcd123015a8bb29c5",
+        "packages/vite/src/node/external.ts": "7d0abd312c8a81c2dccf87f6326e3cf4795ed0c297c9b999239b2c4fcab18180",
+        "packages/vite/src/node/http.ts": "b016b063b01cc25a10e40b728be3960928ec3242d721b48cc9d84962b4d1e2c3",
+        "packages/vite/src/node/idResolver.ts": "2c7b1d3508610605303220e8be1f3250fe317ea720807619e04c20f3f6d5e5c5",
+        "packages/vite/src/node/index.ts": "59f3df62e9815efd7a7c67f606550b82131880d9c5279946caf088c2c16705b9",
+        "packages/vite/src/node/internalIndex.ts": "450de8dd659daa8c8193d428b4cfa213854a554435b2c489f1833bfebc6d4019",
+        "packages/vite/src/node/logger.ts": "63028a31360526ae0c559110e1b90b27044392e70fcb88975c2f2b53ede97d02",
+        "packages/vite/src/node/nativeConfigCompat.ts": "cd701bc168d85bd7ae65933bc4fbf78af785dbc2ba3441805a67baa3114de450",
+        "packages/vite/src/node/nodeResolve.ts": "8434ba58aa2a1b28097534c1033f272c9a3ca5da16301d02cc0f0a1406acc647",
+        "packages/vite/src/node/optimizer/index.ts": "e8d8595dc51b618d7f8b143171a2a3293113eff464ec187a2fe64d8eba0104b8",
+        "packages/vite/src/node/optimizer/optimizer.ts": "3b9d8ebbc787075b5999776e52090dbbdcc202cd097b3c2e252983dc783bb761",
+        "packages/vite/src/node/optimizer/pluginConverter.ts": "b275f2f5565eeaa6047a1bc5626159f4a93cb4d47b483d092366321b1798293d",
+        "packages/vite/src/node/optimizer/resolve.ts": "2c9373956a4ef3248f8f636d0d324b1f832ed4f1077623928f3f6498d48ea9a8",
+        "packages/vite/src/node/optimizer/rolldownDepPlugin.ts": "7f9e17d25f6e6113ee5b7f7aaaaa1f247f8dfd8ba21871dccf89233355134257",
+        "packages/vite/src/node/optimizer/scan.ts": "3921ed9292900c20cb2ac46f862e00f80d5d70032a6af03e3d04cad80b63938e",
+        "packages/vite/src/node/packages.ts": "6563cc7314120ea15c25a68731c4f1e6e3172325ec97255344d92fada81586f9",
+        "packages/vite/src/node/plugin.ts": "aaa596e6120c28d3929e6380a66990c342c638672c2560a1f5166617bbc0bb06",
+        "packages/vite/src/node/plugins/asset.ts": "84ef4eb7134ad94e873616b6109d2539996cec533a801525a0538900e1f980c3",
+        "packages/vite/src/node/plugins/assetImportMetaUrl.ts": "1a34019fcce6dd8e318da6dc354486e8be860591e2e4f277d8b004b06822a0d3",
+        "packages/vite/src/node/plugins/clientInjections.ts": "6d2d68b60efcd95a068e229a8928a8135f6afd07bd606252debfae3498ec62b2",
+        "packages/vite/src/node/plugins/css.ts": "08f5807652fca68622a203c0a87d7617b1daeb8cf3a9ecb16f919f4983d15b2a",
+        "packages/vite/src/node/plugins/define.ts": "ee47eb79afa86274a913d90af7bc022a959bb96d573d230c87031b8af47ef694",
+        "packages/vite/src/node/plugins/dynamicImportVars.ts": "6a1901ceee651ceb5052a4d89c07a42a51ff1518843d8a7afd69837527e7bb57",
+        "packages/vite/src/node/plugins/esbuild.ts": "911e953651b7aeeb848fb6059fc05b444f0d398da456af04d70dd2813b7f9b76",
+        "packages/vite/src/node/plugins/esbuildBannerFooterCompatPlugin.ts": "6d51aa0512ea2df6cc998502055f99c4ab38646de81ee03a8562146d21886107",
+        "packages/vite/src/node/plugins/forwardConsole.ts": "0d23f053b19aa19d4226b71e9e1c2bcbeab09cc123248440f4c86e1c42251029",
+        "packages/vite/src/node/plugins/html.ts": "a591d1c51fd19fbb5c07863bd1d357d22fa8242b9556eb6ccce69a6d916167df",
+        "packages/vite/src/node/plugins/importAnalysis.ts": "7081e22918ae078c2b3793de23eabe546df1fe6109dddd2683428d5a36b961f5",
+        "packages/vite/src/node/plugins/importAnalysisBuild.ts": "b15c5ffc25ebe628dba7a4a1d3007bd6ca8fca1c4002ce44fed35b06df13997e",
+        "packages/vite/src/node/plugins/importMetaGlob.ts": "f3e982b8d1500cbbe3840d4ff6e58fee1111ab62ca463d6c0c254aa639d441e3",
+        "packages/vite/src/node/plugins/index.ts": "9f2d97c698d58d1625a28023e2f82b0657b00bf7b938ae393fda007ddb451590",
+        "packages/vite/src/node/plugins/json.ts": "576263ee734a2ac7b00aebe99519e16bf0a3360aac013bf3eaf66b0d13575666",
+        "packages/vite/src/node/plugins/license.ts": "241afa814893d40766c2fcfe594c735bb469b1ab0b3e3155aa3cab98c356c0ef",
+        "packages/vite/src/node/plugins/manifest.ts": "69b8bb1487efe3d26dc7f75acee18afe832f9491e6ecfd1f88ecb0529a94052f",
+        "packages/vite/src/node/plugins/modulePreloadPolyfill.ts": "7c3ca92628814af5057cd530e8502613e5a47cafa6283281f36d9187db36fc2c",
+        "packages/vite/src/node/plugins/optimizedDeps.ts": "aa4046d5d75fd817bef3910c75ad6f124f07b24271311d432851bf97199d1b3d",
+        "packages/vite/src/node/plugins/oxc.ts": "df0de544e7f555ef7c283d86d3919f66e4c28a69f31d20a484dba4ed25419cfb",
+        "packages/vite/src/node/plugins/pluginFilter.ts": "64c57efcc0b7518d0d10739f011ffc30dd6ccbd86eb4640eab8a3a5e82fcfd1c",
+        "packages/vite/src/node/plugins/preAlias.ts": "d4dc953b0599753d006bf2099e249225da82309a6bfeecb6734c3a2aa18edbd3",
+        "packages/vite/src/node/plugins/prepareOutDir.ts": "a41b3cb6adab626f4d1e2611fab75bf01a574913f798055e3e3f21ded8003710",
+        "packages/vite/src/node/plugins/reporter.ts": "5b34e3d9ee188fcc8e2802d0222177aea72ec25aad10bff4bd51f9124ca6f8bd",
+        "packages/vite/src/node/plugins/resolve.ts": "401f6fa84c7040d618c7e3dd91f66bc91221ed84fb33f6499593f6557f6351fb",
+        "packages/vite/src/node/plugins/terser.ts": "7df0f5100f294549d53fb7f689080d549dfda163dd20b825505197d26a6817b9",
+        "packages/vite/src/node/plugins/wasm.ts": "d64d3cda7763599f3de854283b0a11be3a471e8a22edf49328f4d426c4140cf9",
+        "packages/vite/src/node/plugins/worker.ts": "a67ed97ce04bec464d88682f20a11a31c8a8f8b65a55f2f3d0039aada2a7a429",
+        "packages/vite/src/node/plugins/workerImportMetaUrl.ts": "e15b53e9ab304be5f7573c78c576011b13a13ccd06e09fbc19bcadcb2614cb83",
+        "packages/vite/src/node/preview.ts": "93fc78287057ceffd30f39ea3618665c54d73211487a2c4467bb3e44d23e9ee6",
+        "packages/vite/src/node/publicDir.ts": "7dbab4ea10633ac59784efde5d42aac88d78e1eb36c00c756275080295c25ea0",
+        "packages/vite/src/node/server/bundledDev.ts": "f74989c42d1cf13e8303796f9e7842f8a3e88bd07488089d22020fa409346a87",
+        "packages/vite/src/node/server/environment.ts": "7398b4686f5f6a62de47b6e64c317fbd794a49431eadeaffa6804a3c98801eaa",
+        "packages/vite/src/node/server/environments/fetchableEnvironments.ts": "4928930b84015fcc37a36595c8015dc49b0bfc3790cba7bb2f479183249eb8f2",
+        "packages/vite/src/node/server/environments/runnableEnvironment.ts": "ef531c353f3db4b29cbd306738299670b116b12555dfc1fe3c32184b846e6dff",
+        "packages/vite/src/node/server/hmr.ts": "70382e5c26bb2369d7385a7a7155b88081551061906d167af4e67a57e4b1c1a2",
+        "packages/vite/src/node/server/index.ts": "98995ccf8a38f08f4c8833ac8a70fe694d54e05d6e3c3d0e06e89b2a95252efc",
+        "packages/vite/src/node/server/middlewares/base.ts": "36fd9d98cd52a561bbd4c7ec1156c39e5b4bbd712781e4945d7f75f6f127ae75",
+        "packages/vite/src/node/server/middlewares/error.ts": "3e5b22194f19cfde3f6cf4cf56937830b02cb92412dcf79e0adc422f7957b8a7",
+        "packages/vite/src/node/server/middlewares/hostCheck.ts": "b74d7850d15bea831e899cbf26cbcd87303da1e8bf05bb3903f276b918355492",
+        "packages/vite/src/node/server/middlewares/htmlFallback.ts": "4d3b31feb8fb6d534f8b8b4c043696a51c08c33e196404daa7d9be0b499a3f0c",
+        "packages/vite/src/node/server/middlewares/indexHtml.ts": "df74f2340f642b407af74d0c4e7c229086b57998db229bb7eda58c9072fa9bde",
+        "packages/vite/src/node/server/middlewares/memoryFiles.ts": "e3eb779ff1e5faed0be01c43e50f3de6f5f21d9f399c30b4c96e1c81c02ec76c",
+        "packages/vite/src/node/server/middlewares/notFound.ts": "baa313aac9048bf2d0d9c7206d2d705387e3399910c91e6badce8becda2c6b2d",
+        "packages/vite/src/node/server/middlewares/proxy.ts": "8e24c22f2ce42912dbc4768138661430389ae0bf25976263a018b428a0e14aa6",
+        "packages/vite/src/node/server/middlewares/rejectInvalidRequest.ts": "22f84881d9d8a0926ea1dda5f53977f134d4c2ce3901284174c28ed313a9cf58",
+        "packages/vite/src/node/server/middlewares/static.ts": "ec7b44a627a5f7ce82a11f7852a5e0aac2a75028636df99ce6fedbc416a2d14b",
+        "packages/vite/src/node/server/middlewares/time.ts": "a18de3d2cd39447895cf106674c12d551747944bedcd486ffd46a6f697101b8f",
+        "packages/vite/src/node/server/middlewares/transform.ts": "39a6e059f2d51dbc0f6d401b2bab7cfff9716ab42e512ff722bf01a0d38f57df",
+        "packages/vite/src/node/server/middlewares/triggerLazyBundling.ts": "d06b4b0c4a4bde97ad517b22d355c12bcc1aefb892ec8c88c78c20f742bf9ba2",
+        "packages/vite/src/node/server/mixedModuleGraph.ts": "1a3979573c28ff0b39f122239670cafd4f99681433654ac1ec64e008d0239837",
+        "packages/vite/src/node/server/moduleGraph.ts": "459f3329e19e3cc3d2a47790327570b32484123ee2ca4c171f136c7ecd4ff4c0",
+        "packages/vite/src/node/server/openBrowser.ts": "759f8fe104d6b68bcb2e3769b95e0812cbf7d764db0008c04ba4554e1cd14b0e",
+        "packages/vite/src/node/server/pluginContainer.ts": "f446526b8964c8dbf7036387d608315b1f986b518fc66154749b0ccd3c7f1f92",
+        "packages/vite/src/node/server/searchRoot.ts": "268985d5ba5eb2cc8e3dc98bfaecfd554560766306824046008c88afc011b8a6",
+        "packages/vite/src/node/server/send.ts": "640925c7981adffb0840c4e6c2beb7c6acf6cf9b01e7538cf836f94d2a8bc51c",
+        "packages/vite/src/node/server/sourcemap.ts": "b6e2fd9bd16cfc10586c228ca0d82cd6117a1f7b480013709cdac076cba5c20e",
+        "packages/vite/src/node/server/transformRequest.ts": "c65e70c6cea58d48c4678940529e183db65fc30ffa6c2a85361c83166a1ee4ec",
+        "packages/vite/src/node/server/warmup.ts": "50c38d8518b9bc0ace5f9d5534783353a951edbe4722f2204da2d8bb8161aad5",
+        "packages/vite/src/node/server/ws.ts": "66031ab5d413b1a3c72564e1424ee727a6d8d92335efd09035d68a5187f146b6",
+        "packages/vite/src/node/shortcuts.ts": "3f3f10e0f619865e71edf644bc0171b391244f207678dedd373ab78763df62e2",
+        "packages/vite/src/node/ssr/fetchModule.ts": "c1930a4e97960f44bbc103626aac69178af3cf61ba50fe44a69bd8073d868ab9",
+        "packages/vite/src/node/ssr/index.ts": "96916bdcd1318f4d3729a982ea7cbd33b0baa7b658ba51deb905efd3f2855e24",
+        "packages/vite/src/node/ssr/runnerImport.ts": "d03788075232dc4abf81b4bb6f76836efc00b8d5107c8dee8e7eba5a804d0bca",
+        "packages/vite/src/node/ssr/runtime/serverModuleRunner.ts": "04f1bdcf4a60696f3291c416102da1534349be2455073f8a2328d53203f1315d",
+        "packages/vite/src/node/ssr/ssrManifestPlugin.ts": "5ec0505665584f0a1acf432bd09eade20645b65109209f3d42158556eec0e411",
+        "packages/vite/src/node/ssr/ssrModuleLoader.ts": "d44464a39206d284ebe4ee66ecbf411e44f464c213bd035bdd078c85c65c8433",
+        "packages/vite/src/node/ssr/ssrStacktrace.ts": "8a88c060aff685d9bfb7a222becb58bbe3afd27d6e89c71d4f54052bce3bc17c",
+        "packages/vite/src/node/ssr/ssrTransform.ts": "ed3ead4e73238b11789d76bc66afcfbe4aff312bb0851d472167022a2052aa42",
+        "packages/vite/src/node/typeUtils.ts": "b43acc91e7f30334737d361f293c8b3771e631a8e5fac6bd336dbdcdb4653cfd",
+        "packages/vite/src/node/utils.ts": "6b9374e12dd411c233b6bd97c5d8dcedcbece476a12959f6ceff33c61c8078b1",
+        "packages/vite/src/node/watch.ts": "f5f77bdf949647b72fbb45df850e3b45ddcb21ae1b30ad8862b4e2c06a163c20",
+        "packages/vite/src/shared/builtin.ts": "0e6e87b08b915320e83b791756c57850f8269e5d373b37ded9fbb35ce94f110b",
+        "packages/vite/src/shared/constants.ts": "fb7862ff8c593c3a9ae090e6d0795ed37f1f899fd8be9adc970912c958ab3be2",
+        "packages/vite/src/shared/forwardConsole.ts": "434738afe09f69175a4f569856cd358e0c5d0e4c8a63ec132d5061bec05633dc",
+        "packages/vite/src/shared/hmr.ts": "d3487fa59fc93b542e7542f3958eb2cbab62d1f2ccf5fb1c4b4bc16d70bb1888",
+        "packages/vite/src/shared/hmrHandler.ts": "38b3eb488e2b63876a71a7e2838dcd0272cc06218bd43077ffbf5487e29fbf22",
+        "packages/vite/src/shared/invokeMethods.ts": "47cebfa2bc9718325327531186b7cae0278cd920e0ee2e2c3ef386217323e7b4",
+        "packages/vite/src/shared/moduleRunnerTransport.ts": "dca3361df511c60e1005252f563b4bfa241c822e53364766bff6f64f93ff3d91",
+        "packages/vite/src/shared/pretty-format.ts": "f679825c087bf0f7d3a10408e0c19b39fda81448b6c1b30f64fcaf8c3445052b",
+        "packages/vite/src/shared/ssrTransform.ts": "5e07234faa74433a4a64264e89cf7d561aa43cbbfaa13d6e493e5655b2a5383c",
+        "packages/vite/src/shared/utils.ts": "37ccaa0f5e09dceebd6ea32df579a3cc2b88a6fcee4ea99df460fda32586ff1f",
+        "packages/vite/src/types/alias.d.ts": "2c58198f87d011cd18fd414e5f2a1569f146497d5ff8283cb71b8b73d29ba53b",
+        "packages/vite/src/types/anymatch.d.ts": "6b758cee1ef6c32ec0f1d8dffd6f81e00cee7651763df749d80cc37f121778ff",
+        "packages/vite/src/types/chokidar.d.ts": "bec214de36ca6a5e7596c5e5dc9b8198abde892ed319e30f79cea60e8b882853",
+        "packages/vite/src/types/commonjs.d.ts": "4babce4892baa8594388ac1f14eb6f0b6b4ab4f75ba38b217efa825ecd0078f4",
+        "packages/vite/src/types/connect.d.ts": "d327b46f065c81a2e3be383572b1d2dd1a7f804f962ea1bdb1ec8d7749c0aa70",
+        "packages/vite/src/types/dynamicImportVars.d.ts": "4b05191f1ee3a6d7ae766734c8c99e2b1fca1eb251b4ba47465f275c4a033326",
+        "packages/vite/src/types/shims.d.ts": "7e82a2b79dbd51e8b8acce34b83b0362a231b9c744815fe78ee79c237f51066b",
+        "packages/vite/src/types/ws.d.ts": "9a0f8f3671ba2ba140becf263bf4e9cd78df6fde37adfd9e57e922c4c0ebb7fb"
+      }
+    },
+    "engram": {
+      "sourceFiles": 338,
+      "questions": 15,
+      "questionsSha256": "dfa3d404867f185d9a260605b75ed434a2587a52be545bda095024973877849f",
+      "sourceLabelsSha256": "5d0659325a549fb4e4181304c0a93329bf8ad50bb9b3717d2c2cb852b8230b4f",
+      "chunks": 4740,
+      "nonemptyChunks": 4740,
+      "requiredUnits": 18,
+      "indexedRequiredUnits": 18,
+      "corpusUnchanged": true,
+      "paired": {
+        "vector": {
+          "hitAt10": {
+            "delta": -0.06666666666666667,
+            "pairedBootstrap95": [
+              -0.2,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 1,
+            "ties": 14
+          },
+          "recallAt10": {
+            "delta": -0.03333333333333333,
+            "pairedBootstrap95": [
+              -0.2,
+              0.1
+            ],
+            "wins": 1,
+            "losses": 1,
+            "ties": 13
+          },
+          "mrrAt10": {
+            "delta": 0.011481481481481488,
+            "pairedBootstrap95": [
+              -0.09722222222222222,
+              0.13870370370370372
+            ],
+            "wins": 5,
+            "losses": 3,
+            "ties": 7
+          },
+          "ndcgAt10": {
+            "delta": 0.0025570856418165515,
+            "pairedBootstrap95": [
+              -0.09942879893672173,
+              0.10881531431863385
+            ],
+            "wins": 6,
+            "losses": 4,
+            "ties": 5
+          }
+        },
+        "fused": {
+          "hitAt10": {
+            "delta": 0.06666666666666667,
+            "pairedBootstrap95": [
+              0.0,
+              0.2
+            ],
+            "wins": 1,
+            "losses": 0,
+            "ties": 14
+          },
+          "recallAt10": {
+            "delta": 0.06666666666666667,
+            "pairedBootstrap95": [
+              0.0,
+              0.2
+            ],
+            "wins": 1,
+            "losses": 0,
+            "ties": 14
+          },
+          "mrrAt10": {
+            "delta": 0.02962962962962963,
+            "pairedBootstrap95": [
+              -0.02222222222222222,
+              0.10740740740740741
+            ],
+            "wins": 2,
+            "losses": 1,
+            "ties": 12
+          },
+          "ndcgAt10": {
+            "delta": 0.04043910933682389,
+            "pairedBootstrap95": [
+              -0.01382042766214288,
+              0.10890121123241155
+            ],
+            "wins": 3,
+            "losses": 1,
+            "ties": 11
+          }
+        }
+      },
+      "models": {
+        "default": {
+          "space": {
+            "dimensions": 384,
+            "model": "BAAI/bge-small-en-v1.5",
+            "normalization": null,
+            "prompt_profile": "query",
+            "provider": "fastembed"
+          },
+          "summary": {
+            "vector": {
+              "hitAt1": 0.3333333333333333,
+              "hitAt5": 0.6666666666666666,
+              "hitAt10": 0.8666666666666667,
+              "recallAt10": 0.8333333333333334,
+              "mrrAt10": 0.45685185185185184,
+              "ndcgAt10": 0.5323815028034102
+            },
+            "fused": {
+              "hitAt1": 0.4,
+              "hitAt5": 0.5333333333333333,
+              "hitAt10": 0.5333333333333333,
+              "recallAt10": 0.5,
+              "mrrAt10": 0.45555555555555555,
+              "ndcgAt10": 0.44425318236567357
+            }
+          },
+          "vectorRows": 4740,
+          "indexToolSeconds": 264.87996341107646,
+          "databaseBytes": 78446592,
+          "queryTimings": {
+            "vector": {
+              "medianSeconds": 0.024105427,
+              "sampleP95Seconds": 0.026006044
+            },
+            "fused": {
+              "medianSeconds": 0.541212625,
+              "sampleP95Seconds": 0.580073201
+            }
+          },
+          "cases": [
+            {
+              "id": "engram-fresh-01",
+              "query": "If one search source throws an error, can the caller still receive matches from the other sources, and how is the failure reported?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-02",
+              "query": "What happens when a caller requests a search mode for which no index has been registered?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.16666666666666666,
+                  "ndcgAt10": 0.3562071871080222,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-03",
+              "query": "When both the request and its context budget limit result counts, which limit wins, and are discarded results recorded?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 0.5,
+                  "mrrAt10": 0.125,
+                  "ndcgAt10": 0.19342640361727081,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 2
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 2
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-04",
+              "query": "How does the agent anticipate useful context from its current task and recent searches without calling a language model?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.2,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-05",
+              "query": "How is memory retention calculated from elapsed time and stability, including a zero or negative stability setting?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-06",
+              "query": "When several consolidation executors handle the same task, whose result is kept and what happens to tasks nobody handles?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.25,
+                  "ndcgAt10": 0.43067655807339306,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-07",
+              "query": "How are failures in protected evaluation cases turned into actionable consolidation errors?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-08",
+              "query": "What prevents consolidation mutations from running when the protected fixture fails or the apply authorization denies the plan?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.1111111111111111,
+                  "ndcgAt10": 0.3010299956639812,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-09",
+              "query": "Can hierarchy navigation begin with an underlying member ID rather than a hierarchy node ID, and does the layer limit still apply?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-10",
+              "query": "How does hierarchy navigation find the nearest ancestor shared by all selected starting nodes?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 0.9197207891481876,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-11",
+              "query": "What checks stop a hierarchy build from storing missing parents, self-parenting, or cyclic parent chains?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 0.8175295903539445,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 0.5,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 0.6131471927654584,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 2
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-12",
+              "query": "How does a reflection summary get a repeatable identity from memory contents and record that it was derived by reflection?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-13",
+              "query": "Which memories are eligible for automatic archiving after inactivity, and how is the cutoff compared with their timestamps?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-14",
+              "query": "When automatically extracted entities conflict with entities supplied by the caller, which ones survive and how are unnamed entities treated?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-15",
+              "query": "How does a bounded traversal of transitive callers distinguish reaching the visit limit exactly from actually truncating exploration?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            }
+          ]
+        },
+        "local-alternative": {
+          "space": {
+            "dimensions": 768,
+            "model": "BAAI/bge-base-en-v1.5",
+            "normalization": null,
+            "prompt_profile": "query/embedding-config-v1/fe44a8cccd89edae70b54c5e58399979bd7d8b12643a8396ad62d089a781b692",
+            "provider": "fastembed"
+          },
+          "summary": {
+            "vector": {
+              "hitAt1": 0.3333333333333333,
+              "hitAt5": 0.6666666666666666,
+              "hitAt10": 0.8,
+              "recallAt10": 0.8,
+              "mrrAt10": 0.4683333333333333,
+              "ndcgAt10": 0.5349385884452268
+            },
+            "fused": {
+              "hitAt1": 0.4666666666666667,
+              "hitAt5": 0.4666666666666667,
+              "hitAt10": 0.6,
+              "recallAt10": 0.5666666666666667,
+              "mrrAt10": 0.48518518518518516,
+              "ndcgAt10": 0.48469229170249745
+            }
+          },
+          "vectorRows": 4740,
+          "indexToolSeconds": 542.1080186789914,
+          "databaseBytes": 86302720,
+          "queryTimings": {
+            "vector": {
+              "medianSeconds": 0.036572198,
+              "sampleP95Seconds": 0.039153629
+            },
+            "fused": {
+              "medianSeconds": 0.55387863,
+              "sampleP95Seconds": 0.579288611
+            }
+          },
+          "cases": [
+            {
+              "id": "engram-fresh-01",
+              "query": "If one search source throws an error, can the caller still receive matches from the other sources, and how is the failure reported?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-02",
+              "query": "What happens when a caller requests a search mode for which no index has been registered?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-03",
+              "query": "When both the request and its context budget limit result counts, which limit wins, and are discarded results recorded?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.16666666666666666,
+                  "ndcgAt10": 0.40298313359773236,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 2
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-04",
+              "query": "How does the agent anticipate useful context from its current task and recent searches without calling a language model?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.2,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-05",
+              "query": "How is memory retention calculated from elapsed time and stability, including a zero or negative stability setting?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-06",
+              "query": "When several consolidation executors handle the same task, whose result is kept and what happens to tasks nobody handles?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.3333333333333333,
+                  "ndcgAt10": 0.5,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-07",
+              "query": "How are failures in protected evaluation cases turned into actionable consolidation errors?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-08",
+              "query": "What prevents consolidation mutations from running when the protected fixture fails or the apply authorization denies the plan?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.125,
+                  "ndcgAt10": 0.31546487678572877,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-09",
+              "query": "Can hierarchy navigation begin with an underlying member ID rather than a hierarchy node ID, and does the layer limit still apply?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-10",
+              "query": "How does hierarchy navigation find the nearest ancestor shared by all selected starting nodes?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 0.9197207891481876,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-11",
+              "query": "What checks stop a hierarchy build from storing missing parents, self-parenting, or cyclic parent chains?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 0.8503449055347546,
+                  "requiredUnitsRetrieved": 2,
+                  "requiredUnits": 2
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 0.5,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 0.6131471927654584,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 2
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-12",
+              "query": "How does a reflection summary get a repeatable identity from memory contents and record that it was derived by reflection?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.1111111111111111,
+                  "ndcgAt10": 0.3010299956639812,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-13",
+              "query": "Which memories are eligible for automatic archiving after inactivity, and how is the cutoff compared with their timestamps?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.2,
+                  "ndcgAt10": 0.38685280723454163,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 0.0,
+                  "recallAt10": 0.0,
+                  "mrrAt10": 0.0,
+                  "ndcgAt10": 0.0,
+                  "requiredUnitsRetrieved": 0,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-14",
+              "query": "When automatically extracted entities conflict with entities supplied by the caller, which ones survive and how are unnamed entities treated?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 1.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 1.0,
+                  "ndcgAt10": 1.0,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            },
+            {
+              "id": "engram-fresh-15",
+              "query": "How does a bounded traversal of transitive callers distinguish reaching the visit limit exactly from actually truncating exploration?",
+              "vector": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 1.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.5,
+                  "ndcgAt10": 0.6309297535714575,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              },
+              "fused": {
+                "metrics": {
+                  "hitAt1": 0.0,
+                  "hitAt5": 0.0,
+                  "hitAt10": 1.0,
+                  "recallAt10": 1.0,
+                  "mrrAt10": 0.16666666666666666,
+                  "ndcgAt10": 0.3562071871080222,
+                  "requiredUnitsRetrieved": 1,
+                  "requiredUnits": 1
+                }
+              }
+            }
+          ]
+        }
+      },
+      "sourceManifest": {
+        "adapters/consolidation/decay/src/executor.rs": "9a1ae08317c1577315a9cba62a0e0489370aabc913ab03f71e9c6791d6a2163f",
+        "adapters/consolidation/decay/src/lib.rs": "ffc58b65ace6c569223e1cc104689752f1a9177c79ab176001a2ef3c472279d5",
+        "adapters/consolidation/decay/src/source.rs": "99fc1e75b630dc1c36a071c51872c066549a0abb8ac6fc5dc0e79cddac8aecf3",
+        "adapters/ingest/src/chunker.rs": "2410d58ff4d0182f0c0c9e12d6e7439278496ffa0482237a649d71ead3b49ced",
+        "adapters/ingest/src/classifier.rs": "434c0a53d54c5a5ef55279960ae0e423a76df0ac8581734176b2a1ca741f0270",
+        "adapters/ingest/src/contract.rs": "47582f6b5d6d6090d22440e483b2d5844eae5a80ac4993b3ce1605b55b5b14dc",
+        "adapters/ingest/src/contract_entities.rs": "8811400974d4634b153f6033a8a070e20bc3ae8d1d6c4c37b16ad063c7156393",
+        "adapters/ingest/src/extractor.rs": "b03bd3b892fc7d44801d706d6fe9cad8891533ede80c8de03a6b6b4760ba3c0d",
+        "adapters/ingest/src/filesystem.rs": "6c96d6bd9e054aa3ebed748a875237e5f045c24d987b446a00b743af7b74f774",
+        "adapters/ingest/src/git.rs": "6b4055b3b115b434454d5b6aa07a8936475859bcc782feb43558153ebd9449ca",
+        "adapters/ingest/src/git_detect.rs": "14cff750f85d5f30cb3886656cf3073ccb39e58f65cda03b6def43949967186b",
+        "adapters/ingest/src/hash.rs": "b009489341c5ede63ef963e8cfa3a0b64f3fbe74640f597df2ed51baecc54a9a",
+        "adapters/ingest/src/ingestor.rs": "4c1de95ae6f3d7187c1112be46489ce3b149b812271dd4e2a09d6e53cf392a77",
+        "adapters/ingest/src/lib.rs": "d61a8887cc41f2af83d8cce5b3ac1a27ee2734d308208c4931c2521b102f77d9",
+        "adapters/ingest/src/markdown_chunker.rs": "695f52a254502c30bd1993a05757f1e23292abe52e7a3a9eabe68e87f5febf0b",
+        "adapters/ingest/src/openapi_types.rs": "0c889b84f696075d6b34c82bd8596da330304220b5785849e302daa1324946e1",
+        "adapters/ingest/src/reconcile.rs": "00c1248d1b02b86a076ec84fc342ef2dbed961e1b119da118edb0813c734d2a5",
+        "adapters/ingest/src/repo_graph.rs": "14c28a048ff3a6a98e96954ef3fd0500c473558987f961ac6af6d90d4973a4eb",
+        "adapters/ingest/src/request.rs": "1f0f3e25307ec4176447ff66a02b84af097ff46ff882376155afcb814300d020",
+        "adapters/ingest/src/scan_filter.rs": "c97635ab467b41e6c8e8f4d193e74b149b1782026b23684291b4cd33b90b2203",
+        "adapters/ingest/src/scanner/contract_phase.rs": "5da6aa26a56a954958521bb4ba7e59954965d7b0a0448012f571d4ea33ef4bdd",
+        "adapters/ingest/src/scanner/manifest.rs": "d3c5b56d4ac4761f167d611dd3edcdc00654084f5b3fa5cffcc745d8862bb181",
+        "adapters/ingest/src/scanner/mod.rs": "52e30d84e2150e1d100df30231af24dbff082398580df1e56d35ad945b01cbbf",
+        "adapters/ingest/src/scanner/source_assembly.rs": "1b4449998bd016d015839b124569a41eff486e9cdc42fefeb28d72bfa189c074",
+        "adapters/ingest/src/scanner/source_generation.rs": "af339276b8f0ae408c0497ab0efb0125975d306baffff1037486547d2e3639be",
+        "adapters/ingest/src/scanner/source_reader.rs": "11ad4dc15b7f5d3bd3fbd4c799d6346ff9f6eb07d154c794c4d44bce7747d4ce",
+        "adapters/ingest/src/scanner/workspace.rs": "d4f81934a151e2c732de519c38e38c41ed0d8469d64934e19055e4d061c71ed3",
+        "adapters/ingest/src/source_key.rs": "6dfb509a2ba56a801b6629a53b1ecbf7a2f95e99d4e22f5c872b2cae5f2eedcd",
+        "adapters/ingest/src/yaml_safety.rs": "0181c9bd21e91fddf9829a639df2713e9883294716dec32b9fcb97dbbb1c5b55",
+        "adapters/integration/src/harness.rs": "abbbb3a74d42a7d185946274ac6d4361c26e849e401b513d49d5b10496c4d1f4",
+        "adapters/integration/src/lib.rs": "21f9b45084bae3e796183bfba28127870901c00f946537e60c2bb626d6db34b4",
+        "adapters/integration/src/wiring.rs": "62e91c45873f29d47ed0f41365a01628424fad2474182abc9a2a5cf942695b62",
+        "adapters/pgvector/src/cells.rs": "1d8fcbff4e4138f4b63d57db16c9da30d63cd5c73059030a10a0da4c0a8b6930",
+        "adapters/pgvector/src/connection.rs": "a952a0d0aaede5ad6675ab7323311314f9a90799c69afeebb28dea29ce984180",
+        "adapters/pgvector/src/knowledge.rs": "06cea6ad81a55c7b281830a29fa88b58789e640e976fe8e6a580a200152d0532",
+        "adapters/pgvector/src/lib.rs": "3b1c8c50dbe838cfdafdfebc72f0989fb9d74803a53fe6a7d9bd7db4da7b16e4",
+        "adapters/pgvector/src/memory.rs": "8fa83104c0aae59fa51ec7d2c78d77a522de414f5a88a3131c95dfb59ceb138a",
+        "adapters/pgvector/src/schema.rs": "b7952298497a2544c7adbd8783b89cc6bef827813e8289c4b7f099dfa450fbdc",
+        "adapters/pgvector/src/vector.rs": "cd488773be89cda53da361d461a7e54ba45288699b5a1713321ccd65b13a3516",
+        "adapters/retrieval/associative-graph/src/index.rs": "eab72753d3834e150117b7f94054b046e02d6cf2c0dbdbe67ca3cadcb6688cf5",
+        "adapters/retrieval/associative-graph/src/lib.rs": "24b0c8cb0142ee7339a29352ca2564a945d41dffcedd9377f2f7a0cafd80988c",
+        "adapters/retrieval/associative-graph/src/ranking.rs": "0468a54f2970b1ec215d5026e678d8cc45bc02dcf4a918bfd51cabd237a26037",
+        "adapters/retrieval/associative-graph/src/seeds.rs": "4bcaeb0f49f3567c445b66b31cb7d389a55cc5d7356232505c95fe1c5cf77d2a",
+        "adapters/retrieval/associative-graph/src/source.rs": "d6b3e42280f8c84d0cb5d9760238e538476a4b64d5f8e5836ef6d7fbd321bd7b",
+        "adapters/retrieval/community-summary/src/index.rs": "6da91977625391265f64fe11ea7a2090695a15e5e180804bbb15aeb5f236f629",
+        "adapters/retrieval/community-summary/src/lib.rs": "81c721b384c4fccb22b7e0e5e659c3ca3e868f77294f33b4e213901bf9c4b78f",
+        "adapters/retrieval/cross-encoder-rerank/src/adapter.rs": "a05d4c08f74b09814ea1b5d96fe8ba8adb2ee090a8f7b322e9e8b938684c8621",
+        "adapters/retrieval/cross-encoder-rerank/src/lib.rs": "3552670a3cda9b5e324caaa2bdb434367589e6bfd0b51cb2e366964740908bbd",
+        "adapters/retrieval/cross-encoder-rerank/src/rerank.rs": "384d93b6a9e2ec312858db6f41bd164d04529c03f0271cc8f06eeb5ca6f5c08b",
+        "adapters/retrieval/mmr-rerank/src/lib.rs": "1c87ebe82f91ec61dea4ccd84f6077bad5df5b913bc2fa68ddd428069fff844b",
+        "adapters/retrieval/mmr-rerank/src/reranker.rs": "b5daf9c577f8a899b35d36e7e5af2b695baa05b4dd07f3331d8dd7a068496ed8",
+        "adapters/retrieval/tantivy-lexical/src/index.rs": "d46b92a8049a0094c13914d73a8b07239b7828f70d97d4f4c481acdba450ceb8",
+        "adapters/retrieval/tantivy-lexical/src/lib.rs": "28bd86a5633d12b838778165e92cc9bcb85eb712aaa4fcc73a9af4244d3a4bc9",
+        "adapters/retrieval/tantivy-lexical/src/retrieval.rs": "11513455cfc2ac42740a62077c482ec348a169f6f5678f709c8f0f2387b096c4",
+        "adapters/retrieval/tantivy-lexical/src/tokenizer.rs": "4acbc024d64cfea31611e4c1250514dfb49fa8414f34d403509ac38c4ae9b395",
+        "adapters/sqlite/src/belief/detector.rs": "500e0840c0d9074acd760c2f9be4263d2711cab74f7d06e2d153f2870eda2cbd",
+        "adapters/sqlite/src/belief/mod.rs": "83fa0dd3e01fb0bfbfe7460a01139adb2599a0f4cee1e48c8ff964482c3e3859",
+        "adapters/sqlite/src/belief/rows.rs": "832579d6f10c5a206968332df8565aee6af2b00e3be3607cde8f6b56ba235c4e",
+        "adapters/sqlite/src/belief/schema.rs": "d60391582dd5f98bfe8fb75002ed6bf94b083b199df2db1ee64fa2e7854acde6",
+        "adapters/sqlite/src/belief/scope.rs": "2e320f893ea5b57bf0989899ab3c3751335c459dabbdce4b5458b2325274c25f",
+        "adapters/sqlite/src/belief/service.rs": "6321675b2a1da46a58d1bb7d350487e01c1a7dcb10b554f330d628d18d1e623b",
+        "adapters/sqlite/src/hierarchy/mod.rs": "b3c2e1a92c8babc343ccd7d7422e3f601f528d65555a52c540a972556366c423",
+        "adapters/sqlite/src/hierarchy/schema.rs": "7c866aeb9136ba0debcc6dc9b8cb1b056ae80c4d5c17c25660a652e2b4a56a0e",
+        "adapters/sqlite/src/hierarchy/scope.rs": "b98274474b9f5a24fafd7fb91daf5cb0ed92b1ea07e6e38fb1d4506b2be87776",
+        "adapters/sqlite/src/hierarchy/service.rs": "5b47874d34a931db8eb38d201a575840858c3d07d9fe0ad7af53e0feb76560aa",
+        "adapters/sqlite/src/knowledge/candidate_text.rs": "088bd92e036b81fa5ba44a26db02a2af4ef88b6077001823f66f1779a8f67612",
+        "adapters/sqlite/src/knowledge/code_source.rs": "e54d5bb375228b635af1ec7d3df53609c5aeb54f463c80a638b6ba21f0e6dc86",
+        "adapters/sqlite/src/knowledge/graph.rs": "5fae459d3743163a2eac504f39b0df151205c24b15c7c39f9b90cf64a7565f9a",
+        "adapters/sqlite/src/knowledge/guarded_source_write.rs": "ea6be72f56f5917e8c193a66f514cc38f86427ba34c021b92adc821b19eeb58a",
+        "adapters/sqlite/src/knowledge/identity.rs": "0d668b4a6df27a3690534ec205d517eb5b3c2656a7a9d7263995a9402088a381",
+        "adapters/sqlite/src/knowledge/knowledge.rs": "24546ac002d51f373905738c33e3ca17ca940cdf8f18784ab4c666c022e964b3",
+        "adapters/sqlite/src/knowledge/maintenance.rs": "b26d31b18f4bbacdb01e2e2f5debdb8bb62311f4b199f8b34ad6d6ef6692bc7f",
+        "adapters/sqlite/src/knowledge/mod.rs": "8cc4993b38fa51b57aeb7c6e64515380301dadab5a2e0912ff457f6491eb7cfd",
+        "adapters/sqlite/src/knowledge/ontology.rs": "369376cd3d360f0b49ace928e1d7803f271ba63092691e4d7e5125fccd97d566",
+        "adapters/sqlite/src/knowledge/record_writes.rs": "6fc6d74d8ef360de3e30aaa50d5b0807776e6b65513c92c9ebe3909851c733d8",
+        "adapters/sqlite/src/knowledge/retrieval.rs": "ffb1f77862235be440bdbece672904e5caedcc31c54e8017742f0c5609459d78",
+        "adapters/sqlite/src/knowledge/schema.rs": "1b5dd8fb2404ceaf499a9cf9a566cf240d508206ca114da4235654f18c3e1c16",
+        "adapters/sqlite/src/knowledge/scope.rs": "0a0a3b0f9e99de4b2f7a4b64bd4a575e5a0d616a428322e7f80e5323d9edbdb9",
+        "adapters/sqlite/src/knowledge/service.rs": "4910776c61a81a51efacae299eb06cc251d3a4cc6a741739858413272fef7fb1",
+        "adapters/sqlite/src/knowledge/source_access.rs": "6267a6cfc8fa6a3ac5e3f50a8779d3c415abbdbf479fb912ef036f32665124db",
+        "adapters/sqlite/src/knowledge/source_inventory.rs": "a3e49c4fa982777798e8709c8b92b9b827dd326f6a51927b9c6055a9376902ea",
+        "adapters/sqlite/src/knowledge/source_legacy.rs": "3cca699d914863ae07517981141f5dc94380e48746745d1281601df1665d76d4",
+        "adapters/sqlite/src/knowledge/source_schema.rs": "5a7e8d0fd38ed9af8f6db8cee520cdc09608408ace7ca219be453b6dbb16431e",
+        "adapters/sqlite/src/knowledge/taxonomy.rs": "44f8c3fb5c4d280971bbaf6371be022714929e0b22e78fadcf167468581ef96d",
+        "adapters/sqlite/src/lib.rs": "d2205349aa806976222e25463bd8e589ec308dc937f9c8d35521e289a7c21b6f",
+        "adapters/sqlite/src/memory/dependencies.rs": "74acbd0258f2cec542fd0c7338817f1c3e8cd2572c239d66576557a0153f47c2",
+        "adapters/sqlite/src/memory/engine.rs": "53bf7f1ed312b273078ac350797b1020c652b1e66257ade599253ee79a5bddbb",
+        "adapters/sqlite/src/memory/forget.rs": "32dd8c1c5da3ab521240d5a4ab078c481722a1a7d458bcc6077a3289b9ec552f",
+        "adapters/sqlite/src/memory/mod.rs": "26602ad960ae685cc315921e4ab6e8606f753c833bdfff8a01bc52e90f512c3a",
+        "adapters/sqlite/src/memory/retrieval.rs": "8744055f14eb20d2548f7e10b32329e4a53083fa57297b910039601441bc0544",
+        "adapters/sqlite/src/memory/schema.rs": "58c6d6abba4d405db28c410da0a7a87c752a8f87d4159222adeb32403a9d6250",
+        "adapters/sqlite/src/memory/scope.rs": "028cea8f94e48f8f4c8efe6e4bba95072598a2cdce2fce01ac4cbae689764b9b",
+        "adapters/sqlite/src/memory/service.rs": "b6778f9c931845e0aae169fe9c06be02081ea69c0cf590a014aac40a8c13294f",
+        "adapters/sqlite/src/memory/temporal_retrieval.rs": "a91476967596ecb140d1c6a561ddf70ad081173222e3c9de79b27b03a3bdb008",
+        "adapters/sqlite/src/memory/transactional_write.rs": "1520ca2782eacae67a0013649de962f6f1a00530b041fd3d374c55a6975560e7",
+        "adapters/sqlite/src/memory/validation.rs": "3e34f961f6fba65696a475ad5faaf6678829e68f316347613089c967af4bf3df",
+        "adapters/sqlite/src/memory/write.rs": "291b16fd07f5dd17e1fadacb7418a98142cdd03996065b532e02e5e3d8aa3bc2",
+        "adapters/sqlite/src/procedures/mod.rs": "738c6154c9d026a72da48b113f39572a20e071825b461857095af670e88c0689",
+        "adapters/sqlite/src/procedures/schema.rs": "966cedf8d49db5e551ce8a591a8098cb2aae186d0b83e42f236d057509ca7825",
+        "adapters/sqlite/src/procedures/scope.rs": "d0f9b1a55db33d33317210a16691dc2f2d2cd71e4d0f9631c6593649865062a4",
+        "adapters/sqlite/src/procedures/service.rs": "1b8edc8015e021adef6df34f7e911e91d28b4d9fcd63c1d1fb7f8d55158d3e69",
+        "adapters/sqlite/src/sqlite_options.rs": "421b0901c9157b00a5498bcd6d0cdb1012c7feaa77d7c4809ea993d4816525e1",
+        "adapters/sqlite/src/vector/entry.rs": "1e2e5e2f1375fae234505738176ef9abffc9536f22945eb77b7ef348eb94e0b8",
+        "adapters/sqlite/src/vector/extension.rs": "367af6d11f4cc3526b4fd0c69bef85b9643d73e77faecee4cec8abf6b986f5e7",
+        "adapters/sqlite/src/vector/fastembed_provider.rs": "017e683a73980f58a331e2627b9c995d91d153338050dcd17692930ba8566955",
+        "adapters/sqlite/src/vector/index.rs": "b4f2560bde2f40dbf52008d2f8edf59a583def239cfc809f80df484b77893ff1",
+        "adapters/sqlite/src/vector/mod.rs": "65c54265512fb0439691767b280c1a72e78ef639ab4e780a827ddde402462408",
+        "adapters/sqlite/src/vector/retrieval.rs": "c48b04ae96ff8dcb870c3e9671690696737826c8cc8331ac0795aa97c098092f",
+        "adapters/sqlite/src/vector/vector.rs": "0a858fb708d9a7acdc4e22150295bcfbbac76a63b6a92cfa49c53d2c09e08dd1",
+        "adapters/surreal/src/belief.rs": "8ee2568f6b1a389b4cdd075c2bac02b157e79226b2a85ed08111a82a2708804d",
+        "adapters/surreal/src/connection.rs": "20e338b589124fd4ee9e52469bbdbc9d48ba294d6d79b98b2059e4fe6c3292fd",
+        "adapters/surreal/src/hierarchy.rs": "3b75dbe0cec1ff5efbbe768c350fd2584aea94b60deabe256e944e2bb7e8a9fc",
+        "adapters/surreal/src/knowledge.rs": "04db9b62d95d20c991f8c81836c0dcd16830b0da5476f33e5c46b5b7bfc76c16",
+        "adapters/surreal/src/lib.rs": "4734e7e900112f2927a59a057321e7f53c911f69dbaf7ac9a0eb60c76fb7e48b",
+        "adapters/surreal/src/memory.rs": "e5c479f59f1700b94628506f3d58e168ec33fb156bc946baec27dc98248bb9f0",
+        "adapters/surreal/src/util.rs": "694268f94f4189008266ace6db36cbacbfff11efac9813f3fa2336033bacc788",
+        "adapters/surreal/src/vector.rs": "614b41070c49a8c32a48f9adbf47748cd2657b90ff5c78650ef343abd8408084",
+        "backends/pgvector/src/lib.rs": "f9a979c01eb3df37827ecea7eb79cedd24955eeefee3e0e46002165c469640ae",
+        "backends/pgvector/src/query.rs": "3760a70aba157e838aa879af5045fe8a8b99e60c830146449643e6733cac559d",
+        "backends/pgvector/src/recall.rs": "db504c3b77b70323f7e2e04a34628917b41d6393c0030039fce03d6c5a969f12",
+        "backends/sqlite/src/lib.rs": "3d2262d615aca3855e4a64e6b4fe60eb4be58b76d8eefd3d8e623f056efd873e",
+        "bindings/node/src/belief.rs": "55695be2d5d23ffa8dc1b273d2f7650fc9041aab0066fe157a3ec3830d7b80c3",
+        "bindings/node/src/code_source.rs": "5b5186418e407c27fb6eede78cb738c54c00aa1770a8268cf721f916b2c722a2",
+        "bindings/node/src/codegraph.rs": "77208e95f19ec67ce478f902f935894008673a4690325268bddb5d96a20f3aff",
+        "bindings/node/src/consolidation.rs": "768e1bb1c03c3cf3147d00ccc8bc44b660118951a18517ea90ef8335e247473f",
+        "bindings/node/src/cross_file.rs": "25159d171244493ad9e326108ef3f0eb8417bbbbf44ae95bc02c9def8ad28a90",
+        "bindings/node/src/eval.rs": "f410b04f24e76399f9fd94959b33c5e0f738ac7c050e37a23c0fbf569470ae67",
+        "bindings/node/src/hierarchy.rs": "110bfe1177319194c6d4ad4b2c0b07d7fa433c8507a95a863993aeebb856bdf3",
+        "bindings/node/src/ingest.rs": "ffa665dcb6ac6491f625a7c28ecb20fd5e784215d1a04f6d8dc6d459c90996fa",
+        "bindings/node/src/ingest_ops.rs": "7a2914d97eb798771715339ed267daeb9cb7a2aa69814091dfd99ed43cf54be1",
+        "bindings/node/src/ingest_state.rs": "4be8d57f60cf81555b5dd896b7a86058444024e092f25a2b99f853a0ccd601ef",
+        "bindings/node/src/integration.rs": "efa87e71604c013fd5ac1d6e2f7e7126c95b888326edf308f108107ab211addd",
+        "bindings/node/src/knowledge.rs": "88a1b5e553405a021e2f098bfaf53f8b44fb96fcd1b14f0f4bfc7c09dd5cfff2",
+        "bindings/node/src/knowledge_chunks.rs": "b3a074782849f85175ad90fa1b18b3bf952e86007367229d8dbe72ced1dbb726",
+        "bindings/node/src/knowledge_concepts.rs": "d15156910baafdd2380e9d8d72f90c2217a4021c1343565b74b3ecf16bfc5f0e",
+        "bindings/node/src/knowledge_documents.rs": "abedd53bbd01694e967332ef77a25d89e6bc989ab621d88cd5b3cb459bd99abc",
+        "bindings/node/src/knowledge_entities.rs": "db4ba467d2db403ee79ea3e9cbd71eaa521a6bed15201a37413f1974e26e3ccb",
+        "bindings/node/src/knowledge_fusion.rs": "5b5f210a03cc73ceeae1c3c3424c18e9a1b0b7ecafbdebdf7af5b0aabfd80d20",
+        "bindings/node/src/knowledge_graph.rs": "2debfeec976b132b12ac690b15575a3b2f4de25a778262477788c315bef9b2d6",
+        "bindings/node/src/knowledge_ontology.rs": "e4639f263d3f567c996e1a1088f79fa50724202c78ac5f99f5464dd743ee0b3c",
+        "bindings/node/src/knowledge_relationships.rs": "9dede91b7d887e06ea8a41401d6259ef15eef06c6c864982568b808bba5308f1",
+        "bindings/node/src/knowledge_sources.rs": "ed623298f0317fe706295c40a4a83a3909eeae91de88d19d03a2a74c35924b98",
+        "bindings/node/src/lib.rs": "22cdcb4cacc911a8b751b74bf3de38a95fbcdc0edd9bcd64b54f84627352fe8c",
+        "bindings/node/src/memory.rs": "e12d2d78c6bbd4c8c65da865ee32f5ba4e0d8b084df9d2be7982e162300572e9",
+        "bindings/node/src/provider.rs": "b87fe347ac5126ddda9619f343af33bde4934f6a157e6cbcb5310f4c49682d32",
+        "bindings/node/src/utils.rs": "d86d0550f996bfabc03e0392e734f4fd1f5c5da3f51bda666d1f587bcdd01646",
+        "codegraph/queries/src/lib.rs": "9b1a7db146481833115aefba60a343cafebe14909cb1c84487bee99f4b12ecaf",
+        "codegraph/queries/src/liveness.rs": "61170c1cf2557f5442f51e15e9ec7962c68934db08c8d434379519f6ae6f0133",
+        "codegraph/queries/src/queries.rs": "272c7981c840c4cb2c6a92fe064374abaac5d89fdd3998555edb904ee4e07b56",
+        "codegraph/temporal/src/lib.rs": "ed32cb3a674e3e4249d60f194ab5c934ae5b35987cb9dcc39169d4a88d24914e",
+        "codegraph/temporal/src/scoring.rs": "ce057cf02b31c36f6054b617254616ea9dca7fafe0389020d28337bbdd3ef60d",
+        "core/belief/src/contradiction.rs": "b22ac5d3fe09a8b0328396231ffd06e8a1f7a86954a1749aa60fef3352449d21",
+        "core/belief/src/embedding.rs": "984dc996b63ef5274d0ab7df45e347e9a78f487a252740e803f51b5f55c28a9c",
+        "core/belief/src/lib.rs": "2a658d316d80c6d4b4df240d41f00a928d45310f98c6ba9ec549af807be48d25",
+        "core/belief/src/lifecycle.rs": "6669837525b6f13f2aac4a3f54905c9043b7ee2844044328c1e7013b3f11dd43",
+        "core/belief/src/query.rs": "76dcb765d2bb23f3c356d8c2cf8f5e6c20f025f55973c4433fe4cb0a53a3a8d5",
+        "core/belief/src/reconcile.rs": "142552a0f39c3c97582d07f78b8b4af6be0095f5a92b6bf5cc7c469ef863daa6",
+        "core/belief/src/temporal.rs": "13c21cfb67faaefca6d54ced197d2d88204bea248d98c53a291450c9b5026ea0",
+        "core/code/src/edges.rs": "ec8ef8b122a981ae663f8b95578f046c8bdb45b660a5dbeebd131cf80fed091d",
+        "core/code/src/frameworks.rs": "1fb2083be2409d2f341bfa7e50d3d226004dd489afbef4e6b75d02e71792a5ac",
+        "core/code/src/identity.rs": "c72c4858568d1e418fcdb7b25bdbeb62bef90b33064de5ae4dec788c1a940bff",
+        "core/code/src/lib.rs": "891bce142cb566627e97fbaad9c74a53ef017d66068896b586135306b7b76f22",
+        "core/code/src/noise.rs": "d28b7e1074871960a6be3d10670500221beb9e5ba5acd112c3104da99889e7d3",
+        "core/code/src/parser/chunking.rs": "1ec175d0cfd4a8916cafeb2641a7dc5a93e83942092ae8e673731fc1483bed90",
+        "core/code/src/parser/code_symbol.rs": "29e40e06351065d928100aae276055f2fb9e03c4eafe0294fa641916f39250e7",
+        "core/code/src/parser/mod.rs": "9e0e513e81e3051d24c2ab460a8dbe47d67782c7811bdca55ebef95ff48a8b5a",
+        "core/code/src/parser/source_coverage.rs": "59556cf7a6e7736c73670b122a7c70fd73f4832a1c3fab9052a7b0de6e40d40a",
+        "core/code/src/parser/tree_sitter_chunker.rs": "ff20c5546e24314aa34a7e635131d8c5294360d71b34012bf858f9f2b8127a79",
+        "core/code/src/queries.rs": "a36f405cd938fad9066f42e8a9c12042bbabd6926397198fa3d58bc570f89161",
+        "core/code/src/resolution.rs": "d4e68a9d6d6a4f5b26a3abf501b26ec0eec05b2231ef3210dff94a04627e4d45",
+        "core/consolidation/src/composite.rs": "c35d44a9467c4c5ac02ec08aad2e036ab7ea5d84985039232d099ca229121164",
+        "core/consolidation/src/consolidation/evaluation_gate.rs": "80c0cc6cbbed4491ad9dba7c15eaafa2a3f4721cea632fdba21828be99b830c8",
+        "core/consolidation/src/consolidation/mod.rs": "7305c0e863cda9088fa79a58bd4d6adff048376eca9fda1f11d3be27f1f69164",
+        "core/consolidation/src/consolidation/mutating.rs": "1c743df357aa8c29ffeba93b3d49c7d7526a8ea642cb59eda0c9ba990cd39cf3",
+        "core/consolidation/src/consolidation/planner.rs": "1c41fb38dd5ed8a088a8517d68b975f352de7879558af04b28ea52b8e2fc1f49",
+        "core/consolidation/src/consolidation/service.rs": "76cf748d6287367e93cdaaa596d8577a425d8435840d4e746b0175e668b89530",
+        "core/consolidation/src/consolidation/validation.rs": "562968873dd4f5bfd9a94f381b48dff75c1cfd7c77cdd07dcd25e5929d431054",
+        "core/consolidation/src/lib.rs": "aff9457785155e6d9433b379ba6cd13e1f9c1a1e4852facd17dc259c610831d2",
+        "core/domain/src/assertion.rs": "6aa9594918f343e0bbb834be4c8c385f0cc759783a4a2fbc462d5b40446ff6b6",
+        "core/domain/src/belief.rs": "75f91574fe30c75fa4d9069ffccc0053abbc14331565f0bb715dfe6a1e5c57a6",
+        "core/domain/src/capability.rs": "61fb8630ffeb3943a186fac8ab0e298ccabd8dfce4d6b95be2873fd21e2d8e22",
+        "core/domain/src/code_source.rs": "46d340d79b776675034018954dd6c560808ceb5e3888cb42e8be2991d333ee1b",
+        "core/domain/src/community.rs": "2095ffac68539881e54bc5ed529f650e8649991fd0ff5d2b8d6a39550c78da33",
+        "core/domain/src/embedding.rs": "92f11e2619ae47e0f84cf27cbd8809ee9892c73fe144b5cc228dae735a2595d0",
+        "core/domain/src/evaluation.rs": "b331418a2e562d65d5837a6fab2254ad994f4dcbc7ebb79d6b7453596b39cbec",
+        "core/domain/src/hierarchy.rs": "51a7ce95f9987b3594154d7a6272b0fedd2347900d8eec204259d2e00354883d",
+        "core/domain/src/identity.rs": "78f765653c729777a9f020431b9ebb668ab550220dd24f7ed87d955eaeed720f",
+        "core/domain/src/knowledge.rs": "3c0492ce11242b19063022643cf5a0b90c449ba1055b82ab546038cf9241ce78",
+        "core/domain/src/lib.rs": "ec4c1a99712e6f78b77dd330fd649dc2bc5022a2067a444a272c3e6a7a5bd0dd",
+        "core/domain/src/maintenance.rs": "7088120fd4d49dcf8148f373272ea10ca5822137d6c543664f70d99cc67d5a11",
+        "core/domain/src/memory.rs": "b36f6d5fac23fa087edd72fd2087fd82aa81111f257aaa6085844cee8da98aa9",
+        "core/domain/src/ontology.rs": "1cd14ba4039c4693a09e304cfff75a24479c434b4866d4f43f80249c41865d0a",
+        "core/domain/src/operations.rs": "fbbef15c1bff931f32fc01076db22bb3bf700ebc0b0215e7a7603cc3526bba69",
+        "core/domain/src/paging.rs": "a2cd96c56c554f9a7154757e9304be825622d483e8c7d4ebd2fcdf41f456b98a",
+        "core/domain/src/policy.rs": "3124404c21c1570a2da6b31c753f46301113ea01bf029b2f4b1cdcf648b1c86e",
+        "core/domain/src/procedures.rs": "22f48d25a483eb5432657bdbc270c18a2909cc577bac958c88f34cf0029c22e5",
+        "core/domain/src/provenance.rs": "a14fb17ff39961ccf45ae19402d485f860727fe4fa2dd82d25f29eb1f7df8369",
+        "core/domain/src/retrieval.rs": "ec7dc6bccec54fdb629c3413c2046d1a598a4d88ebbe2f6cad0ed38cb221907b",
+        "core/domain/src/rule.rs": "de56f968c6f059c1514bef82ba09a8fcb653c3a87cb724529dbe1e910f464170",
+        "core/domain/src/taxonomy.rs": "da266a5f690bbd53eb9c2cc1587d139be648828dde0023168dd7cc9929affa33",
+        "core/domain/src/trace.rs": "b6df01b65efd574d2b3d059cbfe7db02707deea161d62983f3bb5d1983ddec55",
+        "core/domain/src/types.rs": "935d08b51538fd5e4c1f7bc80078718e62d8b55724b5bfba53b6a919eb0bbfd3",
+        "core/eval/src/accepted_examples.rs": "2ce69ebbdef4e5b9ad933ef9fa0456d102df11ea246f311878d3af73e6528cd3",
+        "core/eval/src/architecture_coverage.rs": "459df2e21ac93d45518550f3c257d291c4f914b4c67a106133b0884ed9fdce3c",
+        "core/eval/src/contract_runner.rs": "e0469f78ee1a39711e36daa86ac8c010a68b10c48c715b9016077453fc6cb1dd",
+        "core/eval/src/lib.rs": "7b46d49541c0141a011a668f0c9dca3f7bd614fa01991a7ff094fd93956e3abe",
+        "core/eval/src/report_summary.rs": "c5bb26ada4e43a90a31a274908504ea4c9272ed4144989886da47a9235b561cf",
+        "core/graph-analytics/src/betweenness.rs": "7a178cd7fdd34ee16338d0b6ce6b0d32b53339b6fafd1993200c79a95ae49ef5",
+        "core/graph-analytics/src/communities.rs": "5fb5d065d7be8e05bd07af1124d66415554a4f5bedaaa45eb4f0a4170529b70e",
+        "core/graph-analytics/src/lib.rs": "4c4dc6aadcd9652cd223fdd41488e669fce22536fcaabc558ec8434b8197ee20",
+        "core/graph-analytics/src/pagerank.rs": "7c2ef5b320df4f0ef74fba312704bcc65e09d40dba5f7f63daf67b85d91cf167",
+        "core/graph-analytics/src/reachability.rs": "f85e0a850a9772bd2348bb5f5e7876fe18231c319ab21b7e3574d14bd6640bdc",
+        "core/hierarchy/src/lib.rs": "d55043320a0992af0aee5b1c058bb2235689493731e9242558a0f6acc4b77d63",
+        "core/hierarchy/src/navigation.rs": "3a78ef63051def15993c295a680fd7ca855b3651bae3f3180504b52b2db13918",
+        "core/hierarchy/src/validation.rs": "3d31e121b5b864f1a1719e74be173d40b1f69c7548986bb5b3f1575ca1815f7c",
+        "core/integration/src/batch.rs": "ea3ff1bd825d12b7aa6c185b4374b1abde87881e6566b64832f3f0fdd6d9149f",
+        "core/integration/src/capability.rs": "601b02fade0190a88df8089bec2e3231219e02c27d422bd8345e5958f6c73887",
+        "core/integration/src/code_graph.rs": "b3ef094591c41cc94e3f93fd86bdcb796f674d51c4f57d429ce7dab280505a3b",
+        "core/integration/src/community_query.rs": "d216b5d8b112348ede536eb585e961fb40210701a66a7084d17949810e7a1918",
+        "core/integration/src/config.rs": "0fcb81c7d1676f369f6921f63f1b8bc8daafaf7328085787eb6c6e8582d4de80",
+        "core/integration/src/dto.rs": "8644d51ce866f1342f851867423970b1fa10399c618df15003c50f2ae5163f15",
+        "core/integration/src/embedding.rs": "e9c25cc7f6c7b8df1e98bbec6bc297d66a6db8f1b75a8fda3d0aa3749e47db1a",
+        "core/integration/src/embedding_backfill.rs": "c222b43383ee774ae9234e226da70133be9dffdeefcf0686c7c10fd5a0680060",
+        "core/integration/src/export_import.rs": "ad8576f5fb41b1a57f053ea1bb0931c885d18ec5e91e5edfc4fa4391480928d6",
+        "core/integration/src/hierarchy_build.rs": "9b7855bd600c6971e6a09193b269f2055fa930caa327ca64bd10a2d37a1b4358",
+        "core/integration/src/knowledge_query.rs": "2e9e019b7594838c093c972a9e3b8f75cbeea0fc74cf4e49cf76b1d6e2e282ac",
+        "core/integration/src/lexical_feed.rs": "d72050f0fec4e635fe9e6d01ecc0f94569a71280a7925261f1a7bc64bdc2c495",
+        "core/integration/src/lib.rs": "bd1b74f290a1f800435853467035f76716b2c47fff820f3b949b5eb7e65377cb",
+        "core/integration/src/migration.rs": "be1cd73881b5843d8326b4c9d15e508ea7532da18ec9a6b7aa9f40d352d6f43c",
+        "core/integration/src/observability.rs": "32382e9064d109f77666dd24885b11f832d842b223f8fcb6ac1adba4d302c05c",
+        "core/integration/src/ollama_provider.rs": "22df257e07d4636ef0c4d97813f6a29352632d12a2fb33da873a54ea0ac9e93d",
+        "core/integration/src/provenance.rs": "20d7ee2aac72de3192e1d495766a24090d42f54401cea281b1d7e381c4777e11",
+        "core/integration/src/provider.rs": "9cc4d2ab1ba4e4b83304def1c2a840cc9fed88dde89d8e69146b94dadabea9e3",
+        "core/integration/src/recall.rs": "4874b1ad8914417431b10f6f9e9e0bd079bc71c1d417317a9f8a377b767e99ea",
+        "core/integration/src/sqlite/batch.rs": "94046fef78e15cfdb9ad8dc23f132cb0a6fad9efd20ca6d3c5320a60f7c2aca7",
+        "core/integration/src/sqlite/bootstrap.rs": "c486d74a8f9651518e4ae25185a93a43a3f651f7fbc2ce16f0e37e3aa37983f0",
+        "core/integration/src/sqlite/code_source_conformance.rs": "02106802adab79f2f46ead743be077551beae5c991d235f477bf9f8ec185df32",
+        "core/integration/src/sqlite/code_source_import.rs": "92b9d6090a44ea7173df4761804c0eb8e8683c92821479aab3977726f763b235",
+        "core/integration/src/sqlite/community.rs": "8379d5057d9f2ebdd9bc545d14ac51813cc740b8ac9ca5cccde45bb712396706",
+        "core/integration/src/sqlite/conformance.rs": "d8624fc266c10347845e66ac9bb07ac7c90526f0c74c16c0a91d401df879ce12",
+        "core/integration/src/sqlite/consolidation_adapters.rs": "5641cfffc252f57381b8fd33a35073b9897b37473bb6d33ce348937477ecf22e",
+        "core/integration/src/sqlite/export_import.rs": "07b381cfc7d1842583591349ebe2d8a02fd1bafc2f1f228be626069efca1aac5",
+        "core/integration/src/sqlite/fastembed_embedding.rs": "a97d6e25e554db165c040db95ea98210619d8104648995a233efb5cf0be898ff",
+        "core/integration/src/sqlite/knowledge_query.rs": "0dae0221ba76f3e30121af8b3109d3d2681db8609d96239ea0ab350db1bf38f2",
+        "core/integration/src/sqlite/lexical_feed.rs": "3b76b074fef1b5a15e4072d88bebf623d352c37fdf8761c7110517fb0357c1f2",
+        "core/integration/src/sqlite/migration_service.rs": "b9e39328ffc0c5091645422efdadfcfc9b7bcbe8b660b39d648fd5bc658350a3",
+        "core/integration/src/sqlite/mod.rs": "1c0c80b87820a40718e76697dc03fe9d179856f25aba45f1b600d8b9126f1412",
+        "core/integration/src/sqlite/observability.rs": "571d48669c4ce8ba991079d0d5a4999e6266d96037f8b00fad624e8298ac0bfc",
+        "core/integration/src/sqlite/provenance.rs": "8f6e11e135018e6bbd5459537037c8b0d36e8749d0bcee55fcfca384e2ba586c",
+        "core/integration/src/sqlite/recall.rs": "9a8d066bd4e2395759db6770f1528cca36d1eaa22d39adcfcaf156782aa3e4f6",
+        "core/integration/src/sqlite/recall_lanes.rs": "fbba098752ef38ca3a262debe18ead5e78f6c38478d847ac45468e655f085656",
+        "core/integration/src/surreal/bootstrap.rs": "bb329be0f0bbb7653459a08cc464407584f379019dbada849c56df1ed49957ad",
+        "core/integration/src/surreal/mod.rs": "84bd17d9aa8050bb5ac952baaa207f95ca767acb41aec2c41317055d318e949e",
+        "core/knowledge/src/code_source.rs": "fb63cb3662f818652621e88b1f6ad53acc599206c32be8db0ced7e51b015fd76",
+        "core/knowledge/src/code_source_write.rs": "63b0e3093f209c201ce3588c6e58369cbb54a66ee5833e329fa4271a59c045a2",
+        "core/knowledge/src/graph.rs": "18c2fce9a8a361de4cad6f19988315d377d83fbbe7995f982e0740004134bbb5",
+        "core/knowledge/src/identity.rs": "5c99ae62b2454e567033e333d27b33463ed7c93f0f86836842ec5e85ad667608",
+        "core/knowledge/src/ingest.rs": "e5f8026024fc634438f25e515a52d85ac7786d4e96d121a8d151d4fdd79ff291",
+        "core/knowledge/src/lib.rs": "9381196943ae8f8381a3ad002e4132a506fe6b56fe9fde7682dc57fed2a24611",
+        "core/knowledge/src/maintenance.rs": "3e994dbe7001f8f71eedc28fe1f850f965fdcf7ded78a0ddbedd6d1495e87111",
+        "core/knowledge/src/ontology.rs": "eab63ef1e858a51b7d38f93a084165a72f4d65699a1de450b595b77661178938",
+        "core/knowledge/src/repository.rs": "84374e0172559cf0e23fcd26eeb57ee26bad7c3e248b4e9ee13f671a0750755d",
+        "core/knowledge/src/taxonomy.rs": "39706e5f4e180a85cebe773ccedb8090583d89ce368cb153baa25f072010bf24",
+        "core/knowledge/src/taxonomy_validation.rs": "e13a49dae873110e9a757a53f7755f79aa9f9616dca3fba435aa671afc176eb0",
+        "core/memory/src/extraction.rs": "cf4261fdec2c1959743bcd48c33f1a343899af5041a37de7429f43f4f997dbc7",
+        "core/memory/src/lib.rs": "799cc1a33abcae7806428a6175bb967ba6b39eb1d33b070e4e4b2a5dd1244e44",
+        "core/procedures/src/lib.rs": "57c6ceb9785dd83278c7bca8408da72fad28f974cf9e5bb6c668be57c36a7373",
+        "core/reflection/src/belief_build.rs": "227c04a073ec7e69d774a71fa1265db2ce10f2593e9786382a70308b5081a507",
+        "core/reflection/src/contradiction_executor.rs": "fdeb472d0ede496d4676a3b16d4107e47aba58ae6a5dff06010fb36b3c94e95e",
+        "core/reflection/src/executor.rs": "9d6795f414ba590b209ea033c8085e97c5e4651c687dbdcd5d58c1cc626b897f",
+        "core/reflection/src/lib.rs": "f514ceef2b684f9cf2a51ef4eff389cfc3dcd46c21afeb249102fcb9953c1fbc",
+        "core/reflection/src/lifecycle_executor.rs": "6fad6d4e8b0b594933dd9184ae27abb5faca3ee2b8ca65f6dee233c5d9faab92",
+        "core/reflection/src/source.rs": "45c5910b51c8b2d580c3758c0d9f667baea4d184b2a447c19db2dd1ac1de3998",
+        "core/reflection/src/synthesizer.rs": "c0ca593be7479fdea49d7ea127137179fc26042fd55f7c22bf7ba5e75548a109",
+        "core/retrieval/src/composer.rs": "c693b0eae469184029585a113aeb04696eff7c878c150560f4ec51a3ee072f6b",
+        "core/retrieval/src/config.rs": "96613cb7d69b924cb45fb26ccd72a14752b53fd1d34f12f67fde4f3b998a7ccf",
+        "core/retrieval/src/graph_cache.rs": "d3857f21432318d4ab5a442b2c2ad6a87fbc1f37be871f49d6927808758e4a24",
+        "core/retrieval/src/lib.rs": "1b2895951afd3fa40ba173497beba59b3e33b957c244ec5be209e0705919e14a",
+        "core/retrieval/src/ports.rs": "f1ddf047558497fe0cae4810cbfc64587c8d71270d24487e27320ee261e9e666",
+        "core/retrieval/src/predict.rs": "57232a51d3f5e0551f2e897c8b94674e17b4086e234d1e1ad609fee6a6dcd7da",
+        "core/retrieval/src/reciprocal.rs": "f464b8888194a9143eb0d0648a7be281106a26d32c4d142837bc2989845eb305",
+        "core/retrieval/src/record_access.rs": "712cb06612528d130354a8ca89d1f13177996139ecc4fd74674a3f36c9a9f22f",
+        "core/retrieval/src/router.rs": "ef9dc1dd397eac03d0f75c575d2d29209bb801751972e8f5a4d736c57eb4d770",
+        "core/retrieval/src/vector_index.rs": "09e92694f39921018df1d28799855e8bcbba37a40f422b877bb1a347e1a82196",
+        "core/retrieval/src/weighted.rs": "1225adac169500549828ae913b06125e5bbdc159133992f488bbb6f1e82f252d",
+        "core/runtime/src/error.rs": "28daef0a90a039a747352f3dd2818d4946f1515ad7495b93f32ff27e790918f5",
+        "core/runtime/src/lib.rs": "e993c568d23df1859d0c76c60c8236b889f202e713d75ea367f5ea890eee2829",
+        "core/runtime/src/redaction.rs": "6e118b6a5451e7a98ed9268601c5ece0d505de8fa66e7a371931e5288c30e11c",
+        "mcp/engram-mcp/src/app.rs": "d0f1b84bb34fc606049ab7ef44187990a480ec443ecfb1da3f78b6643ccaaf15",
+        "mcp/engram-mcp/src/belief.rs": "6f0f41cdd63070b6c40e3fbb0893a7bce4851ce118da02dab9aa23c544914a65",
+        "mcp/engram-mcp/src/bootstrap.rs": "ab5e36a6fcacf628e630c7fc9bbc1369b38f488361f5d217282209b8764c958b",
+        "mcp/engram-mcp/src/codegraph.rs": "8cf8b9d43389a6192da1002933b678bfab89f912332db34b79b0d283bdcce1ba",
+        "mcp/engram-mcp/src/config.rs": "2792d9469fdcd72773156ecd1bc698cd8e43fe2cd75bb53d822c67095778ddbb",
+        "mcp/engram-mcp/src/dependencies.rs": "e79998e347a059ff4d1bd678bfa068e1a76f4238ce466b3615fe7101e07c8b0d",
+        "mcp/engram-mcp/src/graph.rs": "ce1f8cf0771255e07043cee1f039853f161ddd7920217636cdc8b08d53160cb6",
+        "mcp/engram-mcp/src/hierarchy.rs": "22177c3bb18111602a96ce2bac67543d3da429555c8cd1d0ce7e252e0ad32310",
+        "mcp/engram-mcp/src/main.rs": "78e376b19393f1518d80d36b6b696acf9c18a69673bd6b09d1a0102ebe7b085a",
+        "mcp/engram-mcp/src/maintenance.rs": "6e0fef3803e1d86bb409bb74451d725867dc95874eb660ebf29ae9d1a3334c6e",
+        "mcp/engram-mcp/src/ontology.rs": "47419608e21cc08573f82ab75254875c8ad56fb09c2501c8247d16c2bb8b57c6",
+        "mcp/engram-mcp/src/ownership.rs": "b4944b0bd104e14ff1e7500ba296c4f67fe35aecabce3cb04cb2bc4cf534d563",
+        "mcp/engram-mcp/src/predict.rs": "68188c795a411d1d4805c958611c332467eb3c6bd03e50cc9779374e37abee64",
+        "mcp/engram-mcp/src/procedures.rs": "435348cc5f7a2848cebf61baa9b31aaa12e4926455512b9e14dfcdf7516d1c04",
+        "mcp/engram-mcp/src/protocol.rs": "94a69d598ab01c2340e440584863db200940c8cd6094a6b7734191fc0d1175a4",
+        "mcp/engram-mcp/src/protocols.rs": "fcd3ff34f60bb54819684819858569283b8f76ace6b4e56d4567257f13140d97",
+        "mcp/engram-mcp/src/registry.rs": "23a073ab61e8cd9bd2f83a2e060f7290ed605bffef796e8ddcfc4d9b89535965",
+        "mcp/engram-mcp/src/scope.rs": "e550b0fc1ed8344bc0806f627383ff206a32b95c5b288de91ce8dde7f8e76c01",
+        "mcp/engram-mcp/src/server.rs": "c5ed1186217b799b5c2f90e53e78eaae4e49655e7705ecca56802cbbd785ad97",
+        "mcp/engram-mcp/src/tools.rs": "6e5efc681dacbca64e7e83c3500689ed4d2151b82767b4900f5c1f3eef719072",
+        "packages/adapters/src/events.ts": "c36d3cf42ef0522859d03adbcac058d955b36b6f6a2a03a5b168f3687ceeaa74",
+        "packages/adapters/src/index.ts": "3b572b4206c264334e4adbfae77e52b73bf36c085dd48f4080e1deadf9bb3946",
+        "packages/adapters/src/observed-transport.ts": "1564256b01ddb94e55cd544a1a90dcfee830a776f4beb55f8de7f1d30c3f5433",
+        "packages/adapters/src/observer.ts": "ed348cd0eed34d034725149d8ba41bcd5486fb8654485ea40ebd0df735c039b0",
+        "packages/client/src/client.ts": "8f7100a2be1d12faea227fe8001c091a13ca9e61d03c359a8cd61ce6171a58d8",
+        "packages/client/src/index.ts": "a6f4644daccd696ae680aca63a258a12b4d77cb0b026af352fb5b5a00284a271",
+        "packages/client/src/native.ts": "4c29547c78b27fc14e5d2a4f4271b3c35d1d90567768322f98223c5ec33baa07",
+        "packages/client/src/transport.ts": "2bc47acc53b310b7144c655ca553fbf3287fbd53c685acafb8ce3e86535997df",
+        "packages/contracts/src/generated/schema.generated.ts": "d8b2d77839d9f6955511aaade5f8ad9f050e36599c8467441e63e03ab55d226a",
+        "packages/contracts/src/generated/types.generated.ts": "7bf0b79cb6d2bda7330fb113051167aaf5a8659d94d9dd28cd7d1ddb09eee2aa",
+        "packages/contracts/src/index.ts": "79ad60d52594d0bfd6922519431d05c5ca497ad871c11eae2d52a8e91ac4d778",
+        "packages/node/src/binding.ts": "6cadaa60ab7b26dacef6ea20d9b1db4b1213d23e34791f941051ff4b02d0bbc9",
+        "packages/node/src/index.ts": "fc2c572d58481abdf1da98cd4a8de31802e57d941bb515538cec66118d53f999",
+        "packages/node/src/provider.ts": "a6b9445f4313f07177e9a71f62a2e0e365696aacd0787438762157c52e406da4",
+        "packages/node/src/transport.ts": "ad594a459810d8f747be404459807b4b5c3fb331c77d2e915b18e17804d36c70",
+        "packages/runtime/src/index.ts": "3cc14b652dcf45ec2fe9875ca93301c2bbfb3f2af02a7dd702327660ad7b247e",
+        "packages/runtime/src/ingest/bin.ts": "143a930992e419852f76de57463c972c97290485e90bacb43b66696b1b737934",
+        "packages/runtime/src/ingest/cli.ts": "815388a5e9dc903d62a779be3fed18e5c77847d97ae5d572fc2a67f02a446a34",
+        "packages/runtime/src/maintenance/bin.ts": "eee107935ee8390c21ff0a02b37586a2a01131dabfd033003ee8b1acd7b4dd99",
+        "packages/runtime/src/maintenance/cli.ts": "b13bfdc160da26312e9be5faac4a70c8fcee397b5eaf20c015cb1eff4dc4b3f2",
+        "packages/runtime/src/maintenance/contradict.ts": "2d0e3c7ed5aafd673853d4d29d6b25e406ac051949f5b001fe75dd0da6d52a07",
+        "packages/runtime/src/maintenance/extract_knowledge.ts": "79965388b41db973d7d55e2f8882cca8299252e2325707d2a7e01b70cf68c401",
+        "packages/runtime/src/maintenance/llm.ts": "4bdd16c2825eeec8f1648937fe03a7b02ca668a163775d9e02bfb69da423ddc2",
+        "packages/runtime/src/maintenance/reflect.ts": "ed26946eb4d08e9210e67d0c2a6f361f371c2dc1d1445a7ac80a65b982a28397",
+        "packages/runtime/src/mcp/bin.ts": "a746f5191cc33e5a2a94957038ce222a86f7a1cbabb7726fe4848c7d373ca15b",
+        "packages/runtime/src/mcp/codegraph.ts": "8c425b9f1ef8079fb8ff1d5d36e5313faec0c0ac7c8077edd14a183e5640fd06",
+        "packages/runtime/src/mcp/requests.ts": "e77fed28e3e8bef0ea57f719f6fdee01825859f3427cd5f6e551252639acc811",
+        "packages/runtime/src/mcp/server.ts": "2c6d6ef5e55e417567aefea278d24dc127f803d05bba0f015e6f55bdd3df9c91",
+        "packages/runtime/src/mcp/tools.ts": "038393aa6464cc7dfabf39c62fed6872f891f73d8912cf44685199bd1296f69f",
+        "packages/runtime/src/shared/config.ts": "8b074565cfe553a74f8b4301996d3fa486b19fad25afdc3008221686efc045c8"
+      }
+    }
+  }
+}

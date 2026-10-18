@@ -14,6 +14,7 @@ members = [
     "core/code",
     "core/integration",
     "core/graph-analytics",
+    "adapters/embedding/http",
     "adapters/ingest",
     "adapters/integration",
     "adapters/retrieval/tantivy-lexical",

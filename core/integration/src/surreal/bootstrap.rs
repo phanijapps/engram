@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use crate::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder};
 use engram_belief::BeliefRepository;
-use engram_domain::{CapabilityState, EmbeddingSpace};
+use engram_domain::CapabilityState;
 use engram_hierarchy::HierarchyRepository;
 use engram_knowledge::{
     KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository, TaxonomyRepository,
@@ -36,6 +36,17 @@ use engram_store_surreal::{
 /// vectors, consolidation) wire in subsequent increments; until then they
 /// report `ProviderUnavailable` (fail-closed, conformance contract).
 pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvider> {
+    if config.embedding_provider.dimensions == 0
+        || config.embedding_provider.options != Default::default()
+    {
+        return Err(engram_runtime::CoreError::InvalidRequest {
+            reason: "Surreal vector-only configuration requires fixed dimensions and does not support embedding runtime options; select SQLite or pgvector for configured inference".into(),
+        });
+    }
+    config
+        .embedding_provider
+        .validate()
+        .map_err(|reason| engram_runtime::CoreError::InvalidRequest { reason })?;
     let path = config.storage_path.to_string_lossy().to_string();
     // One shared Surreal connection; every Surreal cell (memory now, knowledge/
     // belief/hierarchy/vectors later) clones this Arc.
@@ -52,13 +63,7 @@ pub(crate) fn bootstrap_surreal(config: &EngramConfig) -> CoreResult<EngramProvi
     let graph: Arc<dyn KnowledgeGraphRepository> = knowledge_store.clone();
     let taxonomy: Arc<dyn TaxonomyRepository> = knowledge_store.clone();
     let ontology: Arc<dyn OntologyRepository> = knowledge_store.clone();
-    let embedding_space = EmbeddingSpace::new(
-        &config.embedding_provider.provider_type,
-        &config.embedding_provider.model,
-        config.embedding_provider.dimensions,
-        &config.embedding_provider.prompt_profile,
-        config.embedding_provider.normalization.clone(),
-    );
+    let embedding_space = config.embedding_provider.embedding_space();
     let vectors: Arc<dyn VectorIndex> = Arc::new(SurrealVectorIndex::new(conn, embedding_space));
     let report = CapabilityReport::builder()
         .memory(CapabilityState::Supported)
@@ -110,6 +115,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             crate::MigrationMode::DryRun,
             crate::CapabilityPolicy::FailClosed,

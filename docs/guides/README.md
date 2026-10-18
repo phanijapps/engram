@@ -17,6 +17,9 @@ This directory contains user-facing guides organized by the [Diátaxis framework
 ### How-to Guides
 - [Use SurrealDB as the Engram store](how-to/build-a-surrealdb-store.md) — Build a new storage backend by implementing the port traits the SQLite adapter does
 
+### Reference
+- [Embedding model configuration](reference/embedding-models.md) — Presets, provider options, CLI/environment controls and SDK resolution
+
 ### Explanations
 - [How repos get indexed](explanation/how-repos-get-indexed.md) — Understanding Engram's code repository indexing
 

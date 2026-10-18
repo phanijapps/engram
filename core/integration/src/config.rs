@@ -143,33 +143,10 @@ struct ProfileFile {
 /// The default embedding-provider config used when a profile file omits the
 /// `[embedding_provider]` section.
 fn default_embedding() -> EmbeddingProviderConfig {
-    EmbeddingProviderConfig {
-        provider_type: "fastembed".to_string(),
-        model: "BAAI/bge-small-en-v1.5".to_string(),
-        dimensions: 384,
-        prompt_profile: "query".to_string(),
-        normalization: None,
-    }
+    EmbeddingProviderConfig::default()
 }
 
-/// Embedding provider configuration.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct EmbeddingProviderConfig {
-    /// Provider type (e.g., "fastembed", "ollama", "openai").
-    pub provider_type: String,
-
-    /// Model identifier within the provider (e.g., "BAAI/bge-small-en-v1.5").
-    pub model: String,
-
-    /// Vector dimensions for the model (e.g., 384).
-    pub dimensions: u32,
-
-    /// Prompt profile for embedding generation (e.g., "query", "passage").
-    pub prompt_profile: String,
-
-    /// Normalization applied to embeddings (e.g., "none", "l2", "cosine").
-    pub normalization: Option<String>,
-}
+pub use crate::embedding_config::EmbeddingProviderConfig;
 
 /// Engram provider configuration.
 ///
@@ -576,6 +553,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -616,6 +594,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -638,6 +617,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -664,6 +644,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -690,6 +671,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -710,6 +692,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -804,6 +787,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -829,6 +813,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -873,6 +858,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -1032,6 +1018,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,

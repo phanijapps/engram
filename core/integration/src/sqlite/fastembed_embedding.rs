@@ -19,6 +19,42 @@ pub struct FastEmbedEmbeddingProvider {
 
 #[cfg(feature = "fastembed")]
 impl FastEmbedEmbeddingProvider {
+    /// Resolve a catalogue name and dimensions without loading model assets.
+    pub fn resolve_config(config: &mut crate::EmbeddingProviderConfig) -> CoreResult<()> {
+        let selected = engram_store_sqlite::FastEmbedModelSelection::resolve(
+            &config.model,
+            config.dimensions,
+        )?;
+        config.model = selected.model_id;
+        config.dimensions = selected.dimensions;
+        config
+            .validate()
+            .map_err(|reason| engram_runtime::CoreError::InvalidRequest { reason })?;
+        if config.normalization.as_deref() == Some("none") {
+            return Err(engram_runtime::CoreError::InvalidRequest {
+                reason: "FastEmbed produces normalized vectors; normalization=none is unsupported"
+                    .into(),
+            });
+        }
+        Ok(())
+    }
+
+    pub fn from_config(config: &crate::EmbeddingProviderConfig) -> CoreResult<Self> {
+        let selected = engram_store_sqlite::FastEmbedModelSelection::resolve(
+            &config.model,
+            config.dimensions,
+        )?;
+        let inner = engram_store_sqlite::FastEmbedBgeSmallQueryProvider::from_selection(
+            selected,
+            config.options.query_instruction.clone(),
+            config.options.passage_instruction.clone(),
+        )?;
+        Ok(Self::new(
+            std::sync::Arc::new(inner),
+            config.embedding_space(),
+        ))
+    }
+
     pub fn new(
         inner: std::sync::Arc<engram_store_sqlite::FastEmbedBgeSmallQueryProvider>,
         space: EmbeddingSpace,
@@ -46,11 +82,19 @@ impl EmbeddingProvider for FastEmbedEmbeddingProvider {
     }
 
     fn embed_query(&self, query: &str) -> CoreResult<Vec<f32>> {
-        self.inner.embed_query(query)
+        crate::embedding_runtime::validate_output(
+            self.inner.embed_query(query)?,
+            self.space.dimensions,
+            self.space.normalization.as_deref(),
+        )
     }
 
     fn embed_passage(&self, text: &str) -> CoreResult<Vec<f32>> {
-        self.inner.embed_passage(text)
+        crate::embedding_runtime::validate_output(
+            self.inner.embed_passage(text)?,
+            self.space.dimensions,
+            self.space.normalization.as_deref(),
+        )
     }
 
     /// Real batch embedding: one FastEmbed model call over all texts.
@@ -62,6 +106,20 @@ impl EmbeddingProvider for FastEmbedEmbeddingProvider {
     /// trimmed texts yield an empty vector in their slot and are skipped by the
     /// ingest loop).
     fn embed_batch(&self, texts: &[String]) -> CoreResult<Vec<Vec<f32>>> {
-        self.inner.embed_passage_batch(texts)
+        self.inner
+            .embed_passage_batch(texts)?
+            .into_iter()
+            .map(|v| {
+                if v.is_empty() {
+                    Ok(v)
+                } else {
+                    crate::embedding_runtime::validate_output(
+                        v,
+                        self.space.dimensions,
+                        self.space.normalization.as_deref(),
+                    )
+                }
+            })
+            .collect()
     }
 }

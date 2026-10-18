@@ -136,6 +136,11 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         message: format!("create storage dir: {e}"),
     })?;
 
+    let prepared = crate::prepare_embedding(&config.embedding_provider, config.enable_vector)?;
+    let mut resolved_config = config.clone();
+    resolved_config.embedding_provider = prepared.config;
+    let config = &resolved_config;
+
     // Resolve per-store SQLite paths once, honoring the configured layout
     // (multi-file directory by default; single shared file when opted in).
     let paths = SqliteLayoutPaths::from_config(config);
@@ -176,7 +181,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut community_query: Option<Arc<dyn crate::CommunityQuery>> = None;
     let mut lexical_feed: Option<Arc<dyn crate::LexicalFeed>> = None;
     #[allow(unused_mut)]
-    let mut embedding_provider: Option<Arc<dyn crate::EmbeddingProvider>> = None;
+    let mut embedding_provider = prepared.provider;
     let mut graph: Option<Arc<dyn KnowledgeGraphRepository>> = None;
     let mut graph_maintenance: Option<Arc<dyn GraphMaintenanceRepository>> = None;
     let mut ontology: Option<Arc<dyn OntologyRepository>> = None;
@@ -380,67 +385,32 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         knowledge_store.is_some(),
         paths.vectors
     );
-    // Vector lane (fastembed-gated): construct the vector index + FastEmbed
-    // query provider + knowledge-store resolver. Skipped entirely when the
-    // feature is off (default build) or when construction fails — recall then
-    // runs degraded for vector (fewer candidates), never errors.
-    //
-    // RFC-0019 D3 (reversed): additionally gated on `config.enable_vector`
-    // (default `true`). When an operator passes `enable_vector = false` (MCP
-    // `--no-vector`), the whole block is skipped — no `SqliteVectorIndex`, no
-    // `FastEmbedBgeSmallQueryProvider` (so no model download/load), no vector
-    // recall lane — even though fastembed is compiled in. The capability is
-    // left `Unsupported` with `vectors = None`.
-    #[cfg(feature = "fastembed")]
-    {
-        if !config.enable_vector {
-            eprintln!("engram-mcp: vector lane disabled by config (enable_vector=false)");
-        } else if let (Some(knowledge_handle), Some(path_str)) =
-            (&knowledge_store, paths.vectors.to_str())
-        {
-            let dims = config.embedding_provider.dimensions;
-            let space = engram_domain::EmbeddingSpace::new(
-                &config.embedding_provider.provider_type,
-                &config.embedding_provider.model,
-                dims,
-                &config.embedding_provider.prompt_profile,
-                config.embedding_provider.normalization.clone(),
-            );
-            if let Ok(vector_index) =
-                engram_store_sqlite::SqliteVectorIndex::open_with_embedding_space(
-                    path_str,
-                    space.clone(),
-                )
-            {
-                match engram_store_sqlite::FastEmbedBgeSmallQueryProvider::new() {
-                    Ok(query_provider) => {
-                        let provider_arc: Arc<engram_store_sqlite::FastEmbedBgeSmallQueryProvider> =
-                            Arc::new(query_provider);
-                        let resolver =
-                            recall_lanes::KnowledgeVectorResolver::new(knowledge_handle.clone());
-                        let vec_index = Arc::new(vector_index);
-                        retrieval_lanes.push(Arc::new(
-                            engram_store_sqlite::VectorRetrievalIndex::new(
-                                (*vec_index).clone(),
-                                provider_arc.clone(),
-                                Arc::new(resolver),
-                            ),
-                        ));
-                        vectors = Some(vec_index as Arc<dyn engram_retrieval::VectorIndex>);
-                        vectors_state = CapabilityState::Supported;
-                        embedding_provider = Some(Arc::new(
-                            super::fastembed_embedding::FastEmbedEmbeddingProvider::new(
-                                provider_arc,
-                                space,
-                            ),
-                        ));
-                    }
-                    Err(e) => {
-                        eprintln!("engram-mcp: FastEmbed init failed — vector lane disabled: {e}");
-                    }
-                }
+    // The same configured provider supplies query and passage embeddings.
+    // Reopening an incompatible index never exposes an old-space query lane.
+    if config.enable_vector {
+        if let (Some(provider), Some(knowledge_handle), Some(path)) = (
+            embedding_provider.as_ref(),
+            &knowledge_store,
+            paths.vectors.to_str(),
+        ) {
+            let space = config.embedding_provider.embedding_space();
+            let index =
+                engram_store_sqlite::SqliteVectorIndex::open_with_embedding_space(path, space)?;
+            if index.requires_reindex() {
+                embedding_provider = None;
+                vectors_state = CapabilityState::RequiresReindex {
+                    reason: CapabilityReason::EmbeddingSpaceMismatch,
+                };
             } else {
-                eprintln!("engram-mcp: SqliteVectorIndex open failed — vector lane disabled");
+                let index = Arc::new(index);
+                let resolver = recall_lanes::KnowledgeVectorResolver::new(knowledge_handle.clone());
+                retrieval_lanes.push(Arc::new(engram_store_sqlite::VectorRetrievalIndex::new(
+                    (*index).clone(),
+                    Arc::new(recall_lanes::EmbeddingQueryProvider(provider.clone())),
+                    Arc::new(resolver),
+                )));
+                vectors = Some(index as Arc<dyn engram_retrieval::VectorIndex>);
+                vectors_state = CapabilityState::Supported;
             }
         }
     }
@@ -533,15 +503,8 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // fastembed lane above constructs a vector index, so `vectors` stays `None`
     // and `vectors_state` stays `Unsupported`.
     if config.enable_vector && conformance::vector_ok() {
-        let dims = config.embedding_provider.dimensions;
         let path = &paths.vectors;
-        let space = engram_domain::EmbeddingSpace::new(
-            &config.embedding_provider.provider_type,
-            &config.embedding_provider.model,
-            dims,
-            &config.embedding_provider.prompt_profile,
-            config.embedding_provider.normalization.clone(),
-        );
+        let space = config.embedding_provider.embedding_space();
         if let Ok(path_str) = path.to_str().ok_or_else(|| CoreError::InvalidRequest {
             reason: "vector db path is not valid unicode".to_string(),
         }) {
@@ -877,6 +840,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,

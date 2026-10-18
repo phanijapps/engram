@@ -28,11 +28,12 @@ serde_json = { workspace = true }
 engram-backend-pgvector = { path = "../../backends/pgvector", optional = true }
 
 [features]
+http-embeddings = ["engram-integration/http-embeddings", "engram-backend-pgvector?/http-embeddings"]
 # RFC-0019 D3 (reversed): the MCP ships vector (fastembed) ON by default so a
 # fresh `cargo build -p engram-mcp` works out-of-the-box. Operators disable at
 # runtime via `--no-vector` / `enable_vector = false` (skips model load) or at
 # build time via `--no-default-features`.
-default = ["fastembed"]
+default = ["fastembed", "http-embeddings"]
 fastembed = ["engram-integration/fastembed"]
 # Cross-encoder reranker (RFC-0019 T4). Forwards to the integration feature so
 # an mcp build can opt into the cross-encoder dispatch path.

@@ -17,6 +17,7 @@ mod bootstrap;
 mod codegraph;
 mod config;
 mod dependencies;
+mod embedding_config;
 mod graph;
 mod hierarchy;
 mod maintenance;
@@ -44,7 +45,7 @@ fn main() {
              [--org <name> --domain <name> [--subdomain <name>]] \
              [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
              [--db-file <name>] [--backend sqlite|pgvector] \
-             [--pg-connection-string <url>] [--tools core|full|all] [--no-vector]"
+             [--pg-connection-string <url>] [--tools core|full|all|consolidated] [--no-vector]"
         );
         std::process::exit(2);
     });
@@ -90,33 +91,83 @@ fn main() {
 /// stays focused. Pass via `--tools <profile>`.
 fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
     match profile {
-        // Consolidated surface: 6 rich verbs. DEFAULT — the daily driver.
-        "core" | "" => Some(CORE_TOOLS),
+        // DEFAULT — the top-20 granular surface: the highest-leverage
+        // discovery, code-intel, write, decision, and correction tools from
+        // the 44-tool granular set (frequency-in-loop × decision leverage ×
+        // non-redundancy). Consolidated verbs stay reachable via
+        // `--tools full` (10) or `--tools consolidated` (7).
+        "core" | "" => Some(TOP20_TOOLS),
         // Consolidated + specialist: 10 tools for maintenance work.
         "full" => Some(FULL_TOOLS),
         // Legacy granular surface: all 44 tools. Superseded — kept for
         // backward compatibility; new integrations should use core/full.
         "all" => None,
-        // Legacy granular profiles — superseded by core/full. Still work
-        // for existing deployments but are deprecated.
+        // The original 7-verb consolidated surface ("remember"/"recall"/…).
+        // Escape hatch for deployments tuned to the old default.
+        "consolidated" => Some(CORE_TOOLS),
+        // Legacy granular profiles — superseded by the top-20 default. Still
+        // work for existing deployments but are deprecated.
         "investigate" | "read" | "scan" | "write" | "maintain" => {
             eprintln!(
-                "engram-mcp: --tools {profile} is superseded by --tools core or --tools full; \
-                 using the consolidated core surface"
+                "engram-mcp: --tools {profile} is superseded by the core (top-20) surface; \
+                 using core"
             );
-            Some(CORE_TOOLS)
+            Some(TOP20_TOOLS)
         }
         other => {
             eprintln!(
-                "engram-mcp: unknown --tools profile '{other}'; using core (6 tools). \
-                 Options: core | full | all"
+                "engram-mcp: unknown --tools profile '{other}'; using core (20 tools). \
+                 Options: core | full | all | consolidated"
             );
-            Some(CORE_TOOLS)
+            Some(TOP20_TOOLS)
         }
     }
 }
 
-/// The 6 core consolidated tools — the 80/20 agent surface.
+/// The top-20 granular tools — the DEFAULT (`--tools core`) agent surface.
+/// Selected from the 44 granular tools by frequency-in-loop × decision
+/// leverage × non-redundancy:
+///   discovery (4)  — get_context, recall, search, explore
+///   code intel (4) — symbol_context, change_impact, architecture, whats_changed
+///   write (6)      — scan_repo, index_docs, store_knowledge, put_entity,
+///                    put_relationship, write_memory
+///   decisions (4)  — belief_get, contradiction_list, procedure_put,
+///                    procedure_list
+///   correct (2)    — forget, graph_health
+/// Cut: meta/diagnostics (ping, reports, ontology/taxonomy reads), ops-cadence
+/// (consolidate, reindex, scan_* post-passes), maintenance machinery,
+/// belief writes (synthesis-owned), hierarchy, and tools redundant with a
+/// keeper.
+pub static TOP20_TOOLS: &[&str] = &[
+    // Discovery — the first calls of any task.
+    "get_context",
+    "recall",
+    "search",
+    "explore",
+    // Code intel — understand the code before touching it.
+    "symbol_context",
+    "change_impact",
+    "architecture",
+    "whats_changed",
+    // Ingest / write — close the learning loop.
+    "scan_repo",
+    "index_docs",
+    "store_knowledge",
+    "put_entity",
+    "put_relationship",
+    "write_memory",
+    // Decisions over time — the judgment surface.
+    "belief_get",
+    "contradiction_list",
+    "procedure_put",
+    "procedure_list",
+    // Correct / monitor.
+    "forget",
+    "graph_health",
+];
+
+/// The 7 consolidated core tools — the prior default, now behind
+/// `--tools consolidated`.
 pub static CORE_TOOLS: &[&str] = &[
     "remember", "recall", "code", "scan", "graph", "forget", "maintain",
 ];
@@ -139,9 +190,9 @@ pub static FULL_TOOLS: &[&str] = &[
 fn register_all(registry: &mut ToolRegistry<App>, profile: &str) {
     match tool_profile_set(profile) {
         Some(tools) if tools.contains(&"remember") && tools.len() <= 7 => {
-            // Consolidated core surface: 6 rich verbs dispatching to
-            // existing handlers. The granular tools are NOT registered —
-            // the dispatch fns call the Rust handlers directly.
+            // Consolidated core surface ("--tools consolidated"): 7 rich
+            // verbs dispatching to existing handlers. The granular tools are
+            // NOT registered — the dispatch fns call the Rust handlers directly.
             register_core_tools(registry);
         }
         Some(tools) if tools.contains(&"remember") => {
@@ -149,8 +200,9 @@ fn register_all(registry: &mut ToolRegistry<App>, profile: &str) {
             register_specialist_tools(registry);
         }
         allowed => {
-            // Granular surface (all/investigate/read/scan/write/maintain):
-            // register everything, filter by the allowed list.
+            // Granular surface — the DEFAULT (top-20 core profile) plus
+            // all/investigate/read/scan/write/maintain: register everything,
+            // filter by the allowed list.
             register_all_tools(registry);
             registry.retain(allowed);
         }

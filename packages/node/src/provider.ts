@@ -1,3 +1,4 @@
+import { createNativeEmbeddingProviderTransport, type NativeEmbeddingProviderTransport } from "./embedding-provider.js";
 import type {
   ContextPayload,
   RetrievalRequest,
@@ -84,6 +85,8 @@ export interface ScopeCounts {
 /** The typed transport over the native binding — every route in the TS MCP
  *  server dispatches through one of these methods. */
 export interface NativeProviderTransport {
+  /** Access the configured Rust embedding provider; throws when unavailable. */
+  embedding(): NativeEmbeddingProviderTransport;
   /** The serialized `CapabilityReport` for the open provider. */
   capabilities(): Promise<unknown>;
   /** Unified recall (fused across lanes) → `ContextPayload`. */
@@ -208,6 +211,10 @@ export function createNativeProviderTransport(
 
 class JsonNativeProviderTransport implements NativeProviderTransport {
   constructor(private readonly provider: NativeProviderBinding) {}
+
+  embedding(): NativeEmbeddingProviderTransport {
+    return createNativeEmbeddingProviderTransport(this.provider);
+  }
 
   async capabilities(): Promise<unknown> {
     return decode(this.provider.capabilitiesJson());

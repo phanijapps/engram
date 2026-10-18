@@ -13,8 +13,10 @@ mod recall;
 
 use std::sync::Arc;
 
-use engram_domain::{CapabilityState, EmbeddingSpace};
-use engram_integration::{CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder};
+use engram_domain::{CapabilityReason, CapabilityState};
+use engram_integration::{
+    CapabilityReport, EngramConfig, EngramProvider, EngramProviderBuilder, prepare_embedding,
+};
 use engram_runtime::{CoreError, CoreResult};
 use engram_store_pgvector::{
     PgBeliefStore, PgConnection, PgHierarchyStore, PgKnowledgeStore, PgMemoryService,
@@ -43,9 +45,18 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         message: e,
     };
 
+    // Resolve inference output before creating a dimensioned vector column.
+    // Disabled vector mode never initializes a model or contacts its endpoint.
+    let prepared = prepare_embedding(&config.embedding_provider, config.enable_vector)?;
+    let embedding_provider = prepared.provider;
+    let dims = if config.enable_vector {
+        prepared.config.dimensions
+    } else {
+        384
+    };
+
     // Connect + apply schema (idempotent).
     let schema_conn = PgConnection::connect(conn_str).map_err(pg_err)?;
-    let dims = config.embedding_provider.dimensions;
     schema_conn
         .block_on(async {
             schema_conn
@@ -64,59 +75,14 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     let hierarchy = Arc::new(PgHierarchyStore::new(mk_conn()?));
     let procedures = Arc::new(PgProcedureStore::new(mk_conn()?));
 
-    // The vector space: the config's embedding block by default; overridden
-    // to the model's TRUE space when fastembed is compiled in (the index and
-    // the embedder must agree on one space for insert/search to match).
-    #[cfg_attr(not(feature = "fastembed"), allow(unused_variables))]
-    let space = EmbeddingSpace::new(
-        &config.embedding_provider.provider_type,
-        &config.embedding_provider.model,
-        dims,
-        &config.embedding_provider.prompt_profile,
-        config.embedding_provider.normalization.clone(),
-    );
-    // PS2: when fastembed is compiled in, the vector space is the model's
-    // true space (BGE-small/384/query profile) — the config's
-    // `embedding_provider` block may say "none" on a pg-only deployment, and
-    // the index + embedder MUST agree on one space for insert/search to match.
-    #[cfg(feature = "fastembed")]
-    let space = EmbeddingSpace::new(
-        "fastembed",
-        "BAAI/bge-small-en-v1.5",
-        384,
-        "query",
-        None::<&str>,
-    );
-    let vectors = Arc::new(PgVectorIndex::new(mk_conn()?, space.clone()));
-
-    // PS2: the vector recall lane needs a query-vector provider. Wired only
-    // when the `fastembed` feature is on AND the model loads — absent
-    // embedder ⇒ degraded recall (facts + beliefs), never a boot failure.
-    // The embedder is also exposed on the provider so the MCP scan path can
-    // embed chunks into PgVectorIndex (scan_repo's incremental embed step
-    // requires `embedding_provider()` + `require_vectors()`).
-    let embedding_provider: Option<Arc<dyn engram_integration::EmbeddingProvider>> = None;
-    #[cfg(feature = "fastembed")]
-    {
-        // Model-load failure DEGRADES (no embedder ⇒ facts+beliefs recall, the
-        // capability report shows vector unsupported) — a missing model cache
-        // must never take a production deployment's boot down.
-        match engram_store_sqlite::FastEmbedBgeSmallQueryProvider::new() {
-            Ok(inner) => {
-                let embedder: Arc<dyn engram_integration::EmbeddingProvider> =
-                    Arc::new(engram_integration::FastEmbedEmbeddingProvider::new(
-                        std::sync::Arc::new(inner),
-                        space.clone(),
-                    ));
-                embedding_provider = Some(embedder);
-            }
-            Err(e) => {
-                eprintln!(
-                    "engram-backend-pgvector: fastembed model unavailable — vector lane disabled (degraded recall): {e}"
-                );
-            }
-        }
-    }
+    let vectors = if config.enable_vector {
+        Some(Arc::new(PgVectorIndex::new_checked(
+            mk_conn()?,
+            prepared.config.embedding_space(),
+        )?))
+    } else {
+        None
+    };
 
     // Unified recall: composes memory.retrieve + beliefs + the vector lane
     // (PS2) via RRF. Lexical (tsvector) is a documented gap on this engine.
@@ -124,7 +90,7 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         memory: memory.clone(),
         beliefs: beliefs.clone(),
         knowledge: knowledge.clone(),
-        vectors: Some(vectors.clone()),
+        vectors: vectors.clone(),
         embedder: embedding_provider.clone(),
     });
 
@@ -142,7 +108,13 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .contradiction(CapabilityState::Supported)
         .hierarchy(CapabilityState::Supported)
         .procedures(CapabilityState::Supported)
-        .vectors(CapabilityState::Supported)
+        .vectors(if vectors.is_some() {
+            CapabilityState::Supported
+        } else {
+            CapabilityState::Unsupported {
+                reason: CapabilityReason::FeatureDisabled,
+            }
+        })
         .unified_recall(CapabilityState::Supported)
         .build();
 
@@ -153,9 +125,11 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
         .beliefs(beliefs)
         .hierarchy(hierarchy)
         .procedures(procedures)
-        .vectors(vectors)
         .knowledge_query(knowledge_query)
         .recall(recall);
+    if let Some(vectors) = vectors {
+        provider_builder = provider_builder.vectors(vectors);
+    }
     if let Some(embedder) = embedding_provider {
         provider_builder = provider_builder.embedding_provider(embedder);
     }

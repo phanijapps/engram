@@ -2547,10 +2547,18 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
     .into_iter()
     .map(|(name, ok)| format!("  {name}: {}", if ok { "supported" } else { "unsupported" }))
     .collect();
-    Ok(protocol::text_content(format!(
-        "Server: engram-mcp 0.1.0\nCapabilities:\n{}",
-        caps.join("\n")
-    )))
+    Ok(protocol::text_content(
+        format!(
+            "Server: engram-mcp 0.1.0\nCapabilities:\n{}",
+            caps.join("\n")
+        ) + &match app.provider.embedding_provider() {
+            Some(provider) => format!(
+                "\nEmbedding space: {}",
+                serde_json::to_string(&provider.embedding_space()).map_err(internal)?
+            ),
+            None => "\nEmbedding space: unavailable".into(),
+        },
+    ))
 }
 
 #[cfg(test)]
@@ -4416,35 +4424,5 @@ mod phase2_tool_tests {
 }
 
 #[cfg(test)]
-mod reindex_tests {
-    use super::*;
-    use serde_json::json;
-
-    /// PS5: `reindex` over an empty store answers with the progress-report
-    /// shape (never errors, never pretends to embed) and its scope defaults
-    /// to the launch scope when omitted (same contract as the maintenance
-    /// tools' AC2 fix).
-    #[test]
-    fn reindex_answers_with_progress_shape_and_default_scope() {
-        let dir = tempfile::tempdir().unwrap();
-        let app = crate::tools::tests::test_app(dir.path());
-        let res = reindex(&app, &json!({})).unwrap();
-        let text = res["content"][0]["text"].as_str().unwrap();
-        assert!(
-            text.starts_with("reindex:") && text.contains("embedded 0 chunks"),
-            "progress-report shape: {text}"
-        );
-        // The runtime no-embedder path (--no-vector) returns the honest
-        // unavailable message — exercised live; here the stub provider
-        // reports the same never-error contract.
-        let res2 = reindex(&app, &json!({ "limit": 5 })).unwrap();
-        assert!(
-            res2["content"][0]["text"]
-                .as_str()
-                .unwrap()
-                .contains("limit 5"),
-            "limit threads through: {}",
-            res2["content"][0]["text"].as_str().unwrap()
-        );
-    }
-}
+#[path = "codegraph_reindex_tests.rs"]
+mod reindex_tests;

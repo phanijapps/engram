@@ -115,6 +115,7 @@ impl EngramProvider {
     ///             dimensions: 384,
     ///             prompt_profile: "query".to_string(),
     ///             normalization: None,
+    ///             ..Default::default()
     ///         },
     ///         MigrationMode::DryRun,
     ///         CapabilityPolicy::FailClosed,
@@ -175,6 +176,7 @@ impl EngramProvider {
     ///             dimensions: 384,
     ///             prompt_profile: "query".to_string(),
     ///             normalization: None,
+    ///             ..Default::default()
     ///         },
     ///         MigrationMode::DryRun,
     ///         CapabilityPolicy::FailClosed,
@@ -909,6 +911,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -927,6 +930,7 @@ mod tests {
                 dimensions: 384,
                 prompt_profile: "query".to_string(),
                 normalization: None,
+                ..Default::default()
             },
             MigrationMode::DryRun,
             CapabilityPolicy::FailClosed,
@@ -1153,6 +1157,7 @@ mod tests {
                         dimensions: 384,
                         prompt_profile: "query".to_string(),
                         normalization: None,
+                        ..Default::default()
                     },
                     schema_version: "2026.01".to_string(),
                     adapter_version: "0.1.0".to_string(),

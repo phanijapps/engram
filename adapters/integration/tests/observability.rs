@@ -406,5 +406,6 @@ fn sample_embedding_config() -> EmbeddingProviderConfig {
         dimensions: 384,
         prompt_profile: "query".to_string(),
         normalization: None,
+        ..Default::default()
     }
 }

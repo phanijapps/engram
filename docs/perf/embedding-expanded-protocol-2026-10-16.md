@@ -1,0 +1,13 @@
+# Expanded embedding evaluation protocol
+
+Source snapshots, questions and model settings were frozen before additional queries on 2026-10-16. This analysis protocol was recorded during BGE baseline execution, before the additional Gemma run; it is not a preregistered blind study. It extends the 45-question BGE/Gemma comparison without changing models, prefixes, chunking, fusion, reranking or labels.
+
+- Additional set: 60 answerable source-labeled questions, 20 each for Starlette (Python), Axum (Rust) and Vitest (TypeScript). Labels and source versions come from the previously frozen repository evaluation; they are historical agent-authored judgments, not new independent human or blind labels.
+- Combined descriptive set: 105 questions across six repositories, balanced at 35 questions per language. Show the additional 60 separately; do not use the earlier 45 that motivated this follow-up as independent confirmation.
+- Primary measure: mean per-question required-unit Recall@10 from the Rust SDK fused-recall endpoint. Secondary measures: vector Recall@10, Hit@10, MRR@10 and nDCG@10. Reuse the existing exact-declaration labels and duplicate suppression. Required units missing from the index remain failures, not excluded questions.
+- Controls: production source snapshots verified against pinned file hashes; one vector-free MCP scan per corpus, then identical knowledge/graph/lexical copies for each model. BGE Small/384, BGE Base/768 and the same pinned Hugging Face EmbeddingGemma 2/768 text-only FP32 checkpoint. Use the established model-specific prefixes and normalizations; no new dimensions or parameter search.
+- Run each measured query once after one unscored warm-up per model/corpus. Keep source/query/binary hashes and raw results. Use separate stores; preserve the original evaluation and shared stores.
+- Uncertainty: paired question bootstrap with a fixed seed, plus repository-level cluster bootstrap as a sensitivity check. Report per-repository and per-language results so pooled averages do not hide regressions. The small number of repositories limits generalization even with more questions.
+- Scope: retrieval of labeled implementation units, not generated-answer correctness or absent-feature abstention. The fixed labels need not enumerate every useful result. Timing cannot establish relative model speed because Gemma runs on GPU while the BGE baseline runs on CPU.
+
+Source revisions and label hashes are frozen in `/tmp/embedding-expanded-freeze.json`; production snapshots are under `/tmp/engram-expanded-production-corpora-20261016`. Full source manifests and question copies are emitted before scoring by `scripts/dev/embedding_model_eval.py`.

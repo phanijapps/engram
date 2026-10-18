@@ -72,6 +72,7 @@ impl McpConfig {
     /// `--no-vector` / `--vector` are value-less switches (RFC-0019 D3
     /// reversed) toggling `enable_vector` (default `true`).
     pub fn from_args(argv: &[String]) -> Result<Self, String> {
+        let (argv, embedding) = crate::embedding_config::from_args(argv)?;
         let mut storage_path = None;
         let mut project = None;
         let mut ontology_path = None;
@@ -184,19 +185,7 @@ impl McpConfig {
             storage_path,
             project: project.unwrap_or_else(|| "default".to_string()),
             scope_strategy: ScopeMappingStrategy::Strict,
-            embedding: EmbeddingProviderConfig {
-                #[cfg(feature = "fastembed")]
-                provider_type: "fastembed".to_owned(),
-                #[cfg(not(feature = "fastembed"))]
-                provider_type: "none".to_owned(),
-                #[cfg(feature = "fastembed")]
-                model: "BAAI/bge-small-en-v1.5".to_owned(),
-                #[cfg(not(feature = "fastembed"))]
-                model: "none".to_owned(),
-                dimensions: 384,
-                prompt_profile: "query".to_owned(),
-                normalization: None,
-            },
+            embedding,
             migration_mode: MigrationMode::DryRun,
             capability_policy: CapabilityPolicy::FailClosed,
             ontology_path,

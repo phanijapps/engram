@@ -12,6 +12,8 @@ skills and [`docs/CONVENTIONS.md`](../CONVENTIONS.md).
 
 ## Active
 
+- [`embedding-model-config`](embedding-model-config/spec.md): configurable local/served embedding models, dimensions and compatible index identities.
+
 - [`viz-foundation`](viz-foundation/spec.md): the foundation slice of the
   engram-cc overhaul — a greenfield 3-tab shell (Memory/Observatory/Graph) with
   ported zbot styling (React 19 + Tailwind v4), a Hono Backend-for-Frontend that

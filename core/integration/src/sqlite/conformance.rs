@@ -386,6 +386,7 @@ pub(crate) fn observability_ok() -> bool {
         dimensions: 384,
         prompt_profile: "query".to_string(),
         normalization: None,
+        ..Default::default()
     };
     let obs = SqlObservability::new(
         Some(knowledge),

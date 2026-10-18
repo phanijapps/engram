@@ -1,6 +1,6 @@
 ---
 name: engram-perf-audit
-description: Use when asked to make engram faster, before optimizing anything, or when a path is "slow" without attributed cause. Triggers on "performance", "optimize", "why is X slow", "make it faster", "profile this". Enforces measure-before-blame: instrument phases, compare SQL-in-CLI vs SQL-in-server, and only then change code. Born of the session where the blamed cost (json_extract) was 60x innocent and the real cost (Rust-side record deserialization) was invisible until measured.
+description: 'Use when asked to make engram faster, before optimizing anything, or when a path is "slow" without attributed cause. Triggers on "performance", "optimize", "why is X slow", "make it faster", "profile this". Enforces measure-before-blame: instrument phases, compare SQL-in-CLI vs SQL-in-server, and only then change code. Born of the session where the blamed cost (json_extract) was 60x innocent and the real cost (Rust-side record deserialization) was invisible until measured.'
 ---
 
 # Skill: engram-perf-audit

@@ -1,0 +1,2190 @@
+{
+  "state": "complete",
+  "model": "google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+  "dimensions": 768,
+  "baseline": "/tmp/engram-bge-production-comparison-20261016",
+  "baselineReceiptSha256": "bca5313c98d81b194d2004e68f903aa6d62a143d0d240e9a70edbdaf677bb8d3",
+  "mcpBinarySha256": "b8bee5e34e05bfc754bed91770438c7444e8c0e4a3a30515ebfc3a55b7797844",
+  "probeSha256": "6fe20519952cae7e23f4bc5f541b9aef2cdca8145f736468bcb6f41d15a2a542",
+  "overall": {
+    "vector": {
+      "hitAt1": 0.37777777777777777,
+      "hitAt5": 0.8,
+      "hitAt10": 0.8666666666666667,
+      "recallAt10": 0.8444444444444444,
+      "mrrAt10": 0.5159523809523809,
+      "ndcgAt10": 0.5773509744344413
+    },
+    "fused": {
+      "hitAt1": 0.28888888888888886,
+      "hitAt5": 0.6444444444444445,
+      "hitAt10": 0.7333333333333333,
+      "recallAt10": 0.6888888888888889,
+      "mrrAt10": 0.4467813051146384,
+      "ndcgAt10": 0.4930027975989784
+    }
+  },
+  "pairedAgainstSmall": {
+    "vector": {
+      "hitAt10": {
+        "delta": 0.06666666666666667,
+        "pairedBootstrap95": [
+          -0.06666666666666667,
+          0.2
+        ],
+        "wins": 7,
+        "losses": 4,
+        "ties": 34
+      },
+      "recallAt10": {
+        "delta": 0.05555555555555555,
+        "pairedBootstrap95": [
+          -0.1,
+          0.2
+        ],
+        "wins": 8,
+        "losses": 6,
+        "ties": 31
+      },
+      "mrrAt10": {
+        "delta": 0.03144620811287478,
+        "pairedBootstrap95": [
+          -0.0817283950617284,
+          0.14567901234567904
+        ],
+        "wins": 15,
+        "losses": 14,
+        "ties": 16
+      },
+      "ndcgAt10": {
+        "delta": 0.028373464414935136,
+        "pairedBootstrap95": [
+          -0.07903016850683005,
+          0.13292998784317148
+        ],
+        "wins": 16,
+        "losses": 16,
+        "ties": 13
+      }
+    },
+    "fused": {
+      "hitAt10": {
+        "delta": 0.08888888888888889,
+        "pairedBootstrap95": [
+          0.0,
+          0.2
+        ],
+        "wins": 5,
+        "losses": 1,
+        "ties": 39
+      },
+      "recallAt10": {
+        "delta": 0.06666666666666667,
+        "pairedBootstrap95": [
+          -0.03333333333333333,
+          0.17777777777777778
+        ],
+        "wins": 5,
+        "losses": 2,
+        "ties": 38
+      },
+      "mrrAt10": {
+        "delta": 0.028051146384479718,
+        "pairedBootstrap95": [
+          -0.02432098765432099,
+          0.07839506172839507
+        ],
+        "wins": 9,
+        "losses": 5,
+        "ties": 31
+      },
+      "ndcgAt10": {
+        "delta": 0.03342902612148287,
+        "pairedBootstrap95": [
+          -0.022467089867910687,
+          0.08814264173572686
+        ],
+        "wins": 9,
+        "losses": 6,
+        "ties": 30
+      }
+    }
+  },
+  "pairedAgainstBase": {
+    "vector": {
+      "hitAt10": {
+        "delta": 0.06666666666666667,
+        "pairedBootstrap95": [
+          -0.044444444444444446,
+          0.17777777777777778
+        ],
+        "wins": 5,
+        "losses": 2,
+        "ties": 38
+      },
+      "recallAt10": {
+        "delta": 0.044444444444444446,
+        "pairedBootstrap95": [
+          -0.07777777777777778,
+          0.16666666666666666
+        ],
+        "wins": 5,
+        "losses": 4,
+        "ties": 36
+      },
+      "mrrAt10": {
+        "delta": -0.00018518518518518884,
+        "pairedBootstrap95": [
+          -0.10201058201058202,
+          0.10407407407407408
+        ],
+        "wins": 15,
+        "losses": 12,
+        "ties": 18
+      },
+      "ndcgAt10": {
+        "delta": 0.004410469077680338,
+        "pairedBootstrap95": [
+          -0.08176018859976933,
+          0.09077257763242748
+        ],
+        "wins": 17,
+        "losses": 14,
+        "ties": 14
+      }
+    },
+    "fused": {
+      "hitAt10": {
+        "delta": 0.022222222222222223,
+        "pairedBootstrap95": [
+          -0.06666666666666667,
+          0.1111111111111111
+        ],
+        "wins": 3,
+        "losses": 2,
+        "ties": 40
+      },
+      "recallAt10": {
+        "delta": 0.011111111111111112,
+        "pairedBootstrap95": [
+          -0.07777777777777778,
+          0.1
+        ],
+        "wins": 3,
+        "losses": 2,
+        "ties": 40
+      },
+      "mrrAt10": {
+        "delta": 0.02937389770723104,
+        "pairedBootstrap95": [
+          -0.038624338624338624,
+          0.08835978835978836
+        ],
+        "wins": 11,
+        "losses": 5,
+        "ties": 29
+      },
+      "ndcgAt10": {
+        "delta": 0.022270940576415692,
+        "pairedBootstrap95": [
+          -0.04425583530544001,
+          0.07999089303886311
+        ],
+        "wins": 11,
+        "losses": 5,
+        "ties": 29
+      }
+    }
+  },
+  "corpora": {
+    "flask": {
+      "questions": 15,
+      "chunks": 446,
+      "indexedRequiredUnits": 17,
+      "requiredUnits": 17,
+      "questionsSha256": "f782f6e2f79fbbf0d7b40dcde32b9664de977d3b00e3d92004c8325ce30aaf9a",
+      "capabilities": {
+        "seconds": 0.1907781089830678,
+        "text": "Server: engram-mcp 0.1.0\nCapabilities:\n  memory: supported\n  knowledge: supported\n  graph: supported\n  knowledge_query: supported\n  lexical_feed: supported\n  recall: supported\n  consolidation: supported\n  batch: supported\n  ontology: supported\n  taxonomy: supported\n  beliefs: supported\n  procedures: supported\n  hierarchy: supported\n  identity: supported\n  vector: supported\nEmbedding space: {\"provider\":\"openai-compatible\",\"model\":\"google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b\",\"dimensions\":768,\"prompt_profile\":\"query/embedding-config-v1/371e626255e17f58f1f270ef6c2b192bfe62976d1dee3d410534b5be8503873b\",\"normalization\":\"l2\"}"
+      },
+      "vectorRows": 446,
+      "space": {
+        "dimensions": 768,
+        "model": "google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b",
+        "normalization": "l2",
+        "prompt_profile": "query/embedding-config-v1/371e626255e17f58f1f270ef6c2b192bfe62976d1dee3d410534b5be8503873b",
+        "provider": "openai-compatible"
+      },
+      "summary": {
+        "vector": {
+          "hitAt1": 0.26666666666666666,
+          "hitAt5": 0.8,
+          "hitAt10": 0.8666666666666667,
+          "recallAt10": 0.8,
+          "mrrAt10": 0.4172222222222222,
+          "ndcgAt10": 0.47209689073153704
+        },
+        "fused": {
+          "hitAt1": 0.3333333333333333,
+          "hitAt5": 0.8666666666666667,
+          "hitAt10": 0.9333333333333333,
+          "recallAt10": 0.8666666666666667,
+          "mrrAt10": 0.5518518518518518,
+          "ndcgAt10": 0.6165732517428274
+        }
+      },
+      "pairedAgainstSmall": {
+        "vector": {
+          "hitAt10": {
+            "delta": -0.06666666666666667,
+            "pairedBootstrap95": [
+              -0.2,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 1,
+            "ties": 14
+          },
+          "recallAt10": {
+            "delta": -0.13333333333333333,
+            "pairedBootstrap95": [
+              -0.3,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 3,
+            "ties": 12
+          },
+          "mrrAt10": {
+            "delta": -0.20166666666666666,
+            "pairedBootstrap95": [
+              -0.38,
+              -0.05611111111111111
+            ],
+            "wins": 1,
+            "losses": 7,
+            "ties": 7
+          },
+          "ndcgAt10": {
+            "delta": -0.20963527854235484,
+            "pairedBootstrap95": [
+              -0.37035724579203405,
+              -0.08119877314042274
+            ],
+            "wins": 1,
+            "losses": 9,
+            "ties": 5
+          }
+        },
+        "fused": {
+          "hitAt10": {
+            "delta": 0.0,
+            "pairedBootstrap95": [
+              0.0,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 0,
+            "ties": 15
+          },
+          "recallAt10": {
+            "delta": -0.03333333333333333,
+            "pairedBootstrap95": [
+              -0.1,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 1,
+            "ties": 14
+          },
+          "mrrAt10": {
+            "delta": 0.017883597883597883,
+            "pairedBootstrap95": [
+              -0.08555555555555555,
+              0.12
+            ],
+            "wins": 3,
+            "losses": 3,
+            "ties": 9
+          },
+          "ndcgAt10": {
+            "delta": -0.0012951171358260628,
+            "pairedBootstrap95": [
+              -0.08071721353264223,
+              0.07713139624028732
+            ],
+            "wins": 2,
+            "losses": 4,
+            "ties": 9
+          }
+        }
+      },
+      "pairedAgainstBase": {
+        "vector": {
+          "hitAt10": {
+            "delta": -0.06666666666666667,
+            "pairedBootstrap95": [
+              -0.2,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 1,
+            "ties": 14
+          },
+          "recallAt10": {
+            "delta": -0.13333333333333333,
+            "pairedBootstrap95": [
+              -0.3,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 3,
+            "ties": 12
+          },
+          "mrrAt10": {
+            "delta": -0.24396825396825397,
+            "pairedBootstrap95": [
+              -0.4162698412698413,
+              -0.08357142857142857
+            ],
+            "wins": 2,
+            "losses": 8,
+            "ties": 5
+          },
+          "ndcgAt10": {
+            "delta": -0.23109812849203176,
+            "pairedBootstrap95": [
+              -0.3592803699714458,
+              -0.10480121514332652
+            ],
+            "wins": 2,
+            "losses": 10,
+            "ties": 3
+          }
+        },
+        "fused": {
+          "hitAt10": {
+            "delta": -0.06666666666666667,
+            "pairedBootstrap95": [
+              -0.2,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 1,
+            "ties": 14
+          },
+          "recallAt10": {
+            "delta": -0.06666666666666667,
+            "pairedBootstrap95": [
+              -0.2,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 1,
+            "ties": 14
+          },
+          "mrrAt10": {
+            "delta": 0.03666666666666667,
+            "pairedBootstrap95": [
+              -0.04666666666666667,
+              0.13333333333333333
+            ],
+            "wins": 4,
+            "losses": 3,
+            "ties": 8
+          },
+          "ndcgAt10": {
+            "delta": 0.010719906374290707,
+            "pairedBootstrap95": [
+              -0.07419380125698151,
+              0.09505047043919428
+            ],
+            "wins": 4,
+            "losses": 3,
+            "ties": 8
+          }
+        }
+      },
+      "indexToolSeconds": 6.445898744015722,
+      "cases": [
+        {
+          "id": "flask-h01",
+          "query": "What happens to a browser session when its signed cookie has been tampered with?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.2,
+              "ndcgAt10": 0.38685280723454163,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h02",
+          "query": "Where is the browser cookie removed when all session data is cleared, and where is caching told that the response varies by cookie?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.25,
+              "ndcgAt10": 0.43067655807339306,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h03",
+          "query": "When is an unchanged permanent browser session renewed on a response?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.3333333333333333,
+              "ndcgAt10": 0.5,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.25,
+              "ndcgAt10": 0.43067655807339306,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h04",
+          "query": "How are older secret keys retained while a new key is used for signing browser session cookies?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.2,
+              "ndcgAt10": 0.38685280723454163,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.1111111111111111,
+              "ndcgAt10": 0.3010299956639812,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h05",
+          "query": "Where does an unhandled request failure get re-raised in debug or testing mode, but become a logged server-error response otherwise?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.2,
+              "ndcgAt10": 0.38685280723454163,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h06",
+          "query": "How are routing redirects kept out of ordinary HTTP error handlers?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.2,
+              "ndcgAt10": 0.38685280723454163,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h07",
+          "query": "How does the framework answer an automatic HTTP OPTIONS request without running the route handler, including the advertised allowed methods?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 0.5,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 0.6131471927654584,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 2
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 0.5,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.38685280723454163,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 2
+            }
+          }
+        },
+        {
+          "id": "flask-h08",
+          "query": "How are a nested route group's URL prefix, subdomain and dotted registration name combined with its parent?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h09",
+          "query": "Where are route-group setup changes rejected after the group has already been registered?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.125,
+              "ndcgAt10": 0.31546487678572877,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.3333333333333333,
+              "ndcgAt10": 0.5,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h10",
+          "query": "How do prefixed environment settings become typed values and nested configuration dictionaries?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h11",
+          "query": "How does a streamed response retain the active request context and close the underlying iterator when streaming ends?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.25,
+              "ndcgAt10": 0.43067655807339306,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h12",
+          "query": "How can a background callable receive an independent copy of the request context that was active when it was decorated?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h13",
+          "query": "Where can a before-request callback return a response that stops subsequent callbacks and the route handler?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 0.5,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 0.6131471927654584,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 2
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 0.5,
+              "mrrAt10": 0.3333333333333333,
+              "ndcgAt10": 0.3065735963827292,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 2
+            }
+          }
+        },
+        {
+          "id": "flask-h14",
+          "query": "How does the command-line application selector safely interpret a factory call with literal arguments and reject invalid application results?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "flask-h15",
+          "query": "How does leaving the final nested context run request cleanup and application cleanup even if individual teardown steps raise errors?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.25,
+              "ndcgAt10": 0.43067655807339306,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        }
+      ]
+    },
+    "vite": {
+      "questions": 15,
+      "chunks": 1815,
+      "indexedRequiredUnits": 15,
+      "requiredUnits": 15,
+      "questionsSha256": "28b901d13704b2e074506bd6fab7fd309094e91fd8ee1773115f0d05862a935a",
+      "capabilities": {
+        "seconds": 0.10103582899319008,
+        "text": "Server: engram-mcp 0.1.0\nCapabilities:\n  memory: supported\n  knowledge: supported\n  graph: supported\n  knowledge_query: supported\n  lexical_feed: supported\n  recall: supported\n  consolidation: supported\n  batch: supported\n  ontology: supported\n  taxonomy: supported\n  beliefs: supported\n  procedures: supported\n  hierarchy: supported\n  identity: supported\n  vector: supported\nEmbedding space: {\"provider\":\"openai-compatible\",\"model\":\"google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b\",\"dimensions\":768,\"prompt_profile\":\"query/embedding-config-v1/371e626255e17f58f1f270ef6c2b192bfe62976d1dee3d410534b5be8503873b\",\"normalization\":\"l2\"}"
+      },
+      "vectorRows": 1815,
+      "space": {
+        "dimensions": 768,
+        "model": "google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b",
+        "normalization": "l2",
+        "prompt_profile": "query/embedding-config-v1/371e626255e17f58f1f270ef6c2b192bfe62976d1dee3d410534b5be8503873b",
+        "provider": "openai-compatible"
+      },
+      "summary": {
+        "vector": {
+          "hitAt1": 0.3333333333333333,
+          "hitAt5": 0.8666666666666667,
+          "hitAt10": 0.9333333333333333,
+          "recallAt10": 0.9333333333333333,
+          "mrrAt10": 0.5061904761904762,
+          "ndcgAt10": 0.6095430378906341
+        },
+        "fused": {
+          "hitAt1": 0.13333333333333333,
+          "hitAt5": 0.4666666666666667,
+          "hitAt10": 0.5333333333333333,
+          "recallAt10": 0.5333333333333333,
+          "mrrAt10": 0.2972222222222222,
+          "ndcgAt10": 0.35594559273810394
+        }
+      },
+      "pairedAgainstSmall": {
+        "vector": {
+          "hitAt10": {
+            "delta": 0.3333333333333333,
+            "pairedBootstrap95": [
+              0.0,
+              0.6
+            ],
+            "wins": 6,
+            "losses": 1,
+            "ties": 8
+          },
+          "recallAt10": {
+            "delta": 0.3333333333333333,
+            "pairedBootstrap95": [
+              0.0,
+              0.6
+            ],
+            "wins": 6,
+            "losses": 1,
+            "ties": 8
+          },
+          "mrrAt10": {
+            "delta": 0.12841269841269842,
+            "pairedBootstrap95": [
+              -0.03444444444444444,
+              0.2885714285714286
+            ],
+            "wins": 8,
+            "losses": 3,
+            "ties": 4
+          },
+          "ndcgAt10": {
+            "delta": 0.17672417990941786,
+            "pairedBootstrap95": [
+              0.003939081327943554,
+              0.3463124299653413
+            ],
+            "wins": 8,
+            "losses": 3,
+            "ties": 4
+          }
+        },
+        "fused": {
+          "hitAt10": {
+            "delta": 0.06666666666666667,
+            "pairedBootstrap95": [
+              0.0,
+              0.2
+            ],
+            "wins": 1,
+            "losses": 0,
+            "ties": 14
+          },
+          "recallAt10": {
+            "delta": 0.06666666666666667,
+            "pairedBootstrap95": [
+              0.0,
+              0.2
+            ],
+            "wins": 1,
+            "losses": 0,
+            "ties": 14
+          },
+          "mrrAt10": {
+            "delta": 0.030555555555555558,
+            "pairedBootstrap95": [
+              0.0,
+              0.08333333333333334
+            ],
+            "wins": 2,
+            "losses": 0,
+            "ties": 13
+          },
+          "ndcgAt10": {
+            "delta": 0.039345829549944276,
+            "pairedBootstrap95": [
+              0.0,
+              0.0997226508856038
+            ],
+            "wins": 2,
+            "losses": 0,
+            "ties": 13
+          }
+        }
+      },
+      "pairedAgainstBase": {
+        "vector": {
+          "hitAt10": {
+            "delta": 0.26666666666666666,
+            "pairedBootstrap95": [
+              0.06666666666666667,
+              0.4666666666666667
+            ],
+            "wins": 4,
+            "losses": 0,
+            "ties": 11
+          },
+          "recallAt10": {
+            "delta": 0.26666666666666666,
+            "pairedBootstrap95": [
+              0.06666666666666667,
+              0.4666666666666667
+            ],
+            "wins": 4,
+            "losses": 0,
+            "ties": 11
+          },
+          "mrrAt10": {
+            "delta": 0.0873015873015873,
+            "pairedBootstrap95": [
+              -0.05222222222222223,
+              0.21666666666666667
+            ],
+            "wins": 8,
+            "losses": 2,
+            "ties": 5
+          },
+          "ndcgAt10": {
+            "delta": 0.12885512948914696,
+            "pairedBootstrap95": [
+              -0.0018679855208968532,
+              0.2541422940515467
+            ],
+            "wins": 8,
+            "losses": 2,
+            "ties": 5
+          }
+        },
+        "fused": {
+          "hitAt10": {
+            "delta": 0.0,
+            "pairedBootstrap95": [
+              0.0,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 0,
+            "ties": 15
+          },
+          "recallAt10": {
+            "delta": 0.0,
+            "pairedBootstrap95": [
+              0.0,
+              0.0
+            ],
+            "wins": 0,
+            "losses": 0,
+            "ties": 15
+          },
+          "mrrAt10": {
+            "delta": 0.04537037037037037,
+            "pairedBootstrap95": [
+              0.0,
+              0.12314814814814815
+            ],
+            "wins": 3,
+            "losses": 0,
+            "ties": 12
+          },
+          "ndcgAt10": {
+            "delta": 0.03429565874144984,
+            "pairedBootstrap95": [
+              0.0,
+              0.09223367517001933
+            ],
+            "wins": 3,
+            "losses": 0,
+            "ties": 12
+          }
+        }
+      },
+      "indexToolSeconds": 25.170912370987935,
+      "cases": [
+        {
+          "id": "vite-h01",
+          "query": "How are environment values exposed to browser code filtered, and which source wins when a file value conflicts with a value already present in the running process?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.14285714285714285,
+              "ndcgAt10": 0.3333333333333333,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h02",
+          "query": "How does the development server decide whether a filesystem path may be read when strict file access is enabled?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.25,
+              "ndcgAt10": 0.43067655807339306,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h03",
+          "query": "How are special browser requests for files outside the project root converted into filesystem-root requests, and how is denied access handled?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.3333333333333333,
+              "ndcgAt10": 0.5,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h04",
+          "query": "How does the asset lookup recognize a public-directory file while preventing a requested path from escaping that directory?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.2,
+              "ndcgAt10": 0.38685280723454163,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h05",
+          "query": "How does workspace discovery walk upward from a project directory and stop at a workspace marker, with a fallback when it reaches the filesystem root?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h06",
+          "query": "How are simultaneous requests to transform the same module reused, and how is an in-flight request replaced after module invalidation?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h07",
+          "query": "Before reprocessing a module, how does the server prefer a recovered soft-invalidated transformation and otherwise reuse a cached result?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h08",
+          "query": "How does a changed module stop propagating through an importer that explicitly accepts that dependency, while continuing through other importers?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.3333333333333333,
+              "ndcgAt10": 0.5,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h09",
+          "query": "How are hot-update dependency arguments read as quoted names or arrays, and why are interpolated template arguments rejected?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.25,
+              "ndcgAt10": 0.43067655807339306,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h10",
+          "query": "When importing a package by its root name, how are export mappings, configured entry fields, the main field, and default entry filenames prioritized?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h11",
+          "query": "How does package resolution block a nested import when the package export map does not expose that subpath?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.3333333333333333,
+              "ndcgAt10": 0.5,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h12",
+          "query": "How is a variable-based dynamic import converted into a module glob expression with a normalized path relative to the importing file?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.3333333333333333,
+              "ndcgAt10": 0.5,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h13",
+          "query": "What rules decide whether an asset becomes embedded data instead of a separate output file, including explicit URL flags, entry files, SVG fragments and size limits?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.25,
+              "ndcgAt10": 0.43067655807339306,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h14",
+          "query": "How does a web-worker source become a bundle whose entry code is saved as an output asset?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "vite-h15",
+          "query": "How does a development proxy rule choose between regular-expression matching and simple URL-prefix matching?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.125,
+              "ndcgAt10": 0.31546487678572877,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        }
+      ]
+    },
+    "engram": {
+      "questions": 15,
+      "chunks": 4740,
+      "indexedRequiredUnits": 18,
+      "requiredUnits": 18,
+      "questionsSha256": "dfa3d404867f185d9a260605b75ed434a2587a52be545bda095024973877849f",
+      "capabilities": {
+        "seconds": 0.11327778999111615,
+        "text": "Server: engram-mcp 0.1.0\nCapabilities:\n  memory: supported\n  knowledge: supported\n  graph: supported\n  knowledge_query: supported\n  lexical_feed: supported\n  recall: supported\n  consolidation: supported\n  batch: supported\n  ontology: supported\n  taxonomy: supported\n  beliefs: supported\n  procedures: supported\n  hierarchy: supported\n  identity: supported\n  vector: supported\nEmbedding space: {\"provider\":\"openai-compatible\",\"model\":\"google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b\",\"dimensions\":768,\"prompt_profile\":\"query/embedding-config-v1/371e626255e17f58f1f270ef6c2b192bfe62976d1dee3d410534b5be8503873b\",\"normalization\":\"l2\"}"
+      },
+      "vectorRows": 4740,
+      "space": {
+        "dimensions": 768,
+        "model": "google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b",
+        "normalization": "l2",
+        "prompt_profile": "query/embedding-config-v1/371e626255e17f58f1f270ef6c2b192bfe62976d1dee3d410534b5be8503873b",
+        "provider": "openai-compatible"
+      },
+      "summary": {
+        "vector": {
+          "hitAt1": 0.5333333333333333,
+          "hitAt5": 0.7333333333333333,
+          "hitAt10": 0.8,
+          "recallAt10": 0.8,
+          "mrrAt10": 0.6244444444444445,
+          "ndcgAt10": 0.6504129946811525
+        },
+        "fused": {
+          "hitAt1": 0.4,
+          "hitAt5": 0.6,
+          "hitAt10": 0.7333333333333333,
+          "recallAt10": 0.6666666666666666,
+          "mrrAt10": 0.49126984126984125,
+          "ndcgAt10": 0.506489548316004
+        }
+      },
+      "pairedAgainstSmall": {
+        "vector": {
+          "hitAt10": {
+            "delta": -0.06666666666666667,
+            "pairedBootstrap95": [
+              -0.26666666666666666,
+              0.13333333333333333
+            ],
+            "wins": 1,
+            "losses": 2,
+            "ties": 12
+          },
+          "recallAt10": {
+            "delta": -0.03333333333333333,
+            "pairedBootstrap95": [
+              -0.26666666666666666,
+              0.2
+            ],
+            "wins": 2,
+            "losses": 2,
+            "ties": 11
+          },
+          "mrrAt10": {
+            "delta": 0.1675925925925926,
+            "pairedBootstrap95": [
+              -0.01777777777777777,
+              0.37000000000000005
+            ],
+            "wins": 6,
+            "losses": 4,
+            "ties": 5
+          },
+          "ndcgAt10": {
+            "delta": 0.11803149187774237,
+            "pairedBootstrap95": [
+              -0.045309455829027505,
+              0.28594628897621505
+            ],
+            "wins": 7,
+            "losses": 4,
+            "ties": 4
+          }
+        },
+        "fused": {
+          "hitAt10": {
+            "delta": 0.2,
+            "pairedBootstrap95": [
+              -0.06666666666666667,
+              0.4666666666666667
+            ],
+            "wins": 4,
+            "losses": 1,
+            "ties": 10
+          },
+          "recallAt10": {
+            "delta": 0.16666666666666666,
+            "pairedBootstrap95": [
+              -0.06666666666666667,
+              0.43333333333333335
+            ],
+            "wins": 4,
+            "losses": 1,
+            "ties": 10
+          },
+          "mrrAt10": {
+            "delta": 0.03571428571428571,
+            "pairedBootstrap95": [
+              -0.07539682539682539,
+              0.14444444444444443
+            ],
+            "wins": 4,
+            "losses": 2,
+            "ties": 9
+          },
+          "ndcgAt10": {
+            "delta": 0.06223636595033041,
+            "pairedBootstrap95": [
+              -0.07638955887972623,
+              0.19075687440978573
+            ],
+            "wins": 5,
+            "losses": 2,
+            "ties": 8
+          }
+        }
+      },
+      "pairedAgainstBase": {
+        "vector": {
+          "hitAt10": {
+            "delta": 0.0,
+            "pairedBootstrap95": [
+              -0.2,
+              0.2
+            ],
+            "wins": 1,
+            "losses": 1,
+            "ties": 13
+          },
+          "recallAt10": {
+            "delta": 0.0,
+            "pairedBootstrap95": [
+              -0.2,
+              0.2
+            ],
+            "wins": 1,
+            "losses": 1,
+            "ties": 13
+          },
+          "mrrAt10": {
+            "delta": 0.15611111111111112,
+            "pairedBootstrap95": [
+              0.016666666666666666,
+              0.31833333333333336
+            ],
+            "wins": 5,
+            "losses": 2,
+            "ties": 8
+          },
+          "ndcgAt10": {
+            "delta": 0.11547440623592582,
+            "pairedBootstrap95": [
+              -0.002375623402559483,
+              0.23710085495286085
+            ],
+            "wins": 7,
+            "losses": 2,
+            "ties": 6
+          }
+        },
+        "fused": {
+          "hitAt10": {
+            "delta": 0.13333333333333333,
+            "pairedBootstrap95": [
+              -0.13333333333333333,
+              0.4
+            ],
+            "wins": 3,
+            "losses": 1,
+            "ties": 11
+          },
+          "recallAt10": {
+            "delta": 0.1,
+            "pairedBootstrap95": [
+              -0.13333333333333333,
+              0.3333333333333333
+            ],
+            "wins": 3,
+            "losses": 1,
+            "ties": 11
+          },
+          "mrrAt10": {
+            "delta": 0.006084656084656083,
+            "pairedBootstrap95": [
+              -0.16084656084656085,
+              0.13756613756613756
+            ],
+            "wins": 4,
+            "losses": 2,
+            "ties": 9
+          },
+          "ndcgAt10": {
+            "delta": 0.021797256613506528,
+            "pairedBootstrap95": [
+              -0.1529943964569989,
+              0.15869855487358708
+            ],
+            "wins": 4,
+            "losses": 2,
+            "ties": 9
+          }
+        }
+      },
+      "indexToolSeconds": 71.15952346898848,
+      "cases": [
+        {
+          "id": "engram-fresh-01",
+          "query": "If one search source throws an error, can the caller still receive matches from the other sources, and how is the failure reported?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-02",
+          "query": "What happens when a caller requests a search mode for which no index has been registered?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-03",
+          "query": "When both the request and its context budget limit result counts, which limit wins, and are discarded results recorded?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 0.8315546295836225,
+              "requiredUnitsRetrieved": 2,
+              "requiredUnits": 2
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 0.5,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.38685280723454163,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 2
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-04",
+          "query": "How does the agent anticipate useful context from its current task and recent searches without calling a language model?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.3333333333333333,
+              "ndcgAt10": 0.5,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-05",
+          "query": "How is memory retention calculated from elapsed time and stability, including a zero or negative stability setting?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-06",
+          "query": "When several consolidation executors handle the same task, whose result is kept and what happens to tasks nobody handles?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.16666666666666666,
+              "ndcgAt10": 0.3562071871080222,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-07",
+          "query": "How are failures in protected evaluation cases turned into actionable consolidation errors?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-08",
+          "query": "What prevents consolidation mutations from running when the protected fixture fails or the apply authorization denies the plan?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-09",
+          "query": "Can hierarchy navigation begin with an underlying member ID rather than a hierarchy node ID, and does the layer limit still apply?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.2,
+              "ndcgAt10": 0.38685280723454163,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 0.0,
+              "recallAt10": 0.0,
+              "mrrAt10": 0.0,
+              "ndcgAt10": 0.0,
+              "requiredUnitsRetrieved": 0,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-10",
+          "query": "How does hierarchy navigation find the nearest ancestor shared by all selected starting nodes?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 2,
+              "requiredUnits": 2
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 2,
+              "requiredUnits": 2
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-11",
+          "query": "What checks stop a hierarchy build from storing missing parents, self-parenting, or cyclic parent chains?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 0.9197207891481876,
+              "requiredUnitsRetrieved": 2,
+              "requiredUnits": 2
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 0.5,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 0.6131471927654584,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 2
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-12",
+          "query": "How does a reflection summary get a repeatable identity from memory contents and record that it was derived by reflection?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.25,
+              "ndcgAt10": 0.43067655807339306,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-13",
+          "query": "Which memories are eligible for automatic archiving after inactivity, and how is the cutoff compared with their timestamps?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.14285714285714285,
+              "ndcgAt10": 0.3333333333333333,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-14",
+          "query": "When automatically extracted entities conflict with entities supplied by the caller, which ones survive and how are unnamed entities treated?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 1.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 1.0,
+              "ndcgAt10": 1.0,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        },
+        {
+          "id": "engram-fresh-15",
+          "query": "How does a bounded traversal of transitive callers distinguish reaching the visit limit exactly from actually truncating exploration?",
+          "vector": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 1.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.5,
+              "ndcgAt10": 0.6309297535714575,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          },
+          "fused": {
+            "metrics": {
+              "hitAt1": 0.0,
+              "hitAt5": 0.0,
+              "hitAt10": 1.0,
+              "recallAt10": 1.0,
+              "mrrAt10": 0.14285714285714285,
+              "ndcgAt10": 0.3333333333333333,
+              "requiredUnitsRetrieved": 1,
+              "requiredUnits": 1
+            }
+          }
+        }
+      ]
+    }
+  },
+  "referenceRuntime": {
+    "model": "google/embeddinggemma-2@914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "device": "NVIDIA GeForce RTX 3090",
+    "dtype": "torch.float32",
+    "dimensions": 768,
+    "maxSequenceLength": 8192,
+    "encoders": "text-only",
+    "versions": {
+      "torch": "2.14.1",
+      "transformers": "5.20.1",
+      "sentence-transformers": "6.1.0"
+    },
+    "loadSeconds": 3.8728459480043966,
+    "requests": 0,
+    "texts": 0,
+    "smoke": {
+      "finite": true,
+      "normalized": true,
+      "dimensions": 768,
+      "batchSingleMaxAbsoluteError": 4.0978193283081055e-08,
+      "queryPassageCosine": 0.8428218364715576
+    },
+    "endpoint": "http://127.0.0.1:35485/v1"
+  },
+  "checkpoint": {
+    "repository": "google/embeddinggemma-2",
+    "revision": "914f7f89142e33e77833254d9c9b90c3cef7303b",
+    "files": {
+      "model.safetensors": {
+        "bytes": 1488915288,
+        "sha256": "197a32965d4b1105faf060417baa899e193fb73cd401f42ec9295234d5553d79"
+      },
+      "tokenizer.json": {
+        "bytes": 32170510,
+        "sha256": "4d777ef5bdc1aa36227abdfb77c3e49e7b9c892d16e1b6bda41c393504828be4"
+      },
+      "tokenizer.model": {
+        "bytes": 4689013,
+        "sha256": "e594c8a90eb08d8bda498ff4747977dc827ae0c3c56b5c0d41a605a22d02ef03"
+      },
+      "sentence_bert_config.json": {
+        "bytes": 747,
+        "sha256": "b1bcd9f2dce3ae863b359e87d0710b5dbc3314a59ecb4e2f97c7778fc8e4b228"
+      },
+      "processor_config.json": {
+        "bytes": 1788,
+        "sha256": "168f6a08522f3ce5dea596d94d003af2fd691742d4f41fe1f9d8cce76bfbf69c"
+      },
+      "tokenizer_config.json": {
+        "bytes": 1599,
+        "sha256": "17bd5d6e9364ca49a534e1502076593317c298d4a663623091ed45388f004874"
+      },
+      "preprocessor_config.json": {
+        "bytes": 511,
+        "sha256": "ea2ae257e901064abdd98dceb19f2b0da06af600bed15e0f99f5c85c37ee9d78"
+      },
+      "modules.json": {
+        "bytes": 413,
+        "sha256": "3d02572a0455b832de67fb8e63a54981bc7e8b46e337c95e917bd8122a533bfd"
+      },
+      "README.md": {
+        "bytes": 21730,
+        "sha256": "b677a0ee2818c36f091b65fd3d9b4baea9f04d53b02b49cae916c74bf9682037"
+      },
+      "config_sentence_transformers.json": {
+        "bytes": 1565,
+        "sha256": "031e56a498d33c349ab489a21885bcfe25b4fcba841149dc99e1e90d4a7c28f5"
+      },
+      "config.json": {
+        "bytes": 4455,
+        "sha256": "b8f1e9931b57fbc054acdb445c41765d55b0074c58d145fa82839941ad1b5bb3"
+      },
+      ".gitattributes": {
+        "bytes": 1301,
+        "sha256": "bcdccfaa66bc1240c7192dbd374cfb39b695bb1d8ff6b7ce0113aa5e9ac21a44"
+      },
+      "chat_template.jinja": {
+        "bytes": 1016,
+        "sha256": "4b852efc0b9960283e735363331e6f325b33bc74bdbaa076f595bc4e9b94d85e"
+      },
+      "2_Normalize/config.json": {
+        "bytes": 97,
+        "sha256": "cdb09dfca347a56aa2d691744e38d5ad3c7cbc2834e7181272b9a15328b82524"
+      },
+      "1_Pooling/config.json": {
+        "bytes": 90,
+        "sha256": "8759bdf7c77efc7df7723f64856a593c8943b71ee38baf2a88771fbaf78438f9"
+      }
+    }
+  },
+  "receiptDirectory": "/home/videogamer/.engram/evaluations/embeddinggemma2-comparison-2026-10-16"
+}

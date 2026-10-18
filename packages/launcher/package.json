@@ -17,7 +17,8 @@
     "agent-install.js",
     "README.md",
     "hooks/",
-    "skills/"
+    "skills/",
+    "agents/"
   ],
   "engines": {
     "node": ">=18"

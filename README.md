@@ -50,6 +50,22 @@ engram-mcp install --client copilot         # GitHub Copilot / VS Code
 npx @engramlabs/mcp@alpha --storage ~/.engram
 ```
 
+### Agent bundle — skills, hooks, and an adversarial subagent (one command)
+
+```bash
+engram-mcp install --agent claude    # or codex | copilot | pi | all
+```
+
+What lands on your machine:
+
+| Piece | What it does |
+|---|---|
+| **5 skills** | `engram-index` (index + memorize with evidence labels), `engram-search` (agentic evidence-chained search), `engram-plan` (triage / bugfix / story workflows), `engram-implement` (verify + self-review loop), `engram-learn` (durable session learnings) |
+| **Recall hooks** | Every prompt recalls relevant memory — gated: irrelevant results stay silent (separation gate, no LLM in the hot path). Session-start packs, stale-index reminders, kill switch (`ENGRAM_HOOKS=0`), fail-open always |
+| **`red-forman` subagent** | Read-only adversarial reviewer — severity-tagged findings (BLOCKER/DEFECT/SMELL) with file:line evidence and a one-line fix each. Dispatch it before declaring work done |
+
+Per-platform notes: Codex agents use YAML (`~/.codex/agents/*.yaml`); Copilot command hooks cannot inject per-prompt context (platform limitation — session-start recall only, honestly documented); pi gets an in-process extension.
+
 ### What you get
 
 Your agent gains these MCP tools:

@@ -38,6 +38,31 @@ function skillsSource() {
   return null;
 }
 
+/** Locate the agents source (subagent definitions, per-platform dialects). */
+function agentsSource() {
+  const candidates = [
+    path.join(LAUNCHER_DIR, 'agents'),
+    path.join(LAUNCHER_DIR, '..', '..', 'mcp', 'engram-mcp', 'agents'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(path.join(c, 'red-forman.claude.md'))) return c;
+  }
+  return null;
+}
+
+/** Install a subagent definition into `destDir` under `fileName`. */
+function copyAgent(destDir, srcName, destName, written) {
+  const src = agentsSource();
+  if (!src) {
+    process.stderr.write('engram-mcp: agents source not found (package incomplete?)\n');
+    return;
+  }
+  fs.mkdirSync(destDir, { recursive: true });
+  const to = path.join(destDir, destName);
+  fs.copyFileSync(path.join(src, srcName), to);
+  written.push(to);
+}
+
 function hookScript(name) {
   return path.join(LAUNCHER_DIR, 'hooks', name);
 }
@@ -125,8 +150,12 @@ const HOSTS = {
   claude: {
     label: 'Claude Code',
     skillsDir: (home) => path.join(home, '.claude', 'skills'),
+    agentFile: (home) => [path.join(home, '.claude', 'agents'), 'red-forman.md'],
     install(home, remove, written) {
       copySkills(this.skillsDir(home), written);
+      const [agentDir, agentName] = this.agentFile(home);
+      if (remove) { try { fs.rmSync(path.join(agentDir, agentName)); } catch {} }
+      else copyAgent(agentDir, 'red-forman.claude.md', agentName, written);
       const settings = path.join(home, '.claude', 'settings.json');
       const recall = hookScript('recall-context.cjs');
       const stale = hookScript('stale-index.cjs');
@@ -147,6 +176,11 @@ const HOSTS = {
     skillsDir: (home) => path.join(home, '.agents', 'skills'),
     install(home, remove, written) {
       copySkills(this.skillsDir(home), written);
+      // Codex agents: ~/.codex/agents/*.yaml (YAML form — the TOML
+      // spelling is deprecated).
+      const agentDir = path.join(home, '.codex', 'agents');
+      if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.yaml')); } catch {} }
+      else copyAgent(agentDir, 'red-forman.codex.yaml', 'red-forman.yaml', written);
       const recall = hookScript('recall-context.cjs');
       const stale = hookScript('stale-index.cjs');
       const body = remove
@@ -181,8 +215,12 @@ const HOSTS = {
   copilot: {
     label: 'GitHub Copilot',
     skillsDir: (home) => path.join(home, '.agents', 'skills'),
-    install(home, remove, written) {
+    install(home, remove, written, cwd) {
       copySkills(this.skillsDir(home), written);
+      // Copilot custom agents are repo-scoped: .github/agents/.
+      const agentDir = path.join(cwd || process.cwd(), '.github', 'agents');
+      if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
+      else copyAgent(agentDir, 'red-forman.copilot.md', 'red-forman.md', written);
       // Per-prompt injection is not available to Copilot command hooks
       // (output dropped by design) — sessionStart only. Honest limitation.
       const file = path.join(home, '.copilot', 'hooks', 'engram.json');
@@ -210,6 +248,9 @@ const HOSTS = {
     skillsDir: (home) => path.join(home, '.pi', 'agent', 'skills'),
     install(home, remove, written) {
       copySkills(this.skillsDir(home), written);
+      const agentDir = path.join(home, '.pi', 'agent', 'agents');
+      if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
+      else copyAgent(agentDir, 'red-forman.pi.md', 'red-forman.md', written);
       const ext = path.join(home, '.pi', 'agent', 'extensions', 'engram-recall.cjs');
       if (remove) {
         try {
@@ -226,6 +267,7 @@ const HOSTS = {
 
 function agentInstall(args) {
   const home = os.homedir();
+  const cwd = process.cwd();
   let target = null;
   let remove = false;
   let storage = process.env.ENGRAM_STORAGE || path.join(home, '.engram');
@@ -244,7 +286,7 @@ function agentInstall(args) {
   }
   const ids = target === 'all' ? Object.keys(HOSTS) : [target];
   process.stdout.write(
-    `${remove ? 'Removing' : 'Installing'} engram agent bundle (skills + hooks)\n` +
+    `${remove ? 'Removing' : 'Installing'} engram agent bundle (skills + hooks + subagents)\n` +
       `  storage: ${storage}\n\n`,
   );
   for (const id of ids) {
@@ -252,7 +294,7 @@ function agentInstall(args) {
     process.stdout.write(`[${host.label}]\n`);
     const written = [];
     try {
-      host.install(home, remove, written);
+      host.install(home, remove, written, cwd);
       for (const w of written) process.stdout.write(`  ${remove ? 'cleaned' : 'wrote'}: ${w}\n`);
       if (id === 'copilot' && !remove) {
         process.stdout.write(

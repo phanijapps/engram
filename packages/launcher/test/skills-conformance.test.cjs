@@ -184,3 +184,48 @@ test('index references carry the REA process + memorization catalog', () => {
   assert.match(rea, /proven/, 'evidence labels defined');
   assert.match(rea, /final check/i);
 });
+
+// ---------------------------------------------------------------- agents
+const AGENTS_ROOT = path.join(__dirname, '..', 'agents');
+const AGENT_DIALECTS = [
+  ['red-forman.claude.md', '.md frontmatter'],
+  ['red-forman.pi.md', '.md frontmatter'],
+  ['red-forman.copilot.md', '.md frontmatter'],
+  ['red-forman.codex.yaml', '.yaml (Codex uses YAML)'],
+];
+
+for (const [file, dialect] of AGENT_DIALECTS) {
+  test(`agent ${file} ships (${dialect})`, () => {
+    assert.ok(fs.existsSync(path.join(AGENTS_ROOT, file)), `${file} missing`);
+  });
+}
+
+test('red-forman md dialects carry valid frontmatter (name + description)', () => {
+  for (const file of AGENT_DIALECTS.slice(0, 3).map(([f]) => f)) {
+    const text = fs.readFileSync(path.join(AGENTS_ROOT, file), 'utf8');
+    const fm = frontmatter(text);
+    assert.ok(fm, `${file}: frontmatter present`);
+    assert.equal(fm.name, 'red-forman', `${file}: name`);
+    assert.ok((fm.description || '').length > 40, `${file}: description`);
+  }
+});
+
+test('red-forman codex yaml parses with required fields', () => {
+  const text = fs.readFileSync(path.join(AGENTS_ROOT, 'red-forman.codex.yaml'), 'utf8');
+  // Minimal YAML structural checks (no yaml dep): key lines present,
+  // developer_instructions block exists, no tab indentation.
+  assert.match(text, /^name: red-forman$/m);
+  assert.match(text, /^sandbox_mode: read-only$/m);
+  assert.match(text, /^developer_instructions: \|$/m);
+  assert.doesNotMatch(text, /\t/, 'YAML must not contain tabs');
+  assert.match(text, /BLOCKER/, 'severity vocabulary present');
+});
+
+test('red-forman persona discipline present in every dialect', () => {
+  for (const [file] of AGENT_DIALECTS) {
+    const text = fs.readFileSync(path.join(AGENTS_ROOT, file), 'utf8');
+    assert.match(text, /Read-only/i, `${file}: read-only rule`);
+    assert.match(text, /WRONG SCOPE/, `${file}: scope gate`);
+    assert.match(text, /PASS — nothing to fix/, `${file}: rare-pass verdict`);
+  }
+});

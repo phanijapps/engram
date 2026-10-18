@@ -13,9 +13,16 @@ the default path.
 npm install -g @engramlabs/mcp@alpha
 ```
 
-## Enable your MCP host
+## Enable your MCP host + agent bundle
 
 One command — no JSON editing:
+
+```bash
+engram-mcp install --agent claude          # skills + hooks + red-forman subagent
+# or: codex, copilot, pi, all
+```
+
+MCP server registration only:
 
 ```bash
 engram-mcp install --client claude          # Claude Code
@@ -58,6 +65,7 @@ Add to your `.mcp.json` (or your host's config):
 | **Track beliefs** | `belief_get`, `contradiction_list` — derived stances, open tensions |
 | **Runbooks** | `procedure_put`, `procedure_list` — replayable with success/fail counters |
 | **Correct** | `forget`, `graph_health` — remove wrong data, monitor health |
+| **Adversarial review** | `red-forman` subagent — severity-tagged findings on any diff before you declare done |
 
 ## Platforms
 

@@ -12,7 +12,7 @@
 >
 > This is the *physical* view. For the logical/domain model see
 > [`docs/domain-data-model.md`](domain-data-model.md); for adapter design
-> rationale see [`docs/sql-adapter-design.md`](sql-adapter-design.md).
+> rationale see [`docs/history/sql-adapter-design.md`](history/sql-adapter-design.md).
 
 ## 1. Persistence architecture at a glance
 

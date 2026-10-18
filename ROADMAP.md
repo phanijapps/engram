@@ -1,7 +1,7 @@
 # Roadmap
 
 The detailed implementation sequence lives in
-`docs/implementation-roadmap.md`. Keep this file as the short status view and
+`docs/history/implementation-roadmap.md`. Keep this file as the short status view and
 use the implementation roadmap as the spec-driven execution loop.
 
 ## Current: Spec-Driven Implementation

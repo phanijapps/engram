@@ -25,7 +25,7 @@ def write(root: Path, relative: str, text: str) -> None:
 def minimal_registry() -> dict:
     return {
         "scan_paths": ["docs/research", "docs/architecture"],
-        "scan_files": ["docs/arch_divergence.md"],
+        "scan_files": ["docs/history/arch_divergence.md"],
         "deny": [
             {
                 "id": "stale-belief-claim",

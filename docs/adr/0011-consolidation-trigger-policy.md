@@ -14,7 +14,7 @@ so a cycle runs only when a caller explicitly invokes `consolidate()`.
 
 The v2 research leaves the trigger policy open — "Consolidation trigger policy:
 time-based, event-count-based, failure-driven, explicit command, or hybrid"
-(`docs/research/synthesis.md:298`) — and `docs/arch_divergence.md` flagged it as
+(`docs/research/synthesis.md:298`) — and `docs/history/arch_divergence.md` flagged it as
 an open decision. The chosen policy needs to be on the record before
 production-grade consolidation work grows.
 

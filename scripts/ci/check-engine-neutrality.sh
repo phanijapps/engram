@@ -12,8 +12,8 @@
 # Deferred-debt layers are intentionally NOT gated (see docs/backlog.md,
 # "provider-sdk-capability-report"): engram-runtime (home-grown SqliteOpenOptions
 # and the SQL-redaction regex), core/eval, core/integration/src/config.rs (holds
-# SqliteStorageLayout + Surreal backend config refs — gated once T3 reconciles
-# the embedded Surreal config), and bindings/node (holds Sql*/engram_store_*
+# the backend profile config — gated once T3 reconciles it), and
+# bindings/node (holds Sql*/engram_store_*
 # wiring — gated once the ADR-0022 backends/ reorg neutralizes it). The
 # surreal/surrealdb crate-import deny-list (rule 1) IS active now across the
 # gated surface, ahead of either layer being added to GATED_PATHS.

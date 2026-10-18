@@ -95,7 +95,6 @@ consolidation executors, ingestion — shared across all engines).
 | Crate | Kind | Implements |
 | --- | --- | --- |
 | `engram-store-sqlite` | engine cell (SQLite) | memory + knowledge/taxonomy/ontology + belief + hierarchy + vector (sqlite-vec) — **all SQLite calls live here** |
-| `engram-store-surreal` | engine cell (SurrealDB) | the same five ports over embedded SurrealKV (MTREE vectors) |
 | `engram-store-lexical` | agnostic (Tantivy) | `RetrievalMode::keyword` (BM25) |
 | `engram-store-associative-graph` | agnostic | `RetrievalMode::Graph` (Personalized PageRank, HippoRAG-style) |
 | `engram-store-community-summary` | agnostic | community-summary retrieval (GraphRAG) |
@@ -139,7 +138,6 @@ surface and leaving the other unwired is not allowed.
 ├── adapters/             # replaceable infrastructure crates (behind traits)
 │   ├── sqlite/           # engram-store-sqlite — ALL SQLite calls (memory/knowledge/belief/hierarchy/vector)
 │   ├── pgvector/         # Postgres/pgvector engine cells
-│   ├── surreal/          # engram-store-surreal — SurrealDB engine cell (SurrealKV embedded)
 │   ├── embedding/http/   # HTTP embedding provider cell (configurable models)
 │   ├── ingest/           # filesystem/git ingestion + tree-sitter AST chunking
 │   ├── retrieval/        # sqlite-vec · tantivy-lexical (BM25) · associative-graph (PPR) · community-summary (GraphRAG) · cross-encoder-rerank · mmr-rerank
@@ -207,7 +205,7 @@ surface and leaving the other unwired is not allowed.
   (the load-bearing retrieval-composition decision).
 4. Skim [`docs/research/README.md`](../research/README.md) for the synthesized
    research that grounds the model.
-5. Pick a recent spec in `docs/specs/` (e.g. `surrealdb-backend`) and read its
+5. Pick a recent spec in `docs/specs/` (e.g. `fetch-content-backend`) and read its
    `spec.md` + `plan.md` alongside the code they produced.
 6. Run the demo: see the [build guide](../guides/how-to/build-and-run.md), then
    index a repo via the dashboard and watch the RRF-hybrid Q&A.

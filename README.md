@@ -77,7 +77,7 @@ Engram keeps these concerns **separate and explicit**:
   engine — so agents depend on *semantics*, not *implementation*.
 - **Rust-owns-deterministic-behavior** — the core traits, adapters, and
   conformance tests are in Rust; TypeScript wraps generated contracts.
-- **Replaceable adapters** — storage (SQLite, SurrealDB), retrieval (vector,
+- **Replaceable adapters** — storage (SQLite, Postgres/pgvector), retrieval (vector,
   graph, lexical, associative), and embedding providers (FastEmbed, Ollama) are
   behind ports, never hardcoded.
 - **Policy on every path** — scope, retention, allowed-uses, and provenance are
@@ -203,7 +203,7 @@ machine-readable wire contract (`contracts/v1/`), and the product overview
 (`docs/product/engram.md`) are the **source of truth**. Rust types, generated TypeScript,
 JSON Schema, database schemas, and API payloads all conform *downward* — never
 the reverse. This is what makes engram portable across SQLite today and
-SurrealDB / Postgres / Neo4j tomorrow without breaking agents that depend on it.
+Postgres / Neo4j tomorrow without breaking agents that depend on it.
 
 The contract freeze policy forbids renames, removals, or meaning changes within
 a version; breaking changes require a new versioned contract. `metadata` maps
@@ -221,25 +221,24 @@ operations. Consumers switch backends by changing a config string + Cargo featur
 | Backend | Crate | Status |
 |---|---|---|
 | **SQLite** | `engram-store-sqlite` | ✅ Complete — memory, knowledge, belief, hierarchy, vector, consolidation glue, `SqliteOpenOptions` |
-| **SurrealDB** | `engram-store-surreal` | ✅ All 5 capabilities — memory, knowledge, belief, hierarchy, vector (MTREE) |
 | **Mixed** (future) | `engram-store-mixed` | 🔜 Compose multiple engines (e.g. lancedb + neo4j) |
 
 ```toml
 # Select the backend in a profile file
 [backend]
-kind = "sqlite"        # or "surreal"
+kind = "sqlite"        # or "postgres"
 data_root = "/var/lib/engram"
 ```
 
 ```bash
 # Compile with the backend feature
-cargo build --features sqlite    # or --features surreal
+cargo build --features sqlite
 ```
 
 Both backends share the **same ports, same DTOs, same facade** — the storage
 engine is an adapter detail. An engine-neutrality lint
 (`.codex/hooks/check-engine-neutrality.sh`) enforces that no engine type
-(`Sql*`, `Surreal*`, raw SQL) leaks into the neutral facade or port crates.
+(`Sql*`, raw SQL) leaks into the neutral facade or port crates.
 Engine-agnostic adapters (lexical BM25, associative-graph PPR, community-summary,
 cross-encoder rerank, decay, ingest) work with any backend — see
 [Extend the storage layer](docs/guides/how-to/extend-storage.md) for the full
@@ -279,9 +278,9 @@ draft extension contracts — direction-fixed but not frozen.
 Current validated surface:
 
 - **Memory**: write, retrieve, forget, lifecycle events, scope isolation,
-  policy enforcement — SQLite + SurrealDB.
+  policy enforcement — SQLite.
 - **Knowledge graph**: source → document → chunk → entity → relationship,
-  taxonomy, ontology, graph traversal (neighbors) — SQLite + SurrealDB.
+  taxonomy, ontology, graph traversal (neighbors) — SQLite.
 - **Belief**: put, get (valid-time), mark-stale, supersede, retract,
   contradictions — SQLite + SurrealDB.
 - **Hierarchy**: put-node, put-relation, path navigation — SQLite + SurrealDB.
@@ -326,7 +325,6 @@ core/                Storage-neutral Rust crates.
 
 adapters/            Replaceable infrastructure crates.
   sqlite/            engram-store-sqlite — ALL SQLite DB ops (one crate).
-  surreal/           engram-store-surreal — ALL SurrealDB DB ops (one crate).
   ingest/            Filesystem/git ingestion adapter.
   retrieval/         sqlite-vec, tantivy-lexical, associative-graph,
                      community-summary, cross-encoder-rerank.
@@ -376,7 +374,6 @@ cargo check --workspace
 
 # Build + test with a backend
 cargo test --workspace --features sqlite     # SQLite backend
-cargo test -p engram-integration --features surreal   # SurrealDB backend
 
 # TypeScript generation + typecheck + tests
 pnpm run check

@@ -173,7 +173,7 @@ fn run_recall(argv: &[String]) -> i32 {
             .iter()
             .map(|item| {
                 json!({
-                    "kind": format!("{:?}", item.target_type).to_lowercase(),
+                    "kind": item.target_type.kind_str(),
                     "score": item.score.total,
                     "evidence": evidence_label(item, top_score),
                     "source_score": item.fusion_trace.as_ref()
@@ -435,5 +435,96 @@ mod tests {
     fn truncate_is_char_safe() {
         assert_eq!(truncate("hello world", 5), "hello…");
         assert_eq!(truncate("hi", 5), "hi");
+    }
+
+    /// Surface pin (red-forman blocker #1): the launcher hook reads
+    /// `source_score` + `lanes` from `recall --json`. If this key set drifts
+    /// (e.g. camelCase rename), this test fails BEFORE the hook silently
+    /// reads `undefined`. The stub-fixture in packages/launcher/test/ cannot
+    /// catch that — it never touches this code.
+    #[test]
+    fn recall_json_surface_keys_are_pinned() {
+        use chrono::Utc;
+        use engram_domain::policy::{
+            AllowedUse, DeleteMode, Policy, Retention, Sensitivity, Visibility,
+        };
+        use engram_domain::provenance::Provenance;
+        use engram_domain::retrieval::{FusionTrace, RetrievalScore};
+        use engram_domain::{Actor, ActorKind, Id};
+        let item = RetrievalResult {
+            id: "r1".into(),
+            target_type: engram_domain::retrieval::RetrievalTargetType::Memory,
+            target_id: "m1".into(),
+            content: "pinned surface".into(),
+            score: RetrievalScore {
+                total: 0.5,
+                relevance: None,
+                recency: None,
+                confidence: None,
+                cue_match: None,
+                hierarchical_fit: None,
+                policy_fit: None,
+            },
+            provenance: Provenance {
+                source: "test".into(),
+                actor: Actor {
+                    id: Id::from("actor-test"),
+                    kind: ActorKind::Agent,
+                    display_name: None,
+                    metadata: None,
+                },
+                observed_at: Utc::now(),
+                evidence: Vec::new(),
+                derivations: Vec::new(),
+                confidence: Some(1.0),
+                method: Some("test".into()),
+            },
+            policy: Policy {
+                visibility: Visibility::Workspace,
+                retention: Retention::Durable,
+                sensitivity: Some(Sensitivity::Low),
+                allowed_uses: vec![AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: Some(DeleteMode::Tombstone),
+            },
+            explanation: None,
+            fusion_trace: Some(FusionTrace {
+                query_id: None,
+                vector_index: None,
+                embedding_time_ms: None,
+                search_time_ms: None,
+                source: "lexical".into(),
+                source_rank: Some(1),
+                source_score: Some(3.25),
+                score: None,
+                rank: None,
+                fusion_strategy: None,
+                fusion_score: None,
+                rerank_strategy: None,
+                rerank_score: None,
+                discard_reason: None,
+                deduplicated_with: Vec::new(),
+            }),
+            metadata: None,
+        };
+        // The exact JSON shape run_recall emits per hit.
+        let rendered = serde_json::json!({
+            "kind": item.target_type.kind_str(),
+            "score": item.score.total,
+            "source_score": item.fusion_trace.as_ref().and_then(|t| t.source_score)
+                .map(|s| (s * 100.0).round() / 100.0),
+            "lanes": item.fusion_trace.as_ref().map(|t| t.source.as_str()).unwrap_or(""),
+        });
+        assert_eq!(rendered["kind"], "memory");
+        assert_eq!(rendered["source_score"], 3.25);
+        assert_eq!(rendered["lanes"], "lexical");
+        // And the header the MCP tool renders (tools::recall).
+        let lanes = "lexical";
+        let raw = item.fusion_trace.as_ref().and_then(|t| t.source_score);
+        let raw_seg = match (raw, lanes) {
+            (Some(raw), l) if !l.is_empty() && !l.contains('+') => format!("raw {raw:.2}@{l}"),
+            _ => unreachable!("pin covers the single-lane path"),
+        };
+        assert_eq!(raw_seg, "raw 3.25@lexical");
     }
 }

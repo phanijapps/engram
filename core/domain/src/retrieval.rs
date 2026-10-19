@@ -124,6 +124,32 @@ pub enum RetrievalTargetType {
     DecisionTrace,
 }
 
+impl RetrievalTargetType {
+    /// Stable lowercase kind string for cross-surface rendering — matches the
+    /// serde `snake_case` wire form (`hierarchy_node`, not the `{:?}`-derived
+    /// `hierarchynode`). Used by the MCP recall header and the one-shot CLI;
+    /// the launcher hook's lane sets match on these strings.
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            Self::Memory => "memory",
+            Self::Event => "event",
+            Self::Chunk => "chunk",
+            Self::Document => "document",
+            Self::Entity => "entity",
+            Self::Relationship => "relationship",
+            Self::Concept => "concept",
+            Self::Belief => "belief",
+            Self::Contradiction => "contradiction",
+            Self::HierarchyNode => "hierarchy_node",
+            Self::HierarchyRelation => "hierarchy_relation",
+            Self::Rule => "rule",
+            Self::Policy => "policy",
+            Self::Axiom => "axiom",
+            Self::DecisionTrace => "decision_trace",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RetrievalScore {

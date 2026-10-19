@@ -184,12 +184,12 @@ impl Group {
     fn finalize(self) -> RetrievalResult {
         let mut result = self.representative;
         result.score = with_fused_score(result.score, self.rrf_score);
-        // Preserve the best contributor's RAW lane score when available so
-        // callers can distinguish per-lane match strength (cosine/BM25) from the
-        // fused RRF score. Fall back to the best contribution only when no raw
-        // score was set — preserves the prior observable behavior for sources
-        // that never populate `source_score` pre-fusion.
-        let source_score = self.best_raw_score.or(Some(self.best_contribution));
+        // Preserve the best contributor's RAW lane score when the lane set
+        // one. `None` stays `None`: substituting the RRF contribution term
+        // (weight/(k+rank)) as a "raw" score fabricates a lane-scale value
+        // (red-forman defect #2, 2026-10-19) — renderers must be able to
+        // distinguish "lane reported no raw score" from "matched at 0.016".
+        let source_score = self.best_raw_score;
         result.fusion_trace = Some(FusionTrace {
             query_id: None,
             vector_index: None,

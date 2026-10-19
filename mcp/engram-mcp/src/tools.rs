@@ -301,14 +301,9 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
     };
     let payload = block_on(recall.recall(request)).map_err(internal)?;
 
-    let filtered: Vec<&engram_domain::retrieval::RetrievalTargetType> = payload
-        .items
-        .iter()
-        .filter(|i| lanes.allows(&i.target_type))
-        .map(|i| &i.target_type)
-        .collect();
+    let has_hits = payload.items.iter().any(|i| lanes.allows(&i.target_type));
 
-    if filtered.is_empty() {
+    if !has_hits {
         let failures = payload.source_failures;
         let body = if failures.is_empty() {
             "No results.".to_owned()
@@ -334,7 +329,11 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
     let mut joined = String::new();
     let mut _items_used = 0usize;
     let mut items_skipped = 0usize;
-    for item in payload.items.iter().filter(|i| lanes.allows(&i.target_type)) {
+    for item in payload
+        .items
+        .iter()
+        .filter(|i| lanes.allows(&i.target_type))
+    {
         let content = item.content.as_str();
         let excerpt = if content.chars().count() <= RECALL_ITEM_EXCERPT_CHARS {
             content.to_owned()
@@ -346,17 +345,38 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
                 .unwrap_or(content.len());
             format!("{}\n... [truncated]", &content[..end])
         };
-        let kind = format!("{:?}", item.target_type).to_lowercase();
-        let (lanes, raw) = item
+        let kind = item.target_type.kind_str();
+        let (lane_names, raw) = item
             .fusion_trace
             .as_ref()
             .map(|t| (t.source.as_str(), t.source_score))
             .unwrap_or(("", None));
-        let header = match raw {
-            Some(raw) => format!("[{kind} · raw {raw:.2} · lanes: {lanes}]"),
-            None => format!("[{kind} · lanes: {lanes}]"),
+        // Provenance: with a single contributing lane the raw score's owner
+        // is unambiguous (`@lane`); with several, say so — lane raws are
+        // incommensurable scales (facts ∈[0,1], graph = 3×matches, lexical
+        // BM25 unbounded) so a bare number would invite cross-lane
+        // comparison (red-forman defect #3).
+        let raw_seg = match (raw, lane_names) {
+            (Some(raw), l) if !l.is_empty() && !l.contains('+') => {
+                format!("raw {raw:.2}@{l}")
+            }
+            (Some(raw), l) if !l.is_empty() => format!("raw {raw:.2} (best of {l})"),
+            (Some(raw), _) => format!("raw {raw:.2}"),
+            (None, _) => String::new(),
         };
-        let would_be = joined.len() + header.len() + excerpt.len() + 5; // +5 for "\n---\n"
+        let lanes_seg = if lane_names.is_empty() {
+            "—".to_owned()
+        } else {
+            lane_names.to_owned()
+        };
+        let header = match (raw_seg.is_empty(), lanes_seg == "—") {
+            (true, true) => format!("[{kind}]"),
+            (true, false) => format!("[{kind} · lanes: {lanes_seg}]"),
+            (false, true) => format!("[{kind} · {raw_seg}]"),
+            (false, false) => format!("[{kind} · {raw_seg} · lanes: {lanes_seg}]"),
+        };
+        // +1 for the header/content newline, +5 for the "\n---\n" separator.
+        let would_be = joined.len() + header.len() + excerpt.len() + 6;
         if !joined.is_empty() && would_be > RECALL_TOTAL_CHAR_BUDGET {
             items_skipped += 1;
             continue;

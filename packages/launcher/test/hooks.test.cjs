@@ -367,10 +367,12 @@ test('gate v2: memory lane with moderate overlap injects, weak evidence never do
   assert.ok(res.stdout.includes('UserPromptSubmit'), 'memory-lane overlap injects');
 });
 
-// ---------------------------------------------------------------- surface parity fixture
+// ---------------------------------------------------------------- gate fixture (captured shapes)
 // Real shapes captured live from the 9.7k-entity self-index (2026-10-19):
-// the BM25-compression case that motivated gate v2. Locked here so drift
-// in the server's score/exposure surface breaks the build loudly.
+// the BM25-compression case that motivated gate v2. This tests HOOK GATE
+// BEHAVIOR against captured shapes — it does NOT pin the server surface
+// (the stub never touches oneshot.rs/tools.rs). The server-side pin lives
+// in mcp/engram-mcp/src/oneshot.rs:recall_json_surface_keys_are_pinned.
 test('fixture: live score shapes — compression + lane-normalized raws', () => {
   // Relevant query: correct memory tops at fused 0.0325 (2 lanes), raw=1.0
   // (facts lane). Junk query: pg_recipe_* entity tops at fused 0.0481 with

@@ -32,7 +32,7 @@ fn handle_request<C>(registry: &ToolRegistry<C>, ctx: &C, req: &Value) -> Option
         "initialize" => Some(Response::Result(json!({
             "protocolVersion": "2024-11-05",
             "capabilities": { "tools": {} },
-            "serverInfo": { "name": "engram-mcp", "version": "0.1.0" }
+            "serverInfo": { "name": "engram-mcp", "version": crate::ENGRAM_VERSION }
         }))),
         "notifications/initialized" => None,
         "tools/list" => Some(Response::Result(json!({ "tools": registry.list() }))),
@@ -134,6 +134,11 @@ mod tests {
         match resp {
             Response::Result(v) => {
                 assert_eq!(v["serverInfo"]["name"], "engram-mcp");
+                assert_eq!(
+                    v["serverInfo"]["version"],
+                    crate::ENGRAM_VERSION,
+                    "serverInfo must read the single version constant"
+                );
                 assert_eq!(v["protocolVersion"], "2024-11-05");
                 assert!(v["capabilities"]["tools"].is_object());
             }

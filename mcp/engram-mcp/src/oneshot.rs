@@ -320,6 +320,7 @@ fn run_status(argv: &[String]) -> i32 {
             json!({
                 "ok": true,
                 "command": "status",
+                "version": crate::ENGRAM_VERSION,
                 "project": config.project,
                 "last_index_at": last_index_at,
                 "indexed_files": indexed_files,
@@ -334,6 +335,7 @@ fn run_status(argv: &[String]) -> i32 {
         let indexed = last_index_at
             .map(chrono_like_utc)
             .unwrap_or_else(|| "never".to_owned());
+        println!("version:       {}", crate::ENGRAM_VERSION);
         println!("project:       {}", config.project);
         println!("last index:    {indexed}");
         println!("indexed files: {indexed_files}");

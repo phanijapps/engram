@@ -269,7 +269,21 @@ engram-mcp status --storage <dir> --project <p> [--json]
 — the shape the launcher's recall hook consumes. Errors exit 0 with
 `{ok:false, error}` so hooks fail open.
 
+### Version identity
+
+Every release binary self-reports the git tag it was built from (CI
+compiles it in via `ENGRAM_BUILD_VERSION`, `v` stripped — same semver as
+the npm packages). Local dev builds fall back to the Cargo workspace
+version. Surfaces: MCP `serverInfo.version`, `status --json` →
+`"version"`. The constant lives in `main.rs` (`ENGRAM_VERSION`) — one
+place, every surface reads it. A `--version` CLI flag, when added, reads
+the same constant.
+
 ### Runtime environment variables
+
+| Variable | Used by | Effect |
+|---|---|---|
+| `ENGRAM_BUILD_VERSION` | CI (compile time) | Stamps the release version into the binary |
 
 | Variable | Used by | Effect |
 |---|---|---|

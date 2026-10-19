@@ -38,6 +38,22 @@ use app::App;
 use registry::{ToolError, ToolRecord, ToolRegistry};
 use serde_json::{Value, json};
 
+/// Single source of truth for the binary's self-reported version.
+///
+/// Release builds stamp the git tag via `ENGRAM_BUILD_VERSION` in CI (the
+/// workflow strips the leading `v`, so this is npm-comparable semver);
+/// local builds fall back to the Cargo workspace version. Every surface
+/// that reports a version — MCP `serverInfo`, `status --json`, future
+/// `--version` — reads THIS constant so the identities cannot drift.
+///
+/// Future switch (if crates.io publishing ever matters): bump the
+/// workspace `Cargo.toml` per release instead of build-stamping and drop
+/// the `option_env!` arm — one edit, here only.
+pub const ENGRAM_VERSION: &str = match option_env!("ENGRAM_BUILD_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
+
 fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
 

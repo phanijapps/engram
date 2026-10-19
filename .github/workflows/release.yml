@@ -70,7 +70,16 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.target }}-${{ matrix.variant }}
+          # The tag rides the key: ENGRAM_BUILD_VERSION is compiled in, so a
+          # cached binary from a previous tag must never be reused.
+          key: ${{ matrix.target }}-${{ matrix.variant }}-${{ github.ref_name }}
+
+      # Compile-time version stamp: the binary's self-reported version
+      # (MCP serverInfo, status --json, future --version) reads
+      # ENGRAM_BUILD_VERSION — the git tag, v-stripped to match npm semver.
+      # Local builds fall back to the Cargo workspace version.
+      - name: Set build version (git tag)
+        run: echo "ENGRAM_BUILD_VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
 
       - name: Build (slim — no fastembed)
         if: matrix.variant == 'slim'

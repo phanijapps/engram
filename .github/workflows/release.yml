@@ -222,6 +222,40 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      # Registry verification (added after the 2026-10-19 silent drop:
+      # npm echoed publish success + dist-tag success for
+      # mcp-linux-x64-gnu@0.2.0-alpha and NONE of it landed — discovered
+      # by users, not by us). Poll the registry until every package's
+      # version is fetchable; fail the job loudly if any is missing.
+      - name: Verify published versions exist on the registry
+        if: github.event_name == 'push' || inputs.dry_run == false
+        run: |
+          V="${{ env.VERSION }}"
+          V="${V#v}"
+          verify() {
+            local pkg="$1" i
+            for i in $(seq 1 30); do
+              if [ "$(curl -s -o /dev/null -w '%{http_code}' \
+                    "https://registry.npmjs.org/@engramlabs%2f${pkg}/${V}")" = "200" ]; then
+                echo "  ✓ @engramlabs/${pkg}@${V}"
+                return 0
+              fi
+              sleep 20
+            done
+            echo "::error::@engramlabs/${pkg}@${V} never became fetchable (10 min) — npm dropped the publish. Re-tag to republish."
+            return 1
+          }
+          FAIL=0
+          verify mcp || FAIL=1
+          for tgz in $(find artifacts -name 'mcp-*.tgz' -type f); do
+            pkg=$(tar -xzOf "$tgz" package/package.json | node -e \
+              "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).name.replace('@engramlabs/','')))")
+            verify "$pkg" || FAIL=1
+          done
+          exit $FAIL
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       # Keep `latest` pointing at the newest published version so the npm
       # landing page reflects the current release (the --tag publish above
       # only moves the channel tag, e.g. `alpha`; `latest` would drift).

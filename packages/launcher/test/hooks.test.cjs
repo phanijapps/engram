@@ -366,3 +366,43 @@ test('gate v2: memory lane with moderate overlap injects, weak evidence never do
   });
   assert.ok(res.stdout.includes('UserPromptSubmit'), 'memory-lane overlap injects');
 });
+
+// ---------------------------------------------------------------- surface parity fixture
+// Real shapes captured live from the 9.7k-entity self-index (2026-10-19):
+// the BM25-compression case that motivated gate v2. Locked here so drift
+// in the server's score/exposure surface breaks the build loudly.
+test('fixture: live score shapes — compression + lane-normalized raws', () => {
+  // Relevant query: correct memory tops at fused 0.0325 (2 lanes), raw=1.0
+  // (facts lane). Junk query: pg_recipe_* entity tops at fused 0.0481 with
+  // raw=1.0 too — raw source_score is LANE-NORMALIZED, not absolute BM25,
+  // so it cannot discriminate (falsified the planned raw-percentile gate).
+  const relevant = {
+    ok: true,
+    hit_count: 3,
+    results: [
+      { kind: 'memory', score: 0.0325, source_score: 1.0, lanes: 'facts+temporal', evidence: 'exact', content: 'Core boundary invariants: engram-domain and core port crates must never name an engine type' },
+      { kind: 'chunk', score: 0.0164, source_score: 6.0, lanes: 'graph', evidence: 'exact', content: '## Boundary Rules section from docs' },
+      { kind: 'memory', score: 0.0312, source_score: 1.0, lanes: 'lexical', evidence: 'exact', content: 'Core abstractions listing' },
+    ],
+  };
+  const junk = {
+    ok: true,
+    hit_count: 3,
+    results: [
+      { kind: 'entity', score: 0.0481, source_score: 1.0, lanes: 'graph+associative_graph+lexical', evidence: 'keyword', content: 'pg_recipe_recall_fuses_vector_lane' },
+      { kind: 'entity', score: 0.0317, source_score: 1.0, lanes: 'graph+lexical', evidence: 'keyword', content: 'pg_recipe_opens_and_reports_capabilities' },
+      { kind: 'chunk', score: 0.0310, source_score: 1.0, lanes: 'lexical', evidence: 'weak', content: 'EngramProvider diagram text' },
+    ],
+  };
+  // The discrimination must come from overlap (gate v2), not raw or fused.
+  const store1 = tmpStore('fx-relevant');
+  const r1 = fire(RECALL, '{"prompt":"what are the boundary rules for core crates","cwd":"/tmp"}', {
+    ENGRAM_STORAGE: store1, ENGRAM_STUB_RESPONSE: JSON.stringify(relevant),
+  });
+  assert.ok(r1.stdout.includes('UserPromptSubmit'), 'fixture relevant injects via overlap');
+  const store2 = tmpStore('fx-junk');
+  const r2 = fire(RECALL, '{"prompt":"banana pancake recipe for breakfast","cwd":"/tmp"}', {
+    ENGRAM_STORAGE: store2, ENGRAM_STUB_RESPONSE: JSON.stringify(junk),
+  });
+  assert.equal(r2.stdout.trim(), '', 'fixture junk stays silent despite higher fused score');
+});

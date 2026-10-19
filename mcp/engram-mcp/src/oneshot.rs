@@ -176,6 +176,12 @@ fn run_recall(argv: &[String]) -> i32 {
                     "kind": format!("{:?}", item.target_type).to_lowercase(),
                     "score": item.score.total,
                     "evidence": evidence_label(item, top_score),
+                    "source_score": item.fusion_trace.as_ref()
+                        .and_then(|t| t.source_score)
+                        .map(|s| (s * 100.0).round() / 100.0),
+                    "lanes": item.fusion_trace.as_ref()
+                        .map(|t| t.source.as_str())
+                        .unwrap_or(""),
                     "title": item.metadata.as_ref()
                         .and_then(|m| m.get("title"))
                         .and_then(Value::as_str)

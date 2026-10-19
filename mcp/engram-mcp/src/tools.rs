@@ -301,11 +301,11 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
     };
     let payload = block_on(recall.recall(request)).map_err(internal)?;
 
-    let filtered: Vec<&str> = payload
+    let filtered: Vec<&engram_domain::retrieval::RetrievalTargetType> = payload
         .items
         .iter()
         .filter(|i| lanes.allows(&i.target_type))
-        .map(|i| i.content.as_str())
+        .map(|i| &i.target_type)
         .collect();
 
     if filtered.is_empty() {
@@ -326,13 +326,18 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
         return Ok(protocol::text_content(body));
     }
 
-    // Excerpt each item + cap total output.
+    // Excerpt each item + cap total output. Each hit carries a compact
+    // trace header (kind · evidence · fused score · raw lane score · lanes)
+    // — surface parity with the facade/N-API, which expose the full
+    // `fusion_trace` structurally (RFC-0022 gate + agent reasoning need the
+    // same signal the other transports already ship).
     let mut joined = String::new();
     let mut _items_used = 0usize;
     let mut items_skipped = 0usize;
-    for content in &filtered {
+    for item in payload.items.iter().filter(|i| lanes.allows(&i.target_type)) {
+        let content = item.content.as_str();
         let excerpt = if content.chars().count() <= RECALL_ITEM_EXCERPT_CHARS {
-            (*content).to_owned()
+            content.to_owned()
         } else {
             let end = content
                 .char_indices()
@@ -341,7 +346,17 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
                 .unwrap_or(content.len());
             format!("{}\n... [truncated]", &content[..end])
         };
-        let would_be = joined.len() + excerpt.len() + 5; // +5 for "\n---\n"
+        let kind = format!("{:?}", item.target_type).to_lowercase();
+        let (lanes, raw) = item
+            .fusion_trace
+            .as_ref()
+            .map(|t| (t.source.as_str(), t.source_score))
+            .unwrap_or(("", None));
+        let header = match raw {
+            Some(raw) => format!("[{kind} · raw {raw:.2} · lanes: {lanes}]"),
+            None => format!("[{kind} · lanes: {lanes}]"),
+        };
+        let would_be = joined.len() + header.len() + excerpt.len() + 5; // +5 for "\n---\n"
         if !joined.is_empty() && would_be > RECALL_TOTAL_CHAR_BUDGET {
             items_skipped += 1;
             continue;
@@ -349,6 +364,8 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
         if !joined.is_empty() {
             joined.push_str("\n---\n");
         }
+        joined.push_str(&header);
+        joined.push('\n');
         joined.push_str(&excerpt);
         _items_used += 1;
     }

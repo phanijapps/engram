@@ -42,7 +42,14 @@ def main() -> int:
         return 1
     binary_path = os.path.abspath(sys.argv[1])
     target = sys.argv[2]
-    version = sys.argv[3]
+    raw_version = sys.argv[3]
+    # Normalize: git tags are `v0.1.8-alpha`; npm versions must be
+    # `0.1.8-alpha`. npm tolerates a `v` prefix when resolving, but the
+    # launcher's version-lockstep check compares the raw string — a
+    # v-prefixed stamp broke every `engram-mcp` invocation on Windows
+    # (observed 2026-10-18: "launcher 0.1.7-alpha != platform package
+    # v0.1.7-alpha").
+    version = raw_version[1:] if raw_version.startswith("v") else raw_version
     is_full = "--full" in sys.argv
 
     if target not in TARGET_MAP:

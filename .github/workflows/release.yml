@@ -223,9 +223,12 @@ jobs:
           V="${V#v}"               # tag is v0.1.5-alpha; npm wants 0.1.5-alpha
           npm dist-tag add "@engramlabs/mcp@$V" latest
           for tgz in $(find artifacts -name 'mcp-*.tgz' -type f); do
-            pkg=$(basename "$tgz" .tgz)   # mcp-linux-x64-gnu-v0.1.6-alpha.tgz
-            pkg="${pkg%-v*}"              # → mcp-linux-x64-gnu
-            npm dist-tag add "@engramlabs/$pkg@$V" latest
+            # Read the package name from the tarball's own manifest — robust
+            # to filename shape (pre-0.1.8 tarballs carried a -v<version>
+            # suffix, later ones don't).
+            pkg=$(tar -xzOf "$tgz" package/package.json | node -e \
+              "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).name))")
+            npm dist-tag add "$pkg@$V" latest
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

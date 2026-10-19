@@ -82,8 +82,14 @@ function resolveBinary() {
     fail(`platform package ${pkg} is present but the binary is missing: ${binPath}`);
   }
   // Version lockstep: the platform package must match the launcher version.
-  const binVersion = require(manifest).version;
-  if (binVersion !== LAUNCHER_VERSION) {
+  // Both sides are normalized (leading `v` stripped) — releases before
+  // 0.1.8 stamped platform packages with the git tag's `v` prefix
+  // ("v0.1.7-alpha"), which npm tolerates on install but a literal string
+  // compare rejects. Normalizing keeps those already-installed packages
+  // working instead of forcing a reinstall.
+  const norm = (v) => String(v).replace(/^v/, "");
+  const binVersion = norm(require(manifest).version);
+  if (binVersion !== norm(LAUNCHER_VERSION)) {
     fail(
       `version mismatch: launcher ${LAUNCHER_VERSION} != platform package ${binVersion}.\n` +
         `Mixed versions are unsupported. Fix: npm install @engramlabs/mcp@${LAUNCHER_VERSION}`

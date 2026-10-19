@@ -291,3 +291,16 @@ console.log(JSON.stringify({ok:true,command:'status',project:'t',last_index_at:n
   assert.equal(res.status, 0);
   assert.equal(res.stdout.trim(), '');
 });
+
+// ---------------------------------------------------------------- launcher lockstep
+test('version lockstep normalizes the v prefix (Windows 2026-10-18 repro)', () => {
+  const binJs = fs.readFileSync(path.join(__dirname, '..', 'bin.js'), 'utf8');
+  // The fix: both sides pass through a leading-v normalizer before compare.
+  assert.match(binJs, /replace\(\/\^v\/, ""\)/, 'bin.js normalizes v prefix in lockstep check');
+  // And the stamper stamps clean versions (no v) for future packages.
+  const stamper = fs.readFileSync(
+    path.join(__dirname, '..', '..', '..', 'scripts', 'release', 'stamp-platform-package.py'),
+    'utf8',
+  );
+  assert.match(stamper, /raw_version\[1:\]/, 'stamper strips the v prefix');
+});

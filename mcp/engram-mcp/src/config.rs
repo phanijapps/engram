@@ -166,7 +166,20 @@ impl McpConfig {
             }
             i += 2;
         }
-        let storage_path = storage_path.ok_or("missing required --storage <path>")?;
+        // Launch-config env fallbacks (PLAN mcp-args-contract step 2):
+        // precedence is flag > environment > default — same discipline the
+        // pg-connection-string already follows below. The launcher hooks and
+        // pi extension speak ENGRAM_STORAGE/ENGRAM_PROJECT; the server
+        // honoring the same variables removes the silent scope skew where a
+        // hook derived cwd-basename while the server used "default".
+        let storage_path = storage_path
+            .or_else(|| {
+                std::env::var("ENGRAM_STORAGE")
+                    .ok()
+                    .filter(|s| !s.is_empty())
+                    .map(PathBuf::from)
+            })
+            .ok_or("missing required --storage <path> (or set ENGRAM_STORAGE)")?;
         let backend = backend.unwrap_or_default();
         // The env var is a fallback, not an override: an explicit flag wins.
         let pg_connection_string = pg_connection_string.or_else(|| {
@@ -183,7 +196,13 @@ impl McpConfig {
         }
         Ok(Self {
             storage_path,
-            project: project.unwrap_or_else(|| "default".to_string()),
+            project: project
+                .or_else(|| {
+                    std::env::var("ENGRAM_PROJECT")
+                        .ok()
+                        .filter(|s| !s.is_empty())
+                })
+                .unwrap_or_else(|| "default".to_string()),
             scope_strategy: ScopeMappingStrategy::Strict,
             embedding,
             migration_mode: MigrationMode::DryRun,
@@ -206,6 +225,112 @@ impl McpConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// PLAN mcp-args-contract step 4 — the launch-flag surface pin. Every
+    /// flag the contract table (HOW-TO.md) documents must parse; a removed
+    /// or renamed flag fails here before the docs drift. Env-fallback
+    /// precedence (flag > env > default) is pinned for storage/project.
+    #[test]
+    fn launch_flag_surface_is_pinned() {
+        let argv = [
+            "--storage",
+            "/tmp/pin",
+            "--project",
+            "pinproj",
+            "--org",
+            "pinorg",
+            "--domain",
+            "pindom",
+            "--subdomain",
+            "pinsub",
+            "--ontology",
+            "/tmp/o.json",
+            "--taxonomy",
+            "/tmp/t.json",
+            "--layout",
+            "multi",
+            "--db-file",
+            "pin.db",
+            "--tools",
+            "full",
+            "--backend",
+            "sqlite",
+            "--no-vector",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>();
+        let cfg = McpConfig::from_args(&argv).expect("all 13 contract flags parse");
+        assert_eq!(cfg.storage_path, PathBuf::from("/tmp/pin"));
+        assert_eq!(cfg.project, "pinproj");
+        assert_eq!(cfg.org.as_deref(), Some("pinorg"));
+        assert_eq!(cfg.domain.as_deref(), Some("pindom"));
+        assert_eq!(cfg.subdomain.as_deref(), Some("pinsub"));
+        assert_eq!(cfg.ontology_path, Some(PathBuf::from("/tmp/o.json")));
+        assert_eq!(cfg.taxonomy_path, Some(PathBuf::from("/tmp/t.json")));
+        assert_eq!(cfg.db_file, "pin.db");
+        assert_eq!(cfg.tool_profile, "full");
+        assert!(!cfg.enable_vector, "--no-vector parsed");
+    }
+
+    #[test]
+    fn env_fallback_precedence_is_flag_over_env_over_default() {
+        // SAFETY: tests run multi-threaded; these env names are test-private.
+        let guard = EnvGuard::set("ENGRAM_PROJECT", "envproj");
+        let flag = McpConfig::from_args(&argv(&["--storage", "/tmp/e", "--project", "flagproj"]))
+            .expect("flag wins");
+        assert_eq!(flag.project, "flagproj", "explicit flag beats env");
+        let env_only = McpConfig::from_args(&argv(&["--storage", "/tmp/e"])).expect("env used");
+        assert_eq!(env_only.project, "envproj", "env fills when flag absent");
+        drop(guard);
+        let neither = McpConfig::from_args(&argv(&["--storage", "/tmp/e"])).expect("default");
+        assert_eq!(
+            neither.project, "default",
+            "literal default when neither set"
+        );
+    }
+
+    #[test]
+    fn missing_storage_mentions_the_env_escape_hatch() {
+        let guard = EnvGuard::unset("ENGRAM_STORAGE");
+        let err = McpConfig::from_args(&argv(&[])).expect_err("storage required");
+        assert!(err.contains("ENGRAM_STORAGE"), "got: {err}");
+        drop(guard);
+    }
+
+    fn argv(flags: &[&str]) -> Vec<String> {
+        flags.iter().map(|s| s.to_string()).collect()
+    }
+
+    struct EnvGuard {
+        key: &'static str,
+        prior: Option<String>,
+    }
+    impl EnvGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let prior = std::env::var(key).ok();
+            // SAFETY: process-wide env mutation is inherent to testing env
+            // fallbacks; the guard re-asserts the prior value on drop and
+            // tests touching these keys are serialized by the key naming.
+            unsafe { std::env::set_var(key, value) };
+            Self { key, prior }
+        }
+        fn unset(key: &'static str) -> Self {
+            let prior = std::env::var(key).ok();
+            // SAFETY: see EnvGuard::set.
+            unsafe { std::env::remove_var(key) };
+            Self { key, prior }
+        }
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match self.prior.take() {
+                // SAFETY: see EnvGuard::set.
+                Some(v) => unsafe { std::env::set_var(self.key, v) },
+                None => unsafe { std::env::remove_var(self.key) },
+            }
+        }
+    }
 
     #[test]
     fn from_args_parses_flags() {

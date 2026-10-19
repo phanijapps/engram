@@ -283,12 +283,11 @@ engram-mcp status --storage <dir> --project <p> [--json]
 | `ENGRAM_STALE_THRESHOLD` | stale-index hook | Files-changed count that triggers the reminder |
 | `ENGRAM_PG_CONNECTION_STRING` | server (pgvector build) | Connection-string env alias for the flag |
 
-> **Known skew (tracked):** the hooks default `--project` to the *cwd
-> basename* while the server defaults to the literal `"default"` — if you
-> launch the server with `--project X` from a directory named `Y`, the
-> recall hook queries scope `Y` while the server writes scope `X`. Set
-> `ENGRAM_PROJECT` (or run from the matching directory) until the
-> server-side env fallback lands.
+> **Scope harmony (fixed):** the server honors `ENGRAM_STORAGE` and
+> `ENGRAM_PROJECT` with **flag > env > default** precedence — the same
+> variables the hooks and pi extension read. Set them once and every
+> layer (server, one-shot CLI, hooks, extension) resolves the same
+> store and scope.
 
 ---
 

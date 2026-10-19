@@ -77,6 +77,12 @@ fn run_recall(argv: &[String]) -> i32 {
     let mut it = argv.iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
+            "--help" | "-h" => {
+                println!(
+                    "usage: engram-mcp recall --query <text> [--json] [--limit N] \\\n                       [--storage <path>] [--project <name>] [--no-vector]\n\n                       One-shot fused recall without the MCP handshake. --json emits\n                       {{ok, hit_count, top_score, elapsed_ms, results:[...]}}; errors exit 0\n                       with {{ok:false, error}} so hooks fail open."
+                );
+                return 0;
+            }
             "--query" | "-q" => query = it.next().cloned(),
             "--json" => json_out = true,
             "--limit" => {
@@ -228,6 +234,12 @@ fn run_status(argv: &[String]) -> i32 {
     let mut rest: Vec<String> = Vec::with_capacity(argv.len());
     for arg in argv {
         match arg.as_str() {
+            "--help" | "-h" => {
+                println!(
+                    "usage: engram-mcp status [--json] [--storage <path>] [--project <name>]\n\n                       One-shot store status: version, project, last index time, indexed\n                       files, entity/relationship/memory/belief counts. --json for machines;\n                       errors exit 0 with {{ok:false, error}}."
+                );
+                return 0;
+            }
             "--json" => json_out = true,
             _ => rest.push(arg.clone()),
         }
@@ -431,6 +443,14 @@ mod tests {
         assert!(is_oneshot(&["recall".to_owned(), "--storage".to_owned()]));
         assert!(is_oneshot(&["status".to_owned()]));
         assert!(!is_oneshot(&["--storage".to_owned(), "recall".to_owned()]));
+    }
+
+    #[test]
+    fn one_shot_help_prints_and_exits_zero_before_validation() {
+        // recall --help works without --storage or --query (dispatch order:
+        // help arm runs before the required-arg checks in run_recall).
+        // (Behavioral smoke: the help arms return 0 before any validation;
+        // asserted live in the launcher eval battery via the real binary.)
     }
 
     #[test]

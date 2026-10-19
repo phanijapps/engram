@@ -408,3 +408,39 @@ test('fixture: live score shapes — compression + lane-normalized raws', () => 
   });
   assert.equal(r2.stdout.trim(), '', 'fixture junk stays silent despite higher fused score');
 });
+
+// ---------------------------------------------------------------- CLI flags (spec cli-help-version)
+// Live checks against the real binary (soft-skip when unresolvable, same
+// discipline as the conformance suite).
+test('CLI: --version/-V exit 0 with the version line; --help/-h exit 0 with the contract; bogus flag exits 2', () => {
+  const os = require('node:os');
+  const path = require('node:path');
+  const dev = path.join(os.homedir(), 'projects', 'mem-alpha', 'target', 'release', 'engram-mcp');
+  const bin = process.env.ENGRAM_MCP_BIN && fs.existsSync(process.env.ENGRAM_MCP_BIN)
+    ? process.env.ENGRAM_MCP_BIN
+    : fs.existsSync(dev) ? dev : null;
+  if (!bin) { console.log('  [soft-skip] no binary resolvable'); return; }
+  const run = (args) => spawnSync(bin, args, { encoding: 'utf8', timeout: 5000 });
+
+  for (const flag of ['--version', '-V']) {
+    const r = run([flag]);
+    assert.equal(r.status, 0, `${flag} exits 0`);
+    assert.match(r.stdout, /^\d+\.\d+\.\d+/, `${flag} prints a semver line`);
+    assert.equal(r.stdout.trim().split('\n').length, 1, `${flag} is one line`);
+  }
+  for (const flag of ['--help', '-h']) {
+    const r = run([flag]);
+    assert.equal(r.status, 0, `${flag} exits 0`);
+    assert.ok(r.stdout.includes('--pg-connection-string'), `${flag} lists the easy-to-forget flag`);
+    assert.ok(r.stdout.includes('recall') && r.stdout.includes('status'), `${flag} lists subcommands`);
+  }
+  const helpMid = run(['--storage', '/tmp/x', '--help']);
+  assert.equal(helpMid.status, 0, '--help recognized mid-flags');
+  const bogus = run(['--bogus-flag']);
+  assert.equal(bogus.status, 2, 'usage error stays exit 2 (distinguishable from help)');
+  assert.ok(bogus.stderr.length > 0, 'usage errors stay on stderr');
+
+  const recallHelp = run(['recall', '--help']);
+  assert.equal(recallHelp.status, 0, 'recall --help exits 0');
+  assert.match(recallHelp.stdout, /--query/, 'recall help shows --query');
+});

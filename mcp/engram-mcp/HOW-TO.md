@@ -250,6 +250,8 @@ table must not drift from it).
 | `--backend sqlite\|pgvector` | Engine recipe | `sqlite` |
 | `--pg-connection-string <url>` | Postgres URL (pgvector only; env `ENGRAM_PG_CONNECTION_STRING`) | — |
 | `--no-vector` | Disable the embedding lane (fast, lexical+graph only) | on with fastembed builds |
+| `--help` / `-h` | Print the full argument contract, exit 0 (stdout) | — |
+| `--version` / `-V` | Print the binary version (`ENGRAM_VERSION`: tag-stamped), exit 0 | — |
 
 **Scope rule** (`scope.rs`): `tenant = --org || "default"`;
 `workspace = --domain/--subdomain || --domain || --project`. The scope

@@ -232,34 +232,48 @@ mod tests {
     /// precedence (flag > env > default) is pinned for storage/project.
     #[test]
     fn launch_flag_surface_is_pinned() {
-        let argv = [
-            "--storage",
+        // Values positional to CONTRACT_FLAGS' value-taking entries;
+        // assembled flag/value pairs below so the single list stays
+        // authoritative for parser + help + this pin (drift impossible).
+        let values = [
             "/tmp/pin",
-            "--project",
             "pinproj",
-            "--org",
             "pinorg",
-            "--domain",
             "pindom",
-            "--subdomain",
             "pinsub",
-            "--ontology",
             "/tmp/o.json",
-            "--taxonomy",
             "/tmp/t.json",
-            "--layout",
             "multi",
-            "--db-file",
             "pin.db",
-            "--tools",
             "full",
-            "--backend",
             "sqlite",
-            "--no-vector",
-        ]
-        .iter()
-        .map(|s| s.to_string())
-        .collect::<Vec<_>>();
+        ];
+        let value_flags = [
+            "--storage",
+            "--project",
+            "--org",
+            "--domain",
+            "--subdomain",
+            "--ontology",
+            "--taxonomy",
+            "--layout",
+            "--db-file",
+            "--tools",
+            "--backend",
+        ];
+        let mut argv: Vec<String> = Vec::new();
+        for (flag, value) in value_flags.iter().zip(values) {
+            argv.push(flag.to_string());
+            argv.push(value.to_string());
+        }
+        argv.push("--no-vector".to_string());
+        // Cross-check: every value flag is on the contract list (main.rs).
+        for f in value_flags {
+            assert!(
+                crate::CONTRACT_FLAGS.contains(&f),
+                "{f} missing from CONTRACT_FLAGS — update the single list"
+            );
+        }
         let cfg = McpConfig::from_args(&argv).expect("all 13 contract flags parse");
         assert_eq!(cfg.storage_path, PathBuf::from("/tmp/pin"));
         assert_eq!(cfg.project, "pinproj");

@@ -118,6 +118,33 @@ function heartbeat(storage, event, fields) {
   } catch {}
 }
 
+/**
+ * Fraction of query content-words present in the hit's text (0..1).
+ * Deterministic, scale-free, works on real corpora where BM25 scores
+ * compress. Light normalization: lowercase, split hyphens/paths, strip
+ * plural 's' and trailing punctuation. Stopwords removed.
+ */
+function termOverlap(query, text) {
+  const STOP = new Set([
+    'the', 'a', 'an', 'is', 'are', 'was', 'were', 'do', 'does', 'did', 'i',
+    'you', 'we', 'it', 'in', 'on', 'for', 'of', 'to', 'and', 'or', 'how',
+    'what', 'why', 'when', 'with', 'my', 'me', 'this', 'that', 'right',
+  ]);
+  const norm = (s) =>
+    String(s)
+      .toLowerCase()
+      .replace(/[^a-z0-9s/-]+/g, ' ')
+      .split(/[\s/-]+/)
+      .map((w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w))
+      .filter((w) => w.length > 2 && !STOP.has(w));
+  const q = norm(query);
+  if (q.length === 0) return 0;
+  const t = new Set(norm(text));
+  let hit = 0;
+  for (const w of q) if (t.has(w)) hit++;
+  return hit / q.length;
+}
+
 function main() {
   const t0 = Date.now();
   if (process.env.ENGRAM_HOOKS === '0') process.exit(0);
@@ -199,13 +226,29 @@ function main() {
   // average-of-two convention would cap 2-hit separation at 1.33x).
   const median = scores.length >= 2 ? scores[Math.floor(scores.length / 2)] : 0;
   const top = scores[0];
-  const topEvidence = payload.results[0].evidence || 'weak';
+  const topResult = payload.results[0];
+  const topEvidence = topResult.evidence || 'weak';
+
+  // Gate v2 — overlap OR separation (measured on the 9.7k-entity self-index
+  // 2026-10-19: lexical scores compress on real corpora, so pure separation
+  // silenced CORRECT top hits (sep 1.04x) while junk code entities matching
+  // one query word scored HIGHER separation (1.55x). Query-term overlap is
+  // the discriminative signal: 0.58 for the right memory, 0.06-0.08 for junk.
+  // Separation stays as the semantic path (vector-mode hits don't overlap
+  // lexically with reworded queries).
+  const MEMORY_LANES = new Set(['memory', 'belief', 'document']);
+  const overlap = termOverlap(query, topResult.content || '');
+  const MIN_OVERLAP = parseFloat(process.env.ENGRAM_RECALL_MIN_OVERLAP || '0.35');
+  const sepPass =
+    scores.length >= 2 && median > 0 && top / median >= MIN_SEP && topEvidence !== 'weak';
+  const overlapPass =
+    topEvidence !== 'weak' &&
+    (MEMORY_LANES.has(topResult.kind) || topEvidence === 'exact') &&
+    overlap >= MIN_OVERLAP;
 
   // Session packs: any real hit qualifies (it's once per session, and the
   // query is a fixed discovery probe, not a user prompt).
-  const passes = isSessionStart
-    ? scores.length >= 1
-    : scores.length >= 2 && median > 0 && top / median >= MIN_SEP && topEvidence !== 'weak';
+  const passes = isSessionStart ? scores.length >= 1 : sepPass || overlapPass;
   if (!passes) {
     heartbeat(storage, 'recall', { ok: true, gated: true, hits: payload.hit_count });
     process.exit(0); // silence beats a wrong pointer

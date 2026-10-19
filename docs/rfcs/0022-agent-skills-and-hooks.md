@@ -193,6 +193,19 @@ user prompt
       pi: extension appends the block as a context message
 ```
 
+**Gate v2 (2026-10-19, measured on the 9.7k-entity self-index): overlap
+OR separation.** The separation-only gate over-silenced on real corpora:
+lexical BM25 scores compress (the correct memory topped at sep 1.04× —
+silenced) while junk code entities matching ONE query word scored HIGHER
+separation (1.55× — would have injected). Query-term overlap is the
+discriminative signal: 0.58 for the right memory, 0.06 for junk.
+Gate v2 = (evidence ≠ weak AND (memory-lane or exact) AND overlap ≥ 0.35)
+OR (the original separation path — kept for vector-mode semantic hits,
+which don't overlap lexically with reworded queries). End-to-end on the
+real store: 2/2 relevant prompts injected the correct memory, 4/4
+irrelevant/unstored prompts stayed silent. Locked by evals
+(gate-v2 compressed-scores, junk-entity, memory-lane cases).
+
 **Why separation-based, not an absolute threshold:** measured on the live
 binary today (2026-10-18), lexical-scale fused scores barely separate
 relevant from irrelevant prompts (top 0.033 vs 0.020 — the original draft

@@ -304,3 +304,65 @@ test('version lockstep normalizes the v prefix (Windows 2026-10-18 repro)', () =
   );
   assert.match(stamper, /raw_version\[1:\]/, 'stamper strips the v prefix');
 });
+
+// ---------------------------------------------------------------- gate v2 (overlap)
+// Measured on the 9.7k-entity self-index: lexical scores compress, so pure
+// separation silenced CORRECT top hits. Gate v2 adds query-term overlap as
+// the primary signal (separation stays as the vector/semantic path).
+test('gate v2: compressed scores + high overlap still injects', () => {
+  const store = tmpStore('v2relevant');
+  // Scores compressed (sep 1.04x — separation alone would silence) but the
+  // top hit's content overlaps the query heavily.
+  const payload = recallWith(
+    [0.0325, 0.0313, 0.0312],
+    ['exact', 'exact', 'exact'],
+  );
+  const res = fire(RECALL, '{"prompt":"what are the boundary rules for core crates","cwd":"/tmp"}', {
+    ENGRAM_STORAGE: store,
+    ENGRAM_STUB_RESPONSE: JSON.stringify({
+      ok: true,
+      hit_count: 3,
+      results: [
+        { kind: 'memory', score: 0.0325, evidence: 'exact', content: 'Core boundary invariants: engram-domain and core port crates must never name an engine type or hold SQL; boundary rules enforced by scripts' },
+        { kind: 'memory', score: 0.0313, evidence: 'exact', content: 'scanner facade memory unrelated wording' },
+        { kind: 'chunk', score: 0.0312, evidence: 'exact', content: 'Boundary Rules section from docs' },
+      ],
+    }),
+  });
+  assert.equal(res.status, 0);
+  assert.ok(res.stdout.includes('UserPromptSubmit'), 'overlap path injects when scores compress');
+});
+
+test('gate v2: junk entity matching one query word stays silent', () => {
+  const store = tmpStore('v2junk');
+  const res = fire(RECALL, '{"prompt":"banana pancake recipe for breakfast","cwd":"/tmp"}', {
+    ENGRAM_STORAGE: store,
+    ENGRAM_STUB_RESPONSE: JSON.stringify({
+      ok: true,
+      hit_count: 5,
+      results: [
+        { kind: 'entity', score: 0.0481, evidence: 'keyword', content: 'pg_recipe_recall_fuses_vector_lane' },
+        { kind: 'entity', score: 0.0317, evidence: 'keyword', content: 'pg_recipe_opens_and_reports_capabilities' },
+        { kind: 'chunk', score: 0.0310, evidence: 'keyword', content: 'EngramProvider diagram text' },
+      ],
+    }),
+  });
+  assert.equal(res.status, 0);
+  assert.equal(res.stdout.trim(), '', 'junk code entity does not inject (low overlap, entity lane)');
+});
+
+test('gate v2: memory lane with moderate overlap injects, weak evidence never does', () => {
+  const store = tmpStore('v2lane');
+  const res = fire(RECALL, '{"prompt":"scanner module god module dissolved once","cwd":"/tmp"}', {
+    ENGRAM_STORAGE: store,
+    ENGRAM_STUB_RESPONSE: JSON.stringify({
+      ok: true,
+      hit_count: 2,
+      results: [
+        { kind: 'memory', score: 0.03, evidence: 'exact', content: 'scanner mod god-module dissolved into walk prepass sweep modules' },
+        { kind: 'entity', score: 0.029, evidence: 'exact', content: 'unrelated_symbol' },
+      ],
+    }),
+  });
+  assert.ok(res.stdout.includes('UserPromptSubmit'), 'memory-lane overlap injects');
+});

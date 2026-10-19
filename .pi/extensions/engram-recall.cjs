@@ -97,19 +97,37 @@ module.exports = (pi) => {
     });
   }
 
-  function gate(payload) {
+  function termOverlap(query, text) {
+    const STOP = new Set(['the','a','an','is','are','was','do','does','did','i','you','we','it','in','on','for','of','to','and','or','how','what','why','when','with','my','me','this','that','right']);
+    const norm = (s) => String(s).toLowerCase().replace(/[^a-z0-9s/-]+/g, ' ').split(/[\s/-]+/).map((w) => (w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w)).filter((w) => w.length > 2 && !STOP.has(w));
+    const q = norm(query);
+    if (q.length === 0) return 0;
+    const t = new Set(norm(text));
+    let hit = 0;
+    for (const w of q) if (t.has(w)) hit++;
+    return hit / q.length;
+  }
+
+  // Gate v2: overlap OR separation (see recall-context.cjs for the measured
+  // rationale — separation alone over-silences on real corpora).
+  function gate(payload, query) {
     if (!payload || !payload.ok || !Array.isArray(payload.results) || payload.results.length === 0) {
       return [];
     }
     const scores = payload.results.map((r) => Number(r.score) || 0).sort((a, b) => b - a);
-    if (scores.length < 2) return [];
+    if (scores.length < 1) return [];
     const median = scores[Math.floor(scores.length / 2)];
     const top = scores[0];
-    const topEvidence = payload.results[0].evidence || 'weak';
-    if (median > 0 && top / median >= 1.8 && topEvidence !== 'weak') {
-      return payload.results.slice(0, 3);
-    }
-    return [];
+    const topResult = payload.results[0];
+    const topEvidence = topResult.evidence || 'weak';
+    const MEMORY_LANES = new Set(['memory', 'belief', 'document']);
+    const overlap = termOverlap(query, topResult.content || '');
+    const sepPass = scores.length >= 2 && median > 0 && top / median >= 1.8 && topEvidence !== 'weak';
+    const overlapPass =
+      topEvidence !== 'weak' &&
+      (MEMORY_LANES.has(topResult.kind) || topEvidence === 'exact') &&
+      overlap >= 0.35;
+    return sepPass || overlapPass ? payload.results.slice(0, 3) : [];
   }
 
   function block(items) {
@@ -128,7 +146,7 @@ module.exports = (pi) => {
     const words = prompt.split(/\s+/).filter(Boolean);
     if (words.length < 3 || prompt.startsWith('/')) return;
     const payload = await recallOnce(prompt);
-    const items = gate(payload);
+    const items = gate(payload, prompt);
     if (items.length === 0) return;
     return {
       message: {

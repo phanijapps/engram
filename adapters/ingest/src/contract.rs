@@ -88,9 +88,9 @@ pub fn detect_and_parse_openapi(
     // Full parse.  A marker was found, so a parse error means malformed spec.
     let doc: OpenApiDoc = if is_yaml {
         // Safety: reject inputs with pathological anchor/alias density before
-        // handing to serde_yml (billion-laughs / stack-overflow guard).
+        // handing to serde_norway (billion-laughs / stack-overflow guard).
         check_yaml_safety(text).map_err(|e| format!("OpenAPI YAML safety check failed: {e}"))?;
-        serde_yml::from_str(text).map_err(|e| format!("OpenAPI YAML parse error: {e}"))?
+        serde_norway::from_str(text).map_err(|e| format!("OpenAPI YAML parse error: {e}"))?
     } else {
         serde_json::from_str(text).map_err(|e| format!("OpenAPI JSON parse error: {e}"))?
     };
@@ -548,7 +548,7 @@ paths:
     fn flow_nested_yaml_is_rejected() {
         // Deeply nested FLOW-style collections on a single line carry indent 0,
         // so an indent-only guard would miss them; the running flow-depth counter
-        // must reject them before serde_yml recurses into a stack-overflow abort().
+        // must reject them before the YAML parser recurses into a stack-overflow abort().
         let doc = format!("openapi: \"3.0.0\"\nx: {}\npaths: {{}}\n", "[".repeat(300));
         let result = detect_and_parse_openapi(&doc, "yaml");
         assert!(
@@ -561,7 +561,7 @@ paths:
     fn fat_base_yaml_is_rejected() {
         // One large anchored base scalar referenced by many aliases (fat-base
         // expansion); the alias count exceeds the single-digit budget → rejected
-        // before serde_yml can expand it into an OOM.
+        // before the YAML parser can expand it into an OOM.
         let big = "A".repeat(4096);
         let doc = format!(
             "openapi: \"3.0.0\"\nbase: &b \"{big}\"\nx: [*b,*b,*b,*b,*b,*b]\npaths: {{}}\n"
@@ -576,7 +576,7 @@ paths:
     #[test]
     fn compact_block_seq_yaml_is_rejected() {
         // Compact nested block sequences (`- - - - x` on one line) recurse one
-        // level per `-` in serde_yml but carry zero leading indent and no `[`/`{`
+        // level per `-` in YAML but carry zero leading indent and no `[`/`{`
         // — bypassing the flow-depth and indent checks. At 30K entries (~60 KiB)
         // the line is UNDER the byte cap, so this exercises the per-line
         // block-entry (`- `) depth cap specifically, before a stack-overflow abort().

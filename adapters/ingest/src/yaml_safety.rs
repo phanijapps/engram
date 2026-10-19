@@ -22,7 +22,7 @@ pub const YAML_MAX_LINE_BYTES: usize = 64 * 1024; // per-line cap: closes the wh
 
 /// Cheap pre-scan that rejects YAML inputs with pathological anchor/alias
 /// density, excessive block-nesting depth, or excessive flow-collection depth
-/// before handing control to the full serde_yml parser.
+/// before handing control to the full serde_norway parser.
 ///
 /// Vectors closed by this guard:
 /// - Billion-laughs (deeply nested aliases): caught by alias count cap.
@@ -45,7 +45,7 @@ pub fn check_yaml_safety(text: &str) -> Result<(), String> {
     for (i, line) in text.lines().enumerate() {
         // Per-line byte cap: a single physical line longer than this can only be
         // a pathological single-line bomb (`[[[…`, `{{{…`, or compact `- - - …`
-        // block sequences that recurse in serde_yml with zero leading indent).
+        // block sequences that recurse in serde_norway with zero leading indent).
         // Genuine multi-line block nesting stays bounded by YAML_MAX_INDENT.
         if line.len() > YAML_MAX_LINE_BYTES {
             return Err(format!(
@@ -58,7 +58,7 @@ pub fn check_yaml_safety(text: &str) -> Result<(), String> {
         // block-entry on a single physical line and carry no closing token to
         // track via flow_depth. Bound the per-line block-entry count to the same
         // depth cap, so all single-line nesting forms (`[`, `{`, `- `) are limited
-        // to YAML_MAX_FLOW_DEPTH — keeping serde_yml's recursion well within a
+        // to YAML_MAX_FLOW_DEPTH — keeping serde_norway's recursion well within a
         // rayon worker stack even for lines under the byte cap.
         let dash_entries = line.matches("- ").count();
         if dash_entries > YAML_MAX_FLOW_DEPTH {
@@ -124,7 +124,7 @@ mod tests {
     use super::*;
 
     /// A real billion-laughs bomb: the alias references (`*a`) far exceed the
-    /// single-digit alias budget, so the pre-scan rejects it before serde_yml
+    /// single-digit alias budget, so the pre-scan rejects it before serde_norway
     /// can expand it.
     #[test]
     fn yaml_bomb_is_rejected() {

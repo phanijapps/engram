@@ -12,7 +12,9 @@ of your **code + docs**, with the docs linked to the code they describe.
   **your docs**, then **connects them** (a doc section *describes* a function).
 - One SQLite file (`engram_data.db`) in **WAL** mode, so several tools can read it
   at once (the MCP, a gateway, a visualizer).
-- 28 tools the agent can call: scan, search, graph traversal, beliefs, recall, etc.
+- 21 tools the agent can call by default: scan, search, graph traversal, beliefs,
+  recall, etc. (larger surfaces via `--tools full|all` — see the
+  [argument contract](#launch--runtime-arguments-the-contract) below).
 
 ---
 
@@ -225,20 +227,92 @@ local tool that handles your code.)
 
 ---
 
-## Tools at a glance (28)
+## Launch + runtime arguments — the contract
+
+The canonical reference for everything the server accepts. Flags come from
+`mcp/engram-mcp/src/config.rs` (the parser is the source of truth; this
+table must not drift from it).
+
+### Launch flags (`engram-mcp [flags]`)
+
+| Flag | Effect | Default |
+|---|---|---|
+| `--storage <path>` | Directory holding the SQLite store(s) | **required** |
+| `--project <name>` | Project identity → `scope.workspace` (when no `--domain`) | `"default"` |
+| `--org <name>` | Organization → `scope.tenant` | `"default"` |
+| `--domain <name>` | Domain → overrides `--project` as workspace | — |
+| `--subdomain <name>` | With `--domain`: workspace becomes `domain/subdomain` | — |
+| `--ontology <path>` | Multi-layer ontology config (JSON) | baked-in default |
+| `--taxonomy <path>` | Taxonomy config (JSON) | baked-in default |
+| `--layout single\|multi` | SQLite file layout | `single` |
+| `--db-file <name>` | DB filename override | — |
+| `--tools core\|full\|all\|consolidated` | Tool profile (21 / 28 / all / 7) | `core` |
+| `--backend sqlite\|pgvector` | Engine recipe | `sqlite` |
+| `--pg-connection-string <url>` | Postgres URL (pgvector only; env `ENGRAM_PG_CONNECTION_STRING`) | — |
+| `--no-vector` | Disable the embedding lane (fast, lexical+graph only) | on with fastembed builds |
+
+**Scope rule** (`scope.rs`): `tenant = --org || "default"`;
+`workspace = --domain/--subdomain || --domain || --project`. The scope
+dimensions `subject`, `session`, and `environment` exist in the domain
+model but are **not settable from the server** — reserved for future
+per-request wiring, always `None` today.
+
+### One-shot subcommands (no MCP handshake)
+
+```
+engram-mcp recall --storage <dir> --project <p> --query "<text>" [--json] [--limit N]
+engram-mcp status --storage <dir> --project <p> [--json]
+```
+
+`recall --json` emits `{ok, hit_count, top_score, elapsed_ms, results:
+[{kind, score, source_score, lanes, evidence, title, content, path}]}`
+— the shape the launcher's recall hook consumes. Errors exit 0 with
+`{ok:false, error}` so hooks fail open.
+
+### Runtime environment variables
+
+| Variable | Used by | Effect |
+|---|---|---|
+| `ENGRAM_STORAGE` | hooks / pi extension | Store dir override |
+| `ENGRAM_PROJECT` | hooks / pi extension | Project scope override |
+| `ENGRAM_HOOKS` | hooks | `0` = kill switch (every hook exits silently) |
+| `ENGRAM_MCP_BIN` | hooks / extension | Explicit binary path override |
+| `ENGRAM_RECALL_MIN_SEP` / `_MIN_OVERLAP` | recall hook | Gate thresholds (separation / term overlap) |
+| `ENGRAM_RECALL_MAX_CHARS` / `_MAX_ITEMS` | recall hook | Injection budget caps |
+| `ENGRAM_DEDUPE_TURNS` | recall hook | Suppress same items for N turns |
+| `ENGRAM_STALE_THRESHOLD` | stale-index hook | Files-changed count that triggers the reminder |
+| `ENGRAM_PG_CONNECTION_STRING` | server (pgvector build) | Connection-string env alias for the flag |
+
+> **Known skew (tracked):** the hooks default `--project` to the *cwd
+> basename* while the server defaults to the literal `"default"` — if you
+> launch the server with `--project X` from a directory named `Y`, the
+> recall hook queries scope `Y` while the server writes scope `X`. Set
+> `ENGRAM_PROJECT` (or run from the matching directory) until the
+> server-side env fallback lands.
+
+---
+
+## Tools at a glance (default surface: 21)
+
+The default `--tools core` profile — the highest-leverage set (frequency ×
+decision-value × non-redundancy):
 
 | Group | Tools |
 |---|---|
+| Discover | `recall`, `search`, `explore`, `get_context` |
+| Code intel | `symbol_context`, `change_impact`, `architecture`, `whats_changed` |
 | Ingest | `scan_repo`, `index_docs`, `store_knowledge`, `write_memory` |
-| Recall / search | `recall`, `search`, `get_context` |
-| Graph | `graph_neighbors`, `graph_subgraph`, `resolve_entity`, `put_entity`, `put_relationship` |
-| Belief / hierarchy | `belief_get`, `belief_put`, `belief_retract`, `belief_stale_list`, `hierarchy_path` |
-| Lifecycle | `forget`, `consolidate` |
-| Code intel | `symbol_context`, `change_impact`, `code_health`, `architecture`, `whats_changed` |
-| Config | `ping`, `ontology_read`, `taxonomy_read`, `capability_report` |
+| Knowledge graph | `put_entity`, `put_relationship` |
+| Beliefs | `belief_get`, `contradiction_list` |
+| Procedures | `procedure_put`, `procedure_list` |
+| Lifecycle / health | `forget`, `graph_health` |
+| Source | `fetch_content` |
 
-Ask Claude “what tools does engram have?” or call `capability_report` to see what’s
-wired.
+Larger surfaces: `--tools full` (28 — adds maintenance tools) and
+`--tools all` (the complete granular set, including `graph_neighbors`,
+`belief_put`, `hierarchy_path`, `consolidate`, `ontology_read`, and
+friends). `--tools consolidated` is the 7-verb legacy surface. Ask your
+agent “what tools does engram have?” to see what's wired.
 
 ---
 

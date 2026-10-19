@@ -55,7 +55,10 @@ fn main() {
              [--org <name> --domain <name> [--subdomain <name>]] \
              [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
              [--db-file <name>] [--backend sqlite|pgvector] \
-             [--pg-connection-string <url>] [--tools core|full|all|consolidated] [--no-vector]"
+             [--pg-connection-string <url>] \
+             [--tools core|full|all|consolidated] [--no-vector|--vector] \
+             one-shot: engram-mcp recall --query <text> [--json] [--limit N] | status [--json] \
+             (full contract: mcp/engram-mcp/HOW-TO.md#launch--runtime-arguments--the-contract)"
         );
         std::process::exit(2);
     });

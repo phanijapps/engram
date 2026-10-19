@@ -203,10 +203,13 @@ fn trace_reports_best_contributor_not_first_arriving() {
 }
 
 #[test]
-fn trace_source_score_falls_back_to_contribution_when_lane_unset() {
+fn trace_source_score_stays_none_when_lane_unset() {
     // When a source never sets a raw `source_score` pre-fusion (None), the
-    // fuser falls back to the best RRF contribution so the field is still
-    // populated (preserves the pre-raw-preservation observable behavior).
+    // fuser must keep it None. Substituting the RRF contribution term
+    // (weight/(k+rank), ≈0.016 at k=60) would fabricate a "raw" lane-scale
+    // score — renderers and gates could not tell "lane reported nothing"
+    // from "matched at 0.016" (red-forman defect #2, 2026-10-19; the old
+    // fallback behavior this test used to pin is deliberately retracted).
     let mut cand = result("vector-1", "Y", 0.0, "vector");
     // Strip the raw score the fixture set so the candidate carries None.
     if let Some(t) = cand.fusion_trace.as_mut() {
@@ -216,10 +219,10 @@ fn trace_source_score_falls_back_to_contribution_when_lane_unset() {
         .fuse(&request(None), vec![cand])
         .expect("fuse");
     let trace = fused[0].fusion_trace.as_ref().expect("trace");
-    let expected_contrib = 1.0 / (60.0 + 1.0);
     assert!(
-        (trace.source_score.unwrap_or(-1.0) - expected_contrib).abs() < 1e-9,
-        "source_score falls back to best contribution when raw unset"
+        trace.source_score.is_none(),
+        "source_score must stay None when no lane set a raw score, got {:?}",
+        trace.source_score
     );
 }
 

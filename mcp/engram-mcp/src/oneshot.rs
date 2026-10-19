@@ -332,7 +332,7 @@ fn run_status(argv: &[String]) -> i32 {
         0
     } else {
         let indexed = last_index_at
-            .map(|ts| chrono_like_utc(ts))
+            .map(chrono_like_utc)
             .unwrap_or_else(|| "never".to_owned());
         println!("project:       {}", config.project);
         println!("last index:    {indexed}");

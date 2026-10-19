@@ -54,6 +54,107 @@ pub const ENGRAM_VERSION: &str = match option_env!("ENGRAM_BUILD_VERSION") {
     None => env!("CARGO_PKG_VERSION"),
 };
 
+/// The launch-flag surface, in one list. Feeds TWO tests so nothing can
+/// drift: `config::tests::launch_flag_surface_is_pinned` parses every
+/// entry, and `help_text_covers_the_contract_flags` asserts each appears
+/// in `HELP_TEXT`. Adding a flag without updating both (and HOW-TO.md)
+/// fails the build.
+pub const CONTRACT_FLAGS: &[&str] = &[
+    "--storage",
+    "--project",
+    "--org",
+    "--domain",
+    "--subdomain",
+    "--ontology",
+    "--taxonomy",
+    "--layout",
+    "--db-file",
+    "--tools",
+    "--backend",
+    "--pg-connection-string",
+    "--no-vector",
+    "--vector",
+];
+
+/// The full launch-argument contract (mirrors HOW-TO.md). `--help` prints
+/// this; the membership test keeps it in lockstep with CONTRACT_FLAGS.
+const HELP_TEXT: &str = r#"engram-mcp — local-first agentic knowledge & memory layer (MCP server)
+
+USAGE
+  engram-mcp [flags]                    start the stdio MCP server
+  engram-mcp recall --query <text> [...]  one-shot recall (no handshake)
+  engram-mcp status [...]               one-shot store status
+
+LAUNCH FLAGS
+  --storage <path>            Store directory (required; env ENGRAM_STORAGE)
+  --project <name>            Project identity → scope.workspace
+                              (default "default"; env ENGRAM_PROJECT)
+  --org <name>                Organization → scope.tenant (default "default")
+  --domain <name>             Domain → overrides --project as workspace
+  --subdomain <name>          With --domain: workspace = domain/subdomain
+  --ontology <path>           Multi-layer ontology config (JSON)
+  --taxonomy <path>           Taxonomy config (JSON)
+  --layout single|multi       SQLite file layout (default single)
+  --db-file <name>            DB filename override
+  --tools core|full|all|consolidated   Tool profile (default core = 21 tools)
+  --backend sqlite|pgvector   Engine recipe (default sqlite)
+  --pg-connection-string <url> Postgres URL (pgvector; env ENGRAM_PG_CONNECTION_STRING)
+  --no-vector                 Disable the embedding lane
+  --vector                    Enable the embedding lane (default with fastembed)
+
+ONE-SHOT SUBCOMMANDS
+  recall  --query <text> [--json] [--limit N]   (also honors --storage/--project)
+  status  [--json]                              (also honors --storage/--project)
+
+SCOPE RULE
+  tenant    = --org || "default"
+  workspace = --domain/--subdomain || --domain || --project
+  Precedence for storage/project: flag > environment > default.
+
+FULL CONTRACT
+  mcp/engram-mcp/HOW-TO.md § "Launch + runtime arguments — the contract"
+"#;
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+
+    /// Drift mitigation (spec cli-help-version): every flag the parser
+    /// accepts (CONTRACT_FLAGS, which the config surface-pin test parses)
+    /// must appear in HELP_TEXT. A new flag that misses either the help
+    /// output or the list fails the build.
+    #[test]
+    fn help_text_covers_the_contract_flags() {
+        for flag in CONTRACT_FLAGS {
+            assert!(
+                HELP_TEXT.contains(flag),
+                "HELP_TEXT is missing contract flag {flag} — the help output has                  drifted from the parser surface; update HELP_TEXT (and HOW-TO.md)"
+            );
+        }
+        for sub in ["recall", "status"] {
+            assert!(
+                HELP_TEXT.contains(sub),
+                "HELP_TEXT missing subcommand {sub}"
+            );
+        }
+    }
+
+    #[test]
+    fn version_line_is_the_single_constant() {
+        assert_eq!(
+            format!("{ENGRAM_VERSION}\n"),
+            format!("{}\n", ENGRAM_VERSION)
+        );
+        // Non-empty and semver-shaped (digits.digits... possibly -suffix).
+        assert!(
+            ENGRAM_VERSION
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_digit())
+        );
+    }
+}
+
 fn main() {
     let argv: Vec<String> = std::env::args().skip(1).collect();
 
@@ -62,6 +163,18 @@ fn main() {
     // the recall-on-submit and stale-index hooks.
     if oneshot::is_oneshot(&argv) {
         std::process::exit(oneshot::run(&argv));
+    }
+
+    // Help/version: recognized anywhere in the flags, exit before parsing
+    // or server start — stdout stays JSON-RPC-only once serving. (The
+    // one-shot subcommands handle their own --help above.)
+    if argv.iter().any(|a| a == "--help" || a == "-h") {
+        print!("{HELP_TEXT}");
+        std::process::exit(0);
+    }
+    if argv.iter().any(|a| a == "--version" || a == "-V") {
+        println!("{ENGRAM_VERSION}");
+        std::process::exit(0);
     }
 
     let config = config::McpConfig::from_args(&argv).unwrap_or_else(|message| {

@@ -795,6 +795,31 @@ fn shorten_repo_label(label: &str) -> &str {
         .unwrap_or(label)
 }
 
+/// True when the query names a FILE PATH rather than a concept: it contains a
+/// path separator or ends in a known code/doc extension. Such a query is a
+/// precise ask ("where is src/orders.rs?"), not discovery — so `search`
+/// auto-includes the suppressed code-artifact classes (File/Module) for it
+/// instead of returning nothing. Everything else keeps the suppression
+/// default (reproduced regression: file-as-query accuracy 100% → 0% under
+/// default suppression; restored by this rule without weakening it).
+fn is_path_shaped_query(query: &str) -> bool {
+    let q = query.trim();
+    if q.is_empty() || q.len() > 512 {
+        return false;
+    }
+    if q.contains('/') || q.contains('\\') {
+        return true;
+    }
+    const EXTENSIONS: &[&str] = &[
+        "rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "rb", "java", "kt", "kts",
+        "scala", "swift", "c", "h", "cpp", "hpp", "cc", "cxx", "cs", "csx", "php", "pl", "pm",
+        "sh", "bash", "sql", "css", "html", "json", "yaml", "yml", "toml", "md", "markdown", "txt",
+    ];
+    q.rsplit_once('.')
+        .map(|(_, ext)| EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
 /// True when a resolved source path looks like a test artifact: a `tests` /
 /// `test` / `__tests__` / `__mocks__` path segment, a file whose stem starts
 /// `test_` or ends `_test`, or JS test suffixes (`.test.`, `.spec.`).
@@ -1330,8 +1355,11 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
     // include_code_artifacts (default false): Variable/Module/File/Repository
     // entities (import-path stubs, file stubs) are suppressed from ranked
     // results unless explicitly opted in. They keep participating in the
-    // graph (seeds, walk, edges, community structure) either way.
-    let include_code_artifacts = args["include_code_artifacts"].as_bool().unwrap_or(false);
+    // graph (seeds, walk, edges, community structure) either way. Exception:
+    // a PATH-SHAPED query ("src/orders.rs") is a precise file ask, not
+    // discovery — artifacts auto-include for it (see is_path_shaped_query).
+    let include_code_artifacts =
+        args["include_code_artifacts"].as_bool().unwrap_or(false) || is_path_shaped_query(query);
     let filters = engram_domain::QueryFilter {
         memory_kinds: Vec::new(),
         source_kinds: Vec::new(),
@@ -3378,6 +3406,31 @@ mod tests {
             "alpha score unchanged (was 0.05, no 1.0 floor)"
         );
         assert_eq!(hits[0].source_score, Some(0.41), "raw lane score preserved");
+    }
+
+    #[test]
+    fn path_shaped_queries_are_recognized_precisely() {
+        for q in [
+            "src/orders.rs",
+            "apps/ui/src/lib.rs",
+            "payments.ts",
+            "schema.json",
+            "README.md",
+            "windows\\path\\kinds.rs",
+        ] {
+            assert!(is_path_shaped_query(q), "{q:?} should be path-shaped");
+        }
+        // Concepts stay suppressed: no separator, no code extension.
+        for q in [
+            "charge card",
+            "run",
+            "node.js framework discussion",
+            "3.14",
+            "",
+            "e.g.",
+        ] {
+            assert!(!is_path_shaped_query(q), "{q:?} must NOT be path-shaped");
+        }
     }
 
     #[test]

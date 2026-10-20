@@ -1641,6 +1641,20 @@ pub(crate) mod tests {
             );
         }
 
+        // File-as-query: a PATH-SHAPED query auto-includes artifacts — the
+        // reproduced regression (source-of-symbol accuracy 100% -> 0% under
+        // default suppression) must stay fixed without the flag.
+        let res = crate::codegraph::search(
+            &app,
+            &json!({ "query": "src/main.rs", "diagnostics": true }),
+        )
+        .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("src/main.rs") && (body.contains("(File)") || body.contains("(Module)")),
+            "path-shaped query must surface the file artifact by default: {body}"
+        );
+
         // Opt-in: artifacts return (exact-name injection re-admits them).
         let res = crate::codegraph::search(
             &app,

@@ -12,6 +12,7 @@ mod ports;
 mod predict;
 mod reciprocal;
 mod router;
+mod tokens;
 mod vector_index;
 mod weighted;
 
@@ -26,5 +27,6 @@ pub use ports::{ContextComposer, RetrievalFusion, RetrievalIndex, RetrievalReran
 pub use predict::{AgentState, PredictiveRetriever, RecentActivityPredictor, RetrievalHints};
 pub use reciprocal::{DEFAULT_RRF_K, ReciprocalRankFusion};
 pub use router::{RetrievalRoute, RetrievalRouteMode, RetrievalRouter, RoutedRetrieval};
+pub use tokens::query_tokens;
 pub use vector_index::VectorIndex;
 pub use weighted::WeightedRetrievalFusion;

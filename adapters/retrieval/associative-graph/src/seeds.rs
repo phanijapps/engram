@@ -24,14 +24,9 @@ use std::collections::HashSet;
 /// (matching many entity names). A token-length floor is a tuning concern for
 /// the wiring slice, not this adapter unit.
 pub fn resolve_seeds(query: &str, entities: &[(String, String)]) -> Vec<String> {
-    let tokens: Vec<String> = query
-        .split_whitespace()
-        .map(|t| {
-            t.trim_matches(|c: char| !c.is_alphanumeric())
-                .to_ascii_lowercase()
-        })
-        .filter(|t| !t.is_empty())
-        .collect();
+    // Shared heuristic-lane token policy (function words + 1-char tokens
+    // dropped): "how to" must not seed Tokenizer via the "to" substring.
+    let tokens = engram_retrieval::query_tokens(query);
     if tokens.is_empty() {
         return Vec::new();
     }
@@ -77,6 +72,18 @@ mod tests {
         let entities = vec![pair("e", "engram")];
         let seeds = resolve_seeds("eng", &entities);
         assert_eq!(seeds, vec!["e".to_string()]);
+    }
+
+    #[test]
+    fn audit_stopword_tokens_do_not_seed_via_containment() {
+        // AUDIT 2026-10-20 (search-quality): "how to" seeded Tokenizer —
+        // "to" is a substring of "Tokenizer". Function words and 1-char
+        // tokens must not drive containment seeding.
+        let entities = vec![pair("k", "Tokenizer"), pair("c", "CompostHeap")];
+        assert!(resolve_seeds("how to", &entities).is_empty());
+        assert!(resolve_seeds("a b c", &entities).is_empty());
+        // Real tokens still seed.
+        assert_eq!(resolve_seeds("tokenizer", &entities), vec!["k".to_string()]);
     }
 
     #[test]

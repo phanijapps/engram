@@ -1920,6 +1920,7 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
     // Legacy single-string path: preserve the dependency-path option.
     if targets.len() == 1 && args["target"].is_string() {
         let seeds = resolve_seeds(&names, &targets[0]);
+        let unresolved_note = seed_resolution_note(&names, &targets[0], &seeds);
         let radii: Vec<engram_codegraph_queries::BlastRadiusBounded> = seeds
             .iter()
             .map(|s| engram_codegraph_queries::blast_radius_bounded(&rels, s, depth, cap))
@@ -1933,7 +1934,7 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
             engram_codegraph_queries::dependency_path(&rels, &from, &to_resolved)
         });
         return Ok(protocol::text_content(format!(
-            "Blast radius ({depth} hops, cap {cap}): {radius:?}\nDependency path: {path:?}"
+            "Blast radius ({depth} hops, cap {cap}): {radius:?}{unresolved_note}\nDependency path: {path:?}"
         )));
     }
 
@@ -1942,13 +1943,14 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
     let mut sections = Vec::with_capacity(targets.len());
     for target in &targets {
         let seeds = resolve_seeds(&names, target);
+        let unresolved_note = seed_resolution_note(&names, target, &seeds);
         let radii: Vec<engram_codegraph_queries::BlastRadiusBounded> = seeds
             .iter()
             .map(|s| engram_codegraph_queries::blast_radius_bounded(&rels, s, depth, cap))
             .collect();
         let radius = union_blast_radius(radii);
         sections.push(format!(
-            "=== change_impact: {target} (depth={depth}, cap {cap}) ===\nBlast radius: {radius:?}"
+            "=== change_impact: {target} (depth={depth}, cap {cap}) ===\nBlast radius: {radius:?}{unresolved_note}"
         ));
     }
     Ok(protocol::text_content(sections.join("\n\n")))
@@ -1957,6 +1959,26 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// Resolve `query` to its first matching qualified name, falling back to
 /// `fallback` (the bare query) when no entity matches. Used by `change_impact`'s
 /// dependency-path lookup, which needs a single endpoint rather than a union.
+/// Disclosure for `change_impact` targets that resolved to no ENTITY: the
+/// radius is computed over unresolved call references matching the bare
+/// name — real call sites, but not a symbol's resolved neighborhood. Making
+/// that distinction visible keeps bare-name queries ("run", "new") honest
+/// for evals and agents instead of silently returning a reference-graph
+/// union that looks like a symbol's blast radius.
+fn seed_resolution_note(entity_names: &[String], target: &str, seeds: &[String]) -> String {
+    let matched_entity = resolve_symbol_names(entity_names, target);
+    if !matched_entity.is_empty() {
+        return String::new();
+    }
+    if seeds.len() == 1 && seeds[0] == target {
+        format!(
+            "\n[note: no indexed entity named {target:?} — radius is over unresolved call references with that bare name]"
+        )
+    } else {
+        String::new()
+    }
+}
+
 fn names_first_match(entity_names: &[String], query: &str, fallback: &str) -> String {
     resolve_symbol_names(entity_names, query)
         .into_iter()
@@ -4557,6 +4579,27 @@ mod tests {
             resolve_symbol_names(&["my-repo/x.rs::parse_symbol_x".to_owned()], "parse_symbol")
                 .is_empty()
         );
+    }
+
+    #[test]
+    #[test]
+    fn seed_resolution_note_discloses_unresolved_bare_targets() {
+        let names = vec![
+            "PluginService::delete_secret".to_owned(),
+            "overrun_counter".to_owned(),
+        ];
+        // Bare target with no entity: disclosure fires.
+        let seeds = resolve_seeds(&names, "run");
+        assert!(seed_resolution_note(&names, "run", &seeds).contains("no indexed entity"));
+        // Exact/qualified target: silent (resolved neighborhood).
+        let seeds = resolve_seeds(&names, "PluginService::delete_secret");
+        assert_eq!(
+            seed_resolution_note(&names, "PluginService::delete_secret", &seeds),
+            ""
+        );
+        // Bare tail of a qualified name resolves: silent.
+        let seeds = resolve_seeds(&names, "delete_secret");
+        assert_eq!(seed_resolution_note(&names, "delete_secret", &seeds), "");
     }
 
     #[test]

@@ -1,7 +1,18 @@
 //! Code-symbol noise filter (moved from `adapters/ingest/src/extractor.rs`,
-//! RFC-0020 Phase 1). Shared by entity emission and call extraction so
-//! unknown-but-plausible callees reach the resolution ledger while bare
-//! generics (`new`, `clone`, `len`, …) never do.
+//! RFC-0020 Phase 1). Two policies live here — they look similar but answer
+//! different questions:
+//!
+//! * [`is_noise_declaration`] — is this DECLARED symbol name garbage? Used at
+//!   entity emission. Deliberately permissive: leading `_` (Python/Rust/JS
+//!   private-by-convention helpers, `__init__`) and `$` (JS/framework names)
+//!   are legal identifier shapes carrying real logic, and bare generics
+//!   (`new`, `run`, `String`) are kept because qualified identities
+//!   (`Foo::new`, RFC-0020 Phase 2) disambiguate them across receivers.
+//! * [`is_noise_symbol`] — is this unknown CALLEE name too generic to be worth
+//!   a ledger entry? Bare generics (`new`, `clone`, `len`, …) collide across
+//!   every crate and would flood the unresolved-refs ledger, so they are
+//!   dropped here — but a callee that IS declared resolves normally before
+//!   this filter is consulted (the caller checks `entity_names` first).
 
 /// Reject entities that aren't real concepts — punctuation tokens, single-char
 /// symbols, code-block delimiters, common type annotations, YAML keys.
@@ -108,11 +119,44 @@ fn is_noise_concept(name: &str) -> bool {
     false
 }
 
+/// Rejects DECLARED symbol names that are garbage — empty, punctuation-only,
+/// or starting with a character no identifier grammar allows (a digit, or
+/// punctuation other than `_` / `$`).
+///
+/// This is the entity-emission policy (the noise half of the RFC-0020 Phase 1
+/// filter split): it must NOT drop real declarations. Leading `_` (Python
+/// `_helper`, `__init__`, Rust `_unused`) and `$` (JS `$apply`, framework
+/// names) are private-by-convention, not noise, and bare generics (`new`,
+/// `run`, `String`) are kept — their qualified identities disambiguate them,
+/// and dropping them erased entire constructor/interface surfaces (Rust
+/// `Type::new`, Go `Read`/`Write`/`String`/`Error` — reproduced in
+/// `adapters/ingest/tests/audit_symbol_name_survival.rs`).
+///
+/// Returns true = "this declaration is noise, skip it."
+pub fn is_noise_declaration(name: &str) -> bool {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    // Must contain at least one alphanumeric char (reject punctuation-only
+    // tokens like "..." / "###" / "->").
+    if !trimmed.chars().any(|c| c.is_alphanumeric()) {
+        return true;
+    }
+    // Leading char: letters (any script), `_`, or `$` are identifier shapes.
+    // A leading digit (`123abc`) or any other punctuation (`@foo`, `#foo`)
+    // is garbage in every identifier grammar we ingest.
+    !trimmed.starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$')
+}
+
 /// Rejects code-symbol names that are too generic to be useful graph nodes —
 /// language primitives and ubiquitous one-word methods (`new`, `clone`, `len`,
 /// `fmt`, …) that, as bare names, collide across every crate and become massive
 /// cross-cutting hubs with no stable identity (RFC-0020 Phase 1).
 ///
+/// This is the unknown-CALLEE policy: applied to callee names only AFTER a
+/// declared-entity lookup misses, so a repo that declares one of these
+/// resolves normally and only the unresolved-ledger entry is skipped.
 /// Tuned for CODE, so unlike [`is_noise_concept`] it does NOT reject short
 /// names — `tx`, `db`, `id`, `kv` are meaningful identifiers in code. Only the
 /// bare-generic set is blocked. This is the pre-qualified-identity filter: once
@@ -126,11 +170,15 @@ pub fn is_noise_symbol(name: &str) -> bool {
     if lower.is_empty() {
         return true;
     }
-    // Punctuation-only / non-alphanumeric / non-alpha-leading sanity.
+    // Punctuation-only / non-alphanumeric sanity.
     if !lower.chars().any(|c| c.is_alphanumeric()) {
         return true;
     }
-    if !lower.starts_with(|c: char| c.is_alphabetic()) {
+    // Leading char must be an identifier shape (letter, `_`, or `$`) — same
+    // rule as [`is_noise_declaration`]. Historically this rejected every
+    // leading-underscore callee (`_helper`), erasing cross-file private-helper
+    // references from the resolution ledger.
+    if !lower.starts_with(|c: char| c.is_alphabetic() || c == '_' || c == '$') {
         return true;
     }
     // Bare-generic names. Primitives/type words first, then the ubiquitous
@@ -284,6 +332,48 @@ mod tests {
         assert!(!is_noise_symbol("parse_config"));
         assert!(!is_noise_symbol("SymbolIndex"));
         assert!(!is_noise_symbol("scan_repository"));
+    }
+
+    #[test]
+    fn declaration_policy_keeps_private_and_generic_declarations() {
+        // Leading underscore: Python/Rust/JS private helpers are real logic.
+        assert!(!is_noise_declaration("_tokens"));
+        assert!(!is_noise_declaration("_check_review"));
+        assert!(!is_noise_declaration("__init__"));
+        // Leading `$`: JS/framework identifier convention.
+        assert!(!is_noise_declaration("$apply"));
+        // Bare generics are kept as declarations (qualified identities
+        // disambiguate): constructors, entrypoints, interface impls.
+        assert!(!is_noise_declaration("new"));
+        assert!(!is_noise_declaration("String"));
+        assert!(!is_noise_declaration("run"));
+        // Unicode identifiers are legal letters.
+        assert!(!is_noise_declaration("名前を返す"));
+        // Trailing punctuation shapes stay declarations (Ruby ?/!, Haskell ').
+        assert!(!is_noise_declaration("save!"));
+        assert!(!is_noise_declaration("valid?"));
+        assert!(!is_noise_declaration("foo'"));
+    }
+
+    #[test]
+    fn declaration_policy_rejects_garbage() {
+        assert!(is_noise_declaration(""));
+        assert!(is_noise_declaration("   "));
+        assert!(is_noise_declaration("..."));
+        assert!(is_noise_declaration("###"));
+        assert!(is_noise_declaration("123abc"));
+        assert!(is_noise_declaration("->"));
+        assert!(is_noise_declaration("@decorator"));
+    }
+
+    #[test]
+    fn callee_policy_keeps_underscore_and_dollar_callees() {
+        // Unknown `_`/`$` callees must reach the resolution ledger (they are
+        // plausibly cross-file private helpers), while bare generics stay
+        // dropped (a declared `new` resolves before this filter runs).
+        assert!(!is_noise_symbol("_helper"));
+        assert!(!is_noise_symbol("$apply"));
+        assert!(is_noise_symbol("new"));
     }
 
     #[test]

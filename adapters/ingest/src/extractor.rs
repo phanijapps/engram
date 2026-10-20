@@ -147,9 +147,11 @@ impl GraphExtractor {
                 };
                 // RFC-0020 Phase 2: `name` is the receiver-qualified logical
                 // name (`Foo::bar`) when the declaration is nested, bare at
-                // top level. Noise filtering applies to the bare tail.
+                // top level. Declaration noise policy (leading-underscore /
+                // bare-generic declarations are REAL symbols — see
+                // `is_noise_declaration`) applies to the bare tail.
                 let bare = engram_code::bare_tail(&name).unwrap_or(&name).to_owned();
-                if bare.is_empty() || engram_code::is_noise_symbol(&bare) {
+                if bare.is_empty() || engram_code::is_noise_declaration(&bare) {
                     continue;
                 }
                 symbols.push((name, bare, kind, chunk.text.clone(), chunk_idx));

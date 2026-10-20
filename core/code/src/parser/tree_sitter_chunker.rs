@@ -372,6 +372,43 @@ fn walk_declarations_with_receivers(
     chunks: &mut Vec<ChunkCandidate>,
 ) {
     let kind = node.kind();
+    // TS/JS function-valued bindings: `const QuickEdit = (props) => ...` or
+    // `const f = function () { ... }`. The arrow_function / function_expression
+    // value node has NO `name` field, so the generic declaration path below
+    // can never emit it — the `arrow_function` kind-map entry alone was dead
+    // code. Resolve the declaration name from the enclosing
+    // variable_declarator and emit the function under that name.
+    if kind == "variable_declarator" {
+        if let (Some(name_node), Some(value_node)) = (
+            node.child_by_field_name("name"),
+            node.child_by_field_name("value"),
+        ) {
+            let is_function_value = kind_map
+                .get(value_node.kind())
+                .is_some_and(|kw| *kw == "function");
+            if is_function_value {
+                let name_text = extract_name(&name_node, source);
+                if !name_text.is_empty() {
+                    push_declaration_chunk(
+                        node, source, "function", &name_text, receivers, kind_map, chunks,
+                    );
+                    let mut child_receivers = receivers.to_vec();
+                    child_receivers.push(name_text);
+                    let mut cursor = node.walk();
+                    for child in node.named_children(&mut cursor) {
+                        walk_declarations_with_receivers(
+                            &child,
+                            source,
+                            kind_map,
+                            &child_receivers,
+                            chunks,
+                        );
+                    }
+                    return;
+                }
+            }
+        }
+    }
     if let Some(keyword) = kind_map.get(kind) {
         // Try the `name` field first (works for most languages).
         let name_node = node
@@ -381,52 +418,9 @@ fn walk_declarations_with_receivers(
         if let Some(name_node) = name_node {
             let name_text = extract_name(&name_node, source);
             if !name_text.is_empty() {
-                let start_line = (node.start_position().row + 1) as u32;
-                let end_line = (node.end_position().row + 1) as u32;
-                // A container (e.g. a class with method children) emits empty
-                // text — the entity is created from the anchor, but the
-                // multi-thousand-line body is never embedded. Empty-text chunks
-                // are skipped by the embedder (scan_repo filters them) and by
-                // every retrieval lane, so they are graph-only anchors.
-                // T9: code-symbol chunks carry their doc comment +
-                // signature for the lexical lane. Containers (whose whole
-                // body would bloat embeddings) get a SYNTHESIZED small text
-                // — docstring + signature line — instead of empty text, so
-                // they are lexically searchable; leaves prepend the doc
-                // comment to their full body.
-                let doc = leading_doc_comment(node, source);
-                let signature = signature_line(node, source);
-                let text = if has_declaration_descendant(node, kind_map) {
-                    match (&doc, signature.is_empty()) {
-                        (Some(d), _) => format!("{d}\n{signature}"),
-                        (None, true) => String::new(),
-                        (None, false) => signature,
-                    }
-                } else {
-                    match &doc {
-                        Some(d) => format!("{d}\n{}", node.utf8_text(source).unwrap_or("")),
-                        None => node.utf8_text(source).unwrap_or("").to_owned(),
-                    }
-                };
-                // Receiver-qualified anchor: `fn Foo::bar` inside `impl Foo`,
-                // bare `fn parse` at the top level.
-                let qualified = if receivers.is_empty() {
-                    name_text.clone()
-                } else {
-                    format!("{}::{}", receivers.join("::"), name_text)
-                };
-                chunks.push(ChunkCandidate {
-                    kind: KnowledgeChunkKind::CodeSymbol,
-                    text,
-                    location: Some(SourceLocation {
-                        path: None,
-                        start_line: Some(start_line),
-                        end_line: Some(end_line),
-                        start_offset: None,
-                        end_offset: None,
-                        anchor: Some(format!("{keyword} {qualified}")),
-                    }),
-                });
+                push_declaration_chunk(
+                    node, source, keyword, &name_text, receivers, kind_map, chunks,
+                );
                 // Children of this declaration descend with it on the
                 // receiver chain (its bare name, not the qualified form).
                 let mut child_receivers = receivers.to_vec();
@@ -450,6 +444,66 @@ fn walk_declarations_with_receivers(
     for child in node.named_children(&mut cursor) {
         walk_declarations_with_receivers(&child, source, kind_map, receivers, chunks);
     }
+}
+
+/// Emits one declaration chunk for `node` under `name_text` (anchor
+/// `"{keyword} {qualified}"`, with the container/leaf text rules). Shared by
+/// the generic declaration path and the TS/JS `variable_declarator` path —
+/// identical text synthesis, only the name resolution differs.
+fn push_declaration_chunk(
+    node: &tree_sitter::Node,
+    source: &[u8],
+    keyword: &str,
+    name_text: &str,
+    receivers: &[String],
+    kind_map: &HashMap<&str, &str>,
+    chunks: &mut Vec<ChunkCandidate>,
+) {
+    let start_line = (node.start_position().row + 1) as u32;
+    let end_line = (node.end_position().row + 1) as u32;
+    // A container (e.g. a class with method children) emits empty text — the
+    // entity is created from the anchor, but the multi-thousand-line body is
+    // never embedded. Empty-text chunks are skipped by the embedder
+    // (scan_repo filters them) and by every retrieval lane, so they are
+    // graph-only anchors.
+    // T9: code-symbol chunks carry their doc comment + signature for the
+    // lexical lane. Containers (whose whole body would bloat embeddings) get
+    // a SYNTHESIZED small text — docstring + signature line — instead of
+    // empty text, so they are lexically searchable; leaves prepend the doc
+    // comment to their full body.
+    let doc = leading_doc_comment(node, source);
+    let signature = signature_line(node, source);
+    let text = if has_declaration_descendant(node, kind_map) {
+        match (&doc, signature.is_empty()) {
+            (Some(d), _) => format!("{d}\n{signature}"),
+            (None, true) => String::new(),
+            (None, false) => signature,
+        }
+    } else {
+        match &doc {
+            Some(d) => format!("{d}\n{}", node.utf8_text(source).unwrap_or("")),
+            None => node.utf8_text(source).unwrap_or("").to_owned(),
+        }
+    };
+    // Receiver-qualified anchor: `fn Foo::bar` inside `impl Foo`, bare
+    // `fn parse` at the top level.
+    let qualified = if receivers.is_empty() {
+        name_text.to_owned()
+    } else {
+        format!("{}::{}", receivers.join("::"), name_text)
+    };
+    chunks.push(ChunkCandidate {
+        kind: KnowledgeChunkKind::CodeSymbol,
+        text,
+        location: Some(SourceLocation {
+            path: None,
+            start_line: Some(start_line),
+            end_line: Some(end_line),
+            start_offset: None,
+            end_offset: None,
+            anchor: Some(format!("{keyword} {qualified}")),
+        }),
+    });
 }
 
 /// Contiguous comment lines immediately above a declaration (up to 5):
@@ -649,8 +703,16 @@ fn collect_calls_and_spans(
 /// qualified/method-call expressions (`receiver.method`, `Type::method`).
 fn extract_name(node: &tree_sitter::Node, source: &[u8]) -> String {
     let text = node.utf8_text(source).unwrap_or("").trim().to_owned();
-    // For simple identifiers, the text IS the name.
-    if text.chars().all(|c| c.is_alphanumeric() || c == '_') {
+    // For simple identifiers, the text IS the name. Identifier shapes include
+    // language-convention punctuation that is PART of the name: leading `_`
+    // (private-by-convention), `$` (JS/framework names), trailing `!`/`?`
+    // (Ruby bang/predicate methods), `'` (Haskell/ML primes). Keeping them
+    // verbatim preserves distinct identities (`save!` ≠ `save`); the lexical
+    // lane normalizes stems separately, so search still works.
+    if text
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '$' | '\'' | '!' | '?'))
+    {
         return text;
     }
     // For qualified/method-call expressions (receiver.method, Type::method,
@@ -740,8 +802,12 @@ fn ts_kinds() -> HashMap<&'static str, &'static str> {
         // React functional components and Redux action creators use arrow functions
         // assigned to const/let — e.g. `const QuickEdit = (props) => { ... }`.
         // These are lexical_declaration → variable_declarator → arrow_function in
-        // the tree-sitter AST and are invisible without this entry.
+        // the tree-sitter AST. The value node carries no name field, so the
+        // walk resolves the binding's identifier from the variable_declarator
+        // (see `walk_declarations_with_receivers`); `function_expression`
+        // values (`const f = function () {}`) take the same path.
         ("arrow_function", "function"),
+        ("function_expression", "function"),
         ("generator_function_declaration", "function"),
         ("enum_declaration", "enum"),
     ]

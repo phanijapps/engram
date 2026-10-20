@@ -104,8 +104,10 @@ export function isNoiseConcept(name: string): boolean {
   if (TYPE_NOISE.has(lower)) return true;
   // Reject "key: value" patterns (YAML/TOML keys like "type: string").
   if (name.includes(":") && name.split(":").length === 2) return true;
-  // Reject if it starts with a non-alpha char (likely code noise).
-  if (!/^[A-Za-z]/.test(name)) return true;
+  // Reject if it starts with a char no identifier grammar allows. Leading
+  // `_` (and `$`) are private-by-convention identifier shapes, not noise —
+  // mirrors the Rust declaration policy (`is_noise_declaration`).
+  if (!/^[_$A-Za-z\p{L}]/u.test(name)) return true;
   return false;
 }
 

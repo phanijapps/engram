@@ -18,7 +18,7 @@ pub mod resolution;
 pub use edges::{StructuralEdges, contains_pairs};
 pub use frameworks::{FrameworkFacts, RouteFact, extract_frameworks};
 pub use identity::{Resolution, SymbolCandidate, SymbolIndex, bare_tail, qualified_name};
-pub use noise::is_noise_symbol;
+pub use noise::{is_noise_declaration, is_noise_symbol};
 pub use parser::chunking::{ChunkCandidate, Chunker};
 pub use parser::code_symbol::CodeSymbolChunker;
 pub use parser::tree_sitter_chunker::TreeSitterChunker;

@@ -769,13 +769,16 @@ fn shorten_repo_label(label: &str) -> &str {
 fn name_matches_query(name: &str, query: &str) -> bool {
     let n = name.trim().to_ascii_lowercase();
     let q = query.trim().to_ascii_lowercase();
-    // Guard: query too short, name too short/empty → no match.
-    if q.len() < 3 || n.len() < 3 || n.is_empty() {
-        return false;
-    }
-    // Exact: query IS the identifier.
+    // Exact identifier match is always allowed, regardless of length: the
+    // code-symbol noise policy deliberately keeps short real symbols (`db`,
+    // `id`, `tx`), and an exact equality cannot flood — it names one symbol.
+    // (The 3-char floor below stays for SUBSTRING matching only.)
     if n == q {
         return true;
+    }
+    // Guard: query too short, name too short/empty → no substring match.
+    if q.len() < 3 || n.len() < 3 || n.is_empty() {
+        return false;
     }
     // Name contains the query (short query → longer identifier).
     // e.g., query "login" → name "loginAnthropic".
@@ -3130,9 +3133,16 @@ mod tests {
         // Name contains the query (short query → longer identifier).
         assert!(name_matches_query("loginAnthropic", "login"));
 
-        // Too-short query or name never matches.
+        // Too-short query or name never matches via SUBSTRING — but an exact
+        // short identifier still matches (short symbols are real code).
         assert!(!name_matches_query("loginAnthropic", "fn"));
         assert!(!name_matches_query("loginAnthropic", ""));
+        assert!(name_matches_query("db", "db"));
+        assert!(name_matches_query("tx", "TX"));
+        assert!(
+            !name_matches_query("txnLog", "tx"),
+            "short substring stays floored"
+        );
 
         // Query contains the name — ONLY for ≤2-token queries.
         // 2-token: "Anthropic OAuth" contains "oauth" → match.

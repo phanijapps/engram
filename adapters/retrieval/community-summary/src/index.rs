@@ -193,8 +193,12 @@ impl RetrievalIndex for CommunitySummaryIndex {
         }
 
         // Build a text summary per community + rank by query token overlap.
+        // MATCH GATE + honest scores (graph-lane contract: match first, then
+        // expand): a community with ZERO token overlap contributes nothing —
+        // there is no match to expand from — and every emitted member carries
+        // a score derived from the actual match, never a fabricated 1.0.
         let tokens = tokenize(&request.query);
-        let mut ranked: Vec<(usize, Vec<String>, f64)> = groups
+        let mut ranked: Vec<(usize, Vec<String>, f64, f64)> = groups
             .into_iter()
             .map(|(label, members)| {
                 let names: Vec<&str> = members
@@ -209,13 +213,19 @@ impl RetrievalIndex for CommunitySummaryIndex {
                     names.join(", "),
                     predicates.join(", ")
                 );
-                let score = if tokens.is_empty() {
+                let matched = if tokens.is_empty() {
                     0.0
                 } else {
-                    let lower = summary.to_ascii_lowercase();
+                    let lower = summary.to_lowercase();
                     tokens.iter().filter(|t| lower.contains(t.as_str())).count() as f64
                 };
-                (label, members, score)
+                // Specificity: what fraction of the community's summary the
+                // matched tokens cover — an honest 0..1 relevance for the
+                // community as a whole (a 1-token hit on a 12-token summary
+                // is a weak match, not a perfect one).
+                let summary_tokens = summary.split_whitespace().count().max(1) as f64;
+                let specificity = (matched / summary_tokens).min(1.0);
+                (label, members, matched, specificity)
             })
             .collect();
         ranked.sort_by(|a, b| {
@@ -224,17 +234,52 @@ impl RetrievalIndex for CommunitySummaryIndex {
                 .then_with(|| a.0.cmp(&b.0))
         });
 
-        if ranked.is_empty() {
+        // Gate: with no matching community there is nothing legitimate to
+        // return. Previously the all-zero tie-break (lowest label) emitted
+        // the SAME community for every unrelated query at fabricated 1.0
+        // scores — deterministic background noise on nearly every recall.
+        let Some((_label, members, matched, specificity)) = ranked.into_iter().next() else {
+            return Ok(Vec::new());
+        };
+        if matched <= 0.0 {
             return Ok(Vec::new());
         }
-        let top_members = &ranked[0].1;
-        let results = top_members
-            .iter()
+
+        // Match first, then expand: members whose own name matches a query
+        // token rank above pure-expansion members, and expansion members
+        // score at half the community specificity (they are connected to a
+        // match, not a match themselves).
+        let mut scored: Vec<(String, f32, bool)> = members
+            .into_iter()
+            .map(|key| {
+                let direct = display_names
+                    .get(key.as_str())
+                    .map(|n| name_matches_tokens(n, &tokens))
+                    .unwrap_or(false);
+                let score = (specificity * if direct { 1.0 } else { 0.5 }).min(1.0) as f32;
+                (key, score, direct)
+            })
+            .collect();
+        scored.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
+        let results = scored
+            .into_iter()
             .take(limit.max(1) as usize)
-            .filter_map(|key| by_key.get(key.as_str()).map(|e| build_result(key, e)))
+            .enumerate()
+            .filter_map(|(rank, (key, score, _direct))| {
+                by_key
+                    .get(key.as_str())
+                    .map(|e| build_result(&key, e, score, rank))
+            })
             .collect();
         Ok(results)
     }
+}
+
+/// True when the entity name itself contains one of the query tokens — the
+/// member is a direct match, not just a neighbor of one.
+fn name_matches_tokens(name: &str, tokens: &[String]) -> bool {
+    let lower = name.to_lowercase();
+    tokens.iter().any(|t| lower.contains(t.as_str()))
 }
 
 /// Resolves an entity reference to its entity-id key, or `None` if no id.
@@ -255,15 +300,20 @@ fn tokenize(query: &str) -> Vec<String> {
 }
 
 /// Builds a `RetrievalResult` for a community-member entity.
-fn build_result(key: &str, entity: &KnowledgeEntity) -> RetrievalResult {
+///
+/// `score` is the honest lane score (community specificity × direct-match
+/// multiplier — see the match gate in `retrieve_candidates`); the fabricated
+/// constant `1.0` that used to land here surfaced as "perfect" raw scores in
+/// fused recall for items that never matched the query at all.
+fn build_result(key: &str, entity: &KnowledgeEntity, score: f32, rank: usize) -> RetrievalResult {
     RetrievalResult {
         id: format!("community-summary-entity-{key}"),
         target_type: RetrievalTargetType::Entity,
         target_id: key.to_owned(),
         content: entity.name.clone(),
         score: RetrievalScore {
-            total: 1.0,
-            relevance: Some(1.0),
+            total: score,
+            relevance: Some(score),
             recency: None,
             confidence: None,
             cue_match: None,
@@ -286,14 +336,14 @@ fn build_result(key: &str, entity: &KnowledgeEntity) -> RetrievalResult {
             embedding_time_ms: None,
             search_time_ms: None,
             source: SOURCE.to_owned(),
-            source_rank: Some(1),
-            source_score: Some(1.0),
+            source_rank: Some((rank + 1) as u32),
+            source_score: Some(score),
             score: None,
             rank: None,
             fusion_strategy: Some(FusionStrategy::None),
-            fusion_score: Some(1.0),
+            fusion_score: Some(score),
             rerank_strategy: Some(RerankStrategy::None),
-            rerank_score: Some(1.0),
+            rerank_score: Some(score),
             discard_reason: None,
             deduplicated_with: Vec::new(),
         }),

@@ -7,6 +7,11 @@
 //! splitting camelCase / PascalCase, underscores, and other non-alphanumeric
 //! boundaries into spaces and lowercasing. Tantivy's tokenizer then tokenizes
 //! the normalized space-delimited text. The function is pure and unit-tested.
+//!
+//! Lowercasing and the alphanumeric test are Unicode-aware, so identifiers in
+//! non-ASCII scripts (Rust/Python/JS allow them) keep their tokens instead of
+//! normalizing to nothing (a Unicode identifier that normalizes to "" would
+//! exist as an entity but be invisible to every BM25 query).
 
 /// Splits identifier-style text into lowercase, space-delimited tokens.
 ///
@@ -16,14 +21,16 @@ pub fn normalize_identifier_text(text: &str) -> String {
     let mut out = String::with_capacity(text.len() + 8);
     let mut prev_lower_or_digit = false;
     for ch in text.chars() {
-        if ch.is_ascii_alphanumeric() {
+        if ch.is_alphanumeric() {
             // camelCase / PascalCase boundary: an uppercase following a lowercase
             // letter or digit starts a new token.
-            if ch.is_ascii_uppercase() && prev_lower_or_digit {
+            if ch.is_uppercase() && prev_lower_or_digit {
                 out.push(' ');
             }
-            out.push(ch.to_ascii_lowercase());
-            prev_lower_or_digit = ch.is_ascii_lowercase() || ch.is_ascii_digit();
+            for lc in ch.to_lowercase() {
+                out.push(lc);
+            }
+            prev_lower_or_digit = ch.is_lowercase() || ch.is_ascii_digit();
         } else {
             // Any non-alphanumeric (underscore, hyphen, punctuation, whitespace)
             // is a token separator.

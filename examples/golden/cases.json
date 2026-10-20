@@ -1,0 +1,320 @@
+{
+  "$comment": "Golden dataset for engram code-intel + mixed-mission retrieval. Each case is a contract: tool + args + expectations against the RENDERED tool output (text) or parsed JSON (fetch_content). Grading: every expectation must hold; a case fails on first violation. Assertion types: contains, not_contains, empty, not_empty, regex, json_field (path via dotted key into parsed JSON), set_equals_field (regex captures a bracketed list, compared as a set). Known gaps NOT encoded here (asserting them would fail by design): EN-14 nested-parent body loss, EN-13/8 per-edge confidence in navigation output.",
+  "cases": [
+    {
+      "id": "G-EXACT-01",
+      "guard": "EN-4: substring injections never claim exact identity",
+      "tool": "search",
+      "args": {
+        "query": "Reviewer",
+        "limit": 6
+      },
+      "expect": [
+        {
+          "type": "not_contains",
+          "value": "[exact-match"
+        },
+        {
+          "type": "contains",
+          "value": "_check_reviewer_independence"
+        }
+      ]
+    },
+    {
+      "id": "G-EXACT-02",
+      "guard": "true exact identifier still earns the exact tier",
+      "tool": "search",
+      "args": {
+        "query": "_check_reviewer_independence",
+        "limit": 5
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "_check_reviewer_independence"
+        }
+      ]
+    },
+    {
+      "id": "G-NOISE-01",
+      "guard": "unrelated stopword query returns nothing (no fabricated lanes)",
+      "tool": "search",
+      "args": {
+        "query": "how to quantum grandmaster",
+        "limit": 5
+      },
+      "expect": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "id": "G-NOISE-02",
+      "guard": "template words (community) do not resurrect community noise",
+      "tool": "search",
+      "args": {
+        "query": "community overview",
+        "limit": 5
+      },
+      "expect": [
+        {
+          "type": "empty"
+        }
+      ]
+    },
+    {
+      "id": "G-NOISE-03",
+      "guard": "no disconnected associative residue (raw=0.00 unrelated hits)",
+      "tool": "search",
+      "args": {
+        "query": "tokens",
+        "limit": 10
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "_tokens"
+        },
+        {
+          "type": "not_contains",
+          "value": "Facets::iter"
+        }
+      ]
+    },
+    {
+      "id": "G-RECV-01",
+      "guard": "EN-9: unknown-receiver .iter() stays unresolved, never binds Facets::iter",
+      "tool": "symbol_context",
+      "args": {
+        "symbol": "ordinary_collections"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "values.iter"
+        },
+        {
+          "type": "not_contains",
+          "value": "Facets::iter"
+        }
+      ]
+    },
+    {
+      "id": "G-ATTRIB-01",
+      "guard": "EN-10: callers are the innermost methods, not the test class (alias 'tok' calls stay unlinked \u2014 known gap)",
+      "tool": "symbol_context",
+      "args": {
+        "symbol": "_tokens"
+      },
+      "expect": [
+        {
+          "type": "set_equals_field",
+          "regex": "callers: \\[([^]]*)\\]",
+          "value": [
+            "TestModernTokenizer::test_alpha",
+            "TestModernTokenizer::test_beta"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "G-ATTRIB-02",
+      "guard": "EN-11: method-level blast radius (eval G14 recall 1.0)",
+      "tool": "change_impact",
+      "args": {
+        "target": "_check_reviewer_independence"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "ValidatorRunner::check"
+        },
+        {
+          "type": "contains",
+          "value": "test_independent"
+        },
+        {
+          "type": "not_contains",
+          "value": "note: no indexed entity"
+        }
+      ]
+    },
+    {
+      "id": "G-DISCLOSE-01",
+      "guard": "bare-name impact over unresolved refs is disclosed",
+      "tool": "change_impact",
+      "args": {
+        "target": "runaway_bare_name"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "note: no indexed entity"
+        }
+      ]
+    },
+    {
+      "id": "G-SQL-01",
+      "guard": "EN-15: unknown-extension files are lossless (type TEXT trap)",
+      "tool": "fetch_content",
+      "args": {
+        "path": "src/schema.sql"
+      },
+      "expect": [
+        {
+          "type": "json_field",
+          "field": "total_bytes",
+          "op": "gte",
+          "value": 100
+        },
+        {
+          "type": "json_field",
+          "field": "truncated",
+          "op": "eq",
+          "value": false
+        },
+        {
+          "type": "contains",
+          "value": "TOP_MARKER"
+        },
+        {
+          "type": "contains",
+          "value": "BOTTOM_MARKER"
+        },
+        {
+          "type": "contains",
+          "value": "type TEXT,"
+        }
+      ]
+    },
+    {
+      "id": "G-UND-01",
+      "guard": "underscore-prefixed symbols are findable",
+      "tool": "search",
+      "args": {
+        "query": "_norm",
+        "limit": 3
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "_norm"
+        }
+      ]
+    },
+    {
+      "id": "G-SUPPRESS-01",
+      "guard": "ADR-0030: artifact kinds (Module) suppressed by default with explicit hint",
+      "tool": "search",
+      "args": {
+        "query": "src.logic",
+        "limit": 3
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "suppressed by default"
+        },
+        {
+          "type": "not_contains",
+          "value": "src.logic \u2014"
+        }
+      ]
+    },
+    {
+      "id": "G-SUPPRESS-02",
+      "guard": "ADR-0030: include_code_artifacts re-admits artifact kinds",
+      "tool": "search",
+      "args": {
+        "query": "src.logic",
+        "limit": 3,
+        "include_code_artifacts": true
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "src.logic \u2014"
+        }
+      ]
+    },
+    {
+      "id": "G-PATH-01",
+      "guard": "path-shaped queries auto-include file artifacts (fallback-scanned unknown extensions have no file entity \u2014 known gap)",
+      "tool": "search",
+      "args": {
+        "query": "src/logic.py",
+        "limit": 5
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "src/logic.py"
+        }
+      ]
+    },
+    {
+      "id": "G-STOPWORD-01",
+      "guard": "stopword policy does not break recall on natural queries",
+      "tool": "search",
+      "args": {
+        "query": "how to settle payments",
+        "limit": 5
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "settle"
+        }
+      ]
+    },
+    {
+      "id": "G-EXT-01",
+      "guard": "EN-8 balance: external calls stay visible as evidence (not deleted)",
+      "tool": "symbol_context",
+      "args": {
+        "symbol": "cmd_gate"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "json.dumps"
+        },
+        {
+          "type": "contains",
+          "value": "sys.exit"
+        }
+      ]
+    },
+    {
+      "id": "G-DOC-01",
+      "guard": "mixed mission: docs remain first-class retrieval citizens",
+      "tool": "search",
+      "args": {
+        "query": "readiness manifest",
+        "limit": 3
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "Readiness"
+        }
+      ]
+    },
+    {
+      "id": "G-NEST-01",
+      "guard": "nested functions are first-class symbols (attribution scope)",
+      "tool": "search",
+      "args": {
+        "query": "inner_review",
+        "limit": 3
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "_check_reviewer_independence::inner_review"
+        }
+      ]
+    }
+  ]
+}

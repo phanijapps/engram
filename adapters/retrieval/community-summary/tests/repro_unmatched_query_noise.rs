@@ -360,3 +360,26 @@ fn contract_no_result_claims_unearned_perfect_relevance() {
         describe(&results)
     );
 }
+
+/// AUDIT 2026-10-20 (search-quality): the match gate scored tokens against
+/// the summary TEMPLATE string — "Community: ...; edges: ..." — so any query
+/// containing "community", "edges", or the near-universal predicate words
+/// ("related", "to") matched EVERY community and resurrected the
+/// deterministic lowest-label noise for natural-language queries.
+#[test]
+fn audit_unrelated_query_with_stopwords_or_template_words_returns_nothing() {
+    let index = CommunitySummaryIndex::new(Arc::new(farm_expo_graph()));
+    for query in [
+        "how to quantum grandmaster",     // "to" is inside related_to
+        "learn community structure fast", // "community" is boilerplate
+        "graph edges explanation",        // "edges" is boilerplate
+        "related concepts overview",      // "related" from related_to
+    ] {
+        let results = block_on(index.retrieve_candidates(&request(query))).unwrap();
+        assert!(
+            results.is_empty(),
+            "query {query:?} must not match via boilerplate/stopword tokens, got: {}",
+            describe(&results)
+        );
+    }
+}

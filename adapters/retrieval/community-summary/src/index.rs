@@ -213,7 +213,7 @@ impl RetrievalIndex for CommunitySummaryIndex {
         // expand): a community with ZERO token overlap contributes nothing —
         // there is no match to expand from — and every emitted member carries
         // a score derived from the actual match, never a fabricated 1.0.
-        let tokens = tokenize(&request.query);
+        let tokens = engram_retrieval::query_tokens(&request.query);
         let mut ranked: Vec<(usize, Vec<String>, f64, f64)> = groups
             .into_iter()
             .map(|(label, members)| {
@@ -224,11 +224,11 @@ impl RetrievalIndex for CommunitySummaryIndex {
                 let mut predicates = predicates_by_comm.remove(&label).unwrap_or_default();
                 predicates.sort();
                 predicates.dedup();
-                let summary = format!(
-                    "Community: {}; edges: {}",
-                    names.join(", "),
-                    predicates.join(", ")
-                );
+                // AUDIT 2026-10-20: the match haystack is NAMES + PREDICATES
+                // only — the previous "Community: ...; edges: ..." template
+                // made the boilerplate words themselves matchable, so queries
+                // containing "community"/"edges" matched every community.
+                let summary = format!("{} {}", names.join(", "), predicates.join(", "));
                 let matched = if tokens.is_empty() {
                     0.0
                 } else {
@@ -301,18 +301,6 @@ fn name_matches_tokens(name: &str, tokens: &[String]) -> bool {
 /// Resolves an entity reference to its entity-id key, or `None` if no id.
 fn entity_key(reference: &EntityRef) -> Option<String> {
     reference.id.as_ref().map(|id| id.as_str().to_owned())
-}
-
-/// Lowercased alphanumeric query tokens.
-fn tokenize(query: &str) -> Vec<String> {
-    query
-        .split_whitespace()
-        .map(|t| {
-            t.trim_matches(|c: char| !c.is_alphanumeric())
-                .to_ascii_lowercase()
-        })
-        .filter(|t| !t.is_empty())
-        .collect()
 }
 
 /// Builds a `RetrievalResult` for a community-member entity.

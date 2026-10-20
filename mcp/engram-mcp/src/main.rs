@@ -616,6 +616,13 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
                     "description": "When true, emit the full format per result \
                                     (\"name (kind) — org/repo, path [retriever, score=X.XX]\"). \
                                     Default is compact: \"name — repo, path [X.XX]\"."
+                },
+                "include_code_artifacts": {
+                    "type": "boolean",
+                    "description": "When true, include code-artifact results (Module/File/\
+                                    Repository/Variable stubs) that are suppressed by default.\
+                                    Artifacts always participate in graph reasoning; this only\
+                                    re-admits them as RESULTS."
                 }
             },
             "required": ["query"]

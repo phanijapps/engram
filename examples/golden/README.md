@@ -15,8 +15,11 @@ python3 scripts/dev/golden_eval.py --keep     # keep the scratch store for inspe
 python3 scripts/dev/golden_eval.py --binary $(which engram-mcp)   # grade an installed build
 ```
 
-The runner starts ONE server process, scans the fixture, runs a warm-up
-recall, then grades every case in order (single-process keeps hydration
+The runner starts ONE server process, scans an ISOLATED COPY of the
+fixture (provenance stays `engram-mcp-scan`), runs a warm-up recall, then
+grades every case in order, with per-call deadlines, strict empty-envelope
+detection (a `No results` line mixed with results FAILS), stderr capture,
+and reaped processes (single-process keeps hydration
 deterministic). Exit code: 0 all pass, 1 any failure, 2 scan failure.
 
 ## What each case guards
@@ -36,6 +39,17 @@ deterministic). Exit code: 0 all pass, 1 any failure, 2 scan failure.
 | G-EXT-01 | EN-8 balance: external calls remain visible evidence (classified, not deleted) |
 | G-DOC-01 | mixed mission: docs remain first-class retrieval citizens |
 | G-NEST-01 | nested functions are first-class symbols |
+| G-REPO-01/02 | repository exclusion binds exact AND partial-name injections (round-1 BLOCKER) |
+| G-DOC-02 | a successful Doc `get_context` packet is not assessed as failed code discovery |
+| G-RECV-02 | EN-9 positive control: qualified method callers survive unknown-receiver conservatism |
+| G-EXACT-03 | the true identifier is the FIRST typed symbol result |
+| G-PATH-02 | path queries return the File entity, not merely symbols in that path |
+| G-EXT-02 | external calls occupy actual callee edges (exact callee set) |
+| G-SQL-02 | fallback SQL is byte-exact lossless |
+| G-DISCLOSE-02 | nonempty unresolved-reference impact keeps its disclosure |
+| G-RECALL-01 | general `recall` retains document evidence |
+| G-EXPLORE-01 | `explore` keeps unresolved receiver evidence without false binding |
+| G-SCHEMA-01 | runner-level: `search` advertises `include_code_artifacts` in `tools/list` |
 
 ## Known gaps (deliberately NOT encoded)
 

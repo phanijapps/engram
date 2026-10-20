@@ -1069,6 +1069,7 @@ fn inject_exact_matches(
     by_id: &HashMap<String, KnowledgeEntity>,
     query: &str,
     include_code_artifacts: bool,
+    repository: Option<&str>,
 ) -> usize {
     // (1) Mark existing matches; do NOT touch their scores (Option B). Chunks
     // are skipped — `is_exact` means "identifier match," and a chunk's `name`
@@ -1106,6 +1107,14 @@ fn inject_exact_matches(
         // Code-artifact eligibility: suppressed kinds are never injected,
         // even on an exact name match (the opt-in flag re-admits them).
         if !include_code_artifacts && engram_retrieval::is_code_artifact(e) {
+            continue;
+        }
+        // Repository eligibility (BLOCKER, golden eval): injections must
+        // respect the same repository filter recall results already honor —
+        // a scoped search must never re-admit excluded-repo symbols.
+        if let Some(repo) = repository
+            && !source_matches_repository(&e.provenance.source, repo)
+        {
             continue;
         }
         if !name_matches_query(&e.name, query) {
@@ -1507,7 +1516,13 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                 // match never loses to semantic similarity. Option B: NO score
                 // boost — existing matches keep their RRF score, injected ones
                 // get an anchor-based score (max RRF for exact, 80% for partial).
-                inject_exact_matches(&mut hits, &by_id, query, include_code_artifacts);
+                inject_exact_matches(
+                    &mut hits,
+                    &by_id,
+                    query,
+                    include_code_artifacts,
+                    repository.as_deref(),
+                );
 
                 // Fix 6: test-file demotion — implementation outranks tests on
                 // concept queries. Hits resolved to test paths score at 85%
@@ -2633,9 +2648,12 @@ pub fn get_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             unavailable: graph_unavailable,
         },
         &code_ctx,
-        &anchor_symbol,
-        &primary_focus,
-        &focus_list,
+        &AssessmentFocus {
+            anchor_symbol: anchor_symbol.as_str(),
+            primary_focus: primary_focus.as_str(),
+            focus_list: &focus_list,
+            shape,
+        },
     );
 
     Ok(protocol::text_content(format!(
@@ -2675,14 +2693,21 @@ struct AssessmentGraph<'a> {
     unavailable: bool,
 }
 
+/// String-ish context `build_assessment` needs beyond the recall/graph
+/// payloads — grouped so the signature stays under clippy's threshold.
+struct AssessmentFocus<'a> {
+    anchor_symbol: &'a str,
+    primary_focus: &'a str,
+    focus_list: &'a [String],
+    shape: QueryShape,
+}
+
 fn build_assessment(
     recall_items: &[engram_domain::RetrievalResult],
     counts: &RecallCounts,
     graph: &AssessmentGraph<'_>,
     code_ctx: &engram_codegraph_queries::SymbolContext,
-    anchor_symbol: &str,
-    primary_focus: &str,
-    focus_list: &[String],
+    focus: &AssessmentFocus<'_>,
 ) -> String {
     let total = recall_items.len();
     let (entity_count, chunk_count, memory_count) =
@@ -2697,32 +2722,47 @@ fn build_assessment(
     // resolve. The anchor equals the primary focus only when recall found no
     // entity AND no multi-anchor override — i.e. the fallback fired.
     let anchor_line = if code_populated || graph_populated {
-        format!("Anchor symbol: {anchor_symbol}")
+        format!("Anchor symbol: {}", focus.anchor_symbol)
     } else {
-        format!(
-            "Anchor symbol: none (focus '{primary_focus}' did not resolve to a code symbol with edges)"
-        )
+        "Anchor symbol: none (focus did not resolve to a code symbol with edges)".to_owned()
     };
 
-    // Missing-evidence notes — only the gaps that actually fired.
+    // Missing-evidence notes — only the gaps that actually fired, and only
+    // when the query shape makes them gaps. A Doc/Mixed focus that returned
+    // document or memory evidence is a SUCCESSFUL answer: demanding a code
+    // neighborhood or scan_repo for it mis-graded every document question
+    // as failed code discovery (golden eval G-DOC-02).
+    let shape = focus.shape;
+    let doc_answered = !matches!(shape, QueryShape::Code)
+        && (chunk_count > 0 || memory_count > 0 || other_count > 0);
     let mut missing: Vec<String> = Vec::new();
-    if links.is_empty() && !graph.unavailable {
+    if links.is_empty() && !graph.unavailable && !doc_answered {
         missing.push(
             "No graph relationships found for the anchor. The symbol may not have indexed call edges, or the anchor may not be a code symbol."
                 .to_owned(),
         );
     }
-    if !code_populated {
+    if !code_populated && !doc_answered {
         missing.push(
             "No code neighborhood found. Try searching for the exact identifier first, then use it as the focus."
                 .to_owned(),
         );
     }
-    if counts.entities == 0 {
+    if counts.entities == 0 && !doc_answered {
         missing.push(
             "Recall found no code entities. The query may need more specific identifiers, or the code may not be indexed. Try scan_repo first."
                 .to_owned(),
         );
+    }
+    if doc_answered {
+        missing.push(format!(
+            "Document/memory evidence answered this {} query; no code neighborhood required.",
+            match shape {
+                QueryShape::Code => "code",
+                QueryShape::Mixed => "mixed",
+                QueryShape::Doc => "document",
+            }
+        ));
     }
     let missing_block = if missing.is_empty() {
         "Missing evidence: none — recall + graph + code all contributed.".to_owned()
@@ -2738,21 +2778,29 @@ fn build_assessment(
     // Suggested next steps reference the ACTUAL focus terms + anchor. Use the
     // primary focus for `search` (the most distinctive single term) and the
     // anchor for the graph expansions.
-    let search_term = primary_focus;
+    let search_term = focus.primary_focus;
     let suggest_symbol_context = if code_populated {
-        format!("symbol_context \"{anchor_symbol}\" depth=3 for deeper call chain")
+        format!(
+            "symbol_context \"{}\" depth=3 for deeper call chain",
+            focus.anchor_symbol
+        )
     } else {
-        format!("symbol_context \"{anchor_symbol}\" depth=2 to confirm the symbol exists")
+        format!(
+            "symbol_context \"{}\" depth=2 to confirm the symbol exists",
+            focus.anchor_symbol
+        )
     };
     let suggest_graph_neighbors = format!(
-        "graph_neighbors \"{anchor_symbol}\" for all relationship types (calls, describes, mentions, belongs_to)"
+        "graph_neighbors \"{}\" for all relationship types (calls, describes, mentions, belongs_to)",
+        focus.anchor_symbol
     );
     let suggest_search = format!("search \"{search_term}\" for exact-identifier lookup");
     let mut steps = format!("Suggested next steps:\n  - {suggest_search}");
     // When a multi-anchor focus was used, suggest batch symbol_context over the
     // anchor list so the caller knows the batch shape is available.
-    if focus_list.len() > 1 {
-        let list = focus_list
+    if focus.focus_list.len() > 1 {
+        let list = focus
+            .focus_list
             .iter()
             .map(|s| format!("\"{s}\""))
             .collect::<Vec<_>>()
@@ -3436,7 +3484,7 @@ mod tests {
             chunk_excerpt: None,
         }];
 
-        let injected = inject_exact_matches(&mut hits, &by_id, "alpha", false);
+        let injected = inject_exact_matches(&mut hits, &by_id, "alpha", false, None);
         assert_eq!(injected, 0, "alpha already present → not re-injected");
         assert_eq!(hits.len(), 1);
         assert!(hits[0].is_exact, "alpha marked exact");
@@ -3617,7 +3665,7 @@ mod tests {
             },
         ];
 
-        inject_exact_matches(&mut hits, &by_id, "_tokens", false);
+        inject_exact_matches(&mut hits, &by_id, "_tokens", false, None);
 
         let tokens = hits.iter().find(|h| h.name == "_tokens").unwrap();
         let correspond = hits.iter().find(|h| h.name == "correspond_tokens").unwrap();
@@ -3670,7 +3718,7 @@ mod tests {
         // One existing hit with score 0.05 → that is the anchor (max RRF).
         let mut hits = vec![hit("unrelated", Some("z.rs"), 0.05)];
 
-        let injected = inject_exact_matches(&mut hits, &by_id, "anthropicOAuth", false);
+        let injected = inject_exact_matches(&mut hits, &by_id, "anthropicOAuth", false, None);
         assert_eq!(injected, 1, "anthropicOAuth injected");
         let inj = hits.iter().find(|h| h.name == "anthropicOAuth").unwrap();
         assert!(inj.is_exact);
@@ -3706,7 +3754,7 @@ mod tests {
 
         // Existing hit at 0.10 → anchor = 0.10.
         let mut hits = vec![hit("unrelated", Some("z.rs"), 0.10)];
-        let injected = inject_exact_matches(&mut hits, &by_id, "login", false);
+        let injected = inject_exact_matches(&mut hits, &by_id, "login", false, None);
         assert_eq!(injected, 1);
         let inj = hits.iter().find(|h| h.name == "loginAnthropic").unwrap();
         // Partial match → 0.8 * 0.10 = 0.08.
@@ -3724,6 +3772,34 @@ mod tests {
     /// `_check_reviewer_independence`. Partial injections must be labeled
     /// `name-match` and never take the exact tier; only identifier-equality
     /// (or qualified-tail equality) is exact.
+    /// BLOCKER (golden eval): exact/partial-name injection bypassed the
+    /// repository filter recall results already honor — a search scoped to
+    /// `repository="different/repo"` re-admitted excluded-repo symbols as
+    /// exact/name-match hits.
+    #[test]
+    fn injections_respect_the_repository_filter() {
+        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        let e = make_entity(
+            "e1",
+            "_tokens",
+            engram_domain::EntityKind::Function,
+            Some("src/tokens.py"),
+        );
+        by_id.insert("e1".into(), e);
+        let mut hits = vec![hit("anchor", Some("a.rs"), 0.10)];
+        let injected =
+            inject_exact_matches(&mut hits, &by_id, "_tokens", false, Some("other/repo"));
+        assert_eq!(injected, 0, "excluded-repo entity must not be injected");
+        assert!(
+            !hits.iter().any(|h| h.name == "_tokens"),
+            "scoped search must not re-admit excluded-repo symbols"
+        );
+        // Unscoped (None) keeps the injection.
+        let mut hits2 = vec![hit("anchor", Some("a.rs"), 0.10)];
+        let injected2 = inject_exact_matches(&mut hits2, &by_id, "_tokens", false, None);
+        assert_eq!(injected2, 1);
+    }
+
     #[test]
     fn partial_injections_do_not_claim_exact_identity() {
         let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
@@ -3737,7 +3813,13 @@ mod tests {
             ),
         );
         let mut hits = vec![hit("anchor", Some("a.rs"), 0.10)];
-        let _ = inject_exact_matches(&mut hits, &by_id, "_check_reviewer_independence", false);
+        let _ = inject_exact_matches(
+            &mut hits,
+            &by_id,
+            "_check_reviewer_independence",
+            false,
+            None,
+        );
         // Both the true exact hit and a substring injection exist in this
         // scenario; assert on classification, not count.
         let exact = hits
@@ -3750,7 +3832,7 @@ mod tests {
         // Substring-only scenario: query "reviewer" matches the same name as
         // a substring — must NOT be exact or carry the exact-match retriever.
         let mut hits2 = vec![hit("anchor", Some("a.rs"), 0.10)];
-        let _ = inject_exact_matches(&mut hits2, &by_id, "reviewer", false);
+        let _ = inject_exact_matches(&mut hits2, &by_id, "reviewer", false, None);
         let partial = hits2
             .iter()
             .find(|h| h.name == "_check_reviewer_independence")
@@ -3781,7 +3863,7 @@ mod tests {
             ),
         );
         let mut hits: Vec<SearchHit> = Vec::new();
-        let injected = inject_exact_matches(&mut hits, &by_id, "lonelyFunc", false);
+        let injected = inject_exact_matches(&mut hits, &by_id, "lonelyFunc", false, None);
         assert_eq!(injected, 1);
         assert!(
             (hits[0].score - 0.05).abs() < 1e-6,
@@ -4294,7 +4376,7 @@ mod tests {
         // is_exact — that tag means "identifier match," not "content match."
         let by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
         let mut hits = vec![hit_chunk("alphaFunction body text", Some("a.rs"), 0.05)];
-        let injected = inject_exact_matches(&mut hits, &by_id, "alphaFunction", false);
+        let injected = inject_exact_matches(&mut hits, &by_id, "alphaFunction", false, None);
         // No entities in by_id → nothing injected.
         assert_eq!(injected, 0);
         // The chunk is NOT marked is_exact (it's a content label, not a symbol).
@@ -4444,6 +4526,47 @@ mod tests {
         }
     }
 
+    /// G-DOC-02 (golden eval): a Doc-shaped focus that returned document
+    /// evidence is a SUCCESSFUL answer — it must not be assessed as failed
+    /// code discovery ("Recall found no code entities ... Try scan_repo").
+    #[test]
+    fn build_assessment_doc_shaped_answer_is_not_failed_code_discovery() {
+        let items = vec![recall_item(RetrievalTargetType::Chunk, "doc-1")];
+        let code_ctx = make_symbol_context(false);
+        let focus_list = vec!["readiness manifest".to_owned()];
+        let assessment = build_assessment(
+            &items,
+            &RecallCounts {
+                entities: 0,
+                chunks: 1,
+                memories: 0,
+            },
+            &AssessmentGraph {
+                links: &[],
+                unavailable: false,
+            },
+            &code_ctx,
+            &AssessmentFocus {
+                anchor_symbol: "readiness manifest",
+                primary_focus: "readiness manifest",
+                focus_list: &focus_list,
+                shape: QueryShape::Doc,
+            },
+        );
+        assert!(
+            !assessment.contains("Recall found no code entities"),
+            "doc answer mis-graded as code failure: {assessment}"
+        );
+        assert!(
+            !assessment.contains("No code neighborhood found"),
+            "doc answer must not demand a code neighborhood: {assessment}"
+        );
+        assert!(
+            assessment.contains("no code neighborhood required"),
+            "doc-answered note expected: {assessment}"
+        );
+    }
+
     #[test]
     fn build_assessment_reports_counts_and_populated_status() {
         // Two entity recall items, one chunk, populated graph + code.
@@ -4468,9 +4591,12 @@ mod tests {
                 unavailable: false,
             },
             &code_ctx,
-            "loginAnthropic",
-            "loginAnthropic",
-            &focus_list,
+            &AssessmentFocus {
+                anchor_symbol: "loginAnthropic",
+                primary_focus: "loginAnthropic",
+                focus_list: &focus_list,
+                shape: QueryShape::Code,
+            },
         );
 
         assert!(
@@ -4526,9 +4652,12 @@ mod tests {
                 unavailable: false,
             },
             &code_ctx,
-            "someConcept",
-            "someConcept",
-            &focus_list,
+            &AssessmentFocus {
+                anchor_symbol: "someConcept",
+                primary_focus: "someConcept",
+                focus_list: &focus_list,
+                shape: QueryShape::Code,
+            },
         );
 
         assert!(
@@ -4576,9 +4705,12 @@ mod tests {
                 unavailable: false,
             },
             &code_ctx,
-            "loginAnthropic",
-            "loginAnthropic",
-            &focus_list,
+            &AssessmentFocus {
+                anchor_symbol: "loginAnthropic",
+                primary_focus: "loginAnthropic",
+                focus_list: &focus_list,
+                shape: QueryShape::Code,
+            },
         );
 
         assert!(

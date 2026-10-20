@@ -42,3 +42,8 @@ class Facets:
 
     def iter(self):
         return [1, 2]
+
+
+def legitimate_facets_iter(facets):
+    """EN-9 positive control: a QUALIFIED call must keep binding."""
+    return Facets.iter(facets)

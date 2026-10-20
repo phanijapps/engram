@@ -315,6 +315,241 @@
           "value": "_check_reviewer_independence::inner_review"
         }
       ]
+    },
+    {
+      "id": "G-REPO-01",
+      "guard": "Repository exclusion applies to exact-name injection",
+      "tool": "search",
+      "args": {
+        "query": "_tokens",
+        "repository": "different/repo",
+        "diagnostics": true,
+        "limit": 5
+      },
+      "expect": [
+        {
+          "type": "empty"
+        },
+        {
+          "type": "not_contains",
+          "value": "_tokens (Function)"
+        }
+      ]
+    },
+    {
+      "id": "G-REPO-02",
+      "guard": "Repository exclusion applies to partial-name injection",
+      "tool": "search",
+      "args": {
+        "query": "Reviewer",
+        "repository": "different/repo",
+        "diagnostics": true,
+        "limit": 6
+      },
+      "expect": [
+        {
+          "type": "empty"
+        },
+        {
+          "type": "not_contains",
+          "value": "_check_reviewer_independence (Function)"
+        }
+      ]
+    },
+    {
+      "id": "G-DOC-02",
+      "guard": "Successful Doc context is not assessed as failed code discovery",
+      "tool": "get_context",
+      "args": {
+        "focus": "readiness manifest",
+        "limit": 5
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "query shape: Doc"
+        },
+        {
+          "type": "contains",
+          "value": "Manifest gate advance evidence lives here."
+        },
+        {
+          "type": "not_contains",
+          "value": "Recall found no code entities"
+        }
+      ]
+    },
+    {
+      "id": "G-RECV-02",
+      "guard": "Qualified method callers survive unknown-receiver conservatism (EN-9 positive control)",
+      "tool": "change_impact",
+      "args": {
+        "target": "Facets::iter"
+      },
+      "expect": [
+        {
+          "type": "set_equals_field",
+          "regex": "callers: \\[([^]]*)\\]",
+          "value": [
+            "legitimate_facets_iter"
+          ]
+        },
+        {
+          "type": "not_contains",
+          "value": "ordinary_collections"
+        },
+        {
+          "type": "contains",
+          "value": "truncated: false"
+        }
+      ]
+    },
+    {
+      "id": "G-EXACT-03",
+      "guard": "True identifier is the first typed symbol result",
+      "tool": "search",
+      "args": {
+        "query": "_check_reviewer_independence",
+        "limit": 5,
+        "diagnostics": true
+      },
+      "expect": [
+        {
+          "type": "regex",
+          "value": "\\A_check_reviewer_independence \\(Function\\) \u2014 [^\\n]*src/logic\\.py \\["
+        }
+      ]
+    },
+    {
+      "id": "G-PATH-02",
+      "guard": "Path query returns the File entity, not merely symbols from that path",
+      "tool": "search",
+      "args": {
+        "query": "src/logic.py",
+        "limit": 5,
+        "diagnostics": true,
+        "include_chunks": false
+      },
+      "expect": [
+        {
+          "type": "regex",
+          "value": "(?m)^src/logic\\.py \\(File\\) \u2014 "
+        }
+      ]
+    },
+    {
+      "id": "G-EXT-02",
+      "guard": "External calls occupy actual callee edges",
+      "tool": "symbol_context",
+      "args": {
+        "symbol": "cmd_gate"
+      },
+      "expect": [
+        {
+          "type": "set_equals_field",
+          "regex": "callees: \\[([^]]*)\\]",
+          "value": [
+            "json.dumps",
+            "sys.exit"
+          ]
+        },
+        {
+          "type": "contains",
+          "value": "truncated: false"
+        }
+      ]
+    },
+    {
+      "id": "G-SQL-02",
+      "guard": "Fallback SQL content is completely lossless (byte-exact)",
+      "tool": "fetch_content",
+      "args": {
+        "path": "src/schema.sql"
+      },
+      "expect": [
+        {
+          "type": "json_field",
+          "field": "content",
+          "op": "eq",
+          "value": "-- TOP_MARKER\nCREATE TABLE edges (\n    type TEXT,\n    id INTEGER PRIMARY KEY\n);\nCREATE TABLE nodes (\n    label TEXT\n);\n-- BOTTOM_MARKER\n"
+        },
+        {
+          "type": "json_field",
+          "field": "truncated",
+          "op": "eq",
+          "value": false
+        }
+      ]
+    },
+    {
+      "id": "G-DISCLOSE-02",
+      "guard": "Nonempty unresolved-reference impact retains disclosure",
+      "tool": "change_impact",
+      "args": {
+        "target": "json.dumps"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "note: no indexed entity"
+        },
+        {
+          "type": "set_equals_field",
+          "regex": "callers: \\[([^]]*)\\]",
+          "value": [
+            "cmd_gate"
+          ]
+        },
+        {
+          "type": "contains",
+          "value": "truncated: false"
+        }
+      ]
+    },
+    {
+      "id": "G-RECALL-01",
+      "guard": "General recall retains document evidence",
+      "tool": "recall",
+      "args": {
+        "query": "readiness manifest",
+        "limit": 3
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "[chunk"
+        },
+        {
+          "type": "contains",
+          "value": "# Readiness"
+        },
+        {
+          "type": "contains",
+          "value": "Manifest gate advance evidence lives here."
+        }
+      ]
+    },
+    {
+      "id": "G-EXPLORE-01",
+      "guard": "Explore retains unresolved receiver evidence without false binding",
+      "tool": "explore",
+      "args": {
+        "query": "ordinary_collections"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "[function] ordinary_collections (hop 0)"
+        },
+        {
+          "type": "contains",
+          "value": "values.iter (hop 1)"
+        },
+        {
+          "type": "not_contains",
+          "value": "Facets::iter"
+        }
+      ]
     }
   ]
 }

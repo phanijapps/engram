@@ -1,5 +1,6 @@
 """Tests calling production code (attribution + demotion guards)."""
-from src.logic import _check_reviewer_independence, _tokens
+from src.logic import _check_reviewer_independence
+from src.tokens import _tokens
 from src.tokens import _tokens as tok
 
 

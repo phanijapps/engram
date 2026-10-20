@@ -289,7 +289,8 @@ mod tests {
 
     #[test]
     fn env_fallback_precedence_is_flag_over_env_over_default() {
-        // SAFETY: tests run multi-threaded; these env names are test-private.
+        // SAFETY: serialized against env-reading tests by ENV_TEST_MUTEX.
+        let _lock = ENV_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let guard = EnvGuard::set("ENGRAM_PROJECT", "envproj");
         let flag = McpConfig::from_args(&argv(&["--storage", "/tmp/e", "--project", "flagproj"]))
             .expect("flag wins");
@@ -306,6 +307,7 @@ mod tests {
 
     #[test]
     fn missing_storage_mentions_the_env_escape_hatch() {
+        let _lock = ENV_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let guard = EnvGuard::unset("ENGRAM_STORAGE");
         let err = McpConfig::from_args(&argv(&[])).expect_err("storage required");
         assert!(err.contains("ENGRAM_STORAGE"), "got: {err}");
@@ -315,6 +317,12 @@ mod tests {
     fn argv(flags: &[&str]) -> Vec<String> {
         flags.iter().map(|s| s.to_string()).collect()
     }
+
+    /// Env mutation leaks across concurrently-running tests (observed flake:
+    /// `from_args_defaults_project` read ENGRAM_PROJECT set by a sibling).
+    /// Every test that sets/unsets env OR asserts env-derived defaults takes
+    /// this lock.
+    static ENV_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     struct EnvGuard {
         key: &'static str,
@@ -379,6 +387,7 @@ mod tests {
 
     #[test]
     fn from_args_defaults_project() {
+        let _lock = ENV_TEST_MUTEX.lock().unwrap_or_else(|e| e.into_inner());
         let argv = ["--storage".to_string(), "/tmp/x".to_string()];
         let c = McpConfig::from_args(&argv).unwrap();
         assert_eq!(c.project, "default");

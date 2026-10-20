@@ -99,9 +99,19 @@ impl RetrievalIndex for LexicalRetrievalIndex {
         request: &RetrievalRequest,
     ) -> CoreResult<Vec<RetrievalResult>> {
         let limit = search_limit(request, self.default_limit) as usize;
+        // Code-artifact suppression runs at the RESOLVER (the only place the
+        // full entity is available), which is AFTER the BM25 search below —
+        // so over-fetch now (4×, floor 32) and truncate after filtering,
+        // otherwise suppressed import/file stubs (short docs BM25 loves)
+        // would consume the entire candidate page and starve real hits.
+        let fetch = if engram_retrieval::suppresses_code_artifacts(request) {
+            (limit * 4).max(32)
+        } else {
+            limit
+        };
         let hits = self
             .index
-            .search(&request.query, limit)
+            .search(&request.query, fetch)
             .map_err(|e| CoreError::Adapter {
                 adapter: "engram-store-lexical".to_owned(),
                 message: e.to_string(),
@@ -112,8 +122,12 @@ impl RetrievalIndex for LexicalRetrievalIndex {
             let Some(target) = self.target_resolver.resolve(&target_id, request).await? else {
                 continue;
             };
+            // Resolver seam: suppressed entity targets resolve to None (see
+            // KnowledgeLexicalResolver), keeping the eligibility decision in
+            // one place; the over-fetch above refills the page.
             results.push(lexical_result(rank, &target_id, score, target));
         }
+        results.truncate(limit);
         Ok(results)
     }
 }

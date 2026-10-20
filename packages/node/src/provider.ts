@@ -106,13 +106,16 @@ export interface NativeProviderTransport {
   /** File-level import graph with module→file resolution (RFC-0020 Phase 2).
    *  One implementation (the Rust facade) — the binding is a transport. */
   fileDependencies(scope: unknown): Promise<unknown>;
-  /** Natural-language explore: seeded bounded subgraph (RFC-0020 Phase 2). */
+  /** Natural-language explore: seeded bounded subgraph (RFC-0020 Phase 2).
+   *  includeCodeArtifacts opts Variable/Module/File/Repository entities into
+   *  the discovery seed list (suppressed by default; always in the graph). */
   explore(request: {
     scope: unknown;
     query: string;
     depth?: number;
     maxNodes?: number;
     maxEdges?: number;
+    includeCodeArtifacts?: boolean;
   }): Promise<unknown>;
   /** Upsert a knowledge entity. */
   putEntity(entity: unknown): Promise<unknown>;
@@ -265,6 +268,7 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
     depth?: number;
     maxNodes?: number;
     maxEdges?: number;
+    includeCodeArtifacts?: boolean;
   }): Promise<unknown> {
     return decode(this.provider.exploreJson(encode(request)));
   }

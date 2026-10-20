@@ -73,6 +73,7 @@ fn run_recall(argv: &[String]) -> i32 {
     let mut query = None;
     let mut json_out = false;
     let mut limit = 5u32;
+    let mut include_code_artifacts = false;
     let mut rest: Vec<String> = Vec::with_capacity(argv.len());
     let mut it = argv.iter();
     while let Some(arg) = it.next() {
@@ -85,6 +86,7 @@ fn run_recall(argv: &[String]) -> i32 {
             }
             "--query" | "-q" => query = it.next().cloned(),
             "--json" => json_out = true,
+            "--include-code-artifacts" => include_code_artifacts = true,
             "--limit" => {
                 limit = it
                     .next()
@@ -149,7 +151,19 @@ fn run_recall(argv: &[String]) -> i32 {
         scope: app.scope.clone(),
         requester: requester(),
         modes: Vec::new(),
-        filters: None,
+        filters: Some(engram_domain::QueryFilter {
+            memory_kinds: Vec::new(),
+            source_kinds: Vec::new(),
+            chunk_kinds: Vec::new(),
+            concept_ids: Vec::new(),
+            entity_ids: Vec::new(),
+            since: None,
+            until: None,
+            min_confidence: None,
+            include_archived: None,
+            as_of: None,
+            include_code_artifacts: Some(include_code_artifacts),
+        }),
         cues: Vec::new(),
         limit: Some(limit),
         budget: None,

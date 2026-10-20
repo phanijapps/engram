@@ -6,7 +6,9 @@
 //! can use those instead — the DTOs are a convenience layer, not a replacement.
 
 use engram_domain::identity::{Actor, ActorKind, Requester};
-use engram_domain::{EntityKind, RetrievalMode, RetrievalRequest, Scope, types::ActorId};
+use engram_domain::{
+    EntityKind, QueryFilter, RetrievalMode, RetrievalRequest, Scope, types::ActorId,
+};
 
 // ---------------------------------------------------------------------------
 // Scope helpers
@@ -158,6 +160,9 @@ pub struct RecallRequest {
     pub query: String,
     /// Retrieval modes. Empty = all available.
     pub modes: Vec<RetrievalMode>,
+    /// Opt code artifacts (Variable/Module/File/Repository) into ranked
+    /// results — suppressed by default at every surface.
+    pub include_code_artifacts: bool,
 }
 
 impl Default for RecallRequest {
@@ -172,6 +177,7 @@ impl Default for RecallRequest {
             },
             query: String::new(),
             modes: Vec::new(),
+            include_code_artifacts: false,
         }
     }
 }
@@ -184,6 +190,14 @@ impl RecallRequest {
             query: query.into(),
             ..Default::default()
         }
+    }
+
+    /// Opts code-artifact entities (Variable/Module/File/Repository) back
+    /// into ranked results. Suppressed by default; they always participate
+    /// in the graph (seeds, walk nodes, edges).
+    pub fn include_code_artifacts(mut self) -> Self {
+        self.include_code_artifacts = true;
+        self
     }
 }
 
@@ -204,7 +218,19 @@ impl From<RecallRequest> for RetrievalRequest {
                 on_behalf_of: None,
             },
             modes: dto.modes,
-            filters: None,
+            filters: Some(QueryFilter {
+                memory_kinds: Vec::new(),
+                source_kinds: Vec::new(),
+                chunk_kinds: Vec::new(),
+                concept_ids: Vec::new(),
+                entity_ids: Vec::new(),
+                since: None,
+                until: None,
+                min_confidence: None,
+                include_archived: None,
+                as_of: None,
+                include_code_artifacts: Some(dto.include_code_artifacts),
+            }),
             cues: Vec::new(),
             limit: None,
             budget: None,

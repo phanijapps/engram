@@ -114,6 +114,16 @@ impl RetrievalIndex for GraphRetrievalIndex {
 
         let mut views = Vec::with_capacity(entities.len() + chunks.len());
         for e in &entities {
+            // Result-eligibility filter (code artifacts): skip suppressed
+            // entities BEFORE view construction — the view struct carries no
+            // kind, so this loop is the only seam. The snapshot/cache stays
+            // full-graph (suppressed entities still load into it and still
+            // serve sibling lanes when the flag is on).
+            if engram_retrieval::suppresses_code_artifacts(request)
+                && engram_retrieval::is_code_artifact(e)
+            {
+                continue;
+            }
             views.push(GraphCandidateView {
                 target_type: RetrievalTargetType::Entity,
                 target_id: e.id.as_str().to_owned(),

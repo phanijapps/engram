@@ -43,10 +43,18 @@ pub(super) struct IngestCtx<'a, R> {
     pub name_index: &'a Arc<Mutex<engram_code::SymbolIndex>>,
 }
 
+/// Parallel ingest results: per-file outcomes plus chunk-coverage warnings
+/// (large files whose chunked bytes cover less than half the file — the
+/// fetch-content single-chunk class surfaced at scan time).
+pub(super) struct IngestResults {
+    pub outcomes: Vec<(String, Outcome, Vec<KnowledgeEntity>)>,
+    pub coverage_warnings: Vec<String>,
+}
+
 pub(super) fn parallel_ingest<R>(
     ctx: &IngestCtx<'_, R>,
     to_ingest: &[ReadyToIngest],
-) -> Vec<(String, Outcome, Vec<KnowledgeEntity>)>
+) -> IngestResults
 where
     R: engram_knowledge::KnowledgeRepository
         + engram_knowledge::KnowledgeGraphRepository
@@ -67,7 +75,7 @@ where
     let global_entity_names = ctx.global_entity_names;
     let name_index = ctx.name_index;
 
-    to_ingest
+    let results: Vec<(String, Outcome, Vec<KnowledgeEntity>, Option<String>)> = to_ingest
         .par_iter()
         .map(|item| {
             let rel = &item.rel;
@@ -75,7 +83,7 @@ where
             if item.content.len() as u64 > opts.max_bytes() {
                 // Defense-in-depth TOCTOU guard (shouldn't fire; pre-pass
                 // already checked).
-                return (rel.clone(), Outcome::Skipped, Vec::new());
+                return (rel.clone(), Outcome::Skipped, Vec::new(), None);
             }
             let text = String::from_utf8_lossy(&item.content).into_owned();
             let text_for_ast = text.clone(); // keep a copy for AST call extraction
@@ -110,11 +118,15 @@ where
                 .as_ref()
                 .filter(|ts| ts.supports(ext))
                 .and_then(|ts| ts.parse(&text_for_ast, ext).ok());
+            // Chunk-coverage warning (large files chunked under half their
+            // bytes) — computed where candidates exist; None on other paths.
+            let mut coverage: Option<String> = None;
             let ingested = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
                 let candidates = match ts.chunk_with_tree(tree, &text, ext) {
                     Ok(c) => c,
-                    Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
+                    Err(_) => return (rel.clone(), Outcome::Error, Vec::new(), None),
                 };
+                coverage = coverage_warning_for(rel, &text, &candidates);
                 let mut req = request;
                 req.text = text;
                 block_on(code_ingestor.ingest_with_candidates(repo, req, candidates))
@@ -131,7 +143,7 @@ where
             };
             let ingested = match ingested {
                 Ok(i) => i,
-                Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
+                Err(_) => return (rel.clone(), Outcome::Error, Vec::new(), coverage),
             };
             // AST-level call extraction using the GLOBAL entity name set (not
             // just this file's symbols). This preserves cross-file call edges.
@@ -246,7 +258,7 @@ where
                         Some(&mut *idx),
                     )) {
                         Ok(e) => e,
-                        Err(_) => return (rel.clone(), Outcome::Error, Vec::new()),
+                        Err(_) => return (rel.clone(), Outcome::Error, Vec::new(), coverage),
                     }
                 }
             };
@@ -276,7 +288,49 @@ where
                     contract_had_write_error,
                 },
                 emitted_entities,
+                coverage,
             )
         })
-        .collect()
+        .collect();
+
+    // Split outcomes from warnings; cap the warning list so a pathological
+    // scan cannot flood the summary.
+    let mut coverage_warnings: Vec<String> = Vec::new();
+    let outcomes = results
+        .into_iter()
+        .map(|(rel, outcome, entities, warning)| {
+            if let Some(warning) = warning
+                && coverage_warnings.len() < super::MAX_COVERAGE_WARNINGS
+            {
+                coverage_warnings.push(warning);
+            }
+            (rel, outcome, entities)
+        })
+        .collect();
+    IngestResults {
+        outcomes,
+        coverage_warnings,
+    }
+}
+
+/// Chunk-coverage warning for one file, when warranted: large files whose
+/// chunked bytes cover less than [`super::COVERAGE_MIN_RATIO`] of the file.
+/// Small files chunk sparsely by design and are exempt.
+fn coverage_warning_for(
+    rel: &str,
+    text: &str,
+    candidates: &[engram_code::ChunkCandidate],
+) -> Option<String> {
+    let file_bytes = text.len();
+    if file_bytes < super::COVERAGE_MIN_FILE_BYTES {
+        return None;
+    }
+    let chunked: usize = candidates.iter().map(|c| c.text.len()).sum();
+    let ratio = chunked as f64 / file_bytes as f64;
+    (ratio < super::COVERAGE_MIN_RATIO).then(|| {
+        format!(
+            "{rel}: {:.0}% chunk coverage ({chunked} of {file_bytes} bytes chunked)",
+            ratio * 100.0
+        )
+    })
 }

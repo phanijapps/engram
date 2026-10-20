@@ -4,6 +4,7 @@
 //! on already-produced candidate results. It does not call stores, embedding
 //! providers, policy engines, graph databases, or model rerankers.
 
+mod artifacts;
 mod composer;
 mod config;
 mod graph_cache;
@@ -14,6 +15,7 @@ mod router;
 mod vector_index;
 mod weighted;
 
+pub use artifacts::{CODE_ARTIFACT_KINDS, is_code_artifact, suppresses_code_artifacts};
 pub use composer::{RetrievalCompositionInput, compose_context};
 pub use config::{
     KNOWN_LANE_TAGS, RecallFusionConfig, ReciprocalFusionConfig, RerankConfig,

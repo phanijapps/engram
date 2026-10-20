@@ -160,8 +160,19 @@ impl LexicalTargetResolver for KnowledgeLexicalResolver {
         // multi-term symbol queries returned nothing. Trying chunk-first keeps
         // chunk resolution unchanged; the entity branch is purely additive —
         // entity ids that previously dropped now resolve instead.
+        //
+        // Code-artifact eligibility (2026-10-20): when the request suppresses
+        // code artifacts (default), an entity-id hit resolving to a suppressed
+        // kind (Module/File/Repository/Variable) resolves to None — the lane's
+        // over-fetch refills the page. This is THE eligibility seam for the
+        // lexical lane; the chunk branch is unaffected.
         let entity_id = EntityId::from(target_id);
         if let Some(entity) = self.store.get_entity(&entity_id, &request.scope).await? {
+            if engram_retrieval::suppresses_code_artifacts(request)
+                && engram_retrieval::is_code_artifact(&entity)
+            {
+                return Ok(None);
+            }
             return Ok(Some(entity_to_lexical(entity)));
         }
         Ok(None)

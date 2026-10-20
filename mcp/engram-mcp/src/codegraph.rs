@@ -795,6 +795,31 @@ fn shorten_repo_label(label: &str) -> &str {
         .unwrap_or(label)
 }
 
+/// True when the query names a FILE PATH rather than a concept: it contains a
+/// path separator or ends in a known code/doc extension. Such a query is a
+/// precise ask ("where is src/orders.rs?"), not discovery — so `search`
+/// auto-includes the suppressed code-artifact classes (File/Module) for it
+/// instead of returning nothing. Everything else keeps the suppression
+/// default (reproduced regression: file-as-query accuracy 100% → 0% under
+/// default suppression; restored by this rule without weakening it).
+fn is_path_shaped_query(query: &str) -> bool {
+    let q = query.trim();
+    if q.is_empty() || q.len() > 512 {
+        return false;
+    }
+    if q.contains('/') || q.contains('\\') {
+        return true;
+    }
+    const EXTENSIONS: &[&str] = &[
+        "rs", "ts", "tsx", "js", "jsx", "mjs", "cjs", "py", "go", "rb", "java", "kt", "kts",
+        "scala", "swift", "c", "h", "cpp", "hpp", "cc", "cxx", "cs", "csx", "php", "pl", "pm",
+        "sh", "bash", "sql", "css", "html", "json", "yaml", "yml", "toml", "md", "markdown", "txt",
+    ];
+    q.rsplit_once('.')
+        .map(|(_, ext)| EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
 /// True when a resolved source path looks like a test artifact: a `tests` /
 /// `test` / `__tests__` / `__mocks__` path segment, a file whose stem starts
 /// `test_` or ends `_test`, or JS test suffixes (`.test.`, `.spec.`).
@@ -1026,6 +1051,7 @@ fn inject_exact_matches(
     hits: &mut Vec<SearchHit>,
     by_id: &HashMap<String, KnowledgeEntity>,
     query: &str,
+    include_code_artifacts: bool,
 ) -> usize {
     // (1) Mark existing matches; do NOT touch their scores (Option B). Chunks
     // are skipped — `is_exact` means "identifier match," and a chunk's `name`
@@ -1060,6 +1086,11 @@ fn inject_exact_matches(
     }
     let mut injected = 0usize;
     for e in by_id.values() {
+        // Code-artifact eligibility: suppressed kinds are never injected,
+        // even on an exact name match (the opt-in flag re-admits them).
+        if !include_code_artifacts && engram_retrieval::is_code_artifact(e) {
+            continue;
+        }
         if !name_matches_query(&e.name, query) {
             continue;
         }
@@ -1321,6 +1352,28 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
     // When false, only Entity results are returned (the prior behavior).
     let include_chunks = args["include_chunks"].as_bool().unwrap_or(true);
 
+    // include_code_artifacts (default false): Variable/Module/File/Repository
+    // entities (import-path stubs, file stubs) are suppressed from ranked
+    // results unless explicitly opted in. They keep participating in the
+    // graph (seeds, walk, edges, community structure) either way. Exception:
+    // a PATH-SHAPED query ("src/orders.rs") is a precise file ask, not
+    // discovery — artifacts auto-include for it (see is_path_shaped_query).
+    let include_code_artifacts =
+        args["include_code_artifacts"].as_bool().unwrap_or(false) || is_path_shaped_query(query);
+    let filters = engram_domain::QueryFilter {
+        memory_kinds: Vec::new(),
+        source_kinds: Vec::new(),
+        chunk_kinds: Vec::new(),
+        concept_ids: Vec::new(),
+        entity_ids: Vec::new(),
+        since: None,
+        until: None,
+        min_confidence: None,
+        include_archived: None,
+        as_of: None,
+        include_code_artifacts: Some(include_code_artifacts),
+    };
+
     // Prefer the hybrid-recall path. Each recall item carries the fused rank;
     // entity (code-symbol) hits are kept and rendered as `name (kind)`.
     //
@@ -1335,7 +1388,7 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                     scope: app.scope.clone(),
                     requester: requester(),
                     modes: Vec::new(),
-                    filters: None,
+                    filters: Some(filters.clone()),
                     cues: Vec::new(),
                     limit: Some(limit as u32),
                     budget: None,
@@ -1436,7 +1489,7 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                 // match never loses to semantic similarity. Option B: NO score
                 // boost — existing matches keep their RRF score, injected ones
                 // get an anchor-based score (max RRF for exact, 80% for partial).
-                inject_exact_matches(&mut hits, &by_id, query);
+                inject_exact_matches(&mut hits, &by_id, query, include_code_artifacts);
 
                 // Fix 6: test-file demotion — implementation outranks tests on
                 // concept queries. Hits resolved to test paths score at 85%
@@ -1515,7 +1568,13 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                 // Degrade to a direct scan when recall is not wired (e.g. a
                 // capability-check failure) so search still works without hybrid.
                 (
-                    substring_symbol_scan(app, query, limit, repository.as_deref()),
+                    substring_symbol_scan(
+                        app,
+                        query,
+                        limit,
+                        repository.as_deref(),
+                        include_code_artifacts,
+                    ),
                     Vec::new(),
                     None,
                 )
@@ -1530,6 +1589,23 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
         if let Some(repo) = repository.as_deref() {
             msg.push('\n');
             msg.push_str(&repository_empty_note(repo));
+        }
+        // Suppressed-artifact hint: an exact/substring match EXISTS but is a
+        // code artifact hidden by default — tell the caller how to opt in
+        // instead of leaving a silent empty packet. Success-empty, not error.
+        if !include_code_artifacts {
+            let by_id = entity_lookup(app);
+            let suppressed_matches = by_id
+                .values()
+                .filter(|e| {
+                    engram_retrieval::is_code_artifact(e) && name_matches_query(&e.name, query)
+                })
+                .count();
+            if suppressed_matches > 0 {
+                msg.push_str(&format!(
+                    "\n[{suppressed_matches} code-artifact match(es) (Module/File/Repository/Variable) suppressed by default — pass include_code_artifacts: true to include them]"
+                ));
+            }
         }
         msg
     } else {
@@ -1552,7 +1628,7 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// Falls back to `list_entities` on a miss (or no cache); it does not populate
 /// the cache itself (it reads entities only, no relationships — see the graph
 /// lane docs for the same reasoning).
-fn entity_lookup(app: &App) -> HashMap<String, KnowledgeEntity> {
+pub(crate) fn entity_lookup(app: &App) -> HashMap<String, KnowledgeEntity> {
     if let Some(cache) = app.provider.graph_cache()
         && let Some(snap) = block_on(cache.get(&app.scope))
     {
@@ -1627,6 +1703,7 @@ fn substring_symbol_scan(
     query: &str,
     limit: usize,
     repository: Option<&str>,
+    include_code_artifacts: bool,
 ) -> Vec<String> {
     let knowledge_query = match app.provider.require_knowledge_query() {
         Ok(q) => q,
@@ -1645,6 +1722,7 @@ fn substring_symbol_scan(
             Some(repo) => source_matches_repository(&e.provenance.source, repo),
             None => true,
         })
+        .filter(|e| include_code_artifacts || !engram_retrieval::is_code_artifact(e))
         .take(limit)
         .map(|e| format!("{} ({:?})", e.name, e.kind))
         .collect()
@@ -1842,6 +1920,7 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
     // Legacy single-string path: preserve the dependency-path option.
     if targets.len() == 1 && args["target"].is_string() {
         let seeds = resolve_seeds(&names, &targets[0]);
+        let unresolved_note = seed_resolution_note(&names, &targets[0], &seeds);
         let radii: Vec<engram_codegraph_queries::BlastRadiusBounded> = seeds
             .iter()
             .map(|s| engram_codegraph_queries::blast_radius_bounded(&rels, s, depth, cap))
@@ -1855,7 +1934,7 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
             engram_codegraph_queries::dependency_path(&rels, &from, &to_resolved)
         });
         return Ok(protocol::text_content(format!(
-            "Blast radius ({depth} hops, cap {cap}): {radius:?}\nDependency path: {path:?}"
+            "Blast radius ({depth} hops, cap {cap}): {radius:?}{unresolved_note}\nDependency path: {path:?}"
         )));
     }
 
@@ -1864,13 +1943,14 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
     let mut sections = Vec::with_capacity(targets.len());
     for target in &targets {
         let seeds = resolve_seeds(&names, target);
+        let unresolved_note = seed_resolution_note(&names, target, &seeds);
         let radii: Vec<engram_codegraph_queries::BlastRadiusBounded> = seeds
             .iter()
             .map(|s| engram_codegraph_queries::blast_radius_bounded(&rels, s, depth, cap))
             .collect();
         let radius = union_blast_radius(radii);
         sections.push(format!(
-            "=== change_impact: {target} (depth={depth}, cap {cap}) ===\nBlast radius: {radius:?}"
+            "=== change_impact: {target} (depth={depth}, cap {cap}) ===\nBlast radius: {radius:?}{unresolved_note}"
         ));
     }
     Ok(protocol::text_content(sections.join("\n\n")))
@@ -1879,6 +1959,26 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// Resolve `query` to its first matching qualified name, falling back to
 /// `fallback` (the bare query) when no entity matches. Used by `change_impact`'s
 /// dependency-path lookup, which needs a single endpoint rather than a union.
+/// Disclosure for `change_impact` targets that resolved to no ENTITY: the
+/// radius is computed over unresolved call references matching the bare
+/// name — real call sites, but not a symbol's resolved neighborhood. Making
+/// that distinction visible keeps bare-name queries ("run", "new") honest
+/// for evals and agents instead of silently returning a reference-graph
+/// union that looks like a symbol's blast radius.
+fn seed_resolution_note(entity_names: &[String], target: &str, seeds: &[String]) -> String {
+    let matched_entity = resolve_symbol_names(entity_names, target);
+    if !matched_entity.is_empty() {
+        return String::new();
+    }
+    if seeds.len() == 1 && seeds[0] == target {
+        format!(
+            "\n[note: no indexed entity named {target:?} — radius is over unresolved call references with that bare name]"
+        )
+    } else {
+        String::new()
+    }
+}
+
 fn names_first_match(entity_names: &[String], query: &str, fallback: &str) -> String {
     resolve_symbol_names(entity_names, query)
         .into_iter()
@@ -3318,7 +3418,7 @@ mod tests {
             chunk_excerpt: None,
         }];
 
-        let injected = inject_exact_matches(&mut hits, &by_id, "alpha");
+        let injected = inject_exact_matches(&mut hits, &by_id, "alpha", false);
         assert_eq!(injected, 0, "alpha already present → not re-injected");
         assert_eq!(hits.len(), 1);
         assert!(hits[0].is_exact, "alpha marked exact");
@@ -3328,6 +3428,31 @@ mod tests {
             "alpha score unchanged (was 0.05, no 1.0 floor)"
         );
         assert_eq!(hits[0].source_score, Some(0.41), "raw lane score preserved");
+    }
+
+    #[test]
+    fn path_shaped_queries_are_recognized_precisely() {
+        for q in [
+            "src/orders.rs",
+            "apps/ui/src/lib.rs",
+            "payments.ts",
+            "schema.json",
+            "README.md",
+            "windows\\path\\kinds.rs",
+        ] {
+            assert!(is_path_shaped_query(q), "{q:?} should be path-shaped");
+        }
+        // Concepts stay suppressed: no separator, no code extension.
+        for q in [
+            "charge card",
+            "run",
+            "node.js framework discussion",
+            "3.14",
+            "",
+            "e.g.",
+        ] {
+            assert!(!is_path_shaped_query(q), "{q:?} must NOT be path-shaped");
+        }
     }
 
     #[test]
@@ -3474,7 +3599,7 @@ mod tests {
             },
         ];
 
-        inject_exact_matches(&mut hits, &by_id, "_tokens");
+        inject_exact_matches(&mut hits, &by_id, "_tokens", false);
 
         let tokens = hits.iter().find(|h| h.name == "_tokens").unwrap();
         let correspond = hits.iter().find(|h| h.name == "correspond_tokens").unwrap();
@@ -3527,7 +3652,7 @@ mod tests {
         // One existing hit with score 0.05 → that is the anchor (max RRF).
         let mut hits = vec![hit("unrelated", Some("z.rs"), 0.05)];
 
-        let injected = inject_exact_matches(&mut hits, &by_id, "anthropicOAuth");
+        let injected = inject_exact_matches(&mut hits, &by_id, "anthropicOAuth", false);
         assert_eq!(injected, 1, "anthropicOAuth injected");
         let inj = hits.iter().find(|h| h.name == "anthropicOAuth").unwrap();
         assert!(inj.is_exact);
@@ -3563,7 +3688,7 @@ mod tests {
 
         // Existing hit at 0.10 → anchor = 0.10.
         let mut hits = vec![hit("unrelated", Some("z.rs"), 0.10)];
-        let injected = inject_exact_matches(&mut hits, &by_id, "login");
+        let injected = inject_exact_matches(&mut hits, &by_id, "login", false);
         assert_eq!(injected, 1);
         let inj = hits.iter().find(|h| h.name == "loginAnthropic").unwrap();
         // Partial match → 0.8 * 0.10 = 0.08.
@@ -3590,7 +3715,7 @@ mod tests {
             ),
         );
         let mut hits: Vec<SearchHit> = Vec::new();
-        let injected = inject_exact_matches(&mut hits, &by_id, "lonelyFunc");
+        let injected = inject_exact_matches(&mut hits, &by_id, "lonelyFunc", false);
         assert_eq!(injected, 1);
         assert!(
             (hits[0].score - 0.05).abs() < 1e-6,
@@ -4103,7 +4228,7 @@ mod tests {
         // is_exact — that tag means "identifier match," not "content match."
         let by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
         let mut hits = vec![hit_chunk("alphaFunction body text", Some("a.rs"), 0.05)];
-        let injected = inject_exact_matches(&mut hits, &by_id, "alphaFunction");
+        let injected = inject_exact_matches(&mut hits, &by_id, "alphaFunction", false);
         // No entities in by_id → nothing injected.
         assert_eq!(injected, 0);
         // The chunk is NOT marked is_exact (it's a content label, not a symbol).
@@ -4457,6 +4582,27 @@ mod tests {
     }
 
     #[test]
+    #[test]
+    fn seed_resolution_note_discloses_unresolved_bare_targets() {
+        let names = vec![
+            "PluginService::delete_secret".to_owned(),
+            "overrun_counter".to_owned(),
+        ];
+        // Bare target with no entity: disclosure fires.
+        let seeds = resolve_seeds(&names, "run");
+        assert!(seed_resolution_note(&names, "run", &seeds).contains("no indexed entity"));
+        // Exact/qualified target: silent (resolved neighborhood).
+        let seeds = resolve_seeds(&names, "PluginService::delete_secret");
+        assert_eq!(
+            seed_resolution_note(&names, "PluginService::delete_secret", &seeds),
+            ""
+        );
+        // Bare tail of a qualified name resolves: silent.
+        let seeds = resolve_seeds(&names, "delete_secret");
+        assert_eq!(seed_resolution_note(&names, "delete_secret", &seeds), "");
+    }
+
+    #[test]
     fn resolve_seeds_falls_back_to_bare_symbol_when_no_entity_matches() {
         // Unknown symbol → the bare string is the sole seed (BFS still runs;
         // finds nothing, but the caller does not error).
@@ -4642,6 +4788,10 @@ pub fn explore(app: &App, args: &Value) -> Result<Value, ToolError> {
     let depth = args["depth"].as_u64().unwrap_or(2).clamp(0, 4) as u32;
     let max_nodes = args["max_nodes"].as_u64().unwrap_or(24).clamp(1, 64) as usize;
     let max_edges = args["max_edges"].as_u64().unwrap_or(64).clamp(1, 256) as usize;
+    // Code-artifact suppression (default on): Variable/Module/File/Repository
+    // entities are excluded from the DISCOVERY seed list unless opted in.
+    // Expansion edges may still traverse them (raw structural view).
+    let include_code_artifacts = args["include_code_artifacts"].as_bool().unwrap_or(false);
     let rels = fetch_rels(app)?;
     let query_handle = app
         .provider
@@ -4651,6 +4801,7 @@ pub fn explore(app: &App, args: &Value) -> Result<Value, ToolError> {
         block_on(async { query_handle.list_entities(&app.scope).await })
             .map_err(|e| crate::tools::internal(e.to_string()))?
             .into_iter()
+            .filter(|e| include_code_artifacts || !engram_retrieval::is_code_artifact(e))
             .map(|e| (e.name, Some(format!("{:?}", e.kind).to_lowercase())))
             .collect();
     let nodes =

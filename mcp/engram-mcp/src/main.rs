@@ -1245,7 +1245,8 @@ fn consolidated_recall(app: &App, args: &Value) -> Result<Value, ToolError> {
                 app,
                 &json!({
                     "mode": "hybrid", "query": args["query"],
-                    "limit": args.get("limit").cloned().unwrap_or(json!(10))
+                    "limit": args.get("limit").cloned().unwrap_or(json!(10)),
+                    "include_code_artifacts": args.get("include_code_artifacts").cloned().unwrap_or(json!(false))
                 }),
             )
         }
@@ -1259,7 +1260,8 @@ fn consolidated_recall(app: &App, args: &Value) -> Result<Value, ToolError> {
         _ => crate::tools::recall(
             app,
             &json!({
-                "mode": "hybrid", "query": args["query"], "limit": args.get("limit").cloned().unwrap_or(json!(10))
+                "mode": "hybrid", "query": args["query"], "limit": args.get("limit").cloned().unwrap_or(json!(10)),
+                "include_code_artifacts": args.get("include_code_artifacts").cloned().unwrap_or(json!(false))
             }),
         ),
     }
@@ -1274,7 +1276,8 @@ fn consolidated_code(app: &App, args: &Value) -> Result<Value, ToolError> {
                 "query": args.get("query")
                     .or_else(|| args.get("symbol").filter(|v| !v.is_null()))
                     .unwrap_or(&json!("")),
-                "limit": args.get("limit").cloned().unwrap_or(json!(5))
+                "limit": args.get("limit").cloned().unwrap_or(json!(5)),
+                "include_code_artifacts": args.get("include_code_artifacts").cloned().unwrap_or(json!(false))
             }),
         ),
         "impact" => crate::codegraph::change_impact(
@@ -1295,7 +1298,8 @@ fn consolidated_code(app: &App, args: &Value) -> Result<Value, ToolError> {
         "explore" => crate::codegraph::explore(
             app,
             &json!({
-                "query": args["query"], "maxNodes": args.get("limit").cloned().unwrap_or(json!(25))
+                "query": args["query"], "maxNodes": args.get("limit").cloned().unwrap_or(json!(25)),
+                "include_code_artifacts": args.get("include_code_artifacts").cloned().unwrap_or(json!(false))
             }),
         ),
         "dependencies" => crate::codegraph::file_dependencies(app, args),

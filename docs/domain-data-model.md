@@ -1776,6 +1776,8 @@ Fields:
 | `until` | no | Timestamp | Upper time bound |
 | `minConfidence` | no | number | Minimum confidence |
 | `includeArchived` | no | boolean | Whether archived records are eligible |
+| `asOf` | no | Timestamp | Bi-temporal as-of validity bound (ADR-0021) |
+| `includeCodeArtifacts` | no | boolean | Opt Variable/Module/File/Repository entities into RANKED retrieval results (default: suppressed). Suppression is result-eligibility only — those entities still seed graph walks, carry edges (concept↔code bridges), and shape community structure. Indexing is unchanged either way. Compatible additive field. |
 
 ### Cue
 

@@ -221,14 +221,18 @@ impl NativeProvider {
             depth: Option<u32>,
             max_nodes: Option<usize>,
             max_edges: Option<usize>,
+            /// Opt Variable/Module/File/Repository entities into the
+            /// discovery seed list (suppressed by default).
+            include_code_artifacts: Option<bool>,
         }
         let request: ExploreRequest = decode(&request_json)?;
-        let nodes = block_on(self.inner.code_graph_explore(
+        let nodes = block_on(self.inner.code_graph_explore_with_artifacts(
             &request.scope,
             &request.query,
             request.depth,
             request.max_nodes,
             request.max_edges,
+            request.include_code_artifacts.unwrap_or(false),
         ))
         .map_err(to_napi_error)?;
         encode(&nodes)

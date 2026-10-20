@@ -41,6 +41,12 @@ const CONTEXT_TOTAL_CHAR_BUDGET: usize = 50_000;
 /// `min_score` arg.
 const DEFAULT_MIN_SCORE: f32 = 0.01;
 
+/// Score multiplier applied to hits resolved to test files (Fix 6): a test
+/// match must be ~18% stronger than an implementation match to outrank it,
+/// so concept queries surface the implementation first without hiding tests
+/// that genuinely match better.
+const TEST_FILE_DEMOTION: f32 = 0.85;
+
 /// Excerpt length for chunk text surfaced in `search` results. Enough to see
 /// decisive code values (`sk-ant-oat`, `Authorization: Bearer`, `PKCE`) that
 /// live in function bodies, not entity names. Bounds context cost while
@@ -94,20 +100,38 @@ fn normalize_repository_key(repository: &str) -> String {
     }
 }
 
-/// True when `provenance_source` originates from `repository`. Matching is
-/// intentionally flexible: a caller may pass `"phanijapps/engram"`,
-/// `"github.com/phanijapps/engram"`, or `"git@github.com:phanijapps/engram"`,
-/// and any of them must match a source like
-/// `engram-mcp-scan [git@github.com:phanijapps/engram.git@feat/x:sha]`. Both
-/// sides are lowercased; the repository is reduced to its `org/name` core (see
-/// [`normalize_repository_key`]) before a substring test against the source. An
-/// empty key (bare host / empty input) matches nothing.
+/// True when `provenance_source` originates from `repository`. Two forms:
+///
+/// * Full `org/name` (optionally with a host prefix — `"phanijapps/zbot"`,
+///   `"github.com/phanijapps/zbot"`, `"git@github.com:phanijapps/zbot"`):
+///   containment against the source string a scan stamped
+///   (`engram-mcp-scan [git@github.com:phanijapps/zbot.git@main:sha]`).
+/// * Short name (`"zbot"`): equality against the repo segment of the
+///   source's extracted `org/repo` label, or against the bare source name
+///   (pre-bracket, for non-git local scans). Deliberately NOT a substring
+///   test — `bot` must not match `phanijapps/zbot`.
+///
+/// An empty or degenerate key matches nothing.
 pub(crate) fn source_matches_repository(source: &str, repository: &str) -> bool {
     let needle = normalize_repository_key(repository);
-    if needle.is_empty() {
+    if !needle.is_empty() {
+        return source.to_ascii_lowercase().contains(&needle);
+    }
+    // Short form: bare repo name, no slash.
+    let short = repository.trim().to_ascii_lowercase();
+    if short.len() < 2 || short.contains('/') {
         return false;
     }
-    source.to_ascii_lowercase().contains(&needle)
+    if let Some(label) = extract_repo_label(source) {
+        if label.rsplit('/').next() == Some(short.as_str()) {
+            return true;
+        }
+    }
+    let bare = source
+        .split_once('[')
+        .map(|(name, _)| name.trim())
+        .unwrap_or(source.trim());
+    bare.to_ascii_lowercase() == short
 }
 
 /// Diagnostic appended when a `repository` filter removes every result, so a
@@ -118,14 +142,10 @@ fn repository_empty_note(repo: &str) -> String {
     )
 }
 
-/// Extracts a concise `org/repo` label from a provenance `source` string (the
-/// field `scan_repo` populates). Git-backed sources embed the remote inside
-/// brackets, e.g. `"engram-mcp-scan [git@github.com:org/repo.git@branch:sha]"`;
-/// this pulls out `"org/repo"`. Falls back to the bare source name (before the
-/// `[`) when no recognizable git remote is embedded, so a non-git source still
-/// renders something meaningful. The result is lowercased (it derives from the
-/// lowercased remote) — acceptable for a display label.
-fn provenance_repo_label(source: &str) -> String {
+/// Extracts the `org/repo` label a git-backed scan stamped into a provenance
+/// `source` string: `"scan [git@github.com:org/repo.git@branch:sha]"` →
+/// `Some("org/repo")`. `None` when no recognizable remote is embedded.
+fn extract_repo_label(source: &str) -> Option<String> {
     let inner = source
         .split_once('[')
         .map(|(_, rest)| rest.trim_end_matches(']'))
@@ -140,9 +160,24 @@ fn provenance_repo_label(source: &str) -> String {
                 .map(|(r, _)| r)
                 .unwrap_or(rest);
             if repo.contains('/') {
-                return repo.to_owned();
+                return Some(repo.to_owned());
             }
         }
+    }
+    None
+}
+
+/// Extracts a concise `org/repo` label from a provenance `source` string (the
+/// field `scan_repo` populates). Git-backed sources embed the remote inside
+/// brackets, e.g. `"engram-mcp-scan [git@github.com:org/repo.git@branch:sha]"`;
+/// this pulls out `"org/repo"` via [`extract_repo_label`]. Falls back to the
+/// bare source name (before the `[`) when no recognizable git remote is
+/// embedded, so a non-git source still renders something meaningful. The
+/// result is lowercased (it derives from the lowercased remote) — acceptable
+/// for a display label.
+fn provenance_repo_label(source: &str) -> String {
+    if let Some(repo) = extract_repo_label(source) {
+        return repo;
     }
     // Fallback: the source name before the bracket.
     source
@@ -760,6 +795,26 @@ fn shorten_repo_label(label: &str) -> &str {
         .unwrap_or(label)
 }
 
+/// True when a resolved source path looks like a test artifact: a `tests` /
+/// `test` / `__tests__` / `__mocks__` path segment, a file whose stem starts
+/// `test_` or ends `_test`, or JS test suffixes (`.test.`, `.spec.`).
+/// Deliberately segment/token-based — `protest.rs` or `latest/` are NOT
+/// tests.
+fn is_test_path(path: &str) -> bool {
+    path.split(['/', '\\']).any(|seg| {
+        let s = seg.to_ascii_lowercase();
+        if s == "tests" || s == "test" || s == "__tests__" || s == "__mocks__" {
+            return true;
+        }
+        if s.contains(".test.") || s.contains(".spec.") {
+            return true;
+        }
+        // Extension-stripped stem: `lexer_test.rs`, `test_parser.go`.
+        let stem = s.split('.').next().unwrap_or(&s);
+        stem.starts_with("test_") || stem.ends_with("_test")
+    })
+}
+
 /// True when `name` is an exact/normalized match for `query` (Fix 2). The query
 /// equals the name (case-insensitive), or one contains the other after
 /// lowercasing + trimming. Handles both `"anthropicOAuth"` → exact, and
@@ -974,10 +1029,14 @@ fn inject_exact_matches(
 ) -> usize {
     // (1) Mark existing matches; do NOT touch their scores (Option B). Chunks
     // are skipped — `is_exact` means "identifier match," and a chunk's `name`
-    // is a content label, not a symbol name.
+    // is a content label, not a symbol name. Marking uses STRICT identifier
+    // equality (`name_exact_match`) — the loose substring arm of
+    // `name_matches_query` would tie every longer symbol containing the query
+    // (searching `_tokens` marked `correspond_tokens` exact too, and its
+    // multi-lane fused score then outranked the true match).
     let mut seen_ids: HashSet<String> = HashSet::new();
     for h in hits.iter_mut() {
-        if h.chunk_excerpt.is_none() && name_matches_query(&h.name, query) {
+        if h.chunk_excerpt.is_none() && name_exact_match(&h.name, query) {
             h.is_exact = true;
         }
         seen_ids.insert(h.entity_id.clone());
@@ -1378,6 +1437,18 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
                 // boost — existing matches keep their RRF score, injected ones
                 // get an anchor-based score (max RRF for exact, 80% for partial).
                 inject_exact_matches(&mut hits, &by_id, query);
+
+                // Fix 6: test-file demotion — implementation outranks tests on
+                // concept queries. Hits resolved to test paths score at 85%
+                // BEFORE the final sort, so a test file leads only when its
+                // match is genuinely stronger. The `is_exact` tier stays
+                // primary (an exact identifier in a test file still ranks
+                // above every partial match).
+                for h in hits.iter_mut() {
+                    if h.path.as_deref().is_some_and(is_test_path) {
+                        h.score *= TEST_FILE_DEMOTION;
+                    }
+                }
 
                 // Re-sort: exact matches first, then by score descending.
                 hits.sort_by(|a, b| {
@@ -2773,6 +2844,35 @@ mod tests {
     }
 
     #[test]
+    fn source_matches_repository_accepts_short_name() {
+        // Defect (reported live): `repository="zbot"` returned 0 results —
+        // the short form has no '/', so the key normalized to "" and matched
+        // nothing. A scan of phanijapps/zbot stamps exactly this source:
+        let zbot_src = "engram-mcp-scan [git@github.com:phanijapps/zbot.git@main:cafe1]";
+
+        // Short name matches the repo segment of the org/repo label.
+        assert!(source_matches_repository(zbot_src, "zbot"));
+        assert!(source_matches_repository(zbot_src, "Zbot"));
+        // Full forms still match the same source.
+        assert!(source_matches_repository(zbot_src, "phanijapps/zbot"));
+        assert!(source_matches_repository(
+            zbot_src,
+            "github.com/phanijapps/zbot"
+        ));
+
+        // NOT a substring test: `bot` must not match `phanijapps/zbot`, and a
+        // short name must not leak into other repos.
+        assert!(!source_matches_repository(zbot_src, "bot"));
+        assert!(!source_matches_repository(zbot_src, "tokens"));
+        let engram_src = "engram-mcp-scan [git@github.com:phanijapps/engram.git@feat/x:abc123]";
+        assert!(!source_matches_repository(engram_src, "zbot"));
+
+        // Non-git local scan whose bare source name IS the short name.
+        assert!(source_matches_repository("zbot", "zbot"));
+        assert!(!source_matches_repository("engram-mcp-scan", "zbot"));
+    }
+
+    #[test]
     fn resolve_explicit_arg_overrides_discovered() {
         // Both an explicit arg AND a discovered file exist; the arg wins and the
         // discovered file's content must NOT leak into the filter. The
@@ -3228,6 +3328,175 @@ mod tests {
             "alpha score unchanged (was 0.05, no 1.0 floor)"
         );
         assert_eq!(hits[0].source_score, Some(0.41), "raw lane score preserved");
+    }
+
+    #[test]
+    fn is_test_path_detects_test_artifacts_without_false_positives() {
+        for path in [
+            "tests/lex.rs",
+            "src/test/parser.rs",
+            "pkg/__tests__/store.test.ts",
+            "__mocks__/api.ts",
+            "src/test_lexer.rs",
+            "src/lexer_test.rs",
+            "packages/runtime/src/store.spec.ts",
+            "src/quick_edit.test.tsx",
+        ] {
+            assert!(is_test_path(path), "{path} should be a test path");
+        }
+        for path in [
+            "src/latest/parser.rs",
+            "src/protest.rs",
+            "src/attest.go",
+            "testsuite/README.md", // no exact `tests`/`test` segment
+            "contest.rs",
+        ] {
+            assert!(!is_test_path(path), "{path} should NOT be a test path");
+        }
+    }
+
+    #[test]
+    fn test_file_demotion_puts_implementation_first_on_ties() {
+        // Defect (reported live): tests outranked implementation on concept
+        // queries. Two equal-score hits — the implementation leads after the
+        // Fix-6 demotion; a genuinely stronger test match still leads.
+        let mut hits = [
+            SearchHit {
+                entity_id: "t1".into(),
+                name: "parse_tokens".into(),
+                kind_label: "Function".into(),
+                repo: "phanijapps/zbot".into(),
+                path: Some("tests/parse_tokens_test.rs".into()),
+                retriever: "lexical".into(),
+                source_score: Some(0.3),
+                score: 0.05,
+                is_exact: false,
+                chunk_excerpt: None,
+            },
+            SearchHit {
+                entity_id: "i1".into(),
+                name: "parse_tokens".into(),
+                kind_label: "Function".into(),
+                repo: "phanijapps/zbot".into(),
+                path: Some("src/parser.rs".into()),
+                retriever: "lexical".into(),
+                source_score: Some(0.3),
+                score: 0.05,
+                is_exact: false,
+                chunk_excerpt: None,
+            },
+        ];
+        for h in hits.iter_mut() {
+            if h.path.as_deref().is_some_and(is_test_path) {
+                h.score *= TEST_FILE_DEMOTION;
+            }
+        }
+        hits.sort_by(|a, b| {
+            b.is_exact.cmp(&a.is_exact).then_with(|| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+        });
+        assert_eq!(hits[0].path.as_deref(), Some("src/parser.rs"));
+        // A test hit with a ~18% stronger raw match still leads.
+        let mut stronger = hits[0].clone();
+        stronger.path = Some("tests/parse_tokens_test.rs".into());
+        stronger.score = 0.07; // 0.07 * 0.85 = 0.0595 > 0.05
+        let mut pair = [hits[1].clone(), stronger];
+        for h in pair.iter_mut() {
+            if h.path.as_deref().is_some_and(is_test_path) {
+                h.score *= TEST_FILE_DEMOTION;
+            }
+        }
+        pair.sort_by(|a, b| {
+            b.is_exact.cmp(&a.is_exact).then_with(|| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+        });
+        assert_eq!(pair[0].path.as_deref(), Some("tests/parse_tokens_test.rs"));
+    }
+
+    #[test]
+    fn exact_marking_requires_identifier_equality_not_substring() {
+        // Defect (reported live): searching `_tokens` ranked `correspond_tokens`
+        // FIRST — the loose substring arm of `name_matches_query` marked the
+        // longer symbol `is_exact` too (it CONTAINS "_tokens"), tying the true
+        // exact match's tier, and its multi-lane fused score won the tie.
+        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        by_id.insert(
+            "e1".into(),
+            make_entity(
+                "e1",
+                "_tokens",
+                engram_domain::EntityKind::Function,
+                Some("src/lex.rs"),
+            ),
+        );
+        by_id.insert(
+            "e2".into(),
+            make_entity(
+                "e2",
+                "correspond_tokens",
+                engram_domain::EntityKind::Function,
+                Some("src/rel.rs"),
+            ),
+        );
+
+        // correspond_tokens comes from MORE lanes → higher fused score (0.03)
+        // than the true exact match _tokens (0.02).
+        let mut hits = vec![
+            SearchHit {
+                entity_id: "e2".into(),
+                name: "correspond_tokens".into(),
+                kind_label: "Function".into(),
+                repo: "phanijapps/zbot".into(),
+                path: Some("src/rel.rs".into()),
+                retriever: "graph+associative_graph+lexical".into(),
+                source_score: Some(0.30),
+                score: 0.03,
+                is_exact: false,
+                chunk_excerpt: None,
+            },
+            SearchHit {
+                entity_id: "e1".into(),
+                name: "_tokens".into(),
+                kind_label: "Function".into(),
+                repo: "phanijapps/zbot".into(),
+                path: Some("src/lex.rs".into()),
+                retriever: "lexical".into(),
+                source_score: Some(0.20),
+                score: 0.02,
+                is_exact: false,
+                chunk_excerpt: None,
+            },
+        ];
+
+        inject_exact_matches(&mut hits, &by_id, "_tokens");
+
+        let tokens = hits.iter().find(|h| h.name == "_tokens").unwrap();
+        let correspond = hits.iter().find(|h| h.name == "correspond_tokens").unwrap();
+        assert!(
+            tokens.is_exact,
+            "the identifier that EQUALS the query must be exact"
+        );
+        assert!(
+            !correspond.is_exact,
+            "a symbol that merely CONTAINS the query string must not tie the exact tier"
+        );
+
+        // And the production sort then puts _tokens first (is_exact primary).
+        let mut sorted = hits.clone();
+        sorted.sort_by(|a, b| {
+            b.is_exact.cmp(&a.is_exact).then_with(|| {
+                b.score
+                    .partial_cmp(&a.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+        });
+        assert_eq!(sorted[0].name, "_tokens", "exact identifier ranks #1");
     }
 
     #[test]

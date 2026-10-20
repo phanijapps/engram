@@ -361,7 +361,15 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         // code symbol), so multi-term symbol queries return ranked hits through
         // unified recall.
         let lexical_dir = storage.join("lexical");
-        if let Ok(lexical_index) = engram_store_lexical::LexicalIndex::open(&lexical_dir) {
+        if let Ok((lexical_index, rebuilt)) =
+            engram_store_lexical::LexicalIndex::open_with_compat(&lexical_dir)
+        {
+            if rebuilt {
+                eprintln!(
+                    "engram-mcp: lexical index at {} was discarded (built by an older engram version) and rebuilt empty. Run scan_repo for your repositories to restore code-symbol search; until then search sees only newly scanned symbols.",
+                    lexical_dir.display()
+                );
+            }
             let lexical_index = Arc::new(lexical_index);
             retrieval_lanes.push(recall_lanes::lexical_recall_lane(
                 knowledge_handle.clone(),

@@ -19,6 +19,22 @@ use tantivy::{
 
 use crate::tokenizer::normalize_identifier_text;
 
+/// On-disk format version of the lexical index (stamped as a `version` marker
+/// file next to the Tantivy files).
+///
+/// Bump when the on-disk shape changes in a way an older/newer binary cannot
+/// interpret consistently (schema field ids, normalization semantics that
+/// change what a token means, storage layout). On mismatch [`LexicalIndex`]
+/// discards the stale index and starts fresh (see [`open_with_compat`](
+/// LexicalIndex::open_with_compat)) — silently serving a stale or
+/// incompatible index after an upgrade is the failure this prevents.
+pub const INDEX_FORMAT_VERSION: u32 = 1;
+
+/// Marker file name stamped into the index directory.
+const VERSION_MARKER: &str = "version";
+/// Tantivy's own metadata file — its presence means a real index exists.
+const TANTIVY_META: &str = "meta.json";
+
 /// Lexical index backed by Tantivy.
 ///
 /// Indexes normalized text and returns BM25-ranked target references. The
@@ -73,6 +89,57 @@ impl LexicalIndex {
         let (schema, text_field, target_id_field) = Self::build_schema();
         let index = Index::create_in_ram(schema);
         Self::attach_io(index, text_field, target_id_field)
+    }
+
+    /// Opens (or creates) a **file-backed** lexical index rooted at `directory`,
+    /// discarding + rebuilding when the persisted index was written by an
+    /// older format version.
+    ///
+    /// Returns the index plus `rebuilt: bool` — true when an existing index
+    /// was DISCARDED because its `version` marker was missing or older than
+    /// [`INDEX_FORMAT_VERSION`]. Callers surface the upgrade guidance (the
+    /// rebuilt index is empty until repositories are re-scanned).
+    ///
+    /// All other behavior matches [`open`](Self::open) (create-if-missing,
+    /// load-if-compatible, in-RAM fallback on hard failure).
+    pub fn open_with_compat(directory: &Path) -> tantivy::Result<(Self, bool)> {
+        let marker = directory.join(VERSION_MARKER);
+        let stamped = std::fs::read_to_string(&marker)
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok());
+        let has_index = directory.join(TANTIVY_META).exists();
+
+        if has_index && stamped != Some(INDEX_FORMAT_VERSION) {
+            // Index on disk predates this format version (or carries no
+            // marker). Serving it risks misinterpreted segments and stale
+            // tokens; discard and start fresh — the next scan re-feeds.
+            eprintln!(
+                "engram-lexical: index at {} was built by an older format (marker {:?}, current v{INDEX_FORMAT_VERSION}); rebuilding empty — re-scan repositories to restore code-symbol search",
+                directory.display(),
+                stamped
+            );
+            if std::fs::remove_dir_all(directory).is_ok() {
+                std::fs::create_dir_all(directory)?;
+            }
+            let index = Self::open_after_compat(directory)?;
+            return Ok((index, true));
+        }
+
+        let index = Self::open_after_compat(directory)?;
+        Ok((index, false))
+    }
+
+    /// Shared tail of the open paths: stamp the current version marker (idempotent)
+    /// and open-or-create the Tantivy index.
+    fn open_after_compat(directory: &Path) -> tantivy::Result<Self> {
+        std::fs::create_dir_all(directory)?;
+        if let Err(e) = std::fs::write(
+            directory.join(VERSION_MARKER),
+            INDEX_FORMAT_VERSION.to_string(),
+        ) {
+            eprintln!("engram-lexical: write version marker failed ({e}); continuing");
+        }
+        Self::open(directory)
     }
 
     /// Opens (or creates) a **file-backed** lexical index rooted at `directory`.
@@ -369,5 +436,54 @@ mod tests {
         index.upsert("t", "parse error").unwrap();
         let hits = index.search("parse", 10).unwrap();
         assert!(hits.iter().any(|(id, _)| id == "t"));
+    }
+
+    /// Fresh open stamps the current format version; a matching re-open loads
+    /// the persisted index WITHOUT rebuilding.
+    #[test]
+    fn open_with_compat_stamps_and_reuses_current_version() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let lexical_dir = dir.path().join("lexical");
+
+        let (index, rebuilt) = LexicalIndex::open_with_compat(&lexical_dir).expect("open");
+        assert!(!rebuilt, "fresh create is not a rebuild");
+        index.upsert("t", "parse error").unwrap();
+        // Tantivy allows one IndexWriter per directory: drop the handle before
+        // re-opening (the persistence test uses the same pattern).
+        drop(index);
+
+        let marker = std::fs::read_to_string(lexical_dir.join("version")).unwrap();
+        assert_eq!(marker.trim(), INDEX_FORMAT_VERSION.to_string());
+
+        // Re-open with the current marker: loads persisted writes, no rebuild.
+        let (index, rebuilt) = LexicalIndex::open_with_compat(&lexical_dir).expect("reopen");
+        assert!(!rebuilt, "current-version index must be reused");
+        let hits = index.search("parse", 10).unwrap();
+        assert!(hits.iter().any(|(id, _)| id == "t"));
+    }
+
+    /// An index stamped by an OLDER version is discarded and rebuilt empty —
+    /// the upgrade guard. Without it, an upgraded binary would silently serve
+    /// a stale/incompatible index.
+    #[test]
+    fn open_with_compat_rebuilds_stale_version() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let lexical_dir = dir.path().join("lexical");
+
+        // Build a real index (meta.json + writes), then stamp it OLD.
+        let (index, _) = LexicalIndex::open_with_compat(&lexical_dir).expect("open");
+        index.upsert("t", "parse error").unwrap();
+        drop(index);
+        std::fs::write(lexical_dir.join("version"), "0").unwrap();
+
+        let (rebuilt_index, rebuilt) = LexicalIndex::open_with_compat(&lexical_dir).expect("open");
+        assert!(rebuilt, "stale-version index must be rebuilt");
+        // The rebuilt index is empty — old contents discarded, not served.
+        let hits = rebuilt_index.search("parse", 10).unwrap();
+        assert!(hits.is_empty(), "stale contents must not survive: {hits:?}");
+        drop(rebuilt_index);
+        // And the marker is current again (a third open is a plain reuse).
+        let (_, rebuilt_again) = LexicalIndex::open_with_compat(&lexical_dir).expect("open");
+        assert!(!rebuilt_again);
     }
 }

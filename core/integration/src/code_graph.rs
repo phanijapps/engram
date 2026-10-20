@@ -57,6 +57,11 @@ impl EngramProvider {
     /// Natural-language explore: identifier-token seeding + bounded
     /// expansion over `calls`/`contains` edges. Defaults per the contract:
     /// depth 2, 24 nodes, 64 edges.
+    ///
+    /// `include_code_artifacts` (default false): Variable/Module/File/
+    /// Repository entities are excluded from the discovery seed list unless
+    /// opted in; expansion edges may still traverse them (raw structural
+    /// view — matches the MCP `explore` tool's semantics).
     pub async fn code_graph_explore(
         &self,
         scope: &Scope,
@@ -65,11 +70,29 @@ impl EngramProvider {
         max_nodes: Option<usize>,
         max_edges: Option<usize>,
     ) -> CoreResult<Vec<ExploreNodeView>> {
+        self.code_graph_explore_with_artifacts(
+            scope, query_text, depth, max_nodes, max_edges, false,
+        )
+        .await
+    }
+
+    /// [`code_graph_explore`](Self::code_graph_explore) with explicit
+    /// code-artifact eligibility for the discovery seed list.
+    pub async fn code_graph_explore_with_artifacts(
+        &self,
+        scope: &Scope,
+        query_text: &str,
+        depth: Option<u32>,
+        max_nodes: Option<usize>,
+        max_edges: Option<usize>,
+        include_code_artifacts: bool,
+    ) -> CoreResult<Vec<ExploreNodeView>> {
         let query = self.require_knowledge_query()?;
         let relationships = query.list_relationships(scope).await?;
         let entities = query.list_entities(scope).await?;
         let names: Vec<(String, Option<String>)> = entities
             .iter()
+            .filter(|e| include_code_artifacts || !engram_retrieval::is_code_artifact(e))
             .map(|e| (e.name.clone(), Some(format!("{:?}", e.kind).to_lowercase())))
             .collect();
         Ok(explore_query(

@@ -150,15 +150,23 @@ pub fn graph_subgraph(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// "is X in the graph?" lookup.
 pub fn resolve_entity(app: &App, args: &Value) -> Result<Value, ToolError> {
     let name = req_str(args, "name")?;
+    // Code-artifact suppression (default on) for this DISCOVERY surface:
+    // suppressed kinds are skipped unless opted in. Exact-id lookups still
+    // resolve (a caller holding an id targets it explicitly) — the filter
+    // guards the fuzzy name-scan arms, matching `search` behavior.
+    let include_code_artifacts = args["include_code_artifacts"].as_bool().unwrap_or(false);
     let entities = fetch_entities(app);
     let needle = name.to_lowercase();
+    let eligible = |e: &engram_domain::KnowledgeEntity| {
+        include_code_artifacts || !engram_retrieval::is_code_artifact(e)
+    };
     let entity = entities
         .iter()
-        .find(|e| e.name == name || e.id.to_string() == name)
+        .find(|e| e.id.to_string() == name || (e.name == name && eligible(e)))
         .or_else(|| {
             entities
                 .iter()
-                .find(|e| e.name.to_lowercase().contains(&needle))
+                .find(|e| e.name.to_lowercase().contains(&needle) && eligible(e))
         });
     let body = match entity {
         Some(e) => {

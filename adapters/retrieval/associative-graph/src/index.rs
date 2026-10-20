@@ -173,14 +173,27 @@ impl RetrievalIndex for AssociativeGraphIndex {
             .collect();
 
         let mut ranked = rank_associative(&edges, &seeds, self.config);
+
+        // Result-eligibility filter (code artifacts): suppressed entities keep
+        // seeding and carrying the walk — only their EMISSION is suppressed,
+        // and the filter runs BEFORE the limit truncation so artifacts never
+        // consume result slots. `suppresses_code_artifacts` is the single
+        // shared reading of the flag (never a local re-implementation).
+        let by_key: HashMap<&str, &KnowledgeEntity> =
+            entities.iter().map(|e| (e.id.as_str(), e)).collect();
+        if engram_retrieval::suppresses_code_artifacts(request) {
+            ranked.retain(|(key, _)| {
+                by_key
+                    .get(key.as_str())
+                    .is_none_or(|e| !engram_retrieval::is_code_artifact(e))
+            });
+        }
         ranked.truncate(limit.max(1) as usize);
 
         // Recover entity content/provenance by key. A ranked key with no
         // discoverable entity (e.g. a relationship endpoints absent from the
         // entity list) is skipped — this slice only emits fully describable
         // entities.
-        let by_key: HashMap<&str, &KnowledgeEntity> =
-            entities.iter().map(|e| (e.id.as_str(), e)).collect();
         let results = ranked
             .into_iter()
             .enumerate()
@@ -357,10 +370,14 @@ mod tests {
     }
 
     fn ent(id: &str, name: &str) -> KnowledgeEntity {
+        entity_of(id, name, EntityKind::Concept)
+    }
+
+    fn entity_of(id: &str, name: &str, kind: EntityKind) -> KnowledgeEntity {
         KnowledgeEntity {
             id: Id::from(id),
             graph_id: None,
-            kind: EntityKind::Concept,
+            kind,
             name: name.to_owned(),
             aliases: Vec::new(),
             scope: scope(),
@@ -406,6 +423,14 @@ mod tests {
     }
 
     fn request(query: &str, limit: Option<u32>) -> RetrievalRequest {
+        request_with(query, limit, None)
+    }
+
+    fn request_with(
+        query: &str,
+        limit: Option<u32>,
+        include_code_artifacts: Option<bool>,
+    ) -> RetrievalRequest {
         RetrievalRequest {
             query: query.to_owned(),
             scope: scope(),
@@ -416,12 +441,112 @@ mod tests {
                 on_behalf_of: None,
             },
             modes: vec![RetrievalMode::Graph],
-            filters: None,
+            filters: Some(engram_domain::QueryFilter {
+                memory_kinds: Vec::new(),
+                source_kinds: Vec::new(),
+                chunk_kinds: Vec::new(),
+                concept_ids: Vec::new(),
+                entity_ids: Vec::new(),
+                since: None,
+                until: None,
+                min_confidence: None,
+                include_archived: None,
+                as_of: None,
+                include_code_artifacts,
+            }),
             cues: Vec::new(),
             limit,
             budget: None,
             include_explanations: Some(true),
         }
+    }
+
+    /// Code-artifact suppression battery (2026-10-20): suppressed entities
+    /// keep SEEDING and CARRYING the walk (graph-RAG preservation) but are
+    /// not EMITTED, never consume limit slots, and opt back in explicitly.
+    #[test]
+    fn code_artifacts_suppressed_from_results_but_still_seed_the_walk() {
+        // Graph: File `billing.ts` (artifact) ↔ Concept `Payments` (seed),
+        // realized_by both ways — the concept↔code bridge must survive
+        // suppression of the File endpoint.
+        let source = Arc::new(StubSource {
+            entities: vec![
+                entity_of("concept", "Payments", EntityKind::Concept),
+                entity_of("file", "billing.ts", EntityKind::File),
+                entity_of("mod", "./FileEditor", EntityKind::Module),
+                entity_of("fn", "charge_card", EntityKind::Function),
+            ],
+            relationships: vec![
+                rel("concept", "file"),
+                rel("file", "concept"),
+                rel("concept", "mod"),
+                rel("mod", "fn"),
+            ],
+        });
+        let index = AssociativeGraphIndex::new(source);
+
+        // Default: artifacts (file, mod) never emitted...
+        let results =
+            block_on(index.retrieve_candidates(&request("Payments billing", None))).unwrap();
+        let ids: Vec<&str> = results.iter().map(|r| r.target_id.as_str()).collect();
+        assert!(
+            !ids.contains(&"file") && !ids.contains(&"mod"),
+            "artifacts suppressed: {ids:?}"
+        );
+        assert!(ids.contains(&"concept"), "the Concept still ranks: {ids:?}");
+        // GRAPH-RAG PRESERVATION: the walk still TRAVERSED the suppressed
+        // module hub — `charge_card` is only reachable THROUGH it.
+        assert!(
+            ids.contains(&"fn"),
+            "suppressed hub must still carry the walk to charge_card: {ids:?}"
+        );
+
+        // Opt-in: artifacts return.
+        let results = block_on(index.retrieve_candidates(&request_with(
+            "Payments billing",
+            None,
+            Some(true),
+        )))
+        .unwrap();
+        let ids: Vec<&str> = results.iter().map(|r| r.target_id.as_str()).collect();
+        assert!(
+            ids.contains(&"file") && ids.contains(&"mod"),
+            "opt-in emits artifacts: {ids:?}"
+        );
+    }
+
+    #[test]
+    fn code_artifact_suppression_runs_before_the_limit_truncation() {
+        // The artifact hub outranks everything (highest PPR); with limit 2 a
+        // post-truncation filter would return ONE result. Pre-truncation
+        // filtering returns a FULL page of eligible entities.
+        let source = Arc::new(StubSource {
+            entities: vec![
+                entity_of("hub", "./imports", EntityKind::Module),
+                entity_of("a", "alpha_handler", EntityKind::Function),
+                entity_of("b", "beta_handler", EntityKind::Function),
+                entity_of("c", "gamma_handler", EntityKind::Function),
+            ],
+            relationships: vec![
+                rel("hub", "a"),
+                rel("hub", "b"),
+                rel("hub", "c"),
+                rel("a", "hub"),
+            ],
+        });
+        let index = AssociativeGraphIndex::new(source);
+        let results =
+            block_on(index.retrieve_candidates(&request("imports handler", Some(2)))).unwrap();
+        assert_eq!(
+            results.len(),
+            2,
+            "suppressed artifacts must not consume limit slots: {:?}",
+            results
+                .iter()
+                .map(|r| r.target_id.clone())
+                .collect::<Vec<_>>()
+        );
+        assert!(results.iter().all(|r| r.target_id != "hub"));
     }
 
     #[test]

@@ -280,6 +280,23 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
             .unwrap_or(10)
             .clamp(1, 100),
     );
+    // Code-artifact suppression (default on): Variable/Module/File/Repository
+    // entities stay in the graph (seeds, walk, edges) but are suppressed from
+    // ranked results unless opted in.
+    let include_code_artifacts = args["include_code_artifacts"].as_bool().unwrap_or(false);
+    let filters = engram_domain::QueryFilter {
+        memory_kinds: Vec::new(),
+        source_kinds: Vec::new(),
+        chunk_kinds: Vec::new(),
+        concept_ids: Vec::new(),
+        entity_ids: Vec::new(),
+        since: None,
+        until: None,
+        min_confidence: None,
+        include_archived: None,
+        as_of: None,
+        include_code_artifacts: Some(include_code_artifacts),
+    };
 
     // Output size bounding — prevents multi-million-token dumps.
     // `recall` returns fused items whose `content` can be whole-class bodies
@@ -293,7 +310,7 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
         scope: app.scope.clone(),
         requester: requester(),
         modes: Vec::new(),
-        filters: None,
+        filters: Some(filters),
         cues: Vec::new(),
         limit,
         budget: None,
@@ -1572,6 +1589,68 @@ pub(crate) mod tests {
         assert!(
             body.contains("alpha"),
             "search must find the scanned symbol: {body}"
+        );
+    }
+
+    /// Code-artifact suppression battery (2026-10-20): scan a fixture whose
+    /// graph contains import-path Module/File entities plus a real Function;
+    /// default search suppresses the artifacts, the flag opts them back in,
+    /// and an exact suppressed-name search returns a SUCCESS-empty packet
+    /// with the opt-in hint (never a bare silent empty).
+    #[test]
+    fn search_suppresses_code_artifacts_with_optin_and_hint() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(repo_dir.path().join("src")).unwrap();
+        std::fs::write(
+            repo_dir.path().join("src/main.rs"),
+            "use std::collections::HashMap;\nfn charge_card() -> u32 { 1 }\nfn main() { charge_card(); }\n",
+        )
+        .unwrap();
+        let app = test_app(dir.path());
+        crate::codegraph::scan_repo(&app, &json!({ "path": repo_dir.path().to_str().unwrap() }))
+            .unwrap();
+
+        // Sanity: the scan DID index artifacts (module/file entities exist).
+        let by_id = crate::codegraph::entity_lookup(&app);
+        assert!(
+            by_id.values().any(engram_retrieval::is_code_artifact),
+            "fixture must contain artifact entities for the battery"
+        );
+
+        // Default: real symbols found, no artifact rows in the output.
+        let res = crate::codegraph::search(
+            &app,
+            &json!({ "query": "charge_card", "diagnostics": true }),
+        )
+        .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(body.contains("charge_card"), "real symbol found: {body}");
+        assert!(
+            !body.contains("(Module)") && !body.contains("(File)"),
+            "artifacts suppressed by default: {body}"
+        );
+
+        // Exact suppressed-name search: SUCCESS-empty + actionable hint.
+        let res = crate::codegraph::search(&app, &json!({ "query": "main" })).unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        if !body.contains("charge_card") {
+            assert!(
+                body.contains("include_code_artifacts: true"),
+                "empty packet must carry the opt-in hint: {body}"
+            );
+        }
+
+        // Opt-in: artifacts return (exact-name injection re-admits them).
+        let res = crate::codegraph::search(
+            &app,
+            &json!({ "query": "main", "include_code_artifacts": true, "diagnostics": true }),
+        )
+        .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("(Module)") || body.contains("(File)"),
+            "opt-in surfaces artifacts: {body}"
         );
     }
 

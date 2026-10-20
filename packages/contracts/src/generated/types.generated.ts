@@ -294,10 +294,18 @@ export interface RetrievalRequest {
   scope: Scope;
 }
 export interface QueryFilter {
+  /**
+   * Bi-temporal as-of filter: only entity versions valid at this instant (validFrom <= asOf < validUntil). Distinct from since/until which filter observed time. ADR-0021.
+   */
+  asOf?: string;
   chunkKinds?: KnowledgeChunkKind[];
   conceptIds?: Identifier[];
   entityIds?: Identifier[];
   includeArchived?: boolean;
+  /**
+   * Include code-artifact entities (Variable/Module/File/Repository - import-path stubs, file stubs, structural anchors) in ranked retrieval results. Absent/false = suppressed: they still participate fully in the graph (seeds, walk/transit nodes, edges, community structure) but are not eligible as results. Indexing is unchanged either way.
+   */
+  includeCodeArtifacts?: boolean;
   memoryKinds?: MemoryKind[];
   minConfidence?: number;
   since?: Timestamp;

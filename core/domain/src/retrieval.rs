@@ -48,6 +48,13 @@ pub struct QueryFilter {
     /// which filter on observed time. ADR-0021.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub as_of: Option<Timestamp>,
+    /// Include code-artifact entities (Variable / Module / File / Repository —
+    /// import-path stubs, file stubs, structural anchors) in RANKED retrieval
+    /// results. Absent/`false` = suppressed: they still participate fully in
+    /// the graph (seeds, walk/transit nodes, edges, community structure) but
+    /// are not eligible as results. Indexing is unchanged either way.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_code_artifacts: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1034,6 +1034,11 @@ export const engramV1Schema = {
     "QueryFilter": {
       "additionalProperties": false,
       "properties": {
+        "asOf": {
+          "description": "Bi-temporal as-of filter: only entity versions valid at this instant (validFrom <= asOf < validUntil). Distinct from since/until which filter observed time. ADR-0021.",
+          "format": "date-time",
+          "type": "string"
+        },
         "chunkKinds": {
           "items": {
             "$ref": "#/$defs/KnowledgeChunkKind"
@@ -1053,6 +1058,10 @@ export const engramV1Schema = {
           "type": "array"
         },
         "includeArchived": {
+          "type": "boolean"
+        },
+        "includeCodeArtifacts": {
+          "description": "Include code-artifact entities (Variable/Module/File/Repository - import-path stubs, file stubs, structural anchors) in ranked retrieval results. Absent/false = suppressed: they still participate fully in the graph (seeds, walk/transit nodes, edges, community structure) but are not eligible as results. Indexing is unchanged either way.",
           "type": "boolean"
         },
         "memoryKinds": {

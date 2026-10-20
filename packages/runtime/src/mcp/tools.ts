@@ -103,11 +103,12 @@ export function registerTools(
         query: z.string(),
         scope: scopeSchema,
         limit: z.number().int().min(1).max(100).optional(),
+        includeCodeArtifacts: z.boolean().optional(),
       }),
     },
-    async ({ query, scope, limit }) => {
+    async ({ query, scope, limit, includeCodeArtifacts }) => {
       const result = await transport.recall(
-        buildRetrievalRequest(query, buildScope(scope), limit ?? 10),
+        buildRetrievalRequest(query, buildScope(scope), limit ?? 10, includeCodeArtifacts),
       );
       // Output bounding — mirrors the Rust stdio MCP (mcp/engram-mcp/src/tools.rs).
       // Prevents multi-million-token dumps + N-API IPC overflow.
@@ -586,19 +587,27 @@ export function registerTools(
         scope: scopeSchema,
         id: z.string().optional(),
         name: z.string().optional(),
+        includeCodeArtifacts: z.boolean().optional(),
       }),
     },
-    async ({ scope, id, name }) => {
+    async ({ scope, id, name, includeCodeArtifacts }) => {
       const theScope = buildScope(scope);
       if (id) {
         const result = await transport.getEntity(id, theScope);
         return textResult(result);
       }
+      const artifactKinds = new Set(["variable", "module", "file", "repository"]);
+      const isArtifact = (entity: unknown) =>
+        artifactKinds.has(String((entity as { kind?: unknown }).kind));
       const entities = await transport.listEntities(theScope);
       const needle = (name ?? "").toLowerCase();
       const matches = needle
-        ? entities.filter((e) => entityName(e).toLowerCase().includes(needle))
-        : entities;
+        ? entities.filter(
+            (e) =>
+              entityName(e).toLowerCase().includes(needle) &&
+              (includeCodeArtifacts === true || !isArtifact(e)),
+          )
+        : entities.filter((e) => includeCodeArtifacts === true || !isArtifact(e));
       return textResult(matches);
     },
   );
@@ -759,15 +768,17 @@ export function registerTools(
         depth: z.number().int().min(0).max(4).optional(),
         maxNodes: z.number().int().min(1).max(64).optional(),
         maxEdges: z.number().int().min(1).max(256).optional(),
+        includeCodeArtifacts: z.boolean().optional(),
       }),
     },
-    async ({ query, scope, depth, maxNodes, maxEdges }) => {
+    async ({ query, scope, depth, maxNodes, maxEdges, includeCodeArtifacts }) => {
       const nodes = (await transport.explore({
         scope: buildScope(scope),
         query,
         ...(depth !== undefined ? { depth } : {}),
         ...(maxNodes !== undefined ? { maxNodes } : {}),
         ...(maxEdges !== undefined ? { maxEdges } : {}),
+        ...(includeCodeArtifacts !== undefined ? { includeCodeArtifacts } : {}),
       })) as Array<{ name: string; kind?: string; hop: number }>;
       return {
         content: [
@@ -793,20 +804,32 @@ export function registerTools(
         query: z.string(),
         scope: scopeSchema,
         limit: z.number().int().min(1).max(100).optional(),
+        includeCodeArtifacts: z.boolean().optional(),
       }),
     },
-    async ({ query, scope, limit }) => {
+    async ({ query, scope, limit, includeCodeArtifacts }) => {
       const theScope = buildScope(scope);
       const [recall, entities] = await Promise.all([
-        transport.recall(buildRetrievalRequest(query, theScope, limit ?? 10)),
+        transport.recall(
+          buildRetrievalRequest(query, theScope, limit ?? 10, includeCodeArtifacts),
+        ),
         transport.listEntities(theScope),
       ]);
       // RFC-0020 T7: a user-supplied bare symbol resolves to qualified entity
       // name(s) (`{repo}/{path}::{bare}`) via suffix matching, so a bare query
       // is not empty after T1 qualified identities. Returns ALL matches.
       const { resolveSymbolNames } = await import("./codegraph.js");
-      const resolved = new Set(resolveSymbolNames(entities.map(entityName), query));
-      const exactEntityMatches = entities.filter((e) => resolved.has(entityName(e)));
+      // Code-artifact eligibility (default suppressed): Variable/Module/File/
+      // Repository entities are filtered BEFORE suffix resolution so the
+      // exact-match lane cannot re-admit what the recall lanes suppressed.
+      const artifactKinds = new Set(["variable", "module", "file", "repository"]);
+      const isArtifact = (entity: unknown) =>
+        artifactKinds.has(String((entity as { kind?: unknown }).kind));
+      const eligible = entities.filter(
+        (e) => includeCodeArtifacts === true || !isArtifact(e),
+      );
+      const resolved = new Set(resolveSymbolNames(eligible.map(entityName), query));
+      const exactEntityMatches = eligible.filter((e) => resolved.has(entityName(e)));
       return textResult({ recall, exactEntityMatches });
     },
   );

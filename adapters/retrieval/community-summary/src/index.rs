@@ -161,6 +161,22 @@ impl RetrievalIndex for CommunitySummaryIndex {
             members.sort();
         }
 
+        // Result-eligibility filter (code artifacts): suppressed members are
+        // dropped from the group membership AND therefore from the summary
+        // text BEFORE the match gate — otherwise a file-path member would
+        // pass the token gate and re-admit its whole community. Community
+        // DETECTION (Louvain labels, cached snapshots) stays full-graph:
+        // suppression never shapes community structure, only emission.
+        if engram_retrieval::suppresses_code_artifacts(request) {
+            for members in groups.values_mut() {
+                members.retain(|key| {
+                    by_key
+                        .get(key.as_str())
+                        .is_none_or(|e| !engram_retrieval::is_code_artifact(e))
+                });
+            }
+        }
+
         // Collect intra-community predicates in a SINGLE pass over the
         // relationships (O(R)) instead of rescanning every relationship once
         // per community (O(communities × R)). On a ~57k-edge / ~4k-community
@@ -387,10 +403,14 @@ mod tests {
     }
 
     fn ent(id: &str, name: &str) -> KnowledgeEntity {
+        ent_kind(id, name, EntityKind::Concept)
+    }
+
+    fn ent_kind(id: &str, name: &str, kind: EntityKind) -> KnowledgeEntity {
         KnowledgeEntity {
             id: Id::from(id),
             graph_id: None,
-            kind: EntityKind::Concept,
+            kind,
             name: name.to_owned(),
             aliases: Vec::new(),
             scope: scope(),
@@ -462,7 +482,7 @@ mod tests {
         }
     }
 
-    fn request(query: &str) -> RetrievalRequest {
+    fn request_with(query: &str, include_code_artifacts: Option<bool>) -> RetrievalRequest {
         RetrievalRequest {
             query: query.to_owned(),
             scope: scope(),
@@ -478,7 +498,19 @@ mod tests {
                 on_behalf_of: None,
             },
             modes: vec![RetrievalMode::Graph],
-            filters: None,
+            filters: Some(engram_domain::QueryFilter {
+                memory_kinds: Vec::new(),
+                source_kinds: Vec::new(),
+                chunk_kinds: Vec::new(),
+                concept_ids: Vec::new(),
+                entity_ids: Vec::new(),
+                since: None,
+                until: None,
+                min_confidence: None,
+                include_archived: None,
+                as_of: None,
+                include_code_artifacts,
+            }),
             cues: Vec::new(),
             limit: None,
             budget: None,
@@ -540,5 +572,61 @@ mod tests {
         let index = CommunitySummaryIndex::new(source);
         let results = block_on(index.retrieve_candidates(&request("Alice"))).unwrap();
         assert!(results.is_empty());
+    }
+
+    fn request(query: &str) -> RetrievalRequest {
+        request_with(query, None)
+    }
+
+    /// Code-artifact suppression (2026-10-20): suppressed members are dropped
+    /// from group membership AND summary text before the match gate (a
+    /// file-path member must not pass the token gate and re-admit its
+    /// community); opt-in restores them. Community detection stays full-graph.
+    #[test]
+    fn code_artifact_members_suppressed_before_the_match_gate() {
+        let source = Arc::new(StubSource {
+            entities: vec![
+                ent_kind("concept", "Payments", EntityKind::Concept),
+                ent_kind("file", "billing.ts", EntityKind::File),
+                ent_kind("fn", "charge_card", EntityKind::Function),
+            ],
+            relationships: vec![
+                rel("concept", "file"),
+                rel("file", "concept"),
+                rel("concept", "fn"),
+                rel("fn", "concept"),
+            ],
+        });
+        let index = CommunitySummaryIndex::new(source);
+
+        // Default: the File member is out of the membership AND the summary —
+        // a query matching ONLY the file name must not pass the match gate.
+        let results = block_on(index.retrieve_candidates(&request("billing"))).unwrap();
+        assert!(
+            results.is_empty(),
+            "file-only match must not re-admit the community: {:?}",
+            results
+                .iter()
+                .map(|r| r.target_id.clone())
+                .collect::<Vec<_>>()
+        );
+
+        // A query matching the CONCEPT still returns the community minus the file.
+        let results = block_on(index.retrieve_candidates(&request("payments"))).unwrap();
+        let ids: Vec<&str> = results.iter().map(|r| r.target_id.as_str()).collect();
+        assert!(
+            ids.contains(&"concept") && ids.contains(&"fn"),
+            "eligible members emitted: {ids:?}"
+        );
+        assert!(!ids.contains(&"file"), "suppressed member absent: {ids:?}");
+
+        // Opt-in: the file member returns (and can match on its name).
+        let results =
+            block_on(index.retrieve_candidates(&request_with("billing", Some(true)))).unwrap();
+        let ids: Vec<&str> = results.iter().map(|r| r.target_id.as_str()).collect();
+        assert!(
+            ids.contains(&"file"),
+            "opt-in emits the file member: {ids:?}"
+        );
     }
 }

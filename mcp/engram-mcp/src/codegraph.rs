@@ -984,16 +984,33 @@ impl SearchHit {
     /// produced the hit). `retriever` is labeled `exact-match` so the injection
     /// is visible in diagnostics mode and the `[exact-match]` render tag fires.
     fn from_exact_match(entity: &KnowledgeEntity, score: f32) -> Self {
+        Self::from_name_match(entity, score, true)
+    }
+
+    /// Build a synthetic hit for a SUBSTRING name match (EN-4): injected at
+    /// 80% of the anchor, labeled `name-match`, never `is_exact` — only
+    /// [`name_exact_match`] equality may claim the exact tier. Substring
+    /// injections that pretended to be exact gave fixtures like `Review` the
+    /// `[exact-match]` tag for the query `_check_reviewer_independence`.
+    fn from_partial_match(entity: &KnowledgeEntity, score: f32) -> Self {
+        Self::from_name_match(entity, score, false)
+    }
+
+    fn from_name_match(entity: &KnowledgeEntity, score: f32, is_exact: bool) -> Self {
         SearchHit {
             entity_id: entity.id.to_string(),
             name: entity.name.clone(),
             kind_label: format!("{:?}", entity.kind),
             repo: provenance_repo_label(&entity.provenance.source),
             path: entity_source_path(entity),
-            retriever: "exact-match".to_owned(),
+            retriever: if is_exact {
+                "exact-match".to_owned()
+            } else {
+                "name-match".to_owned()
+            },
             source_score: None,
             score,
-            is_exact: true,
+            is_exact,
             chunk_excerpt: None,
         }
     }
@@ -1100,12 +1117,13 @@ fn inject_exact_matches(
         }
         // Score by match quality (Option B): exact identifier → anchor (top),
         // substring/partial → 80% of anchor.
-        let score = if name_exact_match(&e.name, query) {
-            anchor
+        let is_exact = name_exact_match(&e.name, query);
+        let score = if is_exact { anchor } else { anchor * 0.8 };
+        let hit = if is_exact {
+            SearchHit::from_exact_match(e, score)
         } else {
-            anchor * 0.8
+            SearchHit::from_partial_match(e, score)
         };
-        let hit = SearchHit::from_exact_match(e, score);
         if !seen_names.insert((hit.repo.clone(), hit.name.clone())) {
             continue;
         }
@@ -3699,6 +3717,54 @@ mod tests {
         );
     }
 
+    /// EN-4 (eval 0.2.5, misdiagnosed cause / real defect): substring
+    /// injections went through `from_exact_match`, which hard-set
+    /// `is_exact: true` — so a `Review` fixture carried the `[exact-match]`
+    /// tag and the exact-ranking tier for the query
+    /// `_check_reviewer_independence`. Partial injections must be labeled
+    /// `name-match` and never take the exact tier; only identifier-equality
+    /// (or qualified-tail equality) is exact.
+    #[test]
+    fn partial_injections_do_not_claim_exact_identity() {
+        let mut by_id: HashMap<String, KnowledgeEntity> = HashMap::new();
+        by_id.insert(
+            "e_sub".into(),
+            make_entity(
+                "e_sub",
+                "_check_reviewer_independence",
+                engram_domain::EntityKind::Function,
+                Some("logic.py"),
+            ),
+        );
+        let mut hits = vec![hit("anchor", Some("a.rs"), 0.10)];
+        let _ = inject_exact_matches(&mut hits, &by_id, "_check_reviewer_independence", false);
+        // Both the true exact hit and a substring injection exist in this
+        // scenario; assert on classification, not count.
+        let exact = hits
+            .iter()
+            .find(|h| h.name == "_check_reviewer_independence")
+            .expect("true exact injection present");
+        assert!(exact.is_exact, "identifier equality must stay exact");
+        assert_eq!(exact.retriever, "exact-match");
+
+        // Substring-only scenario: query "reviewer" matches the same name as
+        // a substring — must NOT be exact or carry the exact-match retriever.
+        let mut hits2 = vec![hit("anchor", Some("a.rs"), 0.10)];
+        let _ = inject_exact_matches(&mut hits2, &by_id, "reviewer", false);
+        let partial = hits2
+            .iter()
+            .find(|h| h.name == "_check_reviewer_independence")
+            .expect("partial injection present");
+        assert!(
+            !partial.is_exact,
+            "substring injection must not claim exact identity"
+        );
+        assert_ne!(
+            partial.retriever, "exact-match",
+            "substring injection must not be labeled exact-match"
+        );
+    }
+
     #[test]
     fn inject_exact_matches_anchor_fallback_when_no_existing_hits() {
         // When recall returned nothing (no existing hits to anchor against), the
@@ -4581,7 +4647,6 @@ mod tests {
         );
     }
 
-    #[test]
     #[test]
     fn seed_resolution_note_discloses_unresolved_bare_targets() {
         let names = vec![

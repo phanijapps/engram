@@ -106,14 +106,28 @@ pub(super) fn heal_pending_refs<R>(
             for row in pending {
                 let reference = row.reference_name.clone();
                 let (hint, name) = engram_code::split_dotted(&reference);
-                let mut outcome = name_index.resolve(name, None, None);
-                if !matches!(outcome, engram_code::Resolution::Resolved(_)) {
-                    if let Some(hint) = hint {
-                        let qualified =
+                // EN-9 parity with resolve_refs: a receiver-hinted
+                // reference heals ONLY through a receiver-consistent
+                // qualified form (as-written, then capitalized) — never by
+                // bare-name uniqueness, which used to bind unknown-receiver
+                // `.iter()` calls to an unrelated unique method.
+                let static_module_path =
+                    hint.is_some() && reference.contains("::") && !reference.contains('.');
+                let outcome = if let Some(hint) = hint {
+                    let as_written = format!("{}::{}", hint, name);
+                    let mut o = name_index.resolve(&as_written, None, None);
+                    if !matches!(o, engram_code::Resolution::Resolved(_)) {
+                        let capitalized =
                             format!("{}::{}", engram_code::receiver_type_hint(hint), name);
-                        outcome = name_index.resolve(&qualified, None, None);
+                        o = name_index.resolve(&capitalized, None, None);
                     }
-                }
+                    if !matches!(o, engram_code::Resolution::Resolved(_)) && static_module_path {
+                        o = name_index.resolve(name, None, None);
+                    }
+                    o
+                } else {
+                    name_index.resolve(name, None, None)
+                };
                 if let engram_code::Resolution::Resolved(candidate) = outcome {
                     let scope = row.scope.clone();
                     let subject_id = row.from_entity_id.clone();

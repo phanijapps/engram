@@ -114,7 +114,35 @@ pub fn resolve_refs(
             continue;
         };
         let from_id = subject_id.to_string();
-        let mut outcome = resolve_one(index, name, path, repo);
+        // EN-9: a DOT-hinted method reference (`values.iter`) has an
+        // UNKNOWN receiver type — bare-name uniqueness is not evidence
+        // about the receiver, and the bare-first order used to bind
+        // `values.iter()` confidently to a unique-but-unrelated
+        // `Facets::iter`. Such references bind ONLY through
+        // receiver-consistent qualified forms and otherwise stay
+        // unresolved (ledgered, still listed as an unresolved callee by
+        // name — classified, never deleted).
+        // `::`-separated references are STATIC MODULE PATHS
+        // (`store::save` with `use crate::store;`) — the prefix is lexical
+        // evidence, so after the qualified attempts they keep the bare-name
+        // ladder. Hint-LESS references keep the full ladder including the
+        // same-document bare fallback for `self.method()`.
+        let static_module_path =
+            hint.is_some() && reference.contains("::") && !reference.contains('.');
+        let mut outcome = if let Some(hint) = hint {
+            let as_written = format!("{}::{}", hint, name);
+            let mut o = resolve_one(index, &as_written, path, repo);
+            if !matches!(o, Resolution::Resolved(_)) {
+                let capitalized = format!("{}::{}", receiver_type_hint(hint), name);
+                o = resolve_one(index, &capitalized, path, repo);
+            }
+            if !matches!(o, Resolution::Resolved(_)) && static_module_path {
+                o = resolve_one(index, name, path, repo);
+            }
+            o
+        } else {
+            resolve_one(index, name, path, repo)
+        };
 
         // [receiver-resolution-gap] Same-document bare-name fallback:
         // `self.method()` inside an impl block extracts as the bare
@@ -122,8 +150,10 @@ pub fn resolve_refs(
         // registered in the index (under both `Class::method` and the
         // bare `method` via bare_tail registration). If the bare name
         // resolves to exactly one same-document candidate, use it —
-        // this is the LWC/Rust `this.x()` / `self.x()` case.
-        if !matches!(outcome, Resolution::Resolved(_)) {
+        // this is the LWC/Rust `this.x()` / `self.x()` case. Skipped for
+        // dot-hinted method references (EN-9: a same-document unique
+        // method name is still not receiver evidence).
+        if !matches!(outcome, Resolution::Resolved(_)) && (hint.is_none() || static_module_path) {
             if let Some(path) = path {
                 if let Some(bucket) = index.bucket(name) {
                     let same_doc: Vec<_> = bucket
@@ -135,15 +165,6 @@ pub fn resolve_refs(
                         outcome = Resolution::Resolved(same_doc[0].clone());
                     }
                 }
-            }
-        }
-
-        // Receiver-hint attempt: `store.save` → `Store::save` when a
-        // declaration with that receiver exists.
-        if !matches!(outcome, Resolution::Resolved(_)) {
-            if let Some(hint) = hint {
-                let qualified_attempt = format!("{}::{}", receiver_type_hint(hint), name);
-                outcome = resolve_one(index, &qualified_attempt, path, repo);
             }
         }
 
@@ -269,6 +290,67 @@ pub(crate) mod tests {
                 path: Some(path.to_owned()),
             },
         );
+    }
+
+    /// EN-9 (eval 0.2.5, BLOCKER): `values.iter()` bound confidently to
+    /// `Facets::iter` because resolve_refs tried the BARE name first and
+    /// `iter` was unique project-wide — uniqueness of the method name is not
+    /// evidence about an unknown receiver. A receiver-hinted reference may
+    /// only bind through a receiver-consistent qualified form.
+    #[test]
+    fn hinted_reference_does_not_bind_by_bare_name_alone() {
+        let mut index = SymbolIndex::new();
+        register(&mut index, "Facets::iter", "e1", "r", "src/facets.rs");
+        let mut rels = vec![rel("calls", "caller", "values.iter")];
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/graph.rs"));
+        assert!(
+            !ledger.is_empty(),
+            "unknown-receiver method call must stay unresolved, not bind to Facets::iter"
+        );
+        assert!(rels[0].object.id.is_none(), "no confident id binding");
+    }
+
+    /// Receiver-consistent binding still works: `store.save` → `Store::save`.
+    #[test]
+    fn hinted_reference_binds_via_receiver_qualified() {
+        let mut index = SymbolIndex::new();
+        register(&mut index, "Store::save", "e1", "r", "src/store.rs");
+        let mut rels = vec![rel("calls", "caller", "store.save")];
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/api.rs"));
+        assert!(ledger.is_empty(), "receiver-qualified binding must resolve");
+        assert!(rels[0].object.id.is_some());
+    }
+
+    /// Module-qualified Rust paths bind in their AS-WRITTEN form
+    /// (`store::save` → entity `store::save`) — not only the capitalized
+    /// receiver form. A `::` path to a BARE-registered fn
+    /// (`store::save()` calling pub fn `save`) keeps the bare ladder: the
+    /// module prefix is lexical evidence, not an unknown receiver.
+    #[test]
+    fn module_qualified_reference_binds_as_written() {
+        let mut index = SymbolIndex::new();
+        register(&mut index, "store::save", "e1", "r", "src/store.rs");
+        let mut rels = vec![rel("calls", "caller", "store::save")];
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/api.rs"));
+        assert!(ledger.is_empty(), "as-written module path must resolve");
+
+        let mut index2 = SymbolIndex::new();
+        register(&mut index2, "save", "e1", "r", "src/store.rs");
+        let mut rels2 = vec![rel("calls", "caller", "store::save")];
+        let ledger2 = resolve_refs(&index2, &mut rels2, Some("r"), Some("src/engine.rs"));
+        assert!(ledger2.is_empty(), ":: path to bare fn must keep resolving");
+    }
+
+    /// Bare function calls (no receiver) keep the unique-survivor ladder —
+    /// the EN-9 rule must not break plain cross-file calls.
+    #[test]
+    fn bare_function_call_still_resolves() {
+        let mut index = SymbolIndex::new();
+        register(&mut index, "save", "e1", "r", "src/store.rs");
+        let mut rels = vec![rel("calls", "caller", "save")];
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/api.rs"));
+        assert!(ledger.is_empty(), "bare call must keep resolving");
+        assert!(rels[0].object.id.is_some());
     }
 
     #[test]

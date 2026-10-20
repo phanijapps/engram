@@ -14,6 +14,8 @@
 //! node-key function as seed resolution, so seed keys and edge endpoints share
 //! one key space.
 
+use std::collections::{HashMap, HashSet};
+
 use engram_graph_analytics::personalized_pagerank;
 
 /// Personalized PageRank configuration.
@@ -70,13 +72,52 @@ pub fn rank_associative(
         config.iterations,
         config.tol,
     );
-    let mut ranked: Vec<(String, f64)> = scores.into_iter().collect();
+    // EN-5 emission gate: uniform PPR initialization leaves residual mass in
+    // disconnected components, which then earned RRF credit as raw≈0.00
+    // "hits". Only nodes actually reachable from the seed set (over the same
+    // bidirected edges the walk uses — artifact nodes included, so suppressed
+    // entities still BRIDGE the walk; only their emission is suppressed
+    // separately in the index) may emit. Seeds are reachable by definition,
+    // so isolated seeds keep their mass.
+    let reachable = reachable_from(&bidirected, seeds);
+    let mut ranked: Vec<(String, f64)> = scores
+        .into_iter()
+        .filter(|(node, score)| *score > 0.0 && reachable.contains(node.as_str()))
+        .collect();
     ranked.sort_by(|a, b| {
         b.1.partial_cmp(&a.1)
             .unwrap_or(std::cmp::Ordering::Equal)
             .then_with(|| a.0.cmp(&b.0))
     });
     ranked
+}
+
+/// BFS reachability over `edges` from `seeds`. Pure string-key set; seeds
+/// are members by definition (an isolated seed is "reachable" from itself).
+fn reachable_from(edges: &[(String, String)], seeds: &[String]) -> HashSet<String> {
+    let mut adjacency: HashMap<&str, Vec<&str>> = HashMap::new();
+    for (s, o) in edges {
+        adjacency.entry(s.as_str()).or_default().push(o.as_str());
+        adjacency.entry(o.as_str()).or_default().push(s.as_str());
+    }
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut queue: std::collections::VecDeque<&str> = std::collections::VecDeque::new();
+    for seed in seeds {
+        if seen.insert(seed.clone()) {
+            queue.push_back(seed.as_str());
+        }
+    }
+    while let Some(node) = queue.pop_front() {
+        if let Some(neighbors) = adjacency.get(node) {
+            for n in neighbors {
+                if !seen.contains(*n) {
+                    seen.insert(n.to_string());
+                    queue.push_back(n);
+                }
+            }
+        }
+    }
+    seen
 }
 
 #[cfg(test)]
@@ -134,6 +175,33 @@ mod tests {
         let ranked = rank_associative(&edges, &seeds(&["b"]), PprConfig::default());
         assert_eq!(ordered_ids(&ranked), vec!["b", "a"]);
         assert!(ranked[0].1 > ranked[1].1, "seed b must outrank a");
+    }
+
+    /// EN-5 (eval 0.2.5): uniform PPR initialization leaves residual mass in
+    /// every disconnected component, and the lane emitted those nodes with
+    /// raw=0.00 scores that still earned RRF credit — unrelated symbols in
+    /// the top-10 of searches whose seeds live in another component.
+    /// Emission must be gated by actual seed reachability.
+    #[test]
+    fn disconnected_components_do_not_emit() {
+        let edges = vec![
+            edge("a", "z"),
+            edge("z", "impact"),
+            // Separate component, unreachable from `a`.
+            edge("x", "y"),
+            edge("y", "w"),
+        ];
+        let ranked = rank_associative(&edges, &seeds(&["a"]), PprConfig::default());
+        let names: Vec<&str> = ranked.iter().map(|(k, _)| k.as_str()).collect();
+        assert!(names.contains(&"a"), "seed itself is reachable: {names:?}");
+        assert!(names.contains(&"z"), "one-hop neighbor: {names:?}");
+        assert!(names.contains(&"impact"), "two-hop neighbor: {names:?}");
+        for far in ["x", "y", "w"] {
+            assert!(
+                !names.contains(&far),
+                "disconnected node {far} must not emit: {names:?}"
+            );
+        }
     }
 
     #[test]

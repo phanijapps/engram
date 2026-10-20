@@ -228,6 +228,7 @@ impl TreeSitterChunker {
             &root,
             source,
             &entry.kind_map,
+            &[],
             &mut fn_spans,
             &mut call_sites,
         );
@@ -245,12 +246,27 @@ impl TreeSitterChunker {
             if !entity_names.contains(tail) && crate::noise::is_noise_symbol(tail) {
                 continue;
             }
-            for (start, end, caller) in &fn_spans {
-                if call_line >= start && call_line <= end {
-                    if caller != callee {
-                        edges.push((caller.clone(), callee.clone()));
+            // EN-10/EN-11: attribute to the INNERMOST enclosing span
+            // (largest start row; ties broken by the smaller end row), not
+            // the first in preorder — a class container must not steal its
+            // methods' call sites, and a nested function's calls belong to
+            // the nested scope.
+            let mut best: Option<&(usize, usize, String)> = None;
+            for span in &fn_spans {
+                let (start, end, _) = *span;
+                if *call_line >= start && *call_line <= end {
+                    let inner = match best {
+                        None => true,
+                        Some(b) => start > b.0 || (start == b.0 && end < b.1),
+                    };
+                    if inner {
+                        best = Some(span);
                     }
-                    break;
+                }
+            }
+            if let Some((_, _, caller)) = best {
+                if caller != callee {
+                    edges.push((caller.clone(), callee.clone()));
                 }
             }
         }
@@ -645,24 +661,55 @@ fn dotted_reference(full_text: &str, bare_callee: &str) -> String {
     format!("{}{}{}", segments[hint_idx], sep, name)
 }
 
+/// Receiver-aware call/span walk (EN-10/EN-11): declarations carry their
+/// enclosing chain — a method inside `class X` records the span under the
+/// RECEIVER-QUALIFIED identity `X::method`, the same convention the chunk
+/// walk uses for entity names, so call edges resolve to method entities.
 fn collect_calls_and_spans(
     node: &tree_sitter::Node,
     source: &[u8],
     kind_map: &HashMap<&str, &str>,
+    receivers: &[String],
     fn_spans: &mut Vec<(usize, usize, String)>,
     call_sites: &mut Vec<(usize, String)>,
 ) {
     let kind = node.kind();
 
-    // Track function/method declarations for scope.
+    // Track declarations for scope under their qualified identity. Children
+    // descend with the bare name appended (mirroring
+    // `walk_declarations_with_receivers`).
     if kind_map.contains_key(kind) {
         if let Some(name_node) = node
             .child_by_field_name("name")
             .or_else(|| node.child_by_field_name("declarator"))
+            .or_else(|| node.child_by_field_name("type"))
         {
             let name = extract_name(&name_node, source);
             if !name.is_empty() {
-                fn_spans.push((node.start_position().row, node.end_position().row, name));
+                let qualified = if receivers.is_empty() {
+                    name.clone()
+                } else {
+                    format!("{}::{}", receivers.join("::"), name)
+                };
+                fn_spans.push((
+                    node.start_position().row,
+                    node.end_position().row,
+                    qualified,
+                ));
+                let mut child_receivers = receivers.to_vec();
+                child_receivers.push(name);
+                let mut cursor = node.walk();
+                for child in node.named_children(&mut cursor) {
+                    collect_calls_and_spans(
+                        &child,
+                        source,
+                        kind_map,
+                        &child_receivers,
+                        fn_spans,
+                        call_sites,
+                    );
+                }
+                return;
             }
         }
     }
@@ -709,7 +756,7 @@ fn collect_calls_and_spans(
     // Recurse.
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
-        collect_calls_and_spans(&child, source, kind_map, fn_spans, call_sites);
+        collect_calls_and_spans(&child, source, kind_map, receivers, fn_spans, call_sites);
     }
 }
 
@@ -1287,6 +1334,59 @@ mod lexical_text_tests {
             "docstring missing from chunk text: {text:?}"
         );
         assert!(text.contains("fn save_all"), "signature missing: {text:?}");
+    }
+
+    /// EN-10/EN-11 (eval 0.2.5): calls made inside a method were attributed
+    /// to the first enclosing declaration in preorder — the CLASS — so
+    /// callers/impact reported `TestModernTokenizer` instead of the calling
+    /// methods. Attribution must pick the INNERMOST enclosing callable and
+    /// carry the receiver-qualified identity (`Class::method`), matching the
+    /// chunk entity names.
+    #[test]
+    fn calls_are_attributed_to_innermost_qualified_callable() {
+        let py = "\nclass TestModernTokenizer:\n    def test_alpha(self):\n        _tokens(\"a\")\n\n    def test_beta(self):\n        _tokens(\"b\")\n\ndef _tokens(x):\n    return x\n";
+        let chunker = TreeSitterChunker::new().expect("chunker");
+        let mut names = std::collections::HashSet::new();
+        names.insert("_tokens".to_string());
+        names.insert("TestModernTokenizer::test_alpha".to_string());
+        names.insert("TestModernTokenizer::test_beta".to_string());
+        let edges = chunker.extract_calls(py, "py", &names).unwrap();
+        assert!(
+            edges.contains(&(
+                "TestModernTokenizer::test_alpha".to_string(),
+                "_tokens".to_string()
+            )),
+            "alpha's call attributed to the method, not the class: {edges:?}"
+        );
+        assert!(
+            edges.contains(&(
+                "TestModernTokenizer::test_beta".to_string(),
+                "_tokens".to_string()
+            )),
+            "beta's call attributed to the method, not the class: {edges:?}"
+        );
+        assert!(
+            !edges
+                .iter()
+                .any(|(caller, _)| caller == "TestModernTokenizer"),
+            "the class container must not steal its methods' call sites: {edges:?}"
+        );
+    }
+
+    /// EN-10 companion: a call inside a NESTED function attributes to the
+    /// nested function (innermost), not the outer function.
+    #[test]
+    fn nested_function_calls_attribute_to_nested_scope() {
+        let py = "\ndef outer():\n    def inner():\n        _tokens(\"x\")\n    return inner\n\ndef _tokens(x):\n    return x\n";
+        let chunker = TreeSitterChunker::new().expect("chunker");
+        let mut names = std::collections::HashSet::new();
+        names.insert("_tokens".to_string());
+        names.insert("outer::inner".to_string());
+        let edges = chunker.extract_calls(py, "py", &names).unwrap();
+        assert!(
+            edges.contains(&("outer::inner".to_string(), "_tokens".to_string())),
+            "nested call attributed to the nested function: {edges:?}"
+        );
     }
 
     #[test]

@@ -693,8 +693,22 @@ fn parse_symbol(anchor: &str) -> Option<(EntityKind, String)> {
 /// Ambiguous bare names (two receivers defining the same tail in one file)
 /// intentionally return None — the reference stays bare for cross-file
 /// resolution instead of an arbitrary pick.
-fn local_qualify(bare_to_qualified: &HashMap<String, Vec<String>>, bare: &str) -> Option<String> {
-    let candidates = bare_to_qualified.get(bare)?;
+fn local_qualify(
+    bare_to_qualified: &HashMap<String, Vec<String>>,
+    reference: &str,
+) -> Option<String> {
+    // Qualified references (`Class::method` — the call-attribution walk's
+    // EN-10 caller form) resolve directly when the document declares that
+    // qualified symbol, before the unique-tail rule.
+    if reference.contains("::") {
+        let tail = reference.rsplit("::").next().unwrap_or(reference);
+        if let Some(candidates) = bare_to_qualified.get(tail) {
+            if let Some(exact) = candidates.iter().find(|q| q.as_str() == reference) {
+                return Some(exact.clone());
+            }
+        }
+    }
+    let candidates = bare_to_qualified.get(reference)?;
     match candidates.as_slice() {
         [only] => Some(only.clone()),
         _ => None,

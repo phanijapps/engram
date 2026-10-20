@@ -122,7 +122,6 @@ fn reachable_from(edges: &[(String, String)], seeds: &[String]) -> HashSet<Strin
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
     use super::*;
 
     fn edge(s: &str, o: &str) -> (String, String) {

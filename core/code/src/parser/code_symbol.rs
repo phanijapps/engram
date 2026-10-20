@@ -74,7 +74,10 @@ mod ext_aware_tests {
             "no source line may be lost: {:?}",
             chunks[0].text
         );
-        assert!(chunks[0].text.contains("type TEXT,"), "column text preserved");
+        assert!(
+            chunks[0].text.contains("type TEXT,"),
+            "column text preserved"
+        );
     }
 
     /// EN-15 companion: known-language files must not lose the lines BEFORE

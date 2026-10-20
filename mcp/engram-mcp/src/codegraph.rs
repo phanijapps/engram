@@ -4648,7 +4648,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn seed_resolution_note_discloses_unresolved_bare_targets() {
         let names = vec![
             "PluginService::delete_secret".to_owned(),

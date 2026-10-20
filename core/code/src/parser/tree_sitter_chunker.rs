@@ -296,7 +296,7 @@ impl TreeSitterChunker {
         walk_declarations(&root, text.as_bytes(), &entry.kind_map, &mut chunks);
         if chunks.is_empty() {
             let lines = text.lines().count() as u32;
-            return Ok(vec![ChunkCandidate {
+            chunks.push(ChunkCandidate {
                 kind: KnowledgeChunkKind::CodeBlock,
                 text: text.to_owned(),
                 location: Some(SourceLocation {
@@ -307,9 +307,12 @@ impl TreeSitterChunker {
                     end_offset: None,
                     anchor: Some("file".to_owned()),
                 }),
-            }]);
+            });
         }
-        Ok(chunks)
+        // Coverage guard: no large file is ever ONE chunk — oversized leaves
+        // (unmapped containers like big TS interfaces, file-level fallbacks)
+        // are re-sliced into span-aligned line windows from the source.
+        Ok(crate::parser::leaf_split::split_oversized(chunks, text))
     }
 }
 
@@ -372,6 +375,18 @@ fn walk_declarations_with_receivers(
     chunks: &mut Vec<ChunkCandidate>,
 ) {
     let kind = node.kind();
+    // Test-wrapper calls (describe/test/it/bench): the INNERMOST wrapper call
+    // becomes one chunk spanning the call, so test files — whose declarations
+    // all live inside call arguments the declaration walk cannot name — keep
+    // full chunk coverage. Anchor keywords are outside `parse_symbol`'s set:
+    // content coverage without symbol entities. The walk does not descend
+    // under an emitted wrapper (its span is already covered).
+    if kind == "call_expression"
+        && let Some(wrapper) = crate::parser::test_wrappers::wrapper_chunk(node, source)
+    {
+        chunks.push(wrapper);
+        return;
+    }
     // TS/JS function-valued bindings: `const QuickEdit = (props) => ...` or
     // `const f = function () { ... }`. The arrow_function / function_expression
     // value node has NO `name` field, so the generic declaration path below
@@ -808,6 +823,12 @@ fn ts_kinds() -> HashMap<&'static str, &'static str> {
         // values (`const f = function () {}`) take the same path.
         ("arrow_function", "function"),
         ("function_expression", "function"),
+        // Interface/abstract-class members: `method_signature` bodies are the
+        // bulk of large TS interfaces — without this mapping the interface is
+        // one leaf chunk and the whole file collapses (fetch-content defect,
+        // 2026-10-20). Members carry the receiver chain (`Transport::send`).
+        ("method_signature", "fn"),
+        ("abstract_method_signature", "fn"),
         ("generator_function_declaration", "function"),
         ("enum_declaration", "enum"),
     ]

@@ -53,7 +53,19 @@ pub struct ScanSummary {
     pub git_remote: Option<String>,
     pub git_branch: Option<String>,
     pub git_sha: Option<String>,
+    /// Files whose chunked bytes cover less than half the file (large files
+    /// only) — the fetch-content single-chunk class made visible at scan
+    /// time instead of silently at retrieval time. Bounded to the first
+    /// [`MAX_COVERAGE_WARNINGS`] offenders.
+    pub coverage_warnings: Vec<String>,
 }
+
+/// Cap on `coverage_warnings` so a pathological scan cannot flood the summary.
+const MAX_COVERAGE_WARNINGS: usize = 20;
+/// Files below this size are exempt — tiny files legitimately chunk sparsely.
+const COVERAGE_MIN_FILE_BYTES: usize = 8 * 1024;
+/// Coverage ratio below which a large file is flagged.
+const COVERAGE_MIN_RATIO: f64 = 0.5;
 
 /// Per-file progress emitted during a scan.
 #[derive(Debug, Clone)]
@@ -238,7 +250,7 @@ where
             &seed,
         ))
     };
-    let outcomes = ingest_phase::parallel_ingest(
+    let ingest_results = ingest_phase::parallel_ingest(
         &ingest_phase::IngestCtx {
             repo,
             opts,
@@ -256,6 +268,8 @@ where
         },
         &to_ingest,
     );
+    let outcomes = ingest_results.outcomes;
+    summary.coverage_warnings = ingest_results.coverage_warnings;
 
     // RFC-0020 T3: the doc↔code `describes` bridge is removed — non-code
     // documents no longer emit Concept entities, so there is nothing to bridge.

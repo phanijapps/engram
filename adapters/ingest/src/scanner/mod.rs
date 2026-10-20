@@ -199,7 +199,8 @@ where
         m
     });
 
-    let code_ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
+    let code_chunker = CodeSymbolChunker;
+    let code_ingestor = KnowledgeIngestor::new(code_chunker);
     let text_ingestor =
         KnowledgeIngestor::new(PlainTextChunker::new(PlainTextChunkerOptions::default())?);
     let markdown_ingestor = KnowledgeIngestor::new(MarkdownChunker::new()?);
@@ -259,6 +260,7 @@ where
             source_key: &source_key,
             git_source_metadata: &git_source_metadata,
             code_ingestor: &code_ingestor,
+            code_chunker: &code_chunker,
             markdown_ingestor: &markdown_ingestor,
             text_ingestor: &text_ingestor,
             ts_chunker: ts_chunker.as_ref(),

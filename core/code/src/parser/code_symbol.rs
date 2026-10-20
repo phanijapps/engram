@@ -55,6 +55,156 @@ impl Chunker for CodeSymbolChunker {
     }
 }
 
+#[cfg(test)]
+mod ext_aware_tests {
+    use super::*;
+
+    /// EN-15 (eval 0.2.5): a SQL `type TEXT,` column was misread as a
+    /// TypeScript declaration by the language-blind fallback, discarding
+    /// every line before the first false anchor. Unknown extensions must
+    /// never run foreign-language recognizers — the whole file stays one
+    /// chunk, lossless.
+    #[test]
+    fn sql_type_column_is_not_a_typescript_declaration() {
+        let sql = "-- TOP_MARKER\nCREATE TABLE edges (\n    type TEXT,\n    id INTEGER PRIMARY KEY\n);\n-- BOTTOM_MARKER\n";
+        let chunks = CodeSymbolChunker.chunk_for_ext(sql, "sql").unwrap();
+        assert_eq!(chunks.len(), 1, "unknown ext: one whole-file chunk");
+        assert!(
+            chunks[0].text.contains("TOP_MARKER") && chunks[0].text.contains("BOTTOM_MARKER"),
+            "no source line may be lost: {:?}",
+            chunks[0].text
+        );
+        assert!(chunks[0].text.contains("type TEXT,"), "column text preserved");
+    }
+
+    /// EN-15 companion: known-language files must not lose the lines BEFORE
+    /// the first declaration (license headers, comments, imports).
+    #[test]
+    fn known_language_prefix_is_preserved() {
+        let py = "# header comment\nimport os\n\ndef run():\n    pass\n";
+        let chunks = CodeSymbolChunker.chunk_for_ext(py, "py").unwrap();
+        let covered: String = chunks.iter().map(|c| c.text.as_str()).collect();
+        assert!(
+            covered.contains("# header comment") && covered.contains("import os"),
+            "prefix lines must survive chunking: {covered:?}"
+        );
+        assert!(
+            chunks.iter().any(|c| c.text.contains("def run():")),
+            "declaration chunk still present"
+        );
+    }
+
+    /// Extension-aware recognizer selection: a .ts file keeps TS anchors, a
+    /// .py file does not fire the TS recognizer on `type` lines.
+    #[test]
+    fn recognizer_runs_only_for_matching_extension() {
+        let ts = "export type Kind = string;\n";
+        let chunks = CodeSymbolChunker.chunk_for_ext(ts, "ts").unwrap();
+        assert!(
+            chunks.iter().any(|c| c.text.contains("export type Kind")),
+            "ts recognizer fires for .ts"
+        );
+
+        let py = "type = TEXT\ndef go():\n    pass\n";
+        let chunks = CodeSymbolChunker.chunk_for_ext(py, "py").unwrap();
+        let first = &chunks[0].text;
+        assert!(
+            first.starts_with("type = TEXT"),
+            "py file must not be split by the TS recognizer: {first:?}"
+        );
+    }
+}
+
+impl CodeSymbolChunker {
+    /// Extension-aware, LOSSLESS chunking (EN-15): only the recognizer for
+    /// the file's own language family runs; unknown extensions run NO
+    /// recognizer and yield one whole-file chunk (a SQL `type TEXT,` column
+    /// is no longer misread as a TypeScript declaration, discarding the
+    /// prefix). Any non-blank lines before the first anchor become a leading
+    /// file chunk so source is never dropped.
+    pub fn chunk_for_ext(&self, text: &str, ext: &str) -> CoreResult<Vec<ChunkCandidate>> {
+        if text.trim().is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: "document text must not be empty".to_owned(),
+            });
+        }
+        let anchor_for: Option<fn(&str) -> Option<String>> = match language_family(ext) {
+            Some(LanguageFamily::Rust) => Some(rust_anchor),
+            Some(LanguageFamily::TypeScript) => Some(typescript_anchor),
+            Some(LanguageFamily::Python) => Some(python_anchor),
+            Some(LanguageFamily::Go) => Some(go_anchor),
+            Some(LanguageFamily::CLike) => Some(c_like_anchor),
+            None => None,
+        };
+        let Some(anchor_for) = anchor_for else {
+            // Unknown extension: never run foreign recognizers — one
+            // lossless whole-file chunk.
+            let lines = text.lines().count() as u32;
+            return Ok(vec![file_candidate(text, lines)]);
+        };
+        let lines = text.lines().collect::<Vec<_>>();
+        let declarations = lines
+            .iter()
+            .enumerate()
+            .filter_map(|(index, line)| anchor_for(line).map(|anchor| (index, anchor)))
+            .collect::<Vec<_>>();
+
+        if declarations.is_empty() {
+            return Ok(vec![file_candidate(text, lines.len() as u32)]);
+        }
+
+        let mut chunks: Vec<ChunkCandidate> = Vec::with_capacity(declarations.len() + 1);
+        // Lossless prefix: non-blank lines before the first anchor become a
+        // leading file chunk (license headers, comments, imports).
+        if declarations[0].0 > 0 {
+            let prefix_end = declarations[0].0 - 1;
+            let prefix_end = trim_trailing_blank_lines(&lines, 0, prefix_end);
+            if prefix_end > 0 || !lines[0].trim().is_empty() {
+                let prefix_text = lines[..=prefix_end].join("\n");
+                if !prefix_text.trim().is_empty() {
+                    chunks.push(file_candidate(&prefix_text, (prefix_end + 1) as u32));
+                }
+            }
+        }
+        for (position, (start_index, anchor)) in declarations.iter().enumerate() {
+            let raw_end_index = declarations
+                .get(position + 1)
+                .map(|(next_index, _)| next_index.saturating_sub(1))
+                .unwrap_or_else(|| lines.len().saturating_sub(1));
+            let end_index = trim_trailing_blank_lines(&lines, *start_index, raw_end_index);
+            let symbol_text = lines[*start_index..=end_index].join("\n");
+            chunks.push(symbol_candidate(
+                symbol_text,
+                (*start_index + 1) as u32,
+                (end_index + 1) as u32,
+                anchor.clone(),
+            ));
+        }
+        Ok(chunks)
+    }
+}
+
+/// Language family for the extension-aware fallback. Only these run their
+/// own recognizer; everything else is unknown (no recognizer at all).
+enum LanguageFamily {
+    Rust,
+    TypeScript,
+    Python,
+    Go,
+    CLike,
+}
+
+fn language_family(ext: &str) -> Option<LanguageFamily> {
+    match ext {
+        "rs" => Some(LanguageFamily::Rust),
+        "ts" | "tsx" | "js" | "jsx" | "mts" | "cts" => Some(LanguageFamily::TypeScript),
+        "py" | "pyi" => Some(LanguageFamily::Python),
+        "go" => Some(LanguageFamily::Go),
+        "c" | "h" | "cc" | "cpp" | "cxx" | "hpp" => Some(LanguageFamily::CLike),
+        _ => None,
+    }
+}
+
 fn declaration_anchor(line: &str) -> Option<String> {
     let trimmed = line.trim_start();
     if trimmed.starts_with("//") || trimmed.starts_with('#') && !trimmed.starts_with("#[") {

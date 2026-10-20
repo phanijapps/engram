@@ -35,6 +35,9 @@ pub(super) struct IngestCtx<'a, R> {
     pub source_key: &'a str,
     pub git_source_metadata: &'a Option<Metadata>,
     pub code_ingestor: &'a crate::KnowledgeIngestor<crate::CodeSymbolChunker>,
+    /// Ext-aware fallback chunker (EN-15): unknown extensions never run
+    /// foreign-language recognizers; the fallback is lossless.
+    pub code_chunker: &'a crate::CodeSymbolChunker,
     pub markdown_ingestor: &'a crate::KnowledgeIngestor<crate::MarkdownChunker>,
     pub text_ingestor: &'a crate::KnowledgeIngestor<crate::PlainTextChunker>,
     pub ts_chunker: Option<&'a crate::TreeSitterChunker>,
@@ -68,6 +71,7 @@ where
     let source_key = ctx.source_key;
     let git_source_metadata = ctx.git_source_metadata;
     let code_ingestor = ctx.code_ingestor;
+    let code_chunker = ctx.code_chunker;
     let markdown_ingestor = ctx.markdown_ingestor;
     let text_ingestor = ctx.text_ingestor;
     let ts_chunker = ctx.ts_chunker;
@@ -134,7 +138,21 @@ where
                 let mut req = request;
                 req.text = text;
                 match kind {
-                    crate::classifier::FileKind::Code => block_on(code_ingestor.ingest(repo, req)),
+                    // EN-15: ext-aware, lossless fallback. Foreign-language
+                    // recognizers no longer run on unsupported files (a SQL
+                    // `type TEXT,` column stopped discarding the file
+                    // prefix), and coverage warnings apply on this path too.
+                    crate::classifier::FileKind::Code => {
+                        match code_chunker.chunk_for_ext(&req.text, ext) {
+                            Ok(candidates) => {
+                                coverage = coverage_warning_for(rel, &req.text, &candidates);
+                                block_on(code_ingestor.ingest_with_candidates(repo, req, candidates))
+                            }
+                            Err(_) => {
+                                return (rel.clone(), Outcome::Error, Vec::new(), None);
+                            }
+                        }
+                    }
                     crate::classifier::FileKind::Text if is_markdown_ext(ext) => {
                         block_on(markdown_ingestor.ingest(repo, req))
                     }

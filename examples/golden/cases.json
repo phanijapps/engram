@@ -102,7 +102,7 @@
     },
     {
       "id": "G-ATTRIB-01",
-      "guard": "EN-10: callers are the innermost methods, not the test class (alias 'tok' calls stay unlinked \u2014 known gap)",
+      "guard": "EN-10: callers are the innermost methods, not the test class (aliases now link)",
       "tool": "symbol_context",
       "args": {
         "symbol": "_tokens"
@@ -113,7 +113,8 @@
           "regex": "callers: \\[([^]]*)\\]",
           "value": [
             "TestModernTokenizer::test_alpha",
-            "TestModernTokenizer::test_beta"
+            "TestModernTokenizer::test_beta",
+            "TestModernTokenizer::test_gamma"
           ]
         }
       ]
@@ -548,6 +549,157 @@
         {
           "type": "not_contains",
           "value": "Facets::iter"
+        }
+      ]
+    },
+    {
+      "id": "G-SRC-01",
+      "guard": "EN-14/16: default fetch is verbatim on-disk source (nested parents whole)",
+      "tool": "fetch_content",
+      "args": {
+        "path": "src/logic.py"
+      },
+      "expect": [
+        {
+          "type": "json_field",
+          "field": "source",
+          "op": "eq",
+          "value": "verbatim"
+        },
+        {
+          "type": "contains",
+          "value": "verdict = all"
+        },
+        {
+          "type": "contains",
+          "value": "return verdict"
+        }
+      ]
+    },
+    {
+      "id": "G-SRC-02",
+      "guard": "symbol-scoped fetch returns just that symbol",
+      "tool": "fetch_content",
+      "args": {
+        "path": "src/logic.py",
+        "symbol": "_check_reviewer_independence"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "def _check_reviewer_independence"
+        },
+        {
+          "type": "contains",
+          "value": "return verdict"
+        },
+        {
+          "type": "not_contains",
+          "value": "class ValidatorRunner"
+        }
+      ]
+    },
+    {
+      "id": "G-VAR-01",
+      "guard": "Variable ENTITY suppressed by default (chunk text remains legal evidence)",
+      "tool": "search",
+      "args": {
+        "query": "MAX_RETRIES",
+        "limit": 5,
+        "diagnostics": true
+      },
+      "expect": [
+        {
+          "type": "not_contains",
+          "value": "MAX_RETRIES (Variable)"
+        },
+        {
+          "type": "not_contains",
+          "value": "suppressed by default"
+        }
+      ]
+    },
+    {
+      "id": "G-VAR-02",
+      "guard": "Variable entities re-admitted with include_code_artifacts",
+      "tool": "search",
+      "args": {
+        "query": "MAX_RETRIES",
+        "limit": 5,
+        "diagnostics": true,
+        "include_code_artifacts": true
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "MAX_RETRIES (Variable)"
+        }
+      ]
+    },
+    {
+      "id": "G-PATH-03",
+      "guard": "fallback files (SQL) have file entities \u2014 path queries reach them",
+      "tool": "search",
+      "args": {
+        "query": "src/schema.sql",
+        "limit": 5,
+        "diagnostics": true,
+        "include_chunks": false
+      },
+      "expect": [
+        {
+          "type": "regex",
+          "value": "(?m)^src/schema\\.sql \\(File\\) \u2014 "
+        }
+      ]
+    },
+    {
+      "id": "G-ALIAS-01",
+      "guard": "import-alias callers link to the original symbol",
+      "tool": "symbol_context",
+      "args": {
+        "symbol": "_tokens"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "TestModernTokenizer::test_gamma"
+        }
+      ]
+    },
+    {
+      "id": "G-EVID-01",
+      "guard": "EN-13/8: navigation surfaces resolved vs unresolved evidence",
+      "tool": "symbol_context",
+      "args": {
+        "symbol": "cmd_gate"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "evidence callees"
+        },
+        {
+          "type": "contains",
+          "value": "unresolved: [json.dumps"
+        }
+      ]
+    },
+    {
+      "id": "G-HOP-01",
+      "guard": "EN-12: impact carries hop distances",
+      "tool": "change_impact",
+      "args": {
+        "target": "_check_reviewer_independence"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "caller_hops"
+        },
+        {
+          "type": "regex",
+          "value": "\\(\"ValidatorRunner::check\", 1\\)"
         }
       ]
     }

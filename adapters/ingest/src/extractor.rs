@@ -409,38 +409,41 @@ impl GraphExtractor {
         // targets may be external (name-only, resolved cross-file in
         // `extract_into`); imports form a File entity → Module entity edge
         // per import path (graph-only entities, like the Repository entity).
+        // Every code document gets its File entity (resolution needs
+        // importer and non-importer files alike) — INCLUDING fallback-path
+        // files with no tree-sitter structural edges (.sql and other
+        // unknown extensions previously had chunks but no file entity, so
+        // path-shaped queries could not reach them; golden eval gap).
+        let file_name = document
+            .path
+            .clone()
+            .unwrap_or_else(|| document.id.to_string());
+        let file_id = entity_id(&graph_id, &file_name);
+        let file_ref = EntityRef {
+            id: Some(file_id.clone()),
+            kind: Some("file".to_owned()),
+            name: Some(file_name.clone()),
+            aliases: Vec::new(),
+        };
+        entities.push(KnowledgeEntity {
+            id: file_id.clone(),
+            graph_id: Some(graph_id.clone()),
+            kind: EntityKind::File,
+            name: file_name.clone(),
+            aliases: Vec::new(),
+            scope: source.scope.clone(),
+            source_refs: Vec::new(),
+            concept_refs: Vec::new(),
+            ontology_class_refs: Vec::new(),
+            provenance: source.provenance.clone(),
+            created_at: now,
+            updated_at: None,
+            valid_from: Some(now),
+            valid_until: None,
+            metadata: entity_git_meta.clone(),
+            archived_at: None,
+        });
         if let Some(edges) = structural {
-            let file_name = document
-                .path
-                .clone()
-                .unwrap_or_else(|| document.id.to_string());
-            let file_id = entity_id(&graph_id, &file_name);
-            let file_ref = EntityRef {
-                id: Some(file_id.clone()),
-                kind: Some("file".to_owned()),
-                name: Some(file_name.clone()),
-                aliases: Vec::new(),
-            };
-            // Every code document gets its File entity (resolution needs
-            // importer and non-importer files alike), not just importers.
-            entities.push(KnowledgeEntity {
-                id: file_id.clone(),
-                graph_id: Some(graph_id.clone()),
-                kind: EntityKind::File,
-                name: file_name.clone(),
-                aliases: Vec::new(),
-                scope: source.scope.clone(),
-                source_refs: Vec::new(),
-                concept_refs: Vec::new(),
-                ontology_class_refs: Vec::new(),
-                provenance: source.provenance.clone(),
-                created_at: now,
-                updated_at: None,
-                valid_from: Some(now),
-                valid_until: None,
-                metadata: entity_git_meta.clone(),
-                archived_at: None,
-            });
             for path in &edges.imports {
                 let module_id = entity_id(&graph_id, &format!("module:{path}"));
                 let module_ref = EntityRef {
@@ -684,6 +687,8 @@ fn parse_symbol(anchor: &str) -> Option<(EntityKind, String)> {
         // Namespaces/modules (C++/C# `namespace`, Rust `mod`) carry the
         // receiver chain for their members.
         "module" | "namespace" | "mod" => EntityKind::Module,
+        // TS/JS const/let bindings (ADR-0030 Variable class).
+        "variable" => EntityKind::Variable,
         _ => return None,
     };
     Some((kind, name.to_owned()))

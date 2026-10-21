@@ -39,6 +39,12 @@ deterministic). Exit code: 0 all pass, 1 any failure, 2 scan failure.
 | G-EXT-01 | EN-8 balance: external calls remain visible evidence (classified, not deleted) |
 | G-DOC-01 | mixed mission: docs remain first-class retrieval citizens |
 | G-NEST-01 | nested functions are first-class symbols |
+| G-SRC-01/02 | verbatim on-disk fetch is the default (nested parents whole); symbol slicing |
+| G-VAR-01/02 | Variable entities exist and follow ADR-0030 suppression |
+| G-PATH-03 | fallback files (SQL) have file entities — path queries reach them |
+| G-ALIAS-01 | import-alias callers link to the original symbol |
+| G-EVID-01 | navigation surfaces resolved-vs-unresolved edge evidence |
+| G-HOP-01 | impact carries hop distances, nearest dependents first |
 | G-REPO-01/02 | repository exclusion binds exact AND partial-name injections (round-1 BLOCKER) |
 | G-DOC-02 | a successful Doc `get_context` packet is not assessed as failed code discovery |
 | G-RECV-02 | EN-9 positive control: qualified method callers survive unknown-receiver conservatism |
@@ -62,16 +68,16 @@ Asserting these would fail by design; they are the documented backlog:
 - **Cold-start hydration race** — the first tool call in a fresh server
   process can return empty while lanes hydrate (pre-existing; the runner
   warms up once after scan to stay deterministic).
-- **No `Variable` entities** — ADR-0030 suppresses `Variable`, but the
-  chunker never emits Variable-kind entities for TS/JS `const` bindings,
-  so that suppression class is currently vacuous (found by this dataset).
-- **Fallback files have no file entity** — unknown-extension files
-  (`.sql`) scanned via the fallback get chunks but no file/module/graph
-  entities, so path-shaped queries cannot reach them by name (found by
-  this dataset).
-- **Import aliases unlink callers** — `from x import y as z` calls record
-  the alias `z`, which never resolves to `y`; aliased callers are absent
-  from caller lists.
+- **Chunk-mode reconstruction is lossy by design** — `mode=chunks` still
+  reconstructs from retrieval chunks (containers keep doc + signature);
+  the DEFAULT is now verbatim on-disk source, which closes EN-14/EN-16
+  whenever the scan root is resolvable.
+- **Module-level import aliases** — `import x.y as z` / `import * as z`
+  leave receiver hints unrewritten (symbol aliases ARE resolved).
+- **Cold-start hydration race** — documented but UNREPRODUCED after
+  8 fresh-process + 5 same-process + 3 focused trials on current builds;
+  the runner keeps its warm-up as cheap insurance. Report a reproduction
+  if you see a first-call empty on a populated store.
 
 ## Adding a case
 

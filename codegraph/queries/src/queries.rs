@@ -68,21 +68,27 @@ pub fn edge_evidence(
         let (Some(subject), Some(object)) = (entity_key(&r.subject), entity_key(&r.object)) else {
             continue;
         };
-        let ev = |endpoint: String| EdgeEvidence {
+        // Resolution state is DIRECTION-aware: a caller's evidence is the
+        // subject endpoint's state, a callee's is the object's. (The initial
+        // version OR'd both — a resolved subject leaked "resolved" onto an
+        // unresolved external callee like json.dumps.)
+        let ev = |endpoint: String, resolved: bool| EdgeEvidence {
             endpoint,
             confidence: r.confidence,
-            resolved: r.object.id.is_some() || r.subject.id.is_some(),
+            resolved,
             method: r.provenance.method.clone(),
         };
         if object == symbol {
+            let resolved = r.subject.id.is_some();
             callers
                 .entry(subject.clone())
-                .or_insert_with(|| ev(subject.clone()));
+                .or_insert_with(|| ev(subject.clone(), resolved));
         }
         if subject == symbol {
+            let resolved = r.object.id.is_some();
             callees
                 .entry(object.clone())
-                .or_insert_with(|| ev(object.clone()));
+                .or_insert_with(|| ev(object.clone(), resolved));
         }
     }
     let mut c: Vec<EdgeEvidence> = callers.into_values().collect();

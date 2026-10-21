@@ -80,9 +80,36 @@ impl RetrievalIndex for TemporalRetrievalIndex {
             .or_else(|| request.budget.as_ref().and_then(|budget| budget.max_items))
             .unwrap_or(self.default_limit);
         let now = Utc::now();
-        let records = self.source.recent_memories(&request.scope, limit).await?;
-        Ok(rank_temporal(records, now, self.half_life_days, limit))
+        // Overfetch so the query gate can discard unrelated recents without
+        // starving the lane (recent N x 5, then gate, then rank + cap).
+        let fetch = limit.saturating_mul(5).max(limit);
+        let records = self.source.recent_memories(&request.scope, fetch).await?;
+        let gated = query_gate(request.query.as_str(), records);
+        Ok(rank_temporal(gated, now, self.half_life_days, limit))
     }
+}
+
+/// RELEVANCE GATE (memory-recall main defect): the temporal lane used to
+/// return the newest memories regardless of the question — a just-written
+/// memory scored ~1.0 for ANY query and, through RRF, covered the right
+/// answer in every recall. Recency must AMPLIFY relevant memories, never
+/// substitute for relevance: a candidate survives only when its text
+/// contains at least one meaningful query token (shared heuristic policy:
+/// function words + 1-char tokens dropped). A query with no surviving
+/// tokens contributes NOTHING from this lane — correct, an unrelated
+/// question should not surface recent memories at all.
+fn query_gate(query: &str, records: Vec<MemoryRecord>) -> Vec<MemoryRecord> {
+    let tokens = engram_retrieval::query_tokens(query);
+    if tokens.is_empty() {
+        return Vec::new();
+    }
+    records
+        .into_iter()
+        .filter(|r| {
+            let lower = r.content.text.to_lowercase();
+            tokens.iter().any(|t| lower.contains(t.as_str()))
+        })
+        .collect()
 }
 
 /// Pure: score memories by recency, sort newest-first, cap at `limit`, and build
@@ -164,6 +191,54 @@ impl TemporalMemorySource for SqlMemoryService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The memory-recall main defect: the newest memory scored ~1.0 for ANY
+    /// query and covered the right answer in every recall question. The
+    /// gate must drop recents that share no meaningful token with the query.
+    #[test]
+    fn query_gate_drops_unrelated_recents() {
+        let now = Utc::now();
+        let records = vec![
+            mem("Deployed the payment gateway to staging today", now, 1),
+            mem(
+                "The capital of France is Paris",
+                now - chrono::Duration::days(1),
+                2,
+            ),
+        ];
+        let gated = query_gate("what is the capital of france", records);
+        assert_eq!(gated.len(), 1, "only the relevant memory survives");
+        assert!(gated[0].content.text.contains("Paris"));
+    }
+
+    /// Recency still ranks among RELEVANT candidates (recent-and-relevant
+    /// first, old-and-relevant still present) — the gate must not become a
+    /// "recent only" filter.
+    #[test]
+    fn query_gate_keeps_old_relevant_memories() {
+        let now = Utc::now();
+        let records = vec![
+            mem("Retries use exponential backoff, newest note", now, 1),
+            mem(
+                "Retries use exponential backoff, older note",
+                now - chrono::Duration::days(30),
+                2,
+            ),
+        ];
+        let gated = query_gate("retry backoff policy", records);
+        assert_eq!(gated.len(), 2, "both relevant memories survive");
+    }
+
+    /// Stopword-only queries contribute NOTHING from this lane (never the
+    /// newest memories regardless of question).
+    #[test]
+    fn query_gate_empty_tokens_contribute_nothing() {
+        let records = vec![mem("anything at all", Utc::now(), 1)];
+        assert!(query_gate("how to the", records.clone()).is_empty());
+        assert!(query_gate("", records).is_empty());
+    }
+
+    use engram_domain::MemoryRecord;
     use engram_domain::{
         Actor, ActorKind, AllowedUse, DeleteMode, Id, MemoryContent, MemoryContentFormat,
         MemoryKind, Policy, Provenance, Sensitivity, Visibility,

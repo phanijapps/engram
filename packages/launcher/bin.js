@@ -69,6 +69,9 @@ function resolveBinary() {
   const pkg = platformPackage();
   // Prefer the -full variant (local fastembed embeddings) when installed at
   // the launcher's version; fall back to the slim platform package.
+  // ENGRAM_NO_FULL=1 forces slim even when -full is installed (e.g. to skip
+  // the first-use model download on constrained machines).
+  const wantFull = !process.env.ENGRAM_NO_FULL;
   const norm = (v) => String(v).replace(/^v/, "");
   const tryManifest = (name) => {
     try {
@@ -79,16 +82,17 @@ function resolveBinary() {
       return null;
     }
   };
-  let manifest = tryManifest(`${pkg}-full`);
+  let manifest = wantFull ? tryManifest(`${pkg}-full`) : null;
   if (manifest) process.stderr.write("engram-mcp: using -full binary (local embeddings)\n");
   if (!manifest) {
     manifest = tryManifest(pkg);
   }
   if (!manifest) {
     fail(
-      `platform package ${pkg} is not installed.\n` +
-        `This should have been installed automatically as an optionalDependency.\n` +
-        `Fix: npm install @engramlabs/mcp --force  (or: npm install ${pkg})`
+      `no platform binary installed (${pkg}-full or ${pkg}).\n` +
+        `The -full binary should have been installed automatically as an optionalDependency.\n` +
+        `Fix: npm install @engramlabs/mcp --force\n` +
+        `     (or install a variant directly: npm install ${pkg}-full  |  ${pkg})`
     );
   }
   // Version lockstep: the platform package must match the launcher version.

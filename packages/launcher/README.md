@@ -12,6 +12,11 @@ npm install -g @engramlabs/mcp@alpha
 engram-mcp install --agent claude    # skills + hooks + red-forman subagent
 ```
 
+The default install ships **local embeddings** (the fastembed-equipped
+`-full` binary) — semantic recall works out of the box, fully offline.
+A slim no-model binary is the fallback (`ENGRAM_NO_FULL=1`, see
+[Embeddings](#embeddings)).
+
 Hosts: `claude` · `claude-desktop` · `cursor` · `codex` · `pi` · `copilot` · `all`
 
 **Project scope** — install skills, hooks, and agents into the repo
@@ -57,25 +62,63 @@ Or run directly: `npx @engramlabs/mcp@alpha --storage ~/.engram`
 Linux x64/ARM64 · macOS Apple Silicon · Windows x64 — binaries install
 automatically per machine.
 
-## Local embeddings (the `-full` variant)
+## Embeddings
 
-The default install uses the **slim** binary: all local-first features work,
-but semantic (vector) recall needs a remote embedding endpoint configured.
-For **fully offline embeddings**, install the `-full` platform package for
-your machine alongside the launcher — it bundles fastembed with a local
-BGE-small model:
+Embeddings give `search`/`recall` a **semantic lane**: results matched by
+meaning, not just keywords — "how do retries back off" finds the exponential
+backoff memory even when those exact words never appear.
+
+### 1. Local & offline — the default
+
+`npm install -g @engramlabs/mcp` installs the **`-full`** binary for your
+machine (fastembed + local BGE-small model) as an automatic
+optionalDependency — no extra step. The embedding model (~130 MB) downloads
+from Hugging Face on **first use** and is cached — behind restricted
+networks point `FASTEMBED_CACHE_DIR` at a pre-populated cache directory.
+
+Variants, if you ever need them explicitly:
 
 ```bash
-npm install -g @engramlabs/mcp @engramlabs/mcp-linux-x64-gnu-full
-# darwin ARM:  @engramlabs/mcp-darwin-arm64-full
-# linux ARM:   @engramlabs/mcp-linux-arm64-gnu-full
-# win32 x64:   @engramlabs/mcp-win32-x64-full
+npm install -g @engramlabs/mcp-linux-x64-gnu-full   # the default binary
+npm install -g @engramlabs/mcp-linux-x64-gnu         # slim fallback (no model)
 ```
 
-The launcher prefers the `-full` binary when present. The embedding model
-(~130 MB) downloads from Hugging Face on **first use** and is cached —
-behind restricted networks point `FASTEMBED_CACHE_DIR` at a pre-populated
-cache directory.
+`ENGRAM_NO_FULL=1` forces the slim binary even when `-full` is installed
+(e.g. to skip the first-use model download).
+
+### 2. Remote — Ollama or any OpenAI-compatible endpoint
+
+An alternative to the bundled local model:
+
+```bash
+# Ollama (endpoint defaults to http://localhost:11434)
+engram-mcp --embedding-provider ollama --embedding-model nomic-embed-text
+
+# OpenAI-compatible (endpoint + API key read from the named env var)
+engram-mcp --embedding-provider openai \
+  --embedding-model text-embedding-3-small \
+  --embedding-endpoint https://api.openai.com/v1 \
+  --embedding-api-key-env OPENAI_API_KEY
+```
+
+Same settings as environment variables (no flags in your MCP config):
+`ENGRAM_EMBEDDING_PROVIDER`, `ENGRAM_EMBEDDING_MODEL`,
+`ENGRAM_EMBEDDING_ENDPOINT`, `ENGRAM_EMBEDDING_API_KEY_ENV`,
+`ENGRAM_EMBEDDING_DIMENSIONS`.
+
+### 3. Remote via profile file
+
+```toml
+# embedding.toml — passed via --embedding-config (or ENGRAM_EMBEDDING_CONFIG)
+[embedding_provider]
+provider_type = "ollama"
+model = "nomic-embed-text"
+```
+
+### Disabling the vector lane
+
+`--no-vector` turns embeddings off entirely (lexical + graph lanes only —
+fastest startup, fully deterministic). Re-enable with `--vector`.
 
 ## Privacy
 

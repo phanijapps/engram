@@ -702,6 +702,70 @@
           "value": "\\(\"ValidatorRunner::check\", 1\\)"
         }
       ]
+    },
+    {
+      "id": "G-MEM-01",
+      "guard": "recency lane is query-gated: an unrelated recent memory never covers the answer",
+      "tool": "write_memory",
+      "args": {
+        "content": "The payment gateway timeout is 30 seconds and retries twice"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "written"
+        }
+      ]
+    },
+    {
+      "id": "G-MEM-02",
+      "guard": "recall surfaces the RELEVANT memory, not the last-written one",
+      "tool": "recall",
+      "args": {
+        "query": "payment gateway timeout",
+        "limit": 3
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "payment gateway timeout is 30 seconds"
+        }
+      ]
+    },
+    {
+      "id": "G-PROC-00",
+      "guard": "setup: store a runbook (also asserts procedure_put works)",
+      "tool": "procedure_put",
+      "args": {
+        "name": "deploy recovery",
+        "steps": [
+          "roll back the migration",
+          "restart workers",
+          "verify health checks"
+        ],
+        "trigger": "when deploys fail health checks"
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "Procedure stored"
+        }
+      ]
+    },
+    {
+      "id": "G-PROC-01",
+      "guard": "runbooks surface in recall (procedures lane)",
+      "tool": "recall",
+      "args": {
+        "query": "a deploy failed what do I do",
+        "limit": 3
+      },
+      "expect": [
+        {
+          "type": "contains",
+          "value": "[procedure] deploy recovery"
+        }
+      ]
     }
   ]
 }

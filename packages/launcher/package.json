@@ -33,11 +33,11 @@
   ],
   "private": true,
   "optionalDependencies": {
-    "@engramlabs/mcp-linux-x64-gnu": "0.1.1-alpha",
-    "@engramlabs/mcp-linux-arm64-gnu": "0.1.1-alpha",
-    "@engramlabs/mcp-darwin-arm64": "0.1.1-alpha",
-    "@engramlabs/mcp-darwin-x64": "0.1.1-alpha",
-    "@engramlabs/mcp-win32-x64": "0.1.1-alpha"
+    "@engramlabs/mcp-linux-x64-gnu-full": "0.1.1-alpha",
+    "@engramlabs/mcp-linux-arm64-gnu-full": "0.1.1-alpha",
+    "@engramlabs/mcp-darwin-arm64-full": "0.1.1-alpha",
+    "@engramlabs/mcp-darwin-x64-full": "0.1.1-alpha",
+    "@engramlabs/mcp-win32-x64-full": "0.1.1-alpha"
   },
   "scripts": {
     "test": "node --test test/*.test.cjs"

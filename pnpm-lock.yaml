@@ -44,20 +44,7 @@ importers:
 
   packages/contracts: {}
 
-  packages/launcher:
-    optionalDependencies:
-      '@engramlabs/mcp-darwin-arm64':
-        specifier: 0.1.1-alpha
-        version: 0.1.1-alpha
-      '@engramlabs/mcp-linux-arm64-gnu':
-        specifier: 0.1.1-alpha
-        version: 0.1.1-alpha
-      '@engramlabs/mcp-linux-x64-gnu':
-        specifier: 0.1.1-alpha
-        version: 0.1.1-alpha
-      '@engramlabs/mcp-win32-x64':
-        specifier: 0.1.1-alpha
-        version: 0.1.1-alpha
+  packages/launcher: {}
 
   packages/node:
     dependencies:
@@ -362,26 +349,6 @@ packages:
   '@earendil-works/pi-tui@1.3.0':
     resolution: {integrity: sha512-AlKvEwEWyVtnuw7SVb4N/mUhlfIohyFslUNWarZVdLHHSdt3ca5EhMLwTzblBpDpaofSz+f+tAHie6CfxVrWKA==}
     engines: {node: '>=22.19.0'}
-
-  '@engramlabs/mcp-darwin-arm64@0.1.1-alpha':
-    resolution: {integrity: sha512-lVJ+CP4CR2iR2JLaefmh1p85c/L5tMYWOMwK9QTRD3KzUUrVcx68udVM1Ry8d6lopUS8HquAqWkewLujB8MUag==}
-    cpu: [arm64]
-    os: [darwin]
-
-  '@engramlabs/mcp-linux-arm64-gnu@0.1.1-alpha':
-    resolution: {integrity: sha512-ouTD3sqeIvkeMRCzry1eGHRSCOgET0MGcZHC7KcKC3pAfZUvSVuCgHKxaCTnO0sA1jTQchiJmmJitZ+RcABujQ==}
-    cpu: [arm64]
-    os: [linux]
-
-  '@engramlabs/mcp-linux-x64-gnu@0.1.1-alpha':
-    resolution: {integrity: sha512-7ajAiy9dUEDn/oWjxJIOIIehuI0c50hJ9qDjkKOhuoZMIqDJe40sOBshNfwRWkOfYHj88zU5mjPB7dkXpHS27A==}
-    cpu: [x64]
-    os: [linux]
-
-  '@engramlabs/mcp-win32-x64@0.1.1-alpha':
-    resolution: {integrity: sha512-MdloGVxc7VT0XQmjt5lzl3oFmXudxXHiAWvHWi8b3uUxvUH4F5/n13lQFUv4REDYZVCiUfziMwq3E467uyxtjw==}
-    cpu: [x64]
-    os: [win32]
 
   '@esbuild/aix-ppc64@0.28.2':
     resolution: {integrity: sha512-XExcO+dvLKvVtNTibSTBej1NCAbaGhWn9Ww1ZPx80qsahhPFe/8jgWP0IchNe0F3HwkU7n8ejhH8bjonqht8mQ==}
@@ -3956,18 +3923,6 @@ snapshots:
     dependencies:
       get-east-asian-width: 1.6.0
       marked: 18.0.11
-
-  '@engramlabs/mcp-darwin-arm64@0.1.1-alpha':
-    optional: true
-
-  '@engramlabs/mcp-linux-arm64-gnu@0.1.1-alpha':
-    optional: true
-
-  '@engramlabs/mcp-linux-x64-gnu@0.1.1-alpha':
-    optional: true
-
-  '@engramlabs/mcp-win32-x64@0.1.1-alpha':
-    optional: true
 
   '@esbuild/aix-ppc64@0.28.2':
     optional: true

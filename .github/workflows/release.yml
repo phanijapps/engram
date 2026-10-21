@@ -61,6 +61,9 @@ jobs:
           - target: win32-x64
             runner: windows-latest
             variant: slim
+          - target: win32-x64
+            runner: windows-latest
+            variant: full
     steps:
       - uses: actions/checkout@v4
 

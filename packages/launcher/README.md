@@ -72,7 +72,10 @@ backoff memory even when those exact words never appear.
 
 `npm install -g @engramlabs/mcp` installs the **`-full`** binary for your
 machine (fastembed + local BGE-small model) as an automatic
-optionalDependency — no extra step. The embedding model (~130 MB) downloads
+optionalDependency — no extra step. Platforms: Linux x64/ARM64 + Apple
+Silicon today; Windows ships the slim binary until its `-full` build lands
+(an upcoming release); Intel Macs have no prebuilt binaries (build from
+source or use the slim variant for your platform once published). The embedding model (~130 MB) downloads
 from Hugging Face on **first use** and is cached — behind restricted
 networks point `FASTEMBED_CACHE_DIR` at a pre-populated cache directory.
 

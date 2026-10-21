@@ -449,6 +449,21 @@ fn walk_declarations_with_receivers(
                     }
                     return;
                 }
+            } else {
+                // Variable binding (ADR-0030's Variable class): emit the
+                // const/let binding as a `variable NAME` declaration chunk
+                // so it becomes an EntityKind::Variable entity. Suppressed
+                // from search RESULTS by default (is_code_artifact) but a
+                // first-class graph + lexical participant — the previously
+                // vacuous suppression class becomes real. Fall through to
+                // the generic recursion so object-literal method children
+                // are still walked.
+                let name_text = extract_name(&name_node, source);
+                if !name_text.is_empty() {
+                    push_declaration_chunk(
+                        node, source, "variable", &name_text, receivers, kind_map, chunks,
+                    );
+                }
             }
         }
     }
@@ -1418,6 +1433,25 @@ mod lexical_text_tests {
     /// Import-alias resolution (golden eval known gap; codegraph parity):
     /// `from x import y as z` + call `z()` must record the edge to `y`, not
     /// the unresolvable alias.
+    /// ADR-0030 Variable class becomes real: TS const bindings emit
+    /// `variable NAME` declaration chunks (EntityKind::Variable entities),
+    /// previously they were invisible to the graph entirely.
+    #[test]
+    fn ts_const_binding_emits_variable_declaration() {
+        let ts = "export const MAX_RETRIES = 3;\nexport function go(): number {\n    return MAX_RETRIES;\n}\n";
+        let chunker = TreeSitterChunker::new().expect("chunker");
+        let candidates = chunker.chunk_with_ext(ts, "ts").unwrap();
+        let anchors: Vec<&str> = candidates
+            .iter()
+            .filter(|c| matches!(c.kind, engram_domain::KnowledgeChunkKind::CodeSymbol))
+            .filter_map(|c| c.location.as_ref().and_then(|l| l.anchor.as_deref()))
+            .collect();
+        assert!(
+            anchors.contains(&"variable MAX_RETRIES"),
+            "variable anchor missing: {anchors:?}"
+        );
+    }
+
     #[test]
     fn aliased_calls_record_the_original_symbol() {
         let py = "from src.tokens import _tokens as tok\n\ndef gamma():\n    return tok(\"c\")\n";

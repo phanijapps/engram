@@ -684,6 +684,8 @@ fn parse_symbol(anchor: &str) -> Option<(EntityKind, String)> {
         // Namespaces/modules (C++/C# `namespace`, Rust `mod`) carry the
         // receiver chain for their members.
         "module" | "namespace" | "mod" => EntityKind::Module,
+        // TS/JS const/let bindings (ADR-0030 Variable class).
+        "variable" => EntityKind::Variable,
         _ => return None,
     };
     Some((kind, name.to_owned()))

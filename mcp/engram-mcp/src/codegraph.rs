@@ -557,6 +557,19 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     save_manifest(&manifest_path, &new_manifest);
     eprintln!("engram-mcp: scan_repository done: {summary:?}");
 
+    // Record the scan root (provenance source → absolute root) so
+    // fetch_content can read verbatim source at call time — in-memory +
+    // scan-roots.json sidecar (survives restarts).
+    {
+        let scan_source = match (&summary.git_remote, &summary.git_branch, &summary.git_sha) {
+            (Some(remote), Some(branch), Some(sha)) => {
+                format!("{} [{}@{}:{}]", opts.source_name, remote, branch, sha)
+            }
+            _ => opts.source_name.clone(),
+        };
+        crate::scan_roots::record(&app.storage_dir, &scan_source, root);
+    }
+
     // The scan just wrote entities + relationships for this scope. Invalidate
     // the graph snapshot cache for this scope so the next `search`/`recall`
     // reloads fresh data instead of serving a stale pre-scan snapshot. Without

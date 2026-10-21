@@ -30,6 +30,7 @@ mod procedures;
 mod protocol;
 mod protocols;
 mod registry;
+mod scan_roots;
 mod scope;
 mod server;
 mod tools;
@@ -927,18 +928,19 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
     });
     registry.register(ToolRecord {
         name: "fetch_content",
-        description: "Stitch one indexed file's full content back from stored chunks and return \
-                      it. Doc files (Markdown/text) reassemble from document sections; code \
-                      files reassemble from symbol chunks (best-effort reconstruction — \
-                      container bodies are graph-only anchors). Capped at 100 KiB by default; \
-                      pass max_bytes (1..=1048576) to change. In multi-repo scopes, pass the \
-                      `repository` filter (same format as search) when a path is indexed \
-                      from several sources.",
+        description: "Return one indexed file's content — VERBATIM on-disk source when the \
+                      scan root is resolvable (default; byte-exact, read at call time), \
+                      best-effort chunk stitching otherwise. Pass symbol=<name> to slice to \
+                      one symbol's span instead of the whole file. Capped at 100 KiB by \
+                      default; pass max_bytes (1..=1048576) to change. In multi-repo scopes, \
+                      pass the `repository` filter (same format as search).",
         input_schema: json!({
             "type": "object",
             "properties": {
                 "path": { "type": "string", "description": "Indexed relative path (as scan stamped it, e.g. 'src/lib.rs' or 'docs/guide.md')." },
                 "repository": { "type": "string", "description": "Optional repository filter (e.g. \"org/name\") — resolves ambiguity in shared scopes." },
+                "mode": { "type": "string", "enum": ["auto", "verbatim", "chunks"], "description": "auto (default): verbatim source when resolvable, else stitched chunks; verbatim: require the on-disk read (errors otherwise); chunks: legacy best-effort stitching." },
+                "symbol": { "type": "string", "description": "Optional symbol name — slice the verbatim source to that symbol's stored line span (symbol-scoped fetch)." },
                 "max_bytes": { "type": "integer", "minimum": 1, "maximum": 1048576, "description": "Content cap in bytes (default 102400 = 100 KiB)." }
             },
             "required": ["path"]

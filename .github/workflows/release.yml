@@ -209,15 +209,52 @@ jobs:
             }
             require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
           "
-          npm publish --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
+          # Idempotent + retried publish (2026-10-20 silent drop): npm does
+          # NOT retry publish POSTs — one dropped upload loses the version.
+          # Skip when the version is already fetchable; retry otherwise.
+          V="${GITHUB_REF_NAME#v}"
+          if npm view "@engramlabs/mcp@$V" version >/dev/null 2>&1; then
+            echo "launcher @engramlabs/mcp@$V already fetchable — skipping publish"
+          else
+            for attempt in 1 2 3; do
+              if npm publish --provenance --access public --tag ${{ steps.prerelease.outputs.npm_tag }}; then
+                break
+              fi
+              [ "$attempt" = 3 ] && { echo "::error::launcher publish failed after 3 attempts"; exit 1; }
+              echo "retry $attempt failed — backing off"; sleep $((attempt * 20))
+            done
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: npm publish — platform packages
         if: github.event_name == 'push' || inputs.dry_run == false
         run: |
+          # Idempotent + retried platform publishes (2026-10-20 silent drop:
+          # mcp-darwin-arm64-full never became fetchable; npm does not retry
+          # publish POSTs). Each tarball: skip when its version is already
+          # fetchable (re-tag re-runs), else publish with backoff; a package
+          # that still fails after 3 attempts fails the job loudly.
           find artifacts -name 'mcp-*.tgz' -type f | while read tgz; do
-            npm publish "$tgz" --access public --tag ${{ steps.prerelease.outputs.npm_tag }}
+            meta=$(tar -xOf "$tgz" package/package.json)
+            name=$(printf '%s' "$meta" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).name))")
+            version=$(printf '%s' "$meta" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).version))")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version already fetchable — skipping"
+              continue
+            fi
+            published=0
+            for attempt in 1 2 3; do
+              if npm publish "$tgz" --access public --tag ${{ steps.prerelease.outputs.npm_tag }}; then
+                published=1; break
+              fi
+              echo "$name@$version attempt $attempt failed — backing off"
+              sleep $((attempt * 20))
+            done
+            if [ "$published" != 1 ]; then
+              echo "::error::$name@$version never published (3 attempts)"
+              exit 1
+            fi
           done
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

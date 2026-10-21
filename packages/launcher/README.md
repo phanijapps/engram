@@ -12,6 +12,11 @@ npm install -g @engramlabs/mcp@alpha
 engram-mcp install --agent claude    # skills + hooks + red-forman subagent
 ```
 
+The default install ships **local embeddings** (the fastembed-equipped
+`-full` binary) — semantic recall works out of the box, fully offline.
+A slim no-model binary is the fallback (`ENGRAM_NO_FULL=1`, see
+[Embeddings](#embeddings)).
+
 Hosts: `claude` · `claude-desktop` · `cursor` · `codex` · `pi` · `copilot` · `all`
 
 **Project scope** — install skills, hooks, and agents into the repo
@@ -61,29 +66,29 @@ automatically per machine.
 
 Embeddings give `search`/`recall` a **semantic lane**: results matched by
 meaning, not just keywords — "how do retries back off" finds the exponential
-backoff memory even when those exact words never appear. Three ways to run
-it:
+backoff memory even when those exact words never appear.
 
-### 1. Local & offline — the `-full` variant
+### 1. Local & offline — the default
 
-Install the `-full` platform package for your machine alongside the
-launcher — it bundles fastembed with a local BGE-small model:
+`npm install -g @engramlabs/mcp` installs the **`-full`** binary for your
+machine (fastembed + local BGE-small model) as an automatic
+optionalDependency — no extra step. The embedding model (~130 MB) downloads
+from Hugging Face on **first use** and is cached — behind restricted
+networks point `FASTEMBED_CACHE_DIR` at a pre-populated cache directory.
+
+Variants, if you ever need them explicitly:
 
 ```bash
-npm install -g @engramlabs/mcp @engramlabs/mcp-linux-x64-gnu-full
-# darwin ARM:  @engramlabs/mcp-darwin-arm64-full
-# linux ARM:   @engramlabs/mcp-linux-arm64-gnu-full
-# win32 x64:   @engramlabs/mcp-win32-x64-full
+npm install -g @engramlabs/mcp-linux-x64-gnu-full   # the default binary
+npm install -g @engramlabs/mcp-linux-x64-gnu         # slim fallback (no model)
 ```
 
-The launcher prefers the `-full` binary when present (`ENGRAM_NO_FULL=1`
-forces slim). The embedding model (~130 MB) downloads from Hugging Face on
-**first use** and is cached — behind restricted networks point
-`FASTEMBED_CACHE_DIR` at a pre-populated cache directory.
+`ENGRAM_NO_FULL=1` forces the slim binary even when `-full` is installed
+(e.g. to skip the first-use model download).
 
 ### 2. Remote — Ollama or any OpenAI-compatible endpoint
 
-Works with the default slim binary. Point engram at a serving endpoint:
+An alternative to the bundled local model:
 
 ```bash
 # Ollama (endpoint defaults to http://localhost:11434)
@@ -101,7 +106,7 @@ Same settings as environment variables (no flags in your MCP config):
 `ENGRAM_EMBEDDING_ENDPOINT`, `ENGRAM_EMBEDDING_API_KEY_ENV`,
 `ENGRAM_EMBEDDING_DIMENSIONS`.
 
-### 3. Profile file
+### 3. Remote via profile file
 
 ```toml
 # embedding.toml — passed via --embedding-config (or ENGRAM_EMBEDDING_CONFIG)

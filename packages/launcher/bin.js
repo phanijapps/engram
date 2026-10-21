@@ -89,9 +89,10 @@ function resolveBinary() {
   }
   if (!manifest) {
     fail(
-      `platform package ${pkg} is not installed.\n` +
-        `This should have been installed automatically as an optionalDependency.\n` +
-        `Fix: npm install @engramlabs/mcp --force  (or: npm install ${pkg})`
+      `no platform binary installed (${pkg}-full or ${pkg}).\n` +
+        `The -full binary should have been installed automatically as an optionalDependency.\n` +
+        `Fix: npm install @engramlabs/mcp --force\n` +
+        `     (or install a variant directly: npm install ${pkg}-full  |  ${pkg})`
     );
   }
   // Version lockstep: the platform package must match the launcher version.

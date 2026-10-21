@@ -233,6 +233,18 @@ impl TreeSitterChunker {
             &mut call_sites,
         );
 
+        // Import-alias rewrite (golden eval known-gap fix): a bare call
+        // through a local alias (`tok(...)`) records the ORIGINAL symbol
+        // (`_tokens`) so cross-file resolution links the aliased caller.
+        let aliases = import_aliases(text, ext);
+        if !aliases.is_empty() {
+            for (_, reference) in call_sites.iter_mut() {
+                if let Some(original) = aliases.get(reference.as_str()) {
+                    *reference = original.clone();
+                }
+            }
+        }
+
         // Match each call to its enclosing function. Known callees emit
         // immediately; unknown-but-plausible callees (not bare generics —
         // the noise filter) emit as name-only references so Phase-2
@@ -659,6 +671,67 @@ fn dotted_reference(full_text: &str, bare_callee: &str) -> String {
         return bare_callee.to_owned();
     }
     format!("{}{}{}", segments[hint_idx], sep, name)
+}
+
+/// Per-file import-alias map (alias → original symbol name).
+///
+/// Python `from src.tokens import _tokens as tok` and TS
+/// `import { helper as h } from './store'` bind the ORIGINAL symbol under a
+/// local ALIAS. Calls through the alias (`tok("x")`) previously recorded the
+/// alias as the callee, which never resolved — aliased callers were silently
+/// unlinked (golden eval known gap; codegraph parity). The map is consulted
+/// by [`extract_calls_tree`] to rewrite bare alias call sites to the
+/// original name, so cross-file resolution sees the real symbol.
+///
+/// Scope: symbol aliases only. Module aliases (`import x.y as z`,
+/// `import * as z`) and default imports (original name unknowable) are left
+/// as-is.
+fn import_aliases(source: &str, ext: &str) -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+    let mut map = HashMap::new();
+    let is_py = matches!(ext, "py" | "pyi");
+    let is_ts = matches!(ext, "ts" | "tsx" | "js" | "jsx" | "mts" | "cts");
+    if !is_py && !is_ts {
+        return map;
+    }
+    let lines: Vec<&str> = source.lines().collect();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i].trim_start();
+        if is_py && line.starts_with("from ") {
+            // from <mod> import a, b as c, (d as e, f)
+            if let Some(rest) = line.split_once(" import ") {
+                let list = rest.1.trim();
+                let list = list.strip_prefix('(').map(|l| l.trim_end_matches(')')).unwrap_or(list);
+                for item in list.split(',') {
+                    let item = item.trim();
+                    if let Some((orig, alias)) = item.split_once(" as ") {
+                        let (orig, alias) = (orig.trim(), alias.trim());
+                        if !orig.is_empty() && !alias.is_empty() {
+                            map.insert(alias.to_owned(), orig.to_owned());
+                        }
+                    }
+                }
+            }
+        } else if is_ts && line.starts_with("import ") {
+            // import { a as b, c } from '...'
+            if line.contains('{') && line.contains('}') {
+                if let Some(braces) = line.split_once('{').and_then(|(_, r)| r.split_once('}')) {
+                    for item in braces.0.split(',') {
+                        let item = item.trim();
+                        if let Some((orig, alias)) = item.split_once(" as ") {
+                            let (orig, alias) = (orig.trim(), alias.trim());
+                            if !orig.is_empty() && !alias.is_empty() {
+                                map.insert(alias.to_owned(), orig.to_owned());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    map
 }
 
 /// Receiver-aware call/span walk (EN-10/EN-11): declarations carry their
@@ -1342,6 +1415,39 @@ mod lexical_text_tests {
     /// methods. Attribution must pick the INNERMOST enclosing callable and
     /// carry the receiver-qualified identity (`Class::method`), matching the
     /// chunk entity names.
+    /// Import-alias resolution (golden eval known gap; codegraph parity):
+    /// `from x import y as z` + call `z()` must record the edge to `y`, not
+    /// the unresolvable alias.
+    #[test]
+    fn aliased_calls_record_the_original_symbol() {
+        let py = "from src.tokens import _tokens as tok\n\ndef gamma():\n    return tok(\"c\")\n";
+        let chunker = TreeSitterChunker::new().expect("chunker");
+        let mut names = std::collections::HashSet::new();
+        names.insert("_tokens".to_string());
+        let edges = chunker.extract_calls(py, "py", &names).unwrap();
+        assert!(
+            edges.contains(&("gamma".to_string(), "_tokens".to_string())),
+            "aliased call must resolve to the original: {edges:?}"
+        );
+        assert!(
+            !edges.iter().any(|(_, callee)| callee == "tok"),
+            "alias must not survive as the callee: {edges:?}"
+        );
+    }
+
+    #[test]
+    fn ts_named_import_aliases_resolve() {
+        let ts = "import { helper as h } from './store';\nexport function use(): number {\n    return h(1);\n}\n";
+        let chunker = TreeSitterChunker::new().expect("chunker");
+        let mut names = std::collections::HashSet::new();
+        names.insert("helper".to_string());
+        let edges = chunker.extract_calls(ts, "ts", &names).unwrap();
+        assert!(
+            edges.contains(&("use".to_string(), "helper".to_string())),
+            "ts alias must resolve: {edges:?}"
+        );
+    }
+
     #[test]
     fn calls_are_attributed_to_innermost_qualified_callable() {
         let py = "\nclass TestModernTokenizer:\n    def test_alpha(self):\n        _tokens(\"a\")\n\n    def test_beta(self):\n        _tokens(\"b\")\n\ndef _tokens(x):\n    return x\n";

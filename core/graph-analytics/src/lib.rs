@@ -17,5 +17,6 @@ pub use betweenness::betweenness;
 pub use communities::communities;
 pub use pagerank::{pagerank, personalized_pagerank};
 pub use reachability::{
-    ancestors, ancestors_bounded, descendants, descendants_bounded, in_degree, shortest_path,
+    ancestors, ancestors_bounded, ancestors_bounded_with_depth, descendants, descendants_bounded,
+    in_degree, shortest_path,
 };

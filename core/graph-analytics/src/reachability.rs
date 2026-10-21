@@ -109,6 +109,62 @@ where
 /// queue drains and `truncated` is `false` — including the exact-boundary case
 /// where the set equals `max_visited`. Duplicate enqueues never count as
 /// truncation.
+/// [`ancestors_bounded`] retaining per-node hop depth, in BFS visit order.
+/// Consumers that render impact lists order by (hop, name) so truncation
+/// keeps the NEAREST dependents (EN-12: alphabetical caps used to keep
+/// distant `a_…` tests while dropping nearby `type_filter_…`).
+pub fn ancestors_bounded_with_depth<N>(
+    edges: &[(N, N)],
+    target: &N,
+    max_depth: usize,
+    max_visited: usize,
+) -> (Vec<(N, usize)>, bool)
+where
+    N: Eq + Hash + Clone,
+{
+    let (found, truncated) = ancestors_bounded(edges, target, max_depth, max_visited);
+    // ancestors_bounded loses depth; recover it with a bounded BFS replay
+    // over the found set (cheap: the set is already capped).
+    let mut predecessors: HashMap<N, Vec<N>> = HashMap::new();
+    for (source, dest) in edges {
+        if found.contains(source) || source == target {
+            predecessors
+                .entry(dest.clone())
+                .or_default()
+                .push(source.clone());
+        }
+    }
+    let mut depth_of: HashMap<N, usize> = HashMap::new();
+    let mut queue: VecDeque<N> = VecDeque::new();
+    for pred in predecessors.get(target).into_iter().flatten() {
+        if found.contains(pred) && !depth_of.contains_key(pred) {
+            depth_of.insert(pred.clone(), 1);
+            queue.push_back(pred.clone());
+        }
+    }
+    while let Some(node) = queue.pop_front() {
+        let d = *depth_of.get(&node).unwrap_or(&1);
+        if d >= max_depth {
+            continue;
+        }
+        for pred in predecessors.get(&node).into_iter().flatten() {
+            if found.contains(pred) && !depth_of.contains_key(pred) {
+                depth_of.insert(pred.clone(), d + 1);
+                queue.push_back(pred.clone());
+            }
+        }
+    }
+    let mut ordered: Vec<(N, usize)> = found
+        .into_iter()
+        .map(|n| {
+            let d = depth_of.get(&n).copied().unwrap_or(1);
+            (n, d)
+        })
+        .collect();
+    ordered.sort_by_key(|(_, d)| *d);
+    (ordered, truncated)
+}
+
 pub fn ancestors_bounded<N>(
     edges: &[(N, N)],
     target: &N,

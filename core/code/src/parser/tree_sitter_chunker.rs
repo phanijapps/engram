@@ -717,7 +717,10 @@ fn import_aliases(source: &str, ext: &str) -> std::collections::HashMap<String, 
             // from <mod> import a, b as c, (d as e, f)
             if let Some(rest) = line.split_once(" import ") {
                 let list = rest.1.trim();
-                let list = list.strip_prefix('(').map(|l| l.trim_end_matches(')')).unwrap_or(list);
+                let list = list
+                    .strip_prefix('(')
+                    .map(|l| l.trim_end_matches(')'))
+                    .unwrap_or(list);
                 for item in list.split(',') {
                     let item = item.trim();
                     if let Some((orig, alias)) = item.split_once(" as ") {

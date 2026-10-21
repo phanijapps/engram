@@ -36,6 +36,62 @@ pub fn call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(String, Strin
         .collect()
 }
 
+/// Evidence for one navigation edge: what the storage layer knows that the
+/// name-pair reduction used to discard (EN-13/8).
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct EdgeEvidence {
+    pub endpoint: String,
+    /// Storage confidence: AST call edges 0.9, co-occurrence fallback 0.5.
+    pub confidence: Option<f32>,
+    /// True when the endpoint resolved to an indexed entity id.
+    pub resolved: bool,
+    /// Extraction method string (e.g. "deterministic_text_ingestion").
+    pub method: Option<String>,
+}
+
+/// First-hop edge evidence for `symbol`: (caller evidence, callee evidence)
+/// sorted by endpoint name. Later hops carry no per-edge evidence (the walk
+/// composes edges); direct edges are where parsed-vs-guessed matters.
+pub fn edge_evidence(
+    relationships: &[KnowledgeRelationship],
+    symbol: &str,
+) -> (Vec<EdgeEvidence>, Vec<EdgeEvidence>) {
+    let mut callers: HashMap<String, EdgeEvidence> = HashMap::new();
+    let mut callees: HashMap<String, EdgeEvidence> = HashMap::new();
+    for r in relationships.iter() {
+        if !matches!(
+            r.predicate.as_str(),
+            "calls" | "sends_request" | "handled_by"
+        ) {
+            continue;
+        }
+        let (Some(subject), Some(object)) = (entity_key(&r.subject), entity_key(&r.object)) else {
+            continue;
+        };
+        let ev = |endpoint: String| EdgeEvidence {
+            endpoint,
+            confidence: r.confidence,
+            resolved: r.object.id.is_some() || r.subject.id.is_some(),
+            method: r.provenance.method.clone(),
+        };
+        if object == symbol {
+            callers
+                .entry(subject.clone())
+                .or_insert_with(|| ev(subject.clone()));
+        }
+        if subject == symbol {
+            callees
+                .entry(object.clone())
+                .or_insert_with(|| ev(object.clone()));
+        }
+    }
+    let mut c: Vec<EdgeEvidence> = callers.into_values().collect();
+    c.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
+    let mut d: Vec<EdgeEvidence> = callees.into_values().collect();
+    d.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
+    (c, d)
+}
+
 /// Analytics-grade `(caller, callee)` pairs: `calls`-family relationships
 /// whose **both endpoints carry resolved entity ids**.
 ///
@@ -372,7 +428,12 @@ pub fn symbol_context_bounded(
 /// consumer is unaffected.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct BlastRadiusBounded {
+    /// Callers ordered by (hop distance, name) — the NEAREST dependents
+    /// survive the cap (EN-12: alphabetical ordering used to keep distant
+    /// `a_…` tests while dropping nearby dependents).
     pub callers: Vec<String>,
+    /// Per-caller hop distance, parallel ordering.
+    pub caller_hops: Vec<(String, u32)>,
     pub truncated: bool,
 }
 
@@ -386,11 +447,23 @@ pub fn blast_radius_bounded(
     cap: usize,
 ) -> BlastRadiusBounded {
     let edges = call_edges(relationships);
-    let (anc, truncated) =
-        engram_graph_analytics::ancestors_bounded(&edges, &target.to_owned(), depth, cap);
-    let mut callers: Vec<String> = anc.into_iter().collect();
-    callers.sort();
-    BlastRadiusBounded { callers, truncated }
+    let (anc_with_depth, truncated) = engram_graph_analytics::ancestors_bounded_with_depth(
+        &edges,
+        &target.to_owned(),
+        depth,
+        cap,
+    );
+    let mut hops: Vec<(String, u32)> = anc_with_depth
+        .into_iter()
+        .map(|(n, d)| (n, d as u32))
+        .collect();
+    hops.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+    let callers: Vec<String> = hops.iter().map(|(n, _)| n.clone()).collect();
+    BlastRadiusBounded {
+        callers,
+        caller_hops: hops,
+        truncated,
+    }
 }
 
 /// Estimates cyclomatic complexity from source text: 1 + count of decision-point
@@ -1068,6 +1141,28 @@ mod tests {
         assert_eq!(sc.ctx.callees.len(), 5, "callees capped at 5");
         assert!(sc.truncated, "callees (10) exceed cap (5) -> truncated");
         assert!(sc.ctx.callers.is_empty(), "symbol has no callers");
+    }
+
+    /// EN-13/8: edge evidence preserves resolution state (unresolved
+    /// name-only endpoints stay visible as evidence).
+    #[test]
+    fn edge_evidence_lists_endpoints_with_state() {
+        let rels = vec![rel("cmd_gate", "run_report"), rel("cmd_gate", "json.dumps")];
+        let (callers, callees) = edge_evidence(&rels, "cmd_gate");
+        assert!(callers.is_empty());
+        let endpoints: Vec<&str> = callees.iter().map(|e| e.endpoint.as_str()).collect();
+        assert_eq!(endpoints, vec!["json.dumps", "run_report"]);
+    }
+
+    /// EN-12: impact rows carry hop distance and order nearest-first.
+    #[test]
+    fn blast_radius_orders_nearest_dependents_first() {
+        // z_near -> target; a_far -> z_near (hop 2, alphabetically first).
+        let rels = vec![rel("z_near", "target"), rel("a_far", "z_near")];
+        let r = blast_radius_bounded(&rels, "target", 2, 64);
+        assert_eq!(r.callers, vec!["z_near".to_owned(), "a_far".to_owned()]);
+        assert_eq!(r.caller_hops[0], ("z_near".to_owned(), 1));
+        assert_eq!(r.caller_hops[1], ("a_far".to_owned(), 2));
     }
 
     #[test]

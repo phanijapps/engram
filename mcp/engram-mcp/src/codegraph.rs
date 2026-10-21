@@ -1854,17 +1854,25 @@ fn union_symbol_context(
 fn union_blast_radius(
     radii: Vec<engram_codegraph_queries::BlastRadiusBounded>,
 ) -> engram_codegraph_queries::BlastRadiusBounded {
-    let mut callers: HashSet<String> = HashSet::new();
+    // Keep each caller's MINIMUM hop across seeds (the closest seed is the
+    // honest distance for the union), then order by (hop, name).
+    let mut hops: HashMap<String, u32> = HashMap::new();
     let mut truncated = false;
     for r in radii {
-        for caller in r.callers {
-            callers.insert(caller);
+        for (caller, hop) in r.caller_hops {
+            let entry = hops.entry(caller).or_insert(u32::MAX);
+            *entry = (*entry).min(hop);
         }
         truncated |= r.truncated;
     }
-    let mut callers: Vec<String> = callers.into_iter().collect();
-    callers.sort();
-    engram_codegraph_queries::BlastRadiusBounded { callers, truncated }
+    let mut caller_hops: Vec<(String, u32)> = hops.into_iter().collect();
+    caller_hops.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+    let callers: Vec<String> = caller_hops.iter().map(|(n, _)| n.clone()).collect();
+    engram_codegraph_queries::BlastRadiusBounded {
+        callers,
+        caller_hops,
+        truncated,
+    }
 }
 
 /// Resolve `user_symbol` against `entity_names`, falling back to the bare
@@ -1880,23 +1888,48 @@ fn resolve_seeds(entity_names: &[String], user_symbol: &str) -> Vec<String> {
     }
 }
 
-/// `symbol_context`: callers, callees, and community for one symbol — or, when
-/// `symbol` is passed as a JSON array, for each symbol in one call (Fix 1:
-/// batch symbol_context). An agent that finds 5 distinctive identifiers makes
-/// one call instead of five.
-///
-/// RFC-0020 T7: each user-supplied symbol is resolved to its qualified NAME(s)
-/// (`{repo}/{path}::{bare}`) via suffix matching before seeding the BFS. When a
-/// bare symbol resolves to multiple qualified names, the BFS is run from EACH
-/// seed and the callers/callees are unioned, de-duped. Falls back to the bare
-/// symbol when no entity matches.
-///
-/// - String `symbol` (legacy): returns the single unioned `SymbolContextBounded`
-///   debug view (`{ctx:?}` with no header) so existing callers/tests are
-///   unaffected by a single-match resolution.
-/// - Array `symbol` (new): one section per USER symbol, each showing the unioned
-///   context over its resolved names, with a header
-///   `=== symbol_context: <name> (depth=N) ===`.
+fn render_edge_evidence(rels: &[KnowledgeRelationship], seeds: &[String]) -> String {
+    use std::collections::HashMap as EMap;
+    let mut callers: EMap<String, engram_codegraph_queries::EdgeEvidence> = EMap::new();
+    let mut callees: EMap<String, engram_codegraph_queries::EdgeEvidence> = EMap::new();
+    for seed in seeds {
+        let (c, d) = engram_codegraph_queries::edge_evidence(rels, seed);
+        for e in c {
+            callers.entry(e.endpoint.clone()).or_insert(e);
+        }
+        for e in d {
+            callees.entry(e.endpoint.clone()).or_insert(e);
+        }
+    }
+    let render = |m: &EMap<String, engram_codegraph_queries::EdgeEvidence>| {
+        let mut evs: Vec<&engram_codegraph_queries::EdgeEvidence> = m.values().collect();
+        evs.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
+        let fmt = |e: &engram_codegraph_queries::EdgeEvidence| {
+            format!(
+                "{} (conf {}, {}, {})",
+                e.endpoint,
+                e.confidence
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "-".into()),
+                if e.resolved { "resolved" } else { "unresolved" },
+                e.method.as_deref().unwrap_or("ast")
+            )
+        };
+        let resolved: Vec<String> = evs.iter().filter(|e| e.resolved).map(|e| fmt(e)).collect();
+        let unresolved: Vec<String> = evs.iter().filter(|e| !e.resolved).map(|e| fmt(e)).collect();
+        format!(
+            "resolved: [{}] | unresolved: [{}]",
+            resolved.join(", "),
+            unresolved.join(", ")
+        )
+    };
+    format!(
+        "\nevidence callers — {}\nevidence callees — {}",
+        render(&callers),
+        render(&callees)
+    )
+}
+
 pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let symbols = parse_str_or_array(args, "symbol")?;
     let depth = args["depth"].as_u64().unwrap_or(1) as usize;
@@ -1917,7 +1950,8 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             .map(|s| engram_codegraph_queries::symbol_context_bounded(&rels, s, depth, cap))
             .collect();
         let ctx = union_symbol_context(ctxs);
-        return Ok(protocol::text_content(format!("{ctx:?}")));
+        let evidence = render_edge_evidence(&rels, &seeds);
+        return Ok(protocol::text_content(format!("{ctx:?}{evidence}")));
     }
 
     // Batch path: one section per USER symbol with a header. Each user symbol is
@@ -1931,8 +1965,9 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             .map(|s| engram_codegraph_queries::symbol_context_bounded(&rels, s, depth, cap))
             .collect();
         let ctx = union_symbol_context(ctxs);
+        let evidence = render_edge_evidence(&rels, &seeds);
         sections.push(format!(
-            "=== symbol_context: {symbol} (depth={depth}) ===\n{ctx:?}"
+            "=== symbol_context: {symbol} (depth={depth}) ===\n{ctx:?}{evidence}"
         ));
     }
     Ok(protocol::text_content(sections.join("\n\n")))
@@ -4885,10 +4920,12 @@ mod tests {
     fn union_blast_radius_unions_and_dedups_sorted() {
         let r1 = engram_codegraph_queries::BlastRadiusBounded {
             callers: vec!["c1".to_owned()],
+            caller_hops: vec![("c1".to_owned(), 1)],
             truncated: false,
         };
         let r2 = engram_codegraph_queries::BlastRadiusBounded {
             callers: vec!["c1".to_owned(), "c2".to_owned()],
+            caller_hops: vec![("c1".to_owned(), 1), ("c2".to_owned(), 2)],
             truncated: true,
         };
         let unioned = union_blast_radius(vec![r1, r2]);

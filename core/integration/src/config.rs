@@ -130,6 +130,7 @@ struct ProfileFile {
     /// vector on when compiled in).
     #[serde(default)]
     enable_vector: Option<bool>,
+    rebuild_vectors: Option<bool>,
 }
 
 /// The default embedding-provider config used when a profile file omits the
@@ -202,6 +203,11 @@ pub struct EngramConfig {
     /// type is identical under both feature builds.
     #[serde(default = "default_true")]
     pub enable_vector: bool,
+    /// Explicit destructive reset of derived vectors at open, preserving all
+    /// source data. Remove after one launch; backfill vectors separately.
+    /// Unsupported backends reject this request rather than silently ignoring it.
+    #[serde(default)]
+    pub rebuild_vectors: bool,
 }
 
 impl EngramConfig {
@@ -225,6 +231,7 @@ impl EngramConfig {
             pgvector_connection_string: None,
             recall_fusion: None,
             enable_vector: true,
+            rebuild_vectors: false,
         }
     }
 
@@ -267,6 +274,14 @@ impl EngramConfig {
     #[must_use]
     pub fn with_enable_vector(mut self, enable: bool) -> Self {
         self.enable_vector = enable;
+        self
+    }
+
+    /// Explicitly discard derived vectors and adopt the configured embedding
+    /// space on the next open. This is store-wide, not scoped to one project.
+    #[must_use]
+    pub fn with_rebuild_vectors(mut self, rebuild: bool) -> Self {
+        self.rebuild_vectors = rebuild;
         self
     }
 
@@ -417,6 +432,7 @@ impl EngramConfig {
             pgvector_connection_string: None,
             recall_fusion: profile.recall_fusion,
             enable_vector: profile.enable_vector.unwrap_or(true),
+            rebuild_vectors: profile.rebuild_vectors.unwrap_or(false),
         })
     }
 

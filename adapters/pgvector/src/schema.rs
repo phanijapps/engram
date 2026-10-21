@@ -215,6 +215,21 @@ pub fn schema_sql(dimensions: u32) -> String {
     sql
 }
 
+/// Base record schema for embeddings-off startup. Do not preselect a vector
+/// dimension or touch an existing vector index before a provider is enabled.
+/// Section markers delimit the optional vector DDL in the shared template.
+pub fn schema_sql_without_vectors() -> String {
+    let (before, vectors_and_after) = SCHEMA_SQL
+        .split_once("-- === Vector index (pgvector) ===")
+        .expect("vector section marker in schema template");
+    let (_, after) = vectors_and_after
+        .split_once("-- === Belief + Contradiction ===")
+        .expect("post-vector section marker in schema template");
+    let mut sql = format!("{before}\n-- === Belief + Contradiction ==={after}");
+    stamp_schema_version(&mut sql);
+    sql
+}
+
 /// The pgvector schema version — bumped on any non-additive DDL change.
 /// Stamped at open (below) so an operator can query
 /// `SELECT * FROM schema_meta` to see which schema a database carries and
@@ -229,4 +244,31 @@ pub fn stamp_schema_version(sql: &mut String) {
          INSERT INTO schema_meta (key, value) VALUES ('schema_version', '{SCHEMA_VERSION}')\
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;\n"
     ));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn off_schema_does_not_create_vector_table_or_index() {
+        let sql = schema_sql_without_vectors();
+        assert!(!sql.contains("CREATE TABLE IF NOT EXISTS vectors"));
+        assert!(!sql.contains("idx_vectors_embedding"));
+        assert!(!sql.contains("{dimensions}"));
+        for table in [
+            "memories",
+            "knowledge_chunks",
+            "beliefs",
+            "procedures",
+            "hierarchy_nodes",
+            "schema_meta",
+        ] {
+            assert!(
+                sql.contains(&format!("CREATE TABLE IF NOT EXISTS {table}")),
+                "missing {table}"
+            );
+        }
+        assert!(schema_sql(768).contains("vector(768)"));
+    }
 }

@@ -75,6 +75,8 @@ pub const CONTRACT_FLAGS: &[&str] = &[
     "--pg-connection-string",
     "--no-vector",
     "--vector",
+    "--slim",
+    "--rebuild-vectors",
 ];
 
 /// The full launch-argument contract (mirrors HOW-TO.md). `--help` prints
@@ -100,8 +102,12 @@ LAUNCH FLAGS
   --tools core|full|all|consolidated   Tool profile (default core = 21 tools)
   --backend sqlite|pgvector   Engine recipe (default sqlite)
   --pg-connection-string <url> Postgres URL (pgvector; env ENGRAM_PG_CONNECTION_STRING)
-  --no-vector                 Disable the embedding lane
-  --vector                    Enable the embedding lane (default with fastembed)
+  --slim                      Skip embeddings (no model download/load); keep lexical + graph
+  --no-vector                 Compatibility spelling for --slim
+  --vector                    Enable the configured embedding provider (default)
+  --rebuild-vectors           Reset ALL derived vectors for a new model (SQLite only);
+                              preserve source data, then backfill each scope with reindex.
+                              Remove this flag after one launch.
 
 ONE-SHOT SUBCOMMANDS
   recall  --query <text> [--json] [--limit N]   (also honors --storage/--project)
@@ -186,7 +192,7 @@ fn main() {
              [--ontology <path>] [--taxonomy <path>] [--layout single|multi] \
              [--db-file <name>] [--backend sqlite|pgvector] \
              [--pg-connection-string <url>] \
-             [--tools core|full|all|consolidated] [--no-vector|--vector] \
+             [--tools core|full|all|consolidated] [--slim|--no-vector|--vector] [--rebuild-vectors] \
              one-shot: engram-mcp recall --query <text> [--json] [--limit N] | status [--json] \
              (full contract: mcp/engram-mcp/HOW-TO.md#launch--runtime-arguments--the-contract)"
         );

@@ -52,6 +52,8 @@ pub struct McpConfig {
     /// even when fastembed is compiled in — so a deployment can avoid the model
     /// download/load without a rebuild.
     pub enable_vector: bool,
+    /// Explicit, one-launch vector-only reset for changing embedding spaces.
+    pub rebuild_vectors: bool,
     /// Tool profile: restricts which MCP tools are registered. Empty = all tools.
     /// Values: "investigate", "read", "scan", "write", "maintain", or empty (all).
     pub tool_profile: String,
@@ -89,18 +91,24 @@ impl McpConfig {
         // `fastembed` default feature; `--no-vector` disables it at runtime
         // without a rebuild.
         let mut enable_vector = true;
+        let mut rebuild_vectors = false;
         let mut i = 0;
         while i < argv.len() {
             let flag = argv[i].as_str();
             // Value-less switches: handle before the value-consuming path.
             match flag {
-                "--no-vector" => {
+                "--slim" | "--no-vector" => {
                     enable_vector = false;
                     i += 1;
                     continue;
                 }
                 "--vector" => {
                     enable_vector = true;
+                    i += 1;
+                    continue;
+                }
+                "--rebuild-vectors" => {
+                    rebuild_vectors = true;
                     i += 1;
                     continue;
                 }
@@ -166,6 +174,9 @@ impl McpConfig {
             }
             i += 2;
         }
+        if rebuild_vectors && !enable_vector {
+            return Err("--rebuild-vectors cannot be used with embeddings disabled".to_owned());
+        }
         // Launch-config env fallbacks (PLAN mcp-args-contract step 2):
         // precedence is flag > environment > default — same discipline the
         // pg-connection-string already follows below. The launcher hooks and
@@ -215,6 +226,7 @@ impl McpConfig {
             domain,
             subdomain,
             enable_vector,
+            rebuild_vectors,
             tool_profile,
             backend,
             pg_connection_string,
@@ -455,6 +467,46 @@ mod tests {
         let argv = ["--storage".to_string(), "/tmp/x".to_string()];
         let c = McpConfig::from_args(&argv).unwrap();
         assert!(c.enable_vector, "enable_vector defaults to true");
+    }
+
+    #[test]
+    fn slim_switch_precedence_and_inactive_profile() {
+        for (switches, enabled) in [
+            (vec!["--slim"], false),
+            (vec!["--vector", "--slim"], false),
+            (vec!["--slim", "--vector"], true),
+            (vec!["--slim", "--vector", "--no-vector"], false),
+        ] {
+            let mut args = vec!["--storage".to_owned(), "/tmp/x".to_owned()];
+            args.extend(switches.into_iter().map(String::from));
+            assert_eq!(McpConfig::from_args(&args).unwrap().enable_vector, enabled);
+        }
+        let args: Vec<String> = [
+            "--storage",
+            "/tmp/x",
+            "--slim",
+            "--embedding-config",
+            "/missing/embedding-profile.toml",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+        assert!(McpConfig::from_args(&args).is_ok());
+        let mut enabled = args.clone();
+        enabled.push("--vector".into());
+        assert!(McpConfig::from_args(&enabled).is_err());
+        for bad in ["--embedding-typo", "--embedding-dimensions"] {
+            let mut invalid = args.clone();
+            invalid.extend([bad.into(), "not-a-number".into()]);
+            assert!(McpConfig::from_args(&invalid).is_err());
+        }
+        let mut rebuild = args;
+        rebuild.push("--rebuild-vectors".into());
+        assert!(
+            McpConfig::from_args(&rebuild)
+                .unwrap_err()
+                .contains("disabled")
+        );
     }
 
     #[test]

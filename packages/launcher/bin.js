@@ -31,7 +31,7 @@ function fail(message) {
 function platformPackage() {
   const { platform, arch } = process;
   if (platform === "darwin" && arch === "arm64") return "@engramlabs/mcp-darwin-arm64";
-  if (platform === "darwin" && arch === "x64") return "@engramlabs/mcp-darwin-x64";
+  // Intel macOS has no release artifact; do not advertise a phantom package.
   if (platform === "win32" && arch === "x64") return "@engramlabs/mcp-win32-x64";
   if (platform === "linux" && (arch === "x64" || arch === "arm64")) {
     // v1 ships gnu only (RFC-0021 non-goal: musl). Detect the runtime libc
@@ -55,7 +55,8 @@ function platformPackage() {
   }
   fail(
     `unsupported platform ${platform}-${arch}. ` +
-      `Supported: darwin-arm64, darwin-x64, linux-x64-gnu, linux-arm64-gnu, win32-x64.`
+      `Supported: darwin-arm64, linux-x64-gnu, linux-arm64-gnu, win32-x64. ` +
+      `Build from source for other platforms.`
   );
 }
 
@@ -67,11 +68,8 @@ function resolveBinary() {
     return p;
   }
   const pkg = platformPackage();
-  // Prefer the -full variant (local fastembed embeddings) when installed at
-  // the launcher's version; fall back to the slim platform package.
-  // ENGRAM_NO_FULL=1 forces slim even when -full is installed (e.g. to skip
-  // the first-use model download on constrained machines).
-  const wantFull = !process.env.ENGRAM_NO_FULL;
+  // One canonical executable per platform. Embeddings are a runtime mode,
+  // not a choice between npm packages.
   const norm = (v) => String(v).replace(/^v/, "");
   const tryManifest = (name) => {
     try {
@@ -82,17 +80,12 @@ function resolveBinary() {
       return null;
     }
   };
-  let manifest = wantFull ? tryManifest(`${pkg}-full`) : null;
-  if (manifest) process.stderr.write("engram-mcp: using -full binary (local embeddings)\n");
-  if (!manifest) {
-    manifest = tryManifest(pkg);
-  }
+  const manifest = tryManifest(pkg);
   if (!manifest) {
     fail(
-      `no platform binary installed (${pkg}-full or ${pkg}).\n` +
-        `The -full binary should have been installed automatically as an optionalDependency.\n` +
-        `Fix: npm install @engramlabs/mcp --force\n` +
-        `     (or install a variant directly: npm install ${pkg}-full  |  ${pkg})`
+      `matching platform binary missing (${pkg}@${LAUNCHER_VERSION}).\n` +
+        `Install with optional dependencies enabled.\n` +
+        `Fix: npm install @engramlabs/mcp@${LAUNCHER_VERSION} --include=optional --force`
     );
   }
   // Version lockstep: the platform package must match the launcher version.
@@ -120,6 +113,13 @@ if (argv[0] === "install" && argv[1] === "--agent") {
   process.exit(0);
 }
 
+// Compatibility with the old binary-selection setting: use the SAME binary
+// with embeddings off. Explicit CLI switches take precedence over this default.
+if (/^(1|true|yes)$/i.test(process.env.ENGRAM_NO_FULL || "")) {
+  process.stderr.write("engram-mcp: ENGRAM_NO_FULL is deprecated; use --slim instead.\n");
+  const modePosition = ["status", "recall"].includes(argv[0]) ? 1 : 0;
+  argv.splice(modePosition, 0, "--slim");
+}
 const bin = resolveBinary();
 const child = spawn(bin, argv, { stdio: "inherit" });
 child.on("error", (err) => fail(`failed to start binary: ${err.message}`));

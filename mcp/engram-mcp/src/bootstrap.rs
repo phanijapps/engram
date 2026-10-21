@@ -54,7 +54,9 @@ fn open_pgvector(config: &McpConfig) -> Result<EngramProvider, String> {
             config.migration_mode,
             config.capability_policy,
         )
-        .with_pgvector(conn_str);
+        .with_pgvector(conn_str)
+        .with_enable_vector(config.enable_vector)
+        .with_rebuild_vectors(config.rebuild_vectors);
         engram_backend_pgvector::open(&engram_config)
             .map_err(|e| format!("failed to open pgvector provider: {e}"))
     }
@@ -98,7 +100,8 @@ fn open_sqlite(config: &McpConfig) -> Result<EngramProvider, String> {
     // `EngramConfig` so `bootstrap_sqlite` honors `--no-vector` without a
     // rebuild. Default `true`; `--no-vector` skips the vector index + embedding
     // provider/model + vector recall lane.
-    .with_enable_vector(config.enable_vector);
+    .with_enable_vector(config.enable_vector)
+    .with_rebuild_vectors(config.rebuild_vectors);
     // RFC-0019 (Blocker 1): resolve the operator-facing `[recall_fusion]` config
     // through the discovery ladder and apply it to the `EngramConfig` before
     // `EngramProvider::open`. Without this, the MCP path always builds with
@@ -164,6 +167,7 @@ mod tests {
             // enable_vector gate is covered by the integration-crate bootstrap
             // tests directly.
             enable_vector: false,
+            rebuild_vectors: false,
             tool_profile: String::new(),
             backend: McpBackend::Sqlite,
             pg_connection_string: None,

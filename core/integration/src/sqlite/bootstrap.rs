@@ -144,6 +144,26 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // Resolve per-store SQLite paths once, honoring the configured layout
     // (multi-file directory by default; single shared file when opted in).
     let paths = SqliteLayoutPaths::from_config(config);
+    if config.rebuild_vectors {
+        if !config.enable_vector || prepared.provider.is_none() {
+            return Err(CoreError::InvalidRequest {
+                reason: "rebuild_vectors requires enabled, available embedding inference; no vectors were reset".into(),
+            });
+        }
+        let path = paths
+            .vectors
+            .to_str()
+            .ok_or_else(|| CoreError::InvalidRequest {
+                reason: "vector db path is not valid unicode".into(),
+            })?;
+        engram_store_sqlite::SqliteVectorIndex::rebuild_with_embedding_space(
+            path,
+            config.embedding_provider.embedding_space(),
+        )?;
+        eprintln!(
+            "engram: derived vectors reset store-wide; source records preserved. Backfill each scope with reindex; remove --rebuild-vectors after this launch."
+        );
+    }
 
     let failed = || CapabilityState::Unsupported {
         reason: CapabilityReason::ConformanceFailed,
@@ -157,7 +177,13 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut beliefs_state = failed();
     let mut procedures_state = failed();
     let mut hierarchy_state = failed();
-    let mut vectors_state = failed();
+    let mut vectors_state = CapabilityState::Unsupported {
+        reason: if config.enable_vector {
+            CapabilityReason::ConformanceFailed
+        } else {
+            CapabilityReason::FeatureDisabled
+        },
+    };
     // episodes_evidence is a shipped capability (S2): a check failure reports
     // ConformanceFailed, not FeatureDisabled. Flipped to Supported below only
     // when the provenance check passes and the handle attaches.

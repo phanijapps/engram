@@ -34,7 +34,7 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}${{ matrix.variant == 'full' && ' (full)' || '' }}
+    name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -42,28 +42,12 @@ jobs:
         include:
           - target: linux-x64-gnu
             runner: ubuntu-latest
-            variant: slim
-          - target: linux-x64-gnu
-            runner: ubuntu-latest
-            variant: full
           - target: linux-arm64-gnu
             runner: ubuntu-24.04-arm
-            variant: slim
-          - target: linux-arm64-gnu
-            runner: ubuntu-24.04-arm
-            variant: full
           - target: darwin-arm64
             runner: macos-latest
-            variant: slim
-          - target: darwin-arm64
-            runner: macos-latest
-            variant: full
           - target: win32-x64
             runner: windows-latest
-            variant: slim
-          - target: win32-x64
-            runner: windows-latest
-            variant: full
     steps:
       - uses: actions/checkout@v4
 
@@ -75,7 +59,7 @@ jobs:
         with:
           # The tag rides the key: ENGRAM_BUILD_VERSION is compiled in, so a
           # cached binary from a previous tag must never be reused.
-          key: ${{ matrix.target }}-${{ matrix.variant }}-${{ github.ref_name }}
+          key: ${{ matrix.target }}-${{ github.ref_name }}
 
       # Compile-time version stamp: the binary's self-reported version
       # (MCP serverInfo, status --json, future --version) reads
@@ -84,13 +68,17 @@ jobs:
       - name: Set build version (git tag)
         run: echo "ENGRAM_BUILD_VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
 
-      - name: Build (slim — no fastembed)
-        if: matrix.variant == 'slim'
-        run: cargo build --release -p engram-mcp --no-default-features --features http-embeddings
-
-      - name: Build (full — fastembed)
-        if: matrix.variant == 'full'
+      - name: Build canonical binary (runtime embeddings switch)
         run: cargo build --release -p engram-mcp
+
+      - name: Smoke test packaged behavior (no model setup)
+        shell: bash
+        run: |
+          BIN=target/release/engram-mcp
+          [ "${{ matrix.target }}" = "win32-x64" ] && BIN=target/release/engram-mcp.exe
+          "$BIN" --version
+          "$BIN" --help | grep -- --slim
+          python3 scripts/dev/verify_embedding_modes.py --binary "$BIN" --off-only
 
       - name: Stamp platform package
         shell: bash
@@ -100,8 +88,7 @@ jobs:
           python3 scripts/release/stamp-platform-package.py \
             "$BIN" \
             "${{ matrix.target }}" \
-            "${{ env.VERSION }}" \
-            ${{ matrix.variant == 'full' && '--full' || '' }}
+            "${{ env.VERSION }}"
           # emit checksum for the release manifest
           sha256sum "$BIN" > "$BIN.sha256"
           cp "$BIN.sha256" target/release/pkg/ 2>/dev/null || true
@@ -109,7 +96,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.target }}-${{ matrix.variant }}
+          name: ${{ matrix.target }}
           path: |
             target/release/pkg/*.tgz
             target/release/*.sha256
@@ -145,9 +132,32 @@ jobs:
           name: launcher
           path: packages/launcher/artifacts/*.tgz
 
+  package-smoke:
+    name: Verify packed launcher resolves canonical binary
+    needs: [build, launcher]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          name: launcher
+          path: packed/launcher
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-x64-gnu
+          path: packed/platform
+      - name: Launch actual packed artifacts
+        run: |
+          python3 scripts/release/verify-launcher-package.py \
+            --launcher "$(find packed/launcher -name '*.tgz' -print -quit)" \
+            --platform-package "$(find packed/platform -name '*.tgz' -print -quit)"
+
   release:
     name: GitHub Release + npm publish
-    needs: [build, launcher]
+    needs: [build, launcher, package-smoke]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -118,6 +118,51 @@ impl SqliteVectorIndex {
         })
     }
 
+    /// Explicitly rebuilds only the derived vector tables, adopting a new
+    /// embedding space. Canonical records in a shared database are untouched.
+    /// Call only during startup, before attaching any index handles.
+    pub fn rebuild_with_embedding_space(path: &str, space: EmbeddingSpace) -> CoreResult<Self> {
+        if space.dimensions == 0 {
+            return Err(CoreError::InvalidRequest {
+                reason: "dimensions must be greater than zero".to_owned(),
+            });
+        }
+        register_sqlite_vec();
+        let mut connection = Connection::open(path).map_err(sql_error)?;
+        let transaction = connection.transaction().map_err(sql_error)?;
+        transaction
+            .execute("DROP TABLE IF EXISTS vectors", [])
+            .map_err(sql_error)?;
+        create_vectors_table(&transaction, space.dimensions)?;
+        transaction
+            .execute("DELETE FROM vector_meta", [])
+            .map_err(sql_error)?;
+        for (key, value) in [
+            ("provider", space.provider.clone()),
+            ("model", space.model.clone()),
+            ("dimensions", space.dimensions.to_string()),
+            ("prompt_profile", space.prompt_profile.clone()),
+        ] {
+            transaction
+                .execute(
+                    "INSERT INTO vector_meta (key, value) VALUES (?1, ?2)",
+                    params![key, value],
+                )
+                .map_err(sql_error)?;
+        }
+        if let Some(normalization) = &space.normalization {
+            transaction
+                .execute(
+                    "INSERT INTO vector_meta (key, value) VALUES ('normalization', ?1)",
+                    [normalization],
+                )
+                .map_err(sql_error)?;
+        }
+        transaction.commit().map_err(sql_error)?;
+        drop(connection);
+        Self::open_with_embedding_space(path, space)
+    }
+
     /// Returns `true` when the index was reopened under a different embedding
     /// space than the one its vectors were built with.
     ///
@@ -635,6 +680,58 @@ mod tests {
         assert_eq!(hits[0].target_id, "chunk-1", "vector must survive reopen");
 
         let _ = std::fs::remove_file(&dir);
+    }
+
+    #[test]
+    fn explicit_rebuild_preserves_canonical_tables_and_changes_space() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("shared.db");
+        let path = file.to_str().unwrap();
+        let conn = Connection::open(path).unwrap();
+        conn.execute_batch("CREATE TABLE canonical_records (text TEXT); INSERT INTO canonical_records VALUES ('keep me');").unwrap();
+        drop(conn);
+        let old = EmbeddingSpace::new("none", "none", 2, "query", Some("l2"));
+        let index = SqliteVectorIndex::open_with_embedding_space(path, old.clone()).unwrap();
+        futures::executor::block_on(VectorIndex::insert(
+            &index,
+            &Id::from("old"),
+            &old,
+            vec![1.0, 2.0],
+        ))
+        .unwrap();
+        drop(index);
+        let new = EmbeddingSpace::new("test", "new-model", 3, "query", None::<String>);
+        let rebuilt = SqliteVectorIndex::rebuild_with_embedding_space(path, new.clone()).unwrap();
+        assert!(!rebuilt.requires_reindex());
+        assert_eq!(rebuilt.embedding_space(), &new);
+        assert!(
+            futures::executor::block_on(rebuilt.embedded_ids())
+                .unwrap()
+                .is_empty()
+        );
+        futures::executor::block_on(VectorIndex::insert(
+            &rebuilt,
+            &Id::from("new"),
+            &new,
+            vec![1.0; 3],
+        ))
+        .unwrap();
+        let conn = Connection::open(path).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT text FROM canonical_records", [], |row| row
+                .get::<_, String>(0))
+                .unwrap(),
+            "keep me"
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM vector_meta WHERE key='normalization'",
+                [],
+                |row| row.get::<_, u32>(0)
+            )
+            .unwrap(),
+            0
+        );
     }
 
     #[test]

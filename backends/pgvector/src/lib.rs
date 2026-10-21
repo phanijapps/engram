@@ -33,6 +33,12 @@ use recall::PgUnifiedRecall;
 /// memory / knowledge+graph / beliefs / hierarchy / procedures / vectors /
 /// unified-recall — into one provider.
 pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
+    if config.rebuild_vectors {
+        return Err(CoreError::InvalidRequest {
+            reason: "rebuild_vectors is not supported by the pgvector recipe; no data was reset"
+                .into(),
+        });
+    }
     let conn_str = config
         .pgvector_connection_string
         .as_deref()
@@ -49,21 +55,16 @@ pub fn open(config: &EngramConfig) -> CoreResult<EngramProvider> {
     // Disabled vector mode never initializes a model or contacts its endpoint.
     let prepared = prepare_embedding(&config.embedding_provider, config.enable_vector)?;
     let embedding_provider = prepared.provider;
-    let dims = if config.enable_vector {
-        prepared.config.dimensions
+    let ddl = if config.enable_vector {
+        schema::schema_sql(prepared.config.dimensions)
     } else {
-        384
+        schema::schema_sql_without_vectors()
     };
 
     // Connect + apply schema (idempotent).
     let schema_conn = PgConnection::connect(conn_str).map_err(pg_err)?;
     schema_conn
-        .block_on(async {
-            schema_conn
-                .client
-                .batch_execute(&schema::schema_sql(dims))
-                .await
-        })
+        .block_on(async { schema_conn.client.batch_execute(&ddl).await })
         .map_err(|e| pg_err(e.to_string()))?;
 
     // Construct cells (each gets its own connection; a pool follows).

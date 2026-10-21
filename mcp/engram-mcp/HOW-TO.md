@@ -249,9 +249,20 @@ table must not drift from it).
 | `--tools core\|full\|all\|consolidated` | Tool profile (21 / 28 / all / 7) | `core` |
 | `--backend sqlite\|pgvector` | Engine recipe | `sqlite` |
 | `--pg-connection-string <url>` | Postgres URL (pgvector only; env `ENGRAM_PG_CONNECTION_STRING`) | — |
-| `--no-vector` | Disable the embedding lane (fast, lexical+graph only) | on with fastembed builds |
+| `--slim` | Skip embedding setup/downloads; preserve non-vector capabilities and stored vectors | embeddings enabled |
+| `--no-vector` | Compatibility alias for `--slim` | embeddings enabled |
+| `--vector` | Enable the configured provider; last mode switch wins | enabled |
+| `--rebuild-vectors` | Explicit store-wide vector-only reset for a new embedding space (SQLite); remove after one launch, then backfill each scope using MCP `reindex` | off |
 | `--help` / `-h` | Print the full argument contract, exit 0 (stdout) | — |
 | `--version` / `-V` | Print the binary version (`ENGRAM_VERSION`: tag-stamped), exit 0 | — |
+
+One npm installation supports both runtime modes; no binary variants are needed.
+Off mode ignores inactive embedding environment/profile configuration (CLI syntax
+is still checked). It does not reduce install size. Existing same-space vectors
+survive mode switches. New content ingested while off needs explicit backfill;
+changing model/provider/dimensions can instead require a vector-only rebuild.
+See the [configuration guide](../../packages/launcher/CONFIGURATION.md) before
+resetting vectors: never delete the shared database to repair the vector lane.
 
 **Scope rule** (`scope.rs`): `tenant = --org || "default"`;
 `workspace = --domain/--subdomain || --domain || --project`. The scope

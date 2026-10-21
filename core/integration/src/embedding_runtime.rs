@@ -15,13 +15,19 @@ pub fn prepare_embedding(
     enabled: bool,
 ) -> CoreResult<PreparedEmbedding> {
     let mut config = config.clone();
+    if !enabled {
+        return Ok(PreparedEmbedding {
+            config,
+            provider: None,
+        });
+    }
     config
         .validate()
         .map_err(|reason| CoreError::InvalidRequest { reason })?;
     if config.provider_type == "none" && config.dimensions == 0 {
         config.dimensions = EmbeddingProviderConfig::default().dimensions;
     }
-    if !enabled || config.provider_type == "none" {
+    if config.provider_type == "none" {
         return Ok(PreparedEmbedding {
             config,
             provider: None,

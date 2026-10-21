@@ -297,7 +297,7 @@ fn embed_pending(
     scope: &engram_domain::Scope,
     source_filter: Option<&str>,
     cap: usize,
-) -> (usize, usize) {
+) -> Result<(usize, usize), ToolError> {
     const EMBED_TEXT_CAP: usize = 8 * 1024;
     const EMBED_BATCH_SIZE: usize = 64;
     let (Ok(query), Some(embedder), Ok(vector_index)) = (
@@ -307,16 +307,16 @@ fn embed_pending(
     ) else {
         // No embedder wired (fastembed off / --no-vector): nothing to do.
         // Callers surface the honest "0 embedded" count.
-        return (0, 0);
+        return Ok((0, 0));
     };
     // Perf (perf pass 2026-08-28): the LEAN refs listing (id + source +
     // text-nonemptiness — no record deserialization, no text transfer) cut
     // the per-call listing from ~1.4s/hundreds-of-MB on a 90k-chunk store to
     // ~0.1s. Text is fetched lazily per SELECTED chunk (indexed pk lookups).
-    let refs = block_on(query.list_chunk_refs(scope)).unwrap_or_default();
+    let refs = block_on(query.list_chunk_refs(scope)).map_err(internal)?;
     let space = embedder.embedding_space();
     let have: std::collections::HashSet<engram_domain::Id> =
-        block_on(vector_index.embedded_ids()).unwrap_or_default();
+        block_on(vector_index.embedded_ids()).map_err(internal)?;
     let mut pending: Vec<&engram_integration::ChunkRef> = refs
         .iter()
         .filter(|r| {
@@ -324,7 +324,7 @@ fn embed_pending(
         })
         .collect();
     pending.sort_by_key(|r| r.id.as_str().to_owned());
-    let remaining = pending.len().saturating_sub(cap);
+    let total_pending = pending.len();
     let selected: Vec<&engram_integration::ChunkRef> = pending.into_iter().take(cap).collect();
 
     // Content dedup (perf pass 2026-08-28): the eval store holds 92,859
@@ -354,18 +354,19 @@ fn embed_pending(
     // Per-call grouping by the SAME content-hash domain (scanner-stamped,
     // full text) — consistent with the durable map (previously the in-call
     // dedup hashed the 8-KiB-capped text: a slightly different domain).
-    let mut by_hash: std::collections::HashMap<&str, Vec<engram_domain::Id>> =
+    let mut by_hash: std::collections::HashMap<String, Vec<engram_domain::Id>> =
         std::collections::HashMap::new();
-    let mut text_by_hash: std::collections::HashMap<&str, String> =
+    let mut text_by_hash: std::collections::HashMap<String, String> =
         std::collections::HashMap::new();
     for r in &selected {
-        if r.content_hash.is_empty() {
-            continue; // pre-hash chunks always go to the model
-        }
-        by_hash
-            .entry(r.content_hash.as_str())
-            .or_default()
-            .push(r.id.clone());
+        // Legacy hashless chunks must still reach inference; each gets its own
+        // group rather than collapsing all empty hashes into one text.
+        let key = if r.content_hash.is_empty() {
+            format!("id:{}", r.id)
+        } else {
+            format!("hash:{}", r.content_hash)
+        };
+        by_hash.entry(key.clone()).or_default().push(r.id.clone());
         // Text is fetched lazily — ONLY for hashes with no embedded twin
         // (the model path); reuse paths never need the text.
         if !embedded_twin_by_hash.contains_key(r.content_hash.as_str()) {
@@ -378,7 +379,7 @@ fn embed_pending(
                 })
                 .unwrap_or_default();
             if !text.is_empty() {
-                text_by_hash.entry(r.content_hash.as_str()).or_insert(text);
+                text_by_hash.entry(key).or_insert(text);
             }
         }
     }
@@ -391,7 +392,10 @@ fn embed_pending(
         // Reuse path: an already-embedded twin with identical text exists —
         // point-read its vector, insert for every id in this group. Falls to
         // the model when the twin is gone or the read is unsupported.
-        if let Some(twin) = embedded_twin_by_hash.get(hash) {
+        if let Some(twin) = hash
+            .strip_prefix("hash:")
+            .and_then(|h| embedded_twin_by_hash.get(h))
+        {
             if let Ok(Some(vector)) = block_on(vector_index.vector_for_target(twin)) {
                 if !vector.is_empty() {
                     for id in &ids {
@@ -399,14 +403,14 @@ fn embed_pending(
                             eprintln!("engram-mcp: embed reuse warning for {id}: {e}");
                         } else {
                             embedded += 1;
+                            reused += 1;
                         }
                     }
-                    reused += ids.len();
                     continue;
                 }
             }
         }
-        if let Some(text) = text_by_hash.get(hash) {
+        if let Some(text) = text_by_hash.get(&hash) {
             model_batches.push((text.clone(), ids));
         }
     }
@@ -422,7 +426,9 @@ fn embed_pending(
     }
     let _ = &refs;
     LAST_DEDUP_REPORT.with(|c| c.set((embedded, distinct_embedded, reused)));
-    (embedded, remaining)
+    // Only successful inserts leave the backlog. Failed/skipped selections
+    // remain pending even when the entire pre-call backlog fitted in the cap.
+    Ok((embedded, total_pending.saturating_sub(embedded)))
 }
 
 thread_local! {
@@ -488,21 +494,24 @@ pub fn reindex(app: &App, args: &Value) -> Result<Value, ToolError> {
     // scope defaults to the launch scope when absent (same contract as the
     // maintenance tools — the AC2 fix).
     let scope = crate::maintenance::scope_from_args(app, args)?;
-    let limit = std::cmp::min(args["limit"].as_u64().unwrap_or(256) as usize, 1024);
+    let limit = args["limit"].as_u64().unwrap_or(256).clamp(1, 1024) as usize;
     if app.provider.embedding_provider().is_none() {
         return Ok(protocol::text_content(
-            "reindex: no embedding provider wired (build with the fastembed feature and run \
-             without --no-vector) — nothing embedded, 0 pending reported as 0.",
+            "reindex: no embedding provider wired. Run without --slim/--no-vector and check embedding setup. If the space changed, use the documented vector-only rebuild. Backlog not assessed.",
         ));
     }
+    app.provider.require_vectors().map_err(internal)?;
+    app.provider.require_knowledge_query().map_err(internal)?;
     let t0 = std::time::Instant::now();
-    let (embedded, remaining) = embed_pending(app, &scope, None, limit);
+    let (embedded, remaining) = embed_pending(app, &scope, None, limit)?;
     eprintln!(
         "engram-mcp: reindex done ({embedded} embedded, {remaining} pending) in {:.1}s",
         t0.elapsed().as_secs_f32()
     );
     let note = if remaining > 0 {
-        format!("\n{remaining} more pending — call reindex again to continue (deterministic order)")
+        format!(
+            "\n{remaining} more pending (including any failed/skipped chunks; see server diagnostics) — call reindex again to continue (deterministic order)"
+        )
     } else {
         "\nbacklog drained".to_owned()
     };
@@ -623,7 +632,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     // scan-reliability AC1 (embed side) + PS5: the scan embeds only THIS
     // scan's source chunks (delta); the `reindex` tool drains the rest
     // (old-source + backend-switch backlogs) — both share embed_pending.
-    let (embedded, pending_after_cap) = embed_pending(app, &app.scope, Some(&scan_source), 256);
+    let (embedded, pending_after_cap) = embed_pending(app, &app.scope, Some(&scan_source), 256)?;
     let embed_note = if pending_after_cap > 0 {
         format!(
             "\nembedded {embedded} chunks ({pending_after_cap} more pending from this source — re-run scan_repo to continue)"
@@ -2898,8 +2907,10 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
     .collect();
     Ok(protocol::text_content(
         format!(
-            "Server: engram-mcp 0.1.0\nCapabilities:\n{}",
-            caps.join("\n")
+            "Server: engram-mcp {}\nCapabilities:\n{}\nVector state: {}",
+            crate::ENGRAM_VERSION,
+            caps.join("\n"),
+            serde_json::to_string(&app.provider.capabilities().vectors).map_err(internal)?
         ) + &match app.provider.embedding_provider() {
             Some(provider) => format!(
                 "\nEmbedding space: {}",

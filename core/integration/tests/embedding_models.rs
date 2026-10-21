@@ -147,6 +147,50 @@ fn sqlite_fences_same_size_model_and_dimension_changes_without_losing_vectors() 
 }
 
 #[test]
+fn local_off_same_space_keeps_vectors_and_rebuild_adopts_new_dimensions() {
+    let root = tempfile::tempdir().unwrap();
+    let server = ModelServer::new();
+    let original = config(root.path(), &server.endpoint, "original", 2);
+    {
+        let first = EngramProvider::open(&original).unwrap();
+        let index = first.require_vectors().unwrap();
+        block_on(index.insert(&Id::from("kept"), index.embedding_space(), vec![1.0, 2.0])).unwrap();
+    }
+    // Even nonsense inactive-provider config must not initialize or validate it.
+    let mut off = original.clone().with_enable_vector(false);
+    off.embedding_provider.provider_type = "disabled-invalid-provider".into();
+    let disabled = EngramProvider::open(&off).unwrap();
+    assert!(disabled.vectors().is_none());
+    assert!(disabled.embedding_provider().is_none());
+    assert!(disabled.knowledge().is_some());
+    drop(disabled);
+    {
+        let restored = EngramProvider::open(&original).unwrap();
+        assert!(
+            block_on(restored.require_vectors().unwrap().embedded_ids())
+                .unwrap()
+                .contains(&Id::from("kept"))
+        );
+    }
+    let changed = config(root.path(), &server.endpoint, "three", 3).with_rebuild_vectors(true);
+    {
+        let rebuilt = EngramProvider::open(&changed).unwrap();
+        let index = rebuilt.require_vectors().unwrap();
+        assert_eq!(index.embedding_space().dimensions, 3);
+        assert!(block_on(index.embedded_ids()).unwrap().is_empty());
+        assert!(rebuilt.embedding_provider().is_some());
+        block_on(index.insert(&Id::from("new"), index.embedding_space(), vec![1.0; 3])).unwrap();
+    }
+    let reopened = EngramProvider::open(&changed.with_rebuild_vectors(false)).unwrap();
+    assert!(
+        block_on(reopened.require_vectors().unwrap().embedded_ids())
+            .unwrap()
+            .contains(&Id::from("new"))
+    );
+    assert!(EngramProvider::open(&off.with_rebuild_vectors(true)).is_err());
+}
+
+#[test]
 fn automatic_dimensions_and_normalization_reach_index_and_inference_together() {
     let root = tempfile::tempdir().unwrap();
     let server = ModelServer::new();

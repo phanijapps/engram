@@ -46,18 +46,18 @@ importers:
 
   packages/launcher:
     optionalDependencies:
-      '@engramlabs/mcp-darwin-arm64-full':
-        specifier: 0.2.7-alpha
-        version: 0.2.7-alpha
-      '@engramlabs/mcp-linux-arm64-gnu-full':
-        specifier: 0.2.7-alpha
-        version: 0.2.7-alpha
-      '@engramlabs/mcp-linux-x64-gnu-full':
-        specifier: 0.2.7-alpha
-        version: 0.2.7-alpha
+      '@engramlabs/mcp-darwin-arm64':
+        specifier: 0.2.9-alpha
+        version: 0.2.9-alpha
+      '@engramlabs/mcp-linux-arm64-gnu':
+        specifier: 0.2.9-alpha
+        version: 0.2.9-alpha
+      '@engramlabs/mcp-linux-x64-gnu':
+        specifier: 0.2.9-alpha
+        version: 0.2.9-alpha
       '@engramlabs/mcp-win32-x64':
-        specifier: 0.2.7-alpha
-        version: 0.2.7-alpha
+        specifier: 0.2.9-alpha
+        version: 0.2.9-alpha
 
   packages/node:
     dependencies:
@@ -363,23 +363,23 @@ packages:
     resolution: {integrity: sha512-AlKvEwEWyVtnuw7SVb4N/mUhlfIohyFslUNWarZVdLHHSdt3ca5EhMLwTzblBpDpaofSz+f+tAHie6CfxVrWKA==}
     engines: {node: '>=22.19.0'}
 
-  '@engramlabs/mcp-darwin-arm64-full@0.2.7-alpha':
-    resolution: {integrity: sha512-02nj/BkMVuSEKIVOI1OavdrCMLscZbVJulKKS5N/XM6hGwvyiWn4hdJdlAyIBR1egCTCceAdKwYiEPRSbHW33A==}
+  '@engramlabs/mcp-darwin-arm64@0.2.9-alpha':
+    resolution: {integrity: sha512-7Pn0ks3xtgyb/0VQ5sFUKxZBXLHgoVQgP+xEvk9KTDBOwNYHAnJN7MtgyZi2wvr5Yle82/kHvO/ETiKBu4WkBg==}
     cpu: [arm64]
     os: [darwin]
 
-  '@engramlabs/mcp-linux-arm64-gnu-full@0.2.7-alpha':
-    resolution: {integrity: sha512-ddaQBj4R4MbVV7mQeokCA5MWj1lqFCaL3ahxpUno15qFJRCUld4lqk/R71ytAPwjwAM6m0dMLi+ik2hkqMNxng==}
+  '@engramlabs/mcp-linux-arm64-gnu@0.2.9-alpha':
+    resolution: {integrity: sha512-psP0clR13Uvg6bye9q+Mgc5bOO2B90WVCfIZ7rGil5HKIHqfd4HH79nwZhIbASjgH7OI916GhdOC1c/JvLQx3Q==}
     cpu: [arm64]
     os: [linux]
 
-  '@engramlabs/mcp-linux-x64-gnu-full@0.2.7-alpha':
-    resolution: {integrity: sha512-xCc5TrlkuMg07CrVGp5fI3Pts+VOMmHqaS9QWKQoe1u2R87EuLL9Uc6bTwzONnbMyOXIeoq5XNi0Rt7KNuBwXw==}
+  '@engramlabs/mcp-linux-x64-gnu@0.2.9-alpha':
+    resolution: {integrity: sha512-YIAiCWOZA7/7cr+wIpJniBEERqNT0eJY2Cl+w0vPzexycWHWPJx6DDgaKV4hQyfRDwmLxDnqxnBod/kL7hAXPg==}
     cpu: [x64]
     os: [linux]
 
-  '@engramlabs/mcp-win32-x64@0.2.7-alpha':
-    resolution: {integrity: sha512-cl7VUtkWT3wTUsbTkReqx084J5JP/GIVC1dbZrzU6VXRPPy2H7AlYgkL/85cZYg+IwS83Xr+lAbEtU625EA9sA==}
+  '@engramlabs/mcp-win32-x64@0.2.9-alpha':
+    resolution: {integrity: sha512-2XUvdPZAvXiT7T/na+fFwV51cmf7JPOCfwWhY2sAIpu4eplYzAXYn/ayNXevpBtTJrpWpl+41yP7YhaKjtTK5Q==}
     cpu: [x64]
     os: [win32]
 
@@ -3957,16 +3957,16 @@ snapshots:
       get-east-asian-width: 1.6.0
       marked: 18.0.11
 
-  '@engramlabs/mcp-darwin-arm64-full@0.2.7-alpha':
+  '@engramlabs/mcp-darwin-arm64@0.2.9-alpha':
     optional: true
 
-  '@engramlabs/mcp-linux-arm64-gnu-full@0.2.7-alpha':
+  '@engramlabs/mcp-linux-arm64-gnu@0.2.9-alpha':
     optional: true
 
-  '@engramlabs/mcp-linux-x64-gnu-full@0.2.7-alpha':
+  '@engramlabs/mcp-linux-x64-gnu@0.2.9-alpha':
     optional: true
 
-  '@engramlabs/mcp-win32-x64@0.2.7-alpha':
+  '@engramlabs/mcp-win32-x64@0.2.9-alpha':
     optional: true
 
   '@esbuild/aix-ppc64@0.28.2':

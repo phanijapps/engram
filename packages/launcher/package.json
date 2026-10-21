@@ -16,6 +16,7 @@
     "install.js",
     "agent-install.js",
     "README.md",
+    "CONFIGURATION.md",
     "hooks/",
     "skills/",
     "agents/"
@@ -33,10 +34,10 @@
   ],
   "private": true,
   "optionalDependencies": {
-    "@engramlabs/mcp-linux-x64-gnu-full": "0.2.7-alpha",
-    "@engramlabs/mcp-linux-arm64-gnu-full": "0.2.7-alpha",
-    "@engramlabs/mcp-darwin-arm64-full": "0.2.7-alpha",
-    "@engramlabs/mcp-win32-x64": "0.2.7-alpha"
+    "@engramlabs/mcp-linux-x64-gnu": "0.2.9-alpha",
+    "@engramlabs/mcp-linux-arm64-gnu": "0.2.9-alpha",
+    "@engramlabs/mcp-darwin-arm64": "0.2.9-alpha",
+    "@engramlabs/mcp-win32-x64": "0.2.9-alpha"
   },
   "scripts": {
     "test": "node --test test/*.test.cjs"

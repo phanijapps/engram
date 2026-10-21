@@ -2,12 +2,26 @@
 
 use engram_integration::{EmbeddingOverrides, EmbeddingProviderConfig};
 
+/// Resolve the runtime gate before reading any inactive provider configuration.
+/// Still parse CLI syntax in off mode: typos and missing values are errors.
 pub(crate) fn from_args(argv: &[String]) -> Result<(Vec<String>, EmbeddingProviderConfig), String> {
+    let (remaining, _, _) = extract_args(argv)?;
+    if !vectors_enabled(&remaining) {
+        return Ok((remaining, EmbeddingProviderConfig::default()));
+    }
     resolve_args(
         argv,
         EmbeddingOverrides::from_env()?,
         std::env::var("ENGRAM_EMBEDDING_CONFIG").ok(),
     )
+}
+
+pub(crate) fn vectors_enabled(argv: &[String]) -> bool {
+    argv.iter().fold(true, |enabled, arg| match arg.as_str() {
+        "--slim" | "--no-vector" => false,
+        "--vector" => true,
+        _ => enabled,
+    })
 }
 
 fn resolve_args(

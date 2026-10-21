@@ -19,14 +19,15 @@ const path = require("node:path");
 const STORAGE_DEFAULT = path.join(os.homedir(), ".engram");
 
 /** The server entry every host gets, in the host's own file. */
-function serverArgs(storage, project) {
+function serverArgs(storage, project, modeArgs) {
   return [
     "-y",
-    "engram-mcp@latest",
+    `@engramlabs/mcp@${require("./package.json").version}`,
     "--storage",
     storage,
     "--project",
     project,
+    ...modeArgs,
   ];
 }
 
@@ -132,23 +133,37 @@ function install(args) {
   let clientId = null;
   let storage = STORAGE_DEFAULT;
   let project = "default";
+  const modeArgs = [];
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--client") clientId = args[++i];
-    else if (args[i] === "--storage") storage = args[++i];
-    else if (args[i] === "--project") project = args[++i];
+    const flag = args[i];
+    if (["--slim", "--no-vector", "--vector"].includes(flag)) {
+      modeArgs.push(flag);
+    } else if (["--client", "--storage", "--project"].includes(flag)) {
+      const value = args[++i];
+      if (!value || value.startsWith("--")) {
+        process.stderr.write(`engram-mcp install: ${flag} requires a value\n`);
+        process.exit(1);
+      }
+      if (flag === "--client") clientId = value;
+      else if (flag === "--storage") storage = value;
+      else project = value;
+    } else {
+      process.stderr.write(`engram-mcp install: unknown argument ${flag}\n`);
+      process.exit(1);
+    }
   }
   if (!clientId || !CLIENTS[clientId]) {
     process.stderr.write(
       `engram-mcp install: ${clientId ? `unknown client '${clientId}'` : "missing --client"}\n` +
         `Clients: ${Object.keys(CLIENTS).join(", ")}\n` +
-        `Usage: engram-mcp install --client <id> [--storage <path>] [--project <name>]\n`
+        `Usage: engram-mcp install --client <id> [--storage <path>] [--project <name>] [--slim]\n`
     );
     process.exit(1);
   }
   const client = CLIENTS[clientId];
   const file = client.file(cwd, home);
   const command = "npx";
-  const argsForHost = serverArgs(storage, project);
+  const argsForHost = serverArgs(storage, project, modeArgs);
 
   if (client.toml) {
     mergeTomlSection(file, "engram", command, argsForHost);

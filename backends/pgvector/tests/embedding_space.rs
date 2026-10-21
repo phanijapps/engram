@@ -206,6 +206,62 @@ fn disabled_vectors_do_not_contact_configured_http_provider() {
 
 #[test]
 #[ignore = "requires local Docker Postgres"]
+fn fresh_off_startup_does_not_preselect_dimensions() {
+    use engram_domain::ScopeMappingStrategy;
+    use engram_integration::{
+        CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode,
+    };
+    let fixture = Fixture::new(384);
+    let conn = fixture.connection();
+    conn.block_on(conn.client.batch_execute("DROP TABLE vectors"))
+        .unwrap();
+    let mut config = EngramConfig::new(
+        std::env::temp_dir().join("unused-pg-off-on"),
+        std::env::temp_dir(),
+        ScopeMappingStrategy::Strict,
+        // Storage-only provider makes this a deterministic recipe lifecycle
+        // test; enabling it must honor 768 rather than an off-mode default.
+        EmbeddingProviderConfig {
+            provider_type: "none".into(),
+            model: "none".into(),
+            dimensions: 768,
+            ..Default::default()
+        },
+        MigrationMode::DryRun,
+        CapabilityPolicy::FailClosed,
+    )
+    .with_pgvector(format!(
+        "{CONNECTION}?options=-csearch_path%3D{},public",
+        fixture.schema
+    ))
+    .with_enable_vector(false);
+    let off = engram_backend_pgvector::open(&config).unwrap();
+    assert!(off.vectors().is_none());
+    drop(off);
+    let count: i64 = conn
+        .block_on(conn.client.query_one(
+            "SELECT count(*) FROM pg_tables WHERE schemaname=$1 AND tablename='vectors'",
+            &[&fixture.schema],
+        ))
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        count, 0,
+        "off startup must not create dimensioned vector storage"
+    );
+    config.enable_vector = true;
+    let on = engram_backend_pgvector::open(&config).unwrap();
+    assert_eq!(
+        on.require_vectors().unwrap().embedding_space().dimensions,
+        768
+    );
+    let index = on.require_vectors().unwrap();
+    block_on(index.insert(&Id::from("wide"), index.embedding_space(), vec![0.1; 768])).unwrap();
+    assert_eq!(fixture.count(), 1);
+}
+
+#[test]
+#[ignore = "requires local Docker Postgres"]
 fn concurrent_first_open_selects_one_persisted_space() {
     let fixture = Fixture::new(3);
     let a = fixture.connection();

@@ -55,27 +55,11 @@ fn reindex_without_provider_reports_unavailable_without_fake_progress() {
     assert!(!text.contains("embedded 0 chunks"), "{text}");
 }
 
-/// PS5: the handler renders an empty progress report when an embedder is
-/// available but no backfill lanes are attached. Its scope defaults to the
-/// launch scope when omitted (the maintenance tools' AC2 contract).
+/// Missing lanes are not an empty backlog. Never claim success without
+/// actually being able to inspect and update the index.
 #[test]
-fn reindex_answers_with_progress_shape_and_default_scope() {
+fn reindex_without_vector_lane_is_an_error() {
     let app = test_app(true);
-    let res = reindex(&app, &json!({})).unwrap();
-    let text = res["content"][0]["text"].as_str().unwrap();
-    assert!(
-        text.starts_with("reindex:") && text.contains("embedded 0 chunks"),
-        "progress-report shape: {text}"
-    );
-    // With an embedder and no backfill lanes, the empty report still
-    // preserves the requested limit. The unavailable path has its own test.
-    let res2 = reindex(&app, &json!({ "limit": 5 })).unwrap();
-    assert!(
-        res2["content"][0]["text"]
-            .as_str()
-            .unwrap()
-            .contains("limit 5"),
-        "limit threads through: {}",
-        res2["content"][0]["text"].as_str().unwrap()
-    );
+    assert!(reindex(&app, &json!({})).is_err());
+    assert!(reindex(&app, &json!({"limit": 5})).is_err());
 }

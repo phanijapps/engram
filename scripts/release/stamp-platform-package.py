@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Stamp a platform npm package from the template + a built binary.
 
-Usage: stamp-platform-package.py <binary-path> <target-slug> <version> [--full]
+Usage: stamp-platform-package.py <binary-path> <target-slug> <version>
 
 Creates a ready-to-publish npm tarball next to the binary:
   <binary-dir>/pkg/<name>-<version>.tgz
@@ -12,12 +12,9 @@ No install scripts, no extra files — the trust contract from RFC-0021.
 import hashlib
 import json
 import os
-import subprocess
 import sys
 import tarfile
 import tempfile
-
-TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "..", "platform-package.template.json")
 
 TARGET_MAP = {
     "linux-x64-gnu": {"os": "linux", "cpu": "x64"},
@@ -37,7 +34,7 @@ def sha256(path: str) -> str:
 
 
 def main() -> int:
-    if len(sys.argv) < 4:
+    if len(sys.argv) != 4:
         print(__doc__, file=sys.stderr)
         return 1
     binary_path = os.path.abspath(sys.argv[1])
@@ -50,7 +47,6 @@ def main() -> int:
     # (observed 2026-10-18: "launcher 0.1.7-alpha != platform package
     # v0.1.7-alpha").
     version = raw_version[1:] if raw_version.startswith("v") else raw_version
-    is_full = "--full" in sys.argv
 
     if target not in TARGET_MAP:
         print(f"error: unknown target {target}", file=sys.stderr)
@@ -60,15 +56,14 @@ def main() -> int:
         return 1
 
     os_info = TARGET_MAP[target]
-    name = f"@engramlabs/mcp-{target}" + ("-full" if is_full else "")
+    name = f"@engramlabs/mcp-{target}"
     bin_name = os.path.basename(binary_path)
 
     # package.json from template
     pkg = {
         "name": name,
         "version": version,
-        "description": f"engram-mcp server binary for {target}"
-        + (" (fastembed/local-models variant)" if is_full else ""),
+        "description": f"engram-mcp server binary for {target} (embeddings configurable at runtime)",
         "license": "MIT",
         "repository": {"type": "git", "url": "git+https://github.com/phanijapps/engram.git"},
         "os": [os_info["os"]],
@@ -79,7 +74,7 @@ def main() -> int:
     # Build the tarball: package/{package.json, binary} — npm's expected layout
     pkg_dir = os.path.join(os.path.dirname(binary_path), "pkg")
     os.makedirs(pkg_dir, exist_ok=True)
-    tarball = os.path.join(pkg_dir, f"mcp-{target}" + ("-full" if is_full else "") + f"-{version}.tgz")
+    tarball = os.path.join(pkg_dir, f"mcp-{target}-{version}.tgz")
 
     with tempfile.TemporaryDirectory() as staging:
         stage = os.path.join(staging, "package")

@@ -383,6 +383,13 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // Temporal lane (recency-weighted memories): available whenever the memory
     // store is wired, independent of the knowledge store. Gives recall a recency
     // signal alongside the relevance lanes (graph/vector/lexical).
+    // Procedures lane: replayable runbooks surface in recall when the query
+    // matches their name/trigger/steps (query-gated — never unconditional).
+    if let Some(procedures_handle) = &procedures {
+        retrieval_lanes.push(crate::sqlite::recall_lanes::procedures_recall_lane(
+            procedures_handle.clone(),
+        ));
+    }
     if let Some(memory_handle) = &memory_store {
         retrieval_lanes.push(Arc::new(engram_store_sqlite::TemporalRetrievalIndex::new(
             memory_handle.clone(),

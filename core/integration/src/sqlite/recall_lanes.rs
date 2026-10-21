@@ -125,6 +125,115 @@ pub fn lexical_recall_lane(
     ))
 }
 
+/// Procedures recall lane (RFC-0016 Layer 6 + memory-recall triage):
+/// replayable runbooks never surfaced in `recall` — the `procedures` tool
+/// listed them but no lane fused them. Query-gated like the temporal lane:
+/// a runbook survives only when its name/trigger/steps text shares a
+/// meaningful query token; ranked by match count (then name). Engine-
+/// neutral — built directly on the `ProcedureRepository` port.
+pub fn procedures_recall_lane(
+    repo: Arc<dyn engram_procedures::ProcedureRepository>,
+) -> Arc<dyn engram_retrieval::RetrievalIndex> {
+    Arc::new(ProceduresRetrievalIndex {
+        repo,
+        default_limit: 10,
+    })
+}
+
+struct ProceduresRetrievalIndex {
+    repo: Arc<dyn engram_procedures::ProcedureRepository>,
+    default_limit: u32,
+}
+
+#[async_trait::async_trait]
+impl engram_retrieval::RetrievalIndex for ProceduresRetrievalIndex {
+    async fn retrieve_candidates(
+        &self,
+        request: &engram_domain::RetrievalRequest,
+    ) -> engram_runtime::CoreResult<Vec<engram_domain::RetrievalResult>> {
+        use engram_domain::{FusionStrategy, FusionTrace, RetrievalScore, RetrievalTargetType};
+        let limit = request
+            .limit
+            .or_else(|| request.budget.as_ref().and_then(|b| b.max_items))
+            .unwrap_or(self.default_limit);
+        let tokens = engram_retrieval::query_tokens(request.query.as_str());
+        if tokens.is_empty() {
+            return Ok(Vec::new());
+        }
+        let procedures = self.repo.list_procedures(&request.scope).await?;
+        let mut scored: Vec<(f32, engram_domain::Procedure)> = procedures
+            .into_iter()
+            .filter_map(|p| {
+                let hay = format!(
+                    "{} {} {}",
+                    p.name,
+                    p.trigger.as_deref().unwrap_or(""),
+                    p.steps.join(" ")
+                )
+                .to_lowercase();
+                let hits = tokens.iter().filter(|t| hay.contains(t.as_str())).count() as f32;
+                if hits == 0.0 {
+                    None
+                } else {
+                    Some((hits / tokens.len() as f32, p))
+                }
+            })
+            .collect();
+        scored.sort_by(|a, b| {
+            b.0.partial_cmp(&a.0)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.1.name.cmp(&b.1.name))
+        });
+        Ok(scored
+            .into_iter()
+            .take(limit.max(1) as usize)
+            .map(|(score, p)| engram_domain::RetrievalResult {
+                id: format!("result-{}", p.id),
+                target_type: RetrievalTargetType::Rule,
+                target_id: p.id.to_string(),
+                content: format!(
+                    "[procedure] {} — trigger: {}. Steps: {}. (successes: {}, failures: {})",
+                    p.name,
+                    p.trigger.as_deref().unwrap_or("-"),
+                    p.steps.join(" → "),
+                    p.success_count,
+                    p.failure_count
+                ),
+                score: RetrievalScore {
+                    total: score,
+                    relevance: Some(score),
+                    recency: None,
+                    confidence: None,
+                    cue_match: None,
+                    hierarchical_fit: None,
+                    policy_fit: Some(1.0),
+                },
+                provenance: p.provenance.clone(),
+                policy: p.policy.clone(),
+                explanation: None,
+                metadata: None,
+                fusion_trace: Some(FusionTrace {
+                    query_id: None,
+                    vector_index: None,
+                    embedding_time_ms: None,
+                    search_time_ms: None,
+                    source: "procedures".to_owned(),
+                    source_rank: None,
+                    source_score: Some(score),
+                    score: None,
+                    rank: None,
+                    fusion_strategy: Some(FusionStrategy::None),
+                    fusion_score: Some(score),
+                    rerank_strategy: Some(engram_domain::RerankStrategy::None),
+                    rerank_score: None,
+                    discard_reason: None,
+                    deduplicated_with: Vec::new(),
+                }),
+            })
+            .collect())
+    }
+}
+
 /// Lexical-lane target resolver backed by the knowledge store: rehydrates a
 /// BM25 hit's chunk id into its canonical `KnowledgeChunk`.
 pub(crate) struct KnowledgeLexicalResolver {

@@ -72,7 +72,8 @@ npm install -g @engramlabs/mcp @engramlabs/mcp-linux-x64-gnu-full
 # win32 x64:   @engramlabs/mcp-win32-x64-full
 ```
 
-The launcher prefers the `-full` binary when present. The embedding model
+The launcher prefers the `-full` binary when present (`ENGRAM_NO_FULL=1`
+forces slim). The embedding model
 (~130 MB) downloads from Hugging Face on **first use** and is cached —
 behind restricted networks point `FASTEMBED_CACHE_DIR` at a pre-populated
 cache directory.

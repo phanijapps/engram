@@ -69,6 +69,9 @@ function resolveBinary() {
   const pkg = platformPackage();
   // Prefer the -full variant (local fastembed embeddings) when installed at
   // the launcher's version; fall back to the slim platform package.
+  // ENGRAM_NO_FULL=1 forces slim even when -full is installed (e.g. to skip
+  // the first-use model download on constrained machines).
+  const wantFull = !process.env.ENGRAM_NO_FULL;
   const norm = (v) => String(v).replace(/^v/, "");
   const tryManifest = (name) => {
     try {
@@ -79,7 +82,7 @@ function resolveBinary() {
       return null;
     }
   };
-  let manifest = tryManifest(`${pkg}-full`);
+  let manifest = wantFull ? tryManifest(`${pkg}-full`) : null;
   if (manifest) process.stderr.write("engram-mcp: using -full binary (local embeddings)\n");
   if (!manifest) {
     manifest = tryManifest(pkg);

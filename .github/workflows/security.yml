@@ -31,7 +31,9 @@ jobs:
         with:
           tool: cargo-deny
       - name: Check advisories, licenses, bans, sources
-        run: cargo deny check --config deny.toml
+        run: # --config was removed in newer cargo-deny; deny.toml is auto-discovered
+        # at the workspace root.
+        cargo deny check
 
   codeql:
     name: CodeQL (rust · typescript)

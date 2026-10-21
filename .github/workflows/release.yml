@@ -125,8 +125,10 @@ jobs:
             }
             require('fs').writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
           "
-          npm pack
-          mkdir -p artifacts && mv *.tgz artifacts/
+          # Historical tarballs can exist in the checkout. Upload ONLY this
+          # pack result, never a wildcard that includes stale packages.
+          PACK=$(npm pack --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s)[0].filename))")
+          mkdir -p artifacts && mv "$PACK" artifacts/
       - uses: actions/upload-artifact@v4
         with:
           name: launcher

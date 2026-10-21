@@ -109,4 +109,7 @@ test('release builds one embedding-capable artifact for every declared dependenc
   assert.deepEqual(targets.map(t => `@engramlabs/mcp-${t}`).sort(), Object.keys(require('../package.json').optionalDependencies).sort());
   assert.doesNotMatch(workflow, /matrix\.variant|--no-default-features|--full/);
   assert.match(workflow, /verify_embedding_modes\.py/);
+  assert.match(workflow, /PACK=\$\(npm pack --json/);
+  assert.match(workflow, /mv "\$PACK" artifacts\//);
+  assert.doesNotMatch(workflow, /mv \*\.tgz artifacts/);
 });

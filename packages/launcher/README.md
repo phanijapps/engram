@@ -57,13 +57,17 @@ Or run directly: `npx @engramlabs/mcp@alpha --storage ~/.engram`
 Linux x64/ARM64 · macOS Apple Silicon · Windows x64 — binaries install
 automatically per machine.
 
-## Local embeddings (the `-full` variant)
+## Embeddings
 
-The default install uses the **slim** binary: all local-first features work,
-but semantic (vector) recall needs a remote embedding endpoint configured.
-For **fully offline embeddings**, install the `-full` platform package for
-your machine alongside the launcher — it bundles fastembed with a local
-BGE-small model:
+Embeddings give `search`/`recall` a **semantic lane**: results matched by
+meaning, not just keywords — "how do retries back off" finds the exponential
+backoff memory even when those exact words never appear. Three ways to run
+it:
+
+### 1. Local & offline — the `-full` variant
+
+Install the `-full` platform package for your machine alongside the
+launcher — it bundles fastembed with a local BGE-small model:
 
 ```bash
 npm install -g @engramlabs/mcp @engramlabs/mcp-linux-x64-gnu-full
@@ -73,10 +77,43 @@ npm install -g @engramlabs/mcp @engramlabs/mcp-linux-x64-gnu-full
 ```
 
 The launcher prefers the `-full` binary when present (`ENGRAM_NO_FULL=1`
-forces slim). The embedding model
-(~130 MB) downloads from Hugging Face on **first use** and is cached —
-behind restricted networks point `FASTEMBED_CACHE_DIR` at a pre-populated
-cache directory.
+forces slim). The embedding model (~130 MB) downloads from Hugging Face on
+**first use** and is cached — behind restricted networks point
+`FASTEMBED_CACHE_DIR` at a pre-populated cache directory.
+
+### 2. Remote — Ollama or any OpenAI-compatible endpoint
+
+Works with the default slim binary. Point engram at a serving endpoint:
+
+```bash
+# Ollama (endpoint defaults to http://localhost:11434)
+engram-mcp --embedding-provider ollama --embedding-model nomic-embed-text
+
+# OpenAI-compatible (endpoint + API key read from the named env var)
+engram-mcp --embedding-provider openai \
+  --embedding-model text-embedding-3-small \
+  --embedding-endpoint https://api.openai.com/v1 \
+  --embedding-api-key-env OPENAI_API_KEY
+```
+
+Same settings as environment variables (no flags in your MCP config):
+`ENGRAM_EMBEDDING_PROVIDER`, `ENGRAM_EMBEDDING_MODEL`,
+`ENGRAM_EMBEDDING_ENDPOINT`, `ENGRAM_EMBEDDING_API_KEY_ENV`,
+`ENGRAM_EMBEDDING_DIMENSIONS`.
+
+### 3. Profile file
+
+```toml
+# embedding.toml — passed via --embedding-config (or ENGRAM_EMBEDDING_CONFIG)
+[embedding_provider]
+provider_type = "ollama"
+model = "nomic-embed-text"
+```
+
+### Disabling the vector lane
+
+`--no-vector` turns embeddings off entirely (lexical + graph lanes only —
+fastest startup, fully deterministic). Re-enable with `--vector`.
 
 ## Privacy
 

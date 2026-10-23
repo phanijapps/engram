@@ -276,6 +276,21 @@ impl GraphExtractor {
                     graph_id: Some(graph_id.clone()),
                     subject: entity_ref(&entities[subject_index]),
                     predicate: "calls".to_owned(),
+                    // Same-document AST binding when the callee is locally
+                    // qualified in this file (deterministic name-table
+                    // binding); a name-only object keeps the parsed spelling
+                    // with the binding pending the cross-file ladder.
+                    code_resolution: Some(if object_qual.is_some() {
+                        CodeEdgeResolution::new(
+                            ResolutionTier::ScopedName,
+                            engram_code::edge_resolution::producer::AST_LOCAL,
+                        )
+                    } else {
+                        CodeEdgeResolution::new(
+                            ResolutionTier::Parsed,
+                            engram_code::edge_resolution::producer::AST_CALLS,
+                        )
+                    }),
                     object: object_ref,
                     scope: source.scope.clone(),
                     evidence: Vec::new(),
@@ -308,6 +323,12 @@ impl GraphExtractor {
                         graph_id: Some(graph_id.clone()),
                         subject: entity_ref(&entities[subject_index]),
                         predicate: predicate.to_owned(),
+                        // Text co-occurrence fallback: bare-name mention in
+                        // another symbol's body — inferential, never a fact.
+                        code_resolution: Some(CodeEdgeResolution::new(
+                            ResolutionTier::Heuristic,
+                            engram_code::edge_resolution::producer::COOCCURRENCE,
+                        )),
                         object: entity_ref(&entities[object_index]),
                         scope: source.scope.clone(),
                         evidence: Vec::new(),
@@ -387,6 +408,7 @@ impl GraphExtractor {
                     aliases: Vec::new(),
                 },
                 predicate: "belongs_to".to_owned(),
+                code_resolution: None,
                 object: EntityRef {
                     id: Some(repo_id),
                     kind: Some("repository".to_owned()),
@@ -475,6 +497,12 @@ impl GraphExtractor {
                     graph_id: Some(graph_id.clone()),
                     subject: file_ref.clone(),
                     predicate: "imports".to_owned(),
+                    // Import statement: pure syntax — the module entity is
+                    // created from the import string itself.
+                    code_resolution: Some(CodeEdgeResolution::new(
+                        ResolutionTier::Parsed,
+                        engram_code::edge_resolution::producer::PARSED_IMPORTS,
+                    )),
                     object: module_ref,
                     scope: source.scope.clone(),
                     evidence: Vec::new(),
@@ -506,6 +534,21 @@ impl GraphExtractor {
                     graph_id: Some(graph_id.clone()),
                     subject,
                     predicate: predicate.to_owned(),
+                    // Containment is a direct structural fact; inheritance
+                    // spellings are parsed but the base binding may still be
+                    // name-only (the cross-file ladder stamps its own
+                    // evidence when it binds).
+                    code_resolution: Some(if predicate == "contains" {
+                        CodeEdgeResolution::new(
+                            ResolutionTier::Parsed,
+                            engram_code::edge_resolution::producer::PARSED_CONTAINS,
+                        )
+                    } else {
+                        CodeEdgeResolution::new(
+                            ResolutionTier::Parsed,
+                            engram_code::edge_resolution::producer::PARSED_HERITAGE,
+                        )
+                    }),
                     object,
                     scope: source.scope.clone(),
                     evidence: Vec::new(),
@@ -564,6 +607,13 @@ impl GraphExtractor {
                         aliases: Vec::new(),
                     },
                     predicate: "routes_to".to_owned(),
+                    // Route decorator + handler spelling: parsed syntax; the
+                    // handler binding may still be name-only until the ladder
+                    // resolves it (the resolved flag carries that separately).
+                    code_resolution: Some(CodeEdgeResolution::new(
+                        ResolutionTier::Parsed,
+                        engram_code::edge_resolution::producer::PARSED_ROUTES,
+                    )),
                     object: EntityRef {
                         id: None,
                         kind: None,
@@ -588,6 +638,12 @@ impl GraphExtractor {
                     graph_id: Some(graph_id.clone()),
                     subject: entity_ref(&entities[component_index]),
                     predicate: "calls".to_owned(),
+                    // JSX/framework callback synthesis: pattern-matched, not
+                    // parsed call syntax — inferential.
+                    code_resolution: Some(CodeEdgeResolution::new(
+                        ResolutionTier::Heuristic,
+                        engram_code::edge_resolution::producer::FRAMEWORK_PATTERN,
+                    )),
                     object: EntityRef {
                         id: None,
                         kind: None,

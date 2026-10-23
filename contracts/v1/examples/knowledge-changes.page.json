@@ -1,0 +1,17 @@
+{
+  "items": [
+    {
+      "seq": "1042",
+      "scope": { "tenant": "acme" },
+      "targetType": "relationship",
+      "targetId": "rel-91",
+      "op": "upsert",
+      "occurredAt": "2026-10-22T21:00:00Z",
+      "scanRunId": "scan-1764"
+    }
+  ],
+  "nextCursor": "1042",
+  "highWatermark": "1097",
+  "hasMore": true,
+  "resetRequired": false
+}

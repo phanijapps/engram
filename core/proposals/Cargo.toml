@@ -1,0 +1,15 @@
+[package]
+name = "engram-proposals"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+chrono.workspace = true
+engram-domain = { path = "../domain", version = "0.1.0" }
+engram-memory = { path = "../memory", version = "0.1.0" }
+engram-runtime = { path = "../runtime", version = "0.1.0" }
+serde_json.workspace = true
+sha2.workspace = true

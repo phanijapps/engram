@@ -18,6 +18,7 @@ engram-consolidation = { path = "../../core/consolidation", version = "0.1.0" }
 engram-eval = { path = "../../core/eval", version = "0.1.0" }
 engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
 engram-procedures = { path = "../../core/procedures", version = "0.1.0" }
+engram-proposals = { path = "../../core/proposals", version = "0.1.0" }
 engram-conformance = { path = "../../adapters/integration", version = "0.1.0" }
 engram-integration = { path = "../../core/integration", version = "0.1.0", features = ["sqlite"] }
 engram-backend-pgvector = { path = "../../backends/pgvector", optional = true }

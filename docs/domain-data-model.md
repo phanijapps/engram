@@ -460,6 +460,47 @@ Enum:
 - `contradiction_detected`
 - `hierarchy_built`
 
+## Operator Proposal Model
+
+Inert, reviewable pending writes (`OperatorProposal`). Proposals are NEVER
+recall targets: no indexing, embeddings, hierarchy/summary building, or
+consolidation scans over their bodies; only a successfully promoted memory
+becomes recallable through the normal memory write path. First accepted
+slice: **memory-write proposals only** (`ProposalMemoryWrite`).
+
+Fields (`OperatorProposal`): `id` (OperatorProposalId), `scope` (immutable
+after submit), `payload` (typed memory intent: kind/content/policy/links —
+cannot set status, reviewer, memory id, or permissions), `status`
+(`pending` | `applying` | `approved` | `rejected`), `submittedBy` (evidence
+attribution only — never authorization), `payloadFingerprint` (immutable
+version pin), `version` (optimistic concurrency; every transition bumps),
+`createdAt`/`updatedAt`, optional `decision` (`{reviewer, decidedAt,
+reason}`), optional `promotion` receipt (`{memoryId, eventId,
+idempotencyKey, appliedAt}`).
+
+Rules:
+
+- Transitions: `pending → applying` (approval claim, CAS), `applying →
+  approved` (receipt persisted), `pending → rejected`. Terminal states never
+  change; rejection cannot overtake an in-flight approval.
+- Approval is orchestration, not a state flip: claim →
+  `MemoryService::write_memory` (the policy authorizer runs) → finalize.
+  The deterministic per-proposal idempotency key (`proposal-promotion-{id}`)
+  makes retries replay the same memory — never a shared batch key.
+- No cross-store transaction: a memory committed while the finalize failed
+  leaves the proposal visibly `applying` with the memory id reported
+  (in-progress/recovery), never silently rejected or rolled back.
+- Operator authority is a trusted host concern (`ProposalAuthorizer` port);
+  an identity-looking payload is data, not authentication. The default
+  permissive memory-policy bootstrap is NOT operator authentication.
+- Queue governance is distinct from the promoted memory's governance;
+  listing is not a retrieval lane.
+
+Operations: `proposal_submit` (scope-bound submission key idempotency),
+`proposal_list` (status filter + opaque id cursor, limit ≤ 100),
+`proposal_approve` (expected version + trusted reviewer),
+`proposal_reject` (expected version + reviewer + reason).
+
 ## Belief Network Model
 
 Beliefs are derived stances over evidence. They are not raw memories and should
@@ -863,6 +904,7 @@ Fields:
 | `scope` | yes | Scope | Relationship scope |
 | `evidence` | no | EvidenceRef[] | Supporting evidence |
 | `confidence` | no | number | 0 to 1 confidence |
+| `codeResolution` | no | CodeEdgeResolution | Typed code-edge resolution evidence; present only on code-extraction edges (see §Code indexing) |
 | `provenance` | yes | Provenance | Extraction or declaration provenance |
 | `createdAt` | yes | Timestamp | Creation time |
 | `updatedAt` | no | Timestamp | Last update |
@@ -908,6 +950,64 @@ Code entities use existing `EntityKind` values (`Function`, `Method`, `Class`,
 `Struct`, `Interface`, `Trait`, `Enum`, `TypeAlias`, `Module`, `File`,
 `Repository`, `Endpoint` for framework routes).
 
+#### ResolutionTier
+
+Enum (closed; edge-evidence adoption 2026-10): the mechanism that
+established a code edge's endpoint binding. The tier describes the
+**binding**, not extraction effort — observing a call spelling in the AST is
+not proof that an inferred destination entity is correct (`resolved` on
+query evidence and the bound entity id carry that separately).
+
+- `parsed` — direct syntax/structural fact: both endpoint identities (or, for
+  name-only objects, the endpoint spelling) come from one document's AST
+  (`contains`, `imports`, route spellings, as-written call spellings).
+- `scoped_name` — deterministic name-table binding through the scope-wide
+  symbol index (as-written qualified form, exact-name rung, same-document,
+  same-repo, unique survivor). Deterministic, but not compiler proof.
+- `heuristic` — inferential binding: receiver capitalization, text
+  co-occurrence, framework-pattern synthesis. Never silently upgradeable.
+- `legacy_unknown` — pre-evidence code edge lacking a recognizable producer
+  signal; conservative floor.
+
+Ordering-default confidences (diagnostic, NOT calibrated probabilities):
+`parsed` 1.0, `scoped_name` 0.8, `heuristic` 0.5, `legacy_unknown` 0.5.
+Explicit relationship `confidence` is always preserved; a tier is never
+inferred from a numeric confidence alone.
+
+#### CodeEdgeResolution
+
+Fields:
+
+| Field | Required | Type | Meaning |
+|-------|----------|------|---------|
+| `tier` | yes | ResolutionTier | Binding mechanism |
+| `resolvedBy` | yes | string | Stable, versioned producer id (non-empty; `[A-Za-z0-9._-]`) |
+
+Contracted producer ids: `ast-local-v1`, `ast-calls-v1`, `scope-name-v1`,
+`receiver-capitalization-v1`, `cooccurrence-v1`, `framework-pattern-v1`,
+`orphan-sweep-v1`, `parsed-imports-v1`, `parsed-contains-v1`,
+`parsed-heritage-v1`, `parsed-routes-v1`, `legacy-code-edge-v1`.
+
+Rules:
+
+- Non-code relationships (predicates outside `CodeEdgeKind`) carry no
+  `codeResolution`.
+- A name-only parsed edge keeps `tier = parsed` and shows `resolved = false`
+  in query evidence; binding happens later through the ladder, which
+  replaces the evidence with the binding tier (`scoped_name` or
+  `heuristic`).
+- Receiver-capitalization inference can never acquire `parsed` merely
+  because the reference originated in AST text.
+- Legacy rows (no `codeResolution`) get a conservative **effective tier**:
+  recognized historical producer signals only (orphan-sweep method →
+  `scoped_name`; the documented 0.5 co-occurrence convention → `heuristic`;
+  pure-syntax `imports`/`contains` → `parsed`); everything else →
+  `legacy_unknown`. Unresolved-reference ambiguity, candidate ordering, and
+  the EN-9 receiver guard are unchanged by tier stamping.
+- Query evidence dedup for a shared endpoint pair is deterministic:
+  explicit evidence > legacy fallback, then higher confidence, then
+  smallest relationship id — never store enumeration order.
+
 #### Code identity rule (RFC-0020 Phase 2)
 
 - `KnowledgeEntity.name` for code symbols is the **receiver-qualified logical
@@ -951,6 +1051,42 @@ Rules:
 - `pending` → `failed` only by explicit operator action, never automatically.
 - Re-ingesting the referring file retracts its records (they are regenerated
   by the fresh extraction pass).
+
+### Knowledge changes and scan freshness (enhancements adoption, slice 3)
+
+The knowledge change log is INVALIDATION METADATA, not recallable
+knowledge: no document bodies or secrets in change records; memories and
+proposals never appear. `KnowledgeChange { seq (decimal STRING on JSON —
+64-bit rows exceed JS's 53-bit range), scope, stableSourceKey?, graphId?,
+targetType (graph|entity|relationship|document|chunk), targetId, op
+(upsert|remove|archive|restore), occurredAt, scanRunId? }`. Semantically
+unchanged re-puts log NOTHING (no-op rule). Mutation and its log entry
+commit under one writer; a crash between them may under-report (consumers
+reconcile from checkpoints — documented honesty rule).
+
+`KnowledgeChangesRequest { scope, sourceKey?, after? (opaque cursor =
+last consumed seq string), limit ≤ 500 }` → `KnowledgeChangesPage { items,
+nextCursor?, highWatermark?, hasMore, resetRequired }`. A cursor older than
+the retained window returns `resetRequired = true` — never a silently valid
+empty page. Sequences are log-local: not wall-clock, not git commit counts,
+not portable across backends or rebuilds.
+
+`ScanCheckpoint { scope, stableSourceKey, scanRoot? (host-local path,
+diagnostic only), scanRunId, startedAt, completedAt?, indexedRevision?
+(FULL git OID — never a short SHA, never a database mtime), status
+(in_progress|completed|partial), dirty?, errors }`. A stale scan run never
+overwrites a newer checkpoint (started_at guard).
+
+`CodeGraphStaleness { sourceKey, lastSuccessfulScanAt?, indexedRevision?,
+currentRevision?, commitsBehind? (local ancestry only; None = unknown,
+never a fabricated 0), status
+(current|behind|unknown|unindexed|diverged|partial), dirty?,
+scanInProgress, diagnostic? }` — computed at response time (a startup-only
+value would itself go stale), local git only (no fetch), dirty worktrees
+are never reported `current`.
+
+Operations: `subscribe_changes` (bounded polling page — not a stream),
+`code_staleness`; codegraph answers carry a visible `STALENESS:` line.
 
 ### Graph maintenance (ADR-0027)
 

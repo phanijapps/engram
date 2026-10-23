@@ -464,6 +464,26 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
       this.provider.requireProceduresApi().incrementFailureJson(encode(request)),
     );
   }
+
+  /** Operator proposal queue: submit an inert pending memory write. */
+  async proposalSubmit(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireProposalsApi().submitJson(encode(request)));
+  }
+
+  /** Operator proposal queue: list records (optionally by status), paged. */
+  async proposalList(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireProposalsApi().listJson(encode(request)));
+  }
+
+  /** Operator proposal queue: approve (policy-checked promotion; retry-safe). */
+  async proposalApprove(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireProposalsApi().approveJson(encode(request)));
+  }
+
+  /** Operator proposal queue: reject (payload stays inert). */
+  async proposalReject(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireProposalsApi().rejectJson(encode(request)));
+  }
 }
 
 function encode(value: unknown): string {

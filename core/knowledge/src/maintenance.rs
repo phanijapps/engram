@@ -510,6 +510,7 @@ mod detector_tests {
             graph_id: None,
             subject: eref(subj),
             predicate: "calls".into(),
+            code_resolution: None,
             object: eref(obj),
             scope: scope_t(),
             evidence: Vec::new(),

@@ -1570,6 +1570,7 @@ mod tests {
                 aliases: Vec::new(),
             },
             predicate: "calls".into(),
+            code_resolution: None,
             object: EntityRef {
                 id: Some(EntityId::from(obj)),
                 kind: None,

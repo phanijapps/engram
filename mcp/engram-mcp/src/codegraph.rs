@@ -566,6 +566,40 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
     save_manifest(&manifest_path, &new_manifest);
     eprintln!("engram-mcp: scan_repository done: {summary:?}");
 
+    // Scan checkpoint (slice 3): truthful freshness for staleness reporting.
+    // Full-OID revision when git is available; status reflects errors; the
+    // scan root is stored for local git facts at read time.
+    if let Ok(checkpoints) = app.provider.require_checkpoints() {
+        let status = if summary.errors > 0 {
+            engram_domain::ScanStatus::Partial
+        } else {
+            engram_domain::ScanStatus::Completed
+        };
+        let checkpoint = engram_domain::ScanCheckpoint {
+            scope: app.scope.clone(),
+            stable_source_key: root
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.to_owned()),
+            scan_root: Some(
+                root.canonicalize()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|_| path.to_owned()),
+            ),
+            scan_run_id: format!(
+                "scan-{}",
+                chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+            ),
+            started_at: chrono::Utc::now(),
+            completed_at: Some(chrono::Utc::now()),
+            indexed_revision: summary.git_sha.clone(),
+            status,
+            dirty: engram_ingest::git::worktree_dirty(root),
+            errors: summary.errors as u32,
+        };
+        let _ = block_on(checkpoints.put_checkpoint(checkpoint));
+    }
+
     // Record the scan root (provenance source → absolute root) so
     // fetch_content can read verbatim source at call time — in-memory +
     // scan-roots.json sidecar (survives restarts).
@@ -1915,13 +1949,18 @@ fn render_edge_evidence(rels: &[KnowledgeRelationship], seeds: &[String]) -> Str
         evs.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
         let fmt = |e: &engram_codegraph_queries::EdgeEvidence| {
             format!(
-                "{} (conf {}, {}, {})",
+                "{} (conf {}, {}, {}, {})",
                 e.endpoint,
                 e.confidence
                     .map(|c| c.to_string())
                     .unwrap_or_else(|| "-".into()),
                 if e.resolved { "resolved" } else { "unresolved" },
-                e.method.as_deref().unwrap_or("ast")
+                // R7 confidence visibility: the typed tier + producer so a
+                // heuristic binding is never presented as a fact.
+                e.tier
+                    .map(|t| t.to_string())
+                    .unwrap_or_else(|| "tier-unknown".into()),
+                e.resolved_by.as_deref().unwrap_or("ast")
             )
         };
         let resolved: Vec<String> = evs.iter().filter(|e| e.resolved).map(|e| fmt(e)).collect();
@@ -1960,7 +1999,10 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             .collect();
         let ctx = union_symbol_context(ctxs);
         let evidence = render_edge_evidence(&rels, &seeds);
-        return Ok(protocol::text_content(format!("{ctx:?}{evidence}")));
+        let staleness = crate::changes::staleness_note(app);
+        return Ok(protocol::text_content(format!(
+            "{ctx:?}{evidence}{staleness}"
+        )));
     }
 
     // Batch path: one section per USER symbol with a header. Each user symbol is
@@ -1975,8 +2017,9 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             .collect();
         let ctx = union_symbol_context(ctxs);
         let evidence = render_edge_evidence(&rels, &seeds);
+        let staleness = crate::changes::staleness_note(app);
         sections.push(format!(
-            "=== symbol_context: {symbol} (depth={depth}) ===\n{ctx:?}{evidence}"
+            "=== symbol_context: {symbol} (depth={depth}) ===\n{ctx:?}{evidence}{staleness}"
         ));
     }
     Ok(protocol::text_content(sections.join("\n\n")))
@@ -4961,6 +5004,7 @@ mod tests {
                 aliases: Vec::new(),
             },
             predicate: "calls".to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: Some(engram_domain::Id::from("e2")),
                 kind: Some("Function".to_owned()),

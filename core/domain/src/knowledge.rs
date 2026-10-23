@@ -8,9 +8,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ChunkId, ConceptRef, DocumentId, EntityId, EntityRef, EvidenceRef, Id, KnowledgeGraphId,
-    Metadata, OntologyClassId, OntologyRef, Policy, Provenance, RelationshipId, Scope, SourceId,
-    Timestamp,
+    ChunkId, CodeEdgeResolution, ConceptRef, DocumentId, EntityId, EntityRef, EvidenceRef, Id,
+    KnowledgeGraphId, Metadata, OntologyClassId, OntologyRef, Policy, Provenance, RelationshipId,
+    Scope, SourceId, Timestamp,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -245,6 +245,12 @@ pub struct KnowledgeRelationship {
     pub evidence: Vec<EvidenceRef>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f32>,
+    /// Typed code-resolution evidence (ADR-0028 amendment): present only on
+    /// code-extraction edges; describes the binding mechanism (parsed /
+    /// scoped_name / heuristic / legacy_unknown) plus the stable producer id.
+    /// Non-code relationships leave this absent.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub code_resolution: Option<CodeEdgeResolution>,
     pub provenance: Provenance,
     pub created_at: Timestamp,
     #[serde(skip_serializing_if = "Option::is_none")]

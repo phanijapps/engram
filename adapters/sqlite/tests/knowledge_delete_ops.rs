@@ -111,6 +111,7 @@ fn make_relationship(
             aliases: Vec::new(),
         },
         predicate: "calls".to_owned(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from("target")),
             kind: Some("function".to_owned()),

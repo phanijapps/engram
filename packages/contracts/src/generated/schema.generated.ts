@@ -42,6 +42,66 @@ export const engramV1Schema = {
       ],
       "type": "string"
     },
+    "CodeEdgeResolution": {
+      "additionalProperties": false,
+      "description": "Typed resolution evidence stamped on code relationships (KnowledgeRelationship.codeResolution; absent on non-code relationships).",
+      "properties": {
+        "resolvedBy": {
+          "description": "Stable, versioned producer id (e.g. ast-local-v1, scope-name-v1, cooccurrence-v1, orphan-sweep-v1, legacy-code-edge-v1).",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "type": "string"
+        },
+        "tier": {
+          "$ref": "#/$defs/ResolutionTier"
+        }
+      },
+      "required": [
+        "tier",
+        "resolvedBy"
+      ],
+      "type": "object"
+    },
+    "CodeGraphStaleness": {
+      "additionalProperties": false,
+      "description": "Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown \u2014 never a fabricated 0.",
+      "properties": {
+        "commitsBehind": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "currentRevision": {
+          "type": "string"
+        },
+        "diagnostic": {
+          "type": "string"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "indexedRevision": {
+          "type": "string"
+        },
+        "lastSuccessfulScanAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "scanInProgress": {
+          "type": "boolean"
+        },
+        "sourceKey": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/StalenessStatus"
+        }
+      },
+      "required": [
+        "sourceKey",
+        "status",
+        "scanInProgress"
+      ],
+      "type": "object"
+    },
     "ConceptRef": {
       "additionalProperties": false,
       "properties": {
@@ -557,6 +617,100 @@ export const engramV1Schema = {
       "minLength": 1,
       "type": "string"
     },
+    "KnowledgeChange": {
+      "additionalProperties": false,
+      "description": "One committed knowledge mutation (invalidation metadata, never recallable content). seq is a decimal string on JSON surfaces.",
+      "properties": {
+        "graphId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "op": {
+          "$ref": "#/$defs/KnowledgeChangeOp"
+        },
+        "scanRunId": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "seq": {
+          "pattern": "^[0-9]+$",
+          "type": "string"
+        },
+        "stableSourceKey": {
+          "type": "string"
+        },
+        "targetId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "targetType": {
+          "$ref": "#/$defs/KnowledgeChangeTargetType"
+        }
+      },
+      "required": [
+        "seq",
+        "scope",
+        "targetType",
+        "targetId",
+        "op",
+        "occurredAt"
+      ],
+      "type": "object"
+    },
+    "KnowledgeChangeOp": {
+      "description": "Knowledge change-log operation vocabulary.",
+      "enum": [
+        "upsert",
+        "remove",
+        "archive",
+        "restore"
+      ],
+      "type": "string"
+    },
+    "KnowledgeChangeTargetType": {
+      "description": "Knowledge target kinds appearing in the change log. Memories and proposals never appear.",
+      "enum": [
+        "graph",
+        "entity",
+        "relationship",
+        "document",
+        "chunk"
+      ],
+      "type": "string"
+    },
+    "KnowledgeChangesPage": {
+      "additionalProperties": false,
+      "description": "One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window \u2014 take a fresh snapshot.",
+      "properties": {
+        "hasMore": {
+          "type": "boolean"
+        },
+        "highWatermark": {
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/KnowledgeChange"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "resetRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "items",
+        "hasMore",
+        "resetRequired"
+      ],
+      "type": "object"
+    },
     "KnowledgeChunk": {
       "additionalProperties": false,
       "properties": {
@@ -933,6 +1087,106 @@ export const engramV1Schema = {
       ],
       "type": "object"
     },
+    "OperatorProposal": {
+      "additionalProperties": false,
+      "description": "Inert, reviewable pending write. Never a recall target; approval promotes through the policy-checked memory write path.",
+      "properties": {
+        "createdAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "decision": {
+          "additionalProperties": false,
+          "properties": {
+            "decidedAt": {
+              "$ref": "#/$defs/Timestamp"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "reviewer": {
+              "$ref": "#/$defs/Actor"
+            }
+          },
+          "required": [
+            "reviewer",
+            "decidedAt"
+          ],
+          "type": "object"
+        },
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "payload": {
+          "$ref": "#/$defs/ProposalMemoryWrite"
+        },
+        "payloadFingerprint": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "promotion": {
+          "additionalProperties": false,
+          "properties": {
+            "appliedAt": {
+              "$ref": "#/$defs/Timestamp"
+            },
+            "eventId": {
+              "$ref": "#/$defs/Identifier"
+            },
+            "idempotencyKey": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "memoryId": {
+              "$ref": "#/$defs/Identifier"
+            }
+          },
+          "required": [
+            "memoryId",
+            "eventId",
+            "idempotencyKey",
+            "appliedAt"
+          ],
+          "type": "object"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "status": {
+          "$ref": "#/$defs/OperatorProposalStatus"
+        },
+        "submittedBy": {
+          "$ref": "#/$defs/Actor"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "payload",
+        "status",
+        "submittedBy",
+        "payloadFingerprint",
+        "version",
+        "createdAt"
+      ],
+      "type": "object"
+    },
+    "OperatorProposalStatus": {
+      "description": "Operator proposal queue lifecycle. pending -> applying (approval claim, CAS); applying -> approved (promotion receipt); pending -> rejected. applying is the visible in-progress/recovery state.",
+      "enum": [
+        "pending",
+        "applying",
+        "approved",
+        "rejected"
+      ],
+      "type": "string"
+    },
     "Policy": {
       "additionalProperties": false,
       "properties": {
@@ -987,6 +1241,33 @@ export const engramV1Schema = {
       "required": [
         "visibility",
         "retention"
+      ],
+      "type": "object"
+    },
+    "ProposalMemoryWrite": {
+      "additionalProperties": false,
+      "description": "Typed proposed memory intent (first accepted slice: memory writes only). Cannot set status, reviewer, memory id, or permissions.",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/MemoryContent"
+        },
+        "kind": {
+          "$ref": "#/$defs/MemoryKind"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/MemoryLink"
+          },
+          "type": "array"
+        },
+        "policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      },
+      "required": [
+        "kind",
+        "content",
+        "policy"
       ],
       "type": "object"
     },
@@ -1116,6 +1397,16 @@ export const engramV1Schema = {
         "actor"
       ],
       "type": "object"
+    },
+    "ResolutionTier": {
+      "description": "Mechanism that established a code edge's endpoint binding (edge-evidence adoption 2026-10). parsed = direct syntax/structural fact; scoped_name = deterministic name-table binding (not compiler proof); heuristic = inferential binding (receiver capitalization, co-occurrence, framework synthesis); legacy_unknown = pre-evidence edge, conservative floor. The tier describes the binding, not extraction effort; a name-only parsed edge shows resolved=false separately.",
+      "enum": [
+        "parsed",
+        "scoped_name",
+        "heuristic",
+        "legacy_unknown"
+      ],
+      "type": "string"
     },
     "RetrievalExplanation": {
       "additionalProperties": false,
@@ -1350,6 +1641,62 @@ export const engramV1Schema = {
       ],
       "type": "string"
     },
+    "ScanCheckpoint": {
+      "additionalProperties": false,
+      "description": "Truthful scan state for one (scope, stable source key). indexedRevision is a FULL git OID.",
+      "properties": {
+        "completedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "errors": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "indexedRevision": {
+          "type": "string"
+        },
+        "scanRoot": {
+          "type": "string"
+        },
+        "scanRunId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "stableSourceKey": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "startedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "status": {
+          "$ref": "#/$defs/ScanStatus"
+        }
+      },
+      "required": [
+        "scope",
+        "stableSourceKey",
+        "scanRunId",
+        "startedAt",
+        "status",
+        "errors"
+      ],
+      "type": "object"
+    },
+    "ScanStatus": {
+      "enum": [
+        "in_progress",
+        "completed",
+        "partial"
+      ],
+      "type": "string"
+    },
     "Scope": {
       "additionalProperties": false,
       "properties": {
@@ -1490,6 +1837,17 @@ export const engramV1Schema = {
         }
       },
       "type": "object"
+    },
+    "StalenessStatus": {
+      "enum": [
+        "current",
+        "behind",
+        "unknown",
+        "unindexed",
+        "diverged",
+        "partial"
+      ],
+      "type": "string"
     },
     "Timestamp": {
       "format": "date-time",

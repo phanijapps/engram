@@ -212,6 +212,29 @@ export interface NativeProceduresApiBinding {
   incrementFailureJson(requestJson: string): string;
 }
 
+/** Operator proposal queue proxy: inert pending writes promoted through the
+ *  policy-checked memory write path (approval is review-gated; `applying`
+ *  outcomes report the retry-safe in-progress state). */
+export interface NativeProposalsApiBinding {
+  submitJson(requestJson: string): string;
+  listJson(requestJson: string): string;
+  approveJson(requestJson: string): string;
+  rejectJson(requestJson: string): string;
+}
+
+/** Knowledge change-log proxy: bounded resumable invalidation pages +
+ *  latest-checkpoint reads (never recallable content). */
+export interface NativeChangeLogApiBinding {
+  changesSinceJson(requestJson: string): string;
+  latestCheckpointJson(requestJson: string): string;
+}
+
+/** Scan-checkpoint proxy: the scan coordinator's write side (stale runs
+ *  never overwrite newer ones). */
+export interface NativeCheckpointsApiBinding {
+  putCheckpointJson(checkpointJson: string): string;
+}
+
 /** Native handle for configured Rust embedding inference and space identity. */
 export interface NativeEmbeddingProviderApiBinding {
   embeddingSpace(): string;
@@ -249,6 +272,9 @@ export interface NativeProviderBinding {
   requireKnowledgeQueryApi(): NativeKnowledgeQueryApiBinding;
   requireHierarchyApi(): NativeHierarchyApiBinding;
   requireProceduresApi(): NativeProceduresApiBinding;
+  requireProposalsApi(): NativeProposalsApiBinding;
+  requireChangeLogApi(): NativeChangeLogApiBinding;
+  requireCheckpointsApi(): NativeCheckpointsApiBinding;
 }
 
 /** Constructor shape for the held `EngramProvider`. */

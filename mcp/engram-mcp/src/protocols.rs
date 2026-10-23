@@ -229,6 +229,7 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
                 aliases: Vec::new(),
             },
             predicate: "handled_by".to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: None,
                 kind: None,
@@ -261,6 +262,7 @@ pub fn scan_protocols(app: &App, args: &Value) -> Result<Value, ToolError> {
                 aliases: Vec::new(),
             },
             predicate: "sends_request".to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: Some(Id::from(ep_id.clone())),
                 kind: Some("api".to_owned()),

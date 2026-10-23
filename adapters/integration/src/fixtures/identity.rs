@@ -190,6 +190,7 @@ fn test_relationship(
             aliases: Vec::new(),
         },
         predicate: predicate.to_string(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(EntityId::from(object_id)),
             kind: None,

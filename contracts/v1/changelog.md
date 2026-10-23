@@ -1,5 +1,26 @@
 # v1 Changelog
 
+## 2026-10-22 (change log)
+
+- Added `KnowledgeChangeOp`, `KnowledgeChangeTargetType`, `KnowledgeChange`,
+  `KnowledgeChangesPage`, `ScanStatus`, `ScanCheckpoint`, `StalenessStatus`,
+  and `CodeGraphStaleness` definitions with a page example (knowledge change
+  log + scan freshness; seq is a decimal string). Additive/compatible.
+
+## 2026-10-22 (proposals)
+
+- Added `OperatorProposalStatus`, `ProposalMemoryWrite`, and `OperatorProposal`
+  definitions with pending + approved examples (operator proposal queue;
+  approval routes through the policy-checked memory write path).
+  Additive/compatible: new types + operations; no existing shapes change.
+
+## 2026-10-22
+
+- Added `ResolutionTier` + `CodeEdgeResolution` definitions and the optional
+  relationship `codeResolution` field (code-edge resolution evidence; ADR-0028
+  amendment 2026-10-22). Additive/compatible. Examples:
+  `code-edge-resolution.heuristic.json`, `code-edge-resolution.parsed.json`.
+
 ## 2026-06-30
 
 - Added accepted retrieval evaluation fixtures for positive recall, forbidden

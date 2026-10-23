@@ -164,6 +164,7 @@ fn relationship(id: &str, scope: &Scope) -> KnowledgeRelationship {
             aliases: Vec::new(),
         },
         predicate: "calls".to_string(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from("export-entity-b")),
             kind: Some("function".to_string()),

@@ -51,6 +51,14 @@ impl SqlKnowledgeStore {
         Self::from_connection(connection)
     }
 
+    /// Locks the shared connection (change-log reads/writes + checkpoints).
+    pub(crate) fn lock_conn(&self) -> CoreResult<std::sync::MutexGuard<'_, Connection>> {
+        self.connection.lock().map_err(|_| CoreError::Adapter {
+            adapter: "engram-store-sqlite".to_owned(),
+            message: "knowledge connection poisoned".to_owned(),
+        })
+    }
+
     /// Returns a clone of the shared connection Arc for use by identity/consolidation
     /// modules that share the same SQLite database.
     pub fn shared_connection(&self) -> Arc<Mutex<Connection>> {
@@ -121,6 +129,7 @@ impl SqlKnowledgeStore {
 
         // Initialize schema
         initialize_schema(&connection)?;
+        crate::knowledge::changes::initialize_schema(&connection)?;
 
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
@@ -133,6 +142,7 @@ impl SqlKnowledgeStore {
         Self::apply_pragmas(&connection, &options)?;
 
         initialize_schema(&connection)?;
+        crate::knowledge::changes::initialize_schema(&connection)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
         })

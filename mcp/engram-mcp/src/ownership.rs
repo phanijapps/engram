@@ -119,6 +119,7 @@ pub fn scan_ownership(app: &App, args: &Value) -> Result<Value, ToolError> {
                 aliases: Vec::new(),
             },
             predicate: "owns".to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: Some(Id::from(format!("path-{path}"))),
                 kind: Some("module".to_owned()),

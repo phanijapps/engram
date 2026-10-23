@@ -69,6 +69,7 @@ struct SqliteLayoutPaths {
     knowledge: PathBuf,
     belief: PathBuf,
     procedures: PathBuf,
+    proposals: PathBuf,
     hierarchy: PathBuf,
     vectors: PathBuf,
 }
@@ -86,6 +87,7 @@ impl SqliteLayoutPaths {
                     knowledge: storage.join("knowledge.db"),
                     belief: storage.join("belief.db"),
                     procedures: storage.join("procedures.db"),
+                    proposals: storage.join("proposals.db"),
                     hierarchy: storage.join("hierarchy.db"),
                     vectors: storage.join("vectors.db"),
                 }
@@ -97,6 +99,7 @@ impl SqliteLayoutPaths {
                     knowledge: shared.clone(),
                     belief: shared.clone(),
                     procedures: shared.clone(),
+                    proposals: shared.clone(),
                     hierarchy: shared.clone(),
                     vectors: shared,
                 }
@@ -176,6 +179,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut taxonomy_state = failed();
     let mut beliefs_state = failed();
     let mut procedures_state = failed();
+    let mut proposals_state = failed();
     let mut hierarchy_state = failed();
     let mut vectors_state = CapabilityState::Unsupported {
         reason: if config.enable_vector {
@@ -214,6 +218,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     let mut taxonomy: Option<Arc<dyn TaxonomyRepository>> = None;
     let mut beliefs: Option<Arc<dyn BeliefRepository>> = None;
     let mut procedures: Option<Arc<dyn ProcedureRepository>> = None;
+    let mut proposals: Option<Arc<engram_proposals::ProposalService>> = None;
     let mut hierarchy: Option<Arc<dyn HierarchyRepository>> = None;
     let retrieval: Option<Arc<dyn engram_retrieval::RetrievalIndex>> = None;
     let mut vectors: Option<Arc<dyn engram_retrieval::VectorIndex>> = None;
@@ -335,6 +340,26 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             procedures = Some(store);
             procedures_state = CapabilityState::Supported;
         }
+    }
+
+    // Operator proposal queue (enhancements adoption, slice 2): the queue
+    // composes its own SQLite cell with the WIRED memory service handle, so
+    // approval routes through the policy-checked write path. The local
+    // authorizer allows submit+review for the configured project scope and
+    // approve only in operator mode (the MCP layer gates the tools); hosts
+    // with real identity inject their own ProposalAuthorizer instead.
+    if let (Some(memory), Ok(queue)) = (
+        memory_store
+            .clone()
+            .map(|svc| svc as Arc<dyn MemoryService>),
+        engram_store_sqlite::SqlProposalStore::open_file(&paths.proposals),
+    ) {
+        proposals = Some(Arc::new(engram_proposals::ProposalService::new(
+            memory,
+            Arc::new(queue),
+            Arc::new(engram_proposals::AllowAllProposalAuthorizer),
+        )));
+        proposals_state = CapabilityState::Supported;
     }
 
     // unified_recall (S4): construct the SqlUnifiedRecall handle from the wired
@@ -647,6 +672,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         .maintenance(maintenance_state)
         .identity(identity_state)
         .procedures(procedures_state)
+        .proposals(proposals_state)
         .build();
 
     // Construct the SqlObservability handle from the wired concrete stores +
@@ -701,6 +727,17 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
 
     if let Some(h) = procedures {
         builder = builder.procedures(h);
+    }
+    if let Some(h) = proposals {
+        builder = builder.proposals(h);
+    }
+    // Knowledge change log + scan checkpoints (slice 3): the same knowledge
+    // store implements both read/write ports; wire only when the knowledge
+    // store itself was wired.
+    if let Some(k) = &knowledge_store {
+        builder = builder
+            .change_log(k.clone() as Arc<dyn engram_knowledge::KnowledgeChangeLog>)
+            .checkpoints(k.clone() as Arc<dyn engram_knowledge::ScanCheckpointStore>);
     }
     if let Some(h) = hierarchy {
         builder = builder.hierarchy(h);

@@ -20,6 +20,7 @@ engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
 engram-belief = { path = "../../core/belief", version = "0.1.0" }
 engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
 engram-procedures = { path = "../../core/procedures", version = "0.1.0" }
+engram-proposals = { path = "../../core/proposals", version = "0.1.0" }
 sha2.workspace = true
 # Vector cell — folded in from engram-store-vector (T5):
 sqlite-vec.workspace = true

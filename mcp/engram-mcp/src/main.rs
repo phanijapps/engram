@@ -14,6 +14,7 @@
 mod app;
 mod belief;
 mod bootstrap;
+mod changes;
 mod codegraph;
 mod config;
 mod dependencies;
@@ -27,6 +28,7 @@ mod ontology;
 mod ownership;
 mod predict;
 mod procedures;
+mod proposals;
 mod protocol;
 mod protocols;
 mod registry;
@@ -829,6 +831,96 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
             "required": ["name"]
         }),
         handler: procedures::procedure_put,
+    });
+    registry.register(ToolRecord {
+        name: "subscribe_changes",
+        description: "Bounded page of committed knowledge-graph changes since a cursor \\
+                      (invalidation metadata, never recallable content). Poll with \\
+                      nextCursor; resetRequired means take a fresh snapshot.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "after": { "type": "string" },
+                "source_key": { "type": "string" },
+                "limit": { "type": "number" }
+            }
+        }),
+        handler: changes::subscribe_changes,
+    });
+    registry.register(ToolRecord {
+        name: "code_staleness",
+        description: "Freshness of the code graph vs its repository: full-OID checkpoint \\
+                      vs current HEAD, commits behind, dirty worktree, scan state. \\
+                      Local git only (no fetch); unknown stays unknown.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "source_key": { "type": "string" }
+            }
+        }),
+        handler: changes::code_staleness,
+    });
+    registry.register(ToolRecord {
+        name: "proposal_submit",
+        description: "Submit an inert pending memory write for operator review. Never a recall \\
+                      target until approved; approval routes through the policy-checked write path.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "text": { "type": "string" },
+                "kind": { "type": "string", "enum": ["fact", "preference", "episode", "observation", "artifact"] },
+                "agent": { "type": "string" },
+                "submission_key": { "type": "string" }
+            },
+            "required": ["text"]
+        }),
+        handler: proposals::proposal_submit,
+    });
+    registry.register(ToolRecord {
+        name: "proposal_list",
+        description: "List operator proposal queue records (optionally by status: \\
+                      pending|applying|approved|rejected), paged.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "status": { "type": "string", "enum": ["pending", "applying", "approved", "rejected"] },
+                "limit": { "type": "number" },
+                "after": { "type": "string" }
+            }
+        }),
+        handler: proposals::proposal_list,
+    });
+    registry.register(ToolRecord {
+        name: "proposal_approve",
+        description: "Approve a pending proposal: promotes it through the policy-checked \\
+                      memory write path. An 'applying' outcome reports the retry-safe \\
+                      in-progress state.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "id": { "type": "string" },
+                "operator": { "type": "string" },
+                "expected_version": { "type": "number" }
+            },
+            "required": ["id", "operator"]
+        }),
+        handler: proposals::proposal_approve,
+    });
+    registry.register(ToolRecord {
+        name: "proposal_reject",
+        description: "Reject a pending proposal: the payload stays inert and is never \\
+                      promoted; edits require a fresh submission.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "id": { "type": "string" },
+                "operator": { "type": "string" },
+                "expected_version": { "type": "number" },
+                "reason": { "type": "string" }
+            },
+            "required": ["id", "operator"]
+        }),
+        handler: proposals::proposal_reject,
     });
     registry.register(ToolRecord {
         name: "procedure_list",

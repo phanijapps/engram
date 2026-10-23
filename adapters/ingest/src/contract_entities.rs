@@ -170,6 +170,7 @@ pub fn build_exposes_rel(
             aliases: Vec::new(),
         },
         predicate: "exposes".to_owned(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(api_entity_id),
             kind: Some("api".to_owned()),

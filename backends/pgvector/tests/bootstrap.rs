@@ -153,6 +153,7 @@ fn pg_recipe_relationship_round_trip() {
             aliases: Vec::new(),
         },
         predicate: "depends_on".to_owned(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from("pg-rt-dst")),
             kind: None,
@@ -257,6 +258,7 @@ fn pg_recipe_knowledge_query_lists_scope() {
             aliases: Vec::new(),
         },
         predicate: "calls".to_owned(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from("pg-q-entity-2")),
             kind: None,

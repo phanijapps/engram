@@ -12,6 +12,7 @@ use chrono::Utc;
 
 use engram_domain::{KnowledgeRelationship, UnresolvedReference, UnresolvedReferenceStatus};
 
+use crate::edge_resolution::{attempt, branch_evidence};
 use crate::identity::{Resolution, SymbolIndex};
 use engram_domain::Id;
 
@@ -50,42 +51,6 @@ pub fn split_dotted(reference: &str) -> (Option<&str>, &str) {
     (Some(hint), name)
 }
 
-/// Resolution ladder for one reference name from (optional) file context.
-/// Returns the settled candidate or the surviving ambiguity.
-fn resolve_one(
-    index: &SymbolIndex,
-    name: &str,
-    from_path: Option<&str>,
-    from_repo: Option<&str>,
-) -> Resolution {
-    // [js-apex-boundary] Salesforce Apex import scope: an LWC component
-    // importing from '@salesforce/apex/Class.Method' creates a module entity
-    // named '@salesforce/apex/Class.Method'. When that same Class.Method is
-    // parsed from the .cls file, it's registered as 'Class::Method'. This
-    // rung strips the @salesforce/apex/ prefix and converts the dot to ::
-    // so the import resolves to the parsed Apex entity.
-    if let Some(stripped) = name.strip_prefix("@salesforce/apex/") {
-        if let Some((class, method)) = stripped.rsplit_once('.') {
-            let qualified = format!("{class}::{method}");
-            if let Resolution::Resolved(c) = index.resolve(&qualified, from_path, from_repo) {
-                return Resolution::Resolved(c);
-            }
-            if let Resolution::Resolved(c) = index.resolve(method, from_path, from_repo) {
-                return Resolution::Resolved(c);
-            }
-        }
-    }
-
-    // Same document first, then the SymbolIndex ladder (same repo / unique
-    // survivor / ambiguity).
-    if let Some(path) = from_path {
-        if let Resolution::Resolved(c) = index.resolve(name, Some(path), from_repo) {
-            return Resolution::Resolved(c);
-        }
-    }
-    index.resolve(name, from_path, from_repo)
-}
-
 /// Fill name-only object refs (`calls`, `extends`, `implements`,
 /// `routes_to`) and return
 /// the unresolved-reference ledger for everything that did not settle.
@@ -107,68 +72,19 @@ pub fn resolve_refs(
         let Some(reference) = rel.object.name.clone() else {
             continue;
         };
-        let (hint, name) = split_dotted(&reference);
         // Subjectless references have no stable ledger key — skipping them
         // beats collapsing distinct rows onto one "unknown" id.
         let Some(subject_id) = rel.subject.id.clone() else {
             continue;
         };
         let from_id = subject_id.to_string();
-        // EN-9: a DOT-hinted method reference (`values.iter`) has an
-        // UNKNOWN receiver type — bare-name uniqueness is not evidence
-        // about the receiver, and the bare-first order used to bind
-        // `values.iter()` confidently to a unique-but-unrelated
-        // `Facets::iter`. Such references bind ONLY through
-        // receiver-consistent qualified forms and otherwise stay
-        // unresolved (ledgered, still listed as an unresolved callee by
-        // name — classified, never deleted).
-        // `::`-separated references are STATIC MODULE PATHS
-        // (`store::save` with `use crate::store;`) — the prefix is lexical
-        // evidence, so after the qualified attempts they keep the bare-name
-        // ladder. Hint-LESS references keep the full ladder including the
-        // same-document bare fallback for `self.method()`.
-        let static_module_path =
-            hint.is_some() && reference.contains("::") && !reference.contains('.');
-        let mut outcome = if let Some(hint) = hint {
-            let as_written = format!("{}::{}", hint, name);
-            let mut o = resolve_one(index, &as_written, path, repo);
-            if !matches!(o, Resolution::Resolved(_)) {
-                let capitalized = format!("{}::{}", receiver_type_hint(hint), name);
-                o = resolve_one(index, &capitalized, path, repo);
-            }
-            if !matches!(o, Resolution::Resolved(_)) && static_module_path {
-                o = resolve_one(index, name, path, repo);
-            }
-            o
-        } else {
-            resolve_one(index, name, path, repo)
-        };
-
-        // [receiver-resolution-gap] Same-document bare-name fallback:
-        // `self.method()` inside an impl block extracts as the bare
-        // `method` (the `self` receiver carries no hint). The method IS
-        // registered in the index (under both `Class::method` and the
-        // bare `method` via bare_tail registration). If the bare name
-        // resolves to exactly one same-document candidate, use it —
-        // this is the LWC/Rust `this.x()` / `self.x()` case. Skipped for
-        // dot-hinted method references (EN-9: a same-document unique
-        // method name is still not receiver evidence).
-        if !matches!(outcome, Resolution::Resolved(_)) && (hint.is_none() || static_module_path) {
-            if let Some(path) = path {
-                if let Some(bucket) = index.bucket(name) {
-                    let same_doc: Vec<_> = bucket
-                        .iter()
-                        .filter(|c| c.path.as_deref() == Some(path))
-                        .cloned()
-                        .collect();
-                    if same_doc.len() == 1 {
-                        outcome = Resolution::Resolved(same_doc[0].clone());
-                    }
-                }
-            }
-        }
-
-        match outcome {
+        // Shared evidence-aware ladder (edge_resolution::attempt): the EN-9
+        // receiver rules, apex aliasing, static-module paths, and the
+        // same-document fallback all live there, and the settling branch is
+        // recorded as typed code-resolution evidence instead of being
+        // reconstructed after the candidate is chosen.
+        let outcome = attempt(index, &reference, path, repo);
+        match outcome.resolution {
             Resolution::Resolved(candidate) => {
                 rel.object.id = Some(Id::from(candidate.id));
                 // Canonicalize the endpoint name to the resolved entity's
@@ -179,6 +95,13 @@ pub fn resolve_refs(
                 // entity is qualified (`PropertyController::getPagedPropertyList`).
                 if rel.object.name.as_deref() != Some(candidate.name.as_str()) {
                     rel.object.name = Some(candidate.name.clone());
+                }
+                // Record the binding evidence at the decision point. The
+                // tier describes the BINDING mechanism, so an extraction-time
+                // `parsed` spelling is replaced by the binding tier
+                // (scoped_name / heuristic) once the ladder settles a target.
+                if let Some(branch) = outcome.branch {
+                    rel.code_resolution = Some(branch_evidence(branch));
                 }
             }
             Resolution::Ambiguous(candidates) => ledger.push(UnresolvedReference {
@@ -245,6 +168,7 @@ pub(crate) mod tests {
                 aliases: Vec::new(),
             },
             predicate: predicate.to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: None,
                 kind: None,

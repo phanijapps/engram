@@ -106,6 +106,7 @@ pub fn scan_dependencies(app: &App, args: &Value) -> Result<Value, ToolError> {
                     aliases: Vec::new(),
                 },
                 predicate: "depends_on".to_owned(),
+                code_resolution: None,
                 object: EntityRef {
                     id: Some(Id::from(format!("mod-{dep}"))),
                     kind: Some("module".to_owned()),

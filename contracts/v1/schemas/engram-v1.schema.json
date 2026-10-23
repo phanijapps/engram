@@ -1558,6 +1558,36 @@
         "routes_to"
       ]
     },
+    "ResolutionTier": {
+      "type": "string",
+      "description": "Mechanism that established a code edge's endpoint binding (edge-evidence adoption 2026-10). parsed = direct syntax/structural fact; scoped_name = deterministic name-table binding (not compiler proof); heuristic = inferential binding (receiver capitalization, co-occurrence, framework synthesis); legacy_unknown = pre-evidence edge, conservative floor. The tier describes the binding, not extraction effort; a name-only parsed edge shows resolved=false separately.",
+      "enum": [
+        "parsed",
+        "scoped_name",
+        "heuristic",
+        "legacy_unknown"
+      ]
+    },
+    "CodeEdgeResolution": {
+      "type": "object",
+      "description": "Typed resolution evidence stamped on code relationships (KnowledgeRelationship.codeResolution; absent on non-code relationships).",
+      "additionalProperties": false,
+      "properties": {
+        "tier": {
+          "$ref": "#/$defs/ResolutionTier"
+        },
+        "resolvedBy": {
+          "type": "string",
+          "description": "Stable, versioned producer id (e.g. ast-local-v1, scope-name-v1, cooccurrence-v1, orphan-sweep-v1, legacy-code-edge-v1).",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        }
+      },
+      "required": [
+        "tier",
+        "resolvedBy"
+      ]
+    },
     "UnresolvedReferenceStatus": {
       "type": "string",
       "description": "Lifecycle of a recorded unresolved cross-file code reference. pending -> resolved (orphan sweep); pending -> failed (operator only); terminal states never change.",
@@ -1620,6 +1650,334 @@
         "path",
         "scope",
         "createdAt"
+      ]
+    },
+    "OperatorProposalStatus": {
+      "type": "string",
+      "description": "Operator proposal queue lifecycle. pending -> applying (approval claim, CAS); applying -> approved (promotion receipt); pending -> rejected. applying is the visible in-progress/recovery state.",
+      "enum": [
+        "pending",
+        "applying",
+        "approved",
+        "rejected"
+      ]
+    },
+    "ProposalMemoryWrite": {
+      "type": "object",
+      "description": "Typed proposed memory intent (first accepted slice: memory writes only). Cannot set status, reviewer, memory id, or permissions.",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/MemoryKind"
+        },
+        "content": {
+          "$ref": "#/$defs/MemoryContent"
+        },
+        "policy": {
+          "$ref": "#/$defs/Policy"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemoryLink"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "content",
+        "policy"
+      ]
+    },
+    "OperatorProposal": {
+      "type": "object",
+      "description": "Inert, reviewable pending write. Never a recall target; approval promotes through the policy-checked memory write path.",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "payload": {
+          "$ref": "#/$defs/ProposalMemoryWrite"
+        },
+        "status": {
+          "$ref": "#/$defs/OperatorProposalStatus"
+        },
+        "submittedBy": {
+          "$ref": "#/$defs/Actor"
+        },
+        "payloadFingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "createdAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reviewer": {
+              "$ref": "#/$defs/Actor"
+            },
+            "decidedAt": {
+              "$ref": "#/$defs/Timestamp"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "reviewer",
+            "decidedAt"
+          ]
+        },
+        "promotion": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "memoryId": {
+              "$ref": "#/$defs/Identifier"
+            },
+            "eventId": {
+              "$ref": "#/$defs/Identifier"
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "appliedAt": {
+              "$ref": "#/$defs/Timestamp"
+            }
+          },
+          "required": [
+            "memoryId",
+            "eventId",
+            "idempotencyKey",
+            "appliedAt"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "payload",
+        "status",
+        "submittedBy",
+        "payloadFingerprint",
+        "version",
+        "createdAt"
+      ]
+    },
+    "KnowledgeChangeOp": {
+      "type": "string",
+      "enum": [
+        "upsert",
+        "remove",
+        "archive",
+        "restore"
+      ],
+      "description": "Knowledge change-log operation vocabulary."
+    },
+    "KnowledgeChangeTargetType": {
+      "type": "string",
+      "enum": [
+        "graph",
+        "entity",
+        "relationship",
+        "document",
+        "chunk"
+      ],
+      "description": "Knowledge target kinds appearing in the change log. Memories and proposals never appear."
+    },
+    "KnowledgeChange": {
+      "type": "object",
+      "description": "One committed knowledge mutation (invalidation metadata, never recallable content). seq is a decimal string on JSON surfaces.",
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "stableSourceKey": {
+          "type": "string"
+        },
+        "graphId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "targetType": {
+          "$ref": "#/$defs/KnowledgeChangeTargetType"
+        },
+        "targetId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "op": {
+          "$ref": "#/$defs/KnowledgeChangeOp"
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "scanRunId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "scope",
+        "targetType",
+        "targetId",
+        "op",
+        "occurredAt"
+      ]
+    },
+    "KnowledgeChangesPage": {
+      "type": "object",
+      "description": "One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window — take a fresh snapshot.",
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KnowledgeChange"
+          }
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "highWatermark": {
+          "type": "string"
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "resetRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "items",
+        "hasMore",
+        "resetRequired"
+      ]
+    },
+    "ScanStatus": {
+      "type": "string",
+      "enum": [
+        "in_progress",
+        "completed",
+        "partial"
+      ]
+    },
+    "ScanCheckpoint": {
+      "type": "object",
+      "description": "Truthful scan state for one (scope, stable source key). indexedRevision is a FULL git OID.",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "stableSourceKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scanRoot": {
+          "type": "string"
+        },
+        "scanRunId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "completedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "indexedRevision": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ScanStatus"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "errors": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "scope",
+        "stableSourceKey",
+        "scanRunId",
+        "startedAt",
+        "status",
+        "errors"
+      ]
+    },
+    "StalenessStatus": {
+      "type": "string",
+      "enum": [
+        "current",
+        "behind",
+        "unknown",
+        "unindexed",
+        "diverged",
+        "partial"
+      ]
+    },
+    "CodeGraphStaleness": {
+      "type": "object",
+      "description": "Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown — never a fabricated 0.",
+      "additionalProperties": false,
+      "properties": {
+        "sourceKey": {
+          "type": "string"
+        },
+        "lastSuccessfulScanAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "indexedRevision": {
+          "type": "string"
+        },
+        "currentRevision": {
+          "type": "string"
+        },
+        "commitsBehind": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "$ref": "#/$defs/StalenessStatus"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "scanInProgress": {
+          "type": "boolean"
+        },
+        "diagnostic": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourceKey",
+        "status",
+        "scanInProgress"
       ]
     }
   }

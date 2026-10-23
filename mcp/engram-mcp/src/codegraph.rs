@@ -1915,13 +1915,18 @@ fn render_edge_evidence(rels: &[KnowledgeRelationship], seeds: &[String]) -> Str
         evs.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
         let fmt = |e: &engram_codegraph_queries::EdgeEvidence| {
             format!(
-                "{} (conf {}, {}, {})",
+                "{} (conf {}, {}, {}, {})",
                 e.endpoint,
                 e.confidence
                     .map(|c| c.to_string())
                     .unwrap_or_else(|| "-".into()),
                 if e.resolved { "resolved" } else { "unresolved" },
-                e.method.as_deref().unwrap_or("ast")
+                // R7 confidence visibility: the typed tier + producer so a
+                // heuristic binding is never presented as a fact.
+                e.tier
+                    .map(|t| t.to_string())
+                    .unwrap_or_else(|| "tier-unknown".into()),
+                e.resolved_by.as_deref().unwrap_or("ast")
             )
         };
         let resolved: Vec<String> = evs.iter().filter(|e| e.resolved).map(|e| fmt(e)).collect();

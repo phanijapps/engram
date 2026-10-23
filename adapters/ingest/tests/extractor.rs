@@ -429,3 +429,139 @@ fn non_code_documents_emit_no_graph_entities() {
         "graph record must be persisted for non-code documents"
     );
 }
+
+#[test]
+fn code_edges_carry_typed_resolution_evidence() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
+    let request = DocumentIngestRequest {
+        source_kind: SourceKind::Filesystem,
+        source_name: "demo".to_owned(),
+        scope: scope(),
+        document_kind: SourceDocumentKind::Code,
+        document: DocumentMetadata {
+            path: Some("lib.rs".to_owned()),
+            ..Default::default()
+        },
+        text: "use std::fmt;\nstruct Engine;\nimpl Engine {\n    fn drive(&self) { self.run(); }\n    fn run(&self) {}\n}\nfn main() { Engine::drive_helper(); }\n"
+            .to_owned(),
+        policy: policy(),
+        actor: Actor {
+            id: Id::from("agent-1"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        },
+        stable_source_key: None,
+        source_metadata: None,
+    };
+    let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
+    let text = "use std::fmt;\nstruct Engine;\nimpl Engine {\n    fn drive(&self) { self.run(); }\n    fn run(&self) {}\n}\n";
+    let structural = engram_code::TreeSitterChunker::new()
+        .expect("chunker")
+        .extract_structural(text, "rs")
+        .expect("structural");
+    assert!(!structural.imports.is_empty(), "fixture must have imports");
+    assert!(
+        !structural.contains.is_empty(),
+        "fixture must have containment"
+    );
+    let extracted = GraphExtractor::new()
+        .extract_with_calls(
+            &ingested.source,
+            &ingested.document,
+            &ingested.chunks,
+            None,
+            Some(&structural),
+            None,
+        )
+        .expect("extract");
+
+    let evidence_for = |predicate: &str| -> Vec<(ResolutionTier, String)> {
+        extracted
+            .relationships
+            .iter()
+            .filter(|r| r.predicate == predicate)
+            .map(|r| {
+                r.code_resolution
+                    .as_ref()
+                    .map(|ev| (ev.tier, ev.resolved_by.clone()))
+                    .expect("code edge must carry evidence")
+            })
+            .collect()
+    };
+
+    // Import statements are pure syntax: parsed.
+    let imports = evidence_for("imports");
+    assert!(!imports.is_empty());
+    assert!(
+        imports
+            .iter()
+            .all(|(t, p)| *t == ResolutionTier::Parsed && p == "parsed-imports-v1"),
+        "imports: {imports:?}"
+    );
+
+    // Containment from the receiver chain: parsed structural facts.
+    let contains = evidence_for("contains");
+    assert!(!contains.is_empty());
+    assert!(
+        contains
+            .iter()
+            .all(|(t, p)| *t == ResolutionTier::Parsed && p == "parsed-contains-v1"),
+        "contains: {contains:?}"
+    );
+
+    // Non-code edges (belongs_to) carry no code evidence at all.
+    assert!(
+        extracted
+            .relationships
+            .iter()
+            .filter(|r| r.predicate == "belongs_to")
+            .all(|r| r.code_resolution.is_none())
+    );
+}
+
+#[test]
+fn cooccurrence_edges_are_heuristic_not_parsed() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    // Plain `extract()` (no AST calls) falls back to co-occurrence edges at
+    // 0.5 — they must land heuristic, never parsed.
+    let ingestor = KnowledgeIngestor::new(CodeSymbolChunker);
+    let request = DocumentIngestRequest {
+        source_kind: SourceKind::Filesystem,
+        source_name: "demo".to_owned(),
+        scope: scope(),
+        document_kind: SourceDocumentKind::Code,
+        document: DocumentMetadata {
+            path: Some("a.rs".to_owned()),
+            ..Default::default()
+        },
+        text: "fn alpha() { beta(); }\nfn beta() { alpha(); }\n".to_owned(),
+        policy: policy(),
+        actor: Actor {
+            id: Id::from("agent-1"),
+            kind: ActorKind::Agent,
+            display_name: None,
+            metadata: None,
+        },
+        stable_source_key: None,
+        source_metadata: None,
+    };
+    let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
+    let extracted = GraphExtractor::new()
+        .extract(&ingested.source, &ingested.document, &ingested.chunks)
+        .expect("extract");
+    let coocc = extracted
+        .relationships
+        .iter()
+        .filter(|r| r.confidence == Some(0.5));
+    assert!(
+        coocc.clone().count() > 0,
+        "fixture must produce co-occurrence edges"
+    );
+    for rel in coocc {
+        let ev = rel.code_resolution.as_ref().expect("evidence on co-occ");
+        assert_eq!(ev.tier, ResolutionTier::Heuristic);
+        assert_eq!(ev.resolved_by, "cooccurrence-v1");
+    }
+}

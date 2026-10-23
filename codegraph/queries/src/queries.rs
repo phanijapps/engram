@@ -47,6 +47,33 @@ pub struct EdgeEvidence {
     pub resolved: bool,
     /// Extraction method string (e.g. "deterministic_text_ingestion").
     pub method: Option<String>,
+    /// Typed resolution tier (parsed / scoped_name / heuristic /
+    /// legacy_unknown). Legacy edges without explicit evidence get the
+    /// conservative effective tier (`legacy_code_resolution`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tier: Option<engram_domain::ResolutionTier>,
+    /// Stable producer id (e.g. `ast-local-v1`, `scope-name-v1`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolved_by: Option<String>,
+}
+
+impl EdgeEvidence {
+    /// Deterministic representative selection when multiple relationships
+    /// share one endpoint pair: prefer explicit typed evidence over the
+    /// legacy fallback, then higher confidence, then the lexicographically
+    /// smallest relationship id — never store enumeration order.
+    fn better(
+        self,
+        incumbent: &EdgeEvidence,
+        incumbent_rank: (bool, f32, String),
+        challenger_rank: (bool, f32, String),
+    ) -> EdgeEvidence {
+        if challenger_rank > incumbent_rank {
+            self
+        } else {
+            incumbent.clone()
+        }
+    }
 }
 
 /// First-hop edge evidence for `symbol`: (caller evidence, callee evidence)
@@ -56,8 +83,8 @@ pub fn edge_evidence(
     relationships: &[KnowledgeRelationship],
     symbol: &str,
 ) -> (Vec<EdgeEvidence>, Vec<EdgeEvidence>) {
-    let mut callers: HashMap<String, EdgeEvidence> = HashMap::new();
-    let mut callees: HashMap<String, EdgeEvidence> = HashMap::new();
+    let mut callers: HashMap<String, (EdgeEvidence, (bool, f32, String))> = HashMap::new();
+    let mut callees: HashMap<String, (EdgeEvidence, (bool, f32, String))> = HashMap::new();
     for r in relationships.iter() {
         if !matches!(
             r.predicate.as_str(),
@@ -72,28 +99,57 @@ pub fn edge_evidence(
         // subject endpoint's state, a callee's is the object's. (The initial
         // version OR'd both — a resolved subject leaked "resolved" onto an
         // unresolved external callee like json.dumps.)
+        // Typed tier: explicit evidence first; legacy edges fall back to the
+        // conservative effective tier so heuristics are never presented as
+        // facts even for pre-evidence rows.
+        let effective = r
+            .code_resolution
+            .clone()
+            .or_else(|| engram_code::legacy_code_resolution(r));
         let ev = |endpoint: String, resolved: bool| EdgeEvidence {
             endpoint,
             confidence: r.confidence,
             resolved,
             method: r.provenance.method.clone(),
+            tier: effective.as_ref().map(|e| e.tier),
+            resolved_by: effective.as_ref().map(|e| e.resolved_by.clone()),
         };
+        let rel_id = r.id.to_string();
+        let rank = (
+            r.code_resolution.is_some(),
+            r.confidence.unwrap_or(0.0),
+            rel_id,
+        );
         if object == symbol {
             let resolved = r.subject.id.is_some();
+            let challenger = ev(subject.clone(), resolved);
             callers
                 .entry(subject.clone())
-                .or_insert_with(|| ev(subject.clone(), resolved));
+                .and_modify(|(incumbent, inc_rank)| {
+                    *incumbent =
+                        challenger
+                            .clone()
+                            .better(incumbent, inc_rank.clone(), rank.clone());
+                })
+                .or_insert_with(|| (challenger, rank.clone()));
         }
         if subject == symbol {
             let resolved = r.object.id.is_some();
+            let challenger = ev(object.clone(), resolved);
             callees
                 .entry(object.clone())
-                .or_insert_with(|| ev(object.clone(), resolved));
+                .and_modify(|(incumbent, inc_rank)| {
+                    *incumbent =
+                        challenger
+                            .clone()
+                            .better(incumbent, inc_rank.clone(), rank.clone());
+                })
+                .or_insert_with(|| (challenger, rank));
         }
     }
-    let mut c: Vec<EdgeEvidence> = callers.into_values().collect();
+    let mut c: Vec<EdgeEvidence> = callers.into_values().map(|(e, _)| e).collect();
     c.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
-    let mut d: Vec<EdgeEvidence> = callees.into_values().collect();
+    let mut d: Vec<EdgeEvidence> = callees.into_values().map(|(e, _)| e).collect();
     d.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
     (c, d)
 }
@@ -746,7 +802,9 @@ pub fn service_diagram(topology: &[(String, String)]) -> String {
 mod tests {
     use super::*;
     use chrono::{TimeZone, Utc};
-    use engram_domain::{Actor, ActorKind, Id, Provenance, Scope};
+    use engram_domain::{
+        Actor, ActorKind, CodeEdgeResolution, Id, Provenance, ResolutionTier, Scope,
+    };
 
     #[test]
     fn call_edges_keeps_calls_drops_others_and_unresolved() {
@@ -1161,6 +1219,78 @@ mod tests {
         assert!(callers.is_empty());
         let endpoints: Vec<&str> = callees.iter().map(|e| e.endpoint.as_str()).collect();
         assert_eq!(endpoints, vec!["json.dumps", "run_report"]);
+    }
+
+    /// Typed evidence surfaces on first-hop rows; legacy rows without
+    /// explicit evidence get the conservative effective tier, never a
+    /// fabricated precise producer.
+    #[test]
+    fn edge_evidence_surfaces_tier_and_producer() {
+        let mut heuristic_edge = rel("cmd_gate", "json.dumps");
+        heuristic_edge.code_resolution = Some(CodeEdgeResolution::new(
+            ResolutionTier::Heuristic,
+            "receiver-capitalization-v1",
+        ));
+        let mut parsed_edge = rel("cmd_gate", "run_report");
+        parsed_edge.code_resolution = Some(CodeEdgeResolution::new(
+            ResolutionTier::ScopedName,
+            "scope-name-v1",
+        ));
+        // Legacy row: extraction method + no explicit evidence.
+        let mut legacy_edge = rel("cmd_gate", "legacy_fn");
+        legacy_edge.code_resolution = None;
+        legacy_edge.provenance.method = Some("deterministic_text_ingestion".to_owned());
+        legacy_edge.confidence = Some(0.9);
+
+        let (_, callees) = edge_evidence(&[heuristic_edge, parsed_edge, legacy_edge], "cmd_gate");
+        let by_endpoint = |name: &str| {
+            callees
+                .iter()
+                .find(|e| e.endpoint == name)
+                .unwrap_or_else(|| panic!("missing {name}: {callees:?}"))
+        };
+        assert_eq!(
+            by_endpoint("json.dumps").tier,
+            Some(ResolutionTier::Heuristic)
+        );
+        assert_eq!(
+            by_endpoint("json.dumps").resolved_by.as_deref(),
+            Some("receiver-capitalization-v1")
+        );
+        assert_eq!(
+            by_endpoint("run_report").tier,
+            Some(ResolutionTier::ScopedName)
+        );
+        // Legacy 0.9 call edge: producer-ambiguous → legacy_unknown, never a
+        // guessed precise producer.
+        let legacy = by_endpoint("legacy_fn");
+        assert_eq!(legacy.tier, Some(ResolutionTier::LegacyUnknown));
+        assert_eq!(legacy.resolved_by.as_deref(), Some("legacy-code-edge-v1"));
+    }
+
+    /// Duplicate endpoint pairs select a deterministic representative:
+    /// explicit evidence beats none — regardless of enumeration order.
+    #[test]
+    fn edge_evidence_dedup_prefers_explicit_evidence_deterministically() {
+        let mut explicit = rel("a", "b");
+        explicit.code_resolution = Some(CodeEdgeResolution::new(
+            ResolutionTier::ScopedName,
+            "scope-name-v1",
+        ));
+        let mut bare = rel("a", "b");
+        bare.id = Id::from("aaa-first-alphabetically");
+        bare.code_resolution = None;
+
+        // Both orders must yield the explicit-evidence representative.
+        for order in [
+            [explicit.clone(), bare.clone()],
+            [bare.clone(), explicit.clone()],
+        ] {
+            let (_, callees) = edge_evidence(&order, "a");
+            assert_eq!(callees.len(), 1, "{callees:?}");
+            assert_eq!(callees[0].tier, Some(ResolutionTier::ScopedName));
+            assert_eq!(callees[0].resolved_by.as_deref(), Some("scope-name-v1"));
+        }
     }
 
     /// EN-12: impact rows carry hop distance and order nearest-first.

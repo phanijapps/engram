@@ -31,6 +31,10 @@ pub trait KnowledgeChangeLog: Send + Sync {
         scope: &Scope,
         stable_source_key: &str,
     ) -> CoreResult<Option<ScanCheckpoint>>;
+
+    /// All retained checkpoints in a scope, most recent scan first. Hosts
+    /// without per-key knowledge use this to pick the freshest repo.
+    async fn latest_checkpoints(&self, scope: &Scope) -> CoreResult<Vec<ScanCheckpoint>>;
 }
 
 /// Write side for scan checkpoints (the scan coordinator owns when a scan

@@ -259,6 +259,27 @@ impl engram_knowledge::KnowledgeChangeLog for SqlKnowledgeStore {
             .transpose()?;
         Ok(checkpoint.filter(|cp| scope_allows(&cp.scope, scope)))
     }
+
+    async fn latest_checkpoints(&self, scope: &Scope) -> CoreResult<Vec<ScanCheckpoint>> {
+        let connection = self.lock_conn()?;
+        let mut stmt = connection
+            .prepare(
+                "SELECT record_json FROM scan_checkpoints WHERE tenant = ?1 ORDER BY started_at DESC",
+            )
+            .map_err(sql_error)?;
+        let rows = stmt
+            .query_map(params![scope.tenant], |row| row.get::<_, String>(0))
+            .map_err(sql_error)?;
+        let mut out = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let checkpoint: ScanCheckpoint = serde_json::from_str(&json).map_err(json_error)?;
+            if scope_allows(&checkpoint.scope, scope) {
+                out.push(checkpoint);
+            }
+        }
+        Ok(out)
+    }
 }
 
 #[async_trait]

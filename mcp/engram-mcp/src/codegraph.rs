@@ -592,7 +592,8 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
             ),
             started_at: chrono::Utc::now(),
             completed_at: Some(chrono::Utc::now()),
-            indexed_revision: summary.git_sha.clone(),
+            indexed_revision: engram_ingest::git::current_head(root)
+                .or_else(|| summary.git_sha.clone()),
             status,
             dirty: engram_ingest::git::worktree_dirty(root),
             errors: summary.errors as u32,

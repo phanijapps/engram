@@ -101,7 +101,7 @@ LAUNCH FLAGS
   --taxonomy <path>           Taxonomy config (JSON)
   --layout single|multi       SQLite file layout (default single)
   --db-file <name>            DB filename override
-  --tools core|full|all|consolidated   Tool profile (default core = 21 tools)
+  --tools core|full|all|consolidated   Tool profile (default core = 27 tools)
   --backend sqlite|pgvector   Engine recipe (default sqlite)
   --pg-connection-string <url> Postgres URL (pgvector; env ENGRAM_PG_CONNECTION_STRING)
   --slim                      Skip embeddings (no model download/load); keep lexical + graph
@@ -267,7 +267,7 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
         }
         other => {
             eprintln!(
-                "engram-mcp: unknown --tools profile '{other}'; using core (21 tools). \
+                "engram-mcp: unknown --tools profile '{other}'; using core (27 tools). \
                  Options: core | full | all | consolidated"
             );
             Some(DEFAULT_TOOLS)
@@ -308,6 +308,11 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     "put_entity",
     "put_relationship",
     "write_memory",
+    // Gated writes — inert until an operator approves (review queue).
+    "proposal_submit",
+    "proposal_list",
+    "proposal_approve",
+    "proposal_reject",
     // Decisions over time — the judgment surface.
     "belief_get",
     "contradiction_list",
@@ -317,6 +322,9 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     "forget",
     "graph_health",
     "fetch_content",
+    // Freshness — resumable change pages + truthful staleness.
+    "subscribe_changes",
+    "code_staleness",
 ];
 
 /// The 7 consolidated core tools — the prior default, now behind

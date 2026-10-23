@@ -71,26 +71,30 @@ pub fn subscribe_changes(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// `code_staleness`: truthful freshness for the project's code graph. Reads
 /// the latest checkpoint; git facts are local-only (no fetch).
 pub fn code_staleness(app: &App, args: &Value) -> Result<Value, ToolError> {
-    let default_key = match args["source_key"].as_str() {
-        Some(key) => key.to_owned(),
-        None => app.scope.tenant.clone(),
+    let log = app.provider.require_change_log().map_err(internal)?;
+    // Explicit source_key wins; otherwise the FRESHEST checkpoint in this
+    // scope (the tenant is not a source key — checkpoints are keyed by repo
+    // identity, so the default resolves through the checkpoint list).
+    let checkpoints = block_on(log.latest_checkpoints(&app.scope)).map_err(internal)?;
+    let (key, checkpoint) = match args["source_key"].as_str() {
+        Some(key) => {
+            let cp = block_on(log.latest_checkpoint(&app.scope, key)).map_err(internal)?;
+            (key.to_owned(), cp)
+        }
+        None => match checkpoints.first() {
+            Some(cp) => (cp.stable_source_key.clone(), Some(cp.clone())),
+            None => (app.scope.tenant.clone(), None),
+        },
     };
-    let checkpoint = latest_checkpoint(app, &default_key)?;
     let (current, behind, dirty) = git_facts(checkpoint.as_ref());
     let staleness = engram_domain::derive_staleness(
         checkpoint.as_ref(),
-        &default_key,
+        &key,
         current.as_deref(),
         behind,
         dirty,
     );
     Ok(protocol::text_content(render_staleness(&staleness)))
-}
-
-/// Latest checkpoint through the provider's checkpoint store.
-pub fn latest_checkpoint(app: &App, source_key: &str) -> Result<Option<ScanCheckpoint>, ToolError> {
-    let log = app.provider.require_change_log().map_err(internal)?;
-    block_on(log.latest_checkpoint(&app.scope, source_key)).map_err(internal)
 }
 
 /// Local git facts for the checkpoint's scan root (no fetch, no origin
@@ -150,13 +154,23 @@ pub fn render_staleness(s: &engram_domain::CodeGraphStaleness) -> String {
 /// read plus local git); omitted when no checkpoint exists, because
 /// unindexed repos have nothing to be stale against.
 pub fn staleness_note(app: &App) -> String {
-    let key = &app.scope.tenant;
-    let Ok(Some(cp)) = latest_checkpoint(app, key) else {
+    let Ok(log) = app.provider.require_change_log() else {
+        return String::new();
+    };
+    let latest = block_on(log.latest_checkpoints(&app.scope))
+        .ok()
+        .and_then(|all| all.first().cloned());
+    let Some(cp) = latest else {
         return String::new();
     };
     let (current, behind, dirty) = git_facts(Some(&cp));
-    let staleness =
-        engram_domain::derive_staleness(Some(&cp), key, current.as_deref(), behind, dirty);
+    let staleness = engram_domain::derive_staleness(
+        Some(&cp),
+        &cp.stable_source_key,
+        current.as_deref(),
+        behind,
+        dirty,
+    );
     if staleness.status == StalenessStatus::Current {
         String::new()
     } else {

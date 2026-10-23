@@ -20,6 +20,7 @@ use engram_knowledge::{
 };
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
+use engram_proposals::ProposalService;
 use engram_retrieval::{RetrievalIndex, VectorIndex};
 use engram_runtime::{CoreError, CoreResult};
 use std::sync::Arc;
@@ -64,6 +65,7 @@ pub struct EngramProvider {
     taxonomy: Option<Arc<dyn TaxonomyRepository>>,
     beliefs: Option<Arc<dyn BeliefRepository>>,
     procedures: Option<Arc<dyn ProcedureRepository>>,
+    proposals: Option<Arc<ProposalService>>,
     hierarchy: Option<Arc<dyn HierarchyRepository>>,
     retrieval: Option<Arc<dyn RetrievalIndex>>,
     vectors: Option<Arc<dyn VectorIndex>>,
@@ -261,6 +263,11 @@ impl EngramProvider {
         self.procedures.as_ref()
     }
 
+    /// The operator proposal queue service, when wired.
+    pub fn proposals(&self) -> Option<&Arc<ProposalService>> {
+        self.proposals.as_ref()
+    }
+
     /// Returns the hierarchy repository handle if supported.
     pub fn hierarchy(&self) -> Option<&Arc<dyn HierarchyRepository>> {
         self.hierarchy.as_ref()
@@ -440,6 +447,13 @@ impl EngramProvider {
     }
 
     /// Returns the procedure repository handle or an error if it is not wired.
+    pub fn require_proposals(&self) -> CoreResult<&Arc<ProposalService>> {
+        self.proposals()
+            .ok_or_else(|| CoreError::ProviderUnavailable {
+                provider: "proposals".to_string(),
+            })
+    }
+
     pub fn require_procedures(&self) -> CoreResult<&Arc<dyn ProcedureRepository>> {
         self.procedures()
             .ok_or_else(|| CoreError::CapabilityUnsupported {
@@ -599,6 +613,7 @@ impl EngramProvider {
             taxonomy: None,
             beliefs: None,
             procedures: None,
+            proposals: None,
             hierarchy: None,
             retrieval: None,
             vectors: None,
@@ -638,6 +653,7 @@ pub struct EngramProviderBuilder {
     taxonomy: Option<Arc<dyn TaxonomyRepository>>,
     beliefs: Option<Arc<dyn BeliefRepository>>,
     procedures: Option<Arc<dyn ProcedureRepository>>,
+    proposals: Option<Arc<ProposalService>>,
     hierarchy: Option<Arc<dyn HierarchyRepository>>,
     retrieval: Option<Arc<dyn RetrievalIndex>>,
     vectors: Option<Arc<dyn VectorIndex>>,
@@ -671,6 +687,7 @@ impl EngramProviderBuilder {
             taxonomy: None,
             beliefs: None,
             procedures: None,
+            proposals: None,
             hierarchy: None,
             retrieval: None,
             vectors: None,
@@ -737,6 +754,12 @@ impl EngramProviderBuilder {
     /// Attaches the procedure repository handle.
     pub fn procedures(mut self, handle: Arc<dyn ProcedureRepository>) -> Self {
         self.procedures = Some(handle);
+        self
+    }
+
+    /// Attaches the operator proposal queue service.
+    pub fn proposals(mut self, handle: Arc<ProposalService>) -> Self {
+        self.proposals = Some(handle);
         self
     }
 
@@ -863,6 +886,7 @@ impl EngramProviderBuilder {
             taxonomy: self.taxonomy,
             beliefs: self.beliefs,
             procedures: self.procedures,
+            proposals: self.proposals,
             hierarchy: self.hierarchy,
             retrieval: self.retrieval,
             vectors: self.vectors,

@@ -51,25 +51,6 @@ pub fn split_dotted(reference: &str) -> (Option<&str>, &str) {
     (Some(hint), name)
 }
 
-/// Resolution ladder for one reference name from (optional) file context.
-/// Returns the settled candidate or the surviving ambiguity.
-///
-/// Retained for callers that only need the binding; evidence-aware callers
-/// use [`crate::edge_resolution::attempt`] (the shared ladder).
-fn resolve_one(
-    index: &SymbolIndex,
-    name: &str,
-    from_path: Option<&str>,
-    from_repo: Option<&str>,
-) -> Resolution {
-    if let Some(path) = from_path {
-        if let Resolution::Resolved(c) = index.resolve(name, Some(path), from_repo) {
-            return Resolution::Resolved(c);
-        }
-    }
-    index.resolve(name, from_path, from_repo)
-}
-
 /// Fill name-only object refs (`calls`, `extends`, `implements`,
 /// `routes_to`) and return
 /// the unresolved-reference ledger for everything that did not settle.

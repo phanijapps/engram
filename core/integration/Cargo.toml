@@ -15,6 +15,7 @@ engram-knowledge = { path = "../knowledge", version = "0.1.0" }
 engram-hierarchy = { path = "../hierarchy", version = "0.1.0" }
 engram-belief = { path = "../belief", version = "0.1.0" }
 engram-procedures = { path = "../procedures", version = "0.1.0" }
+engram-proposals = { path = "../proposals", version = "0.1.0" }
 engram-retrieval = { path = "../retrieval", version = "0.1.0" }
 engram-consolidation = { path = "../consolidation", version = "0.1.0" }
 engram-reflection = { path = "../reflection", version = "0.1.0", optional = true }

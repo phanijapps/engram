@@ -460,6 +460,47 @@ Enum:
 - `contradiction_detected`
 - `hierarchy_built`
 
+## Operator Proposal Model
+
+Inert, reviewable pending writes (`OperatorProposal`). Proposals are NEVER
+recall targets: no indexing, embeddings, hierarchy/summary building, or
+consolidation scans over their bodies; only a successfully promoted memory
+becomes recallable through the normal memory write path. First accepted
+slice: **memory-write proposals only** (`ProposalMemoryWrite`).
+
+Fields (`OperatorProposal`): `id` (OperatorProposalId), `scope` (immutable
+after submit), `payload` (typed memory intent: kind/content/policy/links —
+cannot set status, reviewer, memory id, or permissions), `status`
+(`pending` | `applying` | `approved` | `rejected`), `submittedBy` (evidence
+attribution only — never authorization), `payloadFingerprint` (immutable
+version pin), `version` (optimistic concurrency; every transition bumps),
+`createdAt`/`updatedAt`, optional `decision` (`{reviewer, decidedAt,
+reason}`), optional `promotion` receipt (`{memoryId, eventId,
+idempotencyKey, appliedAt}`).
+
+Rules:
+
+- Transitions: `pending → applying` (approval claim, CAS), `applying →
+  approved` (receipt persisted), `pending → rejected`. Terminal states never
+  change; rejection cannot overtake an in-flight approval.
+- Approval is orchestration, not a state flip: claim →
+  `MemoryService::write_memory` (the policy authorizer runs) → finalize.
+  The deterministic per-proposal idempotency key (`proposal-promotion-{id}`)
+  makes retries replay the same memory — never a shared batch key.
+- No cross-store transaction: a memory committed while the finalize failed
+  leaves the proposal visibly `applying` with the memory id reported
+  (in-progress/recovery), never silently rejected or rolled back.
+- Operator authority is a trusted host concern (`ProposalAuthorizer` port);
+  an identity-looking payload is data, not authentication. The default
+  permissive memory-policy bootstrap is NOT operator authentication.
+- Queue governance is distinct from the promoted memory's governance;
+  listing is not a retrieval lane.
+
+Operations: `proposal_submit` (scope-bound submission key idempotency),
+`proposal_list` (status filter + opaque id cursor, limit ≤ 100),
+`proposal_approve` (expected version + trusted reviewer),
+`proposal_reject` (expected version + reviewer + reason).
+
 ## Belief Network Model
 
 Beliefs are derived stances over evidence. They are not raw memories and should

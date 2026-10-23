@@ -212,6 +212,16 @@ export interface NativeProceduresApiBinding {
   incrementFailureJson(requestJson: string): string;
 }
 
+/** Operator proposal queue proxy: inert pending writes promoted through the
+ *  policy-checked memory write path (approval is review-gated; `applying`
+ *  outcomes report the retry-safe in-progress state). */
+export interface NativeProposalsApiBinding {
+  submitJson(requestJson: string): string;
+  listJson(requestJson: string): string;
+  approveJson(requestJson: string): string;
+  rejectJson(requestJson: string): string;
+}
+
 /** Native handle for configured Rust embedding inference and space identity. */
 export interface NativeEmbeddingProviderApiBinding {
   embeddingSpace(): string;
@@ -249,6 +259,7 @@ export interface NativeProviderBinding {
   requireKnowledgeQueryApi(): NativeKnowledgeQueryApiBinding;
   requireHierarchyApi(): NativeHierarchyApiBinding;
   requireProceduresApi(): NativeProceduresApiBinding;
+  requireProposalsApi(): NativeProposalsApiBinding;
 }
 
 /** Constructor shape for the held `EngramProvider`. */

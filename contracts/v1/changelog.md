@@ -1,5 +1,12 @@
 # v1 Changelog
 
+## 2026-10-22 (proposals)
+
+- Added `OperatorProposalStatus`, `ProposalMemoryWrite`, and `OperatorProposal`
+  definitions with pending + approved examples (operator proposal queue;
+  approval routes through the policy-checked memory write path).
+  Additive/compatible: new types + operations; no existing shapes change.
+
 ## 2026-10-22
 
 - Added `ResolutionTier` + `CodeEdgeResolution` definitions and the optional

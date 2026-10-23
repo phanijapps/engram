@@ -28,6 +28,10 @@ predict_context
 procedure_increment
 procedure_list
 procedure_put
+proposal_approve
+proposal_list
+proposal_reject
+proposal_submit
 put_entity
 put_relationship
 recall

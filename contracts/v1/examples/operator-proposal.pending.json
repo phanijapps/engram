@@ -1,0 +1,18 @@
+{
+  "id": "proposal-1764-abc123def456",
+  "scope": { "tenant": "acme" },
+  "payload": {
+    "kind": "fact",
+    "content": { "text": "Deploy gate holds at v2 until the migration lands" },
+    "policy": {
+      "visibility": "workspace",
+      "retention": "durable",
+      "allowedUses": ["retrieval"]
+    }
+  },
+  "status": "pending",
+  "submittedBy": { "id": "agent-7", "kind": "agent" },
+  "payloadFingerprint": "9f2c…",
+  "version": 1,
+  "createdAt": "2026-10-22T20:00:00Z"
+}

@@ -953,6 +953,106 @@ export const engramV1Schema = {
       ],
       "type": "object"
     },
+    "OperatorProposal": {
+      "additionalProperties": false,
+      "description": "Inert, reviewable pending write. Never a recall target; approval promotes through the policy-checked memory write path.",
+      "properties": {
+        "createdAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "decision": {
+          "additionalProperties": false,
+          "properties": {
+            "decidedAt": {
+              "$ref": "#/$defs/Timestamp"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "reviewer": {
+              "$ref": "#/$defs/Actor"
+            }
+          },
+          "required": [
+            "reviewer",
+            "decidedAt"
+          ],
+          "type": "object"
+        },
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "payload": {
+          "$ref": "#/$defs/ProposalMemoryWrite"
+        },
+        "payloadFingerprint": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "promotion": {
+          "additionalProperties": false,
+          "properties": {
+            "appliedAt": {
+              "$ref": "#/$defs/Timestamp"
+            },
+            "eventId": {
+              "$ref": "#/$defs/Identifier"
+            },
+            "idempotencyKey": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "memoryId": {
+              "$ref": "#/$defs/Identifier"
+            }
+          },
+          "required": [
+            "memoryId",
+            "eventId",
+            "idempotencyKey",
+            "appliedAt"
+          ],
+          "type": "object"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "status": {
+          "$ref": "#/$defs/OperatorProposalStatus"
+        },
+        "submittedBy": {
+          "$ref": "#/$defs/Actor"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "version": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "payload",
+        "status",
+        "submittedBy",
+        "payloadFingerprint",
+        "version",
+        "createdAt"
+      ],
+      "type": "object"
+    },
+    "OperatorProposalStatus": {
+      "description": "Operator proposal queue lifecycle. pending -> applying (approval claim, CAS); applying -> approved (promotion receipt); pending -> rejected. applying is the visible in-progress/recovery state.",
+      "enum": [
+        "pending",
+        "applying",
+        "approved",
+        "rejected"
+      ],
+      "type": "string"
+    },
     "Policy": {
       "additionalProperties": false,
       "properties": {
@@ -1007,6 +1107,33 @@ export const engramV1Schema = {
       "required": [
         "visibility",
         "retention"
+      ],
+      "type": "object"
+    },
+    "ProposalMemoryWrite": {
+      "additionalProperties": false,
+      "description": "Typed proposed memory intent (first accepted slice: memory writes only). Cannot set status, reviewer, memory id, or permissions.",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/MemoryContent"
+        },
+        "kind": {
+          "$ref": "#/$defs/MemoryKind"
+        },
+        "links": {
+          "items": {
+            "$ref": "#/$defs/MemoryLink"
+          },
+          "type": "array"
+        },
+        "policy": {
+          "$ref": "#/$defs/Policy"
+        }
+      },
+      "required": [
+        "kind",
+        "content",
+        "policy"
       ],
       "type": "object"
     },

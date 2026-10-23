@@ -91,6 +91,10 @@ pub struct CapabilityReport {
     /// Replayable procedures with success/failure accounting (RFC-0016 Layer 6).
     #[serde(default = "default_procedures")]
     pub procedures: CapabilityState,
+    /// Operator proposal queue: inert, reviewable pending writes promoted
+    /// through the policy-checked memory write path.
+    #[serde(default = "default_proposals")]
+    pub proposals: CapabilityState,
 
     /// Phase-2 code-graph queries: `file_dependencies` + `explore`
     /// (RFC-0020 / engram-code spec) — Supported when the KnowledgeQuery
@@ -108,6 +112,13 @@ fn default_code_graph() -> CapabilityState {
 
 /// Serde default for the `identity` field.
 fn default_identity() -> CapabilityState {
+    CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    }
+}
+
+/// Serde default for the `proposals` field.
+fn default_proposals() -> CapabilityState {
     CapabilityState::Unsupported {
         reason: CapabilityReason::FeatureDisabled,
     }
@@ -153,6 +164,7 @@ impl CapabilityReport {
             consolidation: state.clone(),
             identity: state.clone(),
             procedures: state.clone(),
+            proposals: state.clone(),
             code_graph: state,
         }
     }
@@ -184,6 +196,7 @@ impl CapabilityReport {
             && self.consolidation.is_supported()
             && self.identity.is_supported()
             && self.procedures.is_supported()
+            && self.proposals.is_supported()
     }
 
     /// Returns true if memory operations are supported.
@@ -339,6 +352,7 @@ impl CapabilityReportBuilder {
                 retrieval: provider_unavailable.clone(),
                 vectors: provider_unavailable.clone(),
                 procedures: provider_unavailable.clone(),
+                proposals: provider_unavailable.clone(),
                 migration: provider_unavailable,
                 hybrid_search: feature_disabled.clone(),
                 episodes_evidence: feature_disabled.clone(),
@@ -406,6 +420,12 @@ impl CapabilityReportBuilder {
     /// Sets the procedures capability state.
     pub fn procedures(mut self, state: CapabilityState) -> Self {
         self.report.procedures = state;
+        self
+    }
+
+    /// Sets the proposals capability state.
+    pub fn proposals(mut self, state: CapabilityState) -> Self {
+        self.report.proposals = state;
         self
     }
 

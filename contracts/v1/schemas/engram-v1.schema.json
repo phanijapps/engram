@@ -1651,6 +1651,133 @@
         "scope",
         "createdAt"
       ]
+    },
+    "OperatorProposalStatus": {
+      "type": "string",
+      "description": "Operator proposal queue lifecycle. pending -> applying (approval claim, CAS); applying -> approved (promotion receipt); pending -> rejected. applying is the visible in-progress/recovery state.",
+      "enum": [
+        "pending",
+        "applying",
+        "approved",
+        "rejected"
+      ]
+    },
+    "ProposalMemoryWrite": {
+      "type": "object",
+      "description": "Typed proposed memory intent (first accepted slice: memory writes only). Cannot set status, reviewer, memory id, or permissions.",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/MemoryKind"
+        },
+        "content": {
+          "$ref": "#/$defs/MemoryContent"
+        },
+        "policy": {
+          "$ref": "#/$defs/Policy"
+        },
+        "links": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MemoryLink"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "content",
+        "policy"
+      ]
+    },
+    "OperatorProposal": {
+      "type": "object",
+      "description": "Inert, reviewable pending write. Never a recall target; approval promotes through the policy-checked memory write path.",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "payload": {
+          "$ref": "#/$defs/ProposalMemoryWrite"
+        },
+        "status": {
+          "$ref": "#/$defs/OperatorProposalStatus"
+        },
+        "submittedBy": {
+          "$ref": "#/$defs/Actor"
+        },
+        "payloadFingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "createdAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reviewer": {
+              "$ref": "#/$defs/Actor"
+            },
+            "decidedAt": {
+              "$ref": "#/$defs/Timestamp"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "reviewer",
+            "decidedAt"
+          ]
+        },
+        "promotion": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "memoryId": {
+              "$ref": "#/$defs/Identifier"
+            },
+            "eventId": {
+              "$ref": "#/$defs/Identifier"
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "minLength": 1
+            },
+            "appliedAt": {
+              "$ref": "#/$defs/Timestamp"
+            }
+          },
+          "required": [
+            "memoryId",
+            "eventId",
+            "idempotencyKey",
+            "appliedAt"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "scope",
+        "payload",
+        "status",
+        "submittedBy",
+        "payloadFingerprint",
+        "version",
+        "createdAt"
+      ]
     }
   }
 }

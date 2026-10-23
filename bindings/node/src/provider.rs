@@ -43,6 +43,7 @@ use engram_knowledge::{
 };
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
+use engram_proposals::ProposalService;
 use engram_retrieval::{RetrievalIndex, VectorIndex};
 use engram_runtime::CoreResult;
 use futures::executor::block_on;
@@ -349,6 +350,18 @@ impl NativeProvider {
             .map_err(to_napi_error)?
             .clone();
         Ok(NativeProceduresApi { handle })
+    }
+
+    /// Returns an operator proposal queue handle (inert pending writes),
+    /// or throws if not wired.
+    #[napi(js_name = "requireProposalsApi")]
+    pub fn require_proposals_api(&self) -> Result<NativeProposalsApi> {
+        let handle = self
+            .inner
+            .require_proposals()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeProposalsApi { handle })
     }
 
     /// Returns an ontology handle, or throws if not wired.
@@ -1271,6 +1284,53 @@ impl NativeProceduresApi {
 // Minimal handle proxies for remaining capabilities (ADR-0022 parity).
 // Each holds the trait handle + a `ping`. Real methods added as needed.
 // ---------------------------------------------------------------------------
+
+/// Operator proposal queue API: submit, list, approve, and reject inert
+/// pending writes. Approval promotes through the policy-checked memory write
+/// path; `applying` outcomes report the retry-safe in-progress state.
+#[napi]
+pub struct NativeProposalsApi {
+    handle: Arc<ProposalService>,
+}
+
+#[napi]
+impl NativeProposalsApi {
+    /// Submits a proposal. Takes a `ProposalSubmitRequest` JSON, returns a
+    /// `ProposalSubmitResult` JSON.
+    #[napi(js_name = "submitJson")]
+    pub fn submit_json(&self, request_json: String) -> Result<String> {
+        let request = decode(&request_json)?;
+        let result = block_on(self.handle.submit(request)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Lists queue records. Takes a `ProposalListRequest` JSON, returns a
+    /// `ProposalListResult` JSON.
+    #[napi(js_name = "listJson")]
+    pub fn list_json(&self, request_json: String) -> Result<String> {
+        let request = decode(&request_json)?;
+        let result = block_on(self.handle.list(request)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Approves a pending proposal. Takes a `ProposalApproveRequest` JSON,
+    /// returns a `ProposalApproveResult` JSON.
+    #[napi(js_name = "approveJson")]
+    pub fn approve_json(&self, request_json: String) -> Result<String> {
+        let request = decode(&request_json)?;
+        let result = block_on(self.handle.approve(request)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Rejects a pending proposal. Takes a `ProposalRejectRequest` JSON,
+    /// returns a `ProposalRejectResult` JSON.
+    #[napi(js_name = "rejectJson")]
+    pub fn reject_json(&self, request_json: String) -> Result<String> {
+        let request = decode(&request_json)?;
+        let result = block_on(self.handle.reject(request)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
 
 #[napi]
 pub struct NativeOntologyApi {

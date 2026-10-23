@@ -81,6 +81,10 @@ export type MemoryEventKind =
   | "hierarchy_built";
 export type MemoryStatus = "active" | "archived" | "redacted" | "forgotten" | "expired";
 /**
+ * Operator proposal queue lifecycle. pending -> applying (approval claim, CAS); applying -> approved (promotion receipt); pending -> rejected. applying is the visible in-progress/recovery state.
+ */
+export type OperatorProposalStatus = "pending" | "applying" | "approved" | "rejected";
+/**
  * Lifecycle of a recorded unresolved cross-file code reference. pending -> resolved (orphan sweep); pending -> failed (operator only); terminal states never change.
  */
 export type UnresolvedReferenceStatus = "pending" | "resolved" | "failed";
@@ -119,7 +123,10 @@ export interface EngramV1Types {
   MemoryStatus: MemoryStatus;
   Metadata: Metadata;
   OmittedResult: OmittedResult;
+  OperatorProposal: OperatorProposal;
+  OperatorProposalStatus: OperatorProposalStatus;
   Policy: Policy;
+  ProposalMemoryWrite: ProposalMemoryWrite;
   Provenance: Provenance;
   QueryFilter: QueryFilter;
   Requester: Requester;
@@ -475,6 +482,40 @@ export interface MemoryRecord {
   scope: Scope;
   status: MemoryStatus;
   updatedAt?: Timestamp;
+}
+/**
+ * Inert, reviewable pending write. Never a recall target; approval promotes through the policy-checked memory write path.
+ */
+export interface OperatorProposal {
+  createdAt: Timestamp;
+  decision?: {
+    decidedAt: Timestamp;
+    reason?: string;
+    reviewer: Actor;
+  };
+  id: Identifier;
+  payload: ProposalMemoryWrite;
+  payloadFingerprint: string;
+  promotion?: {
+    appliedAt: Timestamp;
+    eventId: Identifier;
+    idempotencyKey: string;
+    memoryId: Identifier;
+  };
+  scope: Scope;
+  status: OperatorProposalStatus;
+  submittedBy: Actor;
+  updatedAt?: Timestamp;
+  version: number;
+}
+/**
+ * Typed proposed memory intent (first accepted slice: memory writes only). Cannot set status, reviewer, memory id, or permissions.
+ */
+export interface ProposalMemoryWrite {
+  content: MemoryContent;
+  kind: MemoryKind;
+  links?: MemoryLink[];
+  policy: Policy;
 }
 /**
  * Recorded best-effort-failed cross-file code reference (the code-resolution honesty ledger). Same lifecycle as relationships: retracted with the referring document on re-ingest, re-attempted by the orphan sweep.

@@ -228,6 +228,22 @@ class StubNativeProvider {
       }
     };
   }
+  requireProposalsApi() {
+    return {
+      submitJson(): string {
+        return "null";
+      },
+      listJson(): string {
+        return "{}";
+      },
+      approveJson(): string {
+        return "null";
+      },
+      rejectJson(): string {
+        return "null";
+      },
+    };
+  }
   static fromProfileFile(_path: string): StubNativeProvider {
     return new StubNativeProvider();
   }

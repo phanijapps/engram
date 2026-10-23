@@ -1,4 +1,4 @@
-//! Code-edge resolution evidence (wicked-estate adoption, slice 1).
+//! Code-edge resolution evidence (enhancements adoption, slice 1).
 //!
 //! Single home for two things both `resolve_refs` (core) and the orphan
 //! sweep (adapter) need:

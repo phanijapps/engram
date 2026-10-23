@@ -1,6 +1,6 @@
 # Spec: code-edge resolution evidence
 
-**Status:** accepted (implementation slice 1 of the wicked-estate top-3 adoption)
+**Status:** accepted (implementation slice 1 of the top-3 enhancements adoption)
 **ADR:** 0028 amendment (2026-10-22) · **Domain:** `docs/domain-data-model.md` §Code indexing
 
 ## Problem

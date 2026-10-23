@@ -1,6 +1,6 @@
 # Spec: operator proposal queue
 
-**Status:** accepted (implementation slice 2 of the wicked-estate top-3 adoption)
+**Status:** accepted (implementation slice 2 of the top-3 enhancements adoption)
 **Domain:** `docs/domain-data-model.md` §Operator Proposal Model · **Schema:** `contracts/v1` (OperatorProposal*)
 
 ## Problem

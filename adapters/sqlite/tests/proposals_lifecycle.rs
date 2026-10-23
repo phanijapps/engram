@@ -1,4 +1,4 @@
-//! Operator proposal queue lifecycle tests (wicked-estate adoption, slice 2).
+//! Operator proposal queue lifecycle tests (enhancements adoption, slice 2).
 //!
 //! Acceptance tests from the spec: approval routes through the policy-checked
 //! memory write path (a denying authorizer leaves NO active memory), pending

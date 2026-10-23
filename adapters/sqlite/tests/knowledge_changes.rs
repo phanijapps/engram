@@ -1,4 +1,4 @@
-//! Knowledge change-log + scan-checkpoint tests (wicked-estate adoption,
+//! Knowledge change-log + scan-checkpoint tests (enhancements adoption,
 //! slice 3): no-op rule, resumable paging, removal events, reset detection,
 //! stale-run checkpoint guard, and the staleness derivation matrix.
 

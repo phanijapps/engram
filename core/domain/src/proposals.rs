@@ -1,4 +1,4 @@
-//! Operator proposal queue (wicked-estate adoption, slice 2).
+//! Operator proposal queue (enhancements adoption, slice 2).
 //!
 //! Inert, reviewable pending writes. A proposal is NEVER a recall target:
 //! only a successfully promoted memory becomes recallable through the normal

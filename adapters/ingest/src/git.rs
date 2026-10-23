@@ -205,7 +205,7 @@ fn invalid<T>(reason: impl Into<String>) -> CoreResult<T> {
     })
 }
 
-// ── Scan freshness helpers (wicked-estate adoption, slice 3) ────────────────
+// ── Scan freshness helpers (enhancements adoption, slice 3) ────────────────
 // Full-OID, local-only git facts. No fetch, no origin-remote requirement,
 // no fabricated zeros: every helper returns None when git cannot answer.
 

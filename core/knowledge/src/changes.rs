@@ -1,4 +1,4 @@
-//! Knowledge change-log and scan-checkpoint ports (wicked-estate adoption,
+//! Knowledge change-log and scan-checkpoint ports (enhancements adoption,
 //! slice 3).
 //!
 //! Reads only: mutation logging is the knowledge adapter's obligation on its

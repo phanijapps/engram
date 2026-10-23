@@ -1,4 +1,4 @@
-//! Change-log + freshness tools (wicked-estate adoption, slice 3).
+//! Change-log + freshness tools (enhancements adoption, slice 3).
 //!
 //! `subscribe_changes` is BOUNDED POLLING, not a stream: one page plus a
 //! `nextCursor`; long-lived consumers poll. `code_staleness` reports the

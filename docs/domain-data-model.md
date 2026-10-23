@@ -1052,7 +1052,7 @@ Rules:
 - Re-ingesting the referring file retracts its records (they are regenerated
   by the fresh extraction pass).
 
-### Knowledge changes and scan freshness (wicked-estate adoption, slice 3)
+### Knowledge changes and scan freshness (enhancements adoption, slice 3)
 
 The knowledge change log is INVALIDATION METADATA, not recallable
 knowledge: no document bodies or secrets in change records; memories and

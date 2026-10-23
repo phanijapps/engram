@@ -1,4 +1,4 @@
-//! Code-edge resolution evidence (wicked-estate adoption, slice 1).
+//! Code-edge resolution evidence (enhancements adoption, slice 1).
 //!
 //! A code relationship's endpoints are established by different mechanisms:
 //! some are direct structural facts from one document's AST, some are bound

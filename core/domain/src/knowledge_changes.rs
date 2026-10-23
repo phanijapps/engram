@@ -1,4 +1,4 @@
-//! Knowledge change log + scan freshness contracts (wicked-estate adoption,
+//! Knowledge change log + scan freshness contracts (enhancements adoption,
 //! slice 3).
 //!
 //! The change log is INVALIDATION METADATA, not recallable knowledge: no

@@ -342,7 +342,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         }
     }
 
-    // Operator proposal queue (wicked-estate adoption, slice 2): the queue
+    // Operator proposal queue (enhancements adoption, slice 2): the queue
     // composes its own SQLite cell with the WIRED memory service handle, so
     // approval routes through the policy-checked write path. The local
     // authorizer allows submit+review for the configured project scope and

@@ -1,4 +1,4 @@
-//! Operator proposal tools (wicked-estate adoption, slice 2): submit, list,
+//! Operator proposal tools (enhancements adoption, slice 2): submit, list,
 //! approve, and reject inert pending writes over the `proposals` provider
 //! handle.
 //!

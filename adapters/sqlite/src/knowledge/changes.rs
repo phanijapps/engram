@@ -1,4 +1,4 @@
-//! Knowledge change log + scan checkpoints (wicked-estate adoption, slice 3).
+//! Knowledge change log + scan checkpoints (enhancements adoption, slice 3).
 //!
 //! The log is invalidation metadata: mutations append rows under the SAME
 //! connection lock as the mutation itself (writer-atomic; a crash between

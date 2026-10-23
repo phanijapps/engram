@@ -1,7 +1,7 @@
 # Spec: knowledge change log, scan checkpoints, and staleness
 
 **Status:** accepted (slice 3A + 3B + the subscribe/staleness part of 3D of
-the wicked-estate top-3 adoption). The filesystem watcher (plan slice 3C)
+the top-3 enhancements adoption). The filesystem watcher (plan slice 3C)
 and `ingest_watch` capability states are explicitly NOT in this slice.
 
 ## Problem

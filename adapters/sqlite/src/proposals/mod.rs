@@ -1,4 +1,4 @@
-//! SQLite-backed operator proposal queue (wicked-estate adoption, slice 2).
+//! SQLite-backed operator proposal queue (enhancements adoption, slice 2).
 //!
 //! Storage-only CAS state machine: `pending → applying → approved` and
 //! `pending → rejected` transitions are guarded by `(id, version, status)`

@@ -1,4 +1,4 @@
-//! engram-proposals — operator proposal queue behavior (wicked-estate
+//! engram-proposals — operator proposal queue behavior (enhancements
 //! adoption, slice 2).
 //!
 //! Storage-neutral orchestration for inert, reviewable pending writes:

@@ -1,5 +1,12 @@
 # v1 Changelog
 
+## 2026-10-22 (change log)
+
+- Added `KnowledgeChangeOp`, `KnowledgeChangeTargetType`, `KnowledgeChange`,
+  `KnowledgeChangesPage`, `ScanStatus`, `ScanCheckpoint`, `StalenessStatus`,
+  and `CodeGraphStaleness` definitions with a page example (knowledge change
+  log + scan freshness; seq is a decimal string). Additive/compatible.
+
 ## 2026-10-22 (proposals)
 
 - Added `OperatorProposalStatus`, `ProposalMemoryWrite`, and `OperatorProposal`

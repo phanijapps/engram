@@ -10,6 +10,7 @@ export type CodeEdgeKind = "calls" | "imports" | "contains" | "extends" | "imple
  */
 export type ResolutionTier = "parsed" | "scoped_name" | "heuristic" | "legacy_unknown";
 export type Timestamp = string;
+export type StalenessStatus = "current" | "behind" | "unknown" | "unindexed" | "diverged" | "partial";
 export type DeleteMode = "delete" | "redact" | "tombstone" | "archive";
 export type EvidenceRef = EvidenceRef1 & {
   location?: SourceLocation;
@@ -79,11 +80,20 @@ export type MemoryEventKind =
   | "belief_retracted"
   | "contradiction_detected"
   | "hierarchy_built";
+/**
+ * Knowledge change-log operation vocabulary.
+ */
+export type KnowledgeChangeOp = "upsert" | "remove" | "archive" | "restore";
+/**
+ * Knowledge target kinds appearing in the change log. Memories and proposals never appear.
+ */
+export type KnowledgeChangeTargetType = "graph" | "entity" | "relationship" | "document" | "chunk";
 export type MemoryStatus = "active" | "archived" | "redacted" | "forgotten" | "expired";
 /**
  * Operator proposal queue lifecycle. pending -> applying (approval claim, CAS); applying -> approved (promotion receipt); pending -> rejected. applying is the visible in-progress/recovery state.
  */
 export type OperatorProposalStatus = "pending" | "applying" | "approved" | "rejected";
+export type ScanStatus = "in_progress" | "completed" | "partial";
 /**
  * Lifecycle of a recorded unresolved cross-file code reference. pending -> resolved (orphan sweep); pending -> failed (operator only); terminal states never change.
  */
@@ -93,6 +103,7 @@ export interface EngramV1Types {
   Actor: Actor;
   CodeEdgeKind: CodeEdgeKind;
   CodeEdgeResolution: CodeEdgeResolution;
+  CodeGraphStaleness: CodeGraphStaleness;
   ConceptRef: ConceptRef;
   ContextBudget: ContextBudget;
   ContextPayload: ContextPayload;
@@ -111,6 +122,10 @@ export interface EngramV1Types {
   ForgetResult: ForgetResult;
   FusionTrace: FusionTrace;
   Identifier: Identifier;
+  KnowledgeChange: KnowledgeChange;
+  KnowledgeChangeOp: KnowledgeChangeOp;
+  KnowledgeChangeTargetType: KnowledgeChangeTargetType;
+  KnowledgeChangesPage: KnowledgeChangesPage;
   KnowledgeChunk: KnowledgeChunk;
   KnowledgeChunkKind: KnowledgeChunkKind;
   KnowledgeSource: KnowledgeSource;
@@ -138,11 +153,14 @@ export interface EngramV1Types {
   RetrievalScore: RetrievalScore;
   RetrievalSourceFailure: RetrievalSourceFailure;
   RetrievalTargetType: RetrievalTargetType;
+  ScanCheckpoint: ScanCheckpoint;
+  ScanStatus: ScanStatus;
   Scope: Scope;
   SourceDocument: SourceDocument;
   SourceDocumentKind: SourceDocumentKind;
   SourceKind: SourceKind;
   SourceLocation: SourceLocation;
+  StalenessStatus: StalenessStatus;
   Timestamp: Timestamp;
   UnresolvedReference: UnresolvedReference;
   UnresolvedReferenceStatus: UnresolvedReferenceStatus;
@@ -167,6 +185,20 @@ export interface CodeEdgeResolution {
    */
   resolvedBy: string;
   tier: ResolutionTier;
+}
+/**
+ * Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown — never a fabricated 0.
+ */
+export interface CodeGraphStaleness {
+  commitsBehind?: number;
+  currentRevision?: string;
+  diagnostic?: string;
+  dirty?: boolean;
+  indexedRevision?: string;
+  lastSuccessfulScanAt?: Timestamp;
+  scanInProgress: boolean;
+  sourceKey: string;
+  status: StalenessStatus;
 }
 export interface ConceptRef {
   id?: Identifier;
@@ -470,6 +502,30 @@ export interface MemoryEvent {
   recordedAt: Timestamp;
   scope: Scope;
 }
+/**
+ * One committed knowledge mutation (invalidation metadata, never recallable content). seq is a decimal string on JSON surfaces.
+ */
+export interface KnowledgeChange {
+  graphId?: Identifier;
+  occurredAt: Timestamp;
+  op: KnowledgeChangeOp;
+  scanRunId?: string;
+  scope: Scope;
+  seq: string;
+  stableSourceKey?: string;
+  targetId: Identifier;
+  targetType: KnowledgeChangeTargetType;
+}
+/**
+ * One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window — take a fresh snapshot.
+ */
+export interface KnowledgeChangesPage {
+  hasMore: boolean;
+  highWatermark?: string;
+  items: KnowledgeChange[];
+  nextCursor?: string;
+  resetRequired: boolean;
+}
 export interface MemoryRecord {
   content: MemoryContent;
   createdAt: Timestamp;
@@ -516,6 +572,21 @@ export interface ProposalMemoryWrite {
   kind: MemoryKind;
   links?: MemoryLink[];
   policy: Policy;
+}
+/**
+ * Truthful scan state for one (scope, stable source key). indexedRevision is a FULL git OID.
+ */
+export interface ScanCheckpoint {
+  completedAt?: Timestamp;
+  dirty?: boolean;
+  errors: number;
+  indexedRevision?: string;
+  scanRoot?: string;
+  scanRunId: string;
+  scope: Scope;
+  stableSourceKey: string;
+  startedAt: Timestamp;
+  status: ScanStatus;
 }
 /**
  * Recorded best-effort-failed cross-file code reference (the code-resolution honesty ledger). Same lifecycle as relationships: retracted with the referring document on re-ingest, re-attempted by the orphan sweep.

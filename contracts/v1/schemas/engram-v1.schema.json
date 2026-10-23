@@ -1778,6 +1778,207 @@
         "version",
         "createdAt"
       ]
+    },
+    "KnowledgeChangeOp": {
+      "type": "string",
+      "enum": [
+        "upsert",
+        "remove",
+        "archive",
+        "restore"
+      ],
+      "description": "Knowledge change-log operation vocabulary."
+    },
+    "KnowledgeChangeTargetType": {
+      "type": "string",
+      "enum": [
+        "graph",
+        "entity",
+        "relationship",
+        "document",
+        "chunk"
+      ],
+      "description": "Knowledge target kinds appearing in the change log. Memories and proposals never appear."
+    },
+    "KnowledgeChange": {
+      "type": "object",
+      "description": "One committed knowledge mutation (invalidation metadata, never recallable content). seq is a decimal string on JSON surfaces.",
+      "additionalProperties": false,
+      "properties": {
+        "seq": {
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "stableSourceKey": {
+          "type": "string"
+        },
+        "graphId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "targetType": {
+          "$ref": "#/$defs/KnowledgeChangeTargetType"
+        },
+        "targetId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "op": {
+          "$ref": "#/$defs/KnowledgeChangeOp"
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "scanRunId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "seq",
+        "scope",
+        "targetType",
+        "targetId",
+        "op",
+        "occurredAt"
+      ]
+    },
+    "KnowledgeChangesPage": {
+      "type": "object",
+      "description": "One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window — take a fresh snapshot.",
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/KnowledgeChange"
+          }
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "highWatermark": {
+          "type": "string"
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "resetRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "items",
+        "hasMore",
+        "resetRequired"
+      ]
+    },
+    "ScanStatus": {
+      "type": "string",
+      "enum": [
+        "in_progress",
+        "completed",
+        "partial"
+      ]
+    },
+    "ScanCheckpoint": {
+      "type": "object",
+      "description": "Truthful scan state for one (scope, stable source key). indexedRevision is a FULL git OID.",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "stableSourceKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scanRoot": {
+          "type": "string"
+        },
+        "scanRunId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "completedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "indexedRevision": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ScanStatus"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "errors": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "scope",
+        "stableSourceKey",
+        "scanRunId",
+        "startedAt",
+        "status",
+        "errors"
+      ]
+    },
+    "StalenessStatus": {
+      "type": "string",
+      "enum": [
+        "current",
+        "behind",
+        "unknown",
+        "unindexed",
+        "diverged",
+        "partial"
+      ]
+    },
+    "CodeGraphStaleness": {
+      "type": "object",
+      "description": "Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown — never a fabricated 0.",
+      "additionalProperties": false,
+      "properties": {
+        "sourceKey": {
+          "type": "string"
+        },
+        "lastSuccessfulScanAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "indexedRevision": {
+          "type": "string"
+        },
+        "currentRevision": {
+          "type": "string"
+        },
+        "commitsBehind": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "status": {
+          "$ref": "#/$defs/StalenessStatus"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "scanInProgress": {
+          "type": "boolean"
+        },
+        "diagnostic": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sourceKey",
+        "status",
+        "scanInProgress"
+      ]
     }
   }
 }

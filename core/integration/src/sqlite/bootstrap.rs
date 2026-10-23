@@ -731,6 +731,14 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     if let Some(h) = proposals {
         builder = builder.proposals(h);
     }
+    // Knowledge change log + scan checkpoints (slice 3): the same knowledge
+    // store implements both read/write ports; wire only when the knowledge
+    // store itself was wired.
+    if let Some(k) = &knowledge_store {
+        builder = builder
+            .change_log(k.clone() as Arc<dyn engram_knowledge::KnowledgeChangeLog>)
+            .checkpoints(k.clone() as Arc<dyn engram_knowledge::ScanCheckpointStore>);
+    }
     if let Some(h) = hierarchy {
         builder = builder.hierarchy(h);
     }

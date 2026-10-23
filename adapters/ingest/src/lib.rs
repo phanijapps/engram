@@ -10,7 +10,7 @@ mod contract;
 mod contract_entities;
 mod extractor;
 mod filesystem;
-mod git;
+pub mod git;
 mod git_detect;
 mod hash;
 pub(crate) mod ingestor;

@@ -12,6 +12,7 @@ use engram_knowledge::KnowledgeRepository;
 use engram_runtime::{CoreError, CoreResult};
 use rusqlite::{Connection, OptionalExtension};
 
+use crate::knowledge::changes::{append_change_locked, stored_json};
 use crate::knowledge::{schema::sql_error, service::SqlKnowledgeStore};
 
 /// Read the persisted `archived_at` for a record (if any), so a re-put preserves a
@@ -319,6 +320,8 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                 Some(prior_valid_from) => Some(prior_valid_from),
                 None => stored.valid_from,
             };
+        // Prior content read BEFORE the write (change-log no-op detection).
+        let prior_json = stored_json(&connection, "knowledge_entities", &stored.id.to_string())?;
         let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
         connection
             .execute(
@@ -349,6 +352,20 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                 ],
             )
             .map_err(sql_error)?;
+        // Change log (slice 3): upsert event only when the row content
+        // actually changed — identical re-puts log nothing (no-op rule).
+        let new_json =
+            serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
+        if prior_json.as_deref() != Some(new_json.as_str()) {
+            append_change_locked(
+                &connection,
+                &stored.scope,
+                stored.graph_id.as_ref().map(ToString::to_string).as_deref(),
+                engram_domain::KnowledgeChangeTarget::Entity,
+                &stored.id.to_string(),
+                engram_domain::KnowledgeChangeOp::Upsert,
+            )?;
+        }
         Ok(stored)
     }
 
@@ -378,6 +395,12 @@ impl KnowledgeRepository for SqlKnowledgeStore {
         if let Some(ts) = preserved {
             stored.archived_at = Some(ts);
         }
+        // Prior content read BEFORE the write (change-log no-op detection).
+        let prior_json = stored_json(
+            &connection,
+            "knowledge_relationships",
+            &stored.id.to_string(),
+        )?;
         let json = serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
         connection
             .execute(
@@ -410,6 +433,19 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                 ],
             )
             .map_err(sql_error)?;
+        // Change log: upsert event only on content change (no-op rule).
+        let new_json =
+            serde_json::to_string(&stored).map_err(crate::knowledge::schema::json_error)?;
+        if prior_json.as_deref() != Some(new_json.as_str()) {
+            append_change_locked(
+                &connection,
+                &stored.scope,
+                stored.graph_id.as_ref().map(ToString::to_string).as_deref(),
+                engram_domain::KnowledgeChangeTarget::Relationship,
+                &stored.id.to_string(),
+                engram_domain::KnowledgeChangeOp::Upsert,
+            )?;
+        }
         Ok(stored)
     }
 
@@ -489,6 +525,16 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                 rusqlite::params![id.to_string(), scope.tenant, scope.subject, scope.workspace,],
             )
             .map_err(sql_error)?;
+        if affected > 0 {
+            append_change_locked(
+                &connection,
+                scope,
+                None,
+                engram_domain::KnowledgeChangeTarget::Entity,
+                &id.to_string(),
+                engram_domain::KnowledgeChangeOp::Remove,
+            )?;
+        }
         Ok(affected > 0)
     }
 

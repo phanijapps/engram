@@ -170,7 +170,7 @@ impl SourceReader for GitSourceReader {
     }
 }
 
-fn run_git<const N: usize>(root: &Path, args: [&str; N]) -> CoreResult<String> {
+pub(crate) fn run_git<const N: usize>(root: &Path, args: [&str; N]) -> CoreResult<String> {
     let output = run_git_bytes(root, args)?;
     String::from_utf8(output)
         .map(|value| value.trim().to_owned())
@@ -203,4 +203,34 @@ fn invalid<T>(reason: impl Into<String>) -> CoreResult<T> {
     Err(CoreError::InvalidRequest {
         reason: reason.into(),
     })
+}
+
+// ── Scan freshness helpers (wicked-estate adoption, slice 3) ────────────────
+// Full-OID, local-only git facts. No fetch, no origin-remote requirement,
+// no fabricated zeros: every helper returns None when git cannot answer.
+
+/// Full OID of the current HEAD, or None (no git, unborn branch, error).
+pub fn current_head(root: &std::path::Path) -> Option<String> {
+    run_git(root, ["rev-parse", "HEAD"])
+        .ok()
+        .map(|s| s.trim().to_owned())
+        .filter(|s| !s.is_empty())
+}
+
+/// Commits between `indexed` and `current` (local ancestry only), or None
+/// when not computable (unrelated histories, shallow, missing objects).
+pub fn commits_behind(root: &std::path::Path, indexed: &str, current: &str) -> Option<u64> {
+    run_git(
+        root,
+        ["rev-list", "--count", &format!("{indexed}..{current}")],
+    )
+    .ok()
+    .and_then(|s| s.trim().parse::<u64>().ok())
+}
+
+/// Whether the worktree has uncommitted changes, or None when unknown.
+pub fn worktree_dirty(root: &std::path::Path) -> Option<bool> {
+    run_git(root, ["status", "--porcelain"])
+        .ok()
+        .map(|s| !s.trim().is_empty())
 }

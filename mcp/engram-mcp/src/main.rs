@@ -14,6 +14,7 @@
 mod app;
 mod belief;
 mod bootstrap;
+mod changes;
 mod codegraph;
 mod config;
 mod dependencies;
@@ -830,6 +831,34 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
             "required": ["name"]
         }),
         handler: procedures::procedure_put,
+    });
+    registry.register(ToolRecord {
+        name: "subscribe_changes",
+        description: "Bounded page of committed knowledge-graph changes since a cursor \\
+                      (invalidation metadata, never recallable content). Poll with \\
+                      nextCursor; resetRequired means take a fresh snapshot.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "after": { "type": "string" },
+                "source_key": { "type": "string" },
+                "limit": { "type": "number" }
+            }
+        }),
+        handler: changes::subscribe_changes,
+    });
+    registry.register(ToolRecord {
+        name: "code_staleness",
+        description: "Freshness of the code graph vs its repository: full-OID checkpoint \\
+                      vs current HEAD, commits behind, dirty worktree, scan state. \\
+                      Local git only (no fetch); unknown stays unknown.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "source_key": { "type": "string" }
+            }
+        }),
+        handler: changes::code_staleness,
     });
     registry.register(ToolRecord {
         name: "proposal_submit",

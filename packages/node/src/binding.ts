@@ -222,6 +222,19 @@ export interface NativeProposalsApiBinding {
   rejectJson(requestJson: string): string;
 }
 
+/** Knowledge change-log proxy: bounded resumable invalidation pages +
+ *  latest-checkpoint reads (never recallable content). */
+export interface NativeChangeLogApiBinding {
+  changesSinceJson(requestJson: string): string;
+  latestCheckpointJson(requestJson: string): string;
+}
+
+/** Scan-checkpoint proxy: the scan coordinator's write side (stale runs
+ *  never overwrite newer ones). */
+export interface NativeCheckpointsApiBinding {
+  putCheckpointJson(checkpointJson: string): string;
+}
+
 /** Native handle for configured Rust embedding inference and space identity. */
 export interface NativeEmbeddingProviderApiBinding {
   embeddingSpace(): string;
@@ -260,6 +273,8 @@ export interface NativeProviderBinding {
   requireHierarchyApi(): NativeHierarchyApiBinding;
   requireProceduresApi(): NativeProceduresApiBinding;
   requireProposalsApi(): NativeProposalsApiBinding;
+  requireChangeLogApi(): NativeChangeLogApiBinding;
+  requireCheckpointsApi(): NativeCheckpointsApiBinding;
 }
 
 /** Constructor shape for the held `EngramProvider`. */

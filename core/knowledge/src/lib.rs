@@ -8,6 +8,7 @@
 //! re-exports the public surface so downstream crates depend on the names, not
 //! the internal module layout.
 
+pub mod changes;
 mod graph;
 pub mod identity;
 mod ingest;
@@ -19,6 +20,7 @@ mod taxonomy_validation;
 
 pub use engram_runtime::{CoreError, CoreResult};
 
+pub use changes::{KnowledgeChangeLog, ScanCheckpointStore};
 pub use graph::KnowledgeGraphRepository;
 pub use identity::EntityIdentityRepository;
 pub use ingest::{Chunker, IngestionService, SourceReader};

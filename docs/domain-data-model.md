@@ -1052,6 +1052,42 @@ Rules:
 - Re-ingesting the referring file retracts its records (they are regenerated
   by the fresh extraction pass).
 
+### Knowledge changes and scan freshness (wicked-estate adoption, slice 3)
+
+The knowledge change log is INVALIDATION METADATA, not recallable
+knowledge: no document bodies or secrets in change records; memories and
+proposals never appear. `KnowledgeChange { seq (decimal STRING on JSON —
+64-bit rows exceed JS's 53-bit range), scope, stableSourceKey?, graphId?,
+targetType (graph|entity|relationship|document|chunk), targetId, op
+(upsert|remove|archive|restore), occurredAt, scanRunId? }`. Semantically
+unchanged re-puts log NOTHING (no-op rule). Mutation and its log entry
+commit under one writer; a crash between them may under-report (consumers
+reconcile from checkpoints — documented honesty rule).
+
+`KnowledgeChangesRequest { scope, sourceKey?, after? (opaque cursor =
+last consumed seq string), limit ≤ 500 }` → `KnowledgeChangesPage { items,
+nextCursor?, highWatermark?, hasMore, resetRequired }`. A cursor older than
+the retained window returns `resetRequired = true` — never a silently valid
+empty page. Sequences are log-local: not wall-clock, not git commit counts,
+not portable across backends or rebuilds.
+
+`ScanCheckpoint { scope, stableSourceKey, scanRoot? (host-local path,
+diagnostic only), scanRunId, startedAt, completedAt?, indexedRevision?
+(FULL git OID — never a short SHA, never a database mtime), status
+(in_progress|completed|partial), dirty?, errors }`. A stale scan run never
+overwrites a newer checkpoint (started_at guard).
+
+`CodeGraphStaleness { sourceKey, lastSuccessfulScanAt?, indexedRevision?,
+currentRevision?, commitsBehind? (local ancestry only; None = unknown,
+never a fabricated 0), status
+(current|behind|unknown|unindexed|diverged|partial), dirty?,
+scanInProgress, diagnostic? }` — computed at response time (a startup-only
+value would itself go stale), local git only (no fetch), dirty worktrees
+are never reported `current`.
+
+Operations: `subscribe_changes` (bounded polling page — not a stream),
+`code_staleness`; codegraph answers carry a visible `STALENESS:` line.
+
 ### Graph maintenance (ADR-0027)
 
 Reversible, plan/apply repair over knowledge entities and relationships. The host

@@ -244,6 +244,23 @@ class StubNativeProvider {
       },
     };
   }
+  requireChangeLogApi() {
+    return {
+      changesSinceJson(): string {
+        return "{}";
+      },
+      latestCheckpointJson(): string {
+        return "null";
+      },
+    };
+  }
+  requireCheckpointsApi() {
+    return {
+      putCheckpointJson(): string {
+        return "null";
+      },
+    };
+  }
   static fromProfileFile(_path: string): StubNativeProvider {
     return new StubNativeProvider();
   }

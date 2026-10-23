@@ -11,6 +11,7 @@
 //! storage concern stays behind its own crate boundary so a durable knowledge
 //! backend can evolve (or move to Postgres / a graph store) without coupling.
 
+mod changes;
 mod graph;
 mod identity;
 #[allow(clippy::module_inception)]

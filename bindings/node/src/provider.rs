@@ -41,6 +41,7 @@ use engram_knowledge::{
     GraphMaintenanceRepository, KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository,
     TaxonomyRepository,
 };
+use engram_knowledge::{KnowledgeChangeLog, ScanCheckpointStore};
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
 use engram_proposals::ProposalService;
@@ -362,6 +363,29 @@ impl NativeProvider {
             .map_err(to_napi_error)?
             .clone();
         Ok(NativeProposalsApi { handle })
+    }
+
+    /// Returns the knowledge change-log handle (resumable invalidation
+    /// pages), or throws if not wired.
+    #[napi(js_name = "requireChangeLogApi")]
+    pub fn require_change_log_api(&self) -> Result<NativeChangeLogApi> {
+        let handle = self
+            .inner
+            .require_change_log()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeChangeLogApi { handle })
+    }
+
+    /// Returns the scan-checkpoint handle, or throws if not wired.
+    #[napi(js_name = "requireCheckpointsApi")]
+    pub fn require_checkpoints_api(&self) -> Result<NativeCheckpointsApi> {
+        let handle = self
+            .inner
+            .require_checkpoints()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeCheckpointsApi { handle })
     }
 
     /// Returns an ontology handle, or throws if not wired.
@@ -1284,6 +1308,58 @@ impl NativeProceduresApi {
 // Minimal handle proxies for remaining capabilities (ADR-0022 parity).
 // Each holds the trait handle + a `ping`. Real methods added as needed.
 // ---------------------------------------------------------------------------
+
+/// Knowledge change-log API: bounded, resumable invalidation pages plus
+/// latest-checkpoint reads (never recallable content).
+#[napi]
+pub struct NativeChangeLogApi {
+    handle: Arc<dyn KnowledgeChangeLog>,
+}
+
+#[napi]
+impl NativeChangeLogApi {
+    /// One page after an opaque cursor. Takes a `KnowledgeChangesRequest`
+    /// JSON, returns a `KnowledgeChangesPage` JSON.
+    #[napi(js_name = "changesSinceJson")]
+    pub fn changes_since_json(&self, request_json: String) -> Result<String> {
+        let request = decode(&request_json)?;
+        let result = block_on(self.handle.changes_since(&request)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Latest checkpoint for one (scope, stable source key). Takes
+    /// `{ scope, stableSourceKey }` JSON, returns a `ScanCheckpoint` JSON
+    /// or null.
+    #[napi(js_name = "latestCheckpointJson")]
+    pub fn latest_checkpoint_json(&self, request_json: String) -> Result<String> {
+        let request = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&request)?;
+        let key = request["stableSourceKey"]
+            .as_str()
+            .or_else(|| request["stable_source_key"].as_str())
+            .ok_or_else(|| napi::Error::from_reason("stableSourceKey is required"))?;
+        let result = block_on(self.handle.latest_checkpoint(&scope, key)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
+
+/// Scan-checkpoint API: the scan coordinator's write side.
+#[napi]
+pub struct NativeCheckpointsApi {
+    handle: Arc<dyn ScanCheckpointStore>,
+}
+
+#[napi]
+impl NativeCheckpointsApi {
+    /// Upserts a checkpoint (stale runs never overwrite newer ones). Takes
+    /// a `ScanCheckpoint` JSON, returns the stored `ScanCheckpoint` JSON.
+    #[napi(js_name = "putCheckpointJson")]
+    pub fn put_checkpoint_json(&self, checkpoint_json: String) -> Result<String> {
+        let checkpoint = decode(&checkpoint_json)?;
+        let result = block_on(self.handle.put_checkpoint(checkpoint)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
 
 /// Operator proposal queue API: submit, list, approve, and reject inert
 /// pending writes. Approval promotes through the policy-checked memory write

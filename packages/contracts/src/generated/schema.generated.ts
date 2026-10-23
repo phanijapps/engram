@@ -62,6 +62,46 @@ export const engramV1Schema = {
       ],
       "type": "object"
     },
+    "CodeGraphStaleness": {
+      "additionalProperties": false,
+      "description": "Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown \u2014 never a fabricated 0.",
+      "properties": {
+        "commitsBehind": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "currentRevision": {
+          "type": "string"
+        },
+        "diagnostic": {
+          "type": "string"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "indexedRevision": {
+          "type": "string"
+        },
+        "lastSuccessfulScanAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "scanInProgress": {
+          "type": "boolean"
+        },
+        "sourceKey": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/StalenessStatus"
+        }
+      },
+      "required": [
+        "sourceKey",
+        "status",
+        "scanInProgress"
+      ],
+      "type": "object"
+    },
     "ConceptRef": {
       "additionalProperties": false,
       "properties": {
@@ -576,6 +616,100 @@ export const engramV1Schema = {
     "Identifier": {
       "minLength": 1,
       "type": "string"
+    },
+    "KnowledgeChange": {
+      "additionalProperties": false,
+      "description": "One committed knowledge mutation (invalidation metadata, never recallable content). seq is a decimal string on JSON surfaces.",
+      "properties": {
+        "graphId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "op": {
+          "$ref": "#/$defs/KnowledgeChangeOp"
+        },
+        "scanRunId": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "seq": {
+          "pattern": "^[0-9]+$",
+          "type": "string"
+        },
+        "stableSourceKey": {
+          "type": "string"
+        },
+        "targetId": {
+          "$ref": "#/$defs/Identifier"
+        },
+        "targetType": {
+          "$ref": "#/$defs/KnowledgeChangeTargetType"
+        }
+      },
+      "required": [
+        "seq",
+        "scope",
+        "targetType",
+        "targetId",
+        "op",
+        "occurredAt"
+      ],
+      "type": "object"
+    },
+    "KnowledgeChangeOp": {
+      "description": "Knowledge change-log operation vocabulary.",
+      "enum": [
+        "upsert",
+        "remove",
+        "archive",
+        "restore"
+      ],
+      "type": "string"
+    },
+    "KnowledgeChangeTargetType": {
+      "description": "Knowledge target kinds appearing in the change log. Memories and proposals never appear.",
+      "enum": [
+        "graph",
+        "entity",
+        "relationship",
+        "document",
+        "chunk"
+      ],
+      "type": "string"
+    },
+    "KnowledgeChangesPage": {
+      "additionalProperties": false,
+      "description": "One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window \u2014 take a fresh snapshot.",
+      "properties": {
+        "hasMore": {
+          "type": "boolean"
+        },
+        "highWatermark": {
+          "type": "string"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/KnowledgeChange"
+          },
+          "type": "array"
+        },
+        "nextCursor": {
+          "type": "string"
+        },
+        "resetRequired": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "items",
+        "hasMore",
+        "resetRequired"
+      ],
+      "type": "object"
     },
     "KnowledgeChunk": {
       "additionalProperties": false,
@@ -1507,6 +1641,62 @@ export const engramV1Schema = {
       ],
       "type": "string"
     },
+    "ScanCheckpoint": {
+      "additionalProperties": false,
+      "description": "Truthful scan state for one (scope, stable source key). indexedRevision is a FULL git OID.",
+      "properties": {
+        "completedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "errors": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "indexedRevision": {
+          "type": "string"
+        },
+        "scanRoot": {
+          "type": "string"
+        },
+        "scanRunId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "stableSourceKey": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "startedAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "status": {
+          "$ref": "#/$defs/ScanStatus"
+        }
+      },
+      "required": [
+        "scope",
+        "stableSourceKey",
+        "scanRunId",
+        "startedAt",
+        "status",
+        "errors"
+      ],
+      "type": "object"
+    },
+    "ScanStatus": {
+      "enum": [
+        "in_progress",
+        "completed",
+        "partial"
+      ],
+      "type": "string"
+    },
     "Scope": {
       "additionalProperties": false,
       "properties": {
@@ -1647,6 +1837,17 @@ export const engramV1Schema = {
         }
       },
       "type": "object"
+    },
+    "StalenessStatus": {
+      "enum": [
+        "current",
+        "behind",
+        "unknown",
+        "unindexed",
+        "diverged",
+        "partial"
+      ],
+      "type": "string"
     },
     "Timestamp": {
       "format": "date-time",

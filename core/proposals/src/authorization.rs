@@ -12,6 +12,10 @@ use engram_domain::{Actor, OperatorProposalId, Scope};
 use engram_runtime::CoreResult;
 
 /// Authorization decisions for the proposal queue, made by the trusted host.
+// async_trait codegen stamps #[must_use] on the boxed-future helper while
+// CoreResult is already must_use — newer clippy flags the combination
+// (same allow as the procedures port).
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait ProposalAuthorizer: Send + Sync {
     /// May this actor submit proposals in this scope? (Read-only content

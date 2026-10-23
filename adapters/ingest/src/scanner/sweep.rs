@@ -110,7 +110,7 @@ pub(super) fn heal_pending_refs<R>(
                 // hand; it now reuses the exact core ladder (which also adds
                 // apex aliasing) and stamps typed evidence from the settling
                 // branch — a capitalized-receiver heal stays heuristic.
-                let out = engram_code::attempt(&name_index, &reference, None, None);
+                let out = engram_code::attempt(name_index, &reference, None, None);
                 if let engram_code::Resolution::Resolved(candidate) = out.resolution {
                     let Some(branch) = out.branch else { continue };
                     let scope = row.scope.clone();

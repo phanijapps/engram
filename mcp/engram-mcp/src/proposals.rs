@@ -20,7 +20,7 @@ use serde_json::Value;
 use crate::app::App;
 use crate::protocol;
 use crate::registry::ToolError;
-use crate::tools::{internal, invalid, req_str};
+use crate::tools::{internal, req_str};
 
 fn payload_from_args(
     args: &Value,
@@ -174,7 +174,7 @@ pub fn proposal_approve(app: &App, args: &Value) -> Result<Value, ToolError> {
         id: engram_domain::OperatorProposalId::from(id),
         scope: app.scope.clone(),
         expected_version,
-        reviewer: actor_from(&operator, None),
+        reviewer: actor_from(operator, None),
     }))
     .map_err(internal)?;
     let note = if result.proposal.status == OperatorProposalStatus::Applying {
@@ -200,7 +200,7 @@ pub fn proposal_reject(app: &App, args: &Value) -> Result<Value, ToolError> {
         id: engram_domain::OperatorProposalId::from(id),
         scope: app.scope.clone(),
         expected_version,
-        reviewer: actor_from(&operator, None),
+        reviewer: actor_from(operator, None),
         reason,
     }))
     .map_err(internal)?;

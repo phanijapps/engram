@@ -14,6 +14,10 @@ use engram_runtime::CoreResult;
 /// finalize `applying → approved` with the promotion receipt. Rejection is
 /// legal only from `pending` — an approval that may have committed a memory
 /// can never be rejected afterwards.
+// async_trait codegen stamps #[must_use] on the boxed-future helper while
+// CoreResult is already must_use — newer clippy flags the combination
+// (same allow as the procedures port).
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait ProposalRepository: Send + Sync {
     /// Inserts a proposal (idempotent on the scope-bound submission key:

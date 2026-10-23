@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use engram_domain::*;
-use engram_memory::MemoryService;
+
 use engram_proposals::{
     AllowAllProposalAuthorizer, DenyAllProposalAuthorizer, ProposalAuthorizer, ProposalRepository,
     ProposalService,
@@ -331,7 +331,7 @@ fn proposal_authorizer_gates_submit_and_approve() {
 fn repository_cas_and_scope_isolation() {
     let repo = SqlProposalStore::open_in_memory().expect("repo");
     let now = chrono::Utc::now();
-    let mut proposal = OperatorProposal {
+    let proposal = OperatorProposal {
         id: OperatorProposalId::from("proposal-cas-1"),
         scope: scope(),
         payload: ProposalMemoryWrite {

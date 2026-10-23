@@ -14,7 +14,7 @@ use serde_json::Value;
 use crate::app::App;
 use crate::protocol;
 use crate::registry::ToolError;
-use crate::tools::{internal, req_str};
+use crate::tools::internal;
 
 /// One bounded page of committed knowledge changes after a cursor.
 pub fn subscribe_changes(app: &App, args: &Value) -> Result<Value, ToolError> {
@@ -90,7 +90,7 @@ pub fn code_staleness(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// Latest checkpoint through the provider's checkpoint store.
 pub fn latest_checkpoint(app: &App, source_key: &str) -> Result<Option<ScanCheckpoint>, ToolError> {
     let log = app.provider.require_change_log().map_err(internal)?;
-    Ok(block_on(log.latest_checkpoint(&app.scope, source_key)).map_err(internal)?)
+    block_on(log.latest_checkpoint(&app.scope, source_key)).map_err(internal)
 }
 
 /// Local git facts for the checkpoint's scan root (no fetch, no origin
@@ -146,9 +146,9 @@ pub fn render_staleness(s: &engram_domain::CodeGraphStaleness) -> String {
     out
 }
 
-/// R5: visible staleness line for codegraph answers. Cheap (checkpoint read
-/// + local git); omitted when no checkpoint exists (unindexed repos have
-/// nothing to be stale against).
+/// R5: visible staleness line for codegraph answers. Cheap (a checkpoint
+/// read plus local git); omitted when no checkpoint exists, because
+/// unindexed repos have nothing to be stale against.
 pub fn staleness_note(app: &App) -> String {
     let key = &app.scope.tenant;
     let Ok(Some(cp)) = latest_checkpoint(app, key) else {

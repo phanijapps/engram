@@ -11,6 +11,10 @@ use engram_domain::{KnowledgeChangesPage, KnowledgeChangesRequest, ScanCheckpoin
 use engram_runtime::CoreResult;
 
 /// Scoped, resumable reads over the persisted knowledge change log.
+// async_trait codegen stamps #[must_use] on the boxed-future helper while
+// CoreResult is already must_use — newer clippy flags the combination
+// (same allow as the procedures port).
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait KnowledgeChangeLog: Send + Sync {
     /// One bounded page after the opaque cursor. A cursor older than the
@@ -31,6 +35,10 @@ pub trait KnowledgeChangeLog: Send + Sync {
 
 /// Write side for scan checkpoints (the scan coordinator owns when a scan
 /// starts, completes, or degrades).
+// async_trait codegen stamps #[must_use] on the boxed-future helper while
+// CoreResult is already must_use — newer clippy flags the combination
+// (same allow as the procedures port).
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait ScanCheckpointStore: Send + Sync {
     /// Upserts the checkpoint for (scope, stable source key). A checkpoint

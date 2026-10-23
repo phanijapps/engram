@@ -9,6 +9,7 @@
 pub mod assertion;
 pub mod belief;
 pub mod capability;
+pub mod code_resolution;
 pub mod community;
 pub mod embedding;
 pub mod evaluation;
@@ -32,6 +33,7 @@ pub mod types;
 pub use assertion::*;
 pub use belief::*;
 pub use capability::*;
+pub use code_resolution::*;
 pub use community::*;
 pub use embedding::*;
 pub use evaluation::*;

@@ -440,6 +440,7 @@ mod tests {
                 aliases: Vec::new(),
             },
             predicate: "related_to".to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: Some(Id::from(o)),
                 kind: None,

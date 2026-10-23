@@ -747,6 +747,7 @@ fn relationship(id: Id, subject: Id, object: Id, graph_id: Id) -> KnowledgeRelat
             aliases: Vec::new(),
         },
         predicate: "calls".to_owned(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(object),
             kind: Some("function".to_owned()),
@@ -947,6 +948,7 @@ fn prov_relationship(id: Id, graph_id: Id) -> KnowledgeRelationship {
             aliases: Vec::new(),
         },
         predicate: "calls".to_owned(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from("entity-other")),
             kind: Some("function".to_owned()),
@@ -1072,6 +1074,7 @@ fn batch_relationship(id: &str) -> KnowledgeRelationship {
             aliases: Vec::new(),
         },
         predicate: "calls".to_string(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from("ent-batch-1")),
             kind: Some("function".to_string()),

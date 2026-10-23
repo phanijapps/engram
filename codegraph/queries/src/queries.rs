@@ -756,6 +756,7 @@ mod tests {
             // non-`calls` predicate -> dropped
             KnowledgeRelationship {
                 predicate: "imports".to_owned(),
+                code_resolution: None,
                 ..rel("a", "c")
             },
             // unresolved object (no id, no name) -> dropped
@@ -1052,6 +1053,7 @@ mod tests {
                 graph_id: None,
                 subject: ref_named("entity-a", "caller_fn"),
                 predicate: "sends_request".to_owned(),
+                code_resolution: None,
                 object: ref_named("entity-ep", "GET /api/foo"),
                 scope: Scope {
                     tenant: "t".to_owned(),
@@ -1073,6 +1075,7 @@ mod tests {
                 graph_id: None,
                 subject: ref_named("entity-ep", "GET /api/foo"),
                 predicate: "handled_by".to_owned(),
+                code_resolution: None,
                 object: ref_named("entity-b", "handler_fn"),
                 scope: Scope {
                     tenant: "t".to_owned(),
@@ -1197,6 +1200,7 @@ mod tests {
             graph_id: None,
             subject: ref_of(caller),
             predicate: "calls".to_owned(),
+            code_resolution: None,
             object: ref_of(callee),
             scope: Scope {
                 tenant: "t".to_owned(),
@@ -1349,6 +1353,7 @@ mod tests {
             graph_id: None,
             subject: ref_named(caller_id, caller_name),
             predicate: "calls".to_owned(),
+            code_resolution: None,
             object: ref_named(callee_id, callee_name),
             scope: Scope {
                 tenant: "t".to_owned(),

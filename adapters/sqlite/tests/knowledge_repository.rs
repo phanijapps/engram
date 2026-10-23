@@ -138,6 +138,7 @@ fn round_trips_scoped_graph_entities_and_neighbors() {
                 aliases: Vec::new(),
             },
             predicate: "calls".to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: Some(Id::from(object_id)),
                 kind: Some("function".to_owned()),
@@ -524,6 +525,7 @@ fn validate_graph_warns_on_undeclared_predicate_only() {
                 aliases: Vec::new(),
             },
             predicate: predicate.to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: Some(Id::from("svc-b")),
                 kind: Some("service".to_owned()),
@@ -592,6 +594,7 @@ fn list_graphs_entities_relationships_are_scope_filtered() {
                 aliases: Vec::new(),
             },
             predicate: "calls".to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: Some(Id::from(format!("entity-{tenant}"))),
                 kind: Some("function".to_owned()),

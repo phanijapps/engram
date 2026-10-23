@@ -226,6 +226,7 @@ mod tests {
             graph_id: None,
             subject: ref_of(subject),
             predicate: "related_to".to_owned(),
+            code_resolution: None,
             object: ref_of(object),
             scope: scope(tenant),
             evidence: Vec::new(),

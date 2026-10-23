@@ -123,6 +123,7 @@ fn relationship(id: &str) -> KnowledgeRelationship {
             aliases: Vec::new(),
         },
         predicate: "calls".to_string(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from("batch-entity-1")),
             kind: Some("function".to_string()),

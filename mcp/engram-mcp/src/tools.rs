@@ -245,6 +245,7 @@ pub fn put_relationship(app: &App, args: &Value) -> Result<Value, ToolError> {
             aliases: Vec::new(),
         },
         predicate: predicate.to_owned(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from(object)),
             kind: None,
@@ -559,6 +560,7 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
                     aliases: Vec::new(),
                 },
                 predicate: predicate.to_owned(),
+                code_resolution: None,
                 object: EntityRef {
                     id: Some(Id::from(object)),
                     kind: None,

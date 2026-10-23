@@ -188,6 +188,7 @@ mod phase2_query_tests {
                 aliases: Vec::new(),
             },
             predicate: predicate.to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: None,
                 kind: None,

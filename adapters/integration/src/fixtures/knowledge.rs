@@ -206,6 +206,7 @@ fn relationship(id: Id, subject: Id, object: Id, graph_id: Id) -> KnowledgeRelat
             aliases: Vec::new(),
         },
         predicate: "calls".to_owned(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(object),
             kind: Some("function".to_owned()),

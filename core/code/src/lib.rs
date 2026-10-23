@@ -7,6 +7,7 @@
 //! I/O, git, storage, async runtime, or LLM; `adapters/ingest` consumes it to
 //! build the code graph.
 
+pub mod edge_resolution;
 pub mod edges;
 pub mod frameworks;
 pub mod identity;
@@ -15,6 +16,10 @@ pub mod parser;
 pub mod queries;
 pub mod resolution;
 
+pub use edge_resolution::{
+    AttemptOutcome, ResolutionBranch, attempt, branch_evidence, legacy_code_resolution, producer,
+    sweep_evidence,
+};
 pub use edges::{StructuralEdges, contains_pairs};
 pub use frameworks::{FrameworkFacts, RouteFact, extract_frameworks};
 pub use identity::{Resolution, SymbolCandidate, SymbolIndex, bare_tail, qualified_name};

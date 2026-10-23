@@ -259,6 +259,7 @@ fn seed_scope(
             aliases: Vec::new(),
         },
         predicate: "calls".to_string(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from("fx-entity-b")),
             kind: Some("function".to_string()),

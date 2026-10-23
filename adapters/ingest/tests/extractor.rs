@@ -344,6 +344,7 @@ fn unresolved_reference_lands_in_the_ledger() {
             aliases: Vec::new(),
         },
         predicate: "calls".to_owned(),
+        code_resolution: None,
         object: EntityRef {
             id: None,
             kind: None,

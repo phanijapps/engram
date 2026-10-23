@@ -250,6 +250,7 @@ fn relationship_with_evidence(id: Id, graph_id: Id) -> KnowledgeRelationship {
             aliases: Vec::new(),
         },
         predicate: "calls".to_owned(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from("entity-other")),
             kind: Some("function".to_owned()),

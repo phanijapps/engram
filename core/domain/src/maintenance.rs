@@ -540,6 +540,7 @@ mod tests {
                 aliases: Vec::new(),
             },
             predicate: "calls".to_string(),
+            code_resolution: None,
             object: crate::EntityRef {
                 id: Some(EntityId::from("e2")),
                 kind: None,

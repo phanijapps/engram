@@ -116,6 +116,7 @@ pub fn resolve_cross_file_edges(store: &SqlKnowledgeStore, scope: &Scope) {
                             aliases: Vec::new(),
                         },
                         predicate: "defined_in".to_owned(),
+                        code_resolution: None,
                         object: EntityRef {
                             id: Some(Id::from(id_b.clone())),
                             kind: None,

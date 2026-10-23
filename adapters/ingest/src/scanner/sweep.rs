@@ -161,6 +161,7 @@ pub(super) fn heal_pending_refs<R>(
                             aliases: Vec::new(),
                         },
                         predicate: predicate.to_owned(),
+                        code_resolution: None,
                         object: EntityRef {
                             id: Some(object_id.clone()),
                             kind: None,

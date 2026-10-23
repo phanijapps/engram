@@ -97,6 +97,7 @@ fn rel(subject: &str, object: &str) -> KnowledgeRelationship {
         graph_id: None,
         subject: ref_of(subject),
         predicate: "related_to".to_string(),
+        code_resolution: None,
         object: ref_of(object),
         scope: scope(),
         evidence: Vec::new(),

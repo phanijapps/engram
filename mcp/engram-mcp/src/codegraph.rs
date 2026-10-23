@@ -4961,6 +4961,7 @@ mod tests {
                 aliases: Vec::new(),
             },
             predicate: "calls".to_owned(),
+            code_resolution: None,
             object: EntityRef {
                 id: Some(engram_domain::Id::from("e2")),
                 kind: Some("Function".to_owned()),

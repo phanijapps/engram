@@ -157,6 +157,7 @@ fn relationship(
             aliases: Vec::new(),
         },
         predicate: "calls".to_string(),
+        code_resolution: None,
         object: EntityRef {
             id: Some(Id::from("e-object")),
             kind: Some("function".to_string()),

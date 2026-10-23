@@ -1,5 +1,12 @@
 # v1 Changelog
 
+## 2026-10-22
+
+- Added `ResolutionTier` + `CodeEdgeResolution` definitions and the optional
+  relationship `codeResolution` field (code-edge resolution evidence; ADR-0028
+  amendment 2026-10-22). Additive/compatible. Examples:
+  `code-edge-resolution.heuristic.json`, `code-edge-resolution.parsed.json`.
+
 ## 2026-06-30
 
 - Added accepted retrieval evaluation fixtures for positive recall, forbidden

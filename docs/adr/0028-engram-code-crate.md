@@ -39,3 +39,27 @@ The reference architecture (`docs/architecture/reference.md`) prescribes behavio
 - `core/code` joins the target repository shape; `adapters/ingest` shrinks to orchestration.
 - The AGENTS.md repository tree gains a `core/code` entry; the boundary rules for the new crate mirror the other behavior crates (no SQL/vector/async/LLM, focused modules, facade root).
 - Grammar dependency surface becomes visible at the `core/` layer — additive languages remain an explicit decision (the engram-code spec gates them behind Ask-first).
+
+## Amendment (2026-10-22): edge resolution evidence
+
+**Status:** accepted · **Slices:** domain contract (`core/domain/src/code_resolution.rs`),
+pure behavior (`core/code/src/edge_resolution.rs`), producers (`adapters/ingest`), query
+surface (`codegraph/queries` `EdgeEvidence`), MCP rendering. Spec:
+`docs/specs/code-edge-resolution-evidence/spec.md`.
+
+Every code relationship now carries optional typed evidence —
+`KnowledgeRelationship.codeResolution = { tier, resolvedBy }` — where
+`ResolutionTier` (parsed / scoped_name / heuristic / legacy_unknown) describes
+the **binding mechanism** and `resolvedBy` is a stable producer id. The pure
+resolution ladder moved to a single shared helper
+(`engram_code::edge_resolution::attempt`) used by BOTH `resolve_refs` and the
+orphan sweep, returning the settling branch so evidence is recorded at the
+decision point; the sweep's hand-duplicated EN-9 ladder is deleted. The
+domain/adapter split is unchanged: tier derivation is pure, producers live in
+`adapters/ingest`, persistence round-trips the optional field, and the legacy
+classifier conservatively maps pre-evidence rows (recognizing only the
+orphan-sweep method, the 0.5 co-occurrence convention, and pure-syntax
+imports/contains; everything else is `legacy_unknown`). No new edge store, no
+identity changes, no reranking — a heuristic is simply never presented as a
+fact. Cross-store neutral: the field is part of the engine-neutral domain
+object, so every backend that persists relationship JSON carries it.

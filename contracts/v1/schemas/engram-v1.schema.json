@@ -1558,6 +1558,36 @@
         "routes_to"
       ]
     },
+    "ResolutionTier": {
+      "type": "string",
+      "description": "Mechanism that established a code edge's endpoint binding (edge-evidence adoption 2026-10). parsed = direct syntax/structural fact; scoped_name = deterministic name-table binding (not compiler proof); heuristic = inferential binding (receiver capitalization, co-occurrence, framework synthesis); legacy_unknown = pre-evidence edge, conservative floor. The tier describes the binding, not extraction effort; a name-only parsed edge shows resolved=false separately.",
+      "enum": [
+        "parsed",
+        "scoped_name",
+        "heuristic",
+        "legacy_unknown"
+      ]
+    },
+    "CodeEdgeResolution": {
+      "type": "object",
+      "description": "Typed resolution evidence stamped on code relationships (KnowledgeRelationship.codeResolution; absent on non-code relationships).",
+      "additionalProperties": false,
+      "properties": {
+        "tier": {
+          "$ref": "#/$defs/ResolutionTier"
+        },
+        "resolvedBy": {
+          "type": "string",
+          "description": "Stable, versioned producer id (e.g. ast-local-v1, scope-name-v1, cooccurrence-v1, orphan-sweep-v1, legacy-code-edge-v1).",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._-]+$"
+        }
+      },
+      "required": [
+        "tier",
+        "resolvedBy"
+      ]
+    },
     "UnresolvedReferenceStatus": {
       "type": "string",
       "description": "Lifecycle of a recorded unresolved cross-file code reference. pending -> resolved (orphan sweep); pending -> failed (operator only); terminal states never change.",

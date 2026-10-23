@@ -42,6 +42,26 @@ export const engramV1Schema = {
       ],
       "type": "string"
     },
+    "CodeEdgeResolution": {
+      "additionalProperties": false,
+      "description": "Typed resolution evidence stamped on code relationships (KnowledgeRelationship.codeResolution; absent on non-code relationships).",
+      "properties": {
+        "resolvedBy": {
+          "description": "Stable, versioned producer id (e.g. ast-local-v1, scope-name-v1, cooccurrence-v1, orphan-sweep-v1, legacy-code-edge-v1).",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "type": "string"
+        },
+        "tier": {
+          "$ref": "#/$defs/ResolutionTier"
+        }
+      },
+      "required": [
+        "tier",
+        "resolvedBy"
+      ],
+      "type": "object"
+    },
     "ConceptRef": {
       "additionalProperties": false,
       "properties": {
@@ -1116,6 +1136,16 @@ export const engramV1Schema = {
         "actor"
       ],
       "type": "object"
+    },
+    "ResolutionTier": {
+      "description": "Mechanism that established a code edge's endpoint binding (edge-evidence adoption 2026-10). parsed = direct syntax/structural fact; scoped_name = deterministic name-table binding (not compiler proof); heuristic = inferential binding (receiver capitalization, co-occurrence, framework synthesis); legacy_unknown = pre-evidence edge, conservative floor. The tier describes the binding, not extraction effort; a name-only parsed edge shows resolved=false separately.",
+      "enum": [
+        "parsed",
+        "scoped_name",
+        "heuristic",
+        "legacy_unknown"
+      ],
+      "type": "string"
     },
     "RetrievalExplanation": {
       "additionalProperties": false,

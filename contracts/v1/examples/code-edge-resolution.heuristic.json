@@ -1,0 +1,6 @@
+{
+  "codeResolution": {
+    "tier": "heuristic",
+    "resolvedBy": "receiver-capitalization-v1"
+  }
+}

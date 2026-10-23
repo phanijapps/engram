@@ -5,6 +5,10 @@ export type Identifier = string;
  * Closed predicate vocabulary emitted by the engram-code extractor (RFC-0020 Phase 2, ADR-0028). KnowledgeRelationship.predicate stays an open string; this is the contracted code set.
  */
 export type CodeEdgeKind = "calls" | "imports" | "contains" | "extends" | "implements" | "routes_to";
+/**
+ * Mechanism that established a code edge's endpoint binding (edge-evidence adoption 2026-10). parsed = direct syntax/structural fact; scoped_name = deterministic name-table binding (not compiler proof); heuristic = inferential binding (receiver capitalization, co-occurrence, framework synthesis); legacy_unknown = pre-evidence edge, conservative floor. The tier describes the binding, not extraction effort; a name-only parsed edge shows resolved=false separately.
+ */
+export type ResolutionTier = "parsed" | "scoped_name" | "heuristic" | "legacy_unknown";
 export type Timestamp = string;
 export type DeleteMode = "delete" | "redact" | "tombstone" | "archive";
 export type EvidenceRef = EvidenceRef1 & {
@@ -84,6 +88,7 @@ export type UnresolvedReferenceStatus = "pending" | "resolved" | "failed";
 export interface EngramV1Types {
   Actor: Actor;
   CodeEdgeKind: CodeEdgeKind;
+  CodeEdgeResolution: CodeEdgeResolution;
   ConceptRef: ConceptRef;
   ContextBudget: ContextBudget;
   ContextPayload: ContextPayload;
@@ -118,6 +123,7 @@ export interface EngramV1Types {
   Provenance: Provenance;
   QueryFilter: QueryFilter;
   Requester: Requester;
+  ResolutionTier: ResolutionTier;
   RetrievalExplanation: RetrievalExplanation;
   RetrievalMode: RetrievalMode;
   RetrievalRequest: RetrievalRequest;
@@ -144,6 +150,16 @@ export interface Actor {
 }
 export interface Metadata {
   [k: string]: unknown;
+}
+/**
+ * Typed resolution evidence stamped on code relationships (KnowledgeRelationship.codeResolution; absent on non-code relationships).
+ */
+export interface CodeEdgeResolution {
+  /**
+   * Stable, versioned producer id (e.g. ast-local-v1, scope-name-v1, cooccurrence-v1, orphan-sweep-v1, legacy-code-edge-v1).
+   */
+  resolvedBy: string;
+  tier: ResolutionTier;
 }
 export interface ConceptRef {
   id?: Identifier;

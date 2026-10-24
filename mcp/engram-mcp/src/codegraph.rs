@@ -2062,7 +2062,6 @@ fn resolve_seeds(entity_names: &[String], user_symbol: &str) -> Vec<String> {
     }
 }
 
-
 fn render_edge_evidence_with_paths(
     rels: &[KnowledgeRelationship],
     seeds: &[String],

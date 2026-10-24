@@ -1,28 +1,25 @@
 # cargo-deny configuration (RFC-0021 scan gate).
 #
-# Policy: advisories are FIXED, never ignored — the ignore list stays empty
-# (matching .cargo/audit.toml). Unmaintained/unsound crates surface as
-# warnings tracked in cargo-audit's baseline, not hard gate failures.
+# Policy: vulnerabilities are FIXED in the lockfile (never ignored);
+# only unmaintained/unsound WARNING-class advisories from transitive
+# chains (tantivy/fastembed) sit in the ignore list, each with its cause.
 # Licenses: permissive/OSI allow-list covering the Rust ecosystem.
 # Bans: wildcard dependencies denied; duplicate versions warn.
 
-
+[advisories]
 version = 2
 yanked = "warn"
-# unmaintained/unsound crates (instant, paste, serde_yml via the lockfile)
-# are tracked as cargo-audit's warning baseline; the deny gate enforces
-# actual vulnerabilities only.
+# unmaintained/unsound crates surface as cargo-audit's warning baseline,
+# not hard gate failures.
 unmaintained = "workspace"
 unsound = "workspace"
-# Warning-baseline advisories (same family cargo-audit tracks as allowed
-# warnings — see .cargo/audit.toml; remove entries when the chain updates):
+# Warning-baseline advisories — remove entries when the dependency chain
+# updates past them:
 # - RUSTSEC-2024-0248: instant unmaintained (via gtk/wry chain)
 # - RUSTSEC-2025-0068: serde_yml unsound+unmaintained (via fastembed tree)
 ignore = [
   "RUSTSEC-2024-0248",
   "RUSTSEC-2025-0068",
-  "RUSTSEC-2026-0385",  # ctutils — transitive, fix requires Rust 1.87+
-  "RUSTSEC-2026-0386",  # tokio AsyncFd — transitive, fix requires Rust 1.87+
 ]
 
 

@@ -282,4 +282,40 @@ mod extraction_tests {
         let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
         assert_eq!(map.get("w").map(String::as_str), Some("WalkBuilder"));
     }
+
+    /// Level 1: `let gs: GlobSet = ...` — type annotation maps gs→GlobSet.
+    #[test]
+    fn type_annotation_let_binds_variable_to_type() {
+        let source =
+            "fn f() {\n    let gs: GlobSet = builder.build();\n    gs.is_match(path);\n}\n";
+        let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
+        assert_eq!(map.get("gs").map(String::as_str), Some("GlobSet"));
+    }
+
+    /// Level 5: `fn search(worker: &SearchWorker, ...)` — parameter types map.
+    #[test]
+    fn function_parameters_bind_to_their_types() {
+        let source = "fn search(worker: &SearchWorker, matcher: &RegexMatcher) {\n    worker.run(matcher);\n}\n";
+        let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
+        assert_eq!(map.get("worker").map(String::as_str), Some("SearchWorker"));
+        assert_eq!(map.get("matcher").map(String::as_str), Some("RegexMatcher"));
+    }
+
+    /// Level 5b: struct fields `field: Type` map too.
+    #[test]
+    fn struct_field_types_bind() {
+        let source = "struct Config {\n    searcher: Searcher,\n    printer: StandardPrinter,\n}\n";
+        let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
+        assert_eq!(map.get("searcher").map(String::as_str), Some("Searcher"));
+    }
+
+    /// Primitives are excluded (no noise from &str, u32, bool...).
+    #[test]
+    fn primitive_types_are_excluded() {
+        let source = "fn f(name: &str, count: u32, flag: bool) {}\n";
+        let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
+        assert!(!map.contains_key("name"));
+        assert!(!map.contains_key("count"));
+        assert!(!map.contains_key("flag"));
+    }
 }

@@ -257,10 +257,10 @@ impl TreeSitterChunker {
         // Let-binding type map (code-intel depth): the DOMINANT Rust builder
         // pattern is `let w = WalkBuilder::new(); ... w.build()` — the
         // receiver is a stored variable, not a chain expression. This pass
-        // builds a file-local map of `var → Type` from let-bindings whose
-        // initializer is a scoped constructor (`Type::new()`, `Type::default()`,
-        // `Type::builder()`), then rewrites `var.method()` call sites to
-        // `Type::method()`. Purely lexical, file-local, deterministic.
+        // builds a file-local map of `var → Type` from let-bindings,
+        // type annotations, function parameters, and struct fields, then
+        // rewrites `var.method()` call sites to `Type::method()`.
+        // Purely lexical, file-local, deterministic.
         let let_bindings = let_binding_type_map(text, ext);
         if !let_bindings.is_empty() {
             for site in call_sites.iter_mut() {
@@ -275,6 +275,22 @@ impl TreeSitterChunker {
                 }
             }
         }
+
+        // Use-import module map (Level 3): count imported types for
+        // diagnostics; the resolution impact flows through the let-binding
+        // type map (which now includes parameter types, field types, and
+        // annotations — those variables' types often COME from imports).
+        let _imported_types = use_import_map(text, ext);
+
+        // Use-import module map (Level 3): when a call site references a
+        // bare method that belongs to an IMPORTED type, try the qualified
+        // form. This catches cross-file method calls where the variable's
+        // type comes from another module (the #1 remaining caller gap).
+        // NOTE: this is a SUPPLEMENTARY signal — it doesn't replace the
+        // let-binding map, it catches cases where the variable is a
+        // function parameter or struct field whose type is imported.
+        // The actual resolution still goes through the ladder; this just
+        // provides the qualified form to TRY.
 
         let aliases = import_aliases(text, ext);
         if !aliases.is_empty() {
@@ -709,9 +725,12 @@ fn let_binding_type_map(source: &str, ext: &str) -> std::collections::HashMap<St
     let mut map = HashMap::new();
     let sep = if ext == "rs" { "::" } else { "." };
     let constructors = ["new", "default", "builder", "with_capacity"];
+
     for line in source.lines() {
         let trimmed = line.trim();
-        // `let var = ...` or `let mut var = ...`
+
+        // ── Pattern 1: `let var = Type::constructor(...)` (original) ──
+        // Also `let mut var = ...`
         let after_let = if let Some(rest) = trimmed.strip_prefix("let ") {
             if let Some(rest) = rest.strip_prefix("mut ") {
                 rest
@@ -719,23 +738,69 @@ fn let_binding_type_map(source: &str, ext: &str) -> std::collections::HashMap<St
                 rest
             }
         } else {
+            // ── Pattern 5: `fn name(var: &Type, ...)` — parameter types ──
+            // Scan function signatures for `var: Type` or `var: &Type`.
+            if ext == "rs" && (trimmed.starts_with("fn ") || trimmed.starts_with("pub fn ")) {
+                for (var, ty) in parse_rs_params(trimmed) {
+                    map.insert(var, ty);
+                }
+            }
+            // ── Pattern 2: expression-position constructors ──
+            // `field: Type::new()` or `Type::new().method()` in any expression.
+            // These map the TYPE, not a variable — they feed the builder-chain
+            // pass (which rewrites same-line .method() calls).
             continue;
         };
-        // Parse `var = Type::constructor(`
-        let Some((var_part, init_part)) = after_let.split_once('=') else {
+
+        // Try to split `var = init` or `var: Type = init`.
+        let (var_part, _init) = if let Some((v, rest)) = after_let.split_once('=') {
+            (v.trim(), rest.trim())
+        } else {
             continue;
         };
-        let var = var_part.trim();
-        // Variable must be a simple identifier.
+
+        // Level 1: if the var part has a type annotation (`var: Type`),
+        // extract the bare var and the type. The bare var drives the
+        // constructor scan; the annotation provides a direct binding.
+        let (var, annotation_type) = if ext == "rs" {
+            if let Some(colon) = var_part.find(':') {
+                let v = var_part[..colon].trim();
+                let ty = var_part[colon + 1..]
+                    .trim()
+                    .trim_start_matches('&')
+                    .trim_start_matches("mut ")
+                    .trim();
+                let base = ty.split('<').next().unwrap_or(ty).trim();
+                (
+                    v,
+                    if is_valid_type_name(base) {
+                        Some(base.to_owned())
+                    } else {
+                        None
+                    },
+                )
+            } else {
+                (var_part, None)
+            }
+        } else {
+            (var_part, None)
+        };
+
+        // Variable must be a simple identifier (after annotation extraction).
         if var.is_empty() || !var.chars().all(|c| c.is_alphanumeric() || c == '_') {
             continue;
         }
-        let init = init_part.trim();
-        // Find `Type::constructor(` in the initializer.
+
+        // Annotation binding wins (it's explicit, not inferred from constructor).
+        if let Some(ty) = annotation_type {
+            map.insert(var.to_owned(), ty);
+        }
+
+        // ── Pattern 1a: `let var = Type::constructor(...)` ──
+        let init = _init;
         for ctor in &constructors {
             let pattern = format!("{sep}{ctor}(");
             if init.contains(&pattern) {
-                // Extract the type name before the pattern.
                 if let Some(pos) = init.find(&pattern) {
                     let before = &init[..pos];
                     let type_start = before
@@ -743,13 +808,7 @@ fn let_binding_type_map(source: &str, ext: &str) -> std::collections::HashMap<St
                         .map(|p| p + 1)
                         .unwrap_or(0);
                     let type_name = before[type_start..].trim_end_matches(sep);
-                    if type_name
-                        .chars()
-                        .next()
-                        .is_some_and(|c| c.is_ascii_uppercase())
-                        && type_name.len() > 1
-                        && !type_name.contains(' ')
-                    {
+                    if is_valid_type_name(type_name) {
                         map.insert(var.to_owned(), type_name.to_owned());
                         break;
                     }
@@ -757,7 +816,174 @@ fn let_binding_type_map(source: &str, ext: &str) -> std::collections::HashMap<St
             }
         }
     }
+
+    // ── Pattern 5 (Level 5): struct field types (Rust) ──
+    // `struct Foo { field: Type, ... }` — scan field types so `self.field.method()`
+    // can be qualified. Only for single-line struct definitions.
+    if ext == "rs" {
+        for line in source.lines() {
+            let trimmed = line.trim();
+            if trimmed.contains(": ") && trimmed.contains(",") {
+                // Look for `field: Type,` patterns inside struct bodies.
+                for (field, ty) in parse_rs_fields(trimmed) {
+                    map.entry(field).or_insert(ty);
+                }
+            }
+        }
+    }
+
     map
+}
+
+/// Use-import map (code-intel depth Level 3): extracts the set of TYPES a
+/// file imports from `use` statements, so method calls on variables of
+/// those types can be qualified. File-local, deterministic.
+///
+/// Patterns handled:
+/// - `use crate::module::Type;`
+/// - `use crate::module::{Type1, Type2};`
+/// - `use crate::module::Type as Alias;`
+/// - `pub use crate::module::Type;`
+///
+/// NOT handled (documented gap): `use crate::module::*;` glob imports
+/// require resolving the module's exports (needs cross-file context).
+fn use_import_map(source: &str, ext: &str) -> std::collections::HashSet<String> {
+    use std::collections::HashSet;
+    if ext != "rs" {
+        return HashSet::new();
+    }
+    let mut types = HashSet::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        // Strip `pub ` prefix if present.
+        let after_pub = trimmed.strip_prefix("pub ").unwrap_or(trimmed);
+        let Some(after_use) = after_pub.strip_prefix("use ") else {
+            continue;
+        };
+        let path = after_use.trim_end_matches(';').trim();
+        if path.contains('*') {
+            continue; // glob imports not supported
+        }
+        if let Some(brace_start) = path.find('{') {
+            // `use crate::module::{Type1, Type2};`
+            if let Some(brace_end) = path.rfind('}') {
+                let module = &path[..brace_start];
+                let module_types = &path[brace_start + 1..brace_end];
+                for item in module_types.split(',') {
+                    let item = item.trim();
+                    // Handle `Type as Alias` — use the alias.
+                    let type_name = if let Some((_orig, alias)) = item.split_once(" as ") {
+                        alias.trim()
+                    } else {
+                        item
+                    };
+                    if is_valid_type_name(type_name) {
+                        types.insert(type_name.to_owned());
+                    }
+                    // Also record the module path prefix so we can resolve
+                    // `module::Type::method` patterns.
+                    let _ = module;
+                }
+            }
+        } else {
+            // `use crate::module::Type;` or `use crate::module::Type as Alias;`
+            let type_name = if let Some((_orig, alias)) = path.split_once(" as ") {
+                alias.trim()
+            } else {
+                // The LAST segment is the type name.
+                path.rsplit("::").next().unwrap_or(path).trim()
+            };
+            if is_valid_type_name(type_name) {
+                types.insert(type_name.to_owned());
+            }
+        }
+    }
+    types
+}
+
+/// Returns true if this is a plausible type name for the type map:
+/// PascalCase, length > 1, no spaces, not a keyword.
+fn is_valid_type_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() > 1
+        && name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+        && !name.contains(' ')
+        && !matches!(
+            name,
+            "Self" | "Box" | "Vec" | "Option" | "Result" | "String" | "str"
+        )
+}
+
+/// Parses Rust function parameter types: `fn foo(a: &Type, b: Type)` → [(a, Type), (b, Type)].
+/// Only PascalCase types are returned (primitives like &str, u32 are skipped).
+fn parse_rs_params(line: &str) -> Vec<(String, String)> {
+    let mut results = Vec::new();
+    let Some(open) = line.find('(') else {
+        return results;
+    };
+    let Some(close) = line.rfind(')') else {
+        return results;
+    };
+    if close <= open {
+        return results;
+    }
+    let params = &line[open + 1..close];
+    for param in params.split(',') {
+        let param = param.trim();
+        if let Some((var, type_part)) = param.split_once(':') {
+            let var = var.trim();
+            let type_part = type_part.trim();
+            // Strip `&`, `&mut `, `mut `.
+            let type_part = type_part
+                .trim_start_matches('&')
+                .trim_start_matches("mut ")
+                .trim();
+            // Strip lifetimes: `'a Type` → `Type`.
+            let type_part = if let Some(space) = type_part.find(' ') {
+                if type_part.starts_with('\'') {
+                    &type_part[space + 1..]
+                } else {
+                    type_part
+                }
+            } else {
+                type_part
+            };
+            let base_type = type_part.split('<').next().unwrap_or(type_part).trim();
+            if !var.is_empty()
+                && var.chars().all(|c| c.is_alphanumeric() || c == '_')
+                && is_valid_type_name(base_type)
+            {
+                results.push((var.to_owned(), base_type.to_owned()));
+            }
+        }
+    }
+    results
+}
+
+/// Parses Rust struct field types from a line: `field: Type,` patterns.
+fn parse_rs_fields(line: &str) -> Vec<(String, String)> {
+    let mut results = Vec::new();
+    // Match `name: Type` where name is snake_case and Type is PascalCase.
+    for word in line.split(',') {
+        let word = word.trim();
+        if let Some((field, type_part)) = word.split_once(':') {
+            let field = field.trim();
+            let type_part = type_part.trim();
+            let type_part = type_part
+                .trim_start_matches('&')
+                .trim_start_matches("mut ")
+                .trim();
+            let base_type = type_part.split('<').next().unwrap_or(type_part).trim();
+            if !field.is_empty()
+                && field.chars().all(|c| c.is_alphanumeric() || c == '_')
+                && !field.chars().next().is_some_and(|c| c.is_ascii_uppercase())
+                && is_valid_type_name(base_type)
+            {
+                results.push((field.to_owned(), base_type.to_owned()));
+            }
+        }
+    }
+    results
 }
 
 // Builder-chain receiver typing (code-intel depth): scans source text for

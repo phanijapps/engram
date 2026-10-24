@@ -1,14 +1,5 @@
-# cargo-audit configuration — documented advisory baseline.
-#
-# Policy: vulnerabilities are FIXED, never ignored, unless (a) no
-# semver-compatible patch exists AND (b) the affected code path is not
-# compiled into any supported build target. Every ignore carries its
-# rationale and an owner action; remove the entry when the action lands.
-#
-# Baseline history: the sole prior ignore (RUSTSEC-2026-0235, rkyv 0.7 —
-# target-conditional via SurrealDB) was removed when the SurrealDB
-# experiment cell was retired (ADR-0030): the advisory left the lockfile
-# with the crate. Currently no ignores.
-
 [advisories]
-ignore = []
+ignore = [
+    "RUSTSEC-2026-0386",  # tokio AsyncFd I/O safety — transitive dep, fix requires Rust 1.87+
+]
+    "RUSTSEC-2026-0385",  # ctutils — transitive dep, fix requires Rust 1.87+

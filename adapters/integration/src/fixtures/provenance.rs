@@ -277,6 +277,8 @@ fn source(id: Id) -> KnowledgeSource {
         name: "provenance source".to_owned(),
         uri: None,
         version: None,
+        repository_key: None,
+        git_ref: None,
         policy: policy(),
         provenance: provenance(None),
         created_at: chrono::Utc::now(),

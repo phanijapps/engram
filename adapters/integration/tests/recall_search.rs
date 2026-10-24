@@ -220,6 +220,8 @@ fn chunk_resolution_remains_unchanged_with_entity_aware_resolver() {
         name: "rrf-docs".to_string(),
         uri: None,
         version: None,
+        repository_key: None,
+        git_ref: None,
         policy: Policy {
             visibility: Visibility::Workspace,
             retention: Retention::Durable,

@@ -1088,6 +1088,45 @@ are never reported `current`.
 Operations: `subscribe_changes` (bounded polling page — not a stream),
 `code_staleness`; codegraph answers carry a visible `STALENESS:` line.
 
+### Code-index identity (branch-aware indexing, 2026-10-24)
+
+> **Implementation status:** Phase 1 (contract) is complete — the domain
+> fields, schemas, and generated types exist. Phase 2 (ingestion — qualified
+> source keys, branch-aware reconciliation) and Phase 3 (search — index
+> selection in retrieval lanes) are NOT yet implemented. Until Phase 3,
+> `codeIndexKeys` is accepted but not enforced by retrieval; setting it
+> explicitly produces an honest not-yet-implemented diagnostic rather than
+> silent filtering.
+
+A **code index** is an independently selectable, refreshable representation
+of a repository's code at a specific Git ref. Operations agents search the
+deployed branch; developer agents search the dev branch — same workspace,
+same repository, different code indexes.
+
+**Identity chain:**
+- `repository_key` — canonical repository identity, commit-stable and
+  branch-independent (e.g. `github.com/acme/payments`).
+- `git_ref` — the Git ref that was indexed (e.g. `refs/heads/main`).
+  None for non-git sources.
+- `version` — the exact commit OID at scan time (full SHA, never a branch name).
+- `code_index_key()` — derived partition key:
+  `repository_key@git_ref` (e.g. `github.com/acme/payments@refs/heads/main`).
+  This is what drives reconciliation partitioning (a dev scan never retracts
+  main's graphs) and search filtering.
+
+**Search selection** (`QueryFilter.codeIndexKeys`): optional array of
+qualified keys or configured aliases. Absent = workspace default;
+`["*"]` = all indexes (cross-branch); unknown = clear diagnostic.
+Never silently falls back from a selected index to another.
+
+**Checkpoint and staleness** carry `gitRef` for display; their
+`stableSourceKey` / `sourceKey` values use the qualified form once
+branch-aware indexing is active.
+
+**Migration:** legacy unqualified keys (`"myrepo"`) remain valid as the
+single-index case during the transition; controlled reindex creates the
+branch-qualified variants.
+
 ### Graph maintenance (ADR-0027)
 
 Reversible, plan/apply repair over knowledge entities and relationships. The host

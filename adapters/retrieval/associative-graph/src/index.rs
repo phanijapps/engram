@@ -450,6 +450,7 @@ mod tests {
                 entity_ids: Vec::new(),
                 since: None,
                 until: None,
+                code_index_keys: None,
                 min_confidence: None,
                 include_archived: None,
                 as_of: None,

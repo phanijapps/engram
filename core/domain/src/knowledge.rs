@@ -36,6 +36,12 @@ pub struct KnowledgeSource {
     pub uri: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
+    /// Canonical repository identity (commit-stable, branch-independent).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub repository_key: Option<String>,
+    /// Git ref that was indexed ("refs/heads/main"). None for non-git.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub git_ref: Option<String>,
     pub policy: Policy,
     pub provenance: Provenance,
     pub created_at: Timestamp,
@@ -43,6 +49,21 @@ pub struct KnowledgeSource {
     pub updated_at: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Metadata>,
+}
+
+impl KnowledgeSource {
+    /// Branch-qualified code-index partition key:
+    /// `github.com/acme/payments@refs/heads/main`. Returns the bare
+    /// repository key when no ref was recorded (legacy/non-git).
+    /// Returns None when no repository identity exists.
+    pub fn code_index_key(&self) -> Option<String> {
+        self.repository_key
+            .as_ref()
+            .map(|repo| match &self.git_ref {
+                Some(r) if !r.is_empty() => format!("{repo}@{r}"),
+                _ => repo.clone(),
+            })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

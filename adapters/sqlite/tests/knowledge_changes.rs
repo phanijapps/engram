@@ -131,6 +131,7 @@ fn checkpoint_upsert_ignores_stale_runs_and_latest_round_trips() {
     let newer = ScanCheckpoint {
         scope: scope(),
         stable_source_key: "repo-a".to_owned(),
+        git_ref: None,
         scan_root: Some("/repo/a".to_owned()),
         scan_run_id: "run-2".to_owned(),
         started_at: chrono::Utc::now(),
@@ -163,6 +164,7 @@ fn staleness_derivation_never_fabricates_zero() {
     let cp = ScanCheckpoint {
         scope: scope(),
         stable_source_key: "repo-a".to_owned(),
+        git_ref: None,
         scan_root: None,
         scan_run_id: "run-1".to_owned(),
         started_at: chrono::Utc::now(),

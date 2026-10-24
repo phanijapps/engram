@@ -115,8 +115,13 @@ pub struct KnowledgeChangesPage {
 #[serde(rename_all = "camelCase")]
 pub struct ScanCheckpoint {
     pub scope: Scope,
-    /// Stable source key (ADR-0017); the portable identity of the repo.
+    /// Stable source key — the branch-qualified code-index partition key
+    /// ("myrepo@refs/heads/main") once branch-aware indexing ships; legacy
+    /// unqualified keys ("myrepo") remain valid for the transition.
     pub stable_source_key: String,
+    /// Git ref that was indexed ("refs/heads/main"). None for non-git.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub git_ref: Option<String>,
     /// Host-local scan root path (diagnostic only; NOT portable identity).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scan_root: Option<String>,
@@ -163,7 +168,11 @@ impl ScanStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CodeGraphStaleness {
+    /// Branch-qualified code-index key ("myrepo@refs/heads/main").
     pub source_key: String,
+    /// Display-friendly git ref name. None for non-git sources.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub git_ref: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_successful_scan_at: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -231,6 +240,7 @@ pub fn derive_staleness(
             indexed_revision: None,
             current_revision: current_revision.map(str::to_owned),
             commits_behind: None,
+            git_ref: None,
             status: StalenessStatus::Unindexed,
             dirty,
             scan_in_progress: false,
@@ -261,6 +271,7 @@ pub fn derive_staleness(
     };
     CodeGraphStaleness {
         source_key: source_key.to_owned(),
+        git_ref: cp.git_ref.clone(),
         last_successful_scan_at: if cp.status == ScanStatus::Completed {
             cp.completed_at
         } else {

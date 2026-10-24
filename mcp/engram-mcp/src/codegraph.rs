@@ -577,6 +577,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         };
         let checkpoint = engram_domain::ScanCheckpoint {
             scope: app.scope.clone(),
+            git_ref: None,
             stable_source_key: root
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
@@ -1452,6 +1453,7 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
         entity_ids: Vec::new(),
         since: None,
         until: None,
+        code_index_keys: None,
         min_confidence: None,
         include_archived: None,
         as_of: None,

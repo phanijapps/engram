@@ -164,6 +164,7 @@ fn rust_retrieval_request_matches_v1_schema() {
         requester: requester(),
         modes: vec![RetrievalMode::Keyword],
         filters: Some(QueryFilter {
+            code_index_keys: None,
             memory_kinds: vec![MemoryKind::Fact],
             source_kinds: Vec::new(),
             chunk_kinds: Vec::new(),

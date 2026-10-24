@@ -79,6 +79,10 @@ export const engramV1Schema = {
         "dirty": {
           "type": "boolean"
         },
+        "gitRef": {
+          "description": "Git ref that was indexed. None for non-git.",
+          "type": "string"
+        },
         "indexedRevision": {
           "type": "string"
         },
@@ -806,6 +810,10 @@ export const engramV1Schema = {
         "createdAt": {
           "$ref": "#/$defs/Timestamp"
         },
+        "gitRef": {
+          "description": "Git ref that was indexed (refs/heads/main). None for non-git sources.",
+          "type": "string"
+        },
         "id": {
           "$ref": "#/$defs/Identifier"
         },
@@ -823,6 +831,10 @@ export const engramV1Schema = {
         },
         "provenance": {
           "$ref": "#/$defs/Provenance"
+        },
+        "repositoryKey": {
+          "description": "Canonical repository identity (commit-stable, branch-independent).",
+          "type": "string"
         },
         "scope": {
           "$ref": "#/$defs/Scope"
@@ -1326,6 +1338,13 @@ export const engramV1Schema = {
           },
           "type": "array"
         },
+        "codeIndexKeys": {
+          "description": "Which code indexes contribute candidates. Qualified keys or configured aliases. Absent = workspace default; ['*'] = all.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "conceptIds": {
           "items": {
             "$ref": "#/$defs/Identifier"
@@ -1654,6 +1673,10 @@ export const engramV1Schema = {
         "errors": {
           "minimum": 0,
           "type": "integer"
+        },
+        "gitRef": {
+          "description": "Git ref that was indexed. None for non-git.",
+          "type": "string"
         },
         "indexedRevision": {
           "type": "string"

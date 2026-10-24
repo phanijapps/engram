@@ -131,6 +131,8 @@ fn source(root: &Path) -> KnowledgeSource {
         name: "git fixture".to_owned(),
         uri: Some(root.display().to_string()),
         version: Some("worktree".to_owned()),
+        repository_key: None,
+        git_ref: None,
         policy: policy(),
         provenance: provenance(),
         created_at: Utc::now(),

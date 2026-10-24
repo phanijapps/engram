@@ -113,6 +113,8 @@ where
             name: request.source_name,
             uri: request.document.uri.clone(),
             version: request.document.version.clone(),
+            repository_key: None,
+            git_ref: None,
             policy: request.policy.clone(),
             provenance: provenance.clone(),
             created_at: now,

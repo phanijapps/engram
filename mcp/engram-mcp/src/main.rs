@@ -102,7 +102,7 @@ LAUNCH FLAGS
   --taxonomy <path>           Taxonomy config (JSON)
   --layout single|multi       SQLite file layout (default single)
   --db-file <name>            DB filename override
-  --tools core|full|all|consolidated   Tool profile (default core = 32 tools)
+  --tools core|full|all|consolidated   Tool profile (default core = 34 tools)
   --backend sqlite|pgvector   Engine recipe (default sqlite)
   --pg-connection-string <url> Postgres URL (pgvector; env ENGRAM_PG_CONNECTION_STRING)
   --slim                      Skip embeddings (no model download/load); keep lexical + graph
@@ -268,7 +268,7 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
         }
         other => {
             eprintln!(
-                "engram-mcp: unknown --tools profile '{other}'; using core (32 tools). \
+                "engram-mcp: unknown --tools profile '{other}'; using core (34 tools). \
                  Options: core | full | all | consolidated"
             );
             Some(DEFAULT_TOOLS)
@@ -323,6 +323,8 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     "procedure_list",
     // Consolidation — close the reflection loop (dry_run honored).
     "consolidate",
+    // Operations surface — health, outcomes report, maintenance.
+    "maintain",
     // Correct / monitor + content stitching.
     "forget",
     "graph_health",
@@ -333,6 +335,7 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     // The outcome loop — attribute task results to recalls.
     "report_outcome",
     "list_outcomes",
+    "outcome_report",
 ];
 
 /// The 7 consolidated core tools — the prior default, now behind
@@ -868,6 +871,13 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
         handler: outcomes::report_outcome,
     });
     registry.register(ToolRecord {
+        name: "outcome_report",
+        description: "ΔP Outcome Report — success rates by capability, recall-usage \\
+                      association, interference candidates. ASSOCIATED, never causal.",
+        input_schema: json!({ "type": "object", "properties": {} }),
+        handler: outcomes::outcome_report,
+    });
+    registry.register(ToolRecord {
         name: "list_outcomes",
         description: "Read a window of attributed recall outcomes (most recent first; \\
                       hours=24 default, max 720).",
@@ -1273,7 +1283,7 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
         input_schema: json!({
             "type": "object",
             "properties": {
-                "op": { "type": "string", "enum": ["consolidate", "reindex", "health", "candidates", "plan", "apply", "capabilities", "increment"],
+                "op": { "type": "string", "enum": ["consolidate", "reindex", "health", "candidates", "plan", "apply", "capabilities", "increment", "outcomes"],
                         "description": "Maintenance operation." },
                 "limit": { "type": "number", "description": "Reindex chunk cap / candidate limit." },
                 "plan": { "type": "object", "description": "Maintenance plan JSON (op=apply)." },
@@ -1554,6 +1564,7 @@ fn consolidated_maintain(app: &App, args: &Value) -> Result<Value, ToolError> {
             }),
         ),
         "capabilities" => crate::codegraph::capability_report(app, args),
+        "outcomes" => crate::outcomes::outcome_report(app, args),
         "increment" => crate::procedures::procedure_increment(
             app,
             &json!({
@@ -1605,6 +1616,7 @@ fn consolidated_beliefs(app: &App, args: &Value) -> Result<Value, ToolError> {
 fn consolidated_procedures(app: &App, args: &Value) -> Result<Value, ToolError> {
     let op = args["op"].as_str().unwrap_or("list");
     match op {
+        "outcomes" => crate::outcomes::outcome_report(app, args),
         "increment" => crate::procedures::procedure_increment(
             app,
             &json!({

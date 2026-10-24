@@ -840,22 +840,29 @@ fn filter_rels_by_graph_ids(
 /// Filters entities to only those whose graph_id is in the allowed set.
 /// Entities with graph_id = None (scope-global, e.g. Repository nodes) pass
 /// through — they are shared across indexes.
-fn filter_entities_by_graph_ids(
-    entities: Vec<KnowledgeEntity>,
-    allowed: &Option<std::collections::HashSet<String>>,
-) -> Vec<KnowledgeEntity> {
-    match allowed {
-        None => entities,
-        Some(set) => entities
-            .into_iter()
-            .filter(|e| {
-                e.graph_id
-                    .as_ref()
-                    .map(|g| set.contains(&g.to_string()))
-                    .unwrap_or(true) // graph_id = None: shared, keep
-            })
-            .collect(),
-    }
+/// Builds a symbol-name → file-path map from in-scope entities so
+/// navigation results can include WHERE each symbol lives (the evaluator's
+/// #2 gap: agents can't use results without locations).
+fn symbol_path_map(app: &App) -> std::collections::HashMap<String, String> {
+    use std::collections::HashMap;
+    let query = match app.provider.require_knowledge_query() {
+        Ok(q) => q,
+        Err(_) => return HashMap::new(),
+    };
+    let entities = match block_on(query.list_entities(&app.scope)) {
+        Ok(e) => e,
+        Err(_) => return HashMap::new(),
+    };
+    entities
+        .into_iter()
+        .filter_map(|e| {
+            e.source_refs
+                .first()
+                .and_then(|r| r.location.as_ref())
+                .and_then(|l| l.path.clone())
+                .map(|path| (e.name.clone(), path))
+        })
+        .collect()
 }
 
 pub(crate) fn fetch_rels(app: &App) -> Result<Vec<KnowledgeRelationship>, ToolError> {
@@ -2055,7 +2062,12 @@ fn resolve_seeds(entity_names: &[String], user_symbol: &str) -> Vec<String> {
     }
 }
 
-fn render_edge_evidence(rels: &[KnowledgeRelationship], seeds: &[String]) -> String {
+
+fn render_edge_evidence_with_paths(
+    rels: &[KnowledgeRelationship],
+    seeds: &[String],
+    paths: &std::collections::HashMap<String, String>,
+) -> String {
     use std::collections::HashMap as EMap;
     let mut callers: EMap<String, engram_codegraph_queries::EdgeEvidence> = EMap::new();
     let mut callees: EMap<String, engram_codegraph_queries::EdgeEvidence> = EMap::new();
@@ -2072,9 +2084,16 @@ fn render_edge_evidence(rels: &[KnowledgeRelationship], seeds: &[String]) -> Str
         let mut evs: Vec<&engram_codegraph_queries::EdgeEvidence> = m.values().collect();
         evs.sort_by(|a, b| a.endpoint.cmp(&b.endpoint));
         let fmt = |e: &engram_codegraph_queries::EdgeEvidence| {
+            // Navigation quality: include the file path so agents know WHERE
+            // the symbol lives (evaluator gap #2).
+            let path = paths
+                .get(e.endpoint.as_str())
+                .map(|p| format!(" [{p}]"))
+                .unwrap_or_default();
             format!(
-                "{} (conf {}, {}, {}, {})",
+                "{}{} (conf {}, {}, {}, {})",
                 e.endpoint,
+                path,
                 e.confidence
                     .map(|c| c.to_string())
                     .unwrap_or_else(|| "-".into()),
@@ -2111,6 +2130,7 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
     let rels = filter_rels_by_graph_ids(fetch_rels(app)?, &index_filter);
     let names = entity_names(app);
+    let paths = symbol_path_map(app);
 
     // Legacy single-string path: identical output shape to the prior
     // implementation (`{ctx:?}` with no header). The single user symbol may
@@ -2123,10 +2143,31 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             .map(|s| engram_codegraph_queries::symbol_context_bounded(&rels, s, depth, cap))
             .collect();
         let ctx = union_symbol_context(ctxs);
-        let evidence = render_edge_evidence(&rels, &seeds);
+        let evidence = render_edge_evidence_with_paths(&rels, &seeds, &paths);
         let staleness = crate::changes::staleness_note(app);
+        // Navigation quality: explain WHY the result is empty (evaluator gap #3).
+        let status_note = if ctx.ctx.callers.is_empty()
+            && ctx.ctx.callees.is_empty()
+            && ctx.ctx.implementers.is_empty()
+        {
+            if names.is_empty() {
+                "\nNOTE: no indexed entities — try scan_repo first.".to_owned()
+            } else if !names.iter().any(|n| n.contains(&symbols[0])) {
+                format!(
+                    "\nNOTE: symbol '{}' not found. Try `search` to discover the correct name.",
+                    symbols[0]
+                )
+            } else {
+                format!(
+                    "\nNOTE: symbol '{}' indexed but no resolved edges — re-scan with --force.",
+                    symbols[0]
+                )
+            }
+        } else {
+            String::new()
+        };
         return Ok(protocol::text_content(format!(
-            "{ctx:?}{evidence}{staleness}"
+            "{ctx:?}{evidence}{staleness}{status_note}"
         )));
     }
 
@@ -2141,7 +2182,7 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
             .map(|s| engram_codegraph_queries::symbol_context_bounded(&rels, s, depth, cap))
             .collect();
         let ctx = union_symbol_context(ctxs);
-        let evidence = render_edge_evidence(&rels, &seeds);
+        let evidence = render_edge_evidence_with_paths(&rels, &seeds, &paths);
         let staleness = crate::changes::staleness_note(app);
         sections.push(format!(
             "=== symbol_context: {symbol} (depth={depth}) ===\n{ctx:?}{evidence}{staleness}"
@@ -2175,6 +2216,7 @@ pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
         .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
     let rels = filter_rels_by_graph_ids(fetch_rels(app)?, &index_filter);
     let names = entity_names(app);
+    let _paths = symbol_path_map(app);
 
     // Legacy single-string path: preserve the dependency-path option.
     if targets.len() == 1 && args["target"].is_string() {

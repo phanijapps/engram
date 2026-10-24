@@ -130,3 +130,58 @@ mod tests {
         );
     }
 }
+
+/// Derives the branch-qualified code-index partition key (ADR-0032).
+///
+/// When a git ref (branch) is known, the key becomes `{repo_key}@{ref}`
+/// (e.g. `github.com/acme/payments@refs/heads/main`), so scans of different
+/// branches of the same repo produce independent lifecycles — a dev scan
+/// never retracts main's graphs. When no ref is known (non-git source, or
+/// legacy single-branch scan), the bare repository key is returned unchanged
+/// (backward-compatible with existing stores).
+///
+/// The ref is used AS-DETECTED — case-sensitive, not lowercased, not fed
+/// through the remote normalizer — because git refs are case-sensitive.
+pub fn qualified_source_key(repo_key: &str, git_ref: Option<&str>) -> String {
+    match git_ref {
+        Some(r) if !r.is_empty() => format!("{repo_key}@{r}"),
+        _ => repo_key.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod qualified_tests {
+    use super::*;
+
+    #[test]
+    fn qualified_key_includes_the_ref() {
+        assert_eq!(
+            qualified_source_key("github.com/acme/payments", Some("refs/heads/main")),
+            "github.com/acme/payments@refs/heads/main"
+        );
+        assert_eq!(
+            qualified_source_key("github.com/acme/payments", Some("refs/heads/dev")),
+            "github.com/acme/payments@refs/heads/dev"
+        );
+    }
+
+    #[test]
+    fn qualified_key_preserves_ref_case_sensitivity() {
+        assert_eq!(
+            qualified_source_key("github.com/org/repo", Some("refs/heads/Feature-X")),
+            "github.com/org/repo@refs/heads/Feature-X"
+        );
+    }
+
+    #[test]
+    fn no_ref_returns_bare_key_backward_compatible() {
+        assert_eq!(
+            qualified_source_key("github.com/acme/payments", None),
+            "github.com/acme/payments"
+        );
+        assert_eq!(
+            qualified_source_key("github.com/acme/payments", Some("")),
+            "github.com/acme/payments"
+        );
+    }
+}

@@ -46,4 +46,4 @@ pub use scan_filter::{ConceptFilterConfig, DenyFilterConfig, ScanFilter, ScanFil
 pub use scanner::{
     ScanOptions, ScanProgress, ScanSummary, detect_workspace, scan_repository, scan_workspace,
 };
-pub use source_key::{SOURCE_PATH_KEY, STABLE_SOURCE_KEY, stable_source_key};
+pub use source_key::{SOURCE_PATH_KEY, STABLE_SOURCE_KEY, qualified_source_key, stable_source_key};

@@ -119,6 +119,8 @@ fn ingest_file(path: &str, text: &str) -> (Vec<String>, Vec<String>, usize) {
         policy: policy(),
         actor: actor(),
         stable_source_key: None,
+        repository_key: None,
+        git_ref: None,
         source_metadata: None,
     };
     let ingested =

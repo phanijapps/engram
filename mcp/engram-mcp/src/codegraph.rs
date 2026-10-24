@@ -577,7 +577,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         };
         let checkpoint = engram_domain::ScanCheckpoint {
             scope: app.scope.clone(),
-            git_ref: None,
+            git_ref: summary.git_branch.clone(),
             stable_source_key: root
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())

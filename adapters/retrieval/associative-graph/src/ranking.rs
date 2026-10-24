@@ -49,20 +49,32 @@ impl Default for PprConfig {
 /// an empty vec when `seeds` is empty. Seeds absent from every edge still appear,
 /// because they are part of the PPR node set.
 pub fn rank_associative(
-    edges: &[(String, String)],
+    edges: &[(String, String, f32)],
     seeds: &[String],
     config: PprConfig,
 ) -> Vec<(String, f64)> {
     if seeds.is_empty() {
         return Vec::new();
     }
-    let mut bidirected: Vec<(String, String)> = Vec::with_capacity(edges.len().saturating_mul(2));
-    for (s, o) in edges {
-        bidirected.push((s.clone(), o.clone()));
+    // Trust-weighted multiplicity (F1): the pure PPR walk is unweighted, so
+    // each edge's weight is quantized to parallel edges via the SAME
+    // documented conversion the exported TrustWeights uses (w in [0,1] ->
+    // max(1, round(w * 4))). A parsed fact (1.0) carries roughly twice the
+    // flow of a heuristic guess (0.5).
+    let weight_multiplicity =
+        |weight: f32| -> usize { ((weight * 4.0).round() as usize).clamp(1, 4) };
+    let mut bidirected: Vec<(String, String)> = Vec::with_capacity(edges.len().saturating_mul(8));
+    for (s, o, weight) in edges {
+        let multiplicity = weight_multiplicity(*weight);
+        for _ in 0..multiplicity {
+            bidirected.push((s.clone(), o.clone()));
+        }
         // Skip the reverse for self-loops so a `subject == object` relationship
         // does not double the node's out-degree.
         if s != o {
-            bidirected.push((o.clone(), s.clone()));
+            for _ in 0..multiplicity {
+                bidirected.push((o.clone(), s.clone()));
+            }
         }
     }
     let scores = personalized_pagerank(
@@ -124,8 +136,12 @@ fn reachable_from(edges: &[(String, String)], seeds: &[String]) -> HashSet<Strin
 mod tests {
     use super::*;
 
-    fn edge(s: &str, o: &str) -> (String, String) {
-        (s.to_string(), o.to_string())
+    fn edge(s: &str, o: &str) -> (String, String, f32) {
+        (s.to_string(), o.to_string(), 1.0)
+    }
+
+    fn weighted_edge(s: &str, o: &str, w: f32) -> (String, String, f32) {
+        (s.to_string(), o.to_string(), w)
     }
 
     fn seeds(ids: &[&str]) -> Vec<String> {
@@ -248,5 +264,51 @@ mod tests {
         let first = rank_associative(&edges, &seeds(&["a"]), PprConfig::default());
         let second = rank_associative(&edges, &seeds(&["a"]), PprConfig::default());
         assert_eq!(first, second);
+    }
+
+    /// F1 (trust-aware retrieval): a parsed structural fact carries more walk
+    /// mass than a heuristic guess, so at equal hop distance the parsed path's
+    /// endpoint ranks higher.
+    #[test]
+    fn parsed_edge_outranks_heuristic_edge_at_equal_hops() {
+        // seed -[parsed 1.0]-> a ; seed -[heuristic 0.5]-> b  (both 1 hop).
+        let edges = vec![
+            weighted_edge("seed", "a", 1.0),
+            weighted_edge("seed", "b", 0.5),
+        ];
+        let ranked = rank_associative(&edges, &seeds(&["seed"]), PprConfig::default());
+        let score_of = |id: &str| {
+            ranked
+                .iter()
+                .find(|(k, _)| k == id)
+                .map(|(_, s)| *s)
+                .unwrap_or(-1.0)
+        };
+        assert!(
+            score_of("a") > score_of("b"),
+            "parsed path must outrank heuristic: a={} b={}",
+            score_of("a"),
+            score_of("b")
+        );
+    }
+
+    /// Neutral weight (non-code relationships, legacy rows) behaves exactly as
+    /// the pre-F1 unweighted walk: same score as an explicit 1.0 edge.
+    #[test]
+    fn neutral_weight_matches_explicit_full_weight() {
+        let neutral = vec![
+            weighted_edge("seed", "a", 1.0),
+            weighted_edge("seed", "b", 1.0),
+        ];
+        let ranked = rank_associative(&neutral, &seeds(&["seed"]), PprConfig::default());
+        let score_of = |id: &str| {
+            ranked
+                .iter()
+                .find(|(k, _)| k == id)
+                .map(|(_, s)| *s)
+                .unwrap_or(-1.0)
+        };
+        let diff = (score_of("a") - score_of("b")).abs();
+        assert!(diff < 1e-12, "equal weights -> equal scores: {diff}");
     }
 }

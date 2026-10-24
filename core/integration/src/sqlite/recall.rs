@@ -71,6 +71,10 @@ pub struct SqlUnifiedRecall {
     /// (equal-weight) when no config is supplied.
     fusion: ReciprocalFusionConfig,
     reranker: Option<Arc<dyn engram_retrieval::RetrievalReranker>>,
+    /// Trust-aware scoring (F1): provenance-method boosts applied to
+    /// facts-lane candidates (e.g. operator-approved memories outrank the
+    /// same text written directly by an agent).
+    trust: engram_retrieval::TrustWeights,
 }
 
 impl SqlUnifiedRecall {
@@ -110,6 +114,7 @@ impl SqlUnifiedRecall {
             beliefs,
             fusion,
             reranker,
+            trust: engram_retrieval::TrustWeights::default(),
         }
     }
 }
@@ -126,8 +131,43 @@ impl UnifiedRecall for SqlUnifiedRecall {
         // Its items feed the outer fusion; its source_failures + omitted merge
         // into the outer payload (compose_context keeps all candidates — no
         // double-budget).
-        match self.memory.retrieve(request.clone()).await {
-            Ok(payload) => {
+        // Trust-aware facts lane (F1, review-hardened):
+        // (a) The INNER retrieve runs WITHOUT the final output truncation
+        //     (limit + budget stripped) — the memory service otherwise omits
+        //     candidates before the trust boost can rescue them (review P1-2:
+        //     an approved equal-score memory lost to a newer plain one at
+        //     limit=1). The user's real budget is applied ONCE by the outer
+        //     compose_context after fusion (the pre-existing no-double-budget
+        //     design); scope/filter/policy checks are unchanged inside.
+        // (b) Method boosts scale the source scores, then the lane reorders —
+        //     RRF consumes WITHIN-SOURCE ENCOUNTER ORDER, not raw scores.
+        // (c) The sort is STABLE with NO id tiebreak (review P1-3): equal
+        //     boosted totals keep the memory service's deterministic order
+        //     (newest-first), so the all-neutral case is byte-identical to
+        //     pre-F1 behavior. Note: RRF's finalization overwrites `total`
+        //     with the fused score and the trace keeps the UNBOOSTED
+        //     source_score — the boost's durable effect is trust-adjusted
+        //     source ORDERING, not a persisted score multiplier.
+        let mut inner_request = request.clone();
+        inner_request.limit = None;
+        inner_request.budget = None;
+        match self.memory.retrieve(inner_request).await {
+            Ok(mut payload) => {
+                for item in &mut payload.items {
+                    let boost = self.trust.method_boost(item.provenance.method.as_deref());
+                    if boost != 1.0 {
+                        item.score.total *= boost;
+                        if let Some(relevance) = item.score.relevance.as_mut() {
+                            *relevance *= boost;
+                        }
+                    }
+                }
+                payload.items.sort_by(|a, b| {
+                    b.score
+                        .total
+                        .partial_cmp(&a.score.total)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                });
                 candidates.extend(payload.items);
                 source_failures.extend(payload.source_failures);
                 omitted.extend(payload.omitted);

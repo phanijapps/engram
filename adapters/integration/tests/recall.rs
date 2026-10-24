@@ -837,3 +837,180 @@ fn zero_weight_keeps_candidate_visible_but_scoreless() {
         "lexical (weight 1.0) must outrank vector (weight 0): {order:?}"
     );
 }
+/// F1 (trust-aware retrieval), review-hardened (P2-4): the plain twin is
+/// written FIRST so the sequential-id tie-break OPPOSES the approved record —
+/// the test can only pass through the actual method boost. Both records must
+/// be present; the approved one must rank STRICTLY above.
+#[test]
+fn proposal_approved_memories_carry_the_trust_boost() {
+    use engram_conformance::SqlUnifiedRecall as ProdRecall;
+    use engram_integration::UnifiedRecall;
+
+    let memory = engram_store_sqlite::SqlMemoryService::open_in_memory().expect("memory");
+    // PLAIN first -> smaller sequential id (tie-break favors it, not approval).
+    let plain =
+        block_on(memory.write_memory(facts_request("trust-boost probe: carousel rotates", None)))
+            .expect("write plain");
+    let approved = block_on(memory.write_memory(facts_request(
+        "trust-boost probe: deploy gate holds",
+        Some("proposal_approval".to_owned()),
+    )))
+    .expect("write approved");
+
+    let recall = ProdRecall::new(
+        std::sync::Arc::new(memory),
+        vec![],
+        std::sync::Arc::new(
+            engram_store_sqlite::SqlBeliefStore::open_in_memory().expect("beliefs"),
+        ),
+    );
+    let payload = block_on(recall.recall(search_request("trust-boost probe"))).expect("recall");
+    let ids: Vec<&str> = payload.items.iter().map(|i| i.target_id.as_str()).collect();
+    assert!(
+        ids.contains(&plain.record.id.to_string().as_str()),
+        "plain twin missing: {ids:?}"
+    );
+    assert!(
+        ids.contains(&approved.record.id.to_string().as_str()),
+        "approved missing: {ids:?}"
+    );
+    let rank = |id: &str| ids.iter().position(|i| *i == id).expect("present");
+    assert!(
+        rank(approved.record.id.to_string().as_str()) < rank(plain.record.id.to_string().as_str()),
+        "approved must rank STRICTLY above plain (id tie-break opposes it): {ids:?}"
+    );
+}
+
+/// Review P1-2 regression: the trust boost is considered BEFORE the final
+/// limit. An approved equal-score memory (older) must survive limit=1 over a
+/// newer plain twin — the inner lane runs untruncated, the outer compose
+/// applies the user's budget once, after fusion.
+#[test]
+fn trust_boost_beats_the_final_limit_cutoff() {
+    use engram_conformance::SqlUnifiedRecall as ProdRecall;
+    use engram_integration::UnifiedRecall;
+
+    let memory = engram_store_sqlite::SqlMemoryService::open_in_memory().expect("memory");
+    let _approved = block_on(memory.write_memory(facts_request(
+        "cutoff probe: approved fact",
+        Some("proposal_approval".to_owned()),
+    )))
+    .expect("write approved (older)");
+    let _plain = block_on(memory.write_memory(facts_request("cutoff probe: plain fact", None)))
+        .expect("write plain (newer)");
+
+    let recall = ProdRecall::new(
+        std::sync::Arc::new(memory),
+        vec![],
+        std::sync::Arc::new(
+            engram_store_sqlite::SqlBeliefStore::open_in_memory().expect("beliefs"),
+        ),
+    );
+    let mut limited = search_request("cutoff probe");
+    limited.limit = Some(1);
+    let payload = block_on(recall.recall(limited)).expect("recall");
+    assert_eq!(payload.items.len(), 1, "outer budget applies once");
+    assert!(
+        payload.items[0]
+            .provenance
+            .method
+            .as_deref()
+            .is_some_and(|m| m == "proposal_approval"),
+        "the approved memory must win the single slot: {:?}",
+        payload.items[0].target_id
+    );
+}
+
+/// Review P1-3 regression: with NO method boost in play, the facts lane's
+/// ordering is byte-identical to the memory service's own (newest first) —
+/// the neutral path changes nothing.
+#[test]
+fn neutral_recall_preserves_memory_service_ordering() {
+    use engram_conformance::SqlUnifiedRecall as ProdRecall;
+    use engram_integration::UnifiedRecall;
+    use engram_memory::MemoryService;
+
+    let memory = engram_store_sqlite::SqlMemoryService::open_in_memory().expect("memory");
+    let older = block_on(memory.write_memory(facts_request("neutral probe: older fact", None)))
+        .expect("older");
+    let newer = block_on(memory.write_memory(facts_request("neutral probe: newer fact", None)))
+        .expect("newer");
+
+    let service_order: Vec<String> = block_on(memory.retrieve(search_request("neutral probe")))
+        .expect("service retrieve")
+        .items
+        .iter()
+        .map(|i| i.target_id.clone())
+        .collect();
+    assert_eq!(
+        service_order.first().map(|s| s.as_str()),
+        Some(newer.record.id.to_string().as_str()),
+        "memory service orders newest-first"
+    );
+
+    let recall = ProdRecall::new(
+        std::sync::Arc::new(memory),
+        vec![],
+        std::sync::Arc::new(
+            engram_store_sqlite::SqlBeliefStore::open_in_memory().expect("beliefs"),
+        ),
+    );
+    let payload = block_on(recall.recall(search_request("neutral probe"))).expect("recall");
+    let recall_order: Vec<&str> = payload.items.iter().map(|i| i.target_id.as_str()).collect();
+    let expected: Vec<&str> = service_order
+        .iter()
+        .map(|s| {
+            recall_order
+                .iter()
+                .find(|id| **id == s)
+                .expect("same membership")
+        })
+        .copied()
+        .collect();
+    // Membership + relative order preserved for both records.
+    assert_eq!(recall_order.len(), 2);
+    assert_eq!(
+        recall_order, expected,
+        "neutral order must match the service's"
+    );
+    assert_eq!(recall_order[0], newer.record.id.to_string().as_str());
+    assert_eq!(recall_order[1], older.record.id.to_string().as_str());
+    let _ = &service_order;
+}
+
+fn facts_request(text: &str, method: Option<String>) -> engram_domain::WriteMemoryRequest {
+    let mut provenance = provenance();
+    provenance.method = method;
+    engram_domain::WriteMemoryRequest {
+        kind: engram_domain::MemoryKind::Fact,
+        content: engram_domain::MemoryContent {
+            text: text.to_owned(),
+            summary: None,
+            entities: vec![],
+            language: None,
+            format: None,
+            structured: None,
+            hash: None,
+        },
+        scope: scope(),
+        requester: requester(),
+        provenance,
+        policy: policy(),
+        links: vec![],
+        idempotency_key: None,
+    }
+}
+
+fn search_request(query: &str) -> engram_domain::RetrievalRequest {
+    engram_domain::RetrievalRequest {
+        query: query.to_owned(),
+        scope: scope(),
+        requester: requester(),
+        modes: vec![engram_domain::RetrievalMode::Keyword],
+        filters: None,
+        cues: vec![],
+        limit: None,
+        budget: None,
+        include_explanations: None,
+    }
+}

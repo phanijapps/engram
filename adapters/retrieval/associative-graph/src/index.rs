@@ -49,6 +49,9 @@ pub struct AssociativeGraphIndex {
     config: PprConfig,
     default_limit: u32,
     cache: Option<Arc<dyn GraphCache>>,
+    /// Trust-aware edge weights (F1): code edges contribute by binding tier
+    /// (parsed > scoped_name > heuristic); non-code edges stay neutral 1.0.
+    trust: engram_retrieval::TrustWeights,
 }
 
 impl AssociativeGraphIndex {
@@ -69,6 +72,7 @@ impl AssociativeGraphIndex {
             config: PprConfig::default(),
             default_limit,
             cache: None,
+            trust: engram_retrieval::TrustWeights::default(),
         }
     }
 
@@ -81,6 +85,7 @@ impl AssociativeGraphIndex {
             config,
             default_limit: 20,
             cache: None,
+            trust: engram_retrieval::TrustWeights::default(),
         }
     }
 
@@ -98,6 +103,7 @@ impl AssociativeGraphIndex {
             config,
             default_limit: 20,
             cache: Some(cache),
+            trust: engram_retrieval::TrustWeights::default(),
         }
     }
 }
@@ -163,12 +169,28 @@ impl RetrievalIndex for AssociativeGraphIndex {
         // Directed edges over all predicates — `rank_associative` makes the walk
         // bidirected. Endpoints resolve to their entity id only; relationships
         // whose endpoints carry no id are skipped.
-        let edges: Vec<(String, String)> = relationships
+        // Trust weighting (F1): a code edge's contribution scales with its
+        // binding tier — a parsed structural fact carries roughly twice the
+        // walk mass of a heuristic guess. Edges WITHOUT explicit evidence go
+        // through the shared conservative classifier (review P1-1): a legacy
+        // code edge resolves to its honest effective tier (legacy_unknown ≈
+        // heuristic), and only genuinely NON-code predicates stay neutral
+        // 1.0. Missing evidence must never outrank disclosed weak evidence.
+        let trust = &self.trust;
+        let edges: Vec<(String, String, f32)> = relationships
             .iter()
             .filter_map(|r| {
                 let s = entity_key(&r.subject)?;
                 let o = entity_key(&r.object)?;
-                Some((s, o))
+                let weight = match &r.code_resolution {
+                    Some(ev) => trust.tier_weight(ev.tier),
+                    None => match engram_code::legacy_code_resolution(r) {
+                        Some(ev) => trust.tier_weight(ev.tier),
+                        // Non-code predicate: neutral.
+                        None => 1.0,
+                    },
+                };
+                Some((s, o, weight))
             })
             .collect();
 
@@ -654,6 +676,54 @@ mod tests {
         assert!(
             result.is_err(),
             "a source failure must propagate, not silently become empty"
+        );
+    }
+
+    /// Review P1-1 regression (index level): a legacy code edge WITHOUT
+    /// evidence must NOT outrank an explicit heuristic edge — missing
+    /// evidence classifies to legacy_unknown (heuristic-floor weight via the
+    /// shared classifier), never parsed-strength neutral. Only genuinely
+    /// non-code predicates stay neutral 1.0.
+    #[test]
+    fn missing_evidence_code_edges_do_not_outrank_disclosed_heuristics() {
+        use engram_domain::{CodeEdgeResolution, ResolutionTier};
+        let seed = entity_of("seed", "seed", EntityKind::Concept);
+        let via_legacy = entity_of("via_legacy", "via_legacy", EntityKind::Function);
+        let via_heuristic = entity_of("via_heuristic", "via_heuristic", EntityKind::Function);
+
+        // A `calls` edge with NO code_resolution and the extraction method —
+        // producer-ambiguous legacy code edge -> legacy_unknown (0.5 floor).
+        let mut legacy_edge = rel("seed", "via_legacy");
+        legacy_edge.predicate = "calls".to_owned();
+        legacy_edge.provenance.method = Some("deterministic_text_ingestion".to_owned());
+        legacy_edge.confidence = Some(0.9);
+
+        // An explicit heuristic edge (co-occurrence producer, disclosed).
+        let mut heuristic_edge = rel("seed", "via_heuristic");
+        heuristic_edge.code_resolution = Some(CodeEdgeResolution::new(
+            ResolutionTier::Heuristic,
+            "cooccurrence-v1",
+        ));
+
+        let index = AssociativeGraphIndex::new(Arc::new(StubSource {
+            entities: vec![seed, via_legacy.clone(), via_heuristic.clone()],
+            relationships: vec![legacy_edge, heuristic_edge],
+        }));
+        let results =
+            block_on(index.retrieve_candidates(&request("seed via", None))).expect("retrieve");
+        let rank = |name: &str| {
+            results
+                .iter()
+                .position(|r| r.target_id == name)
+                .unwrap_or(usize::MAX)
+        };
+        assert!(
+            rank("via_heuristic") < rank("via_legacy"),
+            "disclosed heuristic (0.5 explicit) must outrank undisclosed legacy (0.5 floor via classifier, same weight, same hops -> order by id? no: both 0.5 => equal multiplicity): {:?}",
+            results
+                .iter()
+                .map(|r| r.target_id.clone())
+                .collect::<Vec<_>>()
         );
     }
 }

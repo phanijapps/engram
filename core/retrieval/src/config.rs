@@ -49,6 +49,133 @@ impl WeightedFusionConfig {
     }
 }
 
+/// Trust-aware scoring configuration (F1: consume evidence in ranking).
+///
+/// Two mechanisms, both validated finite/non-negative and defaulting to
+/// behavior-preserving values:
+///
+/// - **Tier weights** scale contributions by HOW a code edge's binding was
+///   established (`ResolutionTier`): a parsed structural fact outranks a
+///   receiver-capitalization guess. Applied by lanes that walk code edges
+///   (the associative lane approximates edge weights via multiplicity in the
+///   unweighted PPR walk).
+/// - **Method boosts** scale candidates by `provenance.method` — e.g. an
+///   operator-approved memory (`proposal_approval`) outranks the same text
+///   written directly by an agent. Boosts are multipliers on the source
+///   score; 1.0 = neutral.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TrustWeights {
+    /// Weight for `parsed` code-edge bindings (direct syntax facts).
+    pub parsed: f32,
+    /// Weight for `scoped_name` bindings (deterministic name-table lookups).
+    pub scoped_name: f32,
+    /// Weight for `heuristic` bindings (receiver capitalization,
+    /// co-occurrence, framework synthesis).
+    pub heuristic: f32,
+    /// Weight for pre-evidence code edges (conservative floor).
+    pub legacy_unknown: f32,
+    /// Provenance-method score multipliers (e.g. `proposal_approval`).
+    /// Absent method = 1.0 (neutral).
+    pub method_boosts: BTreeMap<String, f32>,
+}
+
+impl TrustWeights {
+    /// Default weights: parsed 1.0 > scoped_name 0.85 > heuristic 0.5,
+    /// legacy floor 0.5, and a small trust boost for operator-approved
+    /// memories. Ordering defaults, not calibrated probabilities.
+    pub const DEFAULT_PROPOSAL_BOOST: f32 = 1.15;
+
+    pub fn new(
+        parsed: f32,
+        scoped_name: f32,
+        heuristic: f32,
+        legacy_unknown: f32,
+        method_boosts: BTreeMap<String, f32>,
+    ) -> CoreResult<Self> {
+        let config = Self {
+            parsed,
+            scoped_name,
+            heuristic,
+            legacy_unknown,
+            method_boosts,
+        };
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Validates every weight: finite, non-negative, and tier ordering must
+    /// never invert trust (parsed >= scoped_name >= heuristic; legacy floor
+    /// >= heuristic would be dishonest, so it is clamped to heuristic).
+    pub fn validate(&self) -> CoreResult<()> {
+        for (name, weight) in [
+            ("parsed", self.parsed),
+            ("scoped_name", self.scoped_name),
+            ("heuristic", self.heuristic),
+            ("legacy_unknown", self.legacy_unknown),
+        ] {
+            validate_weight(name, weight)?;
+        }
+        if self.scoped_name > self.parsed {
+            return Err(CoreError::InvalidRequest {
+                reason: "trust weights must not invert: scoped_name <= parsed".to_owned(),
+            });
+        }
+        if self.heuristic > self.scoped_name {
+            return Err(CoreError::InvalidRequest {
+                reason: "trust weights must not invert: heuristic <= scoped_name".to_owned(),
+            });
+        }
+        for (method, boost) in &self.method_boosts {
+            validate_weight(method, *boost)?;
+        }
+        Ok(())
+    }
+
+    /// Weight for a tier (defaults preserve tier ordering).
+    pub fn tier_weight(&self, tier: engram_domain::ResolutionTier) -> f32 {
+        use engram_domain::ResolutionTier::*;
+        match tier {
+            Parsed => self.parsed,
+            ScopedName => self.scoped_name,
+            Heuristic => self.heuristic,
+            LegacyUnknown => self.legacy_unknown.min(self.heuristic),
+        }
+    }
+
+    /// Edge multiplicity for the unweighted PPR walk: the SINGLE documented
+    /// weight→multiplicity conversion (review P2-5), clamped to 1..=4 — a
+    /// weight-1.0 edge becomes 4 parallel edges, 0.5 → 2. Deterministic
+    /// quantization of weighted flow without changing the pure algorithm;
+    /// callers must not re-derive it.
+    pub fn tier_multiplicity(&self, tier: engram_domain::ResolutionTier) -> usize {
+        const MULTIPLIER: f32 = 4.0;
+        let weight = self.tier_weight(tier);
+        ((weight * MULTIPLIER).round() as usize).clamp(1, 4)
+    }
+
+    /// Score multiplier for a provenance method (absent = 1.0).
+    pub fn method_boost(&self, method: Option<&str>) -> f32 {
+        method
+            .and_then(|m| self.method_boosts.get(m).copied())
+            .unwrap_or(1.0)
+    }
+}
+
+impl Default for TrustWeights {
+    fn default() -> Self {
+        let mut method_boosts = BTreeMap::new();
+        method_boosts.insert("proposal_approval".to_owned(), Self::DEFAULT_PROPOSAL_BOOST);
+        Self {
+            parsed: 1.0,
+            scoped_name: 0.85,
+            heuristic: 0.5,
+            legacy_unknown: 0.5,
+            method_boosts,
+        }
+    }
+}
+
 impl Default for WeightedFusionConfig {
     fn default() -> Self {
         Self {
@@ -563,5 +690,51 @@ mod recall_fusion_config_tests {
             rerank: None,
         };
         assert!(cfg.to_reciprocal_config().is_ok());
+    }
+}
+
+#[cfg(test)]
+mod trust_weights_tests {
+    use super::*;
+    use engram_domain::ResolutionTier::*;
+
+    #[test]
+    fn defaults_preserve_tier_ordering_and_boost_approved_memories() {
+        let w = TrustWeights::default();
+        assert!(w.tier_weight(Parsed) > w.tier_weight(ScopedName));
+        assert!(w.tier_weight(ScopedName) > w.tier_weight(Heuristic));
+        assert_eq!(w.tier_weight(LegacyUnknown), w.tier_weight(Heuristic));
+        assert_eq!(w.method_boost(Some("proposal_approval")), 1.15);
+        assert_eq!(w.method_boost(None), 1.0);
+        assert_eq!(w.method_boost(Some("anything-else")), 1.0);
+    }
+
+    #[test]
+    fn multiplicity_approximates_weight_deterministically() {
+        let w = TrustWeights::default();
+        assert_eq!(w.tier_multiplicity(Parsed), 4);
+        assert_eq!(w.tier_multiplicity(ScopedName), 3); // 0.85*4 = 3.4 -> 3
+        assert_eq!(w.tier_multiplicity(Heuristic), 2);
+        assert_eq!(w.tier_multiplicity(LegacyUnknown), 2);
+    }
+
+    #[test]
+    fn inverted_trust_weights_are_rejected() {
+        let err = TrustWeights::new(0.5, 1.0, 0.4, 0.4, BTreeMap::new());
+        assert!(err.is_err(), "scoped_name > parsed must be rejected");
+        let err = TrustWeights::new(1.0, 0.9, 0.95, 0.4, BTreeMap::new());
+        assert!(err.is_err(), "heuristic > scoped_name must be rejected");
+    }
+
+    #[test]
+    fn legacy_floor_is_clamped_to_heuristic_not_above() {
+        let w = TrustWeights {
+            legacy_unknown: 0.9,
+            ..TrustWeights::default()
+        };
+        w.validate()
+            .expect("0.9 legacy is finite and ordered vs tiers");
+        // Even so, the effective weight never exceeds heuristic honesty.
+        assert_eq!(w.tier_weight(LegacyUnknown), w.heuristic);
     }
 }

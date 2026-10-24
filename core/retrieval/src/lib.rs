@@ -19,7 +19,7 @@ mod weighted;
 pub use artifacts::{CODE_ARTIFACT_KINDS, is_code_artifact, suppresses_code_artifacts};
 pub use composer::{RetrievalCompositionInput, compose_context};
 pub use config::{
-    KNOWN_LANE_TAGS, RecallFusionConfig, ReciprocalFusionConfig, RerankConfig,
+    KNOWN_LANE_TAGS, RecallFusionConfig, ReciprocalFusionConfig, RerankConfig, TrustWeights,
     WeightedFusionConfig, unknown_lane_keys,
 };
 pub use graph_cache::{GraphCache, GraphSnapshot, InMemoryGraphCache, scope_key};

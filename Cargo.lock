@@ -1173,6 +1173,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
+ "engram-code",
  "engram-domain",
  "engram-graph-analytics",
  "engram-retrieval",

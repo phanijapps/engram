@@ -56,7 +56,8 @@ const CODE_EXTENSIONS: &[&str] = &[
     // routed to the code path, so Apex source was silently un-indexed
     // (dreamhouse-lwc: 0 `.cls` documents; the Apex surface only appeared via
     // LWC `@salesforce/apex` imports).
-    "cls", "apex", "trigger",
+    "cls", "apex", "trigger", // Language packs (engram-lang first cut).
+    "jl", "zig",
 ];
 const TEXT_EXTENSIONS: &[&str] = &[
     "md",

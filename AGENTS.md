@@ -36,6 +36,13 @@ core/                      Storage-neutral Rust crates.
   integration/             SDK facade: EngramProvider, EngramConfig, CapabilityReport.
   eval/                    Deterministic fixtures and regression harness.
   graph-analytics/         Pure graph algorithms (PageRank, betweenness, communities, reachability).
+  lang/                    Language packs (engram-lang): modular tree-sitter
+                           grammars + declaration kind maps registered into the
+                           engram-code chunker at composition time. Additive
+                           packs behind cargo features — never a rewrite of
+                           engram-code. First cut: lua, julia, zig, dart,
+                           erlang, ocaml, haskell.
+
   code/                    Deterministic code-indexing behavior crate (engram-code, ADR-0028):
                            tree-sitter parsing, symbol identity, typed code edges,
                            cross-file resolution + unresolved-refs ledger, framework

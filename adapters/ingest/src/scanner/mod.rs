@@ -219,7 +219,10 @@ where
     let text_ingestor =
         KnowledgeIngestor::new(PlainTextChunker::new(PlainTextChunkerOptions::default())?);
     let markdown_ingestor = KnowledgeIngestor::new(MarkdownChunker::new()?);
-    let ts_chunker = crate::TreeSitterChunker::new().ok();
+    let ts_chunker = crate::TreeSitterChunker::new().ok().map(|mut c| {
+        engram_lang::register_all(&mut c);
+        c
+    });
     let extractor = GraphExtractor::new();
 
     // Walk + filter (phase 1 — see scanner/walk.rs).

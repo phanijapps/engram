@@ -114,6 +114,31 @@ impl TreeSitterChunker {
         self.entries.contains_key(ext)
     }
 
+    /// Registers a language pack: extension keys (e.g. `"lua"`), its
+    /// tree-sitter grammar, and the declaration kind map (node kind →
+    /// anchor keyword recognized by the extractor's `parse_symbol`).
+    /// Later registration REPLACES an earlier one for the same extension —
+    /// packs are expected to be composed once at startup
+    /// (`engram_lang::register_all`). Extension keys are `'static` pack
+    /// literals (language packs own them).
+    pub fn register_language(
+        &mut self,
+        exts: &[&'static str],
+        language: tree_sitter::Language,
+        kind_map: HashMap<&'static str, &'static str>,
+    ) -> &mut Self {
+        for ext in exts {
+            self.entries.insert(
+                ext,
+                LangEntry {
+                    language: language.clone(),
+                    kind_map: kind_map.clone(),
+                },
+            );
+        }
+        self
+    }
+
     /// Parses `text` once for `ext` — the shared-tree entry point
     /// (code-graph-quality [parse-multiplicity]): chunking, call extraction,
     /// and structural extraction each used to re-parse the same text (3×
@@ -402,6 +427,53 @@ fn walk_declarations(
 /// declarations (a method inside `impl Foo`, a nested `fn`) carries its
 /// enclosing chain in the anchor — `fn Foo::bar` — so the extractor can form
 /// receiver-qualified entity names. Top-level declarations stay bare.
+/// Declaration name resolution, shared by every walker: the `name`,
+/// `declarator`, `type`, or `pattern` field; else — for grammars whose
+/// declaration nodes carry no name fields (Julia `function_definition`,
+/// OCaml structures) — the FIRST identifier-like named child. Fieldless
+/// non-identifier first children resolve to None (no anchor).
+fn declaration_name_node<'n>(node: tree_sitter::Node<'n>) -> Option<tree_sitter::Node<'n>> {
+    if let Some(n) = node
+        .child_by_field_name("name")
+        .or_else(|| node.child_by_field_name("declarator"))
+        .or_else(|| node.child_by_field_name("type"))
+        .or_else(|| node.child_by_field_name("pattern"))
+    {
+        return Some(n);
+    }
+    // Fallback for fieldless declaration grammars: the LEFTMOST named-child
+    // chain, up to three levels (Julia `function_definition → signature →
+    // call_expression → identifier`; OCaml `value_definition → let_binding →
+    // value_name`). Anything deeper or non-identifier resolves to None —
+    // no guessed names.
+    let mut cur = {
+        let mut cursor = node.walk();
+        node.named_children(&mut cursor).next()?
+    };
+    for _ in 0..3 {
+        let k = cur.kind();
+        if matches!(
+            k,
+            "identifier"
+                | "variable"
+                | "value_name"
+                | "atom"
+                | "field_identifier"
+                | "constant"
+                | "function_name"
+                | "variable_name"
+                | "const_identifier"
+        ) {
+            return Some(cur);
+        }
+        cur = {
+            let mut cursor = cur.walk();
+            cur.named_children(&mut cursor).next()?
+        };
+    }
+    None
+}
+
 fn walk_declarations_with_receivers(
     node: &tree_sitter::Node,
     source: &[u8],
@@ -476,10 +548,7 @@ fn walk_declarations_with_receivers(
     }
     if let Some(keyword) = kind_map.get(kind) {
         // Try the `name` field first (works for most languages).
-        let name_node = node
-            .child_by_field_name("name")
-            .or_else(|| node.child_by_field_name("declarator"))
-            .or_else(|| node.child_by_field_name("type"));
+        let name_node = declaration_name_node(*node);
         if let Some(name_node) = name_node {
             let name_text = extract_name(&name_node, source);
             if !name_text.is_empty() {
@@ -1010,10 +1079,7 @@ fn walk_structural(
     if !paths.is_empty() {
         edges.imports.extend(paths);
     } else if kind_map.contains_key(kind) {
-        let name_node = node
-            .child_by_field_name("name")
-            .or_else(|| node.child_by_field_name("declarator"))
-            .or_else(|| node.child_by_field_name("type"));
+        let name_node = declaration_name_node(*node);
         if let Some(name_node) = name_node {
             let name_text = extract_name(&name_node, source);
             if !name_text.is_empty() {

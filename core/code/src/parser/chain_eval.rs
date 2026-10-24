@@ -122,21 +122,32 @@ fn evaluate_call(
             sites.push((line, text.to_owned()));
         }
         // Method call `recv.method(...)` — walk the receiver chain.
-        "field_expression" | "member_expression" => {
+        "field_expression"
+        | "member_expression"
+        | "dot_index_expression"
+        | "method_index_expression" => {
             let mut methods: Vec<&str> = Vec::new();
             let mut receiver = func;
             loop {
                 if let Some(field) = receiver
                     .child_by_field_name("field")
                     .or_else(|| receiver.child_by_field_name("property"))
+                    .or_else(|| receiver.child_by_field_name("method"))
                 {
                     methods.push(node_text(field, source));
                     match receiver
                         .child_by_field_name("object")
+                        .or_else(|| receiver.child_by_field_name("table"))
                         .or_else(|| receiver.named_child(0))
                     {
                         Some(obj)
-                            if matches!(obj.kind(), "field_expression" | "member_expression") =>
+                            if matches!(
+                                obj.kind(),
+                                "field_expression"
+                                    | "member_expression"
+                                    | "dot_index_expression"
+                                    | "method_index_expression"
+                            ) =>
                         {
                             receiver = obj;
                         }
@@ -309,21 +320,32 @@ fn inner_call_state(
         return State::UnknownExpression;
     };
     match func.kind() {
-        "field_expression" | "member_expression" => {
+        "field_expression"
+        | "member_expression"
+        | "dot_index_expression"
+        | "method_index_expression" => {
             let mut methods: Vec<&str> = Vec::new();
             let mut receiver = func;
             loop {
                 if let Some(field) = receiver
                     .child_by_field_name("field")
                     .or_else(|| receiver.child_by_field_name("property"))
+                    .or_else(|| receiver.child_by_field_name("method"))
                 {
                     methods.push(node_text(field, source));
                     match receiver
                         .child_by_field_name("object")
+                        .or_else(|| receiver.child_by_field_name("table"))
                         .or_else(|| receiver.named_child(0))
                     {
                         Some(obj)
-                            if matches!(obj.kind(), "field_expression" | "member_expression") =>
+                            if matches!(
+                                obj.kind(),
+                                "field_expression"
+                                    | "member_expression"
+                                    | "dot_index_expression"
+                                    | "method_index_expression"
+                            ) =>
                         {
                             receiver = obj;
                         }

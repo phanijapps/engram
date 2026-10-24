@@ -16,6 +16,7 @@ pub mod accepted_examples;
 mod architecture_coverage;
 mod contract_runner;
 mod report_summary;
+pub mod sequential;
 
 pub use architecture_coverage::{
     ArchitectureEvalCapability, ArchitectureEvalCase, ArchitectureEvalCoverage,

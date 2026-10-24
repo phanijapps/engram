@@ -15,4 +15,5 @@ serde_json.workspace = true
 
 [dev-dependencies]
 engram-store-sqlite = { path = "../../adapters/sqlite", version = "0.1.0" }
+chrono.workspace = true
 futures.workspace = true

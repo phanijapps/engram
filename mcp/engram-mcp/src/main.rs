@@ -1223,7 +1223,9 @@ pub fn register_core_tools(registry: &mut ToolRegistry<App>) {
     registry.register(ToolRecord {
         name: "maintain",
         description: "Keep the store healthy. ONE operations surface. \
-                      op=consolidate: run reflection + decay → derived beliefs. \
+                      op=consolidate: run reflection + decay → derived beliefs \
+                      (dry_run=true returns a plan and writes NOTHING — honored \
+                      end-to-end; omitted/false applies for real). \
                       op=reindex: drain the vector-embed backlog (content-hash dedup). \
                       op=health: graph-health aggregates (orphans, duplicates). \
                       op=candidates: list maintenance candidates. \

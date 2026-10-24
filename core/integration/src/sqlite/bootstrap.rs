@@ -545,7 +545,11 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             contradiction_executor,
             lifecycle_executor,
         ]));
-        consolidation = Some(Arc::new(ExecutorConsolidationService::new(composite)));
+        consolidation = Some(Arc::new(ExecutorConsolidationService::new(
+            Arc::new(engram_store_sqlite::SystemClock),
+            Arc::new(engram_store_sqlite::SequentialIdGenerator::new()),
+            composite,
+        )));
         consolidation_state = CapabilityState::Supported;
     }
 

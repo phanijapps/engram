@@ -10,7 +10,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use engram_belief::BeliefRepository;
 use engram_consolidation::{
-    ConsolidationMutationExecutor, ConsolidationService, plan_consolidation_operations,
+    ConsolidationMutationExecutor, ConsolidationService, DryRunConsolidationService,
+    plan_consolidation_operations,
 };
 use engram_decay::{DecayCandidate, DecayMemorySource};
 use engram_domain::{
@@ -19,7 +20,7 @@ use engram_domain::{
 };
 use engram_memory::{MemoryEventRepository, MemoryRepository};
 use engram_reflection::{ActiveMemorySource, BeliefSink};
-use engram_runtime::CoreResult;
+use engram_runtime::{Clock, CoreResult, IdGenerator};
 use engram_store_sqlite::SqlBeliefStore;
 use engram_store_sqlite::SqlMemoryService;
 
@@ -94,21 +95,40 @@ impl DecayMemorySource for DecayMemorySourceAdapter {
 }
 
 /// Wraps a composite executor as a `ConsolidationService`: plans tasks, executes
-/// them, and returns a `ConsolidationRun`. No eval gates (ungated — the gated
-/// `GatedConsolidationService` needs an evaluation fixture not yet shipped).
+/// them, and returns a `ConsolidationRun`.
+///
+/// Explicit-apply contract (planner/validation semantics): a request executes
+/// ONLY when `dry_run == Some(false)`. Everything else — including `None` —
+/// is a plan-only preview delegated to [`DryRunConsolidationService`]; the
+/// mutating executor is never invoked. (Regression: this adapter previously
+/// ignored the flag and executed unconditionally, so MCP `maintain
+/// {"dry_run": true}` mutated the store while reporting a preview.)
 pub(crate) struct ExecutorConsolidationService {
+    planner: Arc<DryRunConsolidationService>,
     executor: Arc<dyn ConsolidationMutationExecutor>,
 }
 
 impl ExecutorConsolidationService {
-    pub(crate) fn new(executor: Arc<dyn ConsolidationMutationExecutor>) -> Self {
-        Self { executor }
+    pub(crate) fn new(
+        clock: Arc<dyn Clock>,
+        ids: Arc<dyn IdGenerator>,
+        executor: Arc<dyn ConsolidationMutationExecutor>,
+    ) -> Self {
+        Self {
+            planner: Arc::new(DryRunConsolidationService::new(clock, ids)),
+            executor,
+        }
     }
 }
 
 #[async_trait]
 impl ConsolidationService for ExecutorConsolidationService {
     async fn consolidate(&self, request: ConsolidationRequest) -> CoreResult<ConsolidationRun> {
+        // Preview path: honor the explicit-apply contract — anything but
+        // `Some(false)` plans without touching the executor.
+        if !matches!(request.dry_run, Some(false)) {
+            return self.planner.consolidate(request).await;
+        }
         let now = chrono::Utc::now();
         let plan = plan_consolidation_operations(&request, now)?;
         let planned: Vec<_> = plan.operations.iter().map(|o| o.task.clone()).collect();

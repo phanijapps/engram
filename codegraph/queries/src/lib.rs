@@ -14,7 +14,7 @@ pub use queries::{
     AnalyticsGraph, BlastRadiusBounded, EdgeEvidence, HttpEndpoint, SymbolContext,
     SymbolContextBounded, blast_radius, blast_radius_bounded, bridge_symbols, call_communities,
     call_edges, central_symbols, cyclomatic_complexity, dead_code, dependency_path, edge_evidence,
-    entity_key, find_api_calls, find_endpoints, find_entry_points, match_api_topology,
-    most_complex, process_flow, repository_stats, resolve_call_targets, service_diagram,
-    symbol_context, symbol_context_bounded,
+    entity_key, find_api_calls, find_endpoints, find_entry_points, implemented_traits,
+    match_api_topology, most_complex, process_flow, repository_stats, resolve_call_targets,
+    service_diagram, symbol_context, symbol_context_bounded, trait_implementers,
 };

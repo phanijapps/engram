@@ -854,6 +854,29 @@ fn collect_calls_and_spans(
 /// Extracts a clean name from a name node, handling nested declarators
 /// (e.g. `pointer_declarator -> identifier` in C-like languages) AND
 /// qualified/method-call expressions (`receiver.method`, `Type::method`).
+/// Heritage-target extraction that PRESERVES path qualification (F3 review
+/// P1-1): `a::Sink` stays `a::Sink` so the resolution ladder can bind the
+/// as-written form against registered qualified names. Final-segment
+/// stripping in [`extract_name`] used to collapse `a::Sink` and `b::Sink`
+/// onto one ambiguous bare `Sink`, leaving the implements edge permanently
+/// name-only (qualified trait queries then found nothing). Bare names and
+/// generic arguments fall back to [`extract_name`].
+fn extract_qualified_name(node: &tree_sitter::Node, source: &[u8]) -> String {
+    let text = node.utf8_text(source).unwrap_or("").trim();
+    if text.contains("::") {
+        // Preserve the path; drop generic arguments (`a::Sink<T>` -> `a::Sink`).
+        let path = text.split('<').next().unwrap_or(text);
+        let collapsed: String = path.split_whitespace().collect();
+        if collapsed
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '_' || c == ':')
+        {
+            return collapsed;
+        }
+    }
+    extract_name(node, source)
+}
+
 fn extract_name(node: &tree_sitter::Node, source: &[u8]) -> String {
     let text = node.utf8_text(source).unwrap_or("").trim().to_owned();
     // For simple identifiers, the text IS the name. Identifier shapes include
@@ -1171,7 +1194,9 @@ fn collect_heritage(
             "extends_clause" | "implements_clause" => {
                 let mut inner = child.walk();
                 for target in child.named_children(&mut inner) {
-                    let name = extract_name(&target, source);
+                    // Qualification preserved (F3 review P1-1): the ladder
+                    // resolves as-written paths; bare names unchanged.
+                    let name = extract_qualified_name(&target, source);
                     if name.is_empty() {
                         continue;
                     }
@@ -1224,7 +1249,9 @@ fn extract_inheritance(
                     node.child_by_field_name("type"),
                 )
             {
-                let trait_name = extract_name(&trait_node, source);
+                // Trait side keeps its qualification (`a::Sink`) so the
+                // ladder can resolve it to the right trait (F3 review P1-1).
+                let trait_name = extract_qualified_name(&trait_node, source);
                 let type_name = extract_name(&type_node, source);
                 if !trait_name.is_empty() && !type_name.is_empty() {
                     edges.implements.push((type_name, trait_name));

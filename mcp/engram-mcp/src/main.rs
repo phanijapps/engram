@@ -101,7 +101,7 @@ LAUNCH FLAGS
   --taxonomy <path>           Taxonomy config (JSON)
   --layout single|multi       SQLite file layout (default single)
   --db-file <name>            DB filename override
-  --tools core|full|all|consolidated   Tool profile (default core = 27 tools)
+  --tools core|full|all|consolidated   Tool profile (default core = 30 tools)
   --backend sqlite|pgvector   Engine recipe (default sqlite)
   --pg-connection-string <url> Postgres URL (pgvector; env ENGRAM_PG_CONNECTION_STRING)
   --slim                      Skip embeddings (no model download/load); keep lexical + graph
@@ -267,7 +267,7 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
         }
         other => {
             eprintln!(
-                "engram-mcp: unknown --tools profile '{other}'; using core (27 tools). \
+                "engram-mcp: unknown --tools profile '{other}'; using core (30 tools). \
                  Options: core | full | all | consolidated"
             );
             Some(DEFAULT_TOOLS)
@@ -301,6 +301,8 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     "change_impact",
     "architecture",
     "whats_changed",
+    "code_health",
+    "file_dependencies",
     // Ingest / write — close the learning loop.
     "scan_repo",
     "index_docs",
@@ -318,6 +320,8 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     "contradiction_list",
     "procedure_put",
     "procedure_list",
+    // Consolidation — close the reflection loop (dry_run honored).
+    "consolidate",
     // Correct / monitor + content stitching.
     "forget",
     "graph_health",
@@ -1623,5 +1627,35 @@ mod parity_tests {
             "Rust stdio registry drifted from the shared fixture — update \
              tests/tool_names.txt (and the TS HTTP tool table) together"
         );
+    }
+}
+
+/// Wiring-seam lesson (dogfood defect class): tools can be registered but
+/// DROPPED by the default profile filter while the tool-names test (which
+/// uses the unfiltered registry) stays green. This test asserts the
+/// DEFAULT profile actually exposes every tool the code-intel surface
+/// needs — including the ones added after the profile list was written.
+#[cfg(test)]
+mod default_profile_tests {
+    use super::DEFAULT_TOOLS;
+
+    #[test]
+    fn default_profile_exposes_the_full_core_surface() {
+        for required in [
+            "consolidate",
+            "code_health",
+            "file_dependencies",
+            "symbol_context",
+            "change_impact",
+            "subscribe_changes",
+            "code_staleness",
+            "proposal_submit",
+            "proposal_approve",
+        ] {
+            assert!(
+                DEFAULT_TOOLS.contains(&required),
+                "{required} must be on the DEFAULT profile (wiring-seam regression)"
+            );
+        }
     }
 }

@@ -1864,6 +1864,7 @@ fn union_symbol_context(
 ) -> engram_codegraph_queries::SymbolContextBounded {
     let mut callers: HashSet<String> = HashSet::new();
     let mut callees: HashSet<String> = HashSet::new();
+    let mut implementers: HashSet<String> = HashSet::new();
     let mut truncated = false;
     let mut community = None;
     for c in ctxs {
@@ -1872,6 +1873,9 @@ fn union_symbol_context(
         }
         for callee in c.ctx.callees {
             callees.insert(callee);
+        }
+        for implementer in c.ctx.implementers {
+            implementers.insert(implementer);
         }
         truncated |= c.truncated;
         if community.is_none() {
@@ -1882,11 +1886,14 @@ fn union_symbol_context(
     callers.sort();
     let mut callees: Vec<String> = callees.into_iter().collect();
     callees.sort();
+    let mut implementers: Vec<String> = implementers.into_iter().collect();
+    implementers.sort();
     engram_codegraph_queries::SymbolContextBounded {
         ctx: engram_codegraph_queries::SymbolContext {
             callers,
             callees,
             community,
+            implementers,
         },
         truncated,
     }
@@ -1902,19 +1909,24 @@ fn union_blast_radius(
     // honest distance for the union), then order by (hop, name).
     let mut hops: HashMap<String, u32> = HashMap::new();
     let mut truncated = false;
+    let mut implementers: Vec<String> = Vec::new();
     for r in radii {
         for (caller, hop) in r.caller_hops {
             let entry = hops.entry(caller).or_insert(u32::MAX);
             *entry = (*entry).min(hop);
         }
+        implementers.extend(r.implementers);
         truncated |= r.truncated;
     }
     let mut caller_hops: Vec<(String, u32)> = hops.into_iter().collect();
     caller_hops.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
     let callers: Vec<String> = caller_hops.iter().map(|(n, _)| n.clone()).collect();
+    implementers.sort();
+    implementers.dedup();
     engram_codegraph_queries::BlastRadiusBounded {
         callers,
         caller_hops,
+        implementers,
         truncated,
     }
 }
@@ -4626,6 +4638,7 @@ mod tests {
                 Vec::new()
             },
             community: Some(0),
+            implementers: Vec::new(),
         }
     }
 
@@ -4941,6 +4954,7 @@ mod tests {
                 callers: vec!["a".to_owned()],
                 callees: vec!["b".to_owned(), "c".to_owned()],
                 community: Some(1),
+                implementers: Vec::new(),
             },
             truncated: false,
         };
@@ -4949,6 +4963,7 @@ mod tests {
                 callers: vec!["a".to_owned(), "d".to_owned()],
                 callees: vec!["c".to_owned()],
                 community: Some(2),
+                implementers: Vec::new(),
             },
             truncated: true,
         };
@@ -4976,11 +4991,13 @@ mod tests {
         let r1 = engram_codegraph_queries::BlastRadiusBounded {
             callers: vec!["c1".to_owned()],
             caller_hops: vec![("c1".to_owned(), 1)],
+            implementers: Vec::new(),
             truncated: false,
         };
         let r2 = engram_codegraph_queries::BlastRadiusBounded {
             callers: vec!["c1".to_owned(), "c2".to_owned()],
             caller_hops: vec![("c1".to_owned(), 1), ("c2".to_owned(), 2)],
+            implementers: Vec::new(),
             truncated: true,
         };
         let unioned = union_blast_radius(vec![r1, r2]);

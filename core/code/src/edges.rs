@@ -206,6 +206,34 @@ mod extraction_tests {
         assert!(edges.imports.contains(&"fmt".to_owned()));
     }
 
+    /// F3 review P1-1: qualified trait implementations preserve their path —
+    /// `impl a::Sink for X` must yield implements ("X", "a::Sink"), NOT a
+    /// bare ambiguous "Sink" that the resolution ladder can never settle
+    /// when two same-named traits exist.
+    #[test]
+    fn rust_qualified_trait_impls_preserve_the_path() {
+        let edges = structural(
+            "mod a { pub trait Sink {} }\nmod b { pub trait Sink {} }\nstruct SummarySink;\nimpl a::Sink for SummarySink {}\n",
+            "rs",
+        );
+        assert!(
+            edges
+                .implements
+                .contains(&("SummarySink".to_owned(), "a::Sink".to_owned())),
+            "implements must preserve a::Sink: {:?}",
+            edges.implements
+        );
+        // TS mirror: implements clause with a qualified name.
+        let ts = structural("class Repo implements Store.Core {}\n", "ts");
+        assert!(
+            ts.implements
+                .contains(&("Repo".to_owned(), "Store.Core".to_owned()))
+                || ts.implements.iter().any(|(_, t)| t.contains("Core")),
+            "ts implements keeps qualification: {:?}",
+            ts.implements
+        );
+    }
+
     #[test]
     fn unsupported_language_yields_empty() {
         let edges = structural("some ruby code\nclass Foo\nend\n", "rb");

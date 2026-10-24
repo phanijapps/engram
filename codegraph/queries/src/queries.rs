@@ -411,6 +411,46 @@ pub struct SymbolContext {
     pub callers: Vec<String>,
     pub callees: Vec<String>,
     pub community: Option<usize>,
+    /// Types that IMPLEMENT this symbol when it names a trait
+    /// (`implements` edges, trait side). Labeled separately from call-graph
+    /// callers — a contract change breaks implementers differently than
+    /// callers (F3: the eval's `change_impact("Sink") == empty` gap).
+    pub implementers: Vec<String>,
+}
+
+/// Trait implementers of `symbol` (F3): subjects of `implements` edges whose
+/// object resolves to `symbol` — the types declaring `impl symbol for X`.
+/// Sorted, deduplicated. Empty for non-trait symbols.
+pub fn trait_implementers(relationships: &[KnowledgeRelationship], symbol: &str) -> Vec<String> {
+    let mut implementers: Vec<String> = relationships
+        .iter()
+        .filter(|r| r.predicate == "implements")
+        .filter_map(|r| {
+            let object = entity_key(&r.object)?;
+            let subject = entity_key(&r.subject)?;
+            (object == symbol).then_some(subject)
+        })
+        .collect();
+    implementers.sort();
+    implementers.dedup();
+    implementers
+}
+
+/// Traits implemented BY `symbol` (the impl side of the same edges) — useful
+/// when the seed is a concrete type.
+pub fn implemented_traits(relationships: &[KnowledgeRelationship], symbol: &str) -> Vec<String> {
+    let mut traits: Vec<String> = relationships
+        .iter()
+        .filter(|r| r.predicate == "implements")
+        .filter_map(|r| {
+            let object = entity_key(&r.object)?;
+            let subject = entity_key(&r.subject)?;
+            (subject == symbol).then_some(object)
+        })
+        .collect();
+    traits.sort();
+    traits.dedup();
+    traits
 }
 
 /// Returns the 360° context of `symbol`: transitive callers (blast radius),
@@ -434,10 +474,12 @@ pub fn symbol_context(
     let community = engram_graph_analytics::communities(&edges, 20)
         .get(symbol)
         .copied();
+    let implementers = trait_implementers(relationships, symbol);
     SymbolContext {
         callers,
         callees,
         community,
+        implementers,
     }
 }
 
@@ -474,11 +516,13 @@ pub fn symbol_context_bounded(
     let community = engram_graph_analytics::communities(&edges, 20)
         .get(symbol)
         .copied();
+    let implementers = trait_implementers(relationships, symbol);
     SymbolContextBounded {
         ctx: SymbolContext {
             callers,
             callees,
             community,
+            implementers,
         },
         truncated: anc_truncated || desc_truncated,
     }
@@ -496,6 +540,10 @@ pub struct BlastRadiusBounded {
     pub callers: Vec<String>,
     /// Per-caller hop distance, parallel ordering.
     pub caller_hops: Vec<(String, u32)>,
+    /// Trait implementers when the target names a trait — a contract change
+    /// breaks them like callers do, but they are LABELED SEPARATELY (never
+    /// conflated with call-graph hops; F3).
+    pub implementers: Vec<String>,
     pub truncated: bool,
 }
 
@@ -521,9 +569,11 @@ pub fn blast_radius_bounded(
         .collect();
     hops.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
     let callers: Vec<String> = hops.iter().map(|(n, _)| n.clone()).collect();
+    let implementers = trait_implementers(relationships, target);
     BlastRadiusBounded {
         callers,
         caller_hops: hops,
+        implementers,
         truncated,
     }
 }
@@ -1550,5 +1600,48 @@ mod tests {
             dead2.len() < dead1.len() || !dead1.iter().any(|d| d == "Engine"),
             "contains liveness should reduce dead list: dead1={dead1:?} dead2={dead2:?}"
         );
+    }
+
+    /// F3: trait implementers surface in blast radius + symbol context —
+    /// the eval's `change_impact("Sink") == empty` gap.
+    #[test]
+    fn trait_implementers_surface_in_navigation() {
+        // SummarySink implements Sink; JSONSink implements Sink; a caller
+        // calls SummarySink::run.
+        let mut sink_impl_summary = rel("SummarySink", "Sink");
+        sink_impl_summary.predicate = "implements".to_owned();
+        let mut sink_impl_json = rel("JSONSink", "Sink");
+        sink_impl_json.predicate = "implements".to_owned();
+        let rels = vec![
+            sink_impl_summary,
+            sink_impl_json,
+            rel("run_on_matches", "SummarySink"),
+        ];
+
+        // Blast radius of the TRAIT now reports its implementers.
+        let br = blast_radius_bounded(&rels, "Sink", 2, 64);
+        assert_eq!(
+            br.implementers,
+            vec!["JSONSink".to_owned(), "SummarySink".to_owned()]
+        );
+        assert!(
+            br.callers.is_empty(),
+            "implements edges are not call callers"
+        );
+
+        // Symbol context exposes the same list.
+        let ctx = symbol_context(&rels, "Sink", 2);
+        assert_eq!(
+            ctx.implementers,
+            vec!["JSONSink".to_owned(), "SummarySink".to_owned()]
+        );
+
+        // The impl side resolves the trait list.
+        assert_eq!(
+            implemented_traits(&rels, "SummarySink"),
+            vec!["Sink".to_owned()]
+        );
+        // Non-trait symbols stay empty (not guessed).
+        assert!(trait_implementers(&rels, "run_on_matches").is_empty());
     }
 }

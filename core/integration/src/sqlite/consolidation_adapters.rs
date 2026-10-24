@@ -35,14 +35,18 @@ impl BeliefSink for BeliefSinkAdapter {
 }
 
 /// Adapts `SqlMemoryService` to `ActiveMemorySource`: reads scoped events →
-/// resolves active memory records → extracts text.
+/// resolves active memory records → returns TYPED EVIDENCE (identity,
+/// policy, provenance — MCCL-audit F2 lineage).
 pub(crate) struct ActiveMemorySourceAdapter(pub(crate) Arc<SqlMemoryService>);
 
 #[async_trait]
 impl ActiveMemorySource for ActiveMemorySourceAdapter {
-    async fn active_memory_texts(&self, scope: &Scope) -> CoreResult<Vec<String>> {
+    async fn active_memories(
+        &self,
+        scope: &Scope,
+    ) -> CoreResult<Vec<engram_reflection::ActiveMemoryEvidence>> {
         let events = self.0.list_events_for_scope(scope).await?;
-        let mut texts = Vec::new();
+        let mut evidence = Vec::new();
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
         for event in &events {
             if let Some(mid) = &event.memory_id {
@@ -50,13 +54,18 @@ impl ActiveMemorySource for ActiveMemorySourceAdapter {
                 if seen.insert(mid_str) {
                     if let Ok(Some(record)) = self.0.get_memory(mid, scope).await {
                         if record.status == MemoryStatus::Active {
-                            texts.push(record.content.text.clone());
+                            evidence.push(engram_reflection::ActiveMemoryEvidence {
+                                memory_id: record.id.clone(),
+                                text: record.content.text.clone(),
+                                policy: record.policy.clone(),
+                                observed_at: record.provenance.observed_at,
+                            });
                         }
                     }
                 }
             }
         }
-        Ok(texts)
+        Ok(evidence)
     }
 }
 

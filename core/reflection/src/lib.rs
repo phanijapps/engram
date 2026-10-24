@@ -24,5 +24,5 @@ mod synthesizer;
 pub use contradiction_executor::ContradictionExecutor;
 pub use executor::ReflectionExecutor;
 pub use lifecycle_executor::MemoryLifecycleExecutor;
-pub use source::{ActiveMemorySource, BeliefSink};
+pub use source::{ActiveMemoryEvidence, ActiveMemorySource, BeliefSink};
 pub use synthesizer::{PatternSynthesizer, ReflectionSynthesizer};

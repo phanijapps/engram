@@ -240,10 +240,12 @@ fn composer_enforces_token_budget_after_ranking() {
     // top item alone is oversized -> omitted, never truncated.
     assert!(context.items.is_empty());
     assert_eq!(context.omitted.len(), 2);
-    assert!(context
-        .omitted
-        .iter()
-        .all(|o| o.reason == OmittedReason::BudgetExceeded));
+    assert!(
+        context
+            .omitted
+            .iter()
+            .all(|o| o.reason == OmittedReason::BudgetExceeded)
+    );
 }
 
 #[test]

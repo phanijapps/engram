@@ -51,6 +51,7 @@ pub use embedding_runtime::{PreparedEmbedding, prepare_embedding};
 #[cfg(feature = "http-embeddings")]
 mod http_embedding;
 pub use embedding_config::{EmbeddingOptions, EmbeddingOverrides};
+pub mod derived_lifecycle;
 pub mod export_import;
 pub mod hierarchy_build;
 pub mod knowledge_query;
@@ -59,7 +60,7 @@ pub mod migration;
 pub mod observability;
 #[cfg(feature = "ollama")]
 pub mod ollama_provider;
-pub mod provenance;
+mod provenance;
 pub mod provider;
 pub mod recall;
 #[cfg(feature = "sqlite")]
@@ -76,6 +77,7 @@ pub use config::{
     BackendProfile, CapabilityPolicy, EmbeddingProviderConfig, EngramConfig, MigrationMode,
     SqliteStorageLayout,
 };
+pub use derived_lifecycle::DerivedBeliefLifecycle;
 pub use dto::{GraphQuery, MemorySearch, RecallRequest, scope, workspace_scope};
 pub use embedding::EmbeddingProvider;
 pub use export_import::ExportImport;

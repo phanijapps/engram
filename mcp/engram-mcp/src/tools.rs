@@ -183,8 +183,32 @@ pub fn forget(app: &App, args: &Value) -> Result<Value, ToolError> {
         reason: None,
     };
     let response = block_on(memory.forget(request)).map_err(internal)?;
+    // Correction propagation (MCCL-audit F2): a corrected memory must not
+    // keep feeding derived beliefs. Stale live beliefs that CITE this memory
+    // (lineage made this findable); best-effort, reported, never blocking the
+    // forget itself.
+    let mut propagation_note = String::new();
+    if let Ok(beliefs) = app.provider.require_beliefs() {
+        let lifecycle = engram_integration::DerivedBeliefLifecycle::new(beliefs.clone());
+        match block_on(lifecycle.stale_for_memory(
+            &engram_domain::MemoryId::from(target_id.to_owned()),
+            &app.scope,
+        )) {
+            Ok(staled) if !staled.is_empty() => {
+                propagation_note = format!(
+                    "\ncorrection propagated: {} derived belief(s) marked stale (they cited this memory)",
+                    staled.len()
+                );
+            }
+            Ok(_) => {}
+            Err(e) => {
+                propagation_note =
+                    format!("\ncorrection propagation FAILED (best-effort, not blocking): {e}");
+            }
+        }
+    }
     let body = serde_json::to_string_pretty(&response).unwrap_or_else(|_| "OK".to_owned());
-    Ok(protocol::text_content(body))
+    Ok(protocol::text_content(format!("{body}{propagation_note}")))
 }
 
 /// `put_entity`: add an entity to the knowledge graph (upsert by `name`;

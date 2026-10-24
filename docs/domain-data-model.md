@@ -501,6 +501,36 @@ Operations: `proposal_submit` (scope-bound submission key idempotency),
 `proposal_approve` (expected version + trusted reviewer),
 `proposal_reject` (expected version + reviewer + reason).
 
+### Derived-record lineage and policy composition (2026-10-24)
+
+Records DERIVED from inputs (reflection beliefs, future summaries) must keep
+two properties end-to-end (MCCL-audit F2):
+
+**Lineage.** Every derived record cites every input in BOTH
+`Belief.sources` (typed `BeliefSource`, `targetType = memory`, with the
+input's `validFrom` = its `observedAt`) and `DerivationRef.inputRefs`
+(evidence refs). Belief identity participates in content hashes: same texts
+from different memories are different derivations. Correction propagation
+(redact/delete of an input memory) marks citing live beliefs `stale` —
+auditable, idempotent, best-effort (no cross-store transaction, no deletion
+of the derived record itself; re-synthesis supersedes).
+
+**Never-widen policy composition** (`compose_derived_policy`): a derived
+record can never be LESS protected than its most restrictive input:
+
+| Dimension | Rule |
+|---|---|
+| `visibility` | most restrictive wins (`private < workspace < organization < public`) |
+| `retention` | shortest wins (`ephemeral < session < durable < legal_hold`) |
+| `sensitivity` | highest wins (`none < low < medium < high < restricted`) |
+| `allowedUses` | INTERSECTION — empty intersection means no permitted use (honest, not guessed) |
+| `expiresAt` | earliest input expiry bounds the derived record |
+| `deleteMode` | most destructive wins (`delete > redact > tombstone > archive`) |
+
+Reflection's previous behavior — texts-only input, empty `sources`, blanket
+workspace/durable/low policy — is a security and correctness defect and is
+not a compatible alternative: derived records now inherit composed policy.
+
 ## Belief Network Model
 
 Beliefs are derived stances over evidence. They are not raw memories and should

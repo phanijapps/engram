@@ -1,23 +1,36 @@
-//! Narrow read port for scoped active memories.
+//! Narrow read port for scoped active memories (MCCL-audit F2: lineage).
 //!
 //! The consolidation crate deliberately has no repository dependency, so the
-//! synthesizer injects this focused trait (mirrors `GraphRelationshipSource` in
-//! the associative-graph adapter). Production wiring adapts
-//! `MemoryEventRepository::list_events_for_scope` → `MemoryRepository::
-//! get_memory` → filter `Active` → texts; tests stub it directly.
+//! synthesizer injects this focused trait (mirrors `GraphRelationshipSource`
+//! in the associative-graph adapter). The payload is TYPED EVIDENCE —
+//! identity, policy, and provenance travel with the text — so derived beliefs
+//! can cite their inputs (`Belief.sources`, `DerivationRef.input_refs`) and
+//! inherit a never-widened policy. The previous `Vec<String>` shape destroyed
+//! lineage: correction propagation was structurally impossible.
 
 use async_trait::async_trait;
-use engram_domain::{Belief, Scope};
+use engram_domain::{Belief, MemoryId, Policy, Scope, Timestamp};
 use engram_runtime::CoreResult;
 
-/// Read access to a scope's active memory texts for reflection.
+/// One active memory with the identity and governance needed for lineage.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActiveMemoryEvidence {
+    pub memory_id: MemoryId,
+    pub text: String,
+    pub policy: Policy,
+    /// The input's `provenance.observed_at` (attribution travels with the
+    /// derivation; the derived record's own provenance is written at synthesis).
+    pub observed_at: Timestamp,
+}
+
+/// Read access to a scope's active memories for reflection.
 #[allow(clippy::double_must_use)]
 // async_trait codegen stamps #[must_use] on the boxed-future helper; CoreResult is already must_use
 #[async_trait]
 pub trait ActiveMemorySource: Send + Sync {
-    /// Returns the text content of all `MemoryStatus::Active` memories visible
-    /// to `scope`, in stable order.
-    async fn active_memory_texts(&self, scope: &Scope) -> CoreResult<Vec<String>>;
+    /// Returns all `MemoryStatus::Active` memories visible to `scope`, in
+    /// stable order, WITH identity/policy/provenance evidence.
+    async fn active_memories(&self, scope: &Scope) -> CoreResult<Vec<ActiveMemoryEvidence>>;
 }
 
 /// Write access for persisting reflection-derived beliefs (mirrors

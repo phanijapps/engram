@@ -19,6 +19,7 @@ engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
 engram-belief = { path = "../../core/belief", version = "0.1.0" }
 engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
 engram-store-sqlite = { path = "../sqlite", version = "0.1.0" }
+engram-reflection = { path = "../../core/reflection", version = "0.1.0" }
 engram-store-lexical = { path = "../retrieval/tantivy-lexical", version = "0.1.0" }
 async-trait.workspace = true
 chrono.workspace = true

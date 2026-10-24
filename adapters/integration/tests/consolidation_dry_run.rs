@@ -94,10 +94,11 @@ fn dry_run_true_is_a_plan_only_preview_that_writes_nothing() {
 
     // A completed run reporting planned work with zero writes.
     assert_eq!(run.status, ConsolidationRunStatus::Completed);
-    assert!(run
-        .tasks
-        .iter()
-        .all(|t| t.items_written.unwrap_or(0) == 0 || t.status != ConsolidationTaskStatus::Completed),
+    assert!(
+        run.tasks
+            .iter()
+            .all(|t| t.items_written.unwrap_or(0) == 0
+                || t.status != ConsolidationTaskStatus::Completed),
         "dry-run tasks must not report writes: {:?}",
         run.tasks
     );

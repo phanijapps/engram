@@ -38,11 +38,11 @@ impl ReflectionSynthesizer {
 #[async_trait]
 impl BeliefSynthesizer for ReflectionSynthesizer {
     async fn synthesize_beliefs(&self, request: &ConsolidationRequest) -> CoreResult<Vec<Belief>> {
-        let texts = self.source.active_memory_texts(&request.scope).await?;
-        if texts.is_empty() {
+        let evidence = self.source.active_memories(&request.scope).await?;
+        if evidence.is_empty() {
             return Ok(Vec::new());
         }
-        Ok(vec![reflection_belief(&texts, &request.scope, self.now)])
+        Ok(vec![reflection_belief(&evidence, &request.scope, self.now)])
     }
 }
 
@@ -53,13 +53,32 @@ mod tests {
     use futures::executor::block_on;
 
     struct StubSource {
-        texts: Vec<String>,
+        evidence: Vec<crate::source::ActiveMemoryEvidence>,
+    }
+
+    fn evidence_of(id: &str, text: &str) -> crate::source::ActiveMemoryEvidence {
+        crate::source::ActiveMemoryEvidence {
+            memory_id: engram_domain::MemoryId::from(id),
+            text: text.to_owned(),
+            policy: engram_domain::Policy {
+                visibility: engram_domain::Visibility::Workspace,
+                retention: engram_domain::Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![engram_domain::AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: None,
+            },
+            observed_at: chrono::Utc::now(),
+        }
     }
 
     #[async_trait]
     impl ActiveMemorySource for StubSource {
-        async fn active_memory_texts(&self, _scope: &Scope) -> CoreResult<Vec<String>> {
-            Ok(self.texts.clone())
+        async fn active_memories(
+            &self,
+            _scope: &Scope,
+        ) -> CoreResult<Vec<crate::source::ActiveMemoryEvidence>> {
+            Ok(self.evidence.clone())
         }
     }
 
@@ -102,7 +121,11 @@ mod tests {
     #[test]
     fn produces_reflection_belief_from_active_memories() {
         let source = Arc::new(StubSource {
-            texts: vec!["Alice likes cats".to_owned(), "Bob likes dogs".to_owned()],
+            evidence: vec!["Alice likes cats".to_owned(), "Bob likes dogs".to_owned()]
+                .into_iter()
+                .enumerate()
+                .map(|(i, t)| evidence_of(&format!("m-{i}"), &t))
+                .collect(),
         });
         let synth = ReflectionSynthesizer::new(source, now());
         let beliefs = block_on(synth.synthesize_beliefs(&request())).unwrap();
@@ -118,7 +141,9 @@ mod tests {
 
     #[test]
     fn empty_active_memories_produces_no_beliefs() {
-        let source = Arc::new(StubSource { texts: Vec::new() });
+        let source = Arc::new(StubSource {
+            evidence: Vec::new(),
+        });
         let synth = ReflectionSynthesizer::new(source, now());
         let beliefs = block_on(synth.synthesize_beliefs(&request())).unwrap();
         assert!(beliefs.is_empty());
@@ -127,7 +152,11 @@ mod tests {
     #[test]
     fn single_memory_content_is_the_text_itself() {
         let source = Arc::new(StubSource {
-            texts: vec!["solo insight".to_owned()],
+            evidence: vec!["solo insight".to_owned()]
+                .into_iter()
+                .enumerate()
+                .map(|(i, t)| evidence_of(&format!("m-{i}"), &t))
+                .collect(),
         });
         let synth = ReflectionSynthesizer::new(source, now());
         let beliefs = block_on(synth.synthesize_beliefs(&request())).unwrap();
@@ -206,17 +235,19 @@ fn topic_key(text: &str) -> String {
 #[async_trait]
 impl BeliefSynthesizer for PatternSynthesizer {
     async fn synthesize_beliefs(&self, request: &ConsolidationRequest) -> CoreResult<Vec<Belief>> {
-        let texts = self.source.active_memory_texts(&request.scope).await?;
-        if texts.is_empty() {
+        let evidence = self.source.active_memories(&request.scope).await?;
+        if evidence.is_empty() {
             return Ok(Vec::new());
         }
 
-        // Group texts by topic
-        let mut topics: std::collections::BTreeMap<String, Vec<&str>> =
-            std::collections::BTreeMap::new();
-        for text in &texts {
-            let key = topic_key(text);
-            topics.entry(key).or_default().push(text);
+        // Group evidence by topic (lineage travels with each item).
+        let mut topics: std::collections::BTreeMap<
+            String,
+            Vec<&crate::source::ActiveMemoryEvidence>,
+        > = std::collections::BTreeMap::new();
+        for item in &evidence {
+            let key = topic_key(&item.text);
+            topics.entry(key).or_default().push(item);
         }
 
         // One belief per topic
@@ -225,31 +256,64 @@ impl BeliefSynthesizer for PatternSynthesizer {
             if topic_texts.is_empty() {
                 continue;
             }
+            // Lineage (MCCL-audit F2): cite every input memory in sources
+            // AND derivation input_refs; inherit the never-widen policy.
+            let sources: Vec<engram_domain::BeliefSource> = topic_texts
+                .iter()
+                .map(|item| engram_domain::BeliefSource {
+                    target_type: engram_domain::BeliefSourceTargetType::Memory,
+                    target_id: item.memory_id.to_string(),
+                    authority_level: None,
+                    weight: None,
+                    confidence: None,
+                    valid_from: Some(item.observed_at),
+                    valid_until: None,
+                })
+                .collect();
+            let input_refs: Vec<engram_domain::EvidenceRef> = topic_texts
+                .iter()
+                .map(|item| engram_domain::EvidenceRef {
+                    target_type: engram_domain::EvidenceTargetType::Memory,
+                    target_id: Some(item.memory_id.to_string()),
+                    uri: None,
+                    quote: None,
+                    location: None,
+                })
+                .collect();
             let derivation = DerivationRef {
                 kind: DerivationKind::Consolidation,
                 model: None,
                 prompt_hash: None,
-                input_refs: Vec::new(),
+                input_refs: input_refs.clone(),
                 created_at: self.now,
             };
             let content = if topic_texts.len() == 1 {
-                topic_texts[0].to_owned()
+                topic_texts[0].text.clone()
             } else {
-                format!(
-                    "{} memories on '{}': {}",
-                    topic_texts.len(),
-                    topic,
-                    topic_texts.join("; ")
-                )
+                let joined = topic_texts
+                    .iter()
+                    .map(|item| item.text.as_str())
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                format!("{} memories on '{}': {}", topic_texts.len(), topic, joined)
             };
             let content_hash = {
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
                 let mut hasher = DefaultHasher::new();
                 topic.hash(&mut hasher);
-                content.hash(&mut hasher);
+                for item in &topic_texts {
+                    item.memory_id.to_string().hash(&mut hasher);
+                    item.text.hash(&mut hasher);
+                }
                 hasher.finish()
             };
+            let composed_policy = engram_domain::compose_derived_policy(
+                &topic_texts
+                    .iter()
+                    .map(|item| item.policy.clone())
+                    .collect::<Vec<_>>(),
+            );
             beliefs.push(Belief {
                 id: BeliefId::from(Id::from(format!("reflection:{}:{:x}", topic, content_hash))),
                 scope: request.scope.clone(),
@@ -262,7 +326,7 @@ impl BeliefSynthesizer for PatternSynthesizer {
                 content,
                 confidence: 0.7,
                 status: BeliefStatus::Active,
-                sources: Vec::new(),
+                sources,
                 valid_from: Some(self.now),
                 valid_until: None,
                 synthesizer: Some(derivation.clone()),
@@ -272,14 +336,7 @@ impl BeliefSynthesizer for PatternSynthesizer {
                     topic
                 )),
                 embedding_refs: Vec::new(),
-                policy: engram_domain::Policy {
-                    visibility: engram_domain::Visibility::Workspace,
-                    retention: engram_domain::Retention::Durable,
-                    sensitivity: Some(engram_domain::Sensitivity::Low),
-                    allowed_uses: Vec::new(),
-                    expires_at: None,
-                    delete_mode: None,
-                },
+                policy: composed_policy,
                 provenance: Provenance {
                     source: "engram-reflection".to_owned(),
                     actor: Actor {
@@ -313,13 +370,32 @@ mod pattern_tests {
     use futures::executor::block_on;
 
     struct StubSource {
-        texts: Vec<String>,
+        evidence: Vec<crate::source::ActiveMemoryEvidence>,
+    }
+
+    fn evidence_of(id: &str, text: &str) -> crate::source::ActiveMemoryEvidence {
+        crate::source::ActiveMemoryEvidence {
+            memory_id: engram_domain::MemoryId::from(id),
+            text: text.to_owned(),
+            policy: engram_domain::Policy {
+                visibility: engram_domain::Visibility::Workspace,
+                retention: engram_domain::Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![engram_domain::AllowedUse::Retrieval],
+                expires_at: None,
+                delete_mode: None,
+            },
+            observed_at: chrono::Utc::now(),
+        }
     }
 
     #[async_trait]
     impl ActiveMemorySource for StubSource {
-        async fn active_memory_texts(&self, _scope: &Scope) -> CoreResult<Vec<String>> {
-            Ok(self.texts.clone())
+        async fn active_memories(
+            &self,
+            _scope: &Scope,
+        ) -> CoreResult<Vec<crate::source::ActiveMemoryEvidence>> {
+            Ok(self.evidence.clone())
         }
     }
 
@@ -340,11 +416,15 @@ mod pattern_tests {
     #[test]
     fn pattern_synthesizer_groups_by_topic() {
         let source = Arc::new(StubSource {
-            texts: vec![
+            evidence: vec![
                 "GOTCHAS: camelCase paths".to_owned(),
                 "GOTCHAS: scope strictness".to_owned(),
                 "ARCHITECTURE: 8 domain concepts".to_owned(),
-            ],
+            ]
+            .into_iter()
+            .enumerate()
+            .map(|(i, t)| evidence_of(&format!("m-{i}"), &t))
+            .collect(),
         });
         let now = chrono::Utc::now();
         let synth = PatternSynthesizer::new(source, now);
@@ -385,5 +465,184 @@ mod pattern_tests {
             .unwrap();
         assert!(gotchas.content.contains("camelCase"));
         assert!(gotchas.content.contains("scope strictness"));
+    }
+}
+
+#[cfg(test)]
+mod lineage_tests {
+    use super::*;
+    use crate::source::{ActiveMemoryEvidence, ActiveMemorySource};
+    use engram_domain::ConsolidationRequest;
+    use engram_domain::Scope;
+    use engram_domain::{Actor, ActorKind, Id, Requester};
+    use engram_domain::{
+        AllowedUse, BeliefSourceTargetType, MemoryId, Policy, Retention, Sensitivity, Visibility,
+    };
+    use engram_runtime::CoreResult;
+    use futures::executor::block_on;
+    use std::sync::Arc;
+
+    fn evidence(id: &str, text: &str, policy: Policy) -> ActiveMemoryEvidence {
+        ActiveMemoryEvidence {
+            memory_id: MemoryId::from(id),
+            text: text.to_owned(),
+            policy,
+            observed_at: chrono::Utc::now(),
+        }
+    }
+
+    fn open_policy() -> Policy {
+        Policy {
+            visibility: Visibility::Organization,
+            retention: Retention::Durable,
+            sensitivity: Some(Sensitivity::Low),
+            allowed_uses: vec![AllowedUse::Retrieval, AllowedUse::Consolidation],
+            expires_at: None,
+            delete_mode: None,
+        }
+    }
+
+    fn restricted_policy() -> Policy {
+        Policy {
+            visibility: Visibility::Private,
+            retention: Retention::Session,
+            sensitivity: Some(Sensitivity::High),
+            allowed_uses: vec![AllowedUse::Retrieval],
+            expires_at: None,
+            delete_mode: None,
+        }
+    }
+
+    struct MixedSource(Vec<ActiveMemoryEvidence>);
+
+    #[allow(clippy::double_must_use)]
+    #[async_trait]
+    impl ActiveMemorySource for MixedSource {
+        async fn active_memories(&self, _scope: &Scope) -> CoreResult<Vec<ActiveMemoryEvidence>> {
+            Ok(self.0.clone())
+        }
+    }
+
+    fn request() -> ConsolidationRequest {
+        ConsolidationRequest {
+            scope: Scope {
+                tenant: "t".to_owned(),
+                subject: None,
+                workspace: None,
+                session: None,
+                environment: None,
+            },
+            requester: Requester {
+                actor: Actor {
+                    id: Id::from("a"),
+                    kind: ActorKind::Agent,
+                    display_name: None,
+                    metadata: None,
+                },
+                roles: vec![],
+                permissions: vec![],
+                on_behalf_of: None,
+            },
+            since: None,
+            until: None,
+            strategy: None,
+            dry_run: Some(false),
+        }
+    }
+
+    /// MCCL-audit F2 regression: derived beliefs CITE every input (sources +
+    /// derivation input_refs) and NEVER widen policy below the most
+    /// restrictive input.
+    #[test]
+    fn derived_beliefs_cite_inputs_and_never_widen_policy() {
+        let source = Arc::new(MixedSource(vec![
+            evidence("mem-open", "GOTCHAS: careful with budgets", open_policy()),
+            evidence(
+                "mem-restricted",
+                "GOTCHAS: secrets stay private",
+                restricted_policy(),
+            ),
+        ]));
+        let synth = PatternSynthesizer::new(source, chrono::Utc::now());
+        let beliefs = block_on(synth.synthesize_beliefs(&request())).expect("synthesize");
+
+        assert_eq!(beliefs.len(), 1, "both texts share the GOTCHAS topic");
+        let belief = &beliefs[0];
+
+        // Lineage: every input memory is cited in sources AND input_refs.
+        let source_ids: Vec<&str> = belief
+            .sources
+            .iter()
+            .map(|s| s.target_id.as_str())
+            .collect();
+        assert!(source_ids.contains(&"mem-open"));
+        assert!(source_ids.contains(&"mem-restricted"));
+        assert!(
+            belief
+                .sources
+                .iter()
+                .all(|s| s.target_type == BeliefSourceTargetType::Memory)
+        );
+        let input_ref_ids: Vec<String> = belief
+            .synthesizer
+            .as_ref()
+            .map(|d| {
+                d.input_refs
+                    .iter()
+                    .filter_map(|r| r.target_id.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert_eq!(
+            input_ref_ids.len(),
+            2,
+            "derivation input_refs cite both inputs"
+        );
+
+        // Never-widen policy: most restrictive input won every dimension.
+        assert_eq!(belief.policy.visibility, Visibility::Private);
+        assert_eq!(belief.policy.retention, Retention::Session);
+        assert_eq!(belief.policy.sensitivity, Some(Sensitivity::High));
+        assert_eq!(belief.policy.allowed_uses, vec![AllowedUse::Retrieval]);
+    }
+
+    /// Determinism: same evidence → same belief id; different memory ids with
+    /// same text → different ids (identity participates in the hash).
+    #[test]
+    fn belief_identity_is_deterministic_and_identity_sensitive() {
+        let evs = vec![evidence("mem-1", "GOTCHAS: alpha", open_policy())];
+        let a = {
+            let synth =
+                PatternSynthesizer::new(Arc::new(MixedSource(evs.clone())), chrono::Utc::now());
+            block_on(synth.synthesize_beliefs(&request()))
+                .unwrap()
+                .remove(0)
+        };
+        let b = {
+            let synth =
+                PatternSynthesizer::new(Arc::new(MixedSource(evs.clone())), chrono::Utc::now());
+            block_on(synth.synthesize_beliefs(&request()))
+                .unwrap()
+                .remove(0)
+        };
+        assert_eq!(a.id, b.id, "same evidence -> same id");
+
+        let other = {
+            let synth = PatternSynthesizer::new(
+                Arc::new(MixedSource(vec![evidence(
+                    "mem-2",
+                    "GOTCHAS: alpha",
+                    open_policy(),
+                )])),
+                chrono::Utc::now(),
+            );
+            block_on(synth.synthesize_beliefs(&request()))
+                .unwrap()
+                .remove(0)
+        };
+        assert_ne!(
+            a.id, other.id,
+            "same text, different memory -> different id"
+        );
     }
 }

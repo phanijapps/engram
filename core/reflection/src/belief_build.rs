@@ -5,38 +5,81 @@
 //! `provenance.method = "reflection"`.
 
 use engram_domain::{
-    Actor, ActorKind, Belief, BeliefId, BeliefStatus, BeliefSubject, DerivationKind, DerivationRef,
-    Id, Policy, Provenance, Retention, Scope, Sensitivity, Timestamp, Visibility,
+    Actor, ActorKind, Belief, BeliefId, BeliefSource, BeliefSourceTargetType, BeliefStatus,
+    BeliefSubject, DerivationKind, DerivationRef, EvidenceRef, EvidenceTargetType, Id, Provenance,
+    Scope, Timestamp, compose_derived_policy,
 };
+
+use crate::source::ActiveMemoryEvidence;
 
 /// The provenance source string stamped on every reflection-derived belief.
 pub(crate) const SOURCE: &str = "reflection-synthesizer";
 
-/// Builds a single deterministic reflection-summary belief over `texts`.
-///
-/// The belief's `content` concatenates the active memory texts; `reasoning`
-/// records the count; `provenance.method = "reflection"` distinguishes it from
-/// future bottom-up belief synthesis without a contract change.
-pub(crate) fn reflection_belief(texts: &[String], scope: &Scope, now: Timestamp) -> Belief {
+/// Builds a single deterministic reflection-summary belief over active-memory
+/// evidence, PRESERVING LINEAGE (MCCL-audit F2): every input memory is cited
+/// in `Belief.sources` and `DerivationRef.input_refs`, and the belief's policy
+/// is the never-widen composition of its inputs' policies (a derived record
+/// can never be less protected than its most restrictive input).
+pub(crate) fn reflection_belief(
+    evidence: &[ActiveMemoryEvidence],
+    scope: &Scope,
+    now: Timestamp,
+) -> Belief {
+    // Citations: `Belief.sources` (typed belief-source records) AND the
+    // derivation's `input_refs` (evidence refs) both resolve every input.
+    let sources: Vec<BeliefSource> = evidence
+        .iter()
+        .map(|item| BeliefSource {
+            target_type: BeliefSourceTargetType::Memory,
+            target_id: item.memory_id.to_string(),
+            authority_level: None,
+            weight: None,
+            confidence: None,
+            valid_from: Some(item.observed_at),
+            valid_until: None,
+        })
+        .collect();
+    let input_refs: Vec<EvidenceRef> = evidence
+        .iter()
+        .map(|item| EvidenceRef {
+            target_type: EvidenceTargetType::Memory,
+            target_id: Some(item.memory_id.to_string()),
+            uri: None,
+            quote: None,
+            location: None,
+        })
+        .collect();
     let derivation = DerivationRef {
         kind: DerivationKind::Consolidation,
         model: None,
         prompt_hash: None,
-        input_refs: Vec::new(),
+        input_refs: input_refs.clone(),
         created_at: now,
     };
     let content_hash = {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         let mut hasher = DefaultHasher::new();
-        texts.hash(&mut hasher);
+        // Identity participates in the hash: same texts from different
+        // memories are different derivations.
+        for item in evidence {
+            item.memory_id.to_string().hash(&mut hasher);
+            item.text.hash(&mut hasher);
+        }
         hasher.finish()
     };
+    let texts: Vec<&str> = evidence.iter().map(|item| item.text.as_str()).collect();
     let summary = if texts.len() == 1 {
-        texts[0].clone()
+        texts[0].to_owned()
     } else {
         format!("{} active memories: {}", texts.len(), texts.join("; "))
     };
+    let composed_policy = compose_derived_policy(
+        &evidence
+            .iter()
+            .map(|item| item.policy.clone())
+            .collect::<Vec<_>>(),
+    );
     Belief {
         id: BeliefId::from(Id::from(format!(
             "reflection-{}-{:x}",
@@ -52,7 +95,7 @@ pub(crate) fn reflection_belief(texts: &[String], scope: &Scope, now: Timestamp)
         content: summary,
         status: BeliefStatus::Active,
         confidence: 0.5,
-        sources: Vec::new(),
+        sources,
         valid_from: Some(now),
         valid_until: None,
         superseded_by: None,
@@ -63,14 +106,7 @@ pub(crate) fn reflection_belief(texts: &[String], scope: &Scope, now: Timestamp)
             texts.len()
         )),
         embedding_refs: Vec::new(),
-        policy: Policy {
-            visibility: Visibility::Workspace,
-            retention: Retention::Durable,
-            sensitivity: Some(Sensitivity::Low),
-            allowed_uses: Vec::new(),
-            expires_at: None,
-            delete_mode: None,
-        },
+        policy: composed_policy,
         provenance: Provenance {
             source: SOURCE.to_owned(),
             actor: Actor {

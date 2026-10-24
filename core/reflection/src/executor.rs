@@ -132,6 +132,22 @@ mod tests {
     use futures::executor::block_on;
     use std::sync::Mutex;
 
+    fn ev(id: &str, text: &str) -> crate::source::ActiveMemoryEvidence {
+        crate::source::ActiveMemoryEvidence {
+            memory_id: engram_domain::MemoryId::from(id),
+            text: text.to_owned(),
+            policy: engram_domain::Policy {
+                visibility: engram_domain::Visibility::Workspace,
+                retention: engram_domain::Retention::Durable,
+                sensitivity: None,
+                allowed_uses: vec![],
+                expires_at: None,
+                delete_mode: None,
+            },
+            observed_at: chrono::Utc::now(),
+        }
+    }
+
     fn scope() -> Scope {
         Scope {
             tenant: "t".to_owned(),
@@ -192,7 +208,7 @@ mod tests {
     #[test]
     fn belief_synthesis_task_persists_beliefs() {
         let beliefs = vec![reflection_belief(
-            &["insight a".to_owned(), "insight b".to_owned()],
+            &[ev("m-1", "insight a"), ev("m-2", "insight b")],
             &scope(),
             chrono::Utc::now(),
         )];
@@ -297,8 +313,8 @@ mod tests {
     #[test]
     fn put_belief_failure_records_error_and_downgrades_status() {
         let beliefs = vec![
-            reflection_belief(&["first".to_owned()], &scope(), chrono::Utc::now()),
-            reflection_belief(&["second".to_owned()], &scope(), chrono::Utc::now()),
+            reflection_belief(&[ev("m-1", "first")], &scope(), chrono::Utc::now()),
+            reflection_belief(&[ev("m-2", "second")], &scope(), chrono::Utc::now()),
         ];
         let sink = Arc::new(FailingSink {
             put_count: Mutex::new(0),

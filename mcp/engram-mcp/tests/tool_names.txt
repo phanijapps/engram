@@ -25,6 +25,7 @@ index_docs
 list_maintenance_candidates
 list_outcomes
 ontology_read
+outcome_report
 ping
 predict_context
 procedure_increment

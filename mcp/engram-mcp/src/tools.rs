@@ -363,6 +363,12 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
         return Ok(protocol::text_content(body));
     }
 
+    // ΔP measurement (F2): surface the query_id so agents can report outcomes.
+    let query_id = format!(
+        "q-{}",
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+
     // Excerpt each item + cap total output. Each hit carries a compact
     // trace header (kind · evidence · fused score · raw lane score · lanes)
     // — surface parity with the facade/N-API, which expose the full
@@ -437,7 +443,9 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
         ));
     }
 
-    Ok(protocol::text_content(joined))
+    Ok(protocol::text_content(format!(
+        "query_id: {query_id}\n{joined}"
+    )))
 }
 
 /// `consolidate`: run reflection + decay over the project scope.

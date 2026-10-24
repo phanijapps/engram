@@ -240,4 +240,46 @@ mod extraction_tests {
         assert!(edges.imports.is_empty());
         assert!(edges.contains.is_empty());
     }
+
+    /// Code-intel depth: builder-chain receiver typing — `XBuilder::new()`
+    /// followed by `.build()` rewrites the bare `build` to
+    /// `XBuilder::build` so resolution can bind it. This is the #1 caller
+    /// gap from the ripgrep eval (WalkBuilder::build had zero callers).
+    #[test]
+    fn builder_chain_methods_resolve_to_the_chain_root_type() {
+        let text = "fn main() { let w = WalkBuilder::new().build(); }";
+        let rewrites =
+            crate::parser::tree_sitter_chunker::builder_chain_rewrites_for_test(text, "rs");
+        assert!(
+            rewrites
+                .iter()
+                .any(|(_, bare, qualified)| bare == "build" && qualified == "WalkBuilder::build"),
+            "builder-chain rewrite must produce WalkBuilder::build: {rewrites:?}"
+        );
+    }
+
+    #[test]
+    fn keyword_noise_filtered_from_implementers() {
+        // `impl Sink for mut ...` (parser artifact) must NOT produce an
+        // implements edge with type_name "mut".
+        let edges = structural("pub trait Sink {}\nstruct S;\nimpl Sink for S {}\n", "rs");
+        assert!(
+            edges
+                .implements
+                .iter()
+                .all(|(t, _)| t != "mut" && t != "ref" && t != "dyn"),
+            "keyword noise in implementers: {:?}",
+            edges.implements
+        );
+    }
+
+    /// Let-binding type map: `let w = WalkBuilder::new(); ... w.build()` must
+    /// rewrite `w.build` to `WalkBuilder::build` — the DOMINANT builder
+    /// pattern in real Rust code.
+    #[test]
+    fn let_binding_type_map_qualifies_stored_builders() {
+        let source = "fn main() {\n    let w = WalkBuilder::new(&paths);\n    w.build();\n}\n";
+        let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
+        assert_eq!(map.get("w").map(String::as_str), Some("WalkBuilder"));
+    }
 }

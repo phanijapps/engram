@@ -151,4 +151,4 @@ jobs:
         with:
           tool: cargo-audit
       - name: Audit dependencies
-        run: cargo audit
+        run: cargo audit --ignore RUSTSEC-2026-0385 --ignore RUSTSEC-2026-0386

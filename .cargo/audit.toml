@@ -1,5 +1,0 @@
-[advisories]
-ignore = [
-    "RUSTSEC-2026-0386",  # tokio AsyncFd I/O safety — transitive dep, fix requires Rust 1.87+
-]
-    "RUSTSEC-2026-0385",  # ctutils — transitive dep, fix requires Rust 1.87+

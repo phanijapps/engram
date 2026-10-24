@@ -46,11 +46,46 @@ pub fn compose_context(input: RetrievalCompositionInput<'_>) -> CoreResult<Conte
 
     let mut items = Vec::new();
     let mut omitted = input.omitted;
+    // Shared budget enforcement (MCCL-audit F3): token and byte budgets are
+    // honored AFTER ranking alongside the item budget, so weak candidates
+    // drop before strong ones regardless of storage order. An item that
+    // alone exceeds a budget is OMITTED (BudgetExceeded) — never silently
+    // truncated to fit. `max_bytes` counts exact serialized UTF-8 content
+    // bytes; `max_tokens` uses the deterministic documented estimator
+    // (`estimate_context_tokens`), an approximation, not a model tokenizer.
+    let max_tokens = input
+        .request
+        .budget
+        .as_ref()
+        .and_then(|b| b.max_tokens)
+        .map(|t| t as u64);
+    let max_bytes = input
+        .request
+        .budget
+        .as_ref()
+        .and_then(|b| b.max_bytes)
+        .map(|b| b as u64);
+    let mut used_tokens = 0u64;
+    let mut used_bytes = 0u64;
     for (index, result) in ranked_results.into_iter().enumerate() {
         if index >= max_items {
             omitted.push(omitted_fused_result(&result, OmittedReason::BudgetExceeded));
             continue;
         }
+        let item_tokens = crate::tokens::estimate_context_tokens(&result.content) as u64;
+        let item_bytes = result.content.len() as u64;
+        let tokens_fit = max_tokens
+            .map(|max| used_tokens + item_tokens <= max)
+            .unwrap_or(true);
+        let bytes_fit = max_bytes
+            .map(|max| used_bytes + item_bytes <= max)
+            .unwrap_or(true);
+        if !tokens_fit || !bytes_fit {
+            omitted.push(omitted_fused_result(&result, OmittedReason::BudgetExceeded));
+            continue;
+        }
+        used_tokens += item_tokens;
+        used_bytes += item_bytes;
         items.push(result);
     }
 

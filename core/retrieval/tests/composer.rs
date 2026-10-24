@@ -210,3 +210,97 @@ fn result(id: &str, target_id: &str, score: f32, source: &str) -> RetrievalResul
         metadata: None,
     }
 }
+
+#[test]
+fn composer_enforces_token_budget_after_ranking() {
+    // Two results; the budget fits only the higher-ranked one.
+    let request = request(
+        None,
+        Some(ContextBudget {
+            max_items: None,
+            max_tokens: Some(4),
+            max_bytes: None,
+        }),
+    );
+    let context = compose_context(RetrievalCompositionInput {
+        request: &request,
+        fusion: &WeightedRetrievalFusion::default(),
+        reranker: None,
+        candidates: vec![
+            result("a", "memory-a", 0.9, "memory.keyword"),
+            result("b", "memory-b", 0.8, "memory.keyword"),
+        ],
+        omitted: Vec::new(),
+        source_failures: Vec::new(),
+        created_at: Utc::now(),
+    })
+    .expect("compose context");
+
+    // "content for memory-a" = 20 chars -> 5 tokens > 4-token budget: even the
+    // top item alone is oversized -> omitted, never truncated.
+    assert!(context.items.is_empty());
+    assert_eq!(context.omitted.len(), 2);
+    assert!(context
+        .omitted
+        .iter()
+        .all(|o| o.reason == OmittedReason::BudgetExceeded));
+}
+
+#[test]
+fn composer_enforces_byte_budget_exactly() {
+    let request = request(
+        None,
+        Some(ContextBudget {
+            max_items: None,
+            max_tokens: None,
+            max_bytes: Some(21), // fits exactly ONE "content for memory-x" (20 bytes)
+        }),
+    );
+    let context = compose_context(RetrievalCompositionInput {
+        request: &request,
+        fusion: &WeightedRetrievalFusion::default(),
+        reranker: None,
+        candidates: vec![
+            result("a", "memory-a", 0.9, "memory.keyword"),
+            result("b", "memory-b", 0.8, "memory.keyword"),
+        ],
+        omitted: Vec::new(),
+        source_failures: Vec::new(),
+        created_at: Utc::now(),
+    })
+    .expect("compose context");
+
+    assert_eq!(context.items.len(), 1);
+    assert_eq!(context.items[0].target_id, "memory-a");
+    assert_eq!(context.omitted.len(), 1);
+    assert_eq!(context.omitted[0].target_id, "memory-b");
+    assert_eq!(context.omitted[0].reason, OmittedReason::BudgetExceeded);
+}
+
+#[test]
+fn composer_token_budget_counts_chars_not_bytes() {
+    // UTF-8: multibyte content counts CHARACTERS for tokens (estimator) but
+    // BYTES for the byte budget — both stay exact and deterministic.
+    let mut utf8 = result("a", "memory-a", 0.9, "memory.keyword");
+    utf8.content = "é".repeat(8); // 8 chars (4 tokens), 16 bytes
+    let request = request(
+        None,
+        Some(ContextBudget {
+            max_items: None,
+            max_tokens: Some(4),
+            max_bytes: Some(16),
+        }),
+    );
+    let context = compose_context(RetrievalCompositionInput {
+        request: &request,
+        fusion: &WeightedRetrievalFusion::default(),
+        reranker: None,
+        candidates: vec![utf8],
+        omitted: Vec::new(),
+        source_failures: Vec::new(),
+        created_at: Utc::now(),
+    })
+    .expect("compose context");
+    assert_eq!(context.items.len(), 1, "exact-fit UTF-8 item must be kept");
+    assert!(context.omitted.is_empty());
+}

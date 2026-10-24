@@ -1950,6 +1950,21 @@ Fields:
 | `maxTokens` | no | integer | Approximate token budget |
 | `maxBytes` | no | integer | Byte budget |
 
+Budget semantics (enforced by shared composition, after ranking — weak
+candidates drop before strong ones regardless of source order):
+
+- `maxItems` counts composed items.
+- `maxBytes` counts EXACT serialized UTF-8 content bytes of composed items.
+- `maxTokens` uses the deterministic shared estimator (one token ≈ 4
+  characters, rounded up) — a documented approximation, NOT a model
+  tokenizer; hosts needing exact model accounting lower the budget
+  accordingly or enforce at the presentation layer.
+- An item that alone exceeds an active budget is OMITTED with
+  `OmittedReason.BudgetExceeded` — never silently truncated to fit.
+- All omissions are recorded on `ContextPayload.omitted`.
+- Transport-level excerpt truncation (e.g. MCP output caps) is presentation
+  layered ON TOP of this shared budget, not a substitute for it.
+
 ### RetrievalResult
 
 One retrieved memory or knowledge item.

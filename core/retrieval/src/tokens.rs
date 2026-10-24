@@ -85,3 +85,28 @@ mod tests {
         assert_eq!(query_tokens("'quoted'"), vec!["quoted"]);
     }
 }
+
+/// Deterministic context-size estimator for `ContextBudget.max_tokens`
+/// enforcement (MCCL-audit F3): one token ≈ 4 characters, rounded up.
+///
+/// This is a documented APPROXIMATION shared by every transport — not a model
+/// tokenizer. It exists so budget semantics are engine- and model-neutral and
+/// reproducible in fixtures; hosts needing exact model accounting inject their
+/// own estimator at the presentation layer and lower the budget accordingly.
+pub fn estimate_context_tokens(text: &str) -> u32 {
+    text.chars().count().div_ceil(4) as u32
+}
+
+#[cfg(test)]
+mod estimate_tests {
+    use super::estimate_context_tokens;
+
+    #[test]
+    fn rounds_up_and_counts_chars_not_bytes() {
+        assert_eq!(estimate_context_tokens(""), 0);
+        assert_eq!(estimate_context_tokens("abcd"), 1);
+        assert_eq!(estimate_context_tokens("abcde"), 2);
+        // Multi-byte chars count as one char each (é = 2 bytes, 1 char).
+        assert_eq!(estimate_context_tokens("éééé"), 1);
+    }
+}

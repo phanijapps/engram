@@ -27,7 +27,6 @@ pub fn register_all(chunker: &mut TreeSitterChunker) {
     ocaml::register(chunker);
     #[cfg(feature = "haskell")]
     haskell::register(chunker);
-
 }
 
 pub mod dart;

@@ -187,6 +187,14 @@ pub fn is_noise_symbol(name: &str) -> bool {
     const SYMBOL_NOISE: &[&str] = &[
         // Language primitives & type words.
         "str",
+        // Rust enum constructors + panics (bare position; receiver-verified
+        // qualified forms bypass via the state machine's qualified path).
+        "Ok",
+        "Some",
+        "None",
+        "Err",
+        "unwrap",
+        "expect",
         "string",
         "int",
         "integer",

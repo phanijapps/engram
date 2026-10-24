@@ -221,15 +221,27 @@ fn extract_name(node: tree_sitter::Node, source: &[u8]) -> String {
     clean_type(text).unwrap_or_else(|| text.trim().to_owned())
 }
 
-/// Cleans a type text: strips generics and whitespace; None for empties.
+/// Cleans a type text: strips generics and whitespace; None for empties,
+/// primitive/wrapper names, and non-PascalCase terminals (they can never be
+/// receiver owners).
 fn clean_type(text: &str) -> Option<String> {
+    const PRIMITIVES: &[&str] = &[
+        "str", "String", "i8", "i16", "i32", "i64", "i128", "isize", "u8", "u16", "u32", "u64",
+        "u128", "usize", "f32", "f64", "bool", "char", "string", "number", "boolean", "any",
+        "unknown", "never", "object", "symbol", "bigint", "void", "byte", "int", "long", "short",
+        "float", "double", "Vec", "Option", "Result", "Box", "Rc", "Arc", "Self",
+    ];
     let t = text.trim();
     let t = match t.find('<') {
         Some(i) => &t[..i],
         None => t,
     };
     let t = t.trim();
-    if t.is_empty() {
+    let last = t.rsplit("::").next().unwrap_or(t);
+    if t.is_empty()
+        || !last.chars().next().is_some_and(char::is_uppercase)
+        || PRIMITIVES.contains(&last)
+    {
         None
     } else {
         Some(t.to_owned())

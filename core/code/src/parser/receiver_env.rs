@@ -394,11 +394,12 @@ fn parse_use_aliases(text: &str) -> Vec<(String, String)> {
             }
             if let Some((orig, alias)) = item.split_once(" as ") {
                 out.push((alias.trim().to_owned(), format!("{module}{}", orig.trim())));
-            } else if item.chars().next().is_some_and(char::is_uppercase) {
-                // `use remote::{Product}` — a type import: `Product` denotes
-                // `remote::Product`.
-                out.push((item.to_owned(), format!("{module}{item}")));
             }
+            // Plain braced items (`use remote::{Product}`) create NO alias:
+            // the imported name already matches the entity's anchor key
+            // (anchors are module-prefixed only by IN-FILE nesting, never by
+            // crate/import paths — a path-qualified alias would miss the
+            // repo table and wrongly degrade typed receivers).
         }
         return out;
     }
@@ -407,15 +408,9 @@ fn parse_use_aliases(text: &str) -> Vec<(String, String)> {
     if let Some((orig, alias)) = body.rsplit_once(" as ") {
         return vec![(alias.trim().to_owned(), orig.trim().to_owned())];
     }
-    // `use a::b::Type;` — the last segment denotes the full path when
-    // PascalCase (a type); lowercase last segments are module aliases for
-    // their parent path.
-    if let Some(pos) = body.rfind("::") {
-        let last = &body[pos + 2..];
-        if last.chars().next().is_some_and(char::is_uppercase) {
-            return vec![(last.to_owned(), body.to_owned())];
-        }
-    }
+    // Plain single-path imports (`use ignore::WalkBuilder;`) create NO
+    // alias: the imported name IS the anchor key (see the braced-form note).
+    // Only explicit `as` aliases rewrite.
     Vec::new()
 }
 

@@ -577,6 +577,7 @@ pub fn scan_repo(app: &App, args: &Value) -> Result<Value, ToolError> {
         };
         let checkpoint = engram_domain::ScanCheckpoint {
             scope: app.scope.clone(),
+            git_ref: summary.git_branch.clone(),
             stable_source_key: root
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
@@ -748,6 +749,115 @@ fn resolve_scan_filter(repo_root: &str, args: &Value) -> (ScanFilter, String) {
 /// Fetch all relationships in the project scope. Errors (rather than returning
 /// an empty vec) when the knowledge-query capability is unwired or the store
 /// fails — so graph tools fail loudly instead of masquerading as "no relations".
+/// Resolves an optional `code_index` tool parameter into a set of allowed
+/// graph IDs (ADR-0032 Phase 3). Returns `None` when no filter applies
+/// (absent, "all", or "*"). Returns `Some(graph_ids)` restricting results
+/// to entities/relationships whose `graph_id` belongs to a graph whose
+/// metadata `stableSourceKey` matches the selection.
+///
+/// The filter works at the MCP layer: it fetches all graphs in scope, builds
+/// a graph_id → source_key map, and returns only the IDs whose source key
+/// matches. This avoids changing any core retrieval contract — the lanes
+/// receive pre-filtered entity/relationship sets.
+pub(crate) fn resolve_code_index_filter(
+    app: &App,
+    code_index: Option<&str>,
+) -> Result<Option<std::collections::HashSet<String>>, ToolError> {
+    let selection = match code_index {
+        None | Some("all") | Some("*") => return Ok(None),
+        Some(key) => key,
+    };
+    let query = app
+        .provider
+        .require_knowledge_query()
+        .map_err(|_| internal("knowledge query capability not configured"))?;
+    let graphs = block_on(query.list_graphs(&app.scope))
+        .map_err(|e| internal(format!("list_graphs failed: {e}")))?;
+
+    let mut allowed = std::collections::HashSet::new();
+    let mut matched = false;
+    for graph in &graphs {
+        let source_key = graph
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("stableSourceKey"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        // Match: exact qualified key ("repo@ref"), bare repo key (legacy
+        // single-branch), or a suffix match on the ref ("@main" matches
+        // "repo@refs/heads/main"). The last is a convenience for agents.
+        let is_match = source_key == selection
+            || source_key.starts_with(&format!("{selection}@"))
+            || source_key.ends_with(&format!("@{selection}"))
+            || source_key.split('@').next() == Some(selection);
+        if is_match {
+            matched = true;
+            allowed.insert(graph.id.to_string());
+        }
+    }
+    if !matched {
+        // List available indexes for a helpful diagnostic.
+        let available: Vec<&str> = graphs
+            .iter()
+            .filter_map(|g| {
+                g.metadata
+                    .as_ref()
+                    .and_then(|m| m.get("stableSourceKey"))
+                    .and_then(|v| v.as_str())
+            })
+            .collect();
+        return Err(invalid(format!(
+            "unknown code_index '{selection}'. Available: {}",
+            if available.is_empty() {
+                "(none indexed)".to_owned()
+            } else {
+                available.join(", ")
+            }
+        )));
+    }
+    Ok(Some(allowed))
+}
+
+/// Filters relationships to only those whose graph_id is in the allowed set.
+fn filter_rels_by_graph_ids(
+    rels: Vec<KnowledgeRelationship>,
+    allowed: &Option<std::collections::HashSet<String>>,
+) -> Vec<KnowledgeRelationship> {
+    match allowed {
+        None => rels,
+        Some(set) => rels
+            .into_iter()
+            .filter(|r| {
+                r.graph_id
+                    .as_ref()
+                    .map(|g| set.contains(&g.to_string()))
+                    .unwrap_or(false)
+            })
+            .collect(),
+    }
+}
+
+/// Filters entities to only those whose graph_id is in the allowed set.
+/// Entities with graph_id = None (scope-global, e.g. Repository nodes) pass
+/// through — they are shared across indexes.
+fn filter_entities_by_graph_ids(
+    entities: Vec<KnowledgeEntity>,
+    allowed: &Option<std::collections::HashSet<String>>,
+) -> Vec<KnowledgeEntity> {
+    match allowed {
+        None => entities,
+        Some(set) => entities
+            .into_iter()
+            .filter(|e| {
+                e.graph_id
+                    .as_ref()
+                    .map(|g| set.contains(&g.to_string()))
+                    .unwrap_or(true) // graph_id = None: shared, keep
+            })
+            .collect(),
+    }
+}
+
 pub(crate) fn fetch_rels(app: &App) -> Result<Vec<KnowledgeRelationship>, ToolError> {
     let query = app
         .provider
@@ -1452,6 +1562,7 @@ pub fn search(app: &App, args: &Value) -> Result<Value, ToolError> {
         entity_ids: Vec::new(),
         since: None,
         until: None,
+        code_index_keys: None,
         min_confidence: None,
         include_archived: None,
         as_of: None,
@@ -1994,10 +2105,11 @@ fn render_edge_evidence(rels: &[KnowledgeRelationship], seeds: &[String]) -> Str
 pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
     let symbols = parse_str_or_array(args, "symbol")?;
     let depth = args["depth"].as_u64().unwrap_or(1) as usize;
+    let index_filter = resolve_code_index_filter(app, args["code_index"].as_str())?;
     let cap = args["cap"]
         .as_u64()
         .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
-    let rels = fetch_rels(app)?;
+    let rels = filter_rels_by_graph_ids(fetch_rels(app)?, &index_filter);
     let names = entity_names(app);
 
     // Legacy single-string path: identical output shape to the prior
@@ -2057,10 +2169,11 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
 pub fn change_impact(app: &App, args: &Value) -> Result<Value, ToolError> {
     let targets = parse_str_or_array(args, "target")?;
     let depth = args["depth"].as_u64().unwrap_or(2) as usize;
+    let index_filter = resolve_code_index_filter(app, args["code_index"].as_str())?;
     let cap = args["cap"]
         .as_u64()
         .unwrap_or(DEFAULT_NEIGHBORHOOD_CAP as u64) as usize;
-    let rels = fetch_rels(app)?;
+    let rels = filter_rels_by_graph_ids(fetch_rels(app)?, &index_filter);
     let names = entity_names(app);
 
     // Legacy single-string path: preserve the dependency-path option.

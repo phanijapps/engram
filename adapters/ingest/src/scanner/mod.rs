@@ -16,7 +16,7 @@ use engram_knowledge::{CoreError, CoreResult, KnowledgeGraphRepository, Knowledg
 use crate::{
     CodeSymbolChunker, DocumentIngestRequest, DocumentMetadata, GraphExtractor, KnowledgeIngestor,
     MarkdownChunker, PlainTextChunker, PlainTextChunkerOptions, git_detect::detect_git,
-    scan_filter::ScanFilter, stable_source_key,
+    qualified_source_key, scan_filter::ScanFilter, stable_source_key,
 };
 
 mod contract_phase;
@@ -171,10 +171,19 @@ where
     } else {
         SourceKind::Filesystem
     };
-    let source_key = {
+    let (repository_identity, git_ref_identity) = {
         let remote = git.as_ref().map(|(r, _, _)| r.as_str());
-        stable_source_key(remote, &opts.source_name)
+        let git_ref = git.as_ref().map(|(_, b, _)| b.as_str());
+        let repo_key = stable_source_key(remote, &opts.source_name);
+        (Some(repo_key.clone()), git_ref.map(str::to_owned))
     };
+    // Branch-qualified (ADR-0032): when a ref is known, the partition
+    // key becomes 'repo@ref' — a dev scan never retracts main's graphs.
+    // No ref = bare repo key (backward-compatible with existing stores).
+    let source_key = qualified_source_key(
+        &repository_identity.clone().unwrap_or_default(),
+        git_ref_identity.as_deref(),
+    );
 
     // RFC-0020 rev: clean git provenance keys (repository = remote URL, branch,
     // revision = SHA) stamped on each document's KnowledgeSource.metadata so they
@@ -242,6 +251,8 @@ where
             policy: opts.policy.clone(),
             actor: opts.actor.clone(),
             stable_source_key: Some(source_key.clone()),
+            repository_key: repository_identity.clone(),
+            git_ref: git_ref_identity.clone(),
             source_metadata: None,
         };
         Arc::new(prepass::collect_global_symbols(

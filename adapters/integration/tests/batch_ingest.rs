@@ -149,6 +149,8 @@ fn source(id: &str) -> KnowledgeSource {
         name: format!("source-{id}"),
         uri: None,
         version: None,
+        repository_key: None,
+        git_ref: None,
         policy: policy(),
         provenance: provenance(),
         created_at: chrono::Utc::now(),

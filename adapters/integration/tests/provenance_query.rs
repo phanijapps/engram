@@ -183,6 +183,8 @@ fn source(id: &str, scope: Scope) -> KnowledgeSource {
         name: "source".to_string(),
         uri: None,
         version: None,
+        repository_key: None,
+        git_ref: None,
         policy: Policy {
             visibility: Visibility::Workspace,
             retention: Retention::Durable,

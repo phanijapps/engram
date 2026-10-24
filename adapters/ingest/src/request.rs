@@ -41,6 +41,15 @@ pub struct DocumentIngestRequest {
     /// `KnowledgeGraph` and emit the per-source `EntityKind::Repository` node.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stable_source_key: Option<String>,
+    /// Canonical repository identity (commit-stable, branch-independent).
+    /// Populated by the scanner when a git remote is detected. Flows to
+    /// `KnowledgeSource.repository_key` (ADR-0032).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub repository_key: Option<String>,
+    /// Git ref that was indexed (e.g. "refs/heads/main"). Populated by the
+    /// scanner from git detection. Flows to `KnowledgeSource.git_ref`.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub git_ref: Option<String>,
     /// Additional source-level metadata the scanner stamps onto the
     /// `KnowledgeSource` (merged with the stable-source-key). RFC-0020: the
     /// scanner fills `repository` (git remote), `branch`, and `revision` (SHA)

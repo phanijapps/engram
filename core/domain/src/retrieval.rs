@@ -39,6 +39,12 @@ pub struct QueryFilter {
     pub since: Option<Timestamp>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub until: Option<Timestamp>,
+    /// Which code indexes contribute candidates. Values are qualified keys
+    /// ("myrepo@refs/heads/main") or configured aliases ("deployed").
+    /// Absent = workspace default; ["*"] = all indexes (cross-branch);
+    /// unknown = clear diagnostic, never silent fallback.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub code_index_keys: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min_confidence: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -33,6 +33,8 @@ fn ingest_code(
             metadata: None,
         },
         stable_source_key: Some(stable_source_key.to_owned()),
+        repository_key: None,
+        git_ref: None,
         source_metadata: None,
     };
     block_on(ingestor.ingest(store, request)).expect("ingest")
@@ -81,6 +83,8 @@ fn extracts_code_symbols_and_calls_edges() {
             metadata: None,
         },
         stable_source_key: None,
+        repository_key: None,
+        git_ref: None,
         source_metadata: None,
     };
 
@@ -172,6 +176,8 @@ fn code_entities_carry_logical_names() {
             metadata: None,
         },
         stable_source_key: Some("my-repo".to_owned()),
+        repository_key: None,
+        git_ref: None,
         source_metadata: None,
     };
 
@@ -320,6 +326,8 @@ fn unresolved_reference_lands_in_the_ledger() {
             metadata: None,
         },
         stable_source_key: Some("my-repo".to_owned()),
+        repository_key: None,
+        git_ref: None,
         source_metadata: None,
     };
     let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
@@ -395,6 +403,8 @@ fn non_code_documents_emit_no_graph_entities() {
             metadata: None,
         },
         stable_source_key: Some("repo".to_owned()),
+        repository_key: None,
+        git_ref: None,
         source_metadata: None,
     };
     let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
@@ -453,6 +463,8 @@ fn code_edges_carry_typed_resolution_evidence() {
             metadata: None,
         },
         stable_source_key: None,
+        repository_key: None,
+        git_ref: None,
         source_metadata: None,
     };
     let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");
@@ -545,6 +557,8 @@ fn cooccurrence_edges_are_heuristic_not_parsed() {
             metadata: None,
         },
         stable_source_key: None,
+        repository_key: None,
+        git_ref: None,
         source_metadata: None,
     };
     let ingested = block_on(ingestor.ingest(&store, request)).expect("ingest");

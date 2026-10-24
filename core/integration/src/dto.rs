@@ -230,6 +230,7 @@ impl From<RecallRequest> for RetrievalRequest {
                 include_archived: None,
                 as_of: None,
                 include_code_artifacts: Some(dto.include_code_artifacts),
+                code_index_keys: None,
             }),
             cues: Vec::new(),
             limit: None,

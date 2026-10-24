@@ -134,6 +134,8 @@ fn source(root: &Path) -> KnowledgeSource {
         name: "filesystem fixture".to_owned(),
         uri: Some(root.display().to_string()),
         version: Some("v1".to_owned()),
+        repository_key: None,
+        git_ref: None,
         policy: policy(),
         provenance: provenance(),
         created_at: Utc::now(),

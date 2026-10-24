@@ -69,6 +69,8 @@ fn git_request(repo_key: &str, path: &str, text: &str) -> DocumentIngestRequest 
         policy: policy(),
         actor: actor(),
         stable_source_key: Some(repo_key.to_owned()),
+        repository_key: None,
+        git_ref: None,
         source_metadata: None,
     }
 }
@@ -368,6 +370,8 @@ fn non_git_source_produces_no_repository_node() {
     let request = DocumentIngestRequest {
         source_kind: SourceKind::Filesystem,
         source_name: "local-files".to_owned(),
+        repository_key: None,
+        git_ref: None,
         scope: scope(),
         document_kind: SourceDocumentKind::Code,
         document: DocumentMetadata {

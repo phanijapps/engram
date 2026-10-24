@@ -196,6 +196,10 @@ export interface CodeGraphStaleness {
   currentRevision?: string;
   diagnostic?: string;
   dirty?: boolean;
+  /**
+   * Git ref that was indexed. None for non-git.
+   */
+  gitRef?: string;
   indexedRevision?: string;
   lastSuccessfulScanAt?: Timestamp;
   scanInProgress: boolean;
@@ -356,6 +360,10 @@ export interface QueryFilter {
    */
   asOf?: string;
   chunkKinds?: KnowledgeChunkKind[];
+  /**
+   * Which code indexes contribute candidates. Qualified keys or configured aliases. Absent = workspace default; ['*'] = all.
+   */
+  codeIndexKeys?: string[];
   conceptIds?: Identifier[];
   entityIds?: Identifier[];
   includeArchived?: boolean;
@@ -468,12 +476,20 @@ export interface MemoryLink {
 }
 export interface KnowledgeSource {
   createdAt: Timestamp;
+  /**
+   * Git ref that was indexed (refs/heads/main). None for non-git sources.
+   */
+  gitRef?: string;
   id: Identifier;
   kind: SourceKind;
   metadata?: Metadata;
   name: string;
   policy: Policy;
   provenance: Provenance;
+  /**
+   * Canonical repository identity (commit-stable, branch-independent).
+   */
+  repositoryKey?: string;
   scope: Scope;
   updatedAt?: Timestamp;
   uri?: string;
@@ -602,6 +618,10 @@ export interface ScanCheckpoint {
   completedAt?: Timestamp;
   dirty?: boolean;
   errors: number;
+  /**
+   * Git ref that was indexed. None for non-git.
+   */
+  gitRef?: string;
   indexedRevision?: string;
   scanRoot?: string;
   scanRunId: string;

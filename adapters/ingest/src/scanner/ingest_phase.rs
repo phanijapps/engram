@@ -109,6 +109,8 @@ where
                 policy: opts.policy.clone(),
                 actor: opts.actor.clone(),
                 stable_source_key: Some(source_key.to_owned()),
+                repository_key: None,
+                git_ref: None,
                 source_metadata: git_source_metadata.clone(),
             };
             // Tree-sitter chunking for supported extensions; fallback to the

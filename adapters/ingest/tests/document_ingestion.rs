@@ -31,6 +31,8 @@ fn request() -> DocumentIngestRequest {
     DocumentIngestRequest {
         source_kind: SourceKind::Filesystem,
         source_name: "engram-docs".to_owned(),
+        repository_key: None,
+        git_ref: None,
         scope: Scope {
             tenant: "tenant-demo".to_owned(),
             subject: None,

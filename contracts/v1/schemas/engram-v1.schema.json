@@ -696,6 +696,14 @@
         },
         "metadata": {
           "$ref": "#/$defs/Metadata"
+        },
+        "repositoryKey": {
+          "type": "string",
+          "description": "Canonical repository identity (commit-stable, branch-independent)."
+        },
+        "gitRef": {
+          "type": "string",
+          "description": "Git ref that was indexed (refs/heads/main). None for non-git sources."
         }
       }
     },
@@ -900,6 +908,13 @@
         "includeCodeArtifacts": {
           "type": "boolean",
           "description": "Include code-artifact entities (Variable/Module/File/Repository - import-path stubs, file stubs, structural anchors) in ranked retrieval results. Absent/false = suppressed: they still participate fully in the graph (seeds, walk/transit nodes, edges, community structure) but are not eligible as results. Indexing is unchanged either way."
+        },
+        "codeIndexKeys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Which code indexes contribute candidates. Qualified keys or configured aliases. Absent = workspace default; ['*'] = all."
         }
       }
     },
@@ -1918,6 +1933,10 @@
         "errors": {
           "type": "integer",
           "minimum": 0
+        },
+        "gitRef": {
+          "type": "string",
+          "description": "Git ref that was indexed. None for non-git."
         }
       },
       "required": [
@@ -1972,6 +1991,10 @@
         },
         "diagnostic": {
           "type": "string"
+        },
+        "gitRef": {
+          "type": "string",
+          "description": "Git ref that was indexed. None for non-git."
         }
       },
       "required": [

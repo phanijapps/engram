@@ -100,6 +100,8 @@ fn ingest_and_extract() -> (Vec<String>, Vec<(String, String)>, Vec<String>) {
             metadata: None,
         },
         stable_source_key: None,
+        repository_key: None,
+        git_ref: None,
         source_metadata: None,
     };
 

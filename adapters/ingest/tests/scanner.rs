@@ -239,13 +239,14 @@ fn scanner_git_repo_sets_git_repository_kind_and_stable_key() {
         .and_then(|v| v.as_str());
     assert_eq!(
         key,
-        Some("github.com/acme/scan-test"),
+        Some("github.com/acme/scan-test@master"),
         "stable_source_key must be the normalized remote (scheme/.git stripped)"
     );
 
     // Query-by-key works end-to-end (T6 AC-4).
-    let graphs = block_on(store.list_graphs_by_source(&scope(), "github.com/acme/scan-test"))
-        .expect("list_graphs_by_source");
+    let graphs =
+        block_on(store.list_graphs_by_source(&scope(), "github.com/acme/scan-test@master"))
+            .expect("list_graphs_by_source");
     assert!(!graphs.is_empty(), "at least one graph from the git repo");
 
     let _ = fs::remove_dir_all(&root);

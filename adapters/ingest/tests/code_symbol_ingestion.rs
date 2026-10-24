@@ -61,6 +61,8 @@ fn code_request() -> DocumentIngestRequest {
     DocumentIngestRequest {
         source_kind: SourceKind::Filesystem,
         source_name: "engram-code".to_owned(),
+        repository_key: None,
+        git_ref: None,
         scope: scope(),
         document_kind: SourceDocumentKind::Code,
         document: DocumentMetadata {

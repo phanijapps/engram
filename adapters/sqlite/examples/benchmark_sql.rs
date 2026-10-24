@@ -79,6 +79,7 @@ fn retrieval_request() -> RetrievalRequest {
             include_archived: Some(false),
             as_of: None,
             include_code_artifacts: None,
+            code_index_keys: None,
         }),
         cues: Vec::new(),
         limit: Some(10),

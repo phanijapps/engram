@@ -22,9 +22,11 @@ pub use hierarchy::*;
 
 // Belief cell — folded in from engram-store-belief-sqlite (T3).
 pub mod belief;
+pub mod outcomes;
 pub mod procedures;
 pub mod proposals;
 pub use belief::*;
+pub use outcomes::*;
 pub use procedures::*;
 pub use proposals::*;
 // Vector cell — folded in from engram-store-vector (T5).

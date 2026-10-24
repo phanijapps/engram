@@ -23,6 +23,7 @@ hierarchy_build
 hierarchy_path
 index_docs
 list_maintenance_candidates
+list_outcomes
 ontology_read
 ping
 predict_context
@@ -37,6 +38,7 @@ put_entity
 put_relationship
 recall
 reindex
+report_outcome
 resolve_entity
 scan_dependencies
 scan_ownership

@@ -1371,6 +1371,47 @@ export const engramV1Schema = {
       },
       "type": "object"
     },
+    "RecallOutcome": {
+      "additionalProperties": false,
+      "description": "Attributed post-action outcome for one recall (F2 outcome loop).",
+      "properties": {
+        "configVersion": {
+          "type": "string"
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/Timestamp"
+        },
+        "omittedTargets": {
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "type": "array"
+        },
+        "outcome": {
+          "$ref": "#/$defs/TaskOutcome"
+        },
+        "queryId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "recalledTargets": {
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          },
+          "type": "array"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        }
+      },
+      "required": [
+        "queryId",
+        "scope",
+        "outcome",
+        "occurredAt"
+      ],
+      "type": "object"
+    },
     "Requester": {
       "additionalProperties": false,
       "properties": {
@@ -1848,6 +1889,26 @@ export const engramV1Schema = {
         "partial"
       ],
       "type": "string"
+    },
+    "TaskOutcome": {
+      "additionalProperties": false,
+      "description": "Host-verified task result. Association data \u2014 never causal proof.",
+      "properties": {
+        "capability": {
+          "type": "string"
+        },
+        "success": {
+          "type": "boolean"
+        },
+        "verifier": {
+          "$ref": "#/$defs/Actor"
+        }
+      },
+      "required": [
+        "success",
+        "verifier"
+      ],
+      "type": "object"
     },
     "Timestamp": {
       "format": "date-time",

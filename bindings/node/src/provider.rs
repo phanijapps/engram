@@ -45,6 +45,7 @@ use engram_knowledge::{KnowledgeChangeLog, ScanCheckpointStore};
 use engram_memory::MemoryService;
 use engram_procedures::ProcedureRepository;
 use engram_proposals::ProposalService;
+use engram_retrieval::OutcomeLedger;
 use engram_retrieval::{RetrievalIndex, VectorIndex};
 use engram_runtime::CoreResult;
 use futures::executor::block_on;
@@ -363,6 +364,17 @@ impl NativeProvider {
             .map_err(to_napi_error)?
             .clone();
         Ok(NativeProposalsApi { handle })
+    }
+
+    /// Returns the attributed outcome ledger (F2), or throws if not wired.
+    #[napi(js_name = "requireOutcomesApi")]
+    pub fn require_outcomes_api(&self) -> Result<NativeOutcomesApi> {
+        let handle = self
+            .inner
+            .require_outcomes()
+            .map_err(to_napi_error)?
+            .clone();
+        Ok(NativeOutcomesApi { handle })
     }
 
     /// Returns the knowledge change-log handle (resumable invalidation
@@ -1308,6 +1320,34 @@ impl NativeProceduresApi {
 // Minimal handle proxies for remaining capabilities (ADR-0022 parity).
 // Each holds the trait handle + a `ping`. Real methods added as needed.
 // ---------------------------------------------------------------------------
+
+/// Outcome-ledger API (F2): report attributed post-action results and read
+/// windows. Association data, never causal proof.
+#[napi]
+pub struct NativeOutcomesApi {
+    handle: Arc<dyn OutcomeLedger>,
+}
+
+#[napi]
+impl NativeOutcomesApi {
+    /// Appends one attributed outcome. Takes a `ReportOutcomeRequest` JSON,
+    /// returns a `ReportOutcomeResult` JSON.
+    #[napi(js_name = "reportOutcomeJson")]
+    pub fn report_outcome_json(&self, request_json: String) -> Result<String> {
+        let request = decode(&request_json)?;
+        let result = block_on(self.handle.report_outcome(request)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+
+    /// Reads a window of outcomes. Takes an `OutcomeWindow` JSON, returns
+    /// `[RecordedOutcome, ...]` JSON.
+    #[napi(js_name = "listOutcomesJson")]
+    pub fn list_outcomes_json(&self, window_json: String) -> Result<String> {
+        let window = decode(&window_json)?;
+        let result = block_on(self.handle.list_outcomes(&window)).map_err(to_napi_error)?;
+        encode(&result)
+    }
+}
 
 /// Knowledge change-log API: bounded, resumable invalidation pages plus
 /// latest-checkpoint reads (never recallable content).

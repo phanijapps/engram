@@ -254,6 +254,16 @@ class StubNativeProvider {
       },
     };
   }
+  requireOutcomesApi() {
+    return {
+      reportOutcomeJson(): string {
+        return "{}";
+      },
+      listOutcomesJson(): string {
+        return "[]";
+      },
+    };
+  }
   requireCheckpointsApi() {
     return {
       putCheckpointJson(): string {

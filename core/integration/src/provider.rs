@@ -68,6 +68,7 @@ pub struct EngramProvider {
     procedures: Option<Arc<dyn ProcedureRepository>>,
     proposals: Option<Arc<ProposalService>>,
     change_log: Option<Arc<dyn KnowledgeChangeLog>>,
+    outcomes: Option<Arc<dyn engram_retrieval::OutcomeLedger>>,
     checkpoints: Option<Arc<dyn ScanCheckpointStore>>,
     hierarchy: Option<Arc<dyn HierarchyRepository>>,
     retrieval: Option<Arc<dyn RetrievalIndex>>,
@@ -281,6 +282,11 @@ impl EngramProvider {
         self.checkpoints.as_ref()
     }
 
+    /// The attributed outcome ledger (F2), when wired.
+    pub fn outcomes(&self) -> Option<&Arc<dyn engram_retrieval::OutcomeLedger>> {
+        self.outcomes.as_ref()
+    }
+
     /// Returns the hierarchy repository handle if supported.
     pub fn hierarchy(&self) -> Option<&Arc<dyn HierarchyRepository>> {
         self.hierarchy.as_ref()
@@ -460,6 +466,13 @@ impl EngramProvider {
     }
 
     /// Returns the procedure repository handle or an error if it is not wired.
+    pub fn require_outcomes(&self) -> CoreResult<&Arc<dyn engram_retrieval::OutcomeLedger>> {
+        self.outcomes()
+            .ok_or_else(|| CoreError::ProviderUnavailable {
+                provider: "outcome_ledger".to_string(),
+            })
+    }
+
     pub fn require_change_log(&self) -> CoreResult<&Arc<dyn KnowledgeChangeLog>> {
         self.change_log()
             .ok_or_else(|| CoreError::ProviderUnavailable {
@@ -643,6 +656,7 @@ impl EngramProvider {
             proposals: None,
             change_log: None,
             checkpoints: None,
+            outcomes: None,
             hierarchy: None,
             retrieval: None,
             vectors: None,
@@ -684,6 +698,7 @@ pub struct EngramProviderBuilder {
     procedures: Option<Arc<dyn ProcedureRepository>>,
     proposals: Option<Arc<ProposalService>>,
     change_log: Option<Arc<dyn KnowledgeChangeLog>>,
+    outcomes: Option<Arc<dyn engram_retrieval::OutcomeLedger>>,
     checkpoints: Option<Arc<dyn ScanCheckpointStore>>,
     hierarchy: Option<Arc<dyn HierarchyRepository>>,
     retrieval: Option<Arc<dyn RetrievalIndex>>,
@@ -721,6 +736,7 @@ impl EngramProviderBuilder {
             proposals: None,
             change_log: None,
             checkpoints: None,
+            outcomes: None,
             hierarchy: None,
             retrieval: None,
             vectors: None,
@@ -805,6 +821,12 @@ impl EngramProviderBuilder {
     /// Attaches the scan checkpoint store (slice 3).
     pub fn checkpoints(mut self, handle: Arc<dyn ScanCheckpointStore>) -> Self {
         self.checkpoints = Some(handle);
+        self
+    }
+
+    /// Attaches the attributed outcome ledger (F2).
+    pub fn outcomes(mut self, handle: Arc<dyn engram_retrieval::OutcomeLedger>) -> Self {
+        self.outcomes = Some(handle);
         self
     }
 
@@ -934,6 +956,7 @@ impl EngramProviderBuilder {
             proposals: self.proposals,
             change_log: self.change_log,
             checkpoints: self.checkpoints,
+            outcomes: self.outcomes,
             hierarchy: self.hierarchy,
             retrieval: self.retrieval,
             vectors: self.vectors,

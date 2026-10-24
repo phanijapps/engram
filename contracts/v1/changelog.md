@@ -1,5 +1,11 @@
 # v1 Changelog
 
+## 2026-10-24 (outcome loop)
+
+- Added `TaskOutcome` + `RecallOutcome` definitions with an example (F2:
+  attributed outcome ledger; association data, never causal proof).
+  Additive/compatible.
+
 ## 2026-10-22 (change log)
 
 - Added `KnowledgeChangeOp`, `KnowledgeChangeTargetType`, `KnowledgeChange`,

@@ -229,6 +229,13 @@ export interface NativeChangeLogApiBinding {
   latestCheckpointJson(requestJson: string): string;
 }
 
+/** Outcome-ledger proxy (F2): attributed post-action results — association
+ *  data, never causal proof. */
+export interface NativeOutcomesApiBinding {
+  reportOutcomeJson(requestJson: string): string;
+  listOutcomesJson(windowJson: string): string;
+}
+
 /** Scan-checkpoint proxy: the scan coordinator's write side (stale runs
  *  never overwrite newer ones). */
 export interface NativeCheckpointsApiBinding {
@@ -274,6 +281,7 @@ export interface NativeProviderBinding {
   requireProceduresApi(): NativeProceduresApiBinding;
   requireProposalsApi(): NativeProposalsApiBinding;
   requireChangeLogApi(): NativeChangeLogApiBinding;
+  requireOutcomesApi(): NativeOutcomesApiBinding;
   requireCheckpointsApi(): NativeCheckpointsApiBinding;
 }
 

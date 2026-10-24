@@ -531,6 +531,20 @@ Reflection's previous behavior — texts-only input, empty `sources`, blanket
 workspace/durable/low policy — is a security and correctness defect and is
 not a compatible alternative: derived records now inherit composed policy.
 
+### Outcome ledger (2026-10-24, F2)
+
+Attributed post-action results: `RecallOutcome { queryId, scope,
+recalledTargets, omittedTargets, configVersion?, outcome: TaskOutcome
+{ success, capability?, verifier }, occurredAt }`. The HOST reports
+outcomes after recall-informed actions (task execution and verification
+stay host-side); the ledger is append-only telemetry — NEVER a retrieval
+lane, never memory. **Association, not causation**: outcome data links
+recalls to results; causal credit requires matched interventions (the
+sequential harness), and every surface must phrase reports accordingly.
+Omitted targets are recorded so budget losses ("would have helped") stay
+visible. Operations: `report_outcome`, windowed `list_outcomes`
+(most-recent-first, ≤500).
+
 ## Belief Network Model
 
 Beliefs are derived stances over evidence. They are not raw memories and should

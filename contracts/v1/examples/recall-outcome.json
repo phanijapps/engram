@@ -1,0 +1,13 @@
+{
+  "queryId": "q-01J8...",
+  "scope": { "tenant": "acme" },
+  "recalledTargets": ["mem-1042"],
+  "omittedTargets": [],
+  "configVersion": "fusion-v2",
+  "outcome": {
+    "success": true,
+    "capability": "deploy-gate",
+    "verifier": { "id": "host-checker", "kind": "system" }
+  },
+  "occurredAt": "2026-10-24T13:00:00Z"
+}

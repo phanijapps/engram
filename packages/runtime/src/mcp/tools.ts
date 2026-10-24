@@ -673,6 +673,64 @@ export function registerTools(
   );
 
   server.registerTool(
+    "report_outcome",
+    {
+      description:
+        "Attribute a task result to a recall's query id (caller-asserted; ASSOCIATION data, never causal proof).",
+      inputSchema: z.object({
+        query_id: z.string(),
+        success: z.boolean(),
+        scope: scopeSchema,
+        capability: z.string().optional(),
+        verifier: z.string().optional(),
+        recalled_targets: z.array(z.string()).optional(),
+        omitted_targets: z.array(z.string()).optional(),
+        config_version: z.string().optional(),
+      }),
+    },
+    async (args) => {
+      const result = await transport.reportOutcome({
+        outcome: {
+          queryId: args.query_id,
+          scope: buildScope(args.scope),
+          recalledTargets: args.recalled_targets ?? [],
+          omittedTargets: args.omitted_targets ?? [],
+          configVersion: args.config_version,
+          outcome: {
+            success: args.success,
+            capability: args.capability,
+            verifier: {
+              id: args.verifier ?? "http-agent",
+              kind: "agent",
+              displayName: args.verifier,
+            },
+          },
+          occurredAt: new Date().toISOString(),
+        },
+      });
+      return textResult(result);
+    },
+  );
+
+  server.registerTool(
+    "list_outcomes",
+    {
+      description: "Read a window of attributed recall outcomes (most recent first).",
+      inputSchema: z.object({ hours: z.number().optional(), scope: scopeSchema }),
+    },
+    async ({ hours, scope }) => {
+      const until = new Date();
+      const since = new Date(until.getTime() - (hours ?? 24) * 3600_000);
+      const result = await transport.listOutcomes({
+        scope: buildScope(scope),
+        since: since.toISOString(),
+        until: until.toISOString(),
+      });
+      return textResult(result);
+    },
+  );
+
+  server.registerTool(
     "procedure_put",
     {
       description:

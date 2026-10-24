@@ -70,6 +70,7 @@ struct SqliteLayoutPaths {
     belief: PathBuf,
     procedures: PathBuf,
     proposals: PathBuf,
+    outcomes: PathBuf,
     hierarchy: PathBuf,
     vectors: PathBuf,
 }
@@ -88,6 +89,7 @@ impl SqliteLayoutPaths {
                     belief: storage.join("belief.db"),
                     procedures: storage.join("procedures.db"),
                     proposals: storage.join("proposals.db"),
+                    outcomes: storage.join("outcomes.db"),
                     hierarchy: storage.join("hierarchy.db"),
                     vectors: storage.join("vectors.db"),
                 }
@@ -100,6 +102,7 @@ impl SqliteLayoutPaths {
                     belief: shared.clone(),
                     procedures: shared.clone(),
                     proposals: shared.clone(),
+                    outcomes: shared.clone(),
                     hierarchy: shared.clone(),
                     vectors: shared,
                 }
@@ -348,6 +351,26 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
     // authorizer allows submit+review for the configured project scope and
     // approve only in operator mode (the MCP layer gates the tools); hosts
     // with real identity inject their own ProposalAuthorizer instead.
+    // Outcome ledger (F2): append-only telemetry cell, own file, never a
+    // retrieval lane. Open failures are LOUD (stderr) and reflected in the
+    // capability state — never silently unwired (review P1-6).
+    let mut outcomes: Option<Arc<dyn engram_retrieval::OutcomeLedger>> = None;
+    let outcomes_state;
+    match engram_store_sqlite::SqlOutcomeStore::open_file(&paths.outcomes) {
+        Ok(ledger) => {
+            outcomes = Some(Arc::new(ledger));
+            outcomes_state = CapabilityState::Supported;
+        }
+        Err(e) => {
+            eprintln!(
+                "engram-mcp: outcome ledger open FAILED (report_outcome/list_outcomes unavailable): {e}"
+            );
+            outcomes_state = CapabilityState::Unsupported {
+                reason: engram_domain::CapabilityReason::ProviderUnavailable,
+            };
+        }
+    }
+
     if let (Some(memory), Ok(queue)) = (
         memory_store
             .clone()
@@ -677,6 +700,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         .identity(identity_state)
         .procedures(procedures_state)
         .proposals(proposals_state)
+        .outcomes(outcomes_state)
         .build();
 
     // Construct the SqlObservability handle from the wired concrete stores +
@@ -742,6 +766,9 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
         builder = builder
             .change_log(k.clone() as Arc<dyn engram_knowledge::KnowledgeChangeLog>)
             .checkpoints(k.clone() as Arc<dyn engram_knowledge::ScanCheckpointStore>);
+    }
+    if let Some(h) = outcomes {
+        builder = builder.outcomes(h);
     }
     if let Some(h) = hierarchy {
         builder = builder.hierarchy(h);

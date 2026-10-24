@@ -194,6 +194,12 @@ export interface NativeProviderTransport {
   procedureIncrementSuccess(request: unknown): Promise<unknown>;
   /** Bump a procedure's failure counter `{ id, scope }` (Layer 6). */
   procedureIncrementFailure(request: unknown): Promise<unknown>;
+
+  /** Outcome loop: report an attributed task result (caller-asserted, non-causal). */
+  reportOutcome(request: unknown): Promise<unknown>;
+
+  /** Outcome loop: read a window of attributed outcomes. */
+  listOutcomes(window: unknown): Promise<unknown[]>;
 }
 
 /** Creates a transport over the held `NativeProvider`. */
@@ -478,6 +484,16 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
   /** Operator proposal queue: approve (policy-checked promotion; retry-safe). */
   async proposalApprove(request: unknown): Promise<unknown> {
     return decode(this.provider.requireProposalsApi().approveJson(encode(request)));
+  }
+
+  /** Outcome loop: report an attributed task result (association, non-causal). */
+  async reportOutcome(request: unknown): Promise<unknown> {
+    return decode(this.provider.requireOutcomesApi().reportOutcomeJson(encode(request)));
+  }
+
+  /** Outcome loop: read a window of attributed outcomes. */
+  async listOutcomes(window: unknown): Promise<unknown[]> {
+    return decode<unknown[]>(this.provider.requireOutcomesApi().listOutcomesJson(encode(window)));
   }
 
   /** Operator proposal queue: reject (payload stays inert). */

@@ -95,6 +95,10 @@ pub struct CapabilityReport {
     /// through the policy-checked memory write path.
     #[serde(default = "default_proposals")]
     pub proposals: CapabilityState,
+    /// Attributed outcome ledger (F2): append-only telemetry, never a
+    /// retrieval lane.
+    #[serde(default = "default_outcomes")]
+    pub outcomes: CapabilityState,
 
     /// Phase-2 code-graph queries: `file_dependencies` + `explore`
     /// (RFC-0020 / engram-code spec) — Supported when the KnowledgeQuery
@@ -112,6 +116,13 @@ fn default_code_graph() -> CapabilityState {
 
 /// Serde default for the `identity` field.
 fn default_identity() -> CapabilityState {
+    CapabilityState::Unsupported {
+        reason: CapabilityReason::FeatureDisabled,
+    }
+}
+
+/// Serde default for the `outcomes` field.
+fn default_outcomes() -> CapabilityState {
     CapabilityState::Unsupported {
         reason: CapabilityReason::FeatureDisabled,
     }
@@ -165,6 +176,7 @@ impl CapabilityReport {
             identity: state.clone(),
             procedures: state.clone(),
             proposals: state.clone(),
+            outcomes: state.clone(),
             code_graph: state,
         }
     }
@@ -197,6 +209,7 @@ impl CapabilityReport {
             && self.identity.is_supported()
             && self.procedures.is_supported()
             && self.proposals.is_supported()
+            && self.outcomes.is_supported()
     }
 
     /// Returns true if memory operations are supported.
@@ -352,6 +365,7 @@ impl CapabilityReportBuilder {
                 retrieval: provider_unavailable.clone(),
                 vectors: provider_unavailable.clone(),
                 procedures: provider_unavailable.clone(),
+                outcomes: provider_unavailable.clone(),
                 proposals: provider_unavailable.clone(),
                 migration: provider_unavailable,
                 hybrid_search: feature_disabled.clone(),
@@ -426,6 +440,12 @@ impl CapabilityReportBuilder {
     /// Sets the proposals capability state.
     pub fn proposals(mut self, state: CapabilityState) -> Self {
         self.report.proposals = state;
+        self
+    }
+
+    /// Sets the outcomes capability state.
+    pub fn outcomes(mut self, state: CapabilityState) -> Self {
+        self.report.outcomes = state;
         self
     }
 

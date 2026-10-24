@@ -1979,6 +1979,67 @@
         "status",
         "scanInProgress"
       ]
+    },
+    "TaskOutcome": {
+      "type": "object",
+      "description": "Host-verified task result. Association data — never causal proof.",
+      "additionalProperties": false,
+      "properties": {
+        "success": {
+          "type": "boolean"
+        },
+        "capability": {
+          "type": "string"
+        },
+        "verifier": {
+          "$ref": "#/$defs/Actor"
+        }
+      },
+      "required": [
+        "success",
+        "verifier"
+      ]
+    },
+    "RecallOutcome": {
+      "type": "object",
+      "description": "Attributed post-action outcome for one recall (F2 outcome loop).",
+      "additionalProperties": false,
+      "properties": {
+        "queryId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "recalledTargets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        },
+        "omittedTargets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Identifier"
+          }
+        },
+        "configVersion": {
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/TaskOutcome"
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/Timestamp"
+        }
+      },
+      "required": [
+        "queryId",
+        "scope",
+        "outcome",
+        "occurredAt"
+      ]
     }
   }
 }

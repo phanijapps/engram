@@ -144,6 +144,7 @@ export interface EngramV1Types {
   ProposalMemoryWrite: ProposalMemoryWrite;
   Provenance: Provenance;
   QueryFilter: QueryFilter;
+  RecallOutcome: RecallOutcome;
   Requester: Requester;
   ResolutionTier: ResolutionTier;
   RetrievalExplanation: RetrievalExplanation;
@@ -161,6 +162,7 @@ export interface EngramV1Types {
   SourceKind: SourceKind;
   SourceLocation: SourceLocation;
   StalenessStatus: StalenessStatus;
+  TaskOutcome: TaskOutcome;
   Timestamp: Timestamp;
   UnresolvedReference: UnresolvedReference;
   UnresolvedReferenceStatus: UnresolvedReferenceStatus;
@@ -572,6 +574,26 @@ export interface ProposalMemoryWrite {
   kind: MemoryKind;
   links?: MemoryLink[];
   policy: Policy;
+}
+/**
+ * Attributed post-action outcome for one recall (F2 outcome loop).
+ */
+export interface RecallOutcome {
+  configVersion?: string;
+  occurredAt: Timestamp;
+  omittedTargets?: Identifier[];
+  outcome: TaskOutcome;
+  queryId: string;
+  recalledTargets?: Identifier[];
+  scope: Scope;
+}
+/**
+ * Host-verified task result. Association data — never causal proof.
+ */
+export interface TaskOutcome {
+  capability?: string;
+  success: boolean;
+  verifier: Actor;
 }
 /**
  * Truthful scan state for one (scope, stable source key). indexedRevision is a FULL git OID.

@@ -25,6 +25,7 @@ mod hierarchy;
 mod maintenance;
 mod oneshot;
 mod ontology;
+mod outcomes;
 mod ownership;
 mod predict;
 mod procedures;
@@ -101,7 +102,7 @@ LAUNCH FLAGS
   --taxonomy <path>           Taxonomy config (JSON)
   --layout single|multi       SQLite file layout (default single)
   --db-file <name>            DB filename override
-  --tools core|full|all|consolidated   Tool profile (default core = 30 tools)
+  --tools core|full|all|consolidated   Tool profile (default core = 32 tools)
   --backend sqlite|pgvector   Engine recipe (default sqlite)
   --pg-connection-string <url> Postgres URL (pgvector; env ENGRAM_PG_CONNECTION_STRING)
   --slim                      Skip embeddings (no model download/load); keep lexical + graph
@@ -267,7 +268,7 @@ fn tool_profile_set(profile: &str) -> Option<&'static [&'static str]> {
         }
         other => {
             eprintln!(
-                "engram-mcp: unknown --tools profile '{other}'; using core (30 tools). \
+                "engram-mcp: unknown --tools profile '{other}'; using core (32 tools). \
                  Options: core | full | all | consolidated"
             );
             Some(DEFAULT_TOOLS)
@@ -329,6 +330,9 @@ pub static DEFAULT_TOOLS: &[&str] = &[
     // Freshness — resumable change pages + truthful staleness.
     "subscribe_changes",
     "code_staleness",
+    // The outcome loop — attribute task results to recalls.
+    "report_outcome",
+    "list_outcomes",
 ];
 
 /// The 7 consolidated core tools — the prior default, now behind
@@ -843,6 +847,35 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
             "required": ["name"]
         }),
         handler: procedures::procedure_put,
+    });
+    registry.register(ToolRecord {
+        name: "report_outcome",
+        description: "Attribute a task result to a recall's query id (caller-asserted; \\
+                      ASSOCIATION data, never causal proof). Feeds the outcome loop.",
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "query_id": { "type": "string" },
+                "success": { "type": "boolean" },
+                "capability": { "type": "string" },
+                "verifier": { "type": "string" },
+                "recalled_targets": { "type": "array", "items": { "type": "string" } },
+                "omitted_targets": { "type": "array", "items": { "type": "string" } },
+                "config_version": { "type": "string" }
+            },
+            "required": ["query_id", "success"]
+        }),
+        handler: outcomes::report_outcome,
+    });
+    registry.register(ToolRecord {
+        name: "list_outcomes",
+        description: "Read a window of attributed recall outcomes (most recent first; \\
+                      hours=24 default, max 720).",
+        input_schema: json!({
+            "type": "object",
+            "properties": { "hours": { "type": "number" } }
+        }),
+        handler: outcomes::list_outcomes,
     });
     registry.register(ToolRecord {
         name: "subscribe_changes",
@@ -1651,6 +1684,7 @@ mod default_profile_tests {
             "code_staleness",
             "proposal_submit",
             "proposal_approve",
+            "report_outcome",
         ] {
             assert!(
                 DEFAULT_TOOLS.contains(&required),

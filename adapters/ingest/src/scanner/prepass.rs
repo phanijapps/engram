@@ -49,6 +49,7 @@ pub(super) fn serial_prepass<R>(
     readable: &[Readable],
     filtered_paths: &mut HashSet<String>,
     summary: &mut ScanSummary,
+    force_all_code: bool,
 ) -> PrepassOutput
 where
     R: KnowledgeRepository + KnowledgeGraphRepository + Send + Sync,
@@ -102,7 +103,10 @@ where
         }
         let text = String::from_utf8_lossy(&bytes).into_owned();
         let hash = content_hash(&text);
-        if opts.manifest.get(rel.as_str()).is_some_and(|h| h == &hash) {
+        // `force_all_code`: the repo-context fingerprint changed — code
+        // files re-extract even when their own content is unchanged (their
+        // receiver-typed edges depend on other files' signatures).
+        if !force_all_code && opts.manifest.get(rel.as_str()).is_some_and(|h| h == &hash) {
             unchanged_rels.push(rel.clone());
             continue;
         }

@@ -241,23 +241,6 @@ mod extraction_tests {
         assert!(edges.contains.is_empty());
     }
 
-    /// Code-intel depth: builder-chain receiver typing — `XBuilder::new()`
-    /// followed by `.build()` rewrites the bare `build` to
-    /// `XBuilder::build` so resolution can bind it. This is the #1 caller
-    /// gap from the ripgrep eval (WalkBuilder::build had zero callers).
-    #[test]
-    fn builder_chain_methods_resolve_to_the_chain_root_type() {
-        let text = "fn main() { let w = WalkBuilder::new().build(); }";
-        let rewrites =
-            crate::parser::tree_sitter_chunker::builder_chain_rewrites_for_test(text, "rs");
-        assert!(
-            rewrites
-                .iter()
-                .any(|(_, bare, qualified)| bare == "build" && qualified == "WalkBuilder::build"),
-            "builder-chain rewrite must produce WalkBuilder::build: {rewrites:?}"
-        );
-    }
-
     #[test]
     fn keyword_noise_filtered_from_implementers() {
         // `impl Sink for mut ...` (parser artifact) must NOT produce an
@@ -273,49 +256,144 @@ mod extraction_tests {
         );
     }
 
-    /// Let-binding type map: `let w = WalkBuilder::new(); ... w.build()` must
-    /// rewrite `w.build` to `WalkBuilder::build` — the DOMINANT builder
-    /// pattern in real Rust code.
+    /// Receiver-aware extraction (plan v6): `WalkBuilder::new().build()` —
+    /// the constructor root types through the repo return table and `build`
+    /// emits as a receiver-verified `WalkBuilder::build`.
     #[test]
-    fn let_binding_type_map_qualifies_stored_builders() {
-        let source = "fn main() {\n    let w = WalkBuilder::new(&paths);\n    w.build();\n}\n";
-        let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
-        assert_eq!(map.get("w").map(String::as_str), Some("WalkBuilder"));
+    fn builder_chain_methods_resolve_to_the_chain_root_type() {
+        use crate::parser::repo_context::{RepoContextBuilder, ReturnEvidence};
+        let mut b = RepoContextBuilder::default();
+        b.declare_type("WalkBuilder");
+        b.declare_method(
+            "WalkBuilder::new",
+            ReturnEvidence::Returns("WalkBuilder".into()),
+        );
+        b.declare_method("WalkBuilder::build", ReturnEvidence::Unsupported);
+        let repo = b.build();
+        let chunker = crate::parser::tree_sitter_chunker::TreeSitterChunker::new().unwrap();
+        let names = std::collections::HashSet::from(["build".to_owned(), "new".to_owned()]);
+        let calls = chunker
+            .extract_calls(
+                "fn main() { let w = WalkBuilder::new().build(); }",
+                "rs",
+                &names,
+                &repo,
+            )
+            .unwrap();
+        assert!(
+            calls.iter().any(|(_, c)| c == "WalkBuilder::new"),
+            "ctor emitted: {calls:?}"
+        );
+        assert!(
+            calls.iter().any(|(_, c)| c == "WalkBuilder::build"),
+            "chain-tail build must be receiver-verified: {calls:?}"
+        );
     }
 
-    /// Level 1: `let gs: GlobSet = ...` — type annotation maps gs→GlobSet.
+    /// `let w = WalkBuilder::new(&paths); w.build();` — the DOMINANT stored-
+    /// builder pattern types through the env + repo table.
+    #[test]
+    fn let_binding_builder_qualifies_stored_builders() {
+        use crate::parser::repo_context::{RepoContextBuilder, ReturnEvidence};
+        let mut b = RepoContextBuilder::default();
+        b.declare_type("WalkBuilder");
+        b.declare_method(
+            "WalkBuilder::new",
+            ReturnEvidence::Returns("WalkBuilder".into()),
+        );
+        let repo = b.build();
+        let chunker = crate::parser::tree_sitter_chunker::TreeSitterChunker::new().unwrap();
+        let names = std::collections::HashSet::from(["build".to_owned()]);
+        let calls = chunker
+            .extract_calls(
+                "fn main() {\n    let w = WalkBuilder::new(&paths);\n    w.build();\n}\n",
+                "rs",
+                &names,
+                &repo,
+            )
+            .unwrap();
+        assert!(
+            calls.iter().any(|(_, c)| c == "WalkBuilder::build"),
+            "stored-builder build must be typed: {calls:?}"
+        );
+    }
+
+    /// Type annotations: `let gs: GlobSet = …; gs.is_match(path)`.
     #[test]
     fn type_annotation_let_binds_variable_to_type() {
-        let source =
-            "fn f() {\n    let gs: GlobSet = builder.build();\n    gs.is_match(path);\n}\n";
-        let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
-        assert_eq!(map.get("gs").map(String::as_str), Some("GlobSet"));
+        use crate::parser::repo_context::{RepoContextBuilder, ReturnEvidence};
+        let mut b = RepoContextBuilder::default();
+        b.declare_type("GlobSet");
+        b.declare_type("Builder");
+        b.declare_method("Builder::build", ReturnEvidence::Returns("GlobSet".into()));
+        let repo = b.build();
+        let chunker = crate::parser::tree_sitter_chunker::TreeSitterChunker::new().unwrap();
+        let names = std::collections::HashSet::from(["is_match".to_owned()]);
+        let calls = chunker
+            .extract_calls(
+                "fn f() {\n    let gs: GlobSet = builder.build();\n    gs.is_match(path);\n}\n",
+                "rs",
+                &names,
+                &repo,
+            )
+            .unwrap();
+        assert!(
+            calls.iter().any(|(_, c)| c == "GlobSet::is_match"),
+            "annotated var must type: {calls:?}"
+        );
     }
 
-    /// Level 5: `fn search(worker: &SearchWorker, ...)` — parameter types map.
+    /// Parameter types: `fn search(worker: &SearchWorker)` + `worker.run(m)`.
     #[test]
     fn function_parameters_bind_to_their_types() {
-        let source = "fn search(worker: &SearchWorker, matcher: &RegexMatcher) {\n    worker.run(matcher);\n}\n";
-        let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
-        assert_eq!(map.get("worker").map(String::as_str), Some("SearchWorker"));
-        assert_eq!(map.get("matcher").map(String::as_str), Some("RegexMatcher"));
+        let repo = crate::parser::repo_context::RepoContext::empty();
+        let chunker = crate::parser::tree_sitter_chunker::TreeSitterChunker::new().unwrap();
+        let names = std::collections::HashSet::from(["run".to_owned()]);
+        let calls = chunker
+            .extract_calls(
+                "fn search(worker: &SearchWorker, matcher: &RegexMatcher) {\n    worker.run(matcher);\n}\n",
+                "rs", &names, &repo,
+            )
+            .unwrap();
+        assert!(
+            calls.iter().any(|(_, c)| c == "SearchWorker::run"),
+            "param-typed receiver must qualify: {calls:?}"
+        );
     }
 
-    /// Level 5b: struct fields `field: Type` map too.
+    /// Struct fields: `self.searcher.search()` inside `impl Config`.
     #[test]
     fn struct_field_types_bind() {
-        let source = "struct Config {\n    searcher: Searcher,\n    printer: StandardPrinter,\n}\n";
-        let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
-        assert_eq!(map.get("searcher").map(String::as_str), Some("Searcher"));
+        let repo = crate::parser::repo_context::RepoContext::empty();
+        let chunker = crate::parser::tree_sitter_chunker::TreeSitterChunker::new().unwrap();
+        let names = std::collections::HashSet::from(["search".to_owned()]);
+        let calls = chunker
+            .extract_calls(
+                "struct Config { searcher: Searcher }\nimpl Config { fn go(&self) { self.searcher.search(); } }\n",
+                "rs", &names, &repo,
+            )
+            .unwrap();
+        assert!(
+            calls.iter().any(|(_, c)| c == "Searcher::search"),
+            "self.field receiver must type through the field map: {calls:?}"
+        );
     }
 
-    /// Primitives are excluded (no noise from &str, u32, bool...).
+    /// Primitives never become owners: `name.len()` on `name: &str` has an
+    /// unknown receiver; `len` is generic → dropped entirely.
     #[test]
     fn primitive_types_are_excluded() {
-        let source = "fn f(name: &str, count: u32, flag: bool) {}\n";
-        let map = crate::parser::tree_sitter_chunker::let_binding_type_map_for_test(source, "rs");
-        assert!(!map.contains_key("name"));
-        assert!(!map.contains_key("count"));
-        assert!(!map.contains_key("flag"));
+        let repo = crate::parser::repo_context::RepoContext::empty();
+        let chunker = crate::parser::tree_sitter_chunker::TreeSitterChunker::new().unwrap();
+        let names = std::collections::HashSet::from(["len".to_owned()]);
+        let calls = chunker
+            .extract_calls("fn f(name: &str) { name.len(); }", "rs", &names, &repo)
+            .unwrap();
+        assert!(
+            !calls
+                .iter()
+                .any(|(_, c)| c.contains("::len") || c == "name.len"),
+            "generic method on primitive-typed receiver must drop: {calls:?}"
+        );
     }
 }

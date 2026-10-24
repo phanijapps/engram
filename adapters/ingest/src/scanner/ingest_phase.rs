@@ -43,6 +43,8 @@ pub(super) struct IngestCtx<'a, R> {
     pub ts_chunker: Option<&'a crate::TreeSitterChunker>,
     pub extractor: &'a crate::GraphExtractor,
     pub global_entity_names: &'a HashSet<String>,
+    /// Repo-wide receiver evidence (plan v6 §4) — fed to call extraction.
+    pub repo_ctx: &'a engram_code::parser::repo_context::RepoContext,
     pub name_index: &'a Arc<Mutex<engram_code::SymbolIndex>>,
 }
 
@@ -173,7 +175,7 @@ where
                 // fact-less extract_into path (which silently dropped all
                 // Phase-2 structural/framework facts for declaration-free
                 // files; final-review sweep pin caught it).
-                ts.extract_calls_tree(tree, &text_for_ast, ext, global_entity_names)
+                ts.extract_calls_tree(tree, &text_for_ast, ext, global_entity_names, ctx.repo_ctx)
                     .ok()
             } else {
                 None
@@ -221,7 +223,7 @@ where
                         let path = ingested.document.path.as_deref();
                         crate::extractor::register_entities(&mut idx, &g.entities, repo, path);
                         g.unresolved =
-                            engram_code::resolve_refs(&idx, &mut g.relationships, repo, path);
+                            engram_code::resolve_refs(&idx, &mut g.relationships, repo, path, Some(ctx.repo_ctx));
                     }
                     // Temporal carry-over (whats-changed-temporal-flat): a
                     // re-ingested file gets a brand-new graph id, so every

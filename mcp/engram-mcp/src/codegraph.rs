@@ -2144,11 +2144,18 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         let ctx = union_symbol_context(ctxs);
         let evidence = render_edge_evidence_with_paths(&rels, &seeds, &paths);
         let staleness = crate::changes::staleness_note(app);
-        // Navigation quality: explain WHY the result is empty (evaluator gap #3).
-        let status_note = if ctx.ctx.callers.is_empty()
+        let empty_neighborhood = ctx.ctx.callers.is_empty()
             && ctx.ctx.callees.is_empty()
-            && ctx.ctx.implementers.is_empty()
-        {
+            && ctx.ctx.implementers.is_empty();
+        // Type-member fan-out (plan v6 §5): a type with wired methods rolls
+        // up instead of reporting "no resolved edges".
+        let member_rollup = if empty_neighborhood {
+            expand_type_members(&rels, &seeds, cap)
+        } else {
+            None
+        };
+        // Navigation quality: explain WHY the result is empty (evaluator gap #3).
+        let status_note = if empty_neighborhood && member_rollup.is_none() {
             if names.is_empty() {
                 "\nNOTE: no indexed entities — try scan_repo first.".to_owned()
             } else if !names.iter().any(|n| n.contains(&symbols[0])) {
@@ -2165,8 +2172,9 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         } else {
             String::new()
         };
+        let rollup_text = member_rollup.unwrap_or_default();
         return Ok(protocol::text_content(format!(
-            "{ctx:?}{evidence}{staleness}{status_note}"
+            "{ctx:?}{evidence}{staleness}{status_note}{rollup_text}"
         )));
     }
 
@@ -2183,11 +2191,111 @@ pub fn symbol_context(app: &App, args: &Value) -> Result<Value, ToolError> {
         let ctx = union_symbol_context(ctxs);
         let evidence = render_edge_evidence_with_paths(&rels, &seeds, &paths);
         let staleness = crate::changes::staleness_note(app);
+        let empty = ctx.ctx.callers.is_empty()
+            && ctx.ctx.callees.is_empty()
+            && ctx.ctx.implementers.is_empty();
+        let rollup = if empty {
+            expand_type_members(&rels, &seeds, cap).unwrap_or_default()
+        } else {
+            String::new()
+        };
         sections.push(format!(
-            "=== symbol_context: {symbol} (depth={depth}) ===\n{ctx:?}{evidence}{staleness}"
+            "=== symbol_context: {symbol} (depth={depth}) ===\n{ctx:?}{evidence}{staleness}{rollup}"
         ));
     }
     Ok(protocol::text_content(sections.join("\n\n")))
+}
+
+/// Type-member fan-out (receiver-aware resolution, plan v6 §5): when a seed
+/// has an EMPTY call-family neighborhood but has `contains` members with
+/// edges, roll the members up: `Type (type) — build ← callers [Config::line_buffer]`.
+/// Fires only on the empty-neighborhood trigger, works entirely within the
+/// already code_index-filtered relationship set, deterministic top-K by
+/// resolved-edge count (ties by name). Members are labeled as MEMBERS —
+/// never as the type's literal direct callers.
+fn expand_type_members(
+    rels: &[engram_domain::KnowledgeRelationship],
+    seeds: &[String],
+    cap: usize,
+) -> Option<String> {
+    if seeds.is_empty() {
+        return None;
+    }
+    let seed_set: std::collections::HashSet<&str> = seeds.iter().map(String::as_str).collect();
+    // Members: `contains` edges from a seed subject (resolved or name-only —
+    // "no resolved edges" is not "no edges").
+    let mut members: Vec<String> = rels
+        .iter()
+        .filter(|r| r.predicate == "contains")
+        .filter(|r| {
+            r.subject
+                .name
+                .as_deref()
+                .is_some_and(|n| seed_set.contains(n))
+        })
+        .filter_map(|r| r.object.name.clone())
+        .collect();
+    members.sort();
+    members.dedup();
+    if members.is_empty() {
+        return None;
+    }
+    // Per-member: resolved call-family edges within the filtered set.
+    let mut rows: Vec<(usize, String, Vec<String>, Vec<String>)> = Vec::new();
+    for member in &members {
+        let mut callers: Vec<String> = Vec::new();
+        let mut callees: Vec<String> = Vec::new();
+        for r in rels {
+            let is_call_family = matches!(
+                r.predicate.as_str(),
+                "calls" | "routes_to" | "implements" | "extends"
+            );
+            if !is_call_family {
+                continue;
+            }
+            if r.object.name.as_deref() == Some(member.as_str()) && r.object.id.is_some() {
+                if let Some(s) = r.subject.name.clone() {
+                    if !callers.contains(&s) {
+                        callers.push(s);
+                    }
+                }
+            }
+            if r.subject.name.as_deref() == Some(member.as_str()) && r.object.id.is_some() {
+                if let Some(o) = r.object.name.clone() {
+                    if !callees.contains(&o) {
+                        callees.push(o);
+                    }
+                }
+            }
+        }
+        let weight = callers.len() + callees.len();
+        if weight > 0 {
+            rows.push((weight, member.clone(), callers, callees));
+        }
+    }
+    if rows.is_empty() {
+        return None;
+    }
+    rows.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    rows.truncate(cap.min(5));
+    let lines: Vec<String> = rows
+        .into_iter()
+        .map(|(_, member, callers, callees)| {
+            let mut parts = vec![member];
+            if !callers.is_empty() {
+                parts.push(format!("← called by [{}]", callers.join(", ")));
+            }
+            if !callees.is_empty() {
+                parts.push(format!("→ calls [{}]", callees.join(", ")));
+            }
+            parts.join(" ")
+        })
+        .collect();
+    Some(format!(
+        "\nTYPE ROLL-UP (members of {}): {}",
+        seeds.join(" | "),
+        lines.join("; ")
+    ))
 }
 
 /// `change_impact`: blast radius + dependency path from a change site — or, when

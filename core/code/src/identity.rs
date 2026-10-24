@@ -60,21 +60,34 @@ impl SymbolIndex {
     /// Returns the keys the candidate was registered under.
     pub fn register(&mut self, qualified_name: &str, candidate: SymbolCandidate) -> Vec<String> {
         let mut keys = vec![qualified_name.to_owned()];
-        self.append(qualified_name, candidate.clone());
+        self.append(qualified_name, &candidate);
         if let Some(bare) = bare_tail(qualified_name) {
-            self.append(bare, candidate);
+            self.append(bare, &candidate);
             keys.push(bare.to_owned());
+        }
+        // Suffix registration (receiver-aware resolution, plan v6 §3): a
+        // ≥3-segment name (`inner::Type::m`) also registers under its
+        // `Type::m` suffix key — the ORIGINAL candidate appended (canonical
+        // name preserved), so a short `Type::m()` call binds the nested
+        // entity as-written instead of needing the bare ladder. Colliding
+        // suffixes (a::T::m vs b::T::m) coexist and resolve via the normal
+        // precedence to Ambiguous.
+        let segs: Vec<&str> = qualified_name.split("::").collect();
+        if segs.len() >= 3 {
+            let suffix = format!("{}::{}", segs[segs.len() - 2], segs[segs.len() - 1]);
+            self.append(&suffix, &candidate);
+            keys.push(suffix);
         }
         keys
     }
 
-    fn append(&mut self, key: &str, candidate: SymbolCandidate) {
+    fn append(&mut self, key: &str, candidate: &SymbolCandidate) {
         self.by_id
             .entry(candidate.id.clone())
             .or_insert_with(|| candidate.clone());
         let bucket = self.entries.entry(key.to_owned()).or_default();
         if !bucket.iter().any(|c| c.id == candidate.id) {
-            bucket.push(candidate);
+            bucket.push(candidate.clone());
         }
     }
 

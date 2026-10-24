@@ -314,6 +314,57 @@ pub fn is_noise_symbol(name: &str) -> bool {
     SYMBOL_NOISE.contains(&lower.as_str())
 }
 
+/// Generic METHOD names for receiver-position drop decisions (plan §2):
+/// a generic method on an UNKNOWN receiver is worthless (the `Error::clone`
+/// / `Glob::as_ref` false-binding class) and is dropped rather than ledgered.
+pub fn is_generic_method(name: &str) -> bool {
+    const GENERIC_METHODS: &[&str] = &[
+        "clone",
+        "as_ref",
+        "as_mut",
+        "to_string",
+        "to_owned",
+        "to_vec",
+        "into",
+        "from",
+        "unwrap",
+        "expect",
+        "map",
+        "filter",
+        "iter",
+        "into_iter",
+        "collect",
+        "new",
+        "default",
+        "build",
+        "build_parallel",
+        "eq",
+        "ne",
+        "hash",
+        "fmt",
+        "len",
+        "is_empty",
+        "get",
+        "set",
+        "next",
+        "send",
+        "spawn",
+        "borrow",
+        "borrow_mut",
+        "deref",
+        "drop",
+        "extend",
+        "into_boxed_slice",
+        "copy",
+        "compare",
+        "display",
+        "debug",
+        "serialize",
+        "deserialize",
+    ];
+    GENERIC_METHODS.contains(&name.trim())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

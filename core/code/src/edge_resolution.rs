@@ -114,7 +114,40 @@ pub fn attempt(
     reference: &str,
     from_path: Option<&str>,
     from_repo: Option<&str>,
+    repo_ctx: Option<&crate::parser::repo_context::RepoContext>,
 ) -> AttemptOutcome {
+    // Full-path preservation (plan v6 §3): a `::`-separated reference tries
+    // its COMPLETE as-written string first — nested methods are registered
+    // under exactly that name, so `remote::Product::setting` binds the
+    // nested entity without any prefix loss.
+    if reference.contains("::") && !reference.contains('.') {
+        let full = resolve_one(index, reference, from_path, from_repo);
+        if let Resolution::Resolved(c) = full {
+            return AttemptOutcome {
+                resolution: Resolution::Resolved(c),
+                branch: Some(ResolutionBranch::NameTable),
+            };
+        }
+        // Full-path miss/ambiguous is TERMINAL for type-associated owners:
+        // the owner segment (immediately before the final `::name`) is a
+        // known type OR PascalCase. A qualified type owner's prefix is
+        // receiver evidence — never discarded to try a different owner with
+        // the same terminal spelling (the round-6 qualified-miss rule), and
+        // never bare-laddered (RC4: `Config::clone` → `Error::clone`).
+        let segs: Vec<&str> = reference.split("::").collect();
+        if let Some(owner) = segs.len().checked_sub(2).and_then(|i| segs.get(i)) {
+            let type_associated = repo_ctx.is_some_and(|r| r.is_known_type(owner))
+                || owner.chars().next().is_some_and(char::is_uppercase);
+            if type_associated && !matches!(*owner, "crate" | "self" | "super") {
+                return AttemptOutcome {
+                    resolution: full,
+                    branch: None,
+                };
+            }
+        }
+        // Module paths (lowercase owner, `crate::`-prefixed module paths)
+        // fall through to the ladder below (their bare rung stays).
+    }
     let (hint, name) = split_dotted(reference);
     let static_module_path = hint.is_some() && reference.contains("::") && !reference.contains('.');
 
@@ -296,7 +329,7 @@ mod tests {
     fn as_written_qualified_bind_is_scoped_name() {
         let mut index = SymbolIndex::new();
         register(&mut index, "store::save", "e1", "r", "src/store.rs");
-        let out = attempt(&index, "store::save", Some("src/api.rs"), Some("r"));
+        let out = attempt(&index, "store::save", Some("src/api.rs"), Some("r"), None);
         assert!(resolved(&out));
         assert_eq!(out.branch, Some(ResolutionBranch::NameTable));
         let ev = out.evidence().unwrap();
@@ -308,7 +341,7 @@ mod tests {
     fn capitalized_receiver_bind_is_heuristic() {
         let mut index = SymbolIndex::new();
         register(&mut index, "Store::save", "e1", "r", "src/store.rs");
-        let out = attempt(&index, "store.save", Some("src/api.rs"), Some("r"));
+        let out = attempt(&index, "store.save", Some("src/api.rs"), Some("r"), None);
         assert!(resolved(&out));
         assert_eq!(out.branch, Some(ResolutionBranch::ReceiverCapitalization));
         let ev = out.evidence().unwrap();
@@ -321,7 +354,7 @@ mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "Facets::iter", "e1", "r", "src/facets.rs");
         // `values.iter` registered under bare tail `iter` — unique survivor.
-        let out = attempt(&index, "values.iter", Some("src/graph.rs"), Some("r"));
+        let out = attempt(&index, "values.iter", Some("src/graph.rs"), Some("r"), None);
         assert!(
             !resolved(&out),
             "unknown-receiver method call must stay unresolved"
@@ -334,7 +367,13 @@ mod tests {
     fn same_document_bare_binding_is_scoped_name() {
         let mut index = SymbolIndex::new();
         register(&mut index, "Engine::process", "e7", "r", "src/engine.rs");
-        let out = attempt(&index, "self.process", Some("src/engine.rs"), Some("r"));
+        let out = attempt(
+            &index,
+            "self.process",
+            Some("src/engine.rs"),
+            Some("r"),
+            None,
+        );
         assert!(resolved(&out), "self.method in declaring file must bind");
         let ev = out.evidence().unwrap();
         assert_eq!(ev.tier, ResolutionTier::ScopedName);
@@ -345,7 +384,13 @@ mod tests {
     fn static_module_path_keeps_bare_ladder_as_name_table() {
         let mut index = SymbolIndex::new();
         register(&mut index, "save", "e1", "r", "src/store.rs");
-        let out = attempt(&index, "store::save", Some("src/engine.rs"), Some("r"));
+        let out = attempt(
+            &index,
+            "store::save",
+            Some("src/engine.rs"),
+            Some("r"),
+            None,
+        );
         assert!(resolved(&out));
         assert_eq!(out.branch, Some(ResolutionBranch::NameTable));
     }
@@ -365,9 +410,129 @@ mod tests {
             "@salesforce/apex/PropertyController.getPaged",
             Some("src/lwc.js"),
             Some("r"),
+            None,
         );
         assert!(resolved(&out), "apex alias must resolve");
         assert_eq!(out.branch, Some(ResolutionBranch::NameTable));
+    }
+
+    // ── Receiver-aware resolution rules (plan v6 §3) ─────────────────────
+
+    /// RC4: a type-qualified generic method must NEVER bind cross-type
+    /// through the bare ladder — `Config::clone` with a unique unrelated
+    /// `Error::clone` registered stays unresolved (ledger).
+    #[test]
+    fn type_qualified_generic_never_binds_cross_type() {
+        let mut index = SymbolIndex::new();
+        register(&mut index, "Error::clone", "e1", "r", "src/error.rs");
+        let out = attempt(&index, "Config::clone", Some("src/mod.rs"), Some("r"), None);
+        assert!(
+            !resolved(&out),
+            "Config::clone must not bind Error::clone: {:?}",
+            out.resolution
+        );
+    }
+
+    /// `crate::module::Config::clone` — the OWNER segment (`Config`)
+    /// classifies the path as type-associated even with a `crate::` prefix.
+    #[test]
+    fn crate_prefixed_type_path_is_type_associated() {
+        let mut index = SymbolIndex::new();
+        register(&mut index, "Error::clone", "e1", "r", "src/error.rs");
+        let out = attempt(
+            &index,
+            "crate::module::Config::clone",
+            Some("src/mod.rs"),
+            Some("r"),
+            None,
+        );
+        assert!(
+            !resolved(&out),
+            "crate-prefixed type path must not bare-bind"
+        );
+    }
+
+    /// Full-path preservation: a registered nested method binds by its
+    /// complete as-written name.
+    #[test]
+    fn full_path_binds_nested_entity() {
+        let mut index = SymbolIndex::new();
+        register(
+            &mut index,
+            "remote::Product::setting",
+            "e1",
+            "r",
+            "src/lib.rs",
+        );
+        let out = attempt(
+            &index,
+            "remote::Product::setting",
+            Some("src/caller.rs"),
+            Some("r"),
+            None,
+        );
+        assert!(resolved(&out), "full-path lookup must bind");
+        let Resolution::Resolved(c) = out.resolution else {
+            panic!()
+        };
+        assert_eq!(c.name, "remote::Product::setting");
+    }
+
+    /// Round-6 qualified-miss rule: a FULL-PATH MISS for a type-associated
+    /// owner is TERMINAL — it never collapses to a shorter, different owner.
+    #[test]
+    fn qualified_miss_is_terminal_no_owner_substitution() {
+        let mut index = SymbolIndex::new();
+        // The nested entity does NOT exist; an unrelated top-level does.
+        register(&mut index, "Product::setting", "e1", "r", "src/product.rs");
+        let out = attempt(
+            &index,
+            "remote::Product::setting",
+            Some("src/caller.rs"),
+            Some("r"),
+            None,
+        );
+        assert!(
+            !resolved(&out),
+            "qualified miss must NOT bind top-level Product::setting"
+        );
+    }
+
+    /// Nested-module SHORT call `Type::m()` binds through suffix
+    /// registration (original candidate preserved).
+    #[test]
+    fn short_nested_call_binds_via_suffix_key() {
+        let mut index = SymbolIndex::new();
+        register(&mut index, "inner::Type::m", "e1", "r", "src/lib.rs");
+        let out = attempt(&index, "Type::m", Some("src/caller.rs"), Some("r"), None);
+        assert!(resolved(&out), "suffix key must bind: {:?}", out.resolution);
+        let Resolution::Resolved(c) = out.resolution else {
+            panic!()
+        };
+        assert_eq!(c.name, "inner::Type::m", "canonical name preserved");
+    }
+
+    /// Colliding suffix keys coexist and resolve to Ambiguous (never an
+    /// arbitrary pick).
+    #[test]
+    fn colliding_suffix_keys_are_ambiguous() {
+        let mut index = SymbolIndex::new();
+        register(&mut index, "a::Type::m", "e1", "r", "src/a.rs");
+        register(&mut index, "b::Type::m", "e2", "r", "src/b.rs");
+        let out = attempt(&index, "Type::m", Some("src/caller.rs"), Some("r"), None);
+        assert!(
+            matches!(out.resolution, Resolution::Ambiguous(_)),
+            "colliding suffix keys must stay ambiguous"
+        );
+    }
+
+    /// Lowercase module paths keep the bare rung (`store::save` → `save`).
+    #[test]
+    fn lowercase_module_path_keeps_bare_rung() {
+        let mut index = SymbolIndex::new();
+        register(&mut index, "save", "e1", "r", "src/store.rs");
+        let out = attempt(&index, "store::save", Some("src/api.rs"), Some("r"), None);
+        assert!(resolved(&out), "module path bare rung must keep working");
     }
 
     #[test]

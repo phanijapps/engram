@@ -701,7 +701,7 @@ impl GraphExtractor {
             // Resolution runs the same-doc / same-repo / unique / ledger
             // ladder (the scanner path adds cross-file context the same way).
             extracted.unresolved =
-                engram_code::resolve_refs(index, &mut extracted.relationships, repo, path);
+                engram_code::resolve_refs(index, &mut extracted.relationships, repo, path, None);
         }
 
         repository.put_graph(extracted.graph.clone()).await?;
@@ -824,7 +824,7 @@ pub fn resolve_call_refs(
     // Delegates to engram-code's Phase-2 resolver (receiver hints, the
     // same-doc/same-repo/unique/ledger ladder); returns the ledger records
     // for callers that persist them (T6).
-    engram_code::resolve_refs(index, relationships, repo, path)
+    engram_code::resolve_refs(index, relationships, repo, path, None)
 }
 
 /// Word-boundary occurrence check so `File` does not match inside `Filesystem`.

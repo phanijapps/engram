@@ -198,12 +198,13 @@ impl TreeSitterChunker {
         text: &str,
         ext: &str,
         entity_names: &std::collections::HashSet<String>,
+        repo: &crate::parser::repo_context::RepoContext,
     ) -> CoreResult<Vec<(String, String)>> {
         if !self.supports(ext) {
             return Ok(Vec::new());
         }
         let tree = self.parse(text, ext)?;
-        self.extract_calls_tree(&tree, text, ext, entity_names)
+        self.extract_calls_tree(&tree, text, ext, entity_names, repo)
     }
 
     /// [`Self::extract_calls`] over a pre-parsed tree — see [`Self::parse`].
@@ -213,6 +214,7 @@ impl TreeSitterChunker {
         text: &str,
         ext: &str,
         entity_names: &std::collections::HashSet<String>,
+        repo: &crate::parser::repo_context::RepoContext,
     ) -> CoreResult<Vec<(String, String)>> {
         let Some(entry) = self.entries.get(ext) else {
             return Ok(Vec::new());
@@ -220,78 +222,23 @@ impl TreeSitterChunker {
         let root = tree.root_node();
         let source = text.as_bytes();
 
-        // Collect (start_line, end_line, name) for each function-like declaration.
+        // Function-like declaration spans for call attribution.
         let mut fn_spans: Vec<(usize, usize, String)> = Vec::new();
-        let mut call_sites: Vec<(usize, String)> = Vec::new(); // (line, callee_name)
+        collect_fn_spans(&root, source, &entry.kind_map, &[], &mut fn_spans);
 
-        collect_calls_and_spans(
-            &root,
-            source,
-            &entry.kind_map,
-            &[],
-            &mut fn_spans,
-            &mut call_sites,
-        );
+        // Receiver-aware call sites (plan v6 §2): the chain state machine
+        // resolves receiver chains through the per-file environment + repo
+        // evidence. Verified links emit `Owner::method` (anchor-count
+        // gated); unknown-var receivers keep their honest as-written hint;
+        // unknown-expression receivers are dropped; generic methods on
+        // unknown receivers never reach resolution.
+        let file_ctx = crate::parser::receiver_env::build_file_context(tree, text, ext, repo);
+        let mut call_sites =
+            crate::parser::chain_eval::evaluate_call_sites(root, source, ext, &file_ctx, repo);
 
         // Import-alias rewrite (golden eval known-gap fix): a bare call
         // through a local alias (`tok(...)`) records the ORIGINAL symbol
         // (`_tokens`) so cross-file resolution links the aliased caller.
-        // Builder-chain receiver typing (code-intel depth): when a method
-        // call chains directly on the result of a scoped constructor
-        // (`WalkBuilder::new().build()`), the bare `.build()` has no
-        // receiver hint — resolution can never qualify it. This pass
-        // rewrites bare chain-tail methods to `Type::method` using the
-        // chain root, making builder-pattern callers findable. Purely
-        // lexical, deterministic; tier stays whatever the ladder assigns.
-        let chain_rewrites = builder_chain_rewrites(text, ext);
-        if !chain_rewrites.is_empty() {
-            for (line, bare, qualified) in &chain_rewrites {
-                for site in call_sites.iter_mut() {
-                    if site.0 == *line && site.1 == *bare {
-                        site.1 = qualified.clone();
-                    }
-                }
-            }
-        }
-
-        // Let-binding type map (code-intel depth): the DOMINANT Rust builder
-        // pattern is `let w = WalkBuilder::new(); ... w.build()` — the
-        // receiver is a stored variable, not a chain expression. This pass
-        // builds a file-local map of `var → Type` from let-bindings,
-        // type annotations, function parameters, and struct fields, then
-        // rewrites `var.method()` call sites to `Type::method()`.
-        // Purely lexical, file-local, deterministic.
-        let let_bindings = let_binding_type_map(text, ext);
-        if !let_bindings.is_empty() {
-            for site in call_sites.iter_mut() {
-                if let Some(dot) = site.1.find('.') {
-                    let (var, method) = site.1.split_at(dot);
-                    let method = &method[1..]; // strip '.'
-                    if !method.is_empty() && !method.contains('.') {
-                        if let Some(ty) = let_bindings.get(var) {
-                            site.1 = format!("{ty}::{method}");
-                        }
-                    }
-                }
-            }
-        }
-
-        // Use-import module map (Level 3): count imported types for
-        // diagnostics; the resolution impact flows through the let-binding
-        // type map (which now includes parameter types, field types, and
-        // annotations — those variables' types often COME from imports).
-        let _imported_types = use_import_map(text, ext);
-
-        // Use-import module map (Level 3): when a call site references a
-        // bare method that belongs to an IMPORTED type, try the qualified
-        // form. This catches cross-file method calls where the variable's
-        // type comes from another module (the #1 remaining caller gap).
-        // NOTE: this is a SUPPLEMENTARY signal — it doesn't replace the
-        // let-binding map, it catches cases where the variable is a
-        // function parameter or struct field whose type is imported.
-        // The actual resolution still goes through the ladder; this just
-        // provides the qualified form to TRY.
-
         let aliases = import_aliases(text, ext);
         if !aliases.is_empty() {
             for (_, reference) in call_sites.iter_mut() {
@@ -310,8 +257,12 @@ impl TreeSitterChunker {
         let mut edges = Vec::new();
         for (call_line, callee) in &call_sites {
             // Dotted references match known entities by their bare tail.
+            // Receiver-verified `::`-qualified forms are deliberate state-
+            // machine emissions (e.g. `SearcherBuilder::build`) and bypass
+            // the generic-tail drop.
+            let qualified = callee.contains("::");
             let tail = callee.rsplit('.').next().unwrap_or(callee);
-            if !entity_names.contains(tail) && crate::noise::is_noise_symbol(tail) {
+            if !qualified && !entity_names.contains(tail) && crate::noise::is_noise_symbol(tail) {
                 continue;
             }
             // EN-10/EN-11: attribute to the INNERMOST enclosing span
@@ -710,441 +661,6 @@ fn has_declaration_descendant(node: &tree_sitter::Node, kind_map: &HashMap<&str,
     false
 }
 
-/// Reference name for a call site: the callee node's full dotted text with
-/// `self`/`Self` prefixes stripped (`self.store.save` → `store.save`);
-/// non-dotted calls return the bare callee name.
-// /// Let-binding type map (code-intel depth): scans for
-/// `let var = Type::new(...)` / `let var = Type::default(...)` /
-/// `let var = Type::builder()` and maps `var → Type`. File-local,
-/// deterministic; only PascalCase types (the Rust convention).
-fn let_binding_type_map(source: &str, ext: &str) -> std::collections::HashMap<String, String> {
-    use std::collections::HashMap;
-    if !matches!(ext, "rs" | "ts" | "tsx" | "js" | "jsx" | "mts" | "cts") {
-        return HashMap::new();
-    }
-    let mut map = HashMap::new();
-    let sep = if ext == "rs" { "::" } else { "." };
-    let constructors = ["new", "default", "builder", "with_capacity"];
-
-    for line in source.lines() {
-        let trimmed = line.trim();
-
-        // ── Pattern 1: `let var = Type::constructor(...)` (original) ──
-        // Also `let mut var = ...`
-        let after_let = if let Some(rest) = trimmed.strip_prefix("let ") {
-            if let Some(rest) = rest.strip_prefix("mut ") {
-                rest
-            } else {
-                rest
-            }
-        } else {
-            // ── Pattern 5: `fn name(var: &Type, ...)` — parameter types ──
-            // Scan function signatures for `var: Type` or `var: &Type`.
-            if ext == "rs" && (trimmed.starts_with("fn ") || trimmed.starts_with("pub fn ")) {
-                for (var, ty) in parse_rs_params(trimmed) {
-                    map.insert(var, ty);
-                }
-            }
-            // ── Pattern 2: expression-position constructors ──
-            // `field: Type::new()` or `Type::new().method()` in any expression.
-            // These map the TYPE, not a variable — they feed the builder-chain
-            // pass (which rewrites same-line .method() calls).
-            continue;
-        };
-
-        // Try to split `var = init` or `var: Type = init`.
-        let (var_part, _init) = if let Some((v, rest)) = after_let.split_once('=') {
-            (v.trim(), rest.trim())
-        } else {
-            continue;
-        };
-
-        // Level 1: if the var part has a type annotation (`var: Type`),
-        // extract the bare var and the type. The bare var drives the
-        // constructor scan; the annotation provides a direct binding.
-        let (var, annotation_type) = if ext == "rs" {
-            if let Some(colon) = var_part.find(':') {
-                let v = var_part[..colon].trim();
-                let ty = var_part[colon + 1..]
-                    .trim()
-                    .trim_start_matches('&')
-                    .trim_start_matches("mut ")
-                    .trim();
-                let base = ty.split('<').next().unwrap_or(ty).trim();
-                (
-                    v,
-                    if is_valid_type_name(base) {
-                        Some(base.to_owned())
-                    } else {
-                        None
-                    },
-                )
-            } else {
-                (var_part, None)
-            }
-        } else {
-            (var_part, None)
-        };
-
-        // Variable must be a simple identifier (after annotation extraction).
-        if var.is_empty() || !var.chars().all(|c| c.is_alphanumeric() || c == '_') {
-            continue;
-        }
-
-        // Annotation binding wins (it's explicit, not inferred from constructor).
-        if let Some(ty) = annotation_type {
-            map.insert(var.to_owned(), ty);
-        }
-
-        // ── Pattern 1a: `let var = Type::constructor(...)` ──
-        let init = _init;
-        for ctor in &constructors {
-            let pattern = format!("{sep}{ctor}(");
-            if init.contains(&pattern) {
-                if let Some(pos) = init.find(&pattern) {
-                    let before = &init[..pos];
-                    let type_start = before
-                        .rfind(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':'))
-                        .map(|p| p + 1)
-                        .unwrap_or(0);
-                    let type_name = before[type_start..].trim_end_matches(sep);
-                    if is_valid_type_name(type_name) {
-                        map.insert(var.to_owned(), type_name.to_owned());
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    // ── Pattern 5 (Level 5): struct field types (Rust) ──
-    // `struct Foo { field: Type, ... }` — scan field types so `self.field.method()`
-    // can be qualified. Only for single-line struct definitions.
-    if ext == "rs" {
-        for line in source.lines() {
-            let trimmed = line.trim();
-            if trimmed.contains(": ") && trimmed.contains(",") {
-                // Look for `field: Type,` patterns inside struct bodies.
-                for (field, ty) in parse_rs_fields(trimmed) {
-                    map.entry(field).or_insert(ty);
-                }
-            }
-        }
-    }
-
-    map
-}
-
-/// Use-import map (code-intel depth Level 3): extracts the set of TYPES a
-/// file imports from `use` statements, so method calls on variables of
-/// those types can be qualified. File-local, deterministic.
-///
-/// Patterns handled:
-/// - `use crate::module::Type;`
-/// - `use crate::module::{Type1, Type2};`
-/// - `use crate::module::Type as Alias;`
-/// - `pub use crate::module::Type;`
-///
-/// NOT handled (documented gap): `use crate::module::*;` glob imports
-/// require resolving the module's exports (needs cross-file context).
-fn use_import_map(source: &str, ext: &str) -> std::collections::HashSet<String> {
-    use std::collections::HashSet;
-    if ext != "rs" {
-        return HashSet::new();
-    }
-    let mut types = HashSet::new();
-    for line in source.lines() {
-        let trimmed = line.trim();
-        // Strip `pub ` prefix if present.
-        let after_pub = trimmed.strip_prefix("pub ").unwrap_or(trimmed);
-        let Some(after_use) = after_pub.strip_prefix("use ") else {
-            continue;
-        };
-        let path = after_use.trim_end_matches(';').trim();
-        if path.contains('*') {
-            continue; // glob imports not supported
-        }
-        if let Some(brace_start) = path.find('{') {
-            // `use crate::module::{Type1, Type2};`
-            if let Some(brace_end) = path.rfind('}') {
-                let module = &path[..brace_start];
-                let module_types = &path[brace_start + 1..brace_end];
-                for item in module_types.split(',') {
-                    let item = item.trim();
-                    // Handle `Type as Alias` — use the alias.
-                    let type_name = if let Some((_orig, alias)) = item.split_once(" as ") {
-                        alias.trim()
-                    } else {
-                        item
-                    };
-                    if is_valid_type_name(type_name) {
-                        types.insert(type_name.to_owned());
-                    }
-                    // Also record the module path prefix so we can resolve
-                    // `module::Type::method` patterns.
-                    let _ = module;
-                }
-            }
-        } else {
-            // `use crate::module::Type;` or `use crate::module::Type as Alias;`
-            let type_name = if let Some((_orig, alias)) = path.split_once(" as ") {
-                alias.trim()
-            } else {
-                // The LAST segment is the type name.
-                path.rsplit("::").next().unwrap_or(path).trim()
-            };
-            if is_valid_type_name(type_name) {
-                types.insert(type_name.to_owned());
-            }
-        }
-    }
-    types
-}
-
-/// Returns true if this is a plausible type name for the type map:
-/// PascalCase, length > 1, no spaces, not a keyword.
-fn is_valid_type_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() > 1
-        && name.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-        && !name.contains(' ')
-        && !matches!(
-            name,
-            "Self" | "Box" | "Vec" | "Option" | "Result" | "String" | "str"
-        )
-}
-
-/// Parses Rust function parameter types: `fn foo(a: &Type, b: Type)` → [(a, Type), (b, Type)].
-/// Only PascalCase types are returned (primitives like &str, u32 are skipped).
-fn parse_rs_params(line: &str) -> Vec<(String, String)> {
-    let mut results = Vec::new();
-    let Some(open) = line.find('(') else {
-        return results;
-    };
-    let Some(close) = line.rfind(')') else {
-        return results;
-    };
-    if close <= open {
-        return results;
-    }
-    let params = &line[open + 1..close];
-    for param in params.split(',') {
-        let param = param.trim();
-        if let Some((var, type_part)) = param.split_once(':') {
-            let var = var.trim();
-            let type_part = type_part.trim();
-            // Strip `&`, `&mut `, `mut `.
-            let type_part = type_part
-                .trim_start_matches('&')
-                .trim_start_matches("mut ")
-                .trim();
-            // Strip lifetimes: `'a Type` → `Type`.
-            let type_part = if let Some(space) = type_part.find(' ') {
-                if type_part.starts_with('\'') {
-                    &type_part[space + 1..]
-                } else {
-                    type_part
-                }
-            } else {
-                type_part
-            };
-            let base_type = type_part.split('<').next().unwrap_or(type_part).trim();
-            if !var.is_empty()
-                && var.chars().all(|c| c.is_alphanumeric() || c == '_')
-                && is_valid_type_name(base_type)
-            {
-                results.push((var.to_owned(), base_type.to_owned()));
-            }
-        }
-    }
-    results
-}
-
-/// Parses Rust struct field types from a line: `field: Type,` patterns.
-fn parse_rs_fields(line: &str) -> Vec<(String, String)> {
-    let mut results = Vec::new();
-    // Match `name: Type` where name is snake_case and Type is PascalCase.
-    for word in line.split(',') {
-        let word = word.trim();
-        if let Some((field, type_part)) = word.split_once(':') {
-            let field = field.trim();
-            let type_part = type_part.trim();
-            let type_part = type_part
-                .trim_start_matches('&')
-                .trim_start_matches("mut ")
-                .trim();
-            let base_type = type_part.split('<').next().unwrap_or(type_part).trim();
-            if !field.is_empty()
-                && field.chars().all(|c| c.is_alphanumeric() || c == '_')
-                && !field.chars().next().is_some_and(|c| c.is_ascii_uppercase())
-                && is_valid_type_name(base_type)
-            {
-                results.push((field.to_owned(), base_type.to_owned()));
-            }
-        }
-    }
-    results
-}
-
-// Builder-chain receiver typing (code-intel depth): scans source text for
-/// the ubiquitous builder idiom — `Type::new(...)` or `Type::default(...)`
-/// followed by chained `.method()` calls — and returns rewrites so bare
-/// chain-tail methods become `Type::method`.
-///
-/// Example: `WalkBuilder::new().build()` → the `build` call rewrites to
-/// `WalkBuilder::build` (resolution then binds it to the right symbol).
-/// Deterministic and lexical: only chains rooted at a PascalCase scoped
-/// constructor (the Rust/Java convention) are rewritten; no type inference.
-fn builder_chain_rewrites(source: &str, ext: &str) -> Vec<(usize, String, String)> {
-    // Only for languages with `::` or `.` chain syntax (Rust, TS, Java).
-    if !matches!(
-        ext,
-        "rs" | "ts" | "tsx" | "js" | "jsx" | "mts" | "cts" | "java"
-    ) {
-        return Vec::new();
-    }
-    let mut rewrites = Vec::new();
-    let sep = if ext == "rs" { "::" } else { "." };
-    for (line_idx, line) in source.lines().enumerate() {
-        let trimmed = line.trim();
-        // Find `Type::new(` or `Type::default(` patterns.
-        // We scan for a PascalCase identifier followed by the separator and
-        // `new(` / `default(`.
-        for (constructor, tail) in find_scoped_constructors(trimmed, sep) {
-            // After the constructor's closing paren, look for `.method()`
-            // chain tails.
-            let after = &tail;
-            for method in find_chain_methods(after) {
-                if method
-                    .chars()
-                    .next()
-                    .is_some_and(|c| c.is_ascii_lowercase())
-                {
-                    let qualified = format!("{constructor}::{method}");
-                    rewrites.push((line_idx, method, qualified));
-                }
-            }
-        }
-    }
-    rewrites
-}
-
-/// Finds `PascalCase::new(` / `PascalCase::default(` in a line, returning
-/// (type_name, text_after_constructor_close_paren).
-fn find_scoped_constructors<'a>(line: &'a str, sep: &str) -> Vec<(String, &'a str)> {
-    let mut results = Vec::new();
-    let sep_pattern = format!("{sep}new(");
-    let default_pattern = format!("{sep}default(");
-    // Scan for each occurrence.
-    let mut search_from = 0;
-    while let Some(pos) = line[search_from..]
-        .find(&sep_pattern)
-        .or_else(|| line[search_from..].find(&default_pattern))
-    {
-        let abs = search_from + pos;
-        // Find the type name: the PascalCase identifier ending at `abs`.
-        let before = &line[..abs];
-        let type_start = before
-            .rfind(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':'))
-            .map(|p| p + 1)
-            .unwrap_or(0);
-        let type_name = &before[type_start..];
-        let is_pascal = type_name
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_uppercase())
-            && type_name.len() > 1;
-        if is_pascal {
-            // Find the closing paren of the constructor call.
-            let after_open = abs + sep_pattern.len();
-            if let Some(close) = find_matching_paren(&line[after_open..]) {
-                let tail = &line[after_open + close + 1..];
-                results.push((type_name.to_owned(), tail));
-            }
-        }
-        search_from = abs + sep_pattern.len();
-    }
-    results
-}
-
-/// Finds `.method(` occurrences in text after a constructor (the chain tail).
-fn find_chain_methods(text: &str) -> Vec<String> {
-    let mut methods = Vec::new();
-    for (i, c) in text.char_indices() {
-        if c == '.' {
-            // Parse the identifier that follows.
-            let start = i + 1;
-            let mut end = start;
-            for (j, ch) in text[start..].char_indices() {
-                if ch.is_alphanumeric() || ch == '_' {
-                    end = start + j + ch.len_utf8();
-                } else {
-                    break;
-                }
-            }
-            if end > start {
-                let name = &text[start..end];
-                // Only bare method calls (followed by `(` or `.`).
-                let after = text[end..].chars().next();
-                if after == Some('(') || after == Some('.') {
-                    methods.push(name.to_owned());
-                }
-            }
-        }
-    }
-    methods
-}
-
-/// Finds the index of the matching closing paren, starting from just after
-/// the opening one.
-fn find_matching_paren(text: &str) -> Option<usize> {
-    let mut depth = 1;
-    for (i, c) in text.char_indices() {
-        match c {
-            '(' => depth += 1,
-            ')' => {
-                depth -= 1;
-                if depth == 0 {
-                    return Some(i);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
-
-fn dotted_reference(full_text: &str, bare_callee: &str) -> String {
-    // [receiver-resolution-gap] Handle BOTH `.` (TS/JS) and `::` (Rust)
-    // separators. `super::module::Type::method()` previously returned just
-    // `method` — the path prefix was lost, then `method` hit the noise
-    // filter. Now the qualified tail is preserved for resolution.
-    let using_double_colon = full_text.contains("::") && !full_text.contains('.');
-    let sep = if using_double_colon { "::" } else { "." };
-    if !full_text.contains(sep) {
-        return bare_callee.to_owned();
-    }
-    let segments: Vec<&str> = full_text.split(sep).filter(|s| !s.is_empty()).collect();
-    if segments.len() < 2 {
-        return bare_callee.to_owned();
-    }
-    // Only keep a hint when the text really is a receiver chain ending in
-    // the callee identifier (guards against calls inside strings/paths).
-    let name = segments[segments.len() - 1];
-    if name != bare_callee {
-        return bare_callee.to_owned();
-    }
-    // Closest non-self segment before the callee carries the hint.
-    let mut hint_idx = segments.len() - 2;
-    while hint_idx > 0 && matches!(segments[hint_idx], "self" | "Self") {
-        hint_idx -= 1;
-    }
-    if matches!(segments[hint_idx], "self" | "Self") {
-        return bare_callee.to_owned();
-    }
-    format!("{}{}{}", segments[hint_idx], sep, name)
-}
-
 /// Per-file import-alias map (alias → original symbol name).
 ///
 /// Python `from src.tokens import _tokens as tok` and TS
@@ -1213,19 +729,17 @@ fn import_aliases(source: &str, ext: &str) -> std::collections::HashMap<String, 
 /// enclosing chain — a method inside `class X` records the span under the
 /// RECEIVER-QUALIFIED identity `X::method`, the same convention the chunk
 /// walk uses for entity names, so call edges resolve to method entities.
-fn collect_calls_and_spans(
+/// Collects function-like declaration spans (row ranges + qualified names)
+/// for call attribution, plus JSX element usage sites (declarative component
+/// references — see the JSX note below).
+fn collect_fn_spans(
     node: &tree_sitter::Node,
     source: &[u8],
     kind_map: &HashMap<&str, &str>,
     receivers: &[String],
     fn_spans: &mut Vec<(usize, usize, String)>,
-    call_sites: &mut Vec<(usize, String)>,
 ) {
     let kind = node.kind();
-
-    // Track declarations for scope under their qualified identity. Children
-    // descend with the bare name appended (mirroring
-    // `walk_declarations_with_receivers`).
     if kind_map.contains_key(kind) {
         if let Some(name_node) = node
             .child_by_field_name("name")
@@ -1248,63 +762,15 @@ fn collect_calls_and_spans(
                 child_receivers.push(name);
                 let mut cursor = node.walk();
                 for child in node.named_children(&mut cursor) {
-                    collect_calls_and_spans(
-                        &child,
-                        source,
-                        kind_map,
-                        &child_receivers,
-                        fn_spans,
-                        call_sites,
-                    );
+                    collect_fn_spans(&child, source, kind_map, &child_receivers, fn_spans);
                 }
                 return;
             }
         }
     }
-
-    // Detect call expressions across languages.
-    let is_call = kind.contains("call_expression")
-        || kind.contains("method_invocation")
-        || kind.contains("function_call")
-        || kind == "call";
-    if is_call {
-        let callee_node = node
-            .child_by_field_name("function")
-            .or_else(|| node.child_by_field_name("name"))
-            .or_else(|| node.named_child(0));
-        if let Some(callee_node) = callee_node {
-            let callee = extract_name(&callee_node, source);
-            if !callee.is_empty() {
-                // Dotted callees keep their receiver hint as-written
-                // (`self.store.save` → `store.save`): resolution (Phase 2)
-                // tries `Store::save` through the hint before the bare
-                // ladder. `self`/`Self` receivers carry no hint.
-                let full = callee_node.utf8_text(source).unwrap_or("");
-                let reference = dotted_reference(full, &callee);
-                call_sites.push((node.start_position().row, reference));
-            }
-        }
-    }
-
-    // scan-reliability AC5: JSX element usage is a reference. Components are
-    // used declaratively (`<Button …>`), never via a call_expression, so
-    // without this every React component has zero incoming `calls` edges and
-    // dead-code analytics flag them all as dead. Only PascalCase element
-    // names count — lowercase names are DOM intrinsics (`<div>`, `<span>`),
-    // not entities, and would otherwise flood the unresolved-refs ledger.
-    if kind == "jsx_opening_element" || kind == "jsx_self_closing_element" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = extract_name(&name_node, source);
-            if name.chars().next().is_some_and(char::is_uppercase) {
-                call_sites.push((node.start_position().row, name));
-            }
-        }
-    }
-
-    // Recurse.
     let mut cursor = node.walk();
     for child in node.named_children(&mut cursor) {
-        collect_calls_and_spans(&child, source, kind_map, receivers, fn_spans, call_sites);
+        collect_fn_spans(&child, source, kind_map, receivers, fn_spans);
     }
 }
 
@@ -1734,17 +1200,13 @@ mod dotted_reference_tests {
             names.iter().map(|n| (*n).to_owned()).collect();
         TreeSitterChunker::new()
             .expect("chunker")
-            .extract_calls(source, ext, &set)
+            .extract_calls(
+                source,
+                ext,
+                &set,
+                &crate::parser::repo_context::RepoContext::empty(),
+            )
             .expect("calls")
-    }
-
-    #[test]
-    fn dotted_reference_keeps_receiver_hint() {
-        assert_eq!(dotted_reference("self.store.save", "save"), "store.save");
-        assert_eq!(dotted_reference("self.store.save", "wrong"), "wrong");
-        assert_eq!(dotted_reference("self.save", "save"), "save");
-        assert_eq!(dotted_reference("save", "save"), "save");
-        assert_eq!(dotted_reference("client.db.query", "query"), "db.query");
     }
 
     #[test]
@@ -1951,7 +1413,14 @@ mod lexical_text_tests {
         let chunker = TreeSitterChunker::new().expect("chunker");
         let mut names = std::collections::HashSet::new();
         names.insert("_tokens".to_string());
-        let edges = chunker.extract_calls(py, "py", &names).unwrap();
+        let edges = chunker
+            .extract_calls(
+                py,
+                "py",
+                &names,
+                &crate::parser::repo_context::RepoContext::empty(),
+            )
+            .unwrap();
         assert!(
             edges.contains(&("gamma".to_string(), "_tokens".to_string())),
             "aliased call must resolve to the original: {edges:?}"
@@ -1968,7 +1437,14 @@ mod lexical_text_tests {
         let chunker = TreeSitterChunker::new().expect("chunker");
         let mut names = std::collections::HashSet::new();
         names.insert("helper".to_string());
-        let edges = chunker.extract_calls(ts, "ts", &names).unwrap();
+        let edges = chunker
+            .extract_calls(
+                ts,
+                "ts",
+                &names,
+                &crate::parser::repo_context::RepoContext::empty(),
+            )
+            .unwrap();
         assert!(
             edges.contains(&("use".to_string(), "helper".to_string())),
             "ts alias must resolve: {edges:?}"
@@ -1983,7 +1459,14 @@ mod lexical_text_tests {
         names.insert("_tokens".to_string());
         names.insert("TestModernTokenizer::test_alpha".to_string());
         names.insert("TestModernTokenizer::test_beta".to_string());
-        let edges = chunker.extract_calls(py, "py", &names).unwrap();
+        let edges = chunker
+            .extract_calls(
+                py,
+                "py",
+                &names,
+                &crate::parser::repo_context::RepoContext::empty(),
+            )
+            .unwrap();
         assert!(
             edges.contains(&(
                 "TestModernTokenizer::test_alpha".to_string(),
@@ -2015,7 +1498,14 @@ mod lexical_text_tests {
         let mut names = std::collections::HashSet::new();
         names.insert("_tokens".to_string());
         names.insert("outer::inner".to_string());
-        let edges = chunker.extract_calls(py, "py", &names).unwrap();
+        let edges = chunker
+            .extract_calls(
+                py,
+                "py",
+                &names,
+                &crate::parser::repo_context::RepoContext::empty(),
+            )
+            .unwrap();
         assert!(
             edges.contains(&("outer::inner".to_string(), "_tokens".to_string())),
             "nested call attributed to the nested function: {edges:?}"
@@ -2079,7 +1569,12 @@ mod receiver_gap_tests {
             names.iter().map(|n| (*n).to_owned()).collect();
         TreeSitterChunker::new()
             .expect("chunker")
-            .extract_calls(source, ext, &set)
+            .extract_calls(
+                source,
+                ext,
+                &set,
+                &crate::parser::repo_context::RepoContext::empty(),
+            )
             .expect("calls")
     }
 
@@ -2104,22 +1599,10 @@ mod receiver_gap_tests {
     fn self_method_call_emits_bare_name() {
         let source = "impl Foo {\n    fn bar(&self) {\n        self.baz();\n    }\n    fn baz(&self) {}\n}\n";
         let edges = calls(source, "rs", &["baz", "bar", "Foo::baz", "Foo::bar"]);
+        // Receiver-aware: self.baz() inside impl Foo types as Foo::baz.
         assert!(
-            edges.iter().any(|(_c, callee)| callee == "baz"),
-            "bare self.method callee emitted: {edges:?}"
+            edges.iter().any(|(_c, callee)| callee == "Foo::baz"),
+            "self.method callee receiver-typed: {edges:?}"
         );
     }
-}
-
-#[cfg(test)]
-pub fn builder_chain_rewrites_for_test(source: &str, ext: &str) -> Vec<(usize, String, String)> {
-    builder_chain_rewrites(source, ext)
-}
-
-#[cfg(test)]
-pub fn let_binding_type_map_for_test(
-    source: &str,
-    ext: &str,
-) -> std::collections::HashMap<String, String> {
-    let_binding_type_map(source, ext)
 }

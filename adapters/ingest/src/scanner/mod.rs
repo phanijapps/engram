@@ -19,6 +19,7 @@ use crate::{
     qualified_source_key, scan_filter::ScanFilter, stable_source_key,
 };
 
+mod context;
 mod contract_phase;
 mod ingest_phase;
 mod manifest;
@@ -39,6 +40,11 @@ const DEFAULT_MAX_BYTES: u64 = 1024 * 1024; // 1 MiB per file
 /// which cannot appear in a file path on any OS, so a repo file named
 /// `contract:...` cannot collide with contract-op manifest entries.
 const CONTRACT_PREFIX: &str = "\u{1f}contract:";
+/// Manifest key for the repo-context fingerprint (receiver-aware call
+/// resolution, plan §4): extraction results depend on OTHER files' method
+/// signatures, so a fingerprint change invalidates per-file content-hash
+/// skipping for code files — one full re-extraction scan.
+const REPO_CONTEXT_KEY: &str = "\u{1f}repo-context";
 
 /// Summary returned by a scan.
 #[derive(Debug, Clone, Default, serde::Serialize)]
@@ -223,6 +229,21 @@ where
         mut filtered_paths,
     } = walk::walk_and_classify(&root_canonical, opts, &mut summary)?;
 
+    // Repo-context collection (phase 1.5 — scanner/context.rs): receiver
+    // evidence from ALL eligible code files, changed and unchanged alike.
+    let repo_ctx = context::collect_repo_context(&readable, ts_chunker.as_ref());
+    let repo_ctx_fingerprint = repo_ctx.fingerprint().to_string();
+    // Fingerprint invalidation: a changed evidence table forces full code
+    // re-extraction even for content-unchanged files (their receiver-typed
+    // edges may depend on signatures that changed elsewhere). First scan on
+    // an existing store (no stored fingerprint) also re-extracts once —
+    // the pre-feature edges were extracted without receiver typing.
+    let force_all_code = opts
+        .manifest
+        .get(REPO_CONTEXT_KEY)
+        .map(|old| old != &repo_ctx_fingerprint)
+        .unwrap_or(true);
+
     // Serial pre-pass (phase 2 — see scanner/prepass.rs).
     let prepass::PrepassOutput {
         to_ingest,
@@ -236,6 +257,7 @@ where
         &readable,
         &mut filtered_paths,
         &mut summary,
+        force_all_code,
     );
     let name_index: Arc<Mutex<engram_code::SymbolIndex>> =
         Arc::new(Mutex::new(engram_code::SymbolIndex::new()));
@@ -278,6 +300,7 @@ where
             extractor: &extractor,
             global_entity_names: &global_entity_names,
             name_index: &name_index,
+            repo_ctx: &repo_ctx,
         },
         &to_ingest,
     );
@@ -302,7 +325,7 @@ where
     // Orphan-ledger healing (phase 4b — scanner/sweep.rs).
     {
         let idx = name_index.lock().unwrap_or_else(|e| e.into_inner());
-        sweep::heal_pending_refs(repo, opts, &idx, &mut summary);
+        sweep::heal_pending_refs(repo, opts, &idx, &mut summary, &repo_ctx);
     }
 
     // Manifest assembly (phase 5 — scanner/manifest.rs).
@@ -323,6 +346,11 @@ where
     summary.errors += folded.errors;
     summary.entities += folded.entities;
     summary.relationships += folded.relationships;
+
+    // Persist the evidence fingerprint so the next scan can detect
+    // signature changes (plan §4 invalidation).
+    let mut new_manifest = new_manifest;
+    new_manifest.insert(REPO_CONTEXT_KEY.to_owned(), repo_ctx_fingerprint);
 
     Ok((summary, new_manifest))
 }

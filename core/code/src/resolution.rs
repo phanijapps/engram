@@ -60,6 +60,7 @@ pub fn resolve_refs(
     relationships: &mut [KnowledgeRelationship],
     repo: Option<&str>,
     path: Option<&str>,
+    repo_ctx: Option<&crate::parser::repo_context::RepoContext>,
 ) -> Vec<UnresolvedReference> {
     const RESOLVABLE: [&str; 4] = ["calls", "extends", "implements", "routes_to"];
     let mut ledger = Vec::new();
@@ -83,7 +84,7 @@ pub fn resolve_refs(
         // same-document fallback all live there, and the settling branch is
         // recorded as typed code-resolution evidence instead of being
         // reconstructed after the candidate is chosen.
-        let outcome = attempt(index, &reference, path, repo);
+        let outcome = attempt(index, &reference, path, repo, repo_ctx);
         match outcome.resolution {
             Resolution::Resolved(candidate) => {
                 rel.object.id = Some(Id::from(candidate.id));
@@ -226,7 +227,7 @@ pub(crate) mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "Facets::iter", "e1", "r", "src/facets.rs");
         let mut rels = vec![rel("calls", "caller", "values.iter")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/graph.rs"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/graph.rs"), None);
         assert!(
             !ledger.is_empty(),
             "unknown-receiver method call must stay unresolved, not bind to Facets::iter"
@@ -240,7 +241,7 @@ pub(crate) mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "Store::save", "e1", "r", "src/store.rs");
         let mut rels = vec![rel("calls", "caller", "store.save")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/api.rs"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/api.rs"), None);
         assert!(ledger.is_empty(), "receiver-qualified binding must resolve");
         assert!(rels[0].object.id.is_some());
     }
@@ -255,13 +256,13 @@ pub(crate) mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "store::save", "e1", "r", "src/store.rs");
         let mut rels = vec![rel("calls", "caller", "store::save")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/api.rs"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/api.rs"), None);
         assert!(ledger.is_empty(), "as-written module path must resolve");
 
         let mut index2 = SymbolIndex::new();
         register(&mut index2, "save", "e1", "r", "src/store.rs");
         let mut rels2 = vec![rel("calls", "caller", "store::save")];
-        let ledger2 = resolve_refs(&index2, &mut rels2, Some("r"), Some("src/engine.rs"));
+        let ledger2 = resolve_refs(&index2, &mut rels2, Some("r"), Some("src/engine.rs"), None);
         assert!(ledger2.is_empty(), ":: path to bare fn must keep resolving");
     }
 
@@ -272,7 +273,7 @@ pub(crate) mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "save", "e1", "r", "src/store.rs");
         let mut rels = vec![rel("calls", "caller", "save")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/api.rs"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/api.rs"), None);
         assert!(ledger.is_empty(), "bare call must keep resolving");
         assert!(rels[0].object.id.is_some());
     }
@@ -282,7 +283,7 @@ pub(crate) mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "Config::parse", "e1", "r", "src/config.rs");
         let mut rels = vec![rel("calls", "caller", "Config::parse")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/other.rs"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/other.rs"), None);
         assert!(ledger.is_empty());
         assert_eq!(rels[0].object.id, Some(EntityId::from("e1")));
     }
@@ -293,7 +294,7 @@ pub(crate) mod tests {
         register(&mut index, "parse", "e1", "r", "src/a.rs");
         register(&mut index, "parse", "e2", "r", "src/b.rs");
         let mut rels = vec![rel("calls", "caller", "parse")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), None);
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), None, None);
         assert_eq!(ledger.len(), 1, "ambiguous reference must be recorded");
         assert_eq!(ledger[0].status, UnresolvedReferenceStatus::Pending);
         assert_eq!(ledger[0].candidates.len(), 2);
@@ -304,7 +305,7 @@ pub(crate) mod tests {
     fn not_found_lands_in_the_ledger() {
         let index = SymbolIndex::new();
         let mut rels = vec![rel("calls", "caller", "ghost_fn")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/a.rs"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/a.rs"), None);
         assert_eq!(ledger.len(), 1);
         assert!(ledger[0].candidates.is_empty());
         assert_eq!(ledger[0].reference_name, "ghost_fn");
@@ -315,7 +316,7 @@ pub(crate) mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "Store::save", "e9", "r", "src/store.rs");
         let mut rels = vec![rel("calls", "Engine::drive", "store.save")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/engine.rs"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/engine.rs"), None);
         assert!(ledger.is_empty(), "ledger: {ledger:?}");
         assert_eq!(
             rels[0].object.id,
@@ -329,7 +330,7 @@ pub(crate) mod tests {
         let mut index = SymbolIndex::new();
         register(&mut index, "Engine::process", "e7", "r", "src/engine.rs");
         let mut rels = vec![rel("calls", "Engine::drive", "self.process")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/engine.rs"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("src/engine.rs"), None);
         // Same document: Engine::drive → Engine::process resolves via the
         // bare tail within the file.
         assert!(ledger.is_empty(), "ledger: {ledger:?}");
@@ -340,7 +341,7 @@ pub(crate) mod tests {
     fn routes_to_handlers_ledger_when_unresolved() {
         let index = SymbolIndex::new();
         let mut rels = vec![rel("routes_to", "GET /health", "healthHandler")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("routes.ts"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("routes.ts"), None);
         assert_eq!(ledger.len(), 1, "unresolved route handler must be ledgered");
         assert_eq!(ledger[0].reference_name, "healthHandler");
     }
@@ -349,9 +350,9 @@ pub(crate) mod tests {
     fn ledger_ids_are_deterministic_per_subject_and_name() {
         let index = SymbolIndex::new();
         let mut rels = vec![rel("calls", "caller", "ghost_fn")];
-        let first = resolve_refs(&index, &mut rels, Some("r"), None);
+        let first = resolve_refs(&index, &mut rels, Some("r"), None, None);
         let mut rels2 = vec![rel("calls", "caller", "ghost_fn")];
-        let second = resolve_refs(&index, &mut rels2, Some("r"), None);
+        let second = resolve_refs(&index, &mut rels2, Some("r"), None, None);
         assert_eq!(first[0].id, second[0].id);
     }
 
@@ -390,7 +391,7 @@ mod receiver_resolution_gap_tests {
             "harness.rs",
         );
         let mut rels = vec![rel("calls", "caller_fn", "run_beliefs_fixture")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("harness.rs"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("harness.rs"), None);
         assert!(
             !ledger.is_empty() || rels[0].object.id.is_some(),
             "should resolve or ledger: rels={rels:?}"
@@ -409,7 +410,7 @@ mod receiver_resolution_gap_tests {
             "bootstrap.rs",
         );
         let mut rels = vec![rel("calls", "caller_fn", "FastEmbedEmbeddingProvider::new")];
-        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("other.rs"));
+        let ledger = resolve_refs(&index, &mut rels, Some("r"), Some("other.rs"), None);
         assert!(
             !ledger.is_empty() || rels[0].object.id.is_some(),
             "should resolve or ledger: rels={rels:?}"

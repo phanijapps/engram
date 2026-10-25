@@ -11,51 +11,55 @@ input_artifacts: []
 updated_at: "{{timestamp}}"
 ---
 
+<!--
+  v2 template. House rules: references/templates.md §Writing rules.
+  Executed results live ONLY here — no other artifact restates gate outcomes.
+  Negative evidence is mandatory: what was deliberately not verified, and why.
+-->
+
 # Verification: {{feature_title}}
 
-## Policy, environment and test data
+| Field | Value |
+|---|---|
+| Reader / question | QA, reviewers, approver asking "what was actually executed, and what was deliberately not?" |
+| Status | cycle {{cycle}} · planned checks start NOT_RUN · executed results recorded once, here |
+| Budget | One line per check. |
 
-Acceptance/test policy and evidence source: {{policy}}
-Product/version, environment alias, component versions and baseline: {{environment}}
-Nonproduction authorization and test identities/permission sets: {{authorization}}
-Synthetic/masked fixture design, isolation and cleanup: {{fixtures}}
-External dependencies, mocks versus real contracts and known gaps: {{dependencies}}
-Required checks and rationale for omitted layers: {{applicability}}
+## Acceptance verification
 
-## Case inventory
+> Links analysis AC ids — never restates them. Results are recorded only after execution.
+> Enforcement: an unexecuted check recorded as PASS is a blocker.
 
-Use complete, explicit identifiers for every linked criterion and test; do not
-compress them into numeric ranges or omit prefixes.
+| AC | Command | Expected observable | Result |
+|---|---|---|---|
+| AC-001 | {{ac_verification}} | one sentence | NOT_RUN |
+| AC-00n | `<command>` | one sentence | NOT_RUN |
 
-| Test ID | AC / NFR / risk | Layer | Scenario / identity | Procedure or automation reference | Expected observable result | Required gate |
-| --- | --- | --- | --- | --- | --- | --- |
-| TEST-001 | {{criterion}} | {{unit_component_contract_integration_e2e_or_other}} | {{scenario}} | {{procedure}} | {{expected}} | {{gate}}
+## Gates
 
-Cover applicable happy path, invalid input, denied access, role/tenant/site isolation,
-bulk/limits, concurrent updates, duplicate/replayed events, downstream failure,
-timeouts, migration/reconciliation, regression, accessibility and recovery. Explicitly
-record reasoned N/A instead of silently deleting relevant risk coverage.
+> The repo validation block, verbatim commands. Results land only here.
 
-## Execution records
+| Gate | Command | Result |
+|---|---|---|
+| {{gates}} | `<command>` | NOT_RUN |
 
-Use PASS, FAIL, BLOCKED, NOT_RUN, or NA. Record NA reasons. Do not equate a ready
-verification plan with successful test execution.
+## Negative evidence
 
-| Test ID | Status | Executed at / run ID | Source commit / package digest | Environment fingerprint | Actual result / metrics | Evidence reference |
-| --- | --- | --- | --- | --- | --- | --- |
-| TEST-001 | NOT_RUN | {{run_or_not_run}} | {{source_or_pending}} | {{fingerprint_or_pending}} | {{result_or_not_run}} | {{evidence_or_pending}}
+> REQUIRED. Every deliberate omission: `omitted: <check> — reason — owner — revisit trigger`.
+> Enforcement: QA and the approver check every N/A carries a reason and an owner.
 
-## Defects, exceptions and gaps
+{{negative_evidence}}
 
-| Finding / gap | Impacted criterion | Resolution or authorized EXC ID | Owner / expiry | Gate consequence |
-| --- | --- | --- | --- | --- |
-| {{gap_or_none}} | {{criterion_or_na}} | {{resolution_or_na}} | {{owner_or_na}} | {{gate_effect}}
+## Execution environment
 
-## Verification conclusion
+> Where the commands ran: machine shape, toolchain, store paths, revision. One line each.
 
-Acceptance coverage and missing cases: {{coverage}}
-Executed versus planned checks and required remaining checks: {{execution_summary}}
-Performance/limit measurements versus agreed thresholds: {{measurements}}
-Package/configuration reconciliation and drift assessment: {{reconciliation}}
-Recovery rehearsal results and retained artifacts: {{recovery}}
-Gate readiness and evidence limitations: {{conclusion}}
+{{environment}}
+
+## Recording rules
+
+> Imperatives. Enforcement: reviewers compare recorded results against raw output.
+
+{{recording_rules}}
+
+*(Write: record command, result, and reference for every executed check · never pre-record a result · a failed check stays FAIL until re-executed · partial runs say which part ran.)*

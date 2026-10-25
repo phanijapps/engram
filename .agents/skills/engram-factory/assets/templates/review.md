@@ -14,35 +14,54 @@ discipline: "{{discipline}}"
 verdict: "ERROR"
 ---
 
-# {{discipline}} review: {{feature_title}}
+<!--
+  v2 template. House rules: references/templates.md §Writing rules.
+  Findings: five columns, one idea per row. Repro detail goes in named blocks
+  below the table — never wrapped cells. Verdict semantics: PASS = no changes
+  required · CHANGES = implementation changes required · ERROR = could not
+  conclude. Judge independently; do not rely on another reviewer's verdict.
+-->
 
-## Scope and evidence inspected
+# Review — {{discipline}}, round {{round}}: {{feature_title}}
 
-Snapshot path/hash, base/head and external packages: {{source_identity}}
-Accepted input artifacts and evidence hashes: {{inputs}}
-Actual delta, native objects and related existing behavior inspected: {{inspection_scope}}
-Independent checks run, identities/environments and results: {{checks}}
-Applicable rubric/profile and any scope limitations: {{rubric_and_limitations}}
+| Field | Value |
+|---|---|
+| Scope | snapshot `{{snapshot_path}}` · the delta base..head · artifacts as hashed at freeze |
+| Lens | Apply the discipline rubric (references/reviews.md) as written — do not narrow it |
+
+## Scope inspected
+
+> What you actually read, ran, and compared. Name the commands you executed. If you could not execute a check, say so here — that is evidence, not weakness.
+
+{{scope}}
 
 ## Findings
 
-Use a distinct discipline-scoped finding ID. State NONE explicitly if no findings.
+| ID | Severity | What breaks (one sentence) | Evidence | Fix direction |
+|---|---|---|---|---|
+| FIND-{{discipline}}-001 | critical/high/medium/low | {{first_finding}} | file:line | one sentence |
 
-| Finding ID | Severity | AC / NFR / rule | Location / native object and revision | Reproduction / evidence | Impact | Required resolution and retest |
-| --- | --- | --- | --- | --- | --- | --- |
-| FIND-{{discipline}}-001 | {{severity_or_none}} | {{criterion}} | {{location}} | {{evidence}} | {{impact}} | {{remediation}}
+*Detail blocks — one per finding that needs more than one sentence:*
 
-## Prior findings and exceptions
+**FIND-{{discipline}}-001 — reproduction and impact.**
+{{finding_detail}}
 
-| Prior finding / EXC | Current verification | Resolution evidence / authorization / expiry | Status |
-| --- | --- | --- | --- |
-| {{prior_or_na}} | {{check}} | {{evidence}} | {{state}}
+## Prior findings status
+
+> REQUIRED from round 2 on: every finding from your earlier rounds, resolved or still open. Silence here fails.
+
+| Prior finding | Status | Verified by |
+|---|---|---|
+| {{prior_findings}} | resolved/open | commit · test · line |
+
+## Exceptions
+
+> Authorized exceptions with owner, scope, and expiry — or the single word: none.
+
+{{exceptions}}
 
 ## Verdict
 
-Set frontmatter verdict to PASS, CHANGES, or ERROR. All blocking findings require
-CHANGES. Incomplete review requires ERROR, even when no defect was observed.
+> One line per discipline rule you applied and what it showed. Then the verdict that matches the frontmatter.
 
-Decision and evidence: {{verdict_reason}}
-Blocking findings and required next action: {{blocking_findings_or_none}}
-Nonblocking follow-up and accountable owner: {{followup_or_none}}
+{{verdict_basis}}

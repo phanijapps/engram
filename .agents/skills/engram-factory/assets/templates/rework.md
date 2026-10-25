@@ -11,15 +11,29 @@ input_artifacts: []
 updated_at: "{{timestamp}}"
 ---
 
-# Human rework instruction
+<!--
+  v2 template. The human instruction artifact — verbatim note, minimal framing.
+  House rules: references/templates.md §Writing rules.
+-->
 
-## Verbatim request
+# Rework cycle {{cycle}}: {{feature_title}}
 
-{{human_note}}
+## Human instruction (verbatim)
 
-## Mechanical effects
+> {{human_note}}
 
-Prior approval invalidated; new approval cycle created. Preserve previous evidence.
-Classify scope impact through the analyzer. Repeat analysis, plan and tasks before
-implementation if requirements, acceptance or design change. Otherwise retain
-accepted upstream artifacts and pass this instruction to the builder.
+## What this resets
+
+- Cycle counter advances; round returns to zero.
+- Prior approval and snapshot are void.
+- Analysis, plan, and tasks are re-validated from scratch — changed acceptance is not a builder fix.
+
+## What this preserves
+
+- Source changes in the worktree — the analyzer assesses them.
+- All prior evidence and review history — archived, never edited.
+
+## Next
+
+- Analyzer re-enters with the instruction above as input.
+- Prior-cycle artifacts are archived under history/ before new ones are scaffolded.

@@ -11,81 +11,79 @@ input_artifacts: []
 updated_at: "{{timestamp}}"
 ---
 
+<!--
+  v2 template. House rules: references/templates.md §Writing rules.
+  Steps use imperative STE-style sentences. Requirements stay in EARS — the plan
+  never restates them; it links REQ/AC ids from analysis.md.
+-->
+
 # Plan: {{feature_title}}
 
-## Solution and boundaries
+| Field | Value |
+|---|---|
+| Reader / question | Builder asking "what do I do, in what order, and how do I prove each step?" · reviewers checking design soundness |
+| Status | cycle {{cycle}} · consumes analysis (DEC blocks) · supersedes: none |
+| Budget | ≤ 500 narrative words (tables excluded) |
+| Out of scope | Requirements and ACs (analysis.md owns them) · task decomposition (tasks.md owns it) |
 
-Accepted analysis revision/hash: {{analysis_identity}}
-Approach and why it meets the outcome: {{approach}}
-Components, ownership and trust boundaries: {{components}}
-Interaction sequence including asynchronous paths: {{sequence_or_compact_mermaid}}
-Native configuration versus extension/custom code: {{extension_strategy}}
+## Approach
 
-## Design decisions
+> The design story in plain words. Start by naming which analysis DEC blocks this plan follows.
+> Enforcement: every DEC-n from analysis appears here or in New decisions; an unconsumed DEC fails validation.
 
-| Decision | Requirement / constraint | Options and tradeoffs | Selected option and reason | Consequence / reversibility |
-| --- | --- | --- | --- | --- |
-| DEC-001 | {{requirement}} | {{alternatives}} | {{choice}} | {{consequence}}
+{{approach}}
 
-## Change inventory
+*(≤ 200 words. If a reader cannot retell the design from this paragraph alone, it is not done.)*
 
-| Component / native object ID | Type: code / metadata / config / data / infrastructure | Current -> proposed behavior | Source of truth and export / package | AC / NFR |
-| --- | --- | --- | --- | --- |
-| {{component}} | {{type}} | {{delta}} | {{source_package}} | {{coverage}}
+## New decisions
 
-## Data design and migration
+> Only choices NEW since analysis — ADR blocks, authority-tagged, same shape as analysis DEC blocks.
 
-Entities/records, keys, relationships and validation rules: {{model}}
-Ownership, tenancy, classification and retention: {{data_boundaries}}
-Schema compatibility, expand/contract order and old-client behavior: {{compatibility}}
-Migration/backfill volume, batching, locking and restart checkpoints: {{migration}}
-Reconciliation queries, invariants and repair procedure: {{reconciliation}}
-Irreversible operations, backup/restore limits and authorization: {{irreversibility}}
+{{new_decisions}}
 
-## Contracts and business execution
+## Steps
 
-| API / event / workflow | Producer and consumers | Versioned request / response / transition | Authorization and validation | Errors, compatibility and evidence |
-| --- | --- | --- | --- | --- |
-| {{contract}} | {{participants}} | {{schema_or_reference}} | {{enforcement}} | {{error_contract}}
+> One sentence per step, imperative, each naming its own proof. Small steps beat large ones.
+> Enforcement: builder verification and reviewer traceability follow this table; a step without a verify command fails review.
 
-Execution identity/context and transaction boundary: {{execution_context}}
-Bulk/volume limits, concurrency and resource budget: {{limits_with_version_source}}
-Retries, timeouts, idempotency, duplicates and event ordering: {{delivery_semantics}}
-Compensation for external side effects and partial failure: {{compensation}}
+| Step | Do (one sentence) | Verify with | Touches |
+|---|---|---|---|
+| 1 | {{first_step}} | `<command>` | files / crates |
+| 2 | {{steps}} | `<command>` | files / crates |
 
-## User and operator experience
+## Contracts and compatibility
 
-Journeys and state transitions: {{journeys}}
-Loading, empty, success, validation, permission-denied and failure states: {{states}}
-Accessibility, keyboard/focus, localization and responsive needs: {{accessibility}}
-Manual steps, administrator/support experience and training: {{operator_experience}}
+> What changes in contracts, schemas, or public surface — classified compatible or breaking, per repo docs standard (docs first).
+> Enforcement: platform reviewer checks the classification against the actual diff.
 
-## Security and operations
+{{contract_changes}}
 
-Server-side permission enforcement and least privilege: {{permission_design}}
-Secrets references, sensitive-data controls and audit events: {{security_controls}}
-Threat/abuse cases and mitigations linked to tests: {{threats}}
-Logs, metrics, tracing, correlation IDs and redaction: {{observability}}
-Alert thresholds, owners, runbooks and support handoff: {{operations}}
+## Blast radius
 
-## Verification approach
+> Quantified from the graph, not adjectives. Enforcement: code reviewer checks the numbers against change_impact output.
 
-| AC / NFR / risk | Test layer and scenario | Fixture / identity / environment | Expected evidence | Gap and resolution |
-| --- | --- | --- | --- | --- |
-| {{criterion}} | {{test}} | {{context}} | {{evidence}} | {{gap_or_none}}
+{{blast_radius}}
 
-## Packaging, rollout and recovery
+*(Shape: `<symbol/area> — <change_impact number> dependents — <risk shape>`; name every crate boundary crossed.)*
 
-Export/package manifest and source-to-package reconciliation: {{artifact_strategy}}
-Dependency and transport/import order across environments: {{promotion_order}}
-Environment substitutions and manual steps excluded from packages: {{environment_config}}
-Preflight, staged rollout/flags, go/no-go checks and approval owners: {{rollout}}
-Rollback versus roll-forward, recovery trigger and data repair: {{recovery}}
-Target release/product upgrade compatibility: {{upgrade_assessment}}
-Source merge and platform promotion boundaries: {{authorization_boundaries}}
+## Verification map
 
-## Delivery sequence and readiness
+> Which step proves which AC. Link — do not restate — analysis §Acceptance.
+> Enforcement: every AC id from analysis appears exactly once here or is named in a reasoned omission.
 
-Dependency-ordered implementation slices: {{slices}}
-Open decisions, spikes, access or external dependencies: {{blockers_or_none}}
-Ready for task decomposition because: {{readiness_evidence}}
+{{verification_map}}
+
+*(Shape: `AC-001 ← step 3 gate output` · `AC-005 ← steps 6-8 matrix`.)*
+
+## Recovery and rollback
+
+> How to undo this change and how a partial failure recovers. Imperative steps, exact commands.
+> Enforcement: release.md consumes this section verbatim.
+
+{{rollback}}
+
+## Glossary deltas
+
+> New terms this plan introduces beyond the analysis glossary. If none, write: none.
+
+{{glossary_deltas}}

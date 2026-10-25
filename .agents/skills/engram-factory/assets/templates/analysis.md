@@ -12,84 +12,138 @@ updated_at: "{{timestamp}}"
 required_reviewers: ["code", "security", "platform"]
 ---
 
+<!--
+  v2 template. House rules (full text: references/templates.md §Writing rules):
+  one sentence per line · short sentences, active voice, present tense · approved
+  terms from the job glossary · never break a path or file:line citation · one
+  idea per table row; paragraph-sized detail goes in a named block below the
+  table. Every placeholder below is a required element — replace all before
+  setting status to ready. The controller rejects any left unresolved.
+-->
+
 # Analysis: {{feature_title}}
 
-## Problem and outcome
+| Field | Value |
+|---|---|
+| Reader / question | Planner asking "what must be true, and how will we know?" · human owner ratifying scope |
+| Status | cycle {{cycle}}, round 0 · supersedes: none · superseded-by: — |
+| Budget | ≤ 600 narrative words (tables excluded); state a reason if over |
+| Out of scope | Verbatim feature (feature.md is authoritative) · design (plan.md owns it) |
 
-Business problem: {{problem}}
-Users/operators and decision owner: {{personas_and_owner}}
-Current behavior and evidence: {{observed_baseline}}
-Expected behavior and measurable outcome: {{target_outcome}}
-Failure cost and criticality: {{business_impact}}
+## Intent
 
-## Evidence and assumptions
+> Human-owned input. If a registered brief exists (input_artifacts), the
+> ledger is BINDING: every DEC block below traces to a LED row and the
+> controller requires each LED id addressed in this body; HUMAN-DECIDED rows
+> are preserved verbatim; DELEGATED decisions stay inside their quoted
+> boundary — a decision outside it blocks. OPEN rows block analysis until the
+> owner decides or delegates — never downgrade or convert one. Consume the
+> whole brief: Must → outcome core, Should → scope (a dropped Should is named,
+> never silent), Could → excluded from this job, Won't → non-goals, owner
+> suggestions carry no authority (independent justification or drop). A later
+> human rework note is the newer owner authority: ledger rows it explicitly
+> reverses are superseded — record old row verbatim plus the reversal. If no
+> brief exists and this section cannot be stated confidently, STOP and
+> interview the owner before analyzing.
+> Enforcement: approver and human gate check ledger fidelity; the gate shows the
+> ratification back to the human.
 
-| ID | Fact / assumption / open question | Evidence, revision and environment | Owner / resolution before |
-| --- | --- | --- | --- |
-| EVD-001 | {{classification_and_statement}} | {{evidence_reference}} | {{resolution}}
+{{intent}}
 
-## Scope and boundaries
+*(Shape: problem in the owner's words · outcome measures · explicit non-goals · decision authority. Tag every consequential choice `[HUMAN-DECIDED]` or `[DELEGATED: rationale]`.)*
 
-In scope: {{included_behavior}}
-Out of scope: {{excluded_behavior}}
-Existing constraints and organization standards: {{constraints_with_sources}}
-Systems/teams owned elsewhere and dependency commitments: {{dependencies}}
-Compatibility or contractual obligations: {{compatibility}}
+## Story
 
-## Product and environment inventory
+> Four short paragraphs. Enforcement: reviewers check every claim here appears in Evidence with a label.
 
-| System / component | Product, edition, release / API | Source of truth / export method | Environment alias, owner and permitted access | Drift / dependency evidence |
-| --- | --- | --- | --- | --- |
-| {{system}} | {{version}} | {{source_and_export}} | {{environment_and_authorization}} | {{baseline}}
+{{story}}
 
-## Requirements and acceptance
+*(Shape: what happens today and why it hurts → why now → what changes on success → what failure costs.)*
 
-| Requirement | Actor and trigger | Observable business behavior / rules | Acceptance IDs | Priority and source |
-| --- | --- | --- | --- | --- |
-| REQ-001 | {{actor_trigger}} | {{behavior}} | AC-001 | {{priority_source}}
+## Evidence
 
-| Acceptance ID | Given | When | Then, including denied / failure behavior | Verification method |
-| --- | --- | --- | --- | --- |
-| AC-001 | {{precondition}} | {{action}} | {{observable_expected_result}} | {{test_method}}
+> One claim per row, one sentence, evidence-labeled. Detail goes in named blocks below — never wrapped cells.
+> Enforcement: reviewers spot-check citations against the frozen source.
 
-## Quality requirements
+| ID | Claim (one sentence) | Label | Source |
+|---|---|---|---|
+| EVD-001 | {{first_claim}} | proven/likely/assumed | file:line · doc · tool+query |
 
-| NFR ID | Attribute | Workload / operating conditions | Measurable threshold | Evidence / policy source | Verifier |
-| --- | --- | --- | --- | --- | --- |
-| NFR-001 | {{latency_capacity_availability_accessibility_recovery_or_other}} | {{conditions}} | {{threshold_or_explicit_decision_dependency}} | {{source}} | {{verification}}
+*(Labels: proven = verified against source · likely = strong signal, unverified · assumed = stated, unverified. Every load-bearing unverified claim needs a Decision or a Risk.)*
 
-## Identity, data and integrations
+## Decisions
 
-| Persona / service identity | Operation / workflow transition | Object / field / record scope | Allow / deny rule and enforcement point | Audit / privacy requirement |
-| --- | --- | --- | --- | --- |
-| {{identity}} | {{operation}} | {{scope}} | {{rule_and_server_enforcement}} | {{audit}}
+> ADR blocks, authority-tagged. This section is the only home for choices.
+> Enforcement: the planner must consume every DEC block; an orphan decision fails plan validation.
 
-Data classification, residency, retention and deletion: {{data_policy}}
-Systems of record, data ownership, migration volume and reconciliation: {{data_impacts}}
-API/event contracts, versions, consumers and failure expectations: {{integration_impacts}}
-Licenses, entitlements and third-party dependency constraints: {{entitlements}}
+{{decisions}}
+
+*(Shape per block: `DEC-n [HUMAN-DECIDED | DELEGATED: why]` — context → decision → alternative rejected → consequence.)*
+
+## Requirements
+
+> EARS sentences with RFC-2119 modality. One requirement, one sentence.
+> Enforcement: every REQ appears in Acceptance; an unreferenced REQ fails review.
+
+{{requirements}}
+
+*(Shape: `REQ-n (MUST | SHOULD): When <trigger> [<precondition>], the system shall <response>`. An NFR without a measurable threshold is not a requirement — cut it or give it a number, and place it in Acceptance's map.)*
+
+## Acceptance
+
+> Given/When/Then. This table is THE traceability map — tasks and tests link here; no other artifact restates it.
+> Enforcement: cross-artifact link check during tasks validation.
+
+| AC | Given | When | Then (incl. denied/failure) | REQ |
+|---|---|---|---|---|
+| AC-001 | {{first_acceptance}} | — | — | REQ-001 |
+
+## Scope boundaries
+
+> One line each. "Out" is as load-bearing as "In". Enforcement: reviewer applicability and plan scope must trace here.
+
+- In: {{in_scope}}
+- Out: {{out_of_scope}}
+
+## Verification stance
+
+> Positive AND negative evidence. Silence is not allowed.
+> Enforcement: QA/approver checks every N/A carries a reason and an owner.
+
+{{verification_stance}}
+
+*(Shape: will-verify list mapped to ACs · will-NOT-verify list: `omitted: <check> — reason — owner — revisit trigger`.)*
 
 ## Reviewer applicability
 
-Add every applicable discipline to required_reviewers in frontmatter. The initial
-list is the mandatory baseline, not a completed applicability decision.
+> Drives required_reviewers in frontmatter — update it to match this table. Apply rubric criteria as written; do not narrow them without a stated reason.
+> Enforcement: analysis validation requires the declared set to cover every yes-row.
 
-| Discipline | Applicable | Scope evidence and rationale |
-| --- | --- | --- |
-| code | yes | {{code_or_declarative_logic}}
-| security | yes | {{security_boundary}}
-| platform | yes | {{configuration_delivery_and_compatibility}}
-| ux | {{yes_or_no}} | {{ux_reason}}
-| ui | {{yes_or_no}} | {{ui_reason}}
-| backend | {{yes_or_no}} | {{backend_reason}}
-| data | {{yes_or_no}} | {{data_reason}}
-| operations | {{yes_or_no}} | {{operations_reason}}
+| Discipline | Applicable | One-line reason |
+|---|---|---|
+| code | yes | {{code_reason}} |
+| security | yes | {{security_reason}} |
+| platform | yes | {{platform_reason}} |
+| others | yes/no | one line each |
 
-## Risks and readiness
+## Risks
 
-| Risk ID | Scenario and impact | Likelihood / evidence | Mitigation / detection | Owner and escalation trigger |
-| --- | --- | --- | --- | --- |
-| RISK-001 | {{risk}} | {{likelihood}} | {{mitigation}} | {{owner_trigger}}
+| ID | Scenario (one sentence) | Owner · escalation trigger |
+|---|---|---|
+| RISK-001 | {{top_risk}} | owner · trigger |
 
-Material open decisions and their deadlines: {{open_decisions_or_none}}
-Ready for planning because: {{evidence_that_scope_and_acceptance_are_actionable}}
+## Glossary
+
+> Terms this spec uses with distinct meanings — declare the distinctions once.
+> Enforcement: reviewers flag recurring domain terms that are absent.
+
+{{glossary}}
+
+*(Shape: `term — meaning (≠ what it is NOT, when the confusion is real)`.)*
+
+## Environment inventory
+
+> Platform profiles only. For purely local work, omit the table and record the omission in Verification stance.
+> Enforcement: platform reviewer demands it when a platform profile is active.
+
+{{environment_inventory}}

@@ -11,68 +11,52 @@ input_artifacts: []
 updated_at: "{{timestamp}}"
 ---
 
-# Release and recovery: {{feature_title}}
+<!--
+  v2 template. House rules: references/templates.md §Writing rules.
+  This artifact is the handoff to a future Release/Operations factory: it must
+  stand alone for a reader who has never seen the job.
+-->
 
-## Release boundary
+# Release: {{feature_title}}
 
-Source merge objective and target branch: {{merge_scope}}
-Platform promotion scope and separate authorization reference: {{promotion_scope}}
-Change/release record and owners: {{change_record}}
-Product, edition, release/API and target environment aliases: {{targets}}
-Approved window, user impact, communications and support owner: {{release_window}}
+| Field | Value |
+|---|---|
+| Reader / question | A release operator asking "what ships, how do I undo it, and what am I accepting?" |
+| Status | cycle {{cycle}} · rehearsal required before ready |
+| Boundary | Source merge authorizes NO deployment or promotion |
 
-## Immutable delivery manifest
+## What ships
 
-| Artifact / native object group | Source revision / export time | Package or transport identifier | SHA-256 / immutable version | Dependencies / import order | Target mapping |
-| --- | --- | --- | --- | --- | --- |
-| {{artifact}} | {{source}} | {{package}} | {{digest}} | {{dependencies}} | {{mapping}}
+> One paragraph plus identity. Enforcement: approver binds this to the snapshot id.
 
-Source-to-package completeness and excluded items: {{reconciliation}}
-Environment settings, endpoints and secret references: {{substitutions}}
-Manual changes not captured by export and evidence plan: {{manual_changes}}
-Drift/conflict check, target baseline and concurrent-change coordination: {{drift_check}}
+{{what_ships}}
 
-## Preconditions and gates
+*(Shape: behavior delivered in plain words · exact commit/snapshot identity · surfaces touched.)*
 
-| Gate | Evidence / expected condition | Owner | Status / blocker |
-| --- | --- | --- | --- |
-| Required reviews and source approval | {{snapshot_and_decision}} | {{owner}} | {{status}}
-| Target compatibility, dependencies and permissions | {{preflight}} | {{owner}} | {{status}}
-| Verification, data reconciliation and recovery rehearsal | {{evidence}} | {{owner}} | {{status}}
-| Environment-specific promotion authorization | {{authorization_reference_or_not_requested}} | {{owner}} | {{status}}
+## Rehearsal
 
-## Ordered execution runbook
+> The fresh-run evidence: full gates on a clean store, matrix green. Link verification.md — do not restate results.
 
-| Step ID | Environment | Action / exact procedure reference | Preconditions | Expected result and evidence | Executor / authorization | Failure action |
-| --- | --- | --- | --- | --- | --- | --- |
-| REL-001 | {{environment}} | {{action}} | {{preconditions}} | {{expected}} | {{executor}} | {{failure_action}}
+{{rehearsal}}
 
-Include necessary backup, dependency import, permissions, schema/configuration,
-data migration, activation, scheduled jobs, cache/index work and smoke checks.
-State N/A with reasons. Never assume a package includes data, secrets, or every
-manual/native configuration change.
+## Rollback
 
-## Data and side-effect safety
+> Imperative steps, exact commands. Consumes plan §Recovery and rollback verbatim or explains the delta.
 
-Migration order, batching, pause/restart and idempotency: {{migration}}
-Record-count/value/business-invariant reconciliation: {{reconciliation_queries}}
-External messages, payments, emails or irreversible side effects: {{side_effects}}
-Data backup/restore and retention/security constraints: {{backup_and_restore}}
+{{rollback_steps}}
 
-## Recovery runbook
+## Accepted limitations and follow-ups
 
-| Trigger / threshold | Stop or containment action | Rollback / roll-forward procedure | Data repair / reconciliation | Owner / decision authority | Expected recovery evidence |
-| --- | --- | --- | --- | --- | --- |
-| {{trigger}} | {{containment}} | {{procedure}} | {{data_repair}} | {{owner}} | {{evidence}}
+> Every known gap that ships anyway: `limitation — owner — revisit trigger`. No hidden asterisks.
 
-Irreversible steps and why source revert cannot restore state: {{limitations}}
-Recovery objectives and policy source: {{recovery_targets}}
-Rehearsal environment, result and evidence: {{rehearsal}}
+{{limitations}}
 
-## Post-release validation and handoff
+## Operations notes
 
-Smoke checks by identity/persona: {{smoke_checks}}
-Monitoring period, metrics/alerts and thresholds: {{monitoring}}
-Operational owner, runbook and support escalation: {{handoff}}
-Actual deployment run IDs, or explicitly NOT_DEPLOYED: {{deployment_state}}
-Cleanup and follow-up tasks: {{followups}}
+> What an operator watches after this lands: signals, growth paths, runbook links.
+
+{{ops_notes}}
+
+## Handoff manifest
+
+> What a Release factory consumes from here: approved snapshot id · verification evidence · limitations list · promotion status (none until separately authorized).

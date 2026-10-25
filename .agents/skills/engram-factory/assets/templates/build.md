@@ -11,43 +11,57 @@ input_artifacts: []
 updated_at: "{{timestamp}}"
 ---
 
-# Build evidence: {{feature_title}}
+<!--
+  v2 template. House rules: references/templates.md §Writing rules.
+  The builder's evidence ledger. Gate results are NOT restated here — link
+  verification.md. Every task, finding, and deviation is accounted for.
+-->
 
-## Implementation identity
+# Build: {{feature_title}}
 
-Cycle and upcoming review round: {{cycle_round}}
-Worktree, branch, base and committed head: {{git_identity}}
-Source snapshot path/hash and external package digests: {{snapshot_identity}}
-Platform environment/export provenance and drift check: {{platform_identity}}
-Task, verification and release input hashes: {{artifact_hashes}}
+| Field | Value |
+|---|---|
+| Reader / question | Reviewers and approver asking "what was built, executed, fixed, and honestly not done?" |
+| Status | cycle {{cycle}} · snapshot {{snapshot_path}} |
+| Budget | ≤ 300 narrative words. Tables carry the evidence. |
 
-## Delivered behavior
+## What was built
 
-Behavior change and scope: {{delivered_behavior}}
-Code, configuration, metadata, infrastructure and data changes: {{change_inventory}}
-Deviations from plan, rationale and accepted decision references: {{deviations_or_none}}
+> The implementation story in plain words. ≤ 150 words.
 
-## Completion and evidence
+{{summary}}
 
-| AC / NFR | Completed task IDs | Implementation / native object evidence | Test IDs and run evidence | Result / limitation |
-| --- | --- | --- | --- | --- |
-| {{criterion}} | {{tasks}} | {{implementation}} | {{tests}} | {{result}}
+## Execution evidence
 
-Checks executed, exact procedures, exit status and run IDs: {{check_summary}}
-Required checks not executed and gate consequence: {{unexecuted_checks_or_none}}
-Migration/transport rehearsal and reconciliation: {{rehearsal_results}}
-Secrets/data scan and clean worktree confirmation: {{hygiene}}
+> One row per task, from the task list. Commit + verify command + result.
+> Enforcement: a task row without a commit or without a result fails acceptance.
 
-## Finding resolutions
+| Task | Commit | Verified with | Result |
+|---|---|---|---|
+| TASK-001 | {{execution_evidence}} | `<command>` | one-line observable |
 
-| Finding ID | Resolution / rejected claim with evidence | Commit / exported object | Verification evidence | Remaining risk |
-| --- | --- | --- | --- | --- |
-| {{finding_or_first_build_na}} | {{resolution}} | {{change}} | {{verification}} | {{risk}}
+## Findings resolution
 
-## Review and release readiness
+> One row per review finding, every round. This is the counterpart of tasks §Review rework tracking — both stay filled or both fail.
 
-Reviewer applicability changes since analysis and reason: {{reviewer_changes_or_none}}
-Package completeness, import order and target compatibility evidence: {{packaging}}
-Recovery readiness and known irreversible changes: {{recovery}}
-Open findings, authorized exceptions and owners: {{remaining_items_or_none}}
-Source merged? Platform promoted? State each separately: {{delivery_state}}
+| Finding | Resolution | Proof |
+|---|---|---|
+| FIND-…-001 | fixed · documented · follow-up | commit / test / doc line |
+
+## Deviations
+
+> Every difference between plan and reality, each with a reason. An undocumented deviation found in review is a defect.
+
+{{deviations}}
+
+## Deferred and follow-ups
+
+> `item — owner — trigger`. Deferred work is named, never silent.
+
+{{followups}}
+
+## Self-check
+
+> Imperatives the builder ran before declaring done. Enforcement: approver spot-checks these against raw output.
+
+*(Write: worktree clean and committed · every task verified with its own command · results recorded in verification.md · nothing pre-recorded PASS.)*

@@ -11,54 +11,63 @@ input_artifacts: []
 updated_at: "{{timestamp}}"
 ---
 
+<!--
+  v2 template. House rules: references/templates.md §Writing rules.
+  Tasks are imperative STE-style one-liners. The acceptance map lives in
+  analysis.md §Acceptance — this file links ids, never restates them.
+-->
+
 # Tasks: {{feature_title}}
 
-## Dependency-ordered work
+| Field | Value |
+|---|---|
+| Reader / question | Builder asking "what exactly do I execute, in what order, and what proves each task done?" |
+| Status | cycle {{cycle}} · decomposes plan steps · tests start NOT_RUN |
+| Budget | One line per task. Detail goes in named blocks below the table. |
 
-Use statuses TODO, IN_PROGRESS, BLOCKED, DONE. DONE requires evidence, not an agent assertion.
+## Task list
 
-| Task | Outcome | Depends on | AC / NFR / decision | Components / native objects | Status | Owner role | Completion evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| TASK-001 | {{verifiable_outcome}} | {{ids_or_none}} | {{traceability}} | {{allowed_components}} | TODO | engram-builder | {{required_evidence}}
+> One outcome per task, independently verifiable. Every task names its proof.
+> Enforcement: a task without an evidence command fails build acceptance.
 
-## Task detail: TASK-001
+| Task | Outcome (one sentence, imperative) | Depends on | Covers | Evidence |
+|---|---|---|---|---|
+| TASK-001 | {{first_task}} | — | AC-001 | `<command>` → observable |
+| TASK-002 | {{task_rows}} | TASK-001 | AC-002 | `<command>` → observable |
 
-Purpose and bounded change: {{purpose}}
-Inputs and prerequisites: {{inputs}}
-Allowed write scope and explicitly excluded changes: {{write_scope}}
-Implementation steps and native configuration/code split: {{steps}}
-Permission and negative cases: {{authorization_and_failures}}
-Tests and expected outcomes: {{test_ids_and_results}}
-Export/package/transport and manual configuration requirements: {{delivery_steps}}
-Recovery or cleanup for task side effects: {{recovery}}
-Completion criteria: {{observable_done}}
-Blockers and escalation: {{blockers_or_none}}
-Actual commit/export/run evidence, added by builder: {{actual_evidence_or_not_started}}
+## Execution rules
 
-Repeat task detail for each nontrivial task. Keep small related changes together
-when they share a verification boundary. Expose parallel work only when write
-scopes and environment side effects do not overlap.
+> The builder's contract, restated as imperatives. Enforcement: two consecutive failed verifications on one task → stop and report.
 
-## Acceptance coverage
+{{execution_rules}}
 
-List every complete AC/NFR, task and test identifier explicitly in mapping rows;
-avoid numeric ranges and omitted prefixes so literal searches preserve traceability.
+*(Write: work in dependency order · verify each task with its own command before the next · one commit per task, task id in the message · smallest diff that satisfies the task · record command, result, and reference for every check.)*
 
-| REQ / AC / NFR | Task IDs | Test IDs | Release / recovery step | Gap |
-| --- | --- | --- | --- | --- |
-| {{requirement_ids}} | {{tasks}} | {{tests}} | {{release_steps}} | {{gap_or_none}}
+## Coverage
 
-## Required delivery work
+> Links only. Every AC from analysis appears exactly once, or is named in a reasoned omission. Every TEST row starts NOT_RUN.
 
-Configuration/data migration and reconciliation: {{task_ids_or_reasoned_na}}
-Permission and denied-identity verification: {{task_ids}}
-Integration, bulk, concurrency and failure handling: {{task_ids_or_reasoned_na}}
-Package completeness and source reconciliation: {{task_ids}}
-Release rehearsal, recovery evidence and runbook: {{task_ids}}
-Documentation/operator handoff and follow-ups: {{task_ids}}
+| Links | Ids |
+|---|---|
+| AC coverage | {{ac_links}} |
+| Test inventory | TEST-001..n — one line per case, status NOT_RUN |
+
+## Delivery checklist
+
+> One line each: task ids, or a reasoned N/A. Silence is not allowed — a missing line fails review.
+
+{{delivery_checklist}}
+
+*(Lines: configuration/data migration · permissions incl. denied-identity checks · integration/bulk/concurrency/failure handling · package completeness and reconciliation · release rehearsal and runbook · documentation and operator handoff · follow-ups with owners.)*
 
 ## Review rework tracking
 
-| Cycle / round | Finding ID | Task ID | Resolution / commit / test | Status |
-| --- | --- | --- | --- | --- |
-| {{cycle_round_or_na}} | {{finding_or_na}} | {{task_or_na}} | {{evidence_or_na}} | {{state}}
+> REQUIRED every review round — this table is the supersession record for findings. An empty "N/A" row while a round exists fails validation.
+
+| Round | Finding | Fixed by | Evidence | State |
+|---|---|---|---|---|
+| {{cycle_round_or_na}} | {{finding_or_na}} | {{task_or_na}} | {{evidence_or_na}} | open/resolved |
+
+## Glossary deltas
+
+{{glossary_deltas}}

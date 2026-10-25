@@ -12,36 +12,53 @@ updated_at: "{{timestamp}}"
 recommendation: "ESCALATE"
 ---
 
-# Approval recommendation: {{feature_title}}
+<!--
+  v2 template. This IS the human gate artifact — answer-first, one page.
+  House rules: references/templates.md §Writing rules.
+-->
 
-## Exact decision scope
+# Decision: {{feature_title}}
 
-Source snapshot/hash, base/head and package/export identities: {{source_identity}}
-Cycle, round and required-reviewer set: {{review_scope}}
-Requested action: source merge to {{target_branch}}
-Deployment/promotion authorization is separate: {{promotion_boundary}}
+> **The human authorizes exactly one action by approving this: merge the reviewed
+> source to the target branch. Nothing else — no deployment, no promotion.**
 
-## Gate evidence
+| Field | Value |
+|---|---|
+| Recommendation | See frontmatter (`APPROVE` or `ESCALATE`) |
+| Identity | snapshot `{{snapshot_path}}` · cycle {{cycle}} |
 
-| Gate | Result | Evidence / hash | Limitation / unresolved item |
-| --- | --- | --- | --- |
-| Acceptance and quality criteria covered | {{result}} | {{evidence}} | {{gap_or_none}}
-| Required tests executed successfully | {{result}} | {{evidence}} | {{gap_or_none}}
-| All required independent reviews PASS | {{result}} | {{review_paths_and_hashes}} | {{gap_or_none}}
-| Source/package/configuration identity reconciled | {{result}} | {{evidence}} | {{gap_or_none}}
-| Migration, rollout and recovery feasible | {{result}} | {{evidence}} | {{gap_or_none}}
-| Organization sign-offs and risk exceptions valid | {{result}} | {{evidence}} | {{gap_or_none}}
+## What you authorize
 
-## Risk and recommendation
+> Exact bytes: branch, commit, snapshot, base. No movable refs. If a brief is
+> registered, display its Owner ratification quote and decision ledger here —
+> the human reconciles what they supposedly decided against what ships.
 
-Outstanding findings, residual risks and EXC owners/expiry: {{risks_or_none}}
-Contradictory or missing evidence and resolution: {{contradictions_or_none}}
-Recommendation APPROVE or ESCALATE, with concrete reasons: {{recommendation_reason}}
-Conditions that invalidate this recommendation: source, package, environment,
-accepted evidence or target-base changes; {{additional_conditions}}
+{{authorize}}
 
-## Human decision handoff
+## What was verified — and by whom
 
-Present the exact snapshot, review outcome, executed checks, risks and intended merge.
-Do not fill in a human approval on the user's behalf. The controller records the
-actual user command and actor separately in board.json.
+> Executed evidence only: which gates ran, who executed them, where results live (link verification.md and the review reports — do not restate).
+
+{{verified}}
+
+## What was NOT verified
+
+> The negative evidence, carried forward verbatim from verification §Negative evidence. If this list is empty, say why that is credible.
+
+{{not_verified}}
+
+## What you accept
+
+> Every shipped limitation and follow-up, with owners. Approving means owning these.
+
+{{accepted_risks}}
+
+## What this does not authorize
+
+> Deployment, platform promotion, configuration changes outside Git — each requires its own authorization.
+
+## Why
+
+> The recommendation rationale in ≤ 100 words. If evidence contradicts itself anywhere, name it here or escalate.
+
+{{rationale}}

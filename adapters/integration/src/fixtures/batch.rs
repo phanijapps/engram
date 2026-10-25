@@ -63,6 +63,7 @@ pub fn run_batch_fixture() -> CoreResult<()> {
         // in v1 — honest, not silent.
         evidence: vec![evidence_ref()],
         embeddings: Vec::new(),
+        source_id: None,
     };
 
     let outcome = block_on(batch.ingest(full)).map_err(err("ingest(full)"))?;
@@ -153,6 +154,7 @@ pub fn run_batch_fixture() -> CoreResult<()> {
         relationships: vec![relationship("rel-batch-0")],
         evidence: Vec::new(),
         embeddings: Vec::new(),
+        source_id: None,
     };
     let re_outcome = block_on(batch.ingest(reingest)).map_err(err("ingest(re-ingest)"))?;
     if re_outcome.status != BatchStatus::Complete {
@@ -187,6 +189,7 @@ pub fn run_batch_fixture() -> CoreResult<()> {
         relationships: Vec::new(),
         evidence: Vec::new(),
         embeddings: Vec::new(),
+        source_id: None,
     };
     let partial_outcome = block_on(batch.ingest(partial)).map_err(err("ingest(partial)"))?;
     if partial_outcome.status != BatchStatus::Partial {

@@ -645,6 +645,7 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
         relationships,
         evidence: Vec::new(),
         embeddings: Vec::new(),
+        source_id: None,
     };
     let outcome = block_on(batch.ingest(request)).map_err(internal)?;
 
@@ -782,6 +783,7 @@ pub fn index_docs(app: &App, args: &Value) -> Result<Value, ToolError> {
         relationships: Vec::new(),
         evidence: Vec::new(),
         embeddings: Vec::new(),
+        source_id: None,
     };
     let batch = app.provider.require_batch().map_err(internal)?;
     let outcome = block_on(batch.ingest(request)).map_err(internal)?;
@@ -1086,6 +1088,7 @@ pub(crate) mod tests {
             relationships: Vec::new(),
             evidence: Vec::new(),
             embeddings: Vec::new(),
+            source_id: None,
         };
         let outcome = block_on(batch.ingest(req)).expect("ingest");
         let guarantee = format!("{:?}", outcome.guarantee);

@@ -199,6 +199,7 @@ fn well_formed_batch_is_complete_with_evidence_embeddings_skipped() {
         relationships: vec![relationship("batch-rel-0")],
         evidence: Vec::new(),
         embeddings: Vec::new(),
+        source_id: None,
     };
 
     let outcome = block_on(batch.ingest(request)).expect("ingest");
@@ -268,6 +269,7 @@ fn three_distinct_memories_under_one_batch_key_all_land() {
         relationships: Vec::new(),
         evidence: Vec::new(),
         embeddings: Vec::new(),
+        source_id: None,
     };
 
     let outcome = block_on(batch.ingest(request)).expect("ingest");
@@ -312,6 +314,7 @@ fn reingest_deduplicates_facts_and_succeeds_knowledge() {
         relationships: vec![relationship("reingest-rel")],
         evidence: Vec::new(),
         embeddings: Vec::new(),
+        source_id: None,
     };
 
     // First ingest: everything fresh.
@@ -363,6 +366,7 @@ fn failing_step_records_typed_error_others_land_overall_partial() {
         relationships: vec![relationship("partial-rel")],
         evidence: Vec::new(),
         embeddings: Vec::new(),
+        source_id: None,
     };
 
     let outcome = block_on(batch.ingest(request)).expect("ingest");
@@ -413,6 +417,7 @@ fn empty_writable_steps_report_skipped() {
         relationships: Vec::new(),
         evidence: Vec::new(),
         embeddings: Vec::new(),
+        source_id: None,
     };
     let outcome = block_on(batch.ingest(request)).expect("ingest");
     assert_eq!(outcome.status, BatchStatus::Complete);

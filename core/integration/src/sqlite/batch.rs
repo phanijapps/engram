@@ -54,6 +54,10 @@ use crate::{
     TransactionGuarantee, aggregate_status,
 };
 
+use super::batch_supersession::{
+    SourcedStepOutcome, registry_source, run_entities_step, run_facts_step, run_relationships_step,
+};
+
 /// SQLite-backed [`BatchIngest`]: best-effort batch ingest across the separate
 /// memory and knowledge SQLite stores.
 ///
@@ -73,10 +77,20 @@ impl SqlBatchIngest {
     /// Episode step: writes the optional source, documents, and chunks via the
     /// knowledge repository. An empty episode reports [`StepStatus::Skipped`].
     /// The batch [`Scope`] is authoritative — each record is re-scoped to it.
+    /// A **sourced** batch additionally puts the registry `KnowledgeSource`
+    /// row (id = source_id) so distill sources are queryable — soft-failed
+    /// like the rest of the episode writes.
     async fn step_episode(&self, request: &BatchIngestRequest) -> StepOutcome {
         let step = BatchStep::Episode;
-        let has_episode =
-            request.source.is_some() || !request.documents.is_empty() || !request.chunks.is_empty();
+        let registry = request
+            .source_id
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(|sid| registry_source(sid, &request.scope));
+        let has_episode = request.source.is_some()
+            || !request.documents.is_empty()
+            || !request.chunks.is_empty()
+            || registry.is_some();
         if !has_episode {
             return StepOutcome::ok(step, StepStatus::Skipped);
         }
@@ -87,6 +101,12 @@ impl SqlBatchIngest {
             if let Err(e) = self.knowledge.put_source(record).await {
                 failure = Some(e);
             }
+        }
+        if let Some(registry) = registry
+            && let Err(e) = self.knowledge.put_source(registry).await
+            && failure.is_none()
+        {
+            failure = Some(e);
         }
         for document in &request.documents {
             // SourceDocument carries no scope field; written through unchanged.
@@ -124,8 +144,21 @@ impl SqlBatchIngest {
     /// any record freshly written (none failed) → `Succeeded`; any record
     /// failed → `Failed` (the remaining records are still attempted so every
     /// record that can land does).
+    ///
+    /// A **sourced** batch runs the supersession executor instead (prior facts
+    /// tombstoned, facts stamped + ledgered; same key derivation); an unsourced
+    /// batch takes this path byte-identically to before.
     async fn step_facts(&self, request: &BatchIngestRequest) -> StepOutcome {
         let step = BatchStep::Facts;
+        if request
+            .source_id
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty())
+        {
+            let result =
+                run_facts_step(self.memory.as_ref(), self.knowledge.as_ref(), request).await;
+            return sourced_outcome(step, request.facts.is_empty(), result);
+        }
         if request.facts.is_empty() {
             return StepOutcome::ok(step, StepStatus::Skipped);
         }
@@ -175,18 +208,51 @@ impl SqlBatchIngest {
     /// Entities step: upserts each entity via the knowledge repository (by
     /// record id). Re-ingest overwrites → [`StepStatus::Succeeded`] (the store
     /// has no key-based dedup, so `Deduplicated` is never reported here).
-    async fn step_entities(&self, records: &[KnowledgeEntity], scope: &Scope) -> StepOutcome {
-        write_entities(BatchStep::Entities, records, scope, &self.knowledge).await
+    /// A **sourced** batch runs the supersession executor instead.
+    async fn step_entities(&self, request: &BatchIngestRequest) -> StepOutcome {
+        if request
+            .source_id
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty())
+        {
+            let result =
+                run_entities_step(self.knowledge.as_ref(), self.knowledge.as_ref(), request).await;
+            return sourced_outcome(BatchStep::Entities, request.entities.is_empty(), result);
+        }
+        write_entities(
+            BatchStep::Entities,
+            &request.entities,
+            &request.scope,
+            &self.knowledge,
+        )
+        .await
     }
 
     /// Relationships step: upserts each relationship via the knowledge
     /// repository (by record id). Re-ingest overwrites → `Succeeded`.
-    async fn step_relationships(
-        &self,
-        records: &[KnowledgeRelationship],
-        scope: &Scope,
-    ) -> StepOutcome {
-        write_relationships(BatchStep::Relationships, records, scope, &self.knowledge).await
+    /// A **sourced** batch runs the supersession executor instead.
+    async fn step_relationships(&self, request: &BatchIngestRequest) -> StepOutcome {
+        if request
+            .source_id
+            .as_deref()
+            .is_some_and(|s| !s.trim().is_empty())
+        {
+            let result =
+                run_relationships_step(self.knowledge.as_ref(), self.knowledge.as_ref(), request)
+                    .await;
+            return sourced_outcome(
+                BatchStep::Relationships,
+                request.relationships.is_empty(),
+                result,
+            );
+        }
+        write_relationships(
+            BatchStep::Relationships,
+            &request.relationships,
+            &request.scope,
+            &self.knowledge,
+        )
+        .await
     }
 }
 
@@ -203,11 +269,8 @@ impl BatchIngest for SqlBatchIngest {
         let mut steps = Vec::with_capacity(ALL_STEPS.len());
         steps.push(self.step_episode(&request).await);
         steps.push(self.step_facts(&request).await);
-        steps.push(self.step_entities(&request.entities, &request.scope).await);
-        steps.push(
-            self.step_relationships(&request.relationships, &request.scope)
-                .await,
-        );
+        steps.push(self.step_entities(&request).await);
+        steps.push(self.step_relationships(&request).await);
         // Evidence is not a separate batch write in v1 — honest `Skipped`, never
         // silent. Evidence is embedded in the records' `Provenance.evidence` and
         // lands via the existing per-store writes; attaching evidence to records
@@ -292,6 +355,22 @@ fn requester_from(actor: Actor) -> Requester {
         roles: Vec::new(),
         permissions: vec!["memory.write".to_string()],
         on_behalf_of: None,
+    }
+}
+
+/// Projects a sourced step result into a [`StepOutcome`]: the derived status
+/// plus the supersession counts (attached even when `Failed` — the counts for
+/// what did land are surfaced, never hidden).
+fn sourced_outcome(
+    step: BatchStep,
+    empty_payload: bool,
+    result: SourcedStepOutcome,
+) -> StepOutcome {
+    let status = result.status(empty_payload);
+    let counts = result.counts;
+    match result.failure {
+        Some(e) => StepOutcome::failed(step, e).with_counts(counts),
+        None => StepOutcome::ok(step, status).with_counts(counts),
     }
 }
 

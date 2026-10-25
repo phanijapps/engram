@@ -299,6 +299,7 @@ pub(crate) fn batch_ok() -> bool {
         relationships: vec![batch_relationship("rel-batch-0")],
         evidence: Vec::new(),
         embeddings: Vec::new(),
+        source_id: None,
     };
     block_on(batch.ingest(request))
         .map(|outcome| outcome.status == crate::BatchStatus::Complete)

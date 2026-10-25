@@ -181,6 +181,19 @@ pub struct SupersessionCounts {
     pub failed: usize,
 }
 
+impl SupersessionCounts {
+    /// True when this step changed anything beyond examining rows (a
+    /// retraction, ref removal, restore, or immunity retirement landed).
+    pub fn has_effects(&self) -> bool {
+        self.forgotten_facts > 0
+            || self.archived_entities > 0
+            || self.archived_relationships > 0
+            || self.refs_removed > 0
+            || self.restored > 0
+            || self.immune_skipped > 0
+    }
+}
+
 /// The overall batch status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BatchStatus {

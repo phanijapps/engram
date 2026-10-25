@@ -37,7 +37,7 @@ no vector lane). FastEmbed is a compile-time feature toggle, not enabled here.
 
 Every tool routes through `EngramProvider` (`engram-integration`); the server
 never calls an LLM — extraction is the calling agent's job (see the
-`engram-distill` skill in `extensions/`).
+`engram-distill` skill in `skills/`).
 
 ## Status
 

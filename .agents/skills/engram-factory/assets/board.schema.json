@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:engram-factory:board:1.0",
+  "title": "Engram Factory board",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "revision", "target", "jobs"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "revision": {"type": "integer", "minimum": 0},
+    "target": {"type": "string", "minLength": 1},
+    "jobs": {"type": "array", "items": {"$ref": "#/$defs/job"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "archive"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "archive": {"type": "string", "minLength": 1}
+      }
+    },
+    "review": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["verdict"], "properties": {"verdict": {"const": "pending"}}},
+        {"type": "object", "additionalProperties": false,
+         "required": ["verdict", "path", "sha256", "archive"],
+         "properties": {
+           "verdict": {"enum": ["PASS", "CHANGES", "ERROR"]},
+           "path": {"type": "string"},
+           "sha256": {"$ref": "#/$defs/sha256"},
+           "archive": {"type": "string"}
+         }}
+      ]
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["job_id", "feature", "profiles", "created_at", "updated_at", "stage", "status", "cycle", "round", "target", "branch", "base_sha", "worktree", "snapshot", "required_reviewers", "reviews", "artifacts", "approval", "blocker", "resume_from", "history"],
+      "properties": {
+        "job_id": {"type": "string", "pattern": "^[0-9]{3,}-[a-z0-9]+(?:-[a-z0-9]+)*$"},
+        "feature": {"type": "string", "minLength": 1},
+        "profiles": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["full-stack", "servicenow", "salesforce", "sap", "maximo"]}},
+        "created_at": {"type": "string", "format": "date-time"},
+        "updated_at": {"type": "string", "format": "date-time"},
+        "stage": {"enum": ["analyze", "plan", "tasks", "build", "review", "approve", "merge", "merged", "needs-human"]},
+        "status": {"enum": ["running", "blocked", "awaiting-recommendation", "awaiting-approval", "approved", "complete"]},
+        "cycle": {"type": "integer", "minimum": 1},
+        "round": {"type": "integer", "minimum": 0, "maximum": 3},
+        "target": {"type": "string"},
+        "branch": {"type": "string", "pattern": "^factory/"},
+        "base_sha": {"type": "string", "pattern": "^[a-f0-9]{40,64}$"},
+        "worktree": {"type": "string"},
+        "snapshot": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/evidence"}]},
+        "required_reviewers": {"type": "array", "uniqueItems": true, "items": {"enum": ["code", "security", "platform", "ux", "ui", "backend", "data", "operations"]}},
+        "reviews": {"type": "object", "additionalProperties": {"$ref": "#/$defs/review"}},
+        "artifacts": {"type": "object", "additionalProperties": {"$ref": "#/$defs/evidence"}},
+        "approval": {"oneOf": [
+          {"type": "null"},
+          {"type": "object", "additionalProperties": false,
+           "required": ["actor", "instruction", "at", "snapshot_sha256"],
+           "properties": {"actor": {"type": "string", "minLength": 1}, "instruction": {"type": "string", "minLength": 1}, "at": {"type": "string", "format": "date-time"}, "snapshot_sha256": {"$ref": "#/$defs/sha256"}}}
+        ]},
+        "blocker": {"type": ["object", "null"], "additionalProperties": false, "required": ["code", "reason"], "properties": {"code": {"type": "string"}, "reason": {"type": "string"}}},
+        "resume_from": {"type": ["object", "null"], "additionalProperties": false, "required": ["stage", "status"], "properties": {"stage": {"type": "string"}, "status": {"type": "string"}}},
+        "history": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["at", "action", "detail"], "properties": {"at": {"type": "string", "format": "date-time"}, "action": {"type": "string"}, "detail": {}}}}
+      }
+    }
+  }
+}

@@ -73,12 +73,10 @@ session). Label untested steps in the trigger field ("untested").
 Check what already exists first — `procedure_list({})` — and re-put to
 update, don't duplicate.
 
-Optionally, entities + relationships for the top abstractions:
-
-```
-put_entity({ "name": "Scanner", "kind": "class" })
-put_relationship({ "subject": "Scanner", "predicate": "describes", "object": "ingest pipeline" })
-```
+`write_memory` and `procedure_put` are this skill's authorized writes:
+structure-derived memories and repo runbooks. Conceptual entities and
+relationships are **not** written here — after indexing, run an
+`engram-distill` pass to bridge concepts to the code this scan discovered.
 
 ### 3. Verify (write → read-back)
 

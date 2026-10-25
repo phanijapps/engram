@@ -59,23 +59,17 @@ procedure_put({ "name": "scan-repo",
             "graph_health {}"] })
 ```
 
-## Entity/relationship formats (put_entity / put_relationship)
+## Concept extraction (NOT here — engram-distill)
 
-Top abstractions only — the graph already knows every symbol; entities
-are for the CONCEPTS the graph can't infer:
-
-```
-put_entity({ "name": "Engine Neutrality", "kind": "concept" })
-put_relationship({ "subject": "Engine Neutrality", "predicate":
-  "realized_by", "object": "check-engine-neutrality" })
-```
-
-Bridge concepts to the code that realizes them; a concept linked to
-nothing is an orphan in a disconnected subgraph.
+The graph already knows every symbol; concepts the graph can't infer
+(business rules, domain terms, design principles) are extracted by an
+**engram-distill** pass over the repo's docs, keyed by source. Do not
+call `put_entity`/`put_relationship` from this skill — a concept not
+source-keyed and bridged by distill is an orphan waiting to happen.
 
 ## What NOT to memorize
 
 - File counts, line counts, dependency version trivia
 - Boilerplate names, test fixture names
 - Anything `architecture`/`symbol_context` answers on demand
-- Session play-by-play (that's engram-learn's job, and only the durable parts)
+- Session play-by-play (that's engram-mem's job, and only the durable parts)

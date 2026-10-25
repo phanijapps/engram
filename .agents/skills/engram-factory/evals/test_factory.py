@@ -1,0 +1,406 @@
+"""Run: python3 -m unittest discover -s evals -v. Uses disposable repositories."""
+
+import importlib.util
+import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+SKILL = Path(__file__).resolve().parents[1]
+SCRIPT = SKILL / "scripts" / "factory.py"
+spec = importlib.util.spec_from_file_location("factory_under_test", SCRIPT)
+factory = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(factory)
+
+
+class FactoryTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="factory-eval-")
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.git(self.repo, "init", "-b", "main")
+        self.git(self.repo, "config", "user.name", "Factory Test")
+        self.git(self.repo, "config", "user.email", "factory-test@example.invalid")
+        (self.repo / "app.txt").write_text("baseline\n")
+        self.git(self.repo, "add", "app.txt")
+        self.git(self.repo, "commit", "-m", "baseline")
+        self.feature = self.root / "feature.txt"
+        self.feature.write_text("Add an audited approval transition for authorized operators.\n")
+        self.run_cli("init")
+        self.job_id = None
+
+    @staticmethod
+    def git(repo, *args):
+        result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+        if result.returncode:
+            raise AssertionError(result.stderr)
+        return result.stdout.strip()
+
+    def run_cli(self, *args, fail=False, revision=None):
+        command = [sys.executable, str(SCRIPT), "--repo", str(self.repo)]
+        if revision is not None:
+            command += ["--expected-revision", str(revision)]
+        result = subprocess.run(command + list(args), text=True, capture_output=True)
+        if fail:
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertNotIn("Traceback", result.stderr)
+            return json.loads(result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def create(self, profiles="full-stack"):
+        result = self.run_cli("create", "--feature-file", str(self.feature), "--slug", "approval-flow", "--profiles", profiles)
+        self.job_id = result["result"]["job_id"]
+        self.jobdir = self.repo / ".engram-factory" / "jobs" / self.job_id
+        return result["result"]
+
+    def job(self):
+        return self.run_cli("status", "--job", self.job_id)["result"]
+
+    def fill(self, kind, role, inputs, snapshot=None, path=None, **extra):
+        job = self.job()
+        path = path or kind + ".md"
+        fields = {"schema_version": "1.0", "artifact_type": kind, "job_id": self.job_id,
+                  "cycle": job["cycle"], "status": "ready", "author_role": role,
+                  "profiles": job["profiles"], "source_snapshot": snapshot,
+                  "input_artifacts": [factory.ref(self.jobdir, p) for p in inputs],
+                  "updated_at": factory.now(), **extra}
+        if kind == "analysis":
+            fields["required_reviewers"] = getattr(self, "analysis_reviewers", ["code", "security", "platform"])
+        output = self.jobdir / path
+        output.parent.mkdir(parents=True, exist_ok=True)
+        header = "\n".join(key + ": " + json.dumps(value) for key, value in fields.items())
+        output.write_text("---\n" + header + "\n---\n\n# Controller fixture\n\n## Evidence\n\n"
+                          "Synthetic fixture for exercising controller integrity gates only. "
+                          "This is not a real feature analysis, execution result, review or approval.\n")
+        return path
+
+    def upstream(self):
+        job = self.job()
+        extra = [job["artifacts"]["rework"]["path"]] if "rework" in job["artifacts"] else []
+        self.fill("analysis", "engram-analyzer", ["feature.md"] + extra)
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
+        self.fill("plan", "engram-planner", ["analysis.md"] + extra)
+        self.run_cli("complete", "--job", self.job_id, "--stage", "plan", "--artifacts", "plan.md")
+        for kind in ("tasks", "verification", "release"):
+            self.fill(kind, "engram-tasks", ["analysis.md", "plan.md"] + extra)
+        self.run_cli("complete", "--job", self.job_id, "--stage", "tasks", "--artifacts", "tasks.md", "verification.md", "release.md")
+
+    def build(self, exports=None, reviewers="code,security,platform", fail=False):
+        job = self.job()
+        worktree = Path(job["worktree"])
+        self.build_count = getattr(self, "build_count", 0) + 1
+        (worktree / "app.txt").write_text(f"implementation {job['cycle']} {job['round']} {self.build_count}\n")
+        self.git(worktree, "add", "app.txt")
+        self.git(worktree, "commit", "-m", "implement approval transition")
+        env = self.jobdir / "environment.json"
+        if not env.exists():
+            env.write_text(json.dumps({"environment": "disposable-test", "product": "fixture",
+                                      "version": "1", "observed_at": factory.now(), "baseline": "fixture-1"}))
+        args = ["snapshot", "--job", self.job_id, "--environment", str(env)]
+        if exports:
+            args += ["--exports", *map(str, exports)]
+        self.run_cli(*args)
+        job = self.job()
+        snapshot = job["snapshot"]["path"]
+        upstream = ["analysis.md", "plan.md"]
+        if "rework" in job["artifacts"]:
+            upstream += [job["artifacts"]["rework"]["path"]]
+        for kind in ("tasks", "verification", "release"):
+            self.fill(kind, "engram-builder", upstream, snapshot)
+        self.fill("build", "engram-builder", upstream + ["tasks.md", "verification.md", "release.md"], snapshot)
+        self.run_cli("complete", "--job", self.job_id, "--stage", "build", "--snapshot", snapshot,
+                     "--reviewers", reviewers, "--artifacts", "build.md", "tasks.md", "verification.md", "release.md", fail=fail)
+
+    def review(self, discipline, verdict="PASS", attempt=""):
+        job = self.job()
+        path = f"cycle-{job['cycle']}/round-{job['round']}/review-{discipline}{attempt}.md"
+        self.fill("review", "reviewer-" + discipline, [i["path"] for i in job["artifacts"].values()],
+                  job["snapshot"]["path"], path, round=job["round"], discipline=discipline, verdict=verdict)
+        return self.run_cli("review", "--job", self.job_id, "--discipline", discipline, "--artifact", path)
+
+    def decision(self, recommendation="APPROVE"):
+        job = self.job()
+        inputs = [i["path"] for i in job["artifacts"].values()] + [i["path"] for i in job["reviews"].values()]
+        self.fill("decision", "engram-approver", inputs, job["snapshot"]["path"], recommendation=recommendation)
+        self.run_cli("decision", "--job", self.job_id, "--artifact", "decision.md")
+
+    def to_approval(self):
+        self.create()
+        self.upstream()
+        self.build()
+        for reviewer in ("code", "security", "platform"):
+            self.review(reviewer)
+        self.decision()
+
+    def approve(self):
+        instruction = self.root / "approval.txt"
+        instruction.write_text("/factory approve " + self.job_id)
+        return self.run_cli("approve", "--job", self.job_id, "--actor", "test-human", "--instruction-file", str(instruction))
+
+    def test_happy_path_requires_explicit_approval_and_merges(self):
+        self.to_approval()
+        self.run_cli("merge", "--job", self.job_id, fail=True)
+        self.approve()
+        self.run_cli("merge", "--job", self.job_id)
+        job = self.job()
+        self.assertEqual(job["stage"], "merged")
+        self.assertEqual(self.git(self.repo, "rev-parse", "HEAD"), self.git(job["worktree"], "rev-parse", "HEAD"))
+        self.assertFalse(self.git(self.repo, "status", "--porcelain"))
+        self.assertFalse(self.git(self.repo, "ls-files", ".engram-factory"))
+
+    def test_waits_for_all_reviewers_before_rebuild(self):
+        self.create(); self.upstream(); self.build()
+        self.review("code", "CHANGES")
+        self.assertEqual(self.job()["stage"], "review")
+        self.review("security")
+        self.assertEqual(self.job()["stage"], "review")
+        self.review("platform")
+        self.assertEqual(self.job()["stage"], "build")
+        self.build()
+        self.assertEqual(self.job()["round"], 2)
+        self.assertTrue(all(r["verdict"] == "pending" for r in self.job()["reviews"].values()))
+
+    def test_round_limit_cannot_be_reset_by_resume(self):
+        self.create(); self.upstream()
+        for _ in range(3):
+            self.build()
+            self.review("code", "CHANGES")
+            self.review("security")
+            self.review("platform")
+        self.assertEqual(self.job()["blocker"]["code"], "round-limit")
+        self.run_cli("resume", "--job", self.job_id, "--reason", "try again", fail=True)
+        note = self.root / "rework.txt"
+        note.write_text("Address unresolved transition defect and revalidate scope.")
+        self.run_cli("rework", "--job", self.job_id, "--note-file", str(note))
+        self.assertEqual((self.job()["cycle"], self.job()["round"], self.job()["stage"]), (2, 0, "analyze"))
+        self.assertIsNone(self.job()["approval"])
+        self.upstream()
+
+    def test_manual_block_and_resume_round_trip(self):
+        self.create(); self.upstream(); self.build()
+        self.run_cli("block", "--job", self.job_id, "--reason", "operator question")
+        job = self.job()
+        self.assertEqual((job["stage"], job["blocker"]["code"]), ("needs-human", "manual"))
+        self.assertEqual(job["resume_from"], {"stage": "review", "status": "running"})
+        self.run_cli("resume", "--job", self.job_id, "--reason", "operator answered")
+        job = self.job()
+        self.assertEqual((job["stage"], job["status"]), ("review", "running"))
+        self.assertIsNone(job["blocker"])
+        self.assertTrue(all(r["verdict"] == "pending" for r in job["reviews"].values()))
+
+    def test_refresh_base_integrates_advanced_target(self):
+        self.create(); self.upstream()
+        (self.repo / "other.txt").write_text("concurrent target change\n")
+        self.git(self.repo, "add", "other.txt"); self.git(self.repo, "commit", "-m", "concurrent")
+        env = self.jobdir / "environment.json"
+        env.write_text(json.dumps({"environment": "disposable-test", "product": "fixture",
+                                   "version": "1", "observed_at": factory.now(), "baseline": "fixture-1"}))
+        self.run_cli("snapshot", "--job", self.job_id, "--environment", str(env), fail=True)
+        self.assertEqual(self.job()["stage"], "build")
+        worktree = Path(self.job()["worktree"])
+        self.git(worktree, "merge", self.job()["target"])
+        self.run_cli("refresh-base", "--job", self.job_id)
+        self.assertEqual(self.job()["base_sha"], self.git(self.repo, "rev-parse", "main"))
+        self.build()
+        self.assertEqual(self.job()["round"], 1)
+
+    def test_rework_completes_full_second_cycle_and_merges(self):
+        self.create(); self.upstream()
+        for _ in range(3):
+            self.build()
+            self.review("code", "CHANGES"); self.review("security"); self.review("platform")
+        note = self.root / "rework.txt"
+        note.write_text("Address unresolved transition defect and revalidate scope.")
+        self.run_cli("rework", "--job", self.job_id, "--note-file", str(note))
+        self.upstream(); self.build()
+        for reviewer in ("code", "security", "platform"):
+            self.review(reviewer)
+        self.decision(); self.approve()
+        self.run_cli("merge", "--job", self.job_id)
+        job = self.job()
+        self.assertEqual((job["cycle"], job["stage"]), (2, "merged"))
+        self.assertEqual(self.git(self.repo, "rev-parse", "HEAD"), self.git(job["worktree"], "rev-parse", "HEAD"))
+
+    def test_missing_external_original_falls_back_to_archive(self):
+        self.create("salesforce"); self.upstream()
+        package = self.root / "metadata.zip"; package.write_bytes(b"fixture-package")
+        self.build([package])
+        package.unlink()
+        result = self.review("code")
+        self.assertEqual(result["result"]["reviews"]["code"]["verdict"], "PASS")
+
+    def test_error_recovery_preserves_successful_reviews(self):
+        self.create(); self.upstream(); self.build()
+        self.review("code", "ERROR"); self.review("security"); self.review("platform")
+        old = self.job()["reviews"]["security"].copy()
+        self.run_cli("resume", "--job", self.job_id, "--reason", "review environment repaired")
+        self.assertEqual(self.job()["reviews"]["security"], old)
+        self.review("code", attempt="-attempt-2")
+        self.assertEqual(self.job()["stage"], "approve")
+
+    def test_approver_escalation_blocks_generic_resume(self):
+        self.create(); self.upstream(); self.build()
+        for reviewer in ("code", "security", "platform"):
+            self.review(reviewer)
+        self.decision("ESCALATE")
+        self.assertEqual(self.job()["stage"], "needs-human")
+        self.run_cli("resume", "--job", self.job_id, "--reason", "override", fail=True)
+
+    def test_changed_code_invalidates_approval(self):
+        self.to_approval()
+        worktree = Path(self.job()["worktree"])
+        (worktree / "app.txt").write_text("unreviewed change\n")
+        self.git(worktree, "add", "app.txt"); self.git(worktree, "commit", "-m", "unreviewed")
+        instruction = self.root / "approval.txt"; instruction.write_text("approve")
+        self.run_cli("approve", "--job", self.job_id, "--actor", "test", "--instruction-file", str(instruction), fail=True)
+
+    def test_changed_target_invalidates_merge(self):
+        self.to_approval(); self.approve()
+        (self.repo / "other.txt").write_text("concurrent target change\n")
+        self.git(self.repo, "add", "other.txt"); self.git(self.repo, "commit", "-m", "concurrent")
+        self.run_cli("merge", "--job", self.job_id, fail=True)
+        self.assertEqual(self.job()["stage"], "merge")
+
+    def test_merge_recovers_when_git_finished_before_board_update(self):
+        self.to_approval(); self.approve()
+        self.git(self.repo, "merge", "--ff-only", self.job()["branch"])
+        self.run_cli("merge", "--job", self.job_id)
+        self.assertEqual(self.job()["stage"], "merged")
+
+    def test_merge_pins_sha_if_job_branch_moves_after_validation(self):
+        self.to_approval(); self.approve()
+        board = self.run_cli("status")["result"]
+        job = board["jobs"][0]
+        approved = json.loads((self.jobdir / job["snapshot"]["path"]).read_text())["head_sha"]
+        real_check = factory.source_check
+
+        def move_after_check(*args, **kwargs):
+            snapshot = real_check(*args, **kwargs)
+            worktree = Path(job["worktree"])
+            (worktree / "app.txt").write_text("unreviewed concurrent commit\n")
+            self.git(worktree, "add", "app.txt")
+            self.git(worktree, "commit", "-m", "branch moved after validation")
+            return snapshot
+
+        args = factory.parser().parse_args(["merge", "--job", self.job_id])
+        with mock.patch.object(factory, "source_check", side_effect=move_after_check):
+            factory.execute(args, self.repo, self.repo / ".engram-factory", board)
+        self.assertEqual(self.git(self.repo, "rev-parse", "HEAD"), approved)
+
+    def test_package_drift_blocks_reviews(self):
+        self.create("salesforce"); self.upstream()
+        package = self.root / "metadata.zip"; package.write_bytes(b"fixture-package")
+        self.build([package])
+        package.write_bytes(b"different-package")
+        job = self.job()
+        self.fill("review", "reviewer-code", [i["path"] for i in job["artifacts"].values()], job["snapshot"]["path"],
+                  "review-code.md", round=1, discipline="code", verdict="PASS")
+        self.run_cli("review", "--job", self.job_id, "--discipline", "code", "--artifact", "review-code.md", fail=True)
+
+    def test_environment_change_blocks_review(self):
+        self.create(); self.upstream(); self.build()
+        (self.jobdir / "environment.json").write_text('{"environment":"changed"}')
+        self.run_cli("review", "--job", self.job_id, "--discipline", "code", "--artifact", "missing.md", fail=True)
+
+    def test_invalid_artifact_does_not_advance_or_increment_revision(self):
+        self.create()
+        before = self.run_cli("status")["revision"]
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.assertEqual(self.run_cli("status")["revision"], before)
+        self.fill("analysis", "engram-builder", ["feature.md"])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.assertEqual(self.job()["stage"], "analyze")
+
+    def test_missing_or_stale_required_input_blocks_handoff(self):
+        self.create()
+        self.fill("analysis", "engram-analyzer", [])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.fill("analysis", "engram-analyzer", ["feature.md"])
+        (self.jobdir / "feature.md").write_text("tampered feature")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+
+    def test_single_job_and_stale_revision_enforced(self):
+        self.create()
+        self.run_cli("create", "--feature-file", str(self.feature), "--slug", "another", fail=True)
+        self.run_cli("block", "--job", self.job_id, "--reason", "blocked", revision=0, fail=True)
+
+    def test_concurrent_starts_have_one_winner(self):
+        command = [sys.executable, str(SCRIPT), "--repo", str(self.repo), "create", "--feature-file", str(self.feature)]
+        first = subprocess.Popen(command + ["--slug", "first"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        second = subprocess.Popen(command + ["--slug", "second"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        first.communicate(timeout=20)
+        second.communicate(timeout=20)
+        self.assertEqual(sorted([first.returncode, second.returncode]), [0, 2])
+        self.assertEqual(len(self.run_cli("status")["result"]["jobs"]), 1)
+
+    def test_platform_snapshot_requires_export_evidence(self):
+        self.create("maximo"); self.upstream()
+        env = self.jobdir / "environment.json"
+        env.write_text(json.dumps({"environment": "test", "product": "fixture", "version": "1",
+                                   "observed_at": factory.now(), "baseline": "baseline"}))
+        self.run_cli("snapshot", "--job", self.job_id, "--environment", str(env), fail=True)
+
+    def test_required_reviewer_cannot_be_omitted(self):
+        self.create(); self.upstream(); self.build()
+        self.review("code", "CHANGES"); self.review("security"); self.review("platform")
+        job = self.job()
+        env = self.jobdir / "environment.json"
+        self.run_cli("snapshot", "--job", self.job_id, "--environment", str(env))
+        snapshot = self.job()["snapshot"]["path"]
+        for kind in ("tasks", "verification", "release"):
+            self.fill(kind, "engram-builder", ["analysis.md", "plan.md"], snapshot)
+        self.fill("build", "engram-builder", ["analysis.md", "plan.md", "tasks.md", "verification.md", "release.md"], snapshot)
+        self.run_cli("complete", "--job", self.job_id, "--stage", "build", "--snapshot", snapshot,
+                     "--reviewers", "code,security", "--artifacts", "build.md", "tasks.md", "verification.md", "release.md", fail=True)
+        self.assertEqual(self.job()["stage"], "build")
+
+    def test_analysis_specific_reviewer_cannot_be_dropped(self):
+        self.analysis_reviewers = ["code", "security", "platform", "data"]
+        self.create(); self.upstream()
+        self.build(fail=True)
+        self.assertEqual(self.job()["stage"], "build")
+        self.assertIn("data", self.job()["required_reviewers"])
+
+    def test_dirty_primary_prevents_start_but_not_status(self):
+        (self.repo / "app.txt").write_text("user work\n")
+        self.run_cli("create", "--feature-file", str(self.feature), "--slug", "dirty", fail=True)
+        self.assertEqual(self.run_cli("status")["result"]["jobs"], [])
+
+    def test_artifact_cannot_escape_job(self):
+        self.create()
+        self.run_cli("validate-artifact", "--job", self.job_id, "--artifact", "../outside.md", fail=True)
+
+    def test_archive_tampering_blocks_handoff(self):
+        self.create()
+        archive = self.jobdir / self.job()["artifacts"]["feature"]["archive"]
+        archive.write_text("tampered archive")
+        self.fill("analysis", "engram-analyzer", ["feature.md"])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+
+    def test_profiles_compose_into_phase_specific_templates(self):
+        self.create("full-stack,salesforce,sap,servicenow,maximo")
+        for name in ("analysis", "plan", "tasks", "verification", "release"):
+            text = (self.jobdir / (name + ".md")).read_text()
+            for profile in factory.PROFILES:
+                self.assertIn("## Profile: " + profile, text)
+                self.assertIn("{{" + profile + "_" + name + "_evidence}}", text)
+
+    def test_board_matches_published_schema_when_validator_available(self):
+        try:
+            import jsonschema
+        except ImportError:
+            self.skipTest("Optional jsonschema package unavailable; core tests use stdlib")
+        self.to_approval(); self.approve()
+        board = self.run_cli("status")["result"]
+        schema = json.loads((SKILL / "assets" / "board.schema.json").read_text())
+        jsonschema.Draft202012Validator(schema).validate(board)
+
+
+if __name__ == "__main__":
+    unittest.main()

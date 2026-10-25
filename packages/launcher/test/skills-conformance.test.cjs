@@ -20,10 +20,9 @@ const { spawnSync } = require('node:child_process');
 const SKILLS_ROOT = path.join(__dirname, '..', 'skills');
 const EXPECTED_SKILLS = [
   'engram-index',
-  'engram-learn',
-  'engram-search',
-  'engram-plan',
-  'engram-implement',
+  'engram-know',
+  'engram-mem',
+  'engram-distill',
 ];
 const REQUIRED_SECTIONS = [
   /## Contract/,
@@ -53,8 +52,8 @@ function resolveBinary() {
   return fs.existsSync(dev) ? dev : null;
 }
 
-/** Live tools/list from the real server (default 21-tool surface). */
-function liveToolNames() {
+/** Live tools/list from the real server, launched with extra args (tool profile). */
+function liveToolNames(extraArgs = []) {
   const bin = resolveBinary();
   if (!bin) return null;
   const store = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-conformance-'));
@@ -64,7 +63,7 @@ function liveToolNames() {
       '-e',
       `
       const {spawn} = require('node:child_process');
-      const p = spawn(${JSON.stringify(bin)}, ['--storage', ${JSON.stringify(store)}, '--project', 'conformance', '--no-vector'], {stdio:['pipe','pipe','inherit']});
+      const p = spawn(${JSON.stringify(bin)}, ['--storage', ${JSON.stringify(store)}, '--project', 'conformance', '--no-vector', ...${JSON.stringify(extraArgs)}], {stdio:['pipe','pipe','inherit']});
       let buf = '';
       setTimeout(() => {
         p.stdin.write(JSON.stringify({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'conformance',version:'0'}}})+'\\n');
@@ -91,7 +90,7 @@ function liveToolNames() {
   }
 }
 
-test('exactly the five expected skills ship', () => {
+test('exactly the four expected skills ship', () => {
   const dirs = fs
     .readdirSync(SKILLS_ROOT, { withFileTypes: true })
     .filter((d) => d.isDirectory())
@@ -150,30 +149,62 @@ for (const skill of EXPECTED_SKILLS) {
 }
 
 test('every tool named in skills exists on the live server', { timeout: 30000 }, () => {
-  const names = liveToolNames();
-  if (!names) {
+  const bin = resolveBinary();
+  if (!bin) {
     console.log('  [soft-skip] no binary resolvable — structural checks only');
     return;
   }
-  const serverTools = new Set(names);
+  // Each skill is validated against the tool profile it documents.
+  // Default installs run the core profile; distill requires --tools full.
+  const PROFILE_FOR_SKILL = {
+    'engram-index': [],
+    'engram-know': [],
+    'engram-mem': [],
+    'engram-distill': ['--tools', 'all'],
+  };
+  const surfaces = new Map(); // JSON key of args -> Set of tool names
+  for (const args of new Set(Object.values(PROFILE_FOR_SKILL).map((a) => JSON.stringify(a)))) {
+    const names = liveToolNames(JSON.parse(args));
+    assert.ok(names, `tools/list failed for profile ${args}`);
+    surfaces.set(args, new Set(names));
+  }
   for (const skill of EXPECTED_SKILLS) {
+    const serverTools = surfaces.get(JSON.stringify(PROFILE_FOR_SKILL[skill]));
     const text = fs.readFileSync(path.join(SKILLS_ROOT, skill, 'SKILL.md'), 'utf8');
     for (const m of text.matchAll(TOOL_CALL_RE)) {
       const t = m[1];
       if (['json', 'test'].includes(t)) continue; // prose, not calls
       assert.ok(
         serverTools.has(t),
-        `${skill} references '${t}(...)' but the server exposes: ${[...serverTools].join(', ')}`,
+        `${skill} references '${t}(...)' but its profile exposes: ${[...serverTools].join(', ')}`,
       );
     }
   }
 });
 
-test('plan workflow references cover triage | bugfix | story', () => {
-  const refs = fs.readdirSync(path.join(SKILLS_ROOT, 'engram-plan', 'references'));
-  assert.ok(refs.includes('plan-triage.md'), 'triage workflow');
-  assert.ok(refs.includes('plan-bugfix.md'), 'bugfix workflow');
-  assert.ok(refs.includes('plan-story.md'), 'story workflow');
+test('know is read-only and hands records off', () => {
+  const text = fs.readFileSync(path.join(SKILLS_ROOT, 'engram-know', 'SKILL.md'), 'utf8');
+  for (const writeTool of ['write_memory', 'store_knowledge', 'put_entity', 'put_relationship', 'index_docs', 'scan_repo']) {
+    assert.doesNotMatch(text, new RegExp(`${writeTool}\\s*\\(`), `know must not call ${writeTool}`);
+  }
+  assert.match(text, /engram-mem/, 'know hands experience records to engram-mem');
+  assert.match(text, /engram-distill/, 'know hands source-grounded records to engram-distill');
+});
+
+test('mem owns experience writes and routes source facts out', () => {
+  const text = fs.readFileSync(path.join(SKILLS_ROOT, 'engram-mem', 'SKILL.md'), 'utf8');
+  assert.match(text, /write_memory\(\s*\{/, 'mem writes memories');
+  assert.match(text, /procedure_put\(\s*\{/, 'mem writes procedures');
+  assert.doesNotMatch(text, /store_knowledge\s*\(/, 'mem must not call store_knowledge');
+  assert.match(text, /engram-distill/, 'mem routes source-doc facts to engram-distill');
+});
+
+test('distill keys writes by source and is honest about append-only', () => {
+  const text = fs.readFileSync(path.join(SKILLS_ROOT, 'engram-distill', 'SKILL.md'), 'utf8');
+  assert.match(text, /<[a-z-]*id>@/, 'idempotency key names the source');
+  assert.match(text, /sha256-of-exact-material|content-hash/, 'key binds exact source bytes');
+  assert.match(text, /[Aa]ppend-only/, 'append-only limitation stated');
+  assert.match(text, /supersed/, 'revision supersession rule present');
 });
 
 test('index references carry the REA process + memorization catalog', () => {

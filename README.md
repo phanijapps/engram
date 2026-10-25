@@ -60,7 +60,7 @@ What lands on your machine:
 
 | Piece | What it does |
 |---|---|
-| **5 skills** | `engram-index` (index + memorize with evidence labels), `engram-search` (agentic evidence-chained search), `engram-plan` (triage / bugfix / story workflows), `engram-implement` (verify + self-review loop), `engram-learn` (durable session learnings) |
+| **4 skills** | `engram-index` (index + memorize with evidence labels), `engram-know` (read-only evidence-chained query + verify), `engram-mem` (decisions, gotchas, procedures, stances), `engram-distill` (source-keyed knowledge-graph distillation). Retired skills from older installs (`engram-search`, `engram-plan`, `engram-implement`, `engram-learn`) are removed automatically unless you replaced them |
 | **Recall hooks** | Every prompt recalls relevant memory — gated: irrelevant results stay silent (separation gate, no LLM in the hot path). Session-start packs, stale-index reminders, kill switch (`ENGRAM_HOOKS=0`), fail-open always |
 | **`red-forman` subagent** | Read-only adversarial reviewer — severity-tagged findings (BLOCKER/DEFECT/SMELL) with file:line evidence and a one-line fix each. Dispatch it before declaring work done |
 

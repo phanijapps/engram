@@ -1,0 +1,14 @@
+interface:
+  display_name: Engram Factory
+  short_description: Orchestrate enterprise application delivery
+  default_prompt: Use $engram-factory to deliver a feature through analysis, planning,
+    implementation, reviews, and approval.
+  icon_small: assets/icon.svg
+  icon_large: assets/icon.svg
+policy:
+  products:
+  - chatgpt
+  - codex
+  - api
+  - atlas
+  allow_implicit_invocation: true

@@ -110,13 +110,19 @@ function writeTomlSection(file, section, body) {
   fs.writeFileSync(file, text);
 }
 
+// Skills this installer ships. Retired names below are removed from existing
+// installations — but only directories that still carry our SKILL.md (a user's
+// replacement with different frontmatter is left untouched).
+const SHIPPED_SKILLS = ['engram-index', 'engram-know', 'engram-mem', 'engram-distill'];
+const RETIRED_SKILLS = ['engram-learn', 'engram-search', 'engram-plan', 'engram-implement'];
+
 function copySkills(destRoot, written) {
   const src = skillsSource();
   if (!src) {
     process.stderr.write('engram-mcp: skills source not found (package incomplete?)\n');
     return;
   }
-  for (const skill of ['engram-index', 'engram-learn', 'engram-search', 'engram-plan', 'engram-implement']) {
+  for (const skill of SHIPPED_SKILLS) {
     const from = path.join(src, skill);
     const to = path.join(destRoot, skill);
     if (!fs.existsSync(path.join(from, 'SKILL.md'))) continue;
@@ -124,6 +130,21 @@ function copySkills(destRoot, written) {
     fs.mkdirSync(path.dirname(to), { recursive: true });
     fs.cpSync(from, to, { recursive: true });
     written.push(to);
+  }
+  for (const skill of RETIRED_SKILLS) {
+    const to = path.join(destRoot, skill);
+    const marker = path.join(to, 'SKILL.md');
+    if (!fs.existsSync(marker)) continue;
+    let ours = false;
+    try {
+      ours = fs.readFileSync(marker, 'utf8').startsWith(`---\nname: ${skill}\n`);
+    } catch {
+      ours = false; // unreadable: never delete what we cannot verify
+    }
+    if (ours) {
+      fs.rmSync(to, { recursive: true, force: true });
+      written.push(`${to} (retired)`);
+    }
   }
 }
 

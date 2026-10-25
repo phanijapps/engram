@@ -19,10 +19,11 @@ tree-sitter-haskell = { version = "0.24", optional = true }
 # Legacy modernization pack: COBOL, Fortran, SQL.
 tree-sitter-cobol = { path = "grammars/tree-sitter-cobol", version = "0.0.1", optional = true }
 tree-sitter-fortran = { version = "0.6", optional = true }
+tree-sitter-groovy = { version = "0.1", optional = true }
 tree-sitter-sql = { path = "grammars/tree-sitter-sql", version = "0.0.1", optional = true }
 
 [features]
-default = ["lua", "julia", "zig", "dart", "erlang", "ocaml", "haskell", "cobol", "fortran", "sql"]
+default = ["lua", "julia", "zig", "dart", "erlang", "ocaml", "haskell", "cobol", "fortran", "sql", "groovy"]
 lua = ["dep:tree-sitter-lua"]
 julia = ["dep:tree-sitter-julia"]
 zig = ["dep:tree-sitter-zig"]
@@ -33,6 +34,7 @@ haskell = ["dep:tree-sitter-haskell"]
 cobol = ["dep:tree-sitter-cobol"]
 fortran = ["dep:tree-sitter-fortran"]
 sql = ["dep:tree-sitter-sql"]
+groovy = ["dep:tree-sitter-groovy"]
 
 [dev-dependencies]
 engram-domain = { path = "../domain", version = "0.1.0" }

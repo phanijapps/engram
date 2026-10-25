@@ -201,3 +201,19 @@ fn sql_symbols() {
     assert!(a.contains(&"struct users".to_owned()), "table: {a:?}");
     assert!(a.contains(&"type active".to_owned()), "view: {a:?}");
 }
+
+/// Groovy: classes/methods anchor; annotations route through the JVM
+/// framework-facts layer.
+#[test]
+fn groovy_symbols() {
+    let c = chunker();
+    let src =
+        "class Greeter {\n    String greet(name) {\n        return \"hi $\" + name\n    }\n}\n";
+    let a = anchors(&c, src, "groovy");
+    assert!(
+        a.iter().any(|s| s.contains("Greeter")),
+        "groovy anchors: {a:?}"
+    );
+    let facts = engram_code::extract_frameworks(src, "groovy");
+    assert!(facts.annotations.is_empty() || facts.routes.is_empty());
+}

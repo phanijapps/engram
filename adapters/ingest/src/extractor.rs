@@ -629,6 +629,68 @@ impl GraphExtractor {
                     archived_at: None,
                 });
             }
+            // JVM annotation layer: every attached annotation becomes a
+            // Trait-kind entity (annotations are marker interfaces) wired
+            // to its declaration via `annotated_by` — the typed surface for
+            // "which methods are @Transactional" graph queries (searches
+            // find them via chunk text regardless).
+            let mut seen_annotations: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
+            for fact in &facts.annotations {
+                if seen_annotations.insert(fact.annotation.clone()) {
+                    let ann_id = entity_id(&graph_id, &fact.annotation);
+                    entities.push(KnowledgeEntity {
+                        id: ann_id,
+                        graph_id: Some(graph_id.clone()),
+                        kind: EntityKind::Trait,
+                        name: fact.annotation.clone(),
+                        aliases: Vec::new(),
+                        scope: source.scope.clone(),
+                        source_refs: Vec::new(),
+                        concept_refs: Vec::new(),
+                        ontology_class_refs: Vec::new(),
+                        provenance: source.provenance.clone(),
+                        created_at: now,
+                        updated_at: None,
+                        valid_from: Some(now),
+                        valid_until: None,
+                        metadata: entity_git_meta.clone(),
+                        archived_at: None,
+                    });
+                }
+                let subject = match index.get(&fact.target) {
+                    Some(&i) => entity_ref(&entities[i]),
+                    None => EntityRef {
+                        id: None,
+                        kind: None,
+                        name: Some(fact.target.clone()),
+                        aliases: Vec::new(),
+                    },
+                };
+                relationships.push(KnowledgeRelationship {
+                    id: relationship_id(&graph_id, &fact.target, &fact.annotation),
+                    graph_id: Some(graph_id.clone()),
+                    subject,
+                    predicate: "annotated_by".to_owned(),
+                    code_resolution: Some(CodeEdgeResolution::new(
+                        ResolutionTier::Parsed,
+                        engram_code::edge_resolution::producer::PARSED_ANNOTATIONS,
+                    )),
+                    object: EntityRef {
+                        id: None,
+                        kind: None,
+                        name: Some(fact.annotation.clone()),
+                        aliases: Vec::new(),
+                    },
+                    scope: source.scope.clone(),
+                    evidence: Vec::new(),
+                    confidence: Some(1.0),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    archived_at: None,
+                });
+            }
             for (component, handler) in &facts.callbacks {
                 let Some(&component_index) = index.get(component) else {
                     continue;

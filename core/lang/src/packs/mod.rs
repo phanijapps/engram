@@ -33,12 +33,15 @@ pub fn register_all(chunker: &mut TreeSitterChunker) {
     fortran::register(chunker);
     #[cfg(feature = "sql")]
     sql::register(chunker);
+    #[cfg(feature = "groovy")]
+    groovy::register(chunker);
 }
 
 pub mod cobol;
 pub mod dart;
 pub mod erlang;
 pub mod fortran;
+pub mod groovy;
 pub mod haskell;
 pub mod julia;
 pub mod lua;

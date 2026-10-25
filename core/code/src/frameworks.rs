@@ -25,12 +25,25 @@ pub struct FrameworkFacts {
     pub routes: Vec<RouteFact>,
     /// (component, handler) React callback pairs (`onClick={handler}`).
     pub callbacks: Vec<(String, String)>,
+    /// JVM-language annotation attachments (java/kt/scala/groovy): Spring
+    /// wiring, DI markers, tests, composables — the typed graph surface for
+    /// "which methods are @Transactional" questions.
+    pub annotations: Vec<AnnotationFact>,
 }
 
 impl FrameworkFacts {
     pub fn is_empty(&self) -> bool {
-        self.routes.is_empty() && self.callbacks.is_empty()
+        self.routes.is_empty() && self.callbacks.is_empty() && self.annotations.is_empty()
     }
+}
+
+/// One annotation attachment (`@Transactional` on `find`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnnotationFact {
+    /// Annotation simple name (`Transactional`).
+    pub annotation: String,
+    /// Annotated declaration name as written.
+    pub target: String,
 }
 
 /// Extract framework facts from source text for a file extension.
@@ -46,7 +59,10 @@ pub fn extract_frameworks(text: &str, ext: &str) -> FrameworkFacts {
             facts
         }
         "py" => extract_python_routes(text),
-        "java" => extract_spring_routes(text),
+        "java" => extract_jvm_facts(text),
+        "kt" | "kts" => extract_jvm_facts(text),
+        "scala" => extract_jvm_facts(text),
+        "groovy" | "gradle" => extract_jvm_facts(text),
         _ => FrameworkFacts::default(),
     }
 }
@@ -227,46 +243,6 @@ fn extract_python_routes(text: &str) -> FrameworkFacts {
     facts
 }
 
-/// Spring annotations (`@GetMapping("/x")`, `@RequestMapping`) above a
-/// method declaration.
-fn extract_spring_routes(text: &str) -> FrameworkFacts {
-    let mut facts = FrameworkFacts::default();
-    let mut pending: Option<(String, String)> = None;
-    for raw_line in text.lines() {
-        let line = raw_line.trim();
-        if let Some(rest) = line.strip_prefix('@') {
-            let (word, tail) = rest.split_once('(').unwrap_or((rest, ""));
-            let method = match word {
-                "GetMapping" => Some("GET"),
-                "PostMapping" => Some("POST"),
-                "PutMapping" => Some("PUT"),
-                "DeleteMapping" => Some("DELETE"),
-                "PatchMapping" => Some("PATCH"),
-                "RequestMapping" => Some("GET"),
-                _ => None,
-            };
-            if let Some(method) = method {
-                let path = first_quoted(tail).unwrap_or_default();
-                pending = Some((method.to_owned(), path));
-                continue;
-            }
-        }
-        if line.starts_with('#') || line.starts_with("//") || line.is_empty() {
-            continue;
-        }
-        if let Some((method, path)) = pending.take() {
-            if let Some(handler) = declaration_name(line) {
-                facts.routes.push(RouteFact {
-                    method,
-                    path,
-                    handler,
-                });
-            }
-        }
-    }
-    facts
-}
-
 /// React event-handler callbacks: `onClick={handler}` (or `={() => handler()}`
 /// inline — skipped, no stable name) inside a component. Pairs the closest
 /// enclosing component declaration (heuristic: the last `function Name` /
@@ -318,8 +294,213 @@ fn extract_react_callbacks(text: &str) -> (Vec<RouteFact>, Vec<(String, String)>
     (Vec::new(), callbacks)
 }
 
+/// JVM-language framework facts (java/kt/scala/groovy): Spring route
+/// mappings WITH class-level `@RequestMapping` prefix composition, plus a
+/// full annotation layer — every annotation attached to a declaration
+/// becomes an [`AnnotationFact`] (Transactional, Service, Test, Composable).
+/// Deterministic line-pattern extraction over the same discipline as
+/// [`extract_spring_routes`]; declaration names resolve against the
+/// document symbol table in the extractor.
+pub fn extract_jvm_facts(text: &str) -> FrameworkFacts {
+    let mut facts = FrameworkFacts::default();
+    let mut pending_annotations: Vec<String> = Vec::new();
+    let mut pending_route: Option<(String, String)> = None;
+    // Class-level @RequestMapping("/api") prefixes every method route.
+    let mut class_prefix: Option<String> = None;
+
+    for raw_line in text.lines() {
+        let line = raw_line.trim();
+        if let Some(rest) = line.strip_prefix('@') {
+            let (word, tail) = rest.split_once('(').unwrap_or((rest, ""));
+            let word = word.trim();
+            if word.is_empty() {
+                continue;
+            }
+            pending_annotations.push(word.to_owned());
+            let method = match word {
+                "GetMapping" => Some("GET"),
+                "PostMapping" => Some("POST"),
+                "PutMapping" => Some("PUT"),
+                "DeleteMapping" => Some("DELETE"),
+                "PatchMapping" => Some("PATCH"),
+                "RequestMapping" => Some("GET"),
+                _ => None,
+            };
+            if let Some(method) = method {
+                let path = first_quoted(tail).unwrap_or_default();
+                pending_route = Some((method.to_owned(), path));
+            }
+            continue;
+        }
+        if line.starts_with('#')
+            || line.starts_with("//")
+            || line.starts_with('*')
+            || line.starts_with("/*")
+            || line.is_empty()
+        {
+            continue;
+        }
+        // Class/interface/object declarations: annotations attach here, and
+        // a pending RequestMapping becomes the route prefix.
+        let is_class_decl = line.contains(" class ")
+            || line.starts_with("class ")
+            || line.contains(" interface ")
+            || line.starts_with("interface ")
+            || line.contains(" object ")
+            || line.starts_with("object ")
+            || line.starts_with("trait ");
+        if is_class_decl {
+            if let Some(name) = declaration_name(line).or_else(|| class_name(line)) {
+                for annotation in pending_annotations.drain(..) {
+                    facts.annotations.push(AnnotationFact {
+                        annotation,
+                        target: name.clone(),
+                    });
+                }
+                // A class-level RequestMapping immediately becomes the
+                // prefix for subsequent method routes in the same file.
+                if let Some((_, path)) = pending_route.take() {
+                    class_prefix = Some(path);
+                }
+            }
+            continue;
+        }
+        // Function/method declarations attach pending annotations + routes.
+        if let Some(name) = declaration_name(line) {
+            for annotation in pending_annotations.drain(..) {
+                facts.annotations.push(AnnotationFact {
+                    annotation,
+                    target: name.clone(),
+                });
+            }
+            if let Some((method, path)) = pending_route.take() {
+                let path = match (&class_prefix, path.as_str()) {
+                    (Some(prefix), p) if !prefix.is_empty() && !p.is_empty() => {
+                        format!("{prefix}{p}")
+                    }
+                    (Some(prefix), "") => prefix.clone(),
+                    _ => path,
+                };
+                facts.routes.push(RouteFact {
+                    method,
+                    path,
+                    handler: name.clone(),
+                });
+            }
+        } else {
+            // A non-declaration, non-annotation line clears pending state.
+            pending_annotations.clear();
+            pending_route = None;
+        }
+    }
+    facts
+}
+
+/// Identifier after `class`/`interface`/`object`/`trait` on a line.
+fn class_name(line: &str) -> Option<String> {
+    for kw in ["class ", "interface ", "object ", "trait "] {
+        if let Some(pos) = line.find(kw) {
+            let rest = &line[pos + kw.len()..];
+            let name: String = rest
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect();
+            if !name.is_empty() {
+                return Some(name);
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
+
+    // ── JVM annotation layer ────────────────────────────────────────────
+
+    #[test]
+    fn java_spring_routes_compose_class_prefix_and_annotations() {
+        let src = "@RestController\n@RequestMapping(\"/api/users\")\npublic class UserController {\n    @GetMapping(\"/list\")\n    public List<User> listUsers() { return repo.findAll(); }\n\n    @Override\n    @Transactional(readOnly = true)\n    public User find(Long id) { return repo.findById(id).orElse(null); }\n}\n";
+        let facts = extract_jvm_facts(src);
+        // Class-level prefix composes with method paths.
+        assert!(
+            facts.routes.iter().any(|r| r.method == "GET"
+                && r.path == "/api/users/list"
+                && r.handler == "listUsers"),
+            "composed route: {:?}",
+            facts.routes
+        );
+        // Annotations attach to both classes and methods.
+        assert!(
+            facts
+                .annotations
+                .iter()
+                .any(|a| a.annotation == "RestController" && a.target == "UserController")
+        );
+        assert!(
+            facts
+                .annotations
+                .iter()
+                .any(|a| a.annotation == "GetMapping" && a.target == "listUsers")
+        );
+        assert!(
+            facts
+                .annotations
+                .iter()
+                .any(|a| a.annotation == "Transactional" && a.target == "find")
+        );
+        assert!(
+            facts
+                .annotations
+                .iter()
+                .any(|a| a.annotation == "Override" && a.target == "find")
+        );
+    }
+
+    #[test]
+    fn kotlin_annotations_attach() {
+        let src = "class ApplicationTests {\n    @Test\n    fun contextLoads() { }\n}\n";
+        let facts = extract_jvm_facts(src);
+        assert!(
+            facts
+                .annotations
+                .iter()
+                .any(|a| a.annotation == "Test" && a.target == "contextLoads"),
+            "kt annotations: {:?}",
+            facts.annotations
+        );
+    }
+
+    #[test]
+    fn scala_annotations_attach() {
+        let src = "@Service\nclass UserService {\n  @Transactional\n  def save(u: User): Unit = repo.save(u)\n}\n";
+        let facts = extract_jvm_facts(src);
+        assert!(
+            facts
+                .annotations
+                .iter()
+                .any(|a| a.annotation == "Service" && a.target == "UserService")
+        );
+        assert!(
+            facts
+                .annotations
+                .iter()
+                .any(|a| a.annotation == "Transactional" && a.target == "save")
+        );
+    }
+
+    #[test]
+    fn groovy_annotations_attach() {
+        let src = "@Stepwise\nclass Spec extends Specification {\n    def \"a step\"() { }\n}\n";
+        let facts = extract_jvm_facts(src);
+        assert!(
+            facts
+                .annotations
+                .iter()
+                .any(|a| a.annotation == "Stepwise" && a.target == "Spec")
+        );
+    }
+
     use super::*;
 
     #[test]

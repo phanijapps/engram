@@ -47,6 +47,10 @@ pub mod producer {
     pub const PARSED_HERITAGE: &str = "parsed-heritage-v1";
     /// Route decorator → handler spelling (handler binding pending the ladder).
     pub const PARSED_ROUTES: &str = "parsed-routes-v1";
+    /// JVM annotation attachment (java/kt/scala/groovy): `@Transactional`
+    /// on a declaration — parsed syntax (annotation spelling + attached
+    /// declaration; the target binding resolves via the standard ladder).
+    pub const PARSED_ANNOTATIONS: &str = "parsed-annotations-v1";
 }
 
 /// Which ladder branch settled a reference attempt.

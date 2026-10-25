@@ -34,7 +34,7 @@ use engram_ingest::{
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, CommunityQuery,
     EmbeddingProvider, EngramConfig, EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed,
-    MigrationService, Observability, ProvenanceQuery, StepOutcome, StepStatus, SupersessionCounts,
+    MigrationService, Observability, ProvenanceQuery, StepStatus, SupersessionCounts,
     TransactionGuarantee, UnifiedRecall,
 };
 use engram_knowledge::{
@@ -1687,6 +1687,7 @@ fn scan_actor() -> Actor {
 mod tests {
     use super::*;
     use engram_domain::ScopeMappingStrategy;
+    use engram_integration::StepOutcome;
     use engram_integration::{CapabilityPolicy, EmbeddingProviderConfig, MigrationMode};
 
     #[test]

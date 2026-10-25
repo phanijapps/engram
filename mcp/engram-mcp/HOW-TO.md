@@ -211,6 +211,14 @@ Typical first moves:
 Want the agent to build the **semantic** doc↔code links (a *Login* doc → the
 `login` function)? Run the **`engram-distill`** skill over your docs after scanning.
 
+The full skill set — all seven authored skills, `engram-factory` and
+`engram-frame` included, with the factory's specialist subagents in each
+host's dialect — installs via the launcher bundle:
+
+```bash
+engram-mcp install --agent claude    # or codex | copilot | pi | all
+```
+
 ---
 
 ## Security check — `cargo audit`
@@ -361,6 +369,7 @@ agent “what tools does engram have?” to see what's wired.
 
 - Design + roadmap: `docs/rfcs/0016-zbot-class-memory-kg-code-as-final-layer.md`
 - Build a connected graph from docs: the **`engram-distill`** skill
+- Install every authored skill + hooks + subagents: **`engram-mcp install --agent <host>`**
 - All commands/flags: run `engram-mcp` with no args (prints usage)
 
 ---

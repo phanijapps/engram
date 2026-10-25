@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The agent bundle ships every authored skill**: `engram-mcp install
+  --agent <host>` now derives its skill set from the package's authored
+  tree instead of a hardcoded four-skill list, delivering all seven skills
+  — `engram-index`, `engram-know`, `engram-mem`, `engram-distill`,
+  `outcome-reporting`, `engram-factory`, `engram-frame` — with whole
+  folders to claude, codex, copilot and pi. `engram-factory` additionally
+  delivers its 14 specialist subagents in each host's native dialect, with
+  contract pointers that resolve at both user and project scope, and
+  `install --agent all` prints claude-desktop's skills/agents limitation
+  explicitly. The npm payload is generated at pack time from the authored
+  tree (no committed copies to drift); `verify-launcher-package.py` now
+  asserts the packed payload equals the authored set with zero
+  `__pycache__`/`*.pyc` entries.
+
 - **CI runs a live Postgres+pgvector service** and the pgvector recipe's
   conformance tests in the gate; the engine-neutrality and surface-parity
   lints are enforced in CI (they had been referenced but never wired, and the

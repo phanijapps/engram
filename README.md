@@ -60,11 +60,12 @@ What lands on your machine:
 
 | Piece | What it does |
 |---|---|
-| **4 skills** | `engram-index` (index + memorize with evidence labels), `engram-know` (read-only evidence-chained query + verify), `engram-mem` (decisions, gotchas, procedures, stances), `engram-distill` (source-keyed knowledge-graph distillation). Retired skills from older installs (`engram-search`, `engram-plan`, `engram-implement`, `engram-learn`) are removed automatically unless you replaced them |
+| **7 skills** | `engram-index` (index + memorize with evidence labels), `engram-know` (read-only evidence-chained query + verify), `engram-mem` (decisions, gotchas, procedures, stances), `engram-distill` (source-keyed knowledge-graph distillation), `outcome-reporting` (report whether recall actually helped), `engram-factory` (spec-driven software factory), `engram-frame` (intent framing before a factory job). The set derives from the repo's authored skill tree — new skills ship automatically. Retired skills from older installs (`engram-search`, `engram-plan`, `engram-implement`, `engram-learn`) are removed automatically unless you replaced them |
+| **Factory specialists** | `engram-factory` ships its 14 specialist subagents (analyzer, planner, tasks, builder, eight discipline reviewers, qa, approver) in each host's native dialect — claude, codex, copilot, pi |
 | **Recall hooks** | Every prompt recalls relevant memory — gated: irrelevant results stay silent (separation gate, no LLM in the hot path). Session-start packs, stale-index reminders, kill switch (`ENGRAM_HOOKS=0`), fail-open always |
 | **`red-forman` subagent** | Read-only adversarial reviewer — severity-tagged findings (BLOCKER/DEFECT/SMELL) with file:line evidence and a one-line fix each. Dispatch it before declaring work done |
 
-Per-platform notes: Codex agents use YAML (`~/.codex/agents/*.yaml`); Copilot command hooks cannot inject per-prompt context (platform limitation — session-start recall only, honestly documented); pi gets an in-process extension.
+Per-platform notes: Codex agents use YAML (`~/.codex/agents/*.yaml`); Copilot command hooks cannot inject per-prompt context (platform limitation — session-start recall only, honestly documented); pi gets an in-process extension; claude-desktop hosts MCP registration only (no skills/agents filesystem — `install --agent all` prints that limitation).
 
 **Project scope** — install the bundle into the repo instead (committed, shared with the team):
 

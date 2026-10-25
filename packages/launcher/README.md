@@ -44,8 +44,16 @@ tool after re-enabling them.
 engram-mcp install --agent claude
 ```
 
-Adds skills, hooks and review workflows. Use `--scope project` for a repository
-installation. See the [setup guide](https://github.com/phanijapps/engram/blob/main/mcp/engram-mcp/HOW-TO.md).
+Adds skills, hooks, review workflows, and the factory specialist subagents.
+The skill set is derived from the package's authored tree at build time —
+currently seven: `engram-index`, `engram-know`, `engram-mem`,
+`engram-distill`, `outcome-reporting`, plus the software-factory pair
+`engram-factory` and `engram-frame`. New skills flow to delivery with no
+installer change; retired skills from older installs are removed
+automatically unless you replaced them. `engram-factory` also delivers its
+14 specialist subagents in each host's native dialect (claude, codex,
+copilot, pi). Use `--scope project` for a repository installation. See the
+[setup guide](https://github.com/phanijapps/engram/blob/main/mcp/engram-mcp/HOW-TO.md).
 
 ## Platforms and configuration
 

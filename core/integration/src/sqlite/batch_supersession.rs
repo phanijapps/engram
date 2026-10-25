@@ -18,8 +18,11 @@
 //!   **last** ref goes (ref-counted shared records, ADR-0018/0027).
 //! - **Immunity guard**: a prior record is touched only if its persisted refs
 //!   still contain the source ref — records attributed another way (e.g.
-//!   code-scan records keyed by `graph_id` / `stable_source_key`) are skipped
-//!   and counted `immune_skipped`, never matched by name or id alone.
+//!   code-scan records keyed by `graph_id` / `stable_source_key`, or a foreign
+//!   record adopted through a per-record idempotency-key collision) are
+//!   skipped and counted `immune_skipped`, never matched by name or id alone.
+//!   Facts carry the guard on `Provenance.evidence`; a forget that returns
+//!   `NotFound` (record gone) is never counted as a forgotten fact.
 //! - **Best-effort honesty**: every supersession item soft-fails per record
 //!   (`counts.failed`, first error surfaced); a failed item's ledger row is
 //!   **not** marked superseded, so re-running the same source converges via
@@ -40,8 +43,8 @@ use chrono::Utc;
 use engram_domain::{
     Actor, ActorKind, AllowedUse, DeleteMode, EntityId, EvidenceRef, EvidenceTargetType,
     ForgetRequest, ForgetStatus, ForgetTargetType, Id, KnowledgeEntity, KnowledgeRelationship,
-    KnowledgeSource, MemoryRecord, Policy, Provenance, RelationshipId, Requester, Retention, Scope,
-    Sensitivity, SourceKind, Visibility, WriteMemoryRequest,
+    KnowledgeSource, MemoryId, MemoryRecord, Policy, Provenance, RelationshipId, Requester,
+    Retention, Scope, Sensitivity, SourceKind, Visibility, WriteMemoryRequest,
 };
 use engram_knowledge::{
     KnowledgeRepository, SourceBatchLedger, SourceBatchRecord, SourceBatchRecordKind,
@@ -333,6 +336,33 @@ where
         r.kind == SourceBatchRecordKind::MemoryRecord && r.batch_key != request.idempotency_key
     }) {
         out.counts.examined += 1;
+        // Immunity guard (mirror of the entity/relationship guard): fetch the
+        // record first. A ledger row whose record no longer exists retires as
+        // immune (nothing to retract, never counted forgotten); a record whose
+        // `Provenance.evidence` does not carry this source's ref is NEVER
+        // forgotten — e.g. a foreign record adopted into this source's ledger
+        // through a `{batch_key}#{index}` idempotency-key collision keeps its
+        // owning source's ref and stays active (FIND-security-001).
+        let prior = match memory
+            .get_memory(&MemoryId::from(row.record_id.clone()), scope)
+            .await
+        {
+            Ok(prior) => prior,
+            Err(e) => {
+                soft_fail(&mut out, e);
+                continue;
+            }
+        };
+        let Some(prior) = prior else {
+            out.counts.immune_skipped += 1;
+            mark_superseded(ledger, scope, source_id, &row, &mut out).await;
+            continue;
+        };
+        if !refs_contain_source(&prior.provenance.evidence, source_id) {
+            out.counts.immune_skipped += 1;
+            mark_superseded(ledger, scope, source_id, &row, &mut out).await;
+            continue;
+        }
         let forget = ForgetRequest {
             target_type: ForgetTargetType::Memory,
             target_id: row.record_id.clone(),
@@ -354,6 +384,13 @@ where
                         reason: format!("forget of prior fact {} was denied", row.record_id),
                     });
                 }
+            }
+            // The record vanished between the guard read and the forget:
+            // nothing was retracted — retire the row without counting a
+            // forgotten fact (NotFound is not a retraction).
+            Ok(result) if result.status == ForgetStatus::NotFound => {
+                out.counts.immune_skipped += 1;
+                mark_superseded(ledger, scope, source_id, &row, &mut out).await;
             }
             Ok(_) => {
                 out.counts.forgotten_facts += 1;

@@ -21,7 +21,9 @@
 //!   re-assert-after-archive restore.
 //! Regressions: TEST-007 unsourced legacy behavior; TEST-008 code-entity
 //! immunity (ref membership, never name); TEST-010 injected partial failure;
-//! TEST-013 cross-scope isolation + empty source_id treated as unsourced.
+//! TEST-013 cross-scope isolation + empty source_id treated as unsourced;
+//! review-r1 FIND-security-001 facts immunity (a foreign record adopted
+//! through a per-record idempotency-key collision is never forgotten).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -956,6 +958,104 @@ fn code_attributed_records_are_immune() {
         reattributed.source_refs,
         vec![source_ref("other:writer")],
         "other writer's attribution preserved"
+    );
+}
+
+// ---------- facts immunity via ref membership (FIND-security-001) ---------
+
+#[test]
+fn foreign_fact_adopted_by_key_collision_is_immune() {
+    let (memory, knowledge, batch) = seeded();
+    // Batch A writes one fact under batch key "shared-key" — the per-record
+    // idempotency key is "shared-key#0".
+    block_on(batch.ingest(sourced_request(
+        "shared-key",
+        "docs/a.md",
+        vec![memory_record("fact from source A", "0")],
+        Vec::new(),
+        Vec::new(),
+    )))
+    .expect("A v1");
+    let a_ids = active_memory_ids(&memory, &scope());
+    assert_eq!(a_ids.len(), 1, "A's fact landed");
+
+    // Batch B reuses the SAME batch key for a DIFFERENT source: the write
+    // path dedups against "shared-key#0" and returns A's stored record, so
+    // B's ledger adopts A's record id — but the record carries only A's ref
+    // (the B stamp never lands on a deduplicated write).
+    let b = block_on(batch.ingest(sourced_request(
+        "shared-key",
+        "docs/b.md",
+        vec![memory_record("fact from source B", "1")],
+        Vec::new(),
+        Vec::new(),
+    )))
+    .expect("B v1");
+    assert_eq!(b.steps[1].status, StepStatus::Deduplicated);
+    assert_eq!(
+        active_memory_ids(&memory, &scope()),
+        a_ids,
+        "the colliding write adopted A's record, no second record landed"
+    );
+    let adopted = ledger_rows(
+        &knowledge,
+        &scope(),
+        "docs/b.md",
+        SourceBatchRecordKind::MemoryRecord,
+    );
+    assert_eq!(
+        adopted.len(),
+        1,
+        "B's ledger adopted A's record id — the guard must make that harmless"
+    );
+    assert_eq!(adopted[0].1, a_ids[0].to_string());
+
+    // B's revision (new batch key) supersedes its prior rows. The adopted
+    // record's Provenance.evidence carries docs/a.md, not docs/b.md →
+    // immune: no forget, A's fact stays active with its content intact.
+    let b2 = block_on(batch.ingest(sourced_request(
+        "doc-b@v2",
+        "docs/b.md",
+        vec![memory_record("fact from source B v2", "2")],
+        Vec::new(),
+        Vec::new(),
+    )))
+    .expect("B v2");
+    let counts = counts_of(&b2, BatchStep::Facts);
+    assert_eq!(counts.forgotten_facts, 0, "foreign record not forgotten");
+    assert_eq!(counts.immune_skipped, 1, "adopted row retired as immune");
+    let a_record = block_on(memory.get_memory(&a_ids[0], &scope()))
+        .expect("get A fact")
+        .expect("A's fact still exists");
+    assert_eq!(
+        a_record.status,
+        MemoryStatus::Active,
+        "A's fact untouched (no tombstone, no content wipe)"
+    );
+    assert_eq!(a_record.content.text, "fact from source A");
+
+    // Second pass of B v2: the immune row retired, so every count is zero —
+    // idempotent convergence despite the adoption.
+    let second = block_on(batch.ingest(sourced_request(
+        "doc-b@v2",
+        "docs/b.md",
+        vec![memory_record("fact from source B v2", "2")],
+        Vec::new(),
+        Vec::new(),
+    )))
+    .expect("second pass");
+    assert_eq!(
+        counts_of(&second, BatchStep::Facts),
+        SupersessionCounts::default(),
+        "second pass counts zero"
+    );
+    assert_eq!(
+        active_fact_texts(&memory, &scope()),
+        vec![
+            "fact from source A".to_string(),
+            "fact from source B v2".to_string()
+        ],
+        "both sources' facts active, neither adopted away"
     );
 }
 

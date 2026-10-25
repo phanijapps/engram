@@ -1,5 +1,10 @@
 # Agent contracts
 
+Pi native agent definitions for these roles live in `.pi/agents/engram-*.md`;
+they point here as the authoritative contract — keep both in sync when a role
+changes. Hosts without native agents dispatch these contracts as dispatch
+envelopes.
+
 ## Dispatch envelope
 
 Supply role, feature, job/cycle/round, primary repo and worktree paths, absolute job

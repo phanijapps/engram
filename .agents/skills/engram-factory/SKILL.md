@@ -11,7 +11,9 @@ You are the only writer of `.engram-factory/board.json`.
 Use `scripts/factory.py` for all board changes.
 
 Never author code, analysis, plans, reviews or approval recommendations
-yourself. Agents do that work. Validate their outputs, advance the job
+yourself. Agents do that work. One narrow exception: pre-job intent capture —
+when framing with engram-frame, you record the owner's words into the brief;
+you never decide them. Validate their outputs, advance the job
 and keep the board current.
 
 Capture human instructions verbatim. Do not invent decisions.

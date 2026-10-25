@@ -53,7 +53,7 @@ class FrameSkillTests(unittest.TestCase):
 
     def test_functional_nature_rules(self):
         self.assertIn("The brief is functional", self.skill)
-        self.assertIn("behavior and\n  outcomes, not mechanisms", self.skill)
+        self.assertIn("behavior and outcomes, not mechanisms", self.skill)
         self.assertRegex(self.skill, r"how instead of what|names\n  how")
 
     def test_handoff_names_controller_seam(self):

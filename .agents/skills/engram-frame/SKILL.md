@@ -1,14 +1,15 @@
 ---
 name: engram-frame
-description: Frame a feature request into a factory-ready brief BEFORE starting an engram-factory job. Interactive guided interview — option-based questions (pick a letter or freeform), MoSCoW prioritization, strike-lists over blank-page questions. Captures problem, outcome measures, non-goals, and a decision ledger with explicit authority. Trigger on any wish that is not yet a spec ("I want X", "make X better", "fix X"), or before /engram-factory when intent, outcome, or decision authority is unclear.
+description: ORCHESTRATOR-run skill — the main session conducts this interactive guided interview with the owner BEFORE starting an engram-factory job; a child agent cannot hold the owner channel. Option-based questions (pick a letter or freeform), MoSCoW prioritization, strike-lists over blank-page questions. Captures problem, outcome measures, non-goals, and a decision ledger with explicit authority. Trigger on any wish that is not yet a spec ("I want X", "make X better", "fix X"), or before /engram-factory when intent, outcome, or decision authority is unclear.
 ---
 
 # engram-frame
 
-Turn a wish into a brief the factory can run on. You interview the owner — a
-Product Engineer, technical or functional — and capture intent; you do not
-design. The brief is the contract between human and factory: everything the
-analyzer would otherwise guess.
+Turn a wish into a brief the factory can run on. YOU are the orchestrator
+holding this skill — no child agent has the owner channel. You interview the
+owner (a Product Engineer, technical or functional), capture intent, never
+design. The brief is the human-to-factory contract: everything the analyzer
+would otherwise guess.
 
 The failure this skill exists to prevent: a factory job where consequential
 choices are decided downstream with no recorded human decision, discovered by
@@ -33,19 +34,15 @@ the human only at the approval gate.
 Every question is easy to answer:
 
 ```
-<short stem, one sentence>
-  A) <concrete option>   B) <concrete option>
-  C) <concrete option>   D) freeform — your words
+<short stem> — A) <option>  B) <option>  C) <option>  D) freeform
 ```
 
-- Options are concrete and grounded in what you already know (repo context,
-  prior answers) — never generic filler. **Options describe behavior and
-  outcomes, not mechanisms.**
+- Options are grounded in repo context and prior answers, never generic
+  filler. **Options describe behavior and outcomes, not mechanisms.**
 - **Translate-and-confirm technical answers**: when the owner answers with a
-  mechanism ("add a queue", "use a ledger table"), restate the functional
-  intent and confirm: "So the behavior you want is X — is the mechanism fixed,
-  or a suggestion for analysis?" Fixed → owner-fixed constraint with its
-  functional impact. Suggestion → the brief's non-binding suggestions line.
+  mechanism ("add a queue"), restate the functional intent and confirm: "the
+  behavior you want is X — is the mechanism fixed, or a suggestion?" Fixed →
+  owner-fixed constraint; suggestion → non-binding suggestions.
 - One-word answers are valid: "B", "B but capped at 500", "none — …".
 - You may recommend: "I'd pick B because <reason> — pick or correct." Disclose
   the assumption behind any consequential option ("option A assumes <X> —
@@ -59,9 +56,9 @@ Every question is easy to answer:
 
 ### 1. Classify the ambiguity
 
-Fast path when the request already names a problem, a checkable outcome, a boundary, and its decision owner. Full path when any is missing — signals:
-"better / faster / modernize / fix", no measurable outcome yet, unknown
-boundary, unidentified decisions.
+Fast path when the request names a problem, a checkable outcome, a boundary,
+and its decision owner. Full path when any is missing — signals: "better /
+faster / modernize / fix", no measurable outcome, unknown boundary, unidentified decisions.
 
 ### 2. Fast path — one confirm-and-ratify turn
 
@@ -115,6 +112,12 @@ control.
 
 ### 5. Hand off to the factory
 
+Fail-closed provenance gate: every HUMAN-DECIDED row and the ratification
+resolve to retained owner messages (quote, retrievable reference, option
+context); the owner ratifies the finished brief whole — a fast-path
+confirmation covers the complete brief. Missing evidence or material OPEN
+rows = not ready; stop.
+
 The brief's ask becomes the feature file. Give the orchestrator both paths:
 `factory.py create --feature-file <ask> --brief-file <brief>`. The controller
 registers the brief as an immutable, REQUIRED analysis input; analysis honors
@@ -122,13 +125,10 @@ its ledger. The interview is over; the factory asks questions now, not you.
 
 ## When it fails
 
-- Owner unavailable → tag open decisions `[BLOCKED: owner needed]` and stop;
-  do not fill gaps by inference.
-- Two owners disagree → record both positions verbatim under one open decision;
-  never average.
-- No checkable outcome and no owner pass/fail signal → the outcome stays OPEN
-  and the brief is NOT factory-ready; say so instead of softening it.
-- Request changes mid-interview → restart the affected area, not the whole brief.
+- Owner unavailable → tag open decisions `[BLOCKED: owner needed]` and stop.
+- Two owners disagree → record both verbatim under one open decision; never average.
+- No checkable outcome and no owner signal → outcome stays OPEN; the brief is
+  NOT factory-ready. Request changes mid-interview → restart that area only.
 - More rounds than the caps allow → not ready; stop.
 
 ## Anti-patterns

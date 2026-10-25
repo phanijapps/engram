@@ -14,7 +14,7 @@
 //! engine-neutral `Arc<dyn ...>` handles on the returned provider.
 
 mod batch;
-mod batch_supersession;
+pub mod batch_supersession;
 mod bootstrap;
 mod community;
 mod conformance;

@@ -492,6 +492,13 @@ pub fn consolidate(app: &App, args: &Value) -> Result<Value, ToolError> {
 /// call. The guarantee is **best-effort, not ACID** — the batch's per-step
 /// status is surfaced so a partial failure is visible, never hidden.
 ///
+/// Optional `source_id`: a caller-declared, revision-stable source identity
+/// (e.g. `docs/x.md`). A sourced batch stamps source provenance on every
+/// assertion and supersedes the same source's prior batches (engine-side
+/// convergence — revisions retract non-re-asserted assertions); per-step
+/// supersession counts are surfaced in the result. Without `source_id` the
+/// write is the legacy append-only behavior and the result says so.
+///
 /// Entries missing a required field are skipped (lenient): a malformed fact /
 /// entity / relationship does not abort the batch; valid entries still land.
 pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
@@ -506,6 +513,12 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
                 Utc::now().timestamp_nanos_opt().unwrap_or(0)
             )
         });
+    // Revision-stable source identity (distinct from the retry-scoped
+    // idempotency key). Empty/whitespace is treated as absent (unsourced).
+    let source_id = args["source_id"]
+        .as_str()
+        .filter(|s| !s.trim().is_empty())
+        .map(str::to_owned);
 
     let scope = app.scope.clone();
     let prov = provenance("mcp-store-knowledge");
@@ -645,24 +658,81 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
         relationships,
         evidence: Vec::new(),
         embeddings: Vec::new(),
-        source_id: None,
+        source_id,
     };
     let outcome = block_on(batch.ingest(request)).map_err(internal)?;
 
     let steps: Vec<String> = outcome
         .steps
         .iter()
-        .map(|s| format!("{:?}: {:?}", s.step, s.status))
+        .map(|s| {
+            let mut line = format!("{:?}: {:?}", s.step, s.status);
+            if let Some(counts) = &s.supersession
+                && let Some(note) = supersession_summary(counts)
+            {
+                line.push_str(&format!(" (superseded: {note})"));
+            }
+            line
+        })
         .collect();
+    // Unsourced writes stay append-only — say so explicitly (honest mode
+    // note) instead of leaving the convergence behavior ambiguous.
+    let mode_note = if outcome.steps.iter().all(|s| s.supersession.is_none()) {
+        " Mode: append-only (no source_id) — re-distills do not supersede; pass a stable source_id to enable revision supersession."
+    } else {
+        ""
+    };
     Ok(protocol::text_content(format!(
-        "Batch {:?} (guarantee: {:?}). {} fact(s), {} entities, {} relationship(s){skipped_note}. [{}]",
+        "Batch {:?} (guarantee: {:?}). {} fact(s), {} entities, {} relationship(s){skipped_note}. [{}]{}",
         outcome.status,
         outcome.guarantee,
         fact_count,
         entity_count,
         rel_count,
-        steps.join(", ")
+        steps.join(", "),
+        mode_note
     )))
+}
+
+/// Human/agent-readable summary of a step's supersession counts — only the
+/// non-zero counters (a zero-effect pass adds no noise).
+fn supersession_summary(counts: &engram_integration::SupersessionCounts) -> Option<String> {
+    let mut parts: Vec<String> = Vec::new();
+    if counts.forgotten_facts > 0 {
+        parts.push(format!("{} fact(s) forgotten", counts.forgotten_facts));
+    }
+    if counts.archived_entities > 0 {
+        parts.push(format!("{} entit(y) archived", counts.archived_entities));
+    }
+    if counts.archived_relationships > 0 {
+        parts.push(format!(
+            "{} relationship(s) archived",
+            counts.archived_relationships
+        ));
+    }
+    if counts.refs_removed > 0 {
+        parts.push(format!("{} source ref(s) removed", counts.refs_removed));
+    }
+    if counts.restored > 0 {
+        parts.push(format!("{} restored", counts.restored));
+    }
+    if counts.immune_skipped > 0 {
+        parts.push(format!(
+            "{} immune (other-attribution) skipped",
+            counts.immune_skipped
+        ));
+    }
+    if counts.failed > 0 {
+        parts.push(format!(
+            "{} FAILED (best-effort: re-send to converge)",
+            counts.failed
+        ));
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(parts.join(", "))
+    }
 }
 
 /// `index_docs`: chunk a Markdown (or text) document into retrieval-friendly
@@ -988,6 +1058,94 @@ pub(crate) mod tests {
         assert!(
             !leaked,
             "recall under a different workspace must be isolated"
+        );
+    }
+
+    /// Unsourced `store_knowledge` stays append-only — and says so in the
+    /// result text (honest mode note naming the opt-in).
+    #[test]
+    fn store_knowledge_without_source_id_notes_append_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let res = store_knowledge(
+            &app,
+            &json!({ "facts": [{ "content": "Acme builds widgets" }] }),
+        )
+        .expect("store_knowledge should succeed");
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(body.contains("append-only"), "must name the mode: {body}");
+        assert!(body.contains("source_id"), "must name the opt-in: {body}");
+        assert!(
+            !body.contains("superseded"),
+            "no supersession claims unsourced: {body}"
+        );
+    }
+
+    /// Sourced `store_knowledge`: a revision (same source_id, new key) is
+    /// superseded engine-side and the result surfaces per-step counts — the
+    /// agent-facing honesty surface for retraction.
+    #[test]
+    fn store_knowledge_with_source_id_supersedes_and_surfaces_counts() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let v1 = store_knowledge(
+            &app,
+            &json!({
+                "source_id": "docs/gizmo.md",
+                "idempotency_key": "gizmo@v1",
+                "facts": [{ "content": "The gizmo is brass" }],
+                "entities": [{ "name": "Gizmo", "kind": "concept" }],
+                "relationships": [{ "subject": "Gizmo", "predicate": "made_of", "object": "Brass" }]
+            }),
+        )
+        .expect("v1 succeeds");
+        let v1_body = v1["content"][0]["text"].as_str().unwrap();
+        assert!(
+            !v1_body.contains("append-only"),
+            "sourced write is not append-only: {v1_body}"
+        );
+
+        // Revision: changed fact, relationship removed, same source_id, new key.
+        let v2 = store_knowledge(
+            &app,
+            &json!({
+                "source_id": "docs/gizmo.md",
+                "idempotency_key": "gizmo@v2",
+                "facts": [{ "content": "The gizmo is titanium" }],
+                "entities": [{ "name": "Gizmo", "kind": "concept" }],
+                "relationships": []
+            }),
+        )
+        .expect("v2 succeeds");
+        let v2_body = v2["content"][0]["text"].as_str().unwrap();
+        assert!(
+            !v2_body.contains("append-only"),
+            "sourced revision: {v2_body}"
+        );
+        assert!(
+            v2_body.contains("superseded"),
+            "counts surface per step: {v2_body}"
+        );
+        assert!(
+            v2_body.contains("forgotten"),
+            "fact retraction surfaced: {v2_body}"
+        );
+        assert!(
+            v2_body.contains("archived"),
+            "relationship retraction surfaced: {v2_body}"
+        );
+
+        // Engine-side convergence is observable through recall: the revised
+        // fact is retrievable, the superseded one is not.
+        let rec = recall(&app, &json!({ "query": "gizmo" })).unwrap();
+        let rec_body = rec["content"][0]["text"].as_str().unwrap();
+        assert!(
+            rec_body.contains("titanium"),
+            "revised fact retrievable: {rec_body}"
+        );
+        assert!(
+            !rec_body.contains("brass"),
+            "superseded fact not retrievable: {rec_body}"
         );
     }
 

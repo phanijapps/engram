@@ -504,15 +504,19 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
     registry.register(ToolRecord {
         name: "store_knowledge",
         description: "Bulk distill-write: write extracted facts + entities + relationships in one \
-                      best-effort batch (NOT ACID). Surfaces per-step status. Entries missing a \
-                      required field are skipped (reported in the result).",
+                      best-effort batch (NOT ACID). Surfaces per-step status and supersession \
+                      counts. Pass a stable source_id (e.g. the doc path) to make revisions \
+                      supersede that source's prior batch (engine-side retraction); without it \
+                      the write is append-only. Entries missing a required field are skipped \
+                      (reported in the result).",
         input_schema: json!({
             "type": "object",
             "properties": {
                 "facts": { "type": "array", "items": { "type": "object", "properties": { "content": { "type": "string" } }, "required": ["content"] } },
                 "entities": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string" } }, "required": ["name"] } },
                 "relationships": { "type": "array", "items": { "type": "object", "properties": { "subject": { "type": "string" }, "predicate": { "type": "string" }, "object": { "type": "string" } }, "required": ["subject", "predicate", "object"] } },
-                "idempotency_key": { "type": "string", "description": "Omit only if you do not need re-send dedup; otherwise supply a stable caller-chosen key." }
+                "idempotency_key": { "type": "string", "description": "Omit only if you do not need re-send dedup; otherwise supply a stable caller-chosen key. Use a NEW key for a revision (same key + changed payload dedupes to the old content)." },
+                "source_id": { "type": "string", "description": "Optional stable source identity (e.g. docs/x.md). Reuse the SAME source_id across revisions (with a new idempotency_key) so the engine supersedes that source's prior assertions. Omitted = append-only write." }
             }
         }),
         handler: tools::store_knowledge,

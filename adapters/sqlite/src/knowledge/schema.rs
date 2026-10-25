@@ -136,6 +136,21 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
                 record_json TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS source_batch_ledger (
+                row_key TEXT PRIMARY KEY,
+                tenant TEXT NOT NULL,
+                subject TEXT,
+                workspace TEXT,
+                session TEXT,
+                environment TEXT,
+                source_id TEXT NOT NULL,
+                batch_key TEXT NOT NULL,
+                record_kind TEXT NOT NULL,
+                record_id TEXT NOT NULL,
+                recorded_at TEXT NOT NULL,
+                superseded_at TEXT
+            );
+
             CREATE INDEX IF NOT EXISTS idx_chunks_document ON knowledge_chunks(document_id);
             CREATE INDEX IF NOT EXISTS idx_chunks_source ON knowledge_chunks(source_id);
             CREATE INDEX IF NOT EXISTS idx_documents_source ON knowledge_documents(source_id);
@@ -146,6 +161,8 @@ pub(crate) fn initialize_schema(connection: &Connection) -> CoreResult<()> {
             CREATE INDEX IF NOT EXISTS idx_ontology_classes ON ontology_classes(ontology_id);
             CREATE INDEX IF NOT EXISTS idx_ontology_properties ON ontology_properties(ontology_id);
             CREATE INDEX IF NOT EXISTS idx_ontology_axioms ON ontology_axioms(ontology_id);
+            CREATE INDEX IF NOT EXISTS idx_source_batch_ledger_source
+                ON source_batch_ledger(tenant, source_id, superseded_at);
             "#,
         )
         .map_err(sql_error)?;

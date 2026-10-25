@@ -852,3 +852,178 @@ fn initialize_schema_migrates_pre_existing_db_without_columns() {
 
     let _ = std::fs::remove_file(&path);
 }
+
+// ---------- source-provenance additions (job 001-kg-source-provenance) ------
+
+/// A minimal entity with an optional source ref, in the shared test scope.
+fn sourced_entity(id: &str, source_refs: Vec<EvidenceRef>) -> KnowledgeEntity {
+    KnowledgeEntity {
+        id: Id::from(id),
+        graph_id: None,
+        kind: EntityKind::Concept,
+        name: format!("entity-{id}"),
+        aliases: Vec::new(),
+        scope: scope("tenant-a"),
+        source_refs,
+        concept_refs: Vec::new(),
+        ontology_class_refs: Vec::new(),
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        valid_from: None,
+        valid_until: None,
+        metadata: None,
+        archived_at: None,
+    }
+}
+
+fn source_ref(source_id: &str) -> EvidenceRef {
+    EvidenceRef {
+        target_type: EvidenceTargetType::Source,
+        target_id: Some(source_id.to_owned()),
+        uri: None,
+        quote: None,
+        location: None,
+    }
+}
+
+#[test]
+fn by_source_ref_listings_match_membership_not_name() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    // Entity carrying the doc source ref; entity attributed to a code graph
+    // (graph_id, no doc ref) sharing a similar name; un-attributed entity.
+    block_on(store.put_entity(sourced_entity("ent-doc", vec![source_ref("docs/x.md")])))
+        .expect("put doc entity");
+    let mut code_entity = sourced_entity("ent-code", Vec::new());
+    code_entity.graph_id = Some(Id::from("graph-code"));
+    code_entity.name = "ent-doc".to_owned(); // same name, different attribution
+    block_on(store.put_entity(code_entity)).expect("put code entity");
+    block_on(store.put_entity(sourced_entity("ent-bare", Vec::new()))).expect("put bare entity");
+
+    let listed =
+        block_on(store.list_entities_by_source_ref("docs/x.md", &scope("tenant-a"))).expect("list");
+    assert_eq!(listed.len(), 1, "only the ref-carrying entity matches");
+    assert_eq!(listed[0].id, Id::from("ent-doc"));
+
+    // Scope-bounded: another tenant sees nothing.
+    let other = block_on(store.list_entities_by_source_ref(
+        "docs/x.md",
+        &Scope {
+            tenant: "tenant-b".to_owned(),
+            ..scope("tenant-a")
+        },
+    ))
+    .expect("list other");
+    assert!(other.is_empty(), "cross-tenant listing must be empty");
+}
+
+#[test]
+fn restore_entity_clears_archive_and_is_idempotent() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    block_on(store.put_entity(sourced_entity("ent-restore", Vec::new()))).expect("put");
+
+    // put_entity preserves a prior archive (cannot un-archive via re-put) —
+    // which is exactly why the restore primitive exists.
+    let archived = KnowledgeEntity {
+        archived_at: Some(Utc::now()),
+        ..sourced_entity("ent-restore", Vec::new())
+    };
+    block_on(store.put_entity(archived)).expect("archive via put");
+    let still_archived = block_on(store.get_entity(&Id::from("ent-restore"), &scope("tenant-a")))
+        .expect("get")
+        .expect("present");
+    assert!(still_archived.archived_at.is_some());
+
+    // Restore clears the archive exactly once; a second call is a no-op
+    // returning false; an unknown id also returns false.
+    assert!(
+        block_on(store.restore_entity(&Id::from("ent-restore"), &scope("tenant-a")))
+            .expect("restore")
+    );
+    let restored = block_on(store.get_entity(&Id::from("ent-restore"), &scope("tenant-a")))
+        .expect("get")
+        .expect("present");
+    assert!(restored.archived_at.is_none(), "archive cleared");
+    assert!(
+        restored.updated_at.is_some(),
+        "restore re-stamps updated_at"
+    );
+    assert_eq!(restored.provenance.method.as_deref(), Some("restore"));
+    assert!(
+        !block_on(store.restore_entity(&Id::from("ent-restore"), &scope("tenant-a")))
+            .expect("restore again"),
+        "restoring an active row is a no-op"
+    );
+    assert!(
+        !block_on(store.restore_entity(&Id::from("ent-missing"), &scope("tenant-a")))
+            .expect("restore missing"),
+        "unknown id returns false"
+    );
+    // Cross-scope restore is denied by construction (scope-bounded read).
+    assert!(
+        !block_on(store.restore_entity(
+            &Id::from("ent-restore"),
+            &Scope {
+                tenant: "tenant-b".to_owned(),
+                ..scope("tenant-a")
+            }
+        ))
+        .expect("restore cross-scope"),
+        "another tenant cannot restore"
+    );
+}
+
+#[test]
+fn restore_relationship_clears_archive() {
+    let store = SqlKnowledgeStore::open_in_memory().expect("open store");
+    let subject = EntityRef {
+        id: Some(Id::from("s")),
+        kind: None,
+        name: Some("s".to_owned()),
+        aliases: Vec::new(),
+    };
+    let object = EntityRef {
+        id: Some(Id::from("o")),
+        kind: None,
+        name: Some("o".to_owned()),
+        aliases: Vec::new(),
+    };
+    let base = KnowledgeRelationship {
+        id: Id::from("rel-restore"),
+        graph_id: None,
+        subject: subject.clone(),
+        predicate: "related_to".to_owned(),
+        object: object.clone(),
+        scope: scope("tenant-a"),
+        evidence: vec![source_ref("docs/x.md")],
+        confidence: None,
+        code_resolution: None,
+        provenance: provenance(),
+        created_at: Utc::now(),
+        updated_at: None,
+        archived_at: None,
+    };
+    block_on(store.put_relationship(base.clone())).expect("put");
+    block_on(store.put_relationship(KnowledgeRelationship {
+        archived_at: Some(Utc::now()),
+        ..base
+    }))
+    .expect("archive");
+
+    let by_source =
+        block_on(store.list_relationships_by_source_ref("docs/x.md", &scope("tenant-a")))
+            .expect("list by source");
+    assert!(
+        by_source.is_empty(),
+        "archived relationships are excluded from active by-source reads"
+    );
+
+    assert!(
+        block_on(store.restore_relationship(&Id::from("rel-restore"), &scope("tenant-a")))
+            .expect("restore")
+    );
+    let active = block_on(store.list_relationships_by_source_ref("docs/x.md", &scope("tenant-a")))
+        .expect("list by source after restore");
+    assert_eq!(active.len(), 1, "restored relationship is active again");
+    assert!(active[0].archived_at.is_none());
+}

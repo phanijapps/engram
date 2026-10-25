@@ -554,4 +554,180 @@ impl KnowledgeRepository for SqlKnowledgeStore {
             .map_err(sql_error)?;
         Ok(affected > 0)
     }
+
+    /// Lists entities whose `source_refs` carry a source ref targeting
+    /// `source_id`, within `scope` (queryable-by-source surface for sourced
+    /// distill batches). Scope-filtered scan with the ref membership checked in
+    /// Rust over the parsed record — the same shape `list_entities_by_graph`
+    /// uses for un-indexed record fields.
+    async fn list_entities_by_source_ref(
+        &self,
+        source_id: &str,
+        scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        let connection = self.lock()?;
+        let mut stmt = connection
+            .prepare(
+                r#"
+                SELECT record_json FROM knowledge_entities
+                WHERE tenant = ?1
+                    AND (subject IS NULL OR subject = ?2)
+                    AND (workspace IS NULL OR workspace = ?3)
+                    AND archived_at IS NULL
+                ORDER BY id
+                "#,
+            )
+            .map_err(sql_error)?;
+        let rows = stmt
+            .query_map(
+                rusqlite::params![scope.tenant, scope.subject, scope.workspace],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(sql_error)?;
+        let mut entities = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let entity: KnowledgeEntity =
+                serde_json::from_str(&json).map_err(crate::knowledge::schema::json_error)?;
+            if has_source_ref(&entity.source_refs, source_id) {
+                entities.push(entity);
+            }
+        }
+        Ok(entities)
+    }
+
+    /// Lists relationships whose `evidence` refs target `source_id`, within
+    /// `scope`. Same shape and semantics as
+    /// [`Self::list_entities_by_source_ref`].
+    async fn list_relationships_by_source_ref(
+        &self,
+        source_id: &str,
+        scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeRelationship>> {
+        let connection = self.lock()?;
+        let mut stmt = connection
+            .prepare(
+                r#"
+                SELECT record_json FROM knowledge_relationships
+                WHERE tenant = ?1
+                    AND (subject IS NULL OR subject = ?2)
+                    AND (workspace IS NULL OR workspace = ?3)
+                    AND archived_at IS NULL
+                ORDER BY id
+                "#,
+            )
+            .map_err(sql_error)?;
+        let rows = stmt
+            .query_map(
+                rusqlite::params![scope.tenant, scope.subject, scope.workspace],
+                |row| row.get::<_, String>(0),
+            )
+            .map_err(sql_error)?;
+        let mut relationships = Vec::new();
+        for row in rows {
+            let json = row.map_err(sql_error)?;
+            let relationship: KnowledgeRelationship =
+                serde_json::from_str(&json).map_err(crate::knowledge::schema::json_error)?;
+            if has_source_ref(&relationship.evidence, source_id) {
+                relationships.push(relationship);
+            }
+        }
+        Ok(relationships)
+    }
+
+    /// Clears `archived_at` on one entity (single-record restore, no incident
+    /// cascade — supersession archives per record by source-ref count). Mirrors
+    /// the maintenance restore's provenance re-stamp without the cascade.
+    async fn restore_entity(&self, id: &EntityId, scope: &Scope) -> CoreResult<bool> {
+        let connection = self.lock()?;
+        let json: Option<String> = connection
+            .query_row(
+                r#"
+                SELECT record_json FROM knowledge_entities
+                WHERE id = ?1
+                    AND tenant = ?2
+                    AND (subject IS NULL OR subject = ?3)
+                    AND (workspace IS NULL OR workspace = ?4)
+                    AND archived_at IS NOT NULL
+                "#,
+                rusqlite::params![id.to_string(), scope.tenant, scope.subject, scope.workspace],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql_error)?;
+        let Some(json) = json else {
+            return Ok(false);
+        };
+        let mut entity: KnowledgeEntity =
+            serde_json::from_str(&json).map_err(crate::knowledge::schema::json_error)?;
+        if !crate::knowledge::scope::scope_allows(&entity.scope, scope) {
+            return Ok(false);
+        }
+        let now = Utc::now();
+        entity.archived_at = None;
+        entity.updated_at = Some(now);
+        entity.provenance.observed_at = now;
+        entity.provenance.method = Some("restore".to_owned());
+        let new_json =
+            serde_json::to_string(&entity).map_err(crate::knowledge::schema::json_error)?;
+        connection
+            .execute(
+                "UPDATE knowledge_entities SET archived_at = NULL, record_json = ?1 WHERE id = ?2",
+                rusqlite::params![new_json, id.to_string()],
+            )
+            .map_err(sql_error)?;
+        Ok(true)
+    }
+
+    /// Clears `archived_at` on one relationship. Same semantics as
+    /// [`Self::restore_entity`].
+    async fn restore_relationship(&self, id: &RelationshipId, scope: &Scope) -> CoreResult<bool> {
+        let connection = self.lock()?;
+        let json: Option<String> = connection
+            .query_row(
+                r#"
+                SELECT record_json FROM knowledge_relationships
+                WHERE id = ?1
+                    AND tenant = ?2
+                    AND (subject IS NULL OR subject = ?3)
+                    AND (workspace IS NULL OR workspace = ?4)
+                    AND archived_at IS NOT NULL
+                "#,
+                rusqlite::params![id.to_string(), scope.tenant, scope.subject, scope.workspace],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql_error)?;
+        let Some(json) = json else {
+            return Ok(false);
+        };
+        let mut relationship: KnowledgeRelationship =
+            serde_json::from_str(&json).map_err(crate::knowledge::schema::json_error)?;
+        if !crate::knowledge::scope::scope_allows(&relationship.scope, scope) {
+            return Ok(false);
+        }
+        let now = Utc::now();
+        relationship.archived_at = None;
+        relationship.updated_at = Some(now);
+        relationship.provenance.observed_at = now;
+        relationship.provenance.method = Some("restore".to_owned());
+        let new_json =
+            serde_json::to_string(&relationship).map_err(crate::knowledge::schema::json_error)?;
+        connection
+            .execute(
+                "UPDATE knowledge_relationships SET archived_at = NULL, record_json = ?1 WHERE id = ?2",
+                rusqlite::params![new_json, id.to_string()],
+            )
+            .map_err(sql_error)?;
+        Ok(true)
+    }
+}
+
+/// True when the ref list carries a source ref targeting `source_id` — the
+/// supersession membership guard (records without the ref are immune, e.g.
+/// code-scan-derived records attributed by `graph_id`/`stable_source_key`).
+fn has_source_ref(refs: &[EvidenceRef], source_id: &str) -> bool {
+    refs.iter().any(|r| {
+        r.target_type == EvidenceTargetType::Source && r.target_id.as_deref() == Some(source_id)
+    })
 }

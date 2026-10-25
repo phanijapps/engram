@@ -8,8 +8,8 @@
 //! re-exports the public surface so downstream crates depend on the names, not
 //! the internal module layout.
 
-pub mod changes;
 mod batch_ledger;
+pub mod changes;
 mod graph;
 pub mod identity;
 mod ingest;

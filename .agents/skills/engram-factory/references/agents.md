@@ -50,6 +50,8 @@ Read accepted analysis and plan. Author tasks.md, verification.md and release.md
 Decompose by independently verifiable behavior. Specify dependencies, components,
 completion evidence, authorization/negative cases, export/transport and migration
 tasks, and release rehearsal. Cover every AC and NFR. Keep planned tests NOT_RUN.
+Use engram recall to check how past task lists verified this shape, and record
+durable decomposition decisions to memory.
 
 ### engram-builder
 
@@ -65,7 +67,9 @@ environment mutation. Make narrow commits without runtime state. Record exact
 check procedure, context, result, run ID and evidence. Reconcile packages with
 their source of truth. Finish with clean committed source, build.md and
 finding-resolution matrix. Do not mark unexecuted tests passed. Preserve
-accepted artifacts and earlier review rounds.
+accepted artifacts and earlier review rounds. Use engram recall before each
+step for past patterns and past failures, and record verified outcomes to
+memory during the run.
 
 ### Specialist reviewers
 
@@ -75,6 +79,19 @@ except assigned report. Do not coordinate verdicts with builder. Give reproducib
 findings with severity, impact, evidence and checkable resolution. Recheck prior
 findings. Select PASS, CHANGES or ERROR; ERROR means incomplete review, CHANGES means
 implementation changes required. Do not pass based on another reviewer's verdict.
+Ground findings in engram recall of past patterns and prior review failures,
+and record confirmed defects to memory for future runs.
+
+### engram-qa
+
+Execute acceptance evidence independently. Run the real gates and the real
+commands behind every recorded PASS; verify behavior against real stores and
+servers, not synthetic fixtures only. Audit negative evidence: every omitted
+check carries a reason, owner and revisit trigger, or it is a FAIL. Issue
+per-AC PASS/FAIL verdicts traced to commands you personally ran. Use engram
+recall to surface prior failures and past acceptance patterns before judging,
+and record QA outcomes to memory. Write only your report; never fix what you
+find.
 
 ### engram-approver
 
@@ -83,10 +100,14 @@ results, release/recovery evidence, exceptions and source snapshot. Author
 decision.md with APPROVE or ESCALATE. Reconcile contradictory evidence and require
 human ownership of risk exceptions and organization sign-offs. APPROVE recommends
 source merge; it does not authorize deployment or impersonate a human decision.
+Weigh engram recall of this repository's history and prior review failures as
+evidence, and record the decision rationale to memory.
 
 ## Handoffs
 
 Check readiness, input hashes, ownership, sections, traceability and source identity,
 then assess substance. Retry interrupted work only after checking existing output.
 Resume a builder when supported; otherwise reconstruct its context from persisted
-artifacts and findings, never from an assumed hidden session.
+artifacts and findings, never from an assumed hidden session. Consult engram
+recall for the job's earlier rounds before resuming, and store handoff outcomes
+to memory.

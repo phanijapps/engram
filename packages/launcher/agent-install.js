@@ -110,41 +110,68 @@ function writeTomlSection(file, section, body) {
   fs.writeFileSync(file, text);
 }
 
-// Skills this installer ships. Retired names below are removed from existing
-// installations — but only directories that still carry our SKILL.md (a user's
-// replacement with different frontmatter is left untouched).
-const SHIPPED_SKILLS = ['engram-index', 'engram-know', 'engram-mem', 'engram-distill'];
+// Skills this installer ships are auto-derived: every top-level directory
+// under the source containing SKILL.md ships (DEC-002), so newly authored
+// skills flow to delivery with no installer change. Retired names below are
+// removed from existing installations — but only directories that still
+// carry our SKILL.md (a user's replacement with different frontmatter is
+// left untouched).
 const RETIRED_SKILLS = ['engram-learn', 'engram-search', 'engram-plan', 'engram-implement'];
 
-function copySkills(destRoot, written) {
+/** Every top-level source directory with a SKILL.md ships (DEC-002). */
+function deriveShippedSkills(src) {
+  return fs
+    .readdirSync(src, { withFileTypes: true })
+    .filter((d) => d.isDirectory() && fs.existsSync(path.join(src, d.name, 'SKILL.md')))
+    .map((d) => d.name)
+    .sort();
+}
+
+/** Name-tagged removal: only delete a skill dir whose SKILL.md is ours. */
+function removeIfOurs(to, skill, written, label) {
+  const marker = path.join(to, 'SKILL.md');
+  if (!fs.existsSync(marker)) return;
+  let ours = false;
+  try {
+    ours = fs.readFileSync(marker, 'utf8').startsWith(`---\nname: ${skill}\n`);
+  } catch {
+    ours = false; // unreadable: never delete what we cannot verify
+  }
+  if (ours) {
+    fs.rmSync(to, { recursive: true, force: true });
+    written.push(`${to} (${label})`);
+  }
+}
+
+function copySkills(destRoot, written, remove = false) {
   const src = skillsSource();
   if (!src) {
     process.stderr.write('engram-mcp: skills source not found (package incomplete?)\n');
     return;
   }
-  for (const skill of SHIPPED_SKILLS) {
+  if (remove) {
+    // --remove undoes exactly what this installer owns: delivered skills and
+    // retired names alike, each name-tagged; foreign content stays (REQ-006).
+    for (const skill of [...deriveShippedSkills(src), ...RETIRED_SKILLS]) {
+      removeIfOurs(path.join(destRoot, skill), skill, written, 'removed');
+    }
+    return;
+  }
+  for (const skill of deriveShippedSkills(src)) {
     const from = path.join(src, skill);
     const to = path.join(destRoot, skill);
     if (!fs.existsSync(path.join(from, 'SKILL.md'))) continue;
+    // DEC-P04 self-copy guard: when destination equals source (a project-
+    // scope install inside the authored repo), skip — never remove — so the
+    // authored tree survives its own install.
+    if (path.resolve(from) === path.resolve(to)) continue;
     fs.rmSync(to, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(to), { recursive: true });
     fs.cpSync(from, to, { recursive: true });
     written.push(to);
   }
   for (const skill of RETIRED_SKILLS) {
-    const to = path.join(destRoot, skill);
-    const marker = path.join(to, 'SKILL.md');
-    if (!fs.existsSync(marker)) continue;
-    let ours = false;
-    try {
-      ours = fs.readFileSync(marker, 'utf8').startsWith(`---\nname: ${skill}\n`);
-    } catch {
-      ours = false; // unreadable: never delete what we cannot verify
-    }
-    if (ours) {
-      fs.rmSync(to, { recursive: true, force: true });
-      written.push(`${to} (retired)`);
-    }
+    removeIfOurs(path.join(destRoot, skill), skill, written, 'retired');
   }
 }
 
@@ -174,7 +201,7 @@ const HOSTS = {
     label: 'Claude Code',
     install(home, remove, written, cwd, scope) {
       const root = scope === 'project' ? path.join(cwd, '.claude') : path.join(home, '.claude');
-      copySkills(path.join(root, 'skills'), written);
+      copySkills(path.join(root, 'skills'), written, remove);
       const agentDir = path.join(root, 'agents');
       if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
       else copyAgent(agentDir, 'red-forman.claude.md', 'red-forman.md', written);
@@ -200,6 +227,7 @@ const HOSTS = {
       copySkills(
         scope === 'project' ? path.join(cwd, '.agents', 'skills') : path.join(home, '.agents', 'skills'),
         written,
+        remove,
       );
       // Agents: Codex discovers agents at user level only (~/.codex/agents,
       // YAML form) — no documented project-agent location.
@@ -271,6 +299,7 @@ const HOSTS = {
       copySkills(
         scope === 'project' ? path.join(cwd, '.agents', 'skills') : path.join(home, '.agents', 'skills'),
         written,
+        remove,
       );
       // Agents: repo-scoped either way (.github/agents/).
       const agentDir = path.join(cwd || process.cwd(), '.github', 'agents');
@@ -310,6 +339,7 @@ const HOSTS = {
       copySkills(
         scope === 'project' ? path.join(cwd, '.agents', 'skills') : path.join(home, '.pi', 'agent', 'skills'),
         written,
+        remove,
       );
       // Agents: .pi/agents/ (project) or ~/.pi/agent/agents/ (user).
       const agentDir =

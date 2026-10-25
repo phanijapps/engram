@@ -64,7 +64,12 @@ pub struct CapabilityReport {
     /// Contradiction / tension tracking across beliefs.
     pub contradiction: CapabilityState,
 
-    /// Atomic cross-store semantic ingest (batch transaction).
+    /// Best-effort batch ingest across stores (semantic batches: episode,
+    /// facts, entities, relationships) with optional source-bound supersession:
+    /// a caller-declared `source_id` stamps source provenance on every
+    /// assertion, ledgers written record ids, and supersedes the same
+    /// source's prior batches on revision (archive/tombstone retraction with
+    /// per-step supersession counts). Unsourced batches are append-only.
     pub atomic_batch: CapabilityState,
 
     /// Unified recall across facts, graph, beliefs, episodes, and taxonomy.

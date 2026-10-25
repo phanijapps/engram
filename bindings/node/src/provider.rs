@@ -34,8 +34,8 @@ use engram_ingest::{
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, CommunityQuery,
     EmbeddingProvider, EngramConfig, EngramProvider, ExportImport, KnowledgeQuery, LexicalFeed,
-    MigrationService, Observability, ProvenanceQuery, StepStatus, TransactionGuarantee,
-    UnifiedRecall,
+    MigrationService, Observability, ProvenanceQuery, StepOutcome, StepStatus, SupersessionCounts,
+    TransactionGuarantee, UnifiedRecall,
 };
 use engram_knowledge::{
     GraphMaintenanceRepository, KnowledgeGraphRepository, KnowledgeRepository, OntologyRepository,
@@ -803,7 +803,9 @@ impl NativeBatchApi {
 }
 
 /// Serializable projection of [`BatchOutcome`] for the N-API boundary.
-/// `CoreError` (not `Serialize`) is stringified per step.
+/// `CoreError` (not `Serialize`) is stringified per step; per-step supersession
+/// counts (sourced batches) ride additively — camelCase, omitted when `None`
+/// so unsourced outcome JSON is byte-identical to the legacy shape.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct BatchOutcomeJson<'a> {
@@ -819,6 +821,8 @@ struct StepOutcomeJson<'a> {
     status: &'a StepStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    supersession: Option<&'a SupersessionCounts>,
 }
 
 impl<'a> BatchOutcomeJson<'a> {
@@ -830,6 +834,7 @@ impl<'a> BatchOutcomeJson<'a> {
                 step: &s.step,
                 status: &s.status,
                 error: s.error.as_ref().map(|e| e.to_string()),
+                supersession: s.supersession.as_ref(),
             })
             .collect();
         Self {
@@ -1745,5 +1750,58 @@ mod tests {
         );
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Surface parity for sourced batches: the N-API `ingestJson` outcome
+    /// projection carries per-step supersession counts (camelCase, omitted
+    /// when `None`), so a TS host sees exactly what a Rust embedder sees.
+    #[test]
+    fn batch_outcome_json_carries_supersession_counts() {
+        let counts = SupersessionCounts {
+            examined: 3,
+            forgotten_facts: 2,
+            archived_entities: 1,
+            ..SupersessionCounts::default()
+        };
+        let mut steps: Vec<StepOutcome> = engram_integration::ALL_STEPS
+            .iter()
+            .map(|&s| StepOutcome::ok(s, StepStatus::Succeeded))
+            .collect();
+        let facts_index = engram_integration::ALL_STEPS
+            .iter()
+            .position(|s| *s == BatchStep::Facts)
+            .expect("facts step");
+        steps[facts_index] =
+            StepOutcome::ok(BatchStep::Facts, StepStatus::Succeeded).with_counts(counts);
+
+        let outcome = BatchOutcome::from_steps(steps);
+        let projected = BatchOutcomeJson::from(&outcome);
+        let json = serde_json::to_value(&projected).expect("project");
+
+        let facts = &json["steps"][facts_index];
+        assert_eq!(facts["step"], "Facts");
+        assert_eq!(
+            facts["supersession"]["examined"], 3,
+            "camelCase counts ride"
+        );
+        assert_eq!(
+            facts["supersession"]["forgottenFacts"], 2,
+            "camelCase field"
+        );
+        assert_eq!(
+            facts["supersession"]["archivedEntities"], 1,
+            "camelCase field"
+        );
+
+        // Unsourced steps omit the key entirely (legacy JSON shape intact).
+        let episode_index = engram_integration::ALL_STEPS
+            .iter()
+            .position(|s| *s == BatchStep::Episode)
+            .expect("episode step");
+        assert!(
+            json["steps"][episode_index].get("supersession").is_none(),
+            "None counts are omitted: {}",
+            json["steps"][episode_index]
+        );
     }
 }

@@ -319,7 +319,9 @@ impl EngramProvider {
     }
 
     /// Returns the best-effort batch ingest handle if the `atomic_batch`
-    /// capability is supported.
+    /// capability is supported. Sourced batches (a `source_id` on the
+    /// request) stamp source provenance and supersede the same source's prior
+    /// batches — the revision-convergence capability of the batch port.
     pub fn batch(&self) -> Option<&Arc<dyn BatchIngest>> {
         self.batch.as_ref()
     }

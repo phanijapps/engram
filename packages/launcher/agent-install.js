@@ -30,7 +30,7 @@ const TAG = 'engram (engram-mcp installer)';
 function skillsSource() {
   const candidates = [
     path.join(LAUNCHER_DIR, 'skills'),
-    path.join(LAUNCHER_DIR, '..', '..', 'mcp', 'engram-mcp', 'skills'),
+    path.join(LAUNCHER_DIR, '..', '..', '.agents', 'skills'),
   ];
   for (const c of candidates) {
     if (fs.existsSync(path.join(c, 'engram-index', 'SKILL.md'))) return c;

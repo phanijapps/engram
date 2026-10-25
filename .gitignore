@@ -55,3 +55,6 @@ engram-architecture-report.html
 
 # work-loop loop-cohort session scratch (per-spec)
 docs/specs/*/state.json
+
+# Launcher npm payload — generated at prepack from .agents/skills (DEC-001)
+packages/launcher/skills/

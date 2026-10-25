@@ -63,6 +63,57 @@ function copyAgent(destDir, srcName, destName, written) {
   written.push(to);
 }
 
+/** Map a skill payload agent file to this host's installed name (DEC-P06). */
+function dialectDestName(file, dialect) {
+  if (dialect === 'codex') {
+    return /^engram-.+\.codex\.yaml$/.test(file)
+      ? file.replace(/\.codex\.yaml$/, '.yaml')
+      : null;
+  }
+  const re = new RegExp(`^engram-.+\\.${dialect}\\.md$`);
+  return re.test(file) ? file.replace(new RegExp(`\\.${dialect}\\.md$`), '.md') : null;
+}
+
+/**
+ * Generic per-skill agents delivery (DEC-004): every shipped skill may carry
+ * an agents/ payload of per-dialect subagent definitions; the files for this
+ * host's dialect land in its agents directory. Only the four documented
+ * dialect patterns install — anything else (e.g. openai.yaml) travels with
+ * the skill folder but is never installed as an agent. The contract pointer
+ * is rewritten to `pointerRoot/<skill>/` — project-relative at project scope
+ * (`.agents/skills` is the cross-tool default and rewrites to itself), the
+ * absolute installed root at user scope — so it resolves from the installed
+ * location in both scopes (DEC-P02, REQ-013).
+ */
+function copySkillAgents(destDir, dialect, pointerRoot, remove, written) {
+  const src = skillsSource();
+  if (!src) return; // copySkills already reported the missing source
+  for (const skill of deriveShippedSkills(src)) {
+    const agentsSrc = path.join(src, skill, 'agents');
+    if (!fs.existsSync(agentsSrc)) continue;
+    const rel = `.agents/skills/${skill}/`;
+    const target = `${path.join(pointerRoot, skill).split(path.sep).join('/')}/`;
+    for (const file of fs.readdirSync(agentsSrc).sort()) {
+      const destName = dialectDestName(file, dialect);
+      if (!destName) continue;
+      const to = path.join(destDir, destName);
+      if (remove) {
+        try {
+          fs.rmSync(to);
+        } catch {}
+        continue;
+      }
+      fs.mkdirSync(destDir, { recursive: true });
+      let text = fs.readFileSync(path.join(agentsSrc, file), 'utf8');
+      if (text.includes(rel)) {
+        text = text.split(rel).join(target);
+      }
+      fs.writeFileSync(to, text);
+      written.push(to);
+    }
+  }
+}
+
 function hookScript(name) {
   return path.join(LAUNCHER_DIR, 'hooks', name);
 }
@@ -205,6 +256,7 @@ const HOSTS = {
       const agentDir = path.join(root, 'agents');
       if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
       else copyAgent(agentDir, 'red-forman.claude.md', 'red-forman.md', written);
+      copySkillAgents(agentDir, 'claude', scope === 'project' ? path.join('.claude', 'skills') : path.join(root, 'skills'), remove, written);
       const settings = path.join(root, 'settings.json');
       const recall = hookScript('recall-context.cjs');
       const stale = hookScript('stale-index.cjs');
@@ -239,6 +291,13 @@ const HOSTS = {
           process.stdout.write('  note: Codex agents are user-scope (no project-agent discovery)\n');
         }
       }
+      copySkillAgents(
+        agentDir,
+        'codex',
+        scope === 'project' ? path.join('.agents', 'skills') : path.join(home, '.agents', 'skills'),
+        remove,
+        written,
+      );
       const recall = hookScript('recall-context.cjs');
       const stale = hookScript('stale-index.cjs');
       if (scope === 'project') {
@@ -305,6 +364,13 @@ const HOSTS = {
       const agentDir = path.join(cwd || process.cwd(), '.github', 'agents');
       if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
       else copyAgent(agentDir, 'red-forman.copilot.md', 'red-forman.md', written);
+      copySkillAgents(
+        agentDir,
+        'copilot',
+        scope === 'project' ? path.join('.agents', 'skills') : path.join(home, '.agents', 'skills'),
+        remove,
+        written,
+      );
       // Per-prompt injection is not available to Copilot command hooks
       // (output dropped by design) — sessionStart only. Honest limitation.
       const file =
@@ -346,6 +412,13 @@ const HOSTS = {
         scope === 'project' ? path.join(cwd, '.pi', 'agents') : path.join(home, '.pi', 'agent', 'agents');
       if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
       else copyAgent(agentDir, 'red-forman.pi.md', 'red-forman.md', written);
+      copySkillAgents(
+        agentDir,
+        'pi',
+        scope === 'project' ? path.join('.agents', 'skills') : path.join(home, '.pi', 'agent', 'skills'),
+        remove,
+        written,
+      );
       // Extensions are pi's hook mechanism: .pi/extensions/ (project)
       // or ~/.pi/agent/extensions/ (user).
       const ext =

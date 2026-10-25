@@ -1282,6 +1282,22 @@ sourceId)`, prior assertions not re-asserted are superseded:
   surfaced (counts + failed step), never rolled back; re-running the same
   source converges via the ledger.
 
+**Engine-locality, export/import, and retention.** The source batch ledger is
+engine-local storage behind the `BatchIngest` port: the table is created at
+store open, but its rows are NOT transported by export/import — `ImportData`
+carries no ledger family, and extending it is a contract change deliberately
+out of scope this cycle (export-import-api invariant: reuse `ImportData`, do
+not invent a new export format). After an export→import migration,
+previously-sourced records keep their source-ref stamps but supersession
+finds no prior rows: revisions of previously-sourced sources behave
+append-only (zero counts, indistinguishable from a first ingest) until the
+source is re-ledgered by a fresh distill batch. Ledger transport via an
+additive `ImportData` family (or a reconcile-by-source-ref fallback) is the
+scheduled follow-up. Retention: archived entities/relationships, tombstoned
+memory records, and superseded ledger rows accumulate indefinitely this
+cycle — retention/GC is deferred (RISK-004); the supersession counts are the
+observability hook for growth.
+
 The ledger and supersession execution are engine storage behind the
 `BatchIngest` port contract (SQLite implementation in the adapters layer);
 port-level lookups (`listEntitiesBySourceRef`, `listRelationshipsBySourceRef`,

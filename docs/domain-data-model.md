@@ -1225,6 +1225,62 @@ Rules:
   vectors inline.
 - Vector storage is adapter-specific.
 
+### Source provenance and supersession (distill batches)
+
+Distill-written batches (`store_knowledge`) may declare a durable source
+identity. The contract is composition-level (the `BatchIngest` port); no domain
+type changes.
+
+**Source identity contract.** A batch request carries an optional
+`sourceId`: a caller-declared, revision-stable string (e.g. `docs/x.md`). It is
+distinct from the batch idempotency key (which is retry-scoped, not
+revision-stable). Supersession scope = all prior batches sharing
+`(scope, sourceId)`. When `sourceId` is absent, behavior is exactly the legacy
+append-only path: no refs stamped, no ledger rows, no supersession.
+
+**Per-assertion provenance.** A sourced batch stamps every assertion it writes
+with `EvidenceRef { targetType: "source", targetId: sourceId }`:
+entities via `sourceRefs`, relationships via `evidence`, facts via
+`Provenance.evidence`. A sourced batch also registers a `KnowledgeSource`
+record with id = `sourceId` (revision-stable by construction, unlike a
+content-hash-derived id) so distill sources are queryable via source listings.
+
+**Source batch ledger.** Because fact (memory) record ids are engine-assigned
+and never seen by the caller, a per-source ledger row records what each batch
+wrote: `(scope, sourceId, batchKey, recordKind, recordId, recordedAt,
+supersededAt?)`. `recordKind` is entity / relationship / memory-record;
+`recordId` is opaque. The ledger is the supersession driver — matching is by
+ledger id plus source-ref membership, never by idempotency-key equality and
+never by entity name.
+
+**Supersession semantics.** On a new batch for an existing `(scope,
+sourceId)`, prior assertions not re-asserted are superseded:
+
+- Facts (memory records): forgotten with `DeleteMode.Tombstone` (reversible by
+  re-assert; keeps the lifecycle event trail).
+- Entities / relationships: the source's ref is removed from the record; the
+  record archives (`archivedAt` set, restorable per the archive/restore model)
+  only when its last source ref is removed. Re-asserted records merge refs
+  (read-modify-write union, never last-writer-wins clobber) and are restored if
+  previously archived.
+- Records whose persisted refs do not contain the `sourceId` (e.g.
+  code-scan-derived records attributed by `graphId` / `stableSourceKey`) are
+  immune — supersession never touches them.
+- Supersession is idempotent: a second pass finds zero eligible rows and
+  reports zero counts. Per-step counts (examined / forgotten / archived /
+  refsRemoved / restored / immuneSkipped / failed) surface in the batch
+  outcome. Per the best-effort guarantee, a partial supersession failure is
+  surfaced (counts + failed step), never rolled back; re-running the same
+  source converges via the ledger.
+
+The ledger and supersession execution are engine storage behind the
+`BatchIngest` port contract (SQLite implementation in the adapters layer);
+port-level lookups (`listEntitiesBySourceRef`, `listRelationshipsBySourceRef`,
+`restoreEntity`, `restoreRelationship`, the `SourceBatchLedger` port) are
+additive with honest not-supported defaults for engines without an
+implementation. Concurrency stance: per-scope single writer (read-modify-write
+ref union is not serialized across concurrent same-scope batches).
+
 ## Ontology Model
 
 Ontologies are part of the knowledge graph contract. They define the vocabulary,

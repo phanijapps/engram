@@ -40,6 +40,7 @@
     "@engramlabs/mcp-win32-x64": "0.2.9-alpha"
   },
   "scripts": {
+    "prepack": "node scripts/generate-skills-payload.cjs",
     "test": "node --test test/*.test.cjs"
   }
 }

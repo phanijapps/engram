@@ -18,6 +18,17 @@
 //! The guarantee is surfaced explicitly as
 //! [`TransactionGuarantee::BestEffort`] — never overclaimed as atomic.
 //!
+//! A **sourced batch** (one carrying [`BatchIngestRequest::source_id`]) adds
+//! durable source provenance and revision supersession on top of the
+//! best-effort model: every written assertion is stamped with a source
+//! `EvidenceRef`, a per-source ledger binds each batch to the record ids it
+//! wrote, and a later batch for the same `(scope, source_id)` supersedes the
+//! source's prior assertions (archive for graph records, tombstone forget for
+//! facts, ref-counted shared records). Per-step supersession counts surface on
+//! [`StepOutcome::supersession`]. An **unsourced** batch is byte-identical to
+//! the legacy append-only behavior: no stamping, no ledger rows, no
+//! supersession (`supersession` stays `None`).
+//!
 //! ADR-0022: this port is engine-neutral — it names no engine type and holds no
 //! SQL (enforced by `.codex/hooks/check-engine-neutrality.sh`). The SQLite
 //! implementation lives in the adapters layer (`engram-conformance`).
@@ -101,31 +112,73 @@ pub enum StepStatus {
 /// reported here; later errors in the same step are not surfaced. A caller
 /// debugging a multi-record failure should treat this as one representative
 /// error, not the complete failure set.
+///
+/// `supersession` carries the per-step supersession counts and is `Some` only
+/// for sourced batches (unsourced steps stay `None`, keeping legacy outcomes
+/// byte-identical).
 #[derive(Debug)]
 pub struct StepOutcome {
     pub step: BatchStep,
     pub status: StepStatus,
     pub error: Option<CoreError>,
+    /// Per-step supersession counts (sourced batches only; `None` unsourced).
+    pub supersession: Option<SupersessionCounts>,
 }
 
 impl StepOutcome {
-    /// A non-failing outcome (`status`, no error).
+    /// A non-failing outcome (`status`, no error, no supersession counts).
     pub fn ok(step: BatchStep, status: StepStatus) -> Self {
         Self {
             step,
             status,
             error: None,
+            supersession: None,
         }
     }
 
-    /// A failing outcome carrying the typed error.
+    /// A failing outcome carrying the typed error (no supersession counts).
     pub fn failed(step: BatchStep, error: CoreError) -> Self {
         Self {
             step,
             status: StepStatus::Failed,
             error: Some(error),
+            supersession: None,
         }
     }
+
+    /// Builder: attaches supersession counts to this outcome (sourced steps).
+    /// `StepOutcome::ok(step, status).with_counts(counts)` — the `ok`/`failed`
+    /// constructors stay source-compatible.
+    pub fn with_counts(mut self, counts: SupersessionCounts) -> Self {
+        self.supersession = Some(counts);
+        self
+    }
+}
+
+/// Per-step supersession counts for a sourced batch (surfaced, never hidden —
+/// a partial supersation is visible as landed counts plus a `failed` count).
+/// Every counter is zero unless this step superseded prior assertions of the
+/// same source. Unsourced batches never construct this type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SupersessionCounts {
+    /// Prior ledger rows this step examined for the source.
+    pub examined: usize,
+    /// Prior facts forgotten (tombstone mode).
+    pub forgotten_facts: usize,
+    /// Prior entities archived (last source ref removed).
+    pub archived_entities: usize,
+    /// Prior relationships archived (last source ref removed).
+    pub archived_relationships: usize,
+    /// Source refs removed from records that stay active (shared records).
+    pub refs_removed: usize,
+    /// Re-asserted records restored from a prior archive.
+    pub restored: usize,
+    /// Prior rows skipped because the record no longer carries this source's
+    /// ref (immune — e.g. code-scan-derived records, never matched by name).
+    pub immune_skipped: usize,
+    /// Per-item supersession failures (best-effort: surfaced, never rolled back).
+    pub failed: usize,
 }
 
 /// The overall batch status.
@@ -199,6 +252,19 @@ pub struct BatchIngestRequest {
     /// Embedding references. Not written in v1 (reported `Skipped`) — vector
     /// storage is a VectorIndex follow-up.
     pub embeddings: Vec<EmbeddingRef>,
+    /// Optional caller-declared, revision-stable source identity for a
+    /// **sourced batch** (e.g. `"docs/x.md"`). Distinct from
+    /// `idempotency_key` (retry-scoped): the source identity survives
+    /// revisions. When present, the backend stamps every written assertion
+    /// with a source `EvidenceRef`, records written record ids in a per-source
+    /// ledger, and supersedes the prior batches of the same
+    /// `(scope, source_id)` (archive for entities/relationships, tombstone
+    /// forget for facts, ref-counted shared records — per-step counts on
+    /// [`StepOutcome::supersession`]). When absent, behavior is byte-identical
+    /// to the legacy append-only path. Additive: missing in old payloads ⇒
+    /// `None`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<String>,
 }
 
 /// Best-effort batch ingest port.
@@ -207,6 +273,15 @@ pub struct BatchIngestRequest {
 /// ([`TransactionGuarantee::BestEffort`] for SQLite). `ingest()` runs the six
 /// steps in [`ALL_STEPS`] order, continuing past a step failure, and returns a
 /// per-step [`BatchOutcome`].
+///
+/// **Sourced batches** (a [`BatchIngestRequest::source_id`]) additionally
+/// stamp source provenance on every written assertion, ledger the written
+/// record ids, and supersede the same source's prior batches
+/// (declared-set reconciliation by ledger id + source-ref membership — never
+/// by idempotency-key equality or entity name). Supersession items soft-fail
+/// per record inside their step; counts surface on
+/// [`StepOutcome::supersession`] — a partial supersession is visible, never
+/// rolled back.
 ///
 /// The port is engine-neutral (ADR-0022): it names no engine type. The SQLite
 /// implementation composes `Sql*` stores in the adapters layer.
@@ -279,6 +354,7 @@ mod tests {
             relationships: Vec::new(),
             evidence: Vec::new(),
             embeddings: Vec::new(),
+            source_id: None,
         }
     }
 
@@ -379,6 +455,90 @@ mod tests {
             ),
         ];
         assert_eq!(aggregate_status(&with_fail), BatchStatus::Partial);
+    }
+
+    #[test]
+    fn constructors_leave_supersession_none_and_with_counts_attaches() {
+        // AC-006 shape guard: the legacy constructors produce outcomes with no
+        // supersession counts, so unsourced batches stay byte-identical; the
+        // `with_counts` builder is the additive sourced path.
+        let ok = StepOutcome::ok(BatchStep::Facts, StepStatus::Succeeded);
+        assert!(ok.supersession.is_none());
+        let failed = StepOutcome::failed(
+            BatchStep::Facts,
+            CoreError::Adapter {
+                adapter: "stub".to_string(),
+                message: "boom".to_string(),
+            },
+        );
+        assert!(failed.supersession.is_none());
+
+        let counts = SupersessionCounts {
+            examined: 3,
+            forgotten_facts: 2,
+            archived_entities: 1,
+            ..SupersessionCounts::default()
+        };
+        let sourced = StepOutcome::ok(BatchStep::Facts, StepStatus::Succeeded).with_counts(counts);
+        assert_eq!(sourced.supersession, Some(counts));
+        // The builder only attaches counts — status/error are untouched.
+        assert_eq!(sourced.status, StepStatus::Succeeded);
+        assert!(sourced.error.is_none());
+        // Default is all-zero (a first ingest / idempotent second pass reports
+        // zeros, never fabricated counts).
+        assert_eq!(
+            SupersessionCounts::default(),
+            SupersessionCounts {
+                examined: 0,
+                forgotten_facts: 0,
+                archived_entities: 0,
+                archived_relationships: 0,
+                refs_removed: 0,
+                restored: 0,
+                immune_skipped: 0,
+                failed: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn supersession_counts_serde_is_camel_case() {
+        let counts = SupersessionCounts {
+            examined: 4,
+            forgotten_facts: 2,
+            archived_entities: 1,
+            archived_relationships: 0,
+            refs_removed: 1,
+            restored: 0,
+            immune_skipped: 0,
+            failed: 0,
+        };
+        let json = serde_json::to_string(&counts).expect("serialize counts");
+        assert!(json.contains("\"forgottenFacts\":2"), "camelCase: {json}");
+        assert!(json.contains("\"archivedEntities\":1"), "camelCase: {json}");
+        let back: SupersessionCounts = serde_json::from_str(&json).expect("deserialize counts");
+        assert_eq!(back, counts);
+    }
+
+    #[test]
+    fn source_id_is_additive_legacy_payloads_decode() {
+        // NFR-004: a legacy payload (serialized before source_id existed)
+        // decodes with source_id = None, and a sourced payload round-trips.
+        // (BatchIngestRequest fields serialize snake_case — no rename_all. The
+        // other fields stay required in JSON exactly as before; only
+        // source_id is additive-optional.)
+        let legacy = serde_json::to_value(empty_request()).expect("serialize");
+        assert!(legacy.get("source_id").is_none(), "None is omitted");
+        let decoded: BatchIngestRequest =
+            serde_json::from_value(legacy).expect("legacy payload decodes");
+        assert_eq!(decoded.source_id, None);
+
+        let mut sourced = empty_request();
+        sourced.source_id = Some("docs/x.md".to_string());
+        let round: BatchIngestRequest =
+            serde_json::from_value(serde_json::to_value(&sourced).expect("serialize"))
+                .expect("round trip");
+        assert_eq!(round.source_id.as_deref(), Some("docs/x.md"));
     }
 
     /// Drives a future on the current thread without a tokio runtime.

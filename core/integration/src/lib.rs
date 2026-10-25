@@ -67,8 +67,8 @@ pub mod recall;
 pub mod sqlite;
 
 pub use batch::{
-    ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep, StepOutcome,
-    StepStatus, TransactionGuarantee, aggregate_status,
+    ALL_STEPS, BatchIngest, BatchIngestRequest, BatchOutcome, BatchStatus, BatchStep,
+    StepOutcome, StepStatus, SupersessionCounts, TransactionGuarantee, aggregate_status,
 };
 pub use capability::{CapabilityReport, CapabilityReportBuilder};
 pub use code_graph::{ExploreNodeView, FileDependencyView};

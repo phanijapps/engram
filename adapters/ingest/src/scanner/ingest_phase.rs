@@ -129,7 +129,7 @@ where
             // Chunk-coverage warning (large files chunked under half their
             // bytes) — computed where candidates exist; None on other paths.
             let mut coverage: Option<String> = None;
-            let ingested = if let (Some(_ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
+            let ingested = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
                 let candidates = match ts.chunk_with_tree(tree, &text, ext) {
                     Ok(c) => c,
                     Err(_) => return (rel.clone(), Outcome::Error, Vec::new(), None),
@@ -169,7 +169,7 @@ where
             };
             // AST-level call extraction using the GLOBAL entity name set (not
             // just this file's symbols). This preserves cross-file call edges.
-            let ast_calls = if let (Some(_ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
+            let ast_calls = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
                 // Run whenever the grammar supports the file — an empty
                 // global name set yields empty calls, NOT a fallback to the
                 // fact-less extract_into path (which silently dropped all
@@ -192,7 +192,7 @@ where
                 }
                 if facts.is_empty() { None } else { Some(facts) }
             };
-            let structural = if let (Some(_ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
+            let structural = if let (Some(ts), Some(tree)) = (ts_chunker.as_ref(), shared_tree.as_ref()) {
                 ts.extract_structural_tree(tree, &text_for_ast, ext).ok()
             } else {
                 None

@@ -25,7 +25,7 @@ pub fn call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(String, Strin
         .filter(|r| {
             matches!(
                 r.predicate.as_str(),
-                "calls" | "sends_request" | "handled_by"
+                "calls" | "sends_request" | "handled_by" | "routes_to" | "consumes"
             )
         })
         .filter_map(|r| {
@@ -88,7 +88,7 @@ pub fn edge_evidence(
     for r in relationships.iter() {
         if !matches!(
             r.predicate.as_str(),
-            "calls" | "sends_request" | "handled_by"
+            "calls" | "sends_request" | "handled_by" | "routes_to" | "consumes"
         ) {
             continue;
         }
@@ -172,7 +172,7 @@ pub fn resolved_call_edges(relationships: &[KnowledgeRelationship]) -> Vec<(Stri
         .filter(|r| {
             matches!(
                 r.predicate.as_str(),
-                "calls" | "sends_request" | "handled_by"
+                "calls" | "sends_request" | "handled_by" | "routes_to" | "consumes"
             )
         })
         .filter_map(|r| {
@@ -216,7 +216,7 @@ impl AnalyticsGraph {
         for r in relationships.iter().filter(|r| {
             matches!(
                 r.predicate.as_str(),
-                "calls" | "sends_request" | "handled_by" | "contains"
+                "calls" | "sends_request" | "handled_by" | "routes_to" | "consumes" | "contains"
             )
         }) {
             let (Some(subject_id), Some(object_id)) = (&r.subject.id, &r.object.id) else {

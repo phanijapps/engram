@@ -432,7 +432,10 @@ fn walk_declarations(
 /// declaration nodes carry no name fields (Julia `function_definition`,
 /// OCaml structures) — the FIRST identifier-like named child. Fieldless
 /// non-identifier first children resolve to None (no anchor).
-fn declaration_name_node<'n>(node: tree_sitter::Node<'n>) -> Option<tree_sitter::Node<'n>> {
+fn declaration_name_node<'n>(
+    node: tree_sitter::Node<'n>,
+    source: &[u8],
+) -> Option<tree_sitter::Node<'n>> {
     if let Some(n) = node
         .child_by_field_name("name")
         .or_else(|| node.child_by_field_name("declarator"))
@@ -441,18 +444,15 @@ fn declaration_name_node<'n>(node: tree_sitter::Node<'n>) -> Option<tree_sitter:
     {
         return Some(n);
     }
-    // Fallback for fieldless declaration grammars: the LEFTMOST named-child
-    // chain, up to three levels (Julia `function_definition → signature →
-    // call_expression → identifier`; OCaml `value_definition → let_binding →
-    // value_name`). Anything deeper or non-identifier resolves to None —
-    // no guessed names.
-    let mut cur = {
-        let mut cursor = node.walk();
-        node.named_children(&mut cursor).next()?
-    };
-    for _ in 0..3 {
-        let k = cur.kind();
-        if matches!(
+    // Fallback for fieldless declaration grammars (Julia's signature-nested
+    // names, OCaml's let_binding, SQL's object_reference, COBOL paragraph
+    // headers). Up to three levels: at each level, scan ALL named children
+    // for an identifier-like node (SQL puts keywords before the name);
+    // otherwise descend the first non-keyword child. A leaf declaration
+    // whose name is a hidden token (COBOL `paragraph_header`) resolves to
+    // itself. Anything else resolves to None — no guessed names.
+    let is_identifier_like = |k: &str| {
+        matches!(
             k,
             "identifier"
                 | "variable"
@@ -461,15 +461,44 @@ fn declaration_name_node<'n>(node: tree_sitter::Node<'n>) -> Option<tree_sitter:
                 | "field_identifier"
                 | "constant"
                 | "function_name"
+                | "program_name"
                 | "variable_name"
                 | "const_identifier"
-        ) {
-            return Some(cur);
+                | "object_reference"
+        )
+    };
+    let mut cur = node;
+    for _ in 0..3 {
+        let mut cursor = cur.walk();
+        let children: Vec<_> = cur.named_children(&mut cursor).collect();
+        if children.is_empty() {
+            // Leaf declaration whose own text is the name (COBOL
+            // paragraph_header) — but ONLY when the text is actually
+            // name-shaped (an empty `()` parameter list is not a name).
+            let text = cur
+                .utf8_text(source)
+                .unwrap_or("")
+                .trim()
+                .trim_end_matches('.');
+            if !text.is_empty()
+                && text
+                    .chars()
+                    .all(|c| c.is_alphanumeric() || matches!(c, '_' | '$' | '-' | '\'' | '!' | '?'))
+            {
+                return Some(cur);
+            }
+            return None;
         }
-        cur = {
-            let mut cursor = cur.walk();
-            cur.named_children(&mut cursor).next()?
-        };
+        if let Some(found) = children
+            .iter()
+            .copied()
+            .find(|c| is_identifier_like(c.kind()))
+        {
+            return Some(found);
+        }
+        cur = children
+            .into_iter()
+            .find(|c| !c.kind().starts_with("keyword_"))?;
     }
     None
 }
@@ -548,7 +577,7 @@ fn walk_declarations_with_receivers(
     }
     if let Some(keyword) = kind_map.get(kind) {
         // Try the `name` field first (works for most languages).
-        let name_node = declaration_name_node(*node);
+        let name_node = declaration_name_node(*node, source);
         if let Some(name_node) = name_node {
             let name_text = extract_name(&name_node, source);
             if !name_text.is_empty() {
@@ -870,16 +899,24 @@ fn extract_qualified_name(node: &tree_sitter::Node, source: &[u8]) -> String {
 }
 
 fn extract_name(node: &tree_sitter::Node, source: &[u8]) -> String {
-    let text = node.utf8_text(source).unwrap_or("").trim().to_owned();
+    // COBOL paragraph/section names carry a trailing sentence period
+    // (`MAIN-PARA.`) — strip it before any name logic.
+    let text = node
+        .utf8_text(source)
+        .unwrap_or("")
+        .trim()
+        .trim_end_matches('.')
+        .to_owned();
     // For simple identifiers, the text IS the name. Identifier shapes include
     // language-convention punctuation that is PART of the name: leading `_`
     // (private-by-convention), `$` (JS/framework names), trailing `!`/`?`
-    // (Ruby bang/predicate methods), `'` (Haskell/ML primes). Keeping them
-    // verbatim preserves distinct identities (`save!` ≠ `save`); the lexical
-    // lane normalizes stems separately, so search still works.
+    // (Ruby bang/predicate methods), `'` (Haskell/ML primes), interior `-`
+    // (COBOL paragraphs, Lisp kebab-case). Keeping them verbatim preserves
+    // distinct identities (`save!` ≠ `save`); the lexical lane normalizes
+    // stems separately, so search still works.
     if text
         .chars()
-        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '$' | '\'' | '!' | '?'))
+        .all(|c| c.is_alphanumeric() || matches!(c, '_' | '$' | '-' | '\'' | '!' | '?'))
     {
         return text;
     }
@@ -1079,7 +1116,7 @@ fn walk_structural(
     if !paths.is_empty() {
         edges.imports.extend(paths);
     } else if kind_map.contains_key(kind) {
-        let name_node = declaration_name_node(*node);
+        let name_node = declaration_name_node(*node, source);
         if let Some(name_node) = name_node {
             let name_text = extract_name(&name_node, source);
             if !name_text.is_empty() {

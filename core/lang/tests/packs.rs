@@ -159,3 +159,45 @@ fn registration_composes_with_builtins() {
     let after = anchors(&c, "local function helper(x) return x end", "lua");
     assert_eq!(before, after, "idempotent");
 }
+
+// ── Legacy modernization pack ───────────────────────────────────────────
+
+/// COBOL: program module + paragraphs (hyphenated names preserved, receiver-
+/// qualified by program).
+#[test]
+fn cobol_symbols() {
+    let c = chunker();
+    let src = "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. HELLO.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           DISPLAY 'HELLO'.\n       INIT-PARA.\n           DISPLAY 'INIT'.\n";
+    let a = anchors(&c, src, "cbl");
+    for expected in ["module HELLO", "fn HELLO::MAIN-PARA", "fn HELLO::INIT-PARA"] {
+        assert!(
+            a.contains(&expected.to_owned()),
+            "missing {expected}: {a:?}"
+        );
+    }
+}
+
+/// Fortran: program/module/subroutine/function anchors.
+#[test]
+fn fortran_symbols() {
+    let c = chunker();
+    let src = "program hello\ncontains\n  subroutine init()\n  end subroutine\n  function helper(x) result(r)\n    integer :: r\n    r = x\n  end function\nend program\n";
+    let a = anchors(&c, src, "f90");
+    for expected in ["module hello", "fn init", "fn helper"] {
+        assert!(
+            a.contains(&expected.to_owned()),
+            "missing {expected}: {a:?}"
+        );
+    }
+}
+
+/// SQL: tables → struct, views → type, functions → fn.
+#[test]
+fn sql_symbols() {
+    let c = chunker();
+    let src =
+        "CREATE TABLE users (id INT PRIMARY KEY);\nCREATE VIEW active AS SELECT * FROM users;\n";
+    let a = anchors(&c, src, "sql");
+    assert!(a.contains(&"struct users".to_owned()), "table: {a:?}");
+    assert!(a.contains(&"type active".to_owned()), "view: {a:?}");
+}

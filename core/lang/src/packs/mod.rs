@@ -27,14 +27,23 @@ pub fn register_all(chunker: &mut TreeSitterChunker) {
     ocaml::register(chunker);
     #[cfg(feature = "haskell")]
     haskell::register(chunker);
+    #[cfg(feature = "cobol")]
+    cobol::register(chunker);
+    #[cfg(feature = "fortran")]
+    fortran::register(chunker);
+    #[cfg(feature = "sql")]
+    sql::register(chunker);
 }
 
+pub mod cobol;
 pub mod dart;
 pub mod erlang;
+pub mod fortran;
 pub mod haskell;
 pub mod julia;
 pub mod lua;
 pub mod ocaml;
+pub mod sql;
 pub mod zig;
 
 pub(crate) type KindMap = HashMap<&'static str, &'static str>;

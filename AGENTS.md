@@ -41,7 +41,9 @@ core/                      Storage-neutral Rust crates.
                            engram-code chunker at composition time. Additive
                            packs behind cargo features — never a rewrite of
                            engram-code. First cut: lua, julia, zig, dart,
-                           erlang, ocaml, haskell.
+                           erlang, ocaml, haskell; legacy modernization:
+                           COBOL, Fortran, SQL (COBOL+SQL grammars vendored
+                           under lang/grammars/ — no linkable crates.io lib).
 
   code/                    Deterministic code-indexing behavior crate (engram-code, ADR-0028):
                            tree-sitter parsing, symbol identity, typed code edges,

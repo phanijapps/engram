@@ -1035,12 +1035,15 @@ dependencies = [
  "engram-store-sqlite",
  "futures",
  "tree-sitter",
+ "tree-sitter-cobol",
  "tree-sitter-dart",
  "tree-sitter-erlang",
+ "tree-sitter-fortran",
  "tree-sitter-haskell",
  "tree-sitter-julia",
  "tree-sitter-lua",
  "tree-sitter-ocaml",
+ "tree-sitter-sql",
  "tree-sitter-zig",
 ]
 
@@ -4653,6 +4656,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tree-sitter-cobol"
+version = "0.0.1"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
 name = "tree-sitter-cpp"
 version = "0.23.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4677,6 +4688,16 @@ name = "tree-sitter-erlang"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8079a9cfe733c3b6749bb3c683c0e997ee68a2305f7a210800bbbc53e82d3f64"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-fortran"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea5fea41363a9b59666001dc26c4b356d4e164da27c6ce31145e00aba6bf9b16"
 dependencies = [
  "cc",
  "tree-sitter-language",
@@ -4824,6 +4845,14 @@ name = "tree-sitter-sfapex"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ac630633dad003566212db2adc29a2a75c3e581a7288713dde28f42a428b016"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-sql"
+version = "0.0.1"
 dependencies = [
  "cc",
  "tree-sitter-language",

@@ -63,6 +63,16 @@ fn multi_language_scan_extracts_symbols_and_calls() {
         "pub fn helper(x: u32) u32 {\n    return x;\n}\npub fn run(a: u32) u32 {\n    return helper(a);\n}\n",
     )
     .unwrap();
+    fs::write(
+        root.join("legacy.cbl"),
+        "       IDENTIFICATION DIVISION.\n       PROGRAM-ID. LEGACY.\n       PROCEDURE DIVISION.\n       MAIN-PARA.\n           DISPLAY 'X'.\n",
+    )
+    .unwrap();
+    fs::write(
+        root.join("legacy.f90"),
+        "subroutine helper(x)\n  integer, intent(in) :: x\nend subroutine\n",
+    )
+    .unwrap();
 
     let store = SqlKnowledgeStore::open_in_memory().expect("store");
     let source = "lang-fixture";
@@ -74,7 +84,7 @@ fn multi_language_scan_extracts_symbols_and_calls() {
     )
     .expect("scan");
     assert_eq!(summary.errors, 0, "scan errors");
-    assert!(summary.ingested >= 3, "all fixtures ingested: {summary:?}");
+    assert!(summary.ingested >= 5, "all fixtures ingested: {summary:?}");
 
     let entities = block_on(store.list_entities(&scope())).expect("entities");
     let fns: Vec<String> = entities

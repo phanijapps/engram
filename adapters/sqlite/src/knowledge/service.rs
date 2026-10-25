@@ -410,6 +410,25 @@ impl SqlKnowledgeStore {
         Ok(sources)
     }
 
+    /// Reads one registry source row by its GLOBAL id, deliberately unscoped.
+    /// This is the existence probe for the sourced-batch registry upsert guard
+    /// (FIND-security-003): `put_source` upserts on the global id, so the guard
+    /// must see foreign-scope rows to refuse to clobber or re-scope them — a
+    /// scope-filtered read would hide exactly the rows that need protecting.
+    pub async fn get_source_by_id(&self, id: &Id) -> CoreResult<Option<KnowledgeSource>> {
+        let connection = self.lock()?;
+        let json: Option<String> = connection
+            .query_row(
+                "SELECT record_json FROM knowledge_sources WHERE id = ?1",
+                params![id.to_string()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(sql_error)?;
+        json.map(|json| serde_json::from_str::<KnowledgeSource>(&json).map_err(json_error))
+            .transpose()
+    }
+
     /// Lists knowledge documents whose owning source is visible to `scope`.
     ///
     /// `SourceDocument` carries no `scope` field of its own (documents inherit

@@ -31,7 +31,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use engram_conformance::SqlBatchIngest;
 use engram_domain::*;
-use engram_integration::sqlite::batch_supersession::run_relationships_step;
+use engram_integration::sqlite::batch_supersession::{registry_source, run_relationships_step};
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStep, StepStatus, SupersessionCounts,
 };
@@ -1359,6 +1359,99 @@ fn injected_partial_failure_is_honest_and_converges_on_retry() {
         vec!["Widget␟v2_rel␟NewInV2".to_string()],
         "converged to v2's declared relationship set"
     );
+}
+
+// ---------- registry source collision guard (FIND-security-003) -------------
+
+#[test]
+fn registry_source_collision_never_clobbers_foreign_rows() {
+    let (_memory, knowledge, batch) = seeded();
+    // A foreign-TENANT registry row already owns the id the sourced batch
+    // will claim (e.g. an index_docs source row registered by another tenant).
+    let foreign_scope = Scope {
+        tenant: "tenant-foreign".to_string(),
+        ..scope()
+    };
+    let mut foreign = registry_source("docs/x.md", &foreign_scope);
+    foreign.kind = SourceKind::Url;
+    foreign.name = "foreign registry row".to_string();
+    foreign.uri = Some("https://example.test/x".to_string());
+    block_on(knowledge.put_source(foreign.clone())).expect("seed foreign registry row");
+
+    // A sourced batch in OUR scope claims the same source_id.
+    let outcome = block_on(batch.ingest(sourced_request(
+        "doc-x@v1",
+        "docs/x.md",
+        Vec::new(),
+        vec![entity("Widget")],
+        Vec::new(),
+    )))
+    .expect("ingest");
+
+    // The registry guard surfaces the collision as a failed Episode step
+    // (best-effort: the remaining steps still ran).
+    assert_eq!(
+        step_status(&outcome, BatchStep::Episode),
+        &StepStatus::Failed
+    );
+    assert_eq!(
+        step_status(&outcome, BatchStep::Entities),
+        &StepStatus::Succeeded
+    );
+
+    // The foreign row is untouched — scope, kind, name, uri all preserved,
+    // never re-scoped into the batch's scope.
+    let still = block_on(knowledge.get_source_by_id(&Id::from("docs/x.md")))
+        .expect("get foreign row")
+        .expect("present");
+    assert_eq!(still.scope, foreign_scope, "foreign row not re-scoped");
+    assert_eq!(still.kind, SourceKind::Url);
+    assert_eq!(still.name, "foreign registry row");
+    assert_eq!(still.uri, Some("https://example.test/x".to_string()));
+    assert_eq!(still.created_at, foreign.created_at);
+    // And OUR scope did not gain a registry row for the hijacked id.
+    assert!(
+        block_on(knowledge.list_sources(&scope()))
+            .expect("list our sources")
+            .iter()
+            .all(|s| s.id.to_string() != "docs/x.md"),
+        "no re-scoped copy appeared in the batch scope"
+    );
+
+    // An IN-SCOPE existing row is updated on name/updated_at only — its
+    // kind, uri, and created_at survive the re-put.
+    let created_before = chrono::Utc::now() - chrono::Duration::hours(24);
+    let mut in_scope = registry_source("docs/y.md", &scope());
+    in_scope.kind = SourceKind::Url;
+    in_scope.name = "pre-existing name".to_string();
+    in_scope.uri = Some("https://example.test/y".to_string());
+    in_scope.created_at = created_before;
+    block_on(knowledge.put_source(in_scope)).expect("seed in-scope registry row");
+    let in_scope_outcome = block_on(batch.ingest(sourced_request(
+        "doc-y@v1",
+        "docs/y.md",
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+    )))
+    .expect("ingest y");
+    assert_eq!(
+        step_status(&in_scope_outcome, BatchStep::Episode),
+        &StepStatus::Succeeded,
+        "in-scope re-put is a normal update, not a failure"
+    );
+    let updated = block_on(knowledge.get_source_by_id(&Id::from("docs/y.md")))
+        .expect("get y")
+        .expect("present");
+    assert_eq!(updated.name, "docs/y.md", "name refreshed to the source id");
+    assert!(updated.updated_at.is_some());
+    assert_eq!(updated.kind, SourceKind::Url, "kind preserved");
+    assert_eq!(
+        updated.uri,
+        Some("https://example.test/y".to_string()),
+        "uri preserved"
+    );
+    assert_eq!(updated.created_at, created_before, "created_at preserved");
 }
 
 // ---------- scope isolation + empty source id (TEST-013) --------------------

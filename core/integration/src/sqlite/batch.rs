@@ -40,8 +40,10 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use chrono::Utc;
 use engram_domain::{
-    Actor, KnowledgeEntity, KnowledgeRelationship, Requester, Scope, WriteMemoryRequest,
+    Actor, KnowledgeEntity, KnowledgeRelationship, KnowledgeSource, Requester, Scope,
+    WriteMemoryRequest,
 };
 use engram_knowledge::KnowledgeRepository as _;
 use engram_memory::MemoryService as _;
@@ -78,7 +80,8 @@ impl SqlBatchIngest {
     /// knowledge repository. An empty episode reports [`StepStatus::Skipped`].
     /// The batch [`Scope`] is authoritative — each record is re-scoped to it.
     /// A **sourced** batch additionally puts the registry `KnowledgeSource`
-    /// row (id = source_id) so distill sources are queryable — soft-failed
+    /// row (id = source_id) so distill sources are queryable — guarded against
+    /// foreign-scope id collisions (see [`put_registry_source`]) and soft-failed
     /// like the rest of the episode writes.
     async fn step_episode(&self, request: &BatchIngestRequest) -> StepOutcome {
         let step = BatchStep::Episode;
@@ -103,7 +106,7 @@ impl SqlBatchIngest {
             }
         }
         if let Some(registry) = registry
-            && let Err(e) = self.knowledge.put_source(registry).await
+            && let Err(e) = put_registry_source(self.knowledge.as_ref(), registry).await
             && failure.is_none()
         {
             failure = Some(e);
@@ -356,6 +359,41 @@ fn requester_from(actor: Actor) -> Requester {
         permissions: vec!["memory.write".to_string()],
         on_behalf_of: None,
     }
+}
+
+/// Puts the sourced-batch registry `KnowledgeSource` with a collision guard
+/// (FIND-security-003): `put_source` upserts on the GLOBAL id, so a
+/// caller-supplied `source_id` that collides with an existing registry row of
+/// a different scope envelope must never re-scope or overwrite it — the put
+/// is skipped and the mismatch surfaced as a failure instead. An existing
+/// row in the same scope envelope (canonical `scope_allows` in both
+/// directions, i.e. five-field equality) is updated in place on
+/// `name`/`updated_at` only, keeping its kind, uri, version, policy,
+/// provenance, created_at, and metadata.
+async fn put_registry_source(
+    knowledge: &SqlKnowledgeStore,
+    registry: KnowledgeSource,
+) -> CoreResult<()> {
+    let existing = knowledge.get_source_by_id(&registry.id).await?;
+    let source = match existing {
+        None => registry,
+        Some(existing) => {
+            if existing.scope != registry.scope {
+                return Err(CoreError::PolicyDenied {
+                    reason: format!(
+                        "source_id {} is already registered in a different scope; \
+                         registry write skipped",
+                        registry.id
+                    ),
+                });
+            }
+            let mut updated = existing;
+            updated.name = registry.name;
+            updated.updated_at = Some(Utc::now());
+            updated
+        }
+    };
+    knowledge.put_source(source).await.map(|_| ())
 }
 
 /// Projects a sourced step result into a [`StepOutcome`]: the derived status

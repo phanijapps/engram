@@ -469,6 +469,15 @@ function agentInstall(args) {
       `  scope: ${scope}${scope === 'project' ? ` (${cwd})` : ''}\n` +
       `  storage: ${storage}\n\n`,
   );
+  if (target === 'all' && !remove) {
+    // Honest limitation (REQ-005): claude-desktop has no skills/agents
+    // filesystem — it only takes MCP registration, which is a different
+    // command. Name it instead of staying silent.
+    process.stdout.write(
+      'note: claude-desktop cannot host skills or subagents — MCP registration only\n' +
+        '      (engram-mcp install --client claude-desktop)\n\n',
+    );
+  }
   for (const id of ids) {
     const host = HOSTS[id];
     process.stdout.write(`[${host.label}]\n`);

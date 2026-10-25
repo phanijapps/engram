@@ -205,6 +205,24 @@ test('AC-009 --remove removes owned and retired skills, keeps foreign content', 
   assert.ok(fs.existsSync(path.join(foreign, 'SKILL.md')), 'foreign skill was deleted');
 });
 
+// ------------------------------------------------- AC-008 honest limitations
+test('AC-008 install --agent all names claude-desktop; capable hosts list paths', () => {
+  const { pkg, home, proj } = sandbox('all-limit');
+  const res = run(pkg, ['all'], { cwd: proj, home });
+  assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+  // Explicit limitation naming the harness and the missing capability.
+  assert.match(res.stdout, /note: claude-desktop cannot host skills or subagents/);
+  assert.match(res.stdout, /install --client claude-desktop/);
+  // Host-capable harnesses still list their written paths.
+  assert.ok((res.stdout.match(/^  wrote: /gm) || []).length >= 7, 'capable hosts list written paths');
+  for (const label of ['[Claude Code]', '[Codex]', '[GitHub Copilot]', '[pi]']) {
+    assert.ok(res.stdout.includes(label), `${label} section present`);
+  }
+  // Existing per-host notes are preserved (codex /hooks, copilot session-only).
+  assert.match(res.stdout, /run \/hooks inside Codex/);
+  assert.match(res.stdout, /Copilot command hooks cannot inject per-prompt context/);
+});
+
 // --------------------------------------------------- DEC-P04 self-copy guard
 test('DEC-P04 same-path guard: in-source project install skips instead of deleting', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-agents-selfcopy-'));

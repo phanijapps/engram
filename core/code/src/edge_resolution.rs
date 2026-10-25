@@ -51,6 +51,10 @@ pub mod producer {
     /// on a declaration — parsed syntax (annotation spelling + attached
     /// declaration; the target binding resolves via the standard ladder).
     pub const PARSED_ANNOTATIONS: &str = "parsed-annotations-v1";
+    /// Client-side API consumption (`fetch('/api/users')`): parsed call
+    /// spelling; the endpoint binding resolves via the standard ladder
+    /// against route-emitted Endpoint entities.
+    pub const PARSED_API_CONSUMERS: &str = "api-consumers-v1";
 }
 
 /// Which ladder branch settled a reference attempt.

@@ -62,7 +62,7 @@ pub fn resolve_refs(
     path: Option<&str>,
     repo_ctx: Option<&crate::parser::repo_context::RepoContext>,
 ) -> Vec<UnresolvedReference> {
-    const RESOLVABLE: [&str; 4] = ["calls", "extends", "implements", "routes_to"];
+    const RESOLVABLE: [&str; 5] = ["calls", "extends", "implements", "routes_to", "consumes"];
     let mut ledger = Vec::new();
     let now = Utc::now();
 

@@ -691,6 +691,49 @@ impl GraphExtractor {
                     archived_at: None,
                 });
             }
+            // Client-side API consumption: `fetch('/api/users')` etc become
+            // `consumes` edges (caller → `METHOD /path`) keyed on the same
+            // endpoint-name convention the server side emits — the React→
+            // REST half of the (cross-repo) endpoint join. The object stays
+            // name-only here; the standard ladder resolves it when the
+            // endpoint (this file or another repo in the same workspace
+            // scan) is in the index.
+            for fact in &facts.consumes {
+                let endpoint_name = format!("{} {}", fact.method, fact.path);
+                relationships.push(KnowledgeRelationship {
+                    id: relationship_id(&graph_id, &fact.caller, &endpoint_name),
+                    graph_id: Some(graph_id.clone()),
+                    subject: match index.get(&fact.caller) {
+                        Some(&i) => entity_ref(&entities[i]),
+                        None => EntityRef {
+                            id: None,
+                            kind: None,
+                            name: Some(fact.caller.clone()),
+                            aliases: Vec::new(),
+                        },
+                    },
+                    predicate: "consumes".to_owned(),
+                    // Call-site spelling: parsed syntax; endpoint binding
+                    // pending the ladder (same convention as routes_to).
+                    code_resolution: Some(CodeEdgeResolution::new(
+                        ResolutionTier::Parsed,
+                        engram_code::edge_resolution::producer::PARSED_API_CONSUMERS,
+                    )),
+                    object: EntityRef {
+                        id: None,
+                        kind: None,
+                        name: Some(endpoint_name),
+                        aliases: Vec::new(),
+                    },
+                    scope: source.scope.clone(),
+                    evidence: Vec::new(),
+                    confidence: Some(1.0),
+                    provenance: source.provenance.clone(),
+                    created_at: now,
+                    updated_at: None,
+                    archived_at: None,
+                });
+            }
             for (component, handler) in &facts.callbacks {
                 let Some(&component_index) = index.get(component) else {
                     continue;

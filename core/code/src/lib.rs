@@ -21,7 +21,9 @@ pub use edge_resolution::{
     sweep_evidence,
 };
 pub use edges::{StructuralEdges, contains_pairs};
-pub use frameworks::{FrameworkFacts, RouteFact, extract_frameworks};
+pub use frameworks::{
+    ConsumeFact, FrameworkFacts, RouteFact, extract_api_consumers, extract_frameworks,
+};
 pub use identity::{Resolution, SymbolCandidate, SymbolIndex, bare_tail, qualified_name};
 pub use noise::{is_noise_declaration, is_noise_symbol};
 pub use parser::chunking::{ChunkCandidate, Chunker};

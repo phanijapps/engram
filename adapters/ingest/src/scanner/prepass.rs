@@ -222,20 +222,54 @@ pub(super) fn collect_global_symbols(
         .collect();
 
     let mut names: HashSet<String> = HashSet::new();
-    for (anchors, graph_id, path) in registrations {
+    for (anchors, graph_id, path) in &registrations {
         for qualified in anchors {
             names.insert(qualified.clone());
-            if let Some(tail) = engram_code::bare_tail(&qualified) {
+            if let Some(tail) = engram_code::bare_tail(qualified) {
                 names.insert(tail.to_owned());
             }
-            let id = crate::extractor::symbol_entity_id(&graph_id, &qualified);
+            let id = crate::extractor::symbol_entity_id(graph_id, qualified);
             name_index.register(
-                &qualified,
+                qualified,
                 engram_code::SymbolCandidate {
                     id,
                     name: qualified.clone(),
                     repo: None,
                     path: Some(path.clone()),
+                },
+            );
+        }
+    }
+    // Framework route endpoints (Spring/Express decorators): register the
+    // `METHOD /path` Endpoint entity names so client-side `consumes`
+    // references (fetch/axios/useSWR — possibly in ANOTHER repo of the same
+    // workspace scan) resolve through the standard ladder.
+    for item in to_ingest {
+        let ext = item.rel.rsplit_once('.').map(|(_, e)| e).unwrap_or("");
+        let text = String::from_utf8_lossy(&item.content).into_owned();
+        let facts = engram_code::extract_frameworks(&text, ext);
+        for route in &facts.routes {
+            let endpoint_name = format!("{} {}", route.method, route.path);
+            // The endpoint entity lives in THIS file's graph.
+            let doc_hash = crate::content_hash(text.as_bytes());
+            let mut req = ingest_request_seed.clone();
+            req.document.path = Some(item.rel.clone());
+            req.text = text.clone();
+            let src_id = crate::ingestor::source_id(&req);
+            let doc_id = crate::ingestor::document_id(&src_id, &req.document, &doc_hash);
+            let graph_id = format!(
+                "graph-{}",
+                crate::content_hash(doc_id.as_str()).trim_start_matches("sha256:")
+            );
+            let id = crate::extractor::symbol_entity_id(&graph_id, &endpoint_name);
+            names.insert(endpoint_name.clone());
+            name_index.register(
+                &endpoint_name,
+                engram_code::SymbolCandidate {
+                    id,
+                    name: endpoint_name.clone(),
+                    repo: None,
+                    path: Some(item.rel.clone()),
                 },
             );
         }

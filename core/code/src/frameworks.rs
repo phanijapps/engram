@@ -29,12 +29,33 @@ pub struct FrameworkFacts {
     /// wiring, DI markers, tests, composables — the typed graph surface for
     /// "which methods are @Transactional" questions.
     pub annotations: Vec<AnnotationFact>,
+    /// Client-side HTTP API consumption (ts/tsx/js/jsx): the React→REST
+    /// half of the cross-repo endpoint join — `consumes` edges keyed on the
+    /// same `METHOD /path` endpoint-name convention the server side emits.
+    pub consumes: Vec<ConsumeFact>,
 }
 
 impl FrameworkFacts {
     pub fn is_empty(&self) -> bool {
-        self.routes.is_empty() && self.callbacks.is_empty() && self.annotations.is_empty()
+        self.routes.is_empty()
+            && self.callbacks.is_empty()
+            && self.annotations.is_empty()
+            && self.consumes.is_empty()
     }
+}
+
+/// One client-side HTTP API consumption: a TS/JS call site invoking an
+/// endpoint (`fetch('/api/users')`, `axios.get(...)`, `useSWR(...)`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConsumeFact {
+    /// Enclosing function/component declaration name (the caller).
+    pub caller: String,
+    /// HTTP method, upper-case (`GET`) — from the axios method or the
+    /// `method:` option; fetch defaults to GET.
+    pub method: String,
+    /// Path as written (`/api/users/list`); template substitutions become
+    /// `{}` segments (honestly non-joining against `{id}` path variables).
+    pub path: String,
 }
 
 /// One annotation attachment (`@Transactional` on `find`).
@@ -413,8 +434,341 @@ fn class_name(line: &str) -> Option<String> {
     None
 }
 
+// ---------------------------------------------------------------------------
+// Client-side API consumption (ts/tsx/js/jsx) — the React→REST half of the
+// endpoint join. AST-based: fetch/axios/useSWR call sites attributed to
+// their innermost enclosing function/component, emitted as ConsumeFacts.
+// ---------------------------------------------------------------------------
+
+/// Extracts client-side HTTP API consumption from a parsed TS/JS tree.
+/// Unmapped extensions yield empty. Deterministic; no I/O.
+pub fn extract_api_consumers(
+    tree: &tree_sitter::Tree,
+    source: &str,
+    ext: &str,
+) -> Vec<ConsumeFact> {
+    if !matches!(
+        ext,
+        "ts" | "tsx" | "js" | "jsx" | "mts" | "cts" | "mjs" | "cjs"
+    ) {
+        return Vec::new();
+    }
+    let bytes = source.as_bytes();
+    let mut spans: Vec<(usize, usize, String)> = Vec::new();
+    let mut out: Vec<ConsumeFact> = Vec::new();
+    let entry_kind_map = std::collections::HashMap::<&str, &str>::new();
+    let _ = &entry_kind_map;
+    collect_fn_spans(tree.root_node(), bytes, &mut spans);
+    walk_consumer_calls(tree.root_node(), bytes, &spans, &mut out);
+    out
+}
+
+/// Minimal function-span collection for caller attribution (innermost
+/// enclosing span wins — mirrors the call-attribution discipline).
+fn collect_fn_spans(
+    node: tree_sitter::Node,
+    source: &[u8],
+    spans: &mut Vec<(usize, usize, String)>,
+) {
+    let kind = node.kind();
+    if matches!(
+        kind,
+        "function_declaration" | "method_definition" | "function_expression" | "arrow_function"
+    ) {
+        if let Some(name_node) = node.child_by_field_name("name") {
+            let name = name_node.utf8_text(source).unwrap_or("").trim().to_owned();
+            if !name.is_empty() {
+                spans.push((node.start_byte(), node.end_byte(), name));
+            }
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        collect_fn_spans(child, source, spans);
+    }
+}
+
+fn walk_consumer_calls(
+    node: tree_sitter::Node,
+    source: &[u8],
+    spans: &[(usize, usize, String)],
+    out: &mut Vec<ConsumeFact>,
+) {
+    let kind = node.kind();
+    if matches!(kind, "call_expression" | "new_expression") {
+        if let Some((method, path)) = classify_consumer_call(node, source) {
+            let at = node.start_byte();
+            if let Some(caller) = spans
+                .iter()
+                .filter(|(s, e, _)| at >= *s && at <= *e)
+                .max_by_key(|(s, _, _)| *s)
+                .map(|(_, _, n)| n.clone())
+            {
+                out.push(ConsumeFact {
+                    caller,
+                    method,
+                    path,
+                });
+            }
+        }
+    }
+    let mut cursor = node.walk();
+    for child in node.named_children(&mut cursor) {
+        walk_consumer_calls(child, source, spans, out);
+    }
+}
+
+/// Recognizes `fetch('path'[, { method }])`, `axios.get('path')` and
+/// siblings, `useSWR('path')`. Returns (METHOD, path).
+fn classify_consumer_call(node: tree_sitter::Node, source: &[u8]) -> Option<(String, String)> {
+    let func = node
+        .child_by_field_name("function")
+        .or_else(|| node.named_child(0))?;
+    let args = node.child_by_field_name("arguments");
+    let fkind = func.kind();
+    let callee_text = func.utf8_text(source).unwrap_or("");
+
+    let mut method: Option<&str> = None;
+    let mut is_consumer = false;
+    if fkind == "identifier" {
+        match callee_text {
+            "fetch" => {
+                is_consumer = true;
+                method = Some("GET");
+            }
+            "useSWR" | "useSWRImmutable" => {
+                is_consumer = true;
+                method = Some("GET");
+            }
+            _ => {}
+        }
+    } else if fkind == "member_expression" {
+        // axios.get(...) / this.http.get(...) / apiClient.post(...)
+        let member = func
+            .child_by_field_name("property")
+            .map(|m| m.utf8_text(source).unwrap_or("").to_owned())
+            .unwrap_or_default();
+        match member.as_str() {
+            "get" => {
+                method = Some("GET");
+            }
+            "post" => {
+                method = Some("POST");
+            }
+            "put" => {
+                method = Some("PUT");
+            }
+            "delete" => {
+                method = Some("DELETE");
+            }
+            "patch" => {
+                method = Some("PATCH");
+            }
+            "request" => {
+                method = None; // from options
+            }
+            _ => return None,
+        }
+        is_consumer = true;
+    }
+    if !is_consumer {
+        return None;
+    }
+
+    // First argument: the path literal.
+    let args = args?;
+    let mut cursor = args.walk();
+    let first_arg = args.named_children(&mut cursor).next()?;
+    let path = literal_path(first_arg, source).or_else(|| concat_prefix(first_arg, source))?;
+
+    // fetch options / axios config: `{ method: 'POST' }` overrides.
+    let mut resolved_method = method.unwrap_or("GET").to_owned();
+    let mut c2 = args.walk();
+    for arg in args.named_children(&mut c2).skip(1) {
+        if arg.kind() == "object" {
+            let mut oc = arg.walk();
+            for prop in arg.named_children(&mut oc) {
+                if prop.kind() == "pair" {
+                    let key = prop
+                        .child_by_field_name("key")
+                        .map(|k| k.utf8_text(source).unwrap_or(""))
+                        .unwrap_or("");
+                    if key == "method" {
+                        if let Some(v) = prop.child_by_field_name("value") {
+                            let m = v
+                                .utf8_text(source)
+                                .unwrap_or("")
+                                .trim_matches(['\'', '"'])
+                                .to_uppercase();
+                            if !m.is_empty() {
+                                resolved_method = m;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Some((resolved_method, path))
+}
+
+/// `'/api/users/' + id` — a string-literal prefix concatenated with an
+/// expression records the literal prefix (honest partial path).
+fn concat_prefix(node: tree_sitter::Node, source: &[u8]) -> Option<String> {
+    if node.kind() != "binary_expression" {
+        return None;
+    }
+    let lhs = node.named_child(0)?;
+    if lhs.kind() != "string" {
+        return None;
+    }
+    let text = lhs.utf8_text(source).unwrap_or("");
+    let inner = text.trim_matches(['\'', '"']);
+    if inner.starts_with('/') && !inner.contains(' ') {
+        Some(inner.to_owned())
+    } else {
+        None
+    }
+}
+
+/// Extracts a path from a string literal or template literal; substitutions
+/// become `{}` segments (recorded honestly — they do not join against
+/// server-side `{id}` path variables).
+fn literal_path(node: tree_sitter::Node, source: &[u8]) -> Option<String> {
+    match node.kind() {
+        "string" => {
+            let text = node.utf8_text(source).unwrap_or("");
+            let inner = text.trim_matches(['\'', '"']);
+            if inner.starts_with('/') && !inner.contains(' ') {
+                Some(inner.to_owned())
+            } else {
+                None
+            }
+        }
+        "template_string" => {
+            let text = node.utf8_text(source).unwrap_or("");
+            // Replace ${...} substitutions with {} segments.
+            let mut path = String::new();
+            let mut chars = text.char_indices().peekable();
+            let mut in_subst = false;
+            let mut depth = 0i32;
+            while let Some((_, c)) = chars.next() {
+                match c {
+                    '$' if !in_subst => {
+                        if let Some(&(_, '{')) = chars.peek() {
+                            chars.next();
+                            in_subst = true;
+                            depth = 1;
+                            path.push_str("{}");
+                        } else {
+                            path.push(c);
+                        }
+                    }
+                    '{' if in_subst => depth += 1,
+                    '}' if in_subst => {
+                        depth -= 1;
+                        if depth == 0 {
+                            in_subst = false;
+                        }
+                    }
+                    '`' => {}
+                    _ if !in_subst => path.push(c),
+                    _ => {}
+                }
+            }
+            if path.starts_with('/') && !path.contains(' ') {
+                Some(path)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
+    // ── Client-side API consumption ─────────────────────────────────────
+
+    #[test]
+    fn fetch_literal_get_and_method_override() {
+        let src = "async function loadUsers() {\n  const r = await fetch('/api/users/list');\n  return r.json();\n}\nasync function save(u) {\n  await fetch('/api/users', { method: 'POST' });\n}\n";
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
+            .unwrap();
+        let tree = parser.parse(src, None).unwrap();
+        let facts = extract_api_consumers(&tree, src, "ts");
+        assert!(
+            facts.iter().any(|c| c.caller == "loadUsers"
+                && c.method == "GET"
+                && c.path == "/api/users/list"),
+            "fetch GET: {facts:?}"
+        );
+        assert!(
+            facts
+                .iter()
+                .any(|c| c.caller == "save" && c.method == "POST" && c.path == "/api/users"),
+            "method override: {facts:?}"
+        );
+    }
+
+    #[test]
+    fn axios_methods_and_use_swr() {
+        let src = "function fetchDetail(id) {\n  return axios.get('/api/users/' + id);\n}\nfunction useUsers() {\n  return useSWR('/api/users');\n}\nfunction remove(id) {\n  return apiClient.delete('/api/users/' + id);\n}\n";
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_typescript::LANGUAGE_TSX.into())
+            .unwrap();
+        let tree = parser.parse(src, None).unwrap();
+        let facts = extract_api_consumers(&tree, src, "tsx");
+        assert!(
+            facts
+                .iter()
+                .any(|c| c.caller == "fetchDetail" && c.method == "GET" && c.path == "/api/users/"),
+            "axios.get: {facts:?}"
+        );
+        assert!(
+            facts
+                .iter()
+                .any(|c| c.caller == "useUsers" && c.method == "GET" && c.path == "/api/users"),
+            "useSWR: {facts:?}"
+        );
+        assert!(
+            facts
+                .iter()
+                .any(|c| c.caller == "remove" && c.method == "DELETE"),
+            "delete: {facts:?}"
+        );
+    }
+
+    #[test]
+    fn template_literals_record_honestly() {
+        let src = "function load(id) {\n  return fetch(`/api/users/${id}/detail`);\n}\n";
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
+            .unwrap();
+        let tree = parser.parse(src, None).unwrap();
+        let facts = extract_api_consumers(&tree, src, "ts");
+        assert!(
+            facts.iter().any(|c| c.path == "/api/users/{}/detail"),
+            "template substitution becomes {{}} segment: {facts:?}"
+        );
+    }
+
+    #[test]
+    fn non_path_literals_ignored() {
+        let src = "function run() {\n  const m = new Map();\n  fetchRelative('users');\n  axios.cleanup();\n}\n";
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into())
+            .unwrap();
+        let tree = parser.parse(src, None).unwrap();
+        let facts = extract_api_consumers(&tree, src, "ts");
+        assert!(facts.is_empty(), "noise ignored: {facts:?}");
+    }
 
     // ── JVM annotation layer ────────────────────────────────────────────
 

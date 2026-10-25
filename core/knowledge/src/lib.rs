@@ -9,6 +9,7 @@
 //! the internal module layout.
 
 pub mod changes;
+mod batch_ledger;
 mod graph;
 pub mod identity;
 mod ingest;
@@ -20,6 +21,7 @@ mod taxonomy_validation;
 
 pub use engram_runtime::{CoreError, CoreResult};
 
+pub use batch_ledger::{SourceBatchLedger, SourceBatchRecord, SourceBatchRecordKind};
 pub use changes::{KnowledgeChangeLog, ScanCheckpointStore};
 pub use graph::KnowledgeGraphRepository;
 pub use identity::EntityIdentityRepository;

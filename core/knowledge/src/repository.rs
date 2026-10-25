@@ -127,4 +127,47 @@ pub trait KnowledgeRepository: Send + Sync {
     async fn delete_chunk(&self, _id: &ChunkId, _scope: &Scope) -> CoreResult<bool> {
         Ok(false)
     }
+
+    /// Lists the entities whose `source_refs` carry a source ref targeting
+    /// `source_id` (an `EvidenceRef` with `target_type: Source`), within the
+    /// caller's scope — the query-by-source surface for sourced distill
+    /// batches. Default: empty (unsupported).
+    async fn list_entities_by_source_ref(
+        &self,
+        _source_id: &str,
+        _scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        Ok(Vec::new())
+    }
+
+    /// Lists the relationships whose `evidence` refs target `source_id`,
+    /// within the caller's scope. Default: empty (unsupported).
+    async fn list_relationships_by_source_ref(
+        &self,
+        _source_id: &str,
+        _scope: &Scope,
+    ) -> CoreResult<Vec<KnowledgeRelationship>> {
+        Ok(Vec::new())
+    }
+
+    /// Clears `archived_at` on one entity (single-record restore, no cascade).
+    /// Returns `true` if an archived row was restored, `false` if the entity
+    /// was not found, not archived, or outside the caller's scope. Re-asserted
+    /// records of a re-distilled source use this to come back active. Default:
+    /// not supported.
+    async fn restore_entity(&self, _id: &EntityId, _scope: &Scope) -> CoreResult<bool> {
+        Err(CoreError::Adapter {
+            adapter: "knowledge_repository".to_owned(),
+            message: "entity restores are not supported".to_owned(),
+        })
+    }
+
+    /// Clears `archived_at` on one relationship. Same semantics as
+    /// [`Self::restore_entity`]. Default: not supported.
+    async fn restore_relationship(&self, _id: &RelationshipId, _scope: &Scope) -> CoreResult<bool> {
+        Err(CoreError::Adapter {
+            adapter: "knowledge_repository".to_owned(),
+            message: "relationship restores are not supported".to_owned(),
+        })
+    }
 }

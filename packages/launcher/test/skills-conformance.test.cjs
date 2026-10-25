@@ -1,8 +1,19 @@
 /**
  * Skills conformance evals (RFC-0022) — the gbrain skills-conformance
- * pattern adapted: structural rules every skill must satisfy, plus a
+ * pattern adapted: structural rules skills must satisfy, plus a
  * tool-existence check against the LIVE server's tools/list (so a skill
  * can never reference a tool the server doesn't expose).
+ *
+ * Job 002 (DEC-002/DEC-P05): the expected set is DERIVED from the authored
+ * tree (.agents/skills — the single source), never a second hardcoded list,
+ * and structural rules split by skill class. Knowledge skills keep every
+ * historical assertion verbatim (discipline sections, ≤150-line lean,
+ * trigger-word description, the four bespoke behavior tests). Workflow
+ * skills (engram-factory, engram-frame, outcome-reporting) are checked by
+ * their class: frontmatter, referenced files, JSON tool-call examples, and
+ * live tool existence. The suite also pins the factory contract's
+ * recall/memory guidance (AC-011) and that no skill-listing MCP tool exists
+ * (REQ-009 — the installer is the only exposure surface this phase).
  *
  * Structural checks always run. Tool-existence runs when a binary is
  * resolvable (dev build or ENGRAM_MCP_BIN); otherwise it soft-skips
@@ -17,13 +28,23 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
-const SKILLS_ROOT = path.join(__dirname, '..', 'skills');
-const EXPECTED_SKILLS = [
+const SKILLS_ROOT = path.join(__dirname, '..', '..', '..', '.agents', 'skills');
+// Skill classes (DEC-P05): knowledge skills keep the full structural rule
+// set; workflow skills are checked by their (looser) class rules.
+const KNOWLEDGE_SKILLS = [
+  'engram-distill',
   'engram-index',
   'engram-know',
   'engram-mem',
-  'engram-distill',
 ];
+// Derived from the authored source — the same derivation the installer and
+// the payload generator use. No third list lives here (DEC-002).
+const AUTHORED_SKILLS = fs
+  .readdirSync(SKILLS_ROOT, { withFileTypes: true })
+  .filter((d) => d.isDirectory() && fs.existsSync(path.join(SKILLS_ROOT, d.name, 'SKILL.md')))
+  .map((d) => d.name)
+  .sort();
+const WORKFLOW_SKILLS = AUTHORED_SKILLS.filter((s) => !KNOWLEDGE_SKILLS.includes(s)).sort();
 const REQUIRED_SECTIONS = [
   /## Contract/,
   /## When it fails/,
@@ -90,16 +111,25 @@ function liveToolNames(extraArgs = []) {
   }
 }
 
-test('exactly the four expected skills ship', () => {
-  const dirs = fs
-    .readdirSync(SKILLS_ROOT, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name)
-    .sort();
-  assert.deepEqual(dirs, [...EXPECTED_SKILLS].sort());
+test('expected set derives from the authored source, knowledge skills all ship', () => {
+  assert.deepEqual(
+    AUTHORED_SKILLS,
+    fs
+      .readdirSync(SKILLS_ROOT, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && fs.existsSync(path.join(SKILLS_ROOT, d.name, 'SKILL.md')))
+      .map((d) => d.name)
+      .sort(),
+    'derived expectation must match the source scan',
+  );
+  for (const skill of KNOWLEDGE_SKILLS) {
+    assert.ok(AUTHORED_SKILLS.includes(skill), `knowledge skill ${skill} missing from the authored set`);
+  }
+  // The workflow class is exactly the authored set minus knowledge — today
+  // engram-factory, engram-frame, outcome-reporting (DEC-005).
+  assert.deepEqual(WORKFLOW_SKILLS, ['engram-factory', 'engram-frame', 'outcome-reporting'].sort());
 });
 
-for (const skill of EXPECTED_SKILLS) {
+for (const skill of KNOWLEDGE_SKILLS) {
   test(`${skill}: SKILL.md exists with valid frontmatter`, () => {
     const file = path.join(SKILLS_ROOT, skill, 'SKILL.md');
     assert.ok(fs.existsSync(file), `${file} missing`);
@@ -148,6 +178,45 @@ for (const skill of EXPECTED_SKILLS) {
   });
 }
 
+// Workflow class (DEC-P05): frontmatter, referenced files, JSON examples —
+// no discipline-section or ≤150-line rules (workflow skills carry their
+// process depth in references/ by design; EVD-014).
+for (const skill of WORKFLOW_SKILLS) {
+  test(`${skill}: SKILL.md exists with valid frontmatter (workflow class)`, () => {
+    const file = path.join(SKILLS_ROOT, skill, 'SKILL.md');
+    assert.ok(fs.existsSync(file), `${file} missing`);
+    const text = fs.readFileSync(file, 'utf8');
+    const fm = frontmatter(text);
+    assert.ok(fm, 'frontmatter block present');
+    assert.equal(fm.name, skill, 'frontmatter name matches directory');
+    assert.ok((fm.description || '').length > 40, 'description is substantive (>40 chars)');
+  });
+
+  test(`${skill}: referenced files exist`, () => {
+    const text = fs.readFileSync(path.join(SKILLS_ROOT, skill, 'SKILL.md'), 'utf8');
+    for (const m of text.matchAll(/references\/([a-z0-9-]+\.md)/g)) {
+      const ref = path.join(SKILLS_ROOT, skill, 'references', m[1]);
+      assert.ok(fs.existsSync(ref), `dangling reference: ${m[1]}`);
+    }
+  });
+
+  test(`${skill}: JSON tool-call examples parse`, () => {
+    const text = fs.readFileSync(path.join(SKILLS_ROOT, skill, 'SKILL.md'), 'utf8');
+    for (const m of text.matchAll(/([a-z_]+)\(\s*\{([\s\S]*?)\}\s*\)/g)) {
+      // Workflow skills document unions like "success": true|false — pick the
+      // first alternative, then require strict JSON structure (balanced
+      // braces, quoted keys, valid values). Knowledge skills keep the
+      // verbatim strict check above.
+      const normalized = m[2].replace(/(\btrue|\bfalse|"[^"]*")\|(\btrue|\bfalse|"[^"]*")/g, '$1');
+      try {
+        JSON.parse(`{${normalized}}`);
+      } catch (e) {
+        assert.fail(`non-JSON example for ${m[1]}(...): ${e.message}\n---{${m[2]}}---`);
+      }
+    }
+  });
+}
+
 test('every tool named in skills exists on the live server', { timeout: 30000 }, () => {
   const bin = resolveBinary();
   if (!bin) {
@@ -161,6 +230,11 @@ test('every tool named in skills exists on the live server', { timeout: 30000 },
     'engram-know': [],
     'engram-mem': [],
     'engram-distill': ['--tools', 'all'],
+    // Workflow skills document the core profile (factory/frame carry no
+    // tool-call examples; outcome-reporting uses report_outcome).
+    'engram-factory': [],
+    'engram-frame': [],
+    'outcome-reporting': [],
   };
   const surfaces = new Map(); // JSON key of args -> Set of tool names
   for (const args of new Set(Object.values(PROFILE_FOR_SKILL).map((a) => JSON.stringify(a)))) {
@@ -168,7 +242,7 @@ test('every tool named in skills exists on the live server', { timeout: 30000 },
     assert.ok(names, `tools/list failed for profile ${args}`);
     surfaces.set(args, new Set(names));
   }
-  for (const skill of EXPECTED_SKILLS) {
+  for (const skill of AUTHORED_SKILLS) {
     const serverTools = surfaces.get(JSON.stringify(PROFILE_FOR_SKILL[skill]));
     const text = fs.readFileSync(path.join(SKILLS_ROOT, skill, 'SKILL.md'), 'utf8');
     for (const m of text.matchAll(TOOL_CALL_RE)) {
@@ -180,6 +254,11 @@ test('every tool named in skills exists on the live server', { timeout: 30000 },
       );
     }
   }
+  // REQ-009: the installer is the only exposure surface this phase — the
+  // live tool set must not contain a skill-listing tool.
+  const core = surfaces.get(JSON.stringify([]));
+  const skillTools = [...core].filter((t) => /skill/i.test(t));
+  assert.deepEqual(skillTools, [], 'skill-listing MCP tools must not exist this phase');
 });
 
 test('know is read-only and hands records off', () => {
@@ -224,6 +303,48 @@ test('index references carry the REA process + memorization catalog', () => {
   const rea = fs.readFileSync(path.join(SKILLS_ROOT, 'engram-index', 'references', 'rea-process.md'), 'utf8');
   assert.match(rea, /proven/, 'evidence labels defined');
   assert.match(rea, /final check/i);
+});
+
+// ------------------------------------------------- factory skill payload (job 002)
+test('AC-011 factory contract: every role section instructs engram recall/memory', () => {
+  const contract = fs.readFileSync(
+    path.join(SKILLS_ROOT, 'engram-factory', 'references', 'agents.md'),
+    'utf8',
+  );
+  const sections = contract.split('\n### ').slice(1);
+  const required = [
+    'engram-analyzer',
+    'engram-planner',
+    'engram-tasks',
+    'engram-builder',
+    'Specialist reviewers',
+    'engram-qa',
+    'engram-approver',
+  ];
+  const names = sections.map((s) => s.split('\n')[0]);
+  for (const r of required) {
+    assert.ok(names.includes(r), `contract section '${r}' missing`);
+  }
+  for (const section of sections) {
+    assert.match(
+      section,
+      /recall|memory/,
+      `section '${section.split('\n')[0]}' lacks engram recall/memory guidance`,
+    );
+  }
+});
+
+test('DEC-P06 factory skill ships the four-dialect specialist payload', () => {
+  const agentsDir = path.join(SKILLS_ROOT, 'engram-factory', 'agents');
+  assert.ok(fs.existsSync(agentsDir), 'agents payload missing from the factory skill');
+  const files = fs.readdirSync(agentsDir);
+  const dialects = files.filter(
+    (f) => /^engram-.+\.(claude|pi|copilot)\.md$/.test(f) || /^engram-.+\.codex\.yaml$/.test(f),
+  );
+  assert.equal(dialects.length, 56, `expected 56 dialect files, found ${dialects.length}`);
+  // The interface manifest travels with the folder but is not a dialect.
+  assert.ok(files.includes('openai.yaml'), 'openai.yaml travels with the skill folder');
+  assert.ok(!dialects.includes('openai.yaml'));
 });
 
 // ---------------------------------------------------------------- agents

@@ -199,12 +199,22 @@ test('mem owns experience writes and routes source facts out', () => {
   assert.match(text, /engram-distill/, 'mem routes source-doc facts to engram-distill');
 });
 
-test('distill keys writes by source and is honest about append-only', () => {
+test('distill keys writes by source and is honest about supersession scope', () => {
   const text = fs.readFileSync(path.join(SKILLS_ROOT, 'engram-distill', 'SKILL.md'), 'utf8');
   assert.match(text, /<[a-z-]*id>@/, 'idempotency key names the source');
   assert.match(text, /sha256-of-exact-material|content-hash/, 'key binds exact source bytes');
-  assert.match(text, /[Aa]ppend-only/, 'append-only limitation stated');
+  assert.match(text, /source_id/, 'source_id discipline stated');
+  assert.match(text, /same[^\n]*source_id|source_id[^\n]*same/, 'revisions reuse the same source_id');
   assert.match(text, /supersed/, 'revision supersession rule present');
+  const appendOnlyLines = text.split('\n').filter((line) => /append-only/i.test(line));
+  assert.ok(appendOnlyLines.length > 0, 'append-only limitation stated');
+  for (const line of appendOnlyLines) {
+    assert.match(
+      line,
+      /source_id|unsourced|omitted/i,
+      `append-only must be scoped to batches without source_id: ${line.trim()}`
+    );
+  }
 });
 
 test('index references carry the REA process + memorization catalog', () => {

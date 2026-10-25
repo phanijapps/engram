@@ -74,17 +74,17 @@ All writes land in one fused-per-project workspace; `recall` sees them together.
    fabricating an edge — a fabricated link is worse than an honest orphan.
 
 7. **Write the batch** — `store_knowledge {facts, entities, relationships,
-   idempotency_key}`. Include the bridging relationships in the same batch.
-   Best-effort, not ACID. The key discipline is **mandatory**:
+   idempotency_key, source_id}`. Include the bridging relationships in the same
+   batch. Best-effort, not ACID. The key discipline is **mandatory**:
    - Key = `<doc-id>@<sha256-of-exact-material>[:12]` — the identity of the
      source you distilled, bound to the exact bytes you extracted from.
+   - `source_id` = the stable doc identity (e.g. repo path), reused across revisions; omit only for one-off batches.
    - Retries re-send the **same payload** (immutable retry payload). If you
      re-extract and anything changed, that is a *revision*, not a retry.
-   - A revision uses a **new key** and includes one fact noting supersession
-     ("supersedes <old-key>; changed: …").
-   - **Append-only today:** the store does not retract the previous batch's
-     entities/relationships on revision — the supersession fact is the honest
-     record until engine-side retraction exists.
+   - A revision = **new key** + same `source_id`: the engine supersedes the
+     prior batch (archives undeclared records, tombstones replaced facts,
+     reports per-step counts); keep the supersession fact as the record.
+   - **Append-only only when `source_id` is omitted:** unsourced batches are never retracted.
    - `facts` land in the memory lane as source-derived observations (recalled
      by `recall`); entities/relationships land in the knowledge graph.
 
@@ -123,8 +123,8 @@ graph_neighbors {name}, recall {query}     → verify the bridge + retrieval
 2. Every extracted concept is bridged to a real artifact, or honestly
    recorded as an orphan — never a fabricated edge.
 3. Only declared ontology predicates; only discovered link targets.
-4. The KG is append-only today: revisions supersede via a fact, never by
-   silently rewriting history.
+4. Sourced batches are retractable: a revision reusing the same `source_id`
+   supersedes engine-side with reported counts; unsourced batches stay append-only.
 
 ## When it fails
 

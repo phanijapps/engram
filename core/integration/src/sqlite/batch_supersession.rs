@@ -15,7 +15,11 @@
 //! - **Entities / Relationships**: re-asserted records merge refs
 //!   (read-modify-write union) and are restored if previously archived;
 //!   non-re-asserted records lose this source's ref and archive only when the
-//!   **last** ref goes (ref-counted shared records, ADR-0018/0027).
+//!   **last** ref goes (ref-counted shared records, ADR-0018/0027). A
+//!   re-asserted record's prior-batch ledger row is retired only AFTER the
+//!   replacement write lands, so a failed write keeps it eligible for retry
+//!   (the residual crash window — between a landed write and its ledger
+//!   record — is documented in the domain data model).
 //! - **Immunity guard**: a prior record is touched only if its persisted refs
 //!   still contain the source ref — records attributed another way (e.g.
 //!   code-scan records keyed by `graph_id` / `stable_source_key`, or a foreign
@@ -282,7 +286,9 @@ async fn mark_superseded<L>(
     }
 }
 
-/// Records the current batch's written ids in the ledger (soft-fail).
+/// Records the current batch's written ids in the ledger (soft-fail). Returns
+/// whether the ledger write landed — the re-asserted old-row retirement is
+/// deferred behind this signal (FIND-data-003).
 async fn record_writes<L>(
     ledger: &L,
     scope: &Scope,
@@ -291,17 +297,22 @@ async fn record_writes<L>(
     kind: SourceBatchRecordKind,
     ids: &[String],
     out: &mut SourcedStepOutcome,
-) where
+) -> bool
+where
     L: SourceBatchLedger + ?Sized,
 {
     if ids.is_empty() {
-        return;
+        return true;
     }
-    if let Err(e) = ledger
+    match ledger
         .record_source_batch_writes(scope, source_id, batch_key, kind, ids)
         .await
     {
-        soft_fail(out, e);
+        Ok(()) => true,
+        Err(e) => {
+            soft_fail(out, e);
+            false
+        }
     }
 }
 
@@ -466,7 +477,10 @@ where
     let scope = &request.scope;
     let reasserted: HashSet<String> = request.entities.iter().map(|e| e.id.to_string()).collect();
 
-    supersede_prior_entities(
+    // Re-asserted old rows retire only AFTER the replacement write lands
+    // (FIND-data-003): a failed or crashed replacement write keeps the old
+    // row eligible so a retry converges.
+    let deferred_old_rows = supersede_prior_entities(
         knowledge,
         ledger,
         scope,
@@ -487,13 +501,23 @@ where
             written.push(record.id.to_string());
         }
     }
-    record_writes(
+    let recorded = record_writes(
         ledger,
         scope,
         source_id,
         &request.idempotency_key,
         SourceBatchRecordKind::Entity,
         &written,
+        &mut out,
+    )
+    .await;
+    retire_deferred_reasserted_rows(
+        ledger,
+        scope,
+        source_id,
+        deferred_old_rows,
+        &written,
+        recorded,
         &mut out,
     )
     .await;
@@ -522,7 +546,9 @@ where
         .map(|r| r.id.to_string())
         .collect();
 
-    supersede_prior_relationships(
+    // Re-asserted old rows retire only AFTER the replacement write lands
+    // (FIND-data-003) — the relationship mirror of run_entities_step.
+    let deferred_old_rows = supersede_prior_relationships(
         knowledge,
         ledger,
         scope,
@@ -543,7 +569,7 @@ where
             written.push(record.id.to_string());
         }
     }
-    record_writes(
+    let recorded = record_writes(
         ledger,
         scope,
         source_id,
@@ -553,15 +579,29 @@ where
         &mut out,
     )
     .await;
+    retire_deferred_reasserted_rows(
+        ledger,
+        scope,
+        source_id,
+        deferred_old_rows,
+        &written,
+        recorded,
+        &mut out,
+    )
+    .await;
     out
 }
 
 /// Declared-set supersession over the source's prior entities. Invariants: a
 /// record is retracted only if its persisted `source_refs` contain the source
 /// ref (immune otherwise); archived only when its last ref is removed;
-/// re-asserted rows are skipped (the write path re-records them under the
-/// current batch key); a failed item keeps its ledger row unsuperseded so a
-/// retry converges.
+/// re-asserted rows are NOT retired here — they are returned so the caller
+/// retires them only after the replacement write lands (a failed write keeps
+/// the old row eligible, so a retry converges); a failed item keeps its ledger
+/// row unsuperseded so a retry converges.
+///
+/// Returns the re-asserted prior rows (old batch keys) whose retirement is
+/// deferred until the replacement writes are ledgered.
 async fn supersede_prior_entities<K, L>(
     knowledge: &K,
     ledger: &L,
@@ -570,12 +610,14 @@ async fn supersede_prior_entities<K, L>(
     current_batch_key: &str,
     reasserted: &HashSet<String>,
     out: &mut SourcedStepOutcome,
-) where
+) -> Vec<SourceBatchRecord>
+where
     K: KnowledgeRepository + ?Sized,
     L: SourceBatchLedger + ?Sized,
 {
     let rows = prior_rows(ledger, scope, source_id, out).await;
     let now = Utc::now();
+    let mut deferred = Vec::new();
     for row in rows
         .into_iter()
         .filter(|r| r.kind == SourceBatchRecordKind::Entity && r.batch_key != current_batch_key)
@@ -583,8 +625,8 @@ async fn supersede_prior_entities<K, L>(
         out.counts.examined += 1;
         if reasserted.contains(&row.record_id) {
             // Re-asserted: the write path re-records it under the current key;
-            // retire the old key's row so one active row remains per record.
-            mark_superseded(ledger, scope, source_id, &row, out).await;
+            // retirement is deferred until that write lands.
+            deferred.push(row);
             continue;
         }
         match knowledge
@@ -632,10 +674,12 @@ async fn supersede_prior_entities<K, L>(
             Err(e) => soft_fail(out, e),
         }
     }
+    deferred
 }
 
 /// Declared-set supersession over the source's prior relationships — the
-/// relationship mirror of [`supersede_prior_entities`] (evidence refs).
+/// relationship mirror of [`supersede_prior_entities`] (evidence refs;
+/// re-asserted rows returned for deferred retirement).
 async fn supersede_prior_relationships<K, L>(
     knowledge: &K,
     ledger: &L,
@@ -644,18 +688,20 @@ async fn supersede_prior_relationships<K, L>(
     current_batch_key: &str,
     reasserted: &HashSet<String>,
     out: &mut SourcedStepOutcome,
-) where
+) -> Vec<SourceBatchRecord>
+where
     K: KnowledgeRepository + ?Sized,
     L: SourceBatchLedger + ?Sized,
 {
     let rows = prior_rows(ledger, scope, source_id, out).await;
     let now = Utc::now();
+    let mut deferred = Vec::new();
     for row in rows.into_iter().filter(|r| {
         r.kind == SourceBatchRecordKind::Relationship && r.batch_key != current_batch_key
     }) {
         out.counts.examined += 1;
         if reasserted.contains(&row.record_id) {
-            mark_superseded(ledger, scope, source_id, &row, out).await;
+            deferred.push(row);
             continue;
         }
         match knowledge
@@ -698,6 +744,35 @@ async fn supersede_prior_relationships<K, L>(
             }
             Err(e) => soft_fail(out, e),
         }
+    }
+    deferred
+}
+
+/// Retires a step's deferred re-asserted old rows — but only for records
+/// whose replacement write landed AND whose ledger record landed
+/// (FIND-data-003). Anything short of that keeps the old row eligible so a
+/// retry of the same source converges instead of stranding the record with no
+/// active ledger row.
+#[allow(clippy::too_many_arguments)]
+async fn retire_deferred_reasserted_rows<L>(
+    ledger: &L,
+    scope: &Scope,
+    source_id: &str,
+    deferred_rows: Vec<SourceBatchRecord>,
+    written: &[String],
+    recorded: bool,
+    out: &mut SourcedStepOutcome,
+) where
+    L: SourceBatchLedger + ?Sized,
+{
+    if !recorded {
+        return;
+    }
+    for row in deferred_rows {
+        if !written.contains(&row.record_id) {
+            continue;
+        }
+        mark_superseded(ledger, scope, source_id, &row, out).await;
     }
 }
 

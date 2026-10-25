@@ -1266,6 +1266,15 @@ sourceId)`, prior assertions not re-asserted are superseded:
 - Records whose persisted refs do not contain the `sourceId` (e.g.
   code-scan-derived records attributed by `graphId` / `stableSourceKey`) are
   immune — supersession never touches them.
+- A re-asserted record's prior-batch ledger row is retired only after the
+  replacement write AND its ledger record both land, so a failed or
+  soft-failed replacement keeps the old row eligible and a retry converges.
+  Two windows remain by design (best-effort, no cross-store transaction): a
+  crash between a landed write and its ledger record leaves the record live
+  with no active ledger row (invisible to future supersession until
+  re-ledgered by a same-key retry), and a caller that abandons a soft-failed
+  key (moving to a new revision without a same-key retry) leaves that
+  pending row unsuperseded.
 - Supersession is idempotent: a second pass finds zero eligible rows and
   reports zero counts. Per-step counts (examined / forgotten / archived /
   refsRemoved / restored / immuneSkipped / failed) surface in the batch

@@ -31,7 +31,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use engram_conformance::SqlBatchIngest;
 use engram_domain::*;
-use engram_integration::sqlite::batch_supersession::{registry_source, run_relationships_step};
+use engram_integration::sqlite::batch_supersession::{
+    registry_source, run_entities_step, run_relationships_step,
+};
 use engram_integration::{
     BatchIngest, BatchIngestRequest, BatchOutcome, BatchStep, StepStatus, SupersessionCounts,
 };
@@ -1191,9 +1193,12 @@ fn supersession_respects_canonical_session_and_subject_scope() {
 
 /// A port-level stub that delegates to a real store but fails every
 /// `put_relationship` (the injected failure): proves honest partial counts,
-/// a Failed step, no rollback claims, and retry convergence.
+/// a Failed step, no rollback claims, and retry convergence. With
+/// `fail_entities` set it fails `put_entity` instead — the re-asserted-window
+/// regression (FIND-data-003).
 struct FailingPutsStore {
     inner: Arc<SqlKnowledgeStore>,
+    fail_entities: bool,
 }
 
 #[async_trait]
@@ -1218,6 +1223,12 @@ impl KnowledgeRepository for FailingPutsStore {
         self.inner.get_entity(id, scope).await
     }
     async fn put_entity(&self, entity: KnowledgeEntity) -> CoreResult<KnowledgeEntity> {
+        if self.fail_entities {
+            return Err(CoreError::Adapter {
+                adapter: "injected-failure".to_owned(),
+                message: format!("put_entity injected failure for {}", entity.id),
+            });
+        }
         self.inner.put_entity(entity).await
     }
     async fn get_relationship(
@@ -1302,6 +1313,7 @@ fn injected_partial_failure_is_honest_and_converges_on_retry() {
     // surfaced. No rollback is claimed or attempted.
     let failing = FailingPutsStore {
         inner: knowledge.clone(),
+        fail_entities: false,
     };
     let v2_request = sourced_request(
         "doc-x@v2",
@@ -1452,6 +1464,87 @@ fn registry_source_collision_never_clobbers_foreign_rows() {
         "uri preserved"
     );
     assert_eq!(updated.created_at, created_before, "created_at preserved");
+}
+
+// ---------- re-asserted retirement ordering (FIND-data-003) -----------------
+
+#[test]
+fn reasserted_old_row_retires_only_after_replacement_write_lands() {
+    let (_memory, knowledge, batch) = seeded();
+    // v1 declares Widget; its ledger row is bound to doc-x@v1.
+    block_on(batch.ingest(sourced_request(
+        "doc-x@v1",
+        "docs/x.md",
+        Vec::new(),
+        vec![entity("Widget")],
+        Vec::new(),
+    )))
+    .expect("v1");
+
+    // v2 re-asserts Widget through a store whose put_entity fails: the
+    // replacement write fails, so the OLD row must stay eligible — its
+    // retirement happens only after a replacement write lands.
+    let failing = FailingPutsStore {
+        inner: knowledge.clone(),
+        fail_entities: true,
+    };
+    let v2_request = sourced_request(
+        "doc-x@v2",
+        "docs/x.md",
+        Vec::new(),
+        vec![entity("Widget"), entity("NewInV2")],
+        Vec::new(),
+    );
+    let result = block_on(run_entities_step(&failing, knowledge.as_ref(), &v2_request));
+    assert!(result.failure.is_some(), "injected entity failure surfaced");
+    let rows = ledger_rows(
+        &knowledge,
+        &scope(),
+        "docs/x.md",
+        SourceBatchRecordKind::Entity,
+    );
+    assert_eq!(
+        rows,
+        vec![("doc-x@v1".to_string(), "Widget".to_string())],
+        "old row stays eligible after the failed replacement write"
+    );
+
+    // Retry the same v2 with the healthy store: converges — the old row
+    // retires only now that the replacement landed, exactly one active row
+    // for Widget remains, and a second pass counts zero.
+    let retry = block_on(batch.ingest(v2_request.clone())).expect("retry");
+    assert_eq!(
+        counts_of(&retry, BatchStep::Entities),
+        SupersessionCounts {
+            examined: 1,
+            ..SupersessionCounts::default()
+        },
+        "the old row is examined and retired by deferred mark — no retraction"
+    );
+    let after_retry = ledger_rows(
+        &knowledge,
+        &scope(),
+        "docs/x.md",
+        SourceBatchRecordKind::Entity,
+    );
+    assert_eq!(
+        after_retry,
+        vec![
+            ("doc-x@v2".to_string(), "NewInV2".to_string()),
+            ("doc-x@v2".to_string(), "Widget".to_string()),
+        ],
+        "one active row per record, all under the current batch key"
+    );
+    let second = block_on(batch.ingest(v2_request)).expect("second pass");
+    assert_eq!(
+        counts_of(&second, BatchStep::Entities),
+        SupersessionCounts::default(),
+        "zero-count second pass after convergence"
+    );
+    assert!(
+        active_entity_ids(&knowledge, &scope()).contains(&"Widget".to_string()),
+        "re-asserted entity active"
+    );
 }
 
 // ---------- scope isolation + empty source id (TEST-013) --------------------

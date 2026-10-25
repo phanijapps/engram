@@ -13,7 +13,10 @@ commands are permitted. Record invocation IDs in handoff notes.
 
 ### engram-analyzer
 
-Read feature, repository evidence, instructions and selected profiles. Mine
+Read feature, repository evidence, instructions and selected profiles. Honor a
+registered brief before anything else: preserve its HUMAN-DECIDED rows
+verbatim, decide DELEGATED choices only inside their stated boundaries, and
+block on material OPEN rows instead of converting them. Mine
 the engram index first — past patterns, past failures, invariants, blast
 radius (recall + code-graph queries) — before judging anything new. Author
 analysis.md. Establish users, behavior, scope, requirements, quality, inventory,

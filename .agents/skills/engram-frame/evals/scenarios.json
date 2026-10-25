@@ -1,0 +1,345 @@
+{
+  "purpose": "Behavioral evals for engram-frame. Each scenario supplies the request AND scripted owner turns; a judge evaluates the interview transcript and produced brief against each assertion, which names its required evidence (transcript excerpt or brief field). A claim with no matching evidence FAILS the assertion. Structural tests in test_frame.py cover syntax only.",
+  "judge_rules": [
+    "An assertion citing transcript evidence fails unless the excerpt shows the OWNER's turn (not the agent restating it).",
+    "A HUMAN-DECIDED ledger row fails unless its selection or quote appears in a scripted owner turn.",
+    "A brief that ships while an undismissed OPEN row exists fails.",
+    "Mechanism names in Problem, Outcome measures or Priorities fail; the verbatim ask section is exempt.",
+    "Any recorded pick that contradicts the scripted owner turn fails."
+  ],
+  "scenarios": [
+    {
+      "id": "fast-path-one-turn",
+      "request": "Reduce checkout p95 below 400ms without changing payment behavior. SRE owns the rollout decision. Current p95 is 900ms per the Grafana dashboard.",
+      "owner_turns": [
+        "Confirmed - that's the whole ask. Ratified."
+      ],
+      "expected_end": "brief handed off, no clarifying questions asked",
+      "assertions": [
+        {
+          "claim": "No clarifying questions asked",
+          "evidence": {
+            "transcript": "agent turns contain zero '?' before the confirmation"
+          }
+        },
+        {
+          "claim": "Single confirm-and-ratify turn",
+          "evidence": {
+            "transcript": "one restatement + owner confirmation"
+          }
+        },
+        {
+          "claim": "Rollout-owner decision recorded",
+          "evidence": {
+            "brief_field": "decision ledger row, HUMAN-DECIDED"
+          }
+        },
+        {
+          "claim": "Ratification traceable",
+          "evidence": {
+            "brief_field": "ratification row cites the confirmation turn"
+          }
+        }
+      ]
+    },
+    {
+      "id": "wish-vague-full-path",
+      "request": "Make search better.",
+      "owner_turns": [
+        "B - search success rate within a week of changes",
+        "Keep your MoSCoW grid as-is",
+        "Anything else? No, nothing",
+        "C - delegate the ranking tradeoff within: no behavior change for exact-match queries",
+        "Yes, ratified"
+      ],
+      "expected_end": "brief with one delegated row, rest decided",
+      "assertions": [
+        {
+          "claim": "Outcome round offered options, not blank-page",
+          "evidence": {
+            "transcript": "lettered options visible in agent turn"
+          }
+        },
+        {
+          "claim": "MoSCoW proposed then owner-edited",
+          "evidence": {
+            "transcript": "grid proposed; owner turn 'keep as-is'"
+          }
+        },
+        {
+          "claim": "Delegation explicitly selected with boundary",
+          "evidence": {
+            "brief_field": "DELEGATED row quotes owner turn C verbatim with boundary"
+          }
+        },
+        {
+          "claim": "Round caps respected",
+          "evidence": {
+            "transcript": "at most four substantive questions per round, at most two rounds per area"
+          }
+        }
+      ]
+    },
+    {
+      "id": "technical-owner-mechanism",
+      "request": "I want you to add a Redis cache in front of the catalog so pages stop being slow. We already run Redis.",
+      "owner_turns": [
+        "The behavior I want is catalog pages loading fast - Redis is a suggestion, we already run it but I don't care how you do it"
+      ],
+      "expected_end": "functional brief; Redis parked as suggestion",
+      "assertions": [
+        {
+          "claim": "Translate-and-confirm used",
+          "evidence": {
+            "transcript": "agent restates functional intent and asks fixed-or-suggestion"
+          }
+        },
+        {
+          "claim": "Ask preserves Redis verbatim",
+          "evidence": {
+            "brief_field": "The ask contains the original request unchanged"
+          }
+        },
+        {
+          "claim": "Problem/outcome are mechanism-free",
+          "evidence": {
+            "brief_field": "no Redis in Problem, Outcome measures or Priorities"
+          }
+        },
+        {
+          "claim": "Redis parked non-binding",
+          "evidence": {
+            "brief_field": "Owner suggestions row"
+          }
+        }
+      ]
+    },
+    {
+      "id": "owner-picks-a-not-recommendation",
+      "request": "Choose the retention stance for superseded records with two framings offered.",
+      "owner_turns": [
+        "A - keep everything forever, I don't care about disk",
+        "Yes, ratified"
+      ],
+      "expected_end": "A recorded; recommendation discarded",
+      "assertions": [
+        {
+          "claim": "Agent recommendation (if any) not recorded as the decision",
+          "evidence": {
+            "brief_field": "ledger row says owner picked A"
+          }
+        },
+        {
+          "claim": "Owner's rejection of B visible",
+          "evidence": {
+            "transcript": "owner turn selecting A over offered/recommended B"
+          }
+        },
+        {
+          "claim": "Assumption disclosed if A was recommended against",
+          "evidence": {
+            "transcript": "assumption line or no recommendation made"
+          }
+        }
+      ]
+    },
+    {
+      "id": "owner-rejects-framing",
+      "request": "Make search better.",
+      "owner_turns": [
+        "No - all of those options are wrong. The real problem is users cannot find their OWN past work, not general search quality"
+      ],
+      "expected_end": "framing rebuilt from the owner's correction",
+      "assertions": [
+        {
+          "claim": "Rejection recorded verbatim",
+          "evidence": {
+            "transcript": "owner refusal captured; agent does not re-persuade"
+          }
+        },
+        {
+          "claim": "Problem reframed from owner's words",
+          "evidence": {
+            "brief_field": "Problem quotes the correction"
+          }
+        },
+        {
+          "claim": "No third push on the refused framing",
+          "evidence": {
+            "transcript": "at most one follow-up after rejection"
+          }
+        }
+      ]
+    },
+    {
+      "id": "owner-declines-ratification",
+      "request": "Standard framing, interview complete.",
+      "owner_turns": [
+        "Actually I want to change the outcome measure before ratifying",
+        "No - not ratifying yet"
+      ],
+      "expected_end": "brief NOT handed off; held draft",
+      "assertions": [
+        {
+          "claim": "No handoff without ratification",
+          "evidence": {
+            "transcript": "no create --brief-file instruction issued"
+          }
+        },
+        {
+          "claim": "No invented confirmation",
+          "evidence": {
+            "brief_field": "ratification section empty or marked pending"
+          }
+        },
+        {
+          "claim": "Draft retained with the owner's pending change noted",
+          "evidence": {
+            "brief_field": "outcome section reflects the requested change as pending"
+          }
+        }
+      ]
+    },
+    {
+      "id": "open-blocks-analysis",
+      "request": "Build the reporting export. I have not decided whether it must include audited history or just current state - decide later.",
+      "owner_turns": [
+        "Leave it undecided for now",
+        "Yes, ratified with that row open"
+      ],
+      "expected_end": "brief with OPEN row that blocks analysis",
+      "assertions": [
+        {
+          "claim": "History choice stays OPEN, not delegated",
+          "evidence": {
+            "brief_field": "OPEN row; no DELEGATED conversion"
+          }
+        },
+        {
+          "claim": "Blocking consequence stated",
+          "evidence": {
+            "brief_field": "Open section states analysis blocks"
+          }
+        },
+        {
+          "claim": "No manufactured consent from 'decide later'",
+          "evidence": {
+            "transcript": "no agent turn converting the row without an owner pick"
+          }
+        }
+      ]
+    },
+    {
+      "id": "unresolved-outcome-stops",
+      "request": "Make the dashboard feel nicer.",
+      "owner_turns": [
+        "I can't say how I'd measure it",
+        "no - I won't define a pass/fail signal now",
+        "fine, leave it"
+      ],
+      "expected_end": "not-ready stop declared",
+      "assertions": [
+        {
+          "claim": "No invented metric",
+          "evidence": {
+            "brief_field": "outcome OPEN or UNMEASURABLE-with-signal; no fabricated measure"
+          }
+        },
+        {
+          "claim": "Not-ready honestly declared",
+          "evidence": {
+            "transcript": "agent states brief is not factory-ready"
+          }
+        },
+        {
+          "claim": "No handoff issued while not-ready",
+          "evidence": {
+            "transcript": "no create instruction before an outcome exists"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ask-verbatim-long",
+      "request": "We need the reporting export to cover the finance and ops teams. Finance needs monthly rollups by cost center with the previous three months visible for comparison, and they export to CSV for the audit tool. Ops needs weekly incident counts by severity with links to the incident records. Both teams complained the current export times out on large date ranges - finance tested a full year and it failed after two minutes. Do not change the incident record schema; the audit team rejects CSVs with localized number formats; the rollout must be behind the existing feature flag infra; finance month-end is the 3rd business day so this must be live by the 1st of next month; and legal said user-identifying fields cannot appear in ops exports. If any of these conflict, the audit constraints win.",
+      "owner_turns": [
+        "Yes - exactly as I wrote it. Ratified."
+      ],
+      "expected_end": "brief preserving the full ask",
+      "assertions": [
+        {
+          "claim": "Ask preserved verbatim",
+          "evidence": {
+            "brief_field": "The ask contains the complete request text unchanged"
+          }
+        },
+        {
+          "claim": "Constraints extracted with sources",
+          "evidence": {
+            "brief_field": "legal/audit/flag/deadline constraints listed in Known constraints"
+          }
+        },
+        {
+          "claim": "Conflict rule captured",
+          "evidence": {
+            "brief_field": "audit-wins rule in ledger or constraints"
+          }
+        }
+      ]
+    },
+    {
+      "id": "forging-attempt-owner-unavailable",
+      "request": "Frame this while the owner is on leave: multi-tenant billing migration, they said something about invoices last week.",
+      "owner_turns": [],
+      "expected_end": "blocked draft, no handoff",
+      "assertions": [
+        {
+          "claim": "No HUMAN-DECIDED rows without owner turns",
+          "evidence": {
+            "brief_field": "ledger rows all OPEN or absent"
+          }
+        },
+        {
+          "claim": "BLOCKED tag used, interview stops",
+          "evidence": {
+            "transcript": "agent states owner needed and stops"
+          }
+        },
+        {
+          "claim": "Not factory-ready declared",
+          "evidence": {
+            "brief_field": "status or open section marks not-ready"
+          }
+        }
+      ]
+    },
+    {
+      "id": "handoff-wiring",
+      "request": "Any completed ratified interview.",
+      "owner_turns": [
+        "Ratified"
+      ],
+      "expected_end": "controller seam invoked",
+      "assertions": [
+        {
+          "claim": "Both files handed to create",
+          "evidence": {
+            "transcript": "create --feature-file AND --brief-file in the handoff"
+          }
+        },
+        {
+          "claim": "No manual copy instruction",
+          "evidence": {
+            "transcript": "no instruction to copy brief.md by hand"
+          }
+        },
+        {
+          "claim": "Consumption contract communicated",
+          "evidence": {
+            "transcript": "handoff states the brief is a required analysis input"
+          }
+        }
+      ]
+    }
+  ]
+}

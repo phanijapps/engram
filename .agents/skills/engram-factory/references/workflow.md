@@ -63,6 +63,7 @@ job ID. All artifact paths are job-relative; feature, environment, instruction a
 export paths are local filesystem paths.
 
 ```bash
+python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" create --feature-file /absolute/feature.txt --slug short-kebab-slug [--profiles full-stack] [--brief-file /absolute/brief.md]
 python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" status --job "$JOB"
 python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" complete --job "$JOB" --stage analyze --artifacts analysis.md
 python3 "$SKILL_ROOT/scripts/factory.py" --repo "$REPO" complete --job "$JOB" --stage plan --artifacts plan.md

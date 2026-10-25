@@ -230,6 +230,17 @@ def execute(args, repo, state, board):
         require(re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+){0,7}", args.slug), "Use a short lowercase kebab-case slug")
         feature = Path(args.feature_file).read_text()
         require(feature.strip(), "Empty feature")
+        brief = Path(args.brief_file).read_text() if args.brief_file else None
+        require(brief is None or brief.strip(), "Empty brief")
+        if brief is not None:
+            # A registered brief is an authority contract: it must be structurally
+            # sound and must frame THIS feature. Bytes alone do not qualify.
+            require("## The ask" in brief and "## Owner ratification" in brief
+                    and "## Decision ledger" in brief,
+                    "Brief must carry The ask, Decision ledger and Owner ratification sections")
+            require(feature.strip() in brief, "Brief's ask does not contain the feature text verbatim")
+            require(re.search(r"\|[^|]*\|[^|]*\|[^|]*\|[^|]*\"[^|]*\|", brief.split("## Owner ratification")[1]),
+                    "Owner ratification must carry a non-empty row with a verbatim quoted confirmation")
         profiles = args.profiles.split(",")
         require(profiles and len(set(profiles)) == len(profiles) and set(profiles) <= set(PROFILES), "Invalid profiles")
         number = max([int(j["job_id"].split("-")[0]) for j in board["jobs"]] or [0]) + 1
@@ -248,6 +259,9 @@ def execute(args, repo, state, board):
         jobdir.mkdir(parents=True)
         (jobdir / "feature.md").write_text(feature)
         job["artifacts"]["feature"] = record(jobdir, "feature.md")
+        if brief is not None:
+            (jobdir / "brief.md").write_text(brief)
+            job["artifacts"]["brief"] = record(jobdir, "brief.md")
         scaffold(jobdir, job)
         # All job content exists; only now mutate Git. A crash before this line
         # leaves at most an inspectable job directory, never an orphan worktree.
@@ -270,6 +284,14 @@ def execute(args, repo, state, board):
                     "build": ["analysis", "plan"]}[stage]
         if "rework" in job["artifacts"]:
             upstream = upstream + ["rework"]
+        if stage == "analyze" and "brief" in job["artifacts"]:
+            upstream = upstream + ["brief"]  # registered framing is a required input
+            # Every ledger row id in the registered brief must be addressed by the
+            # analysis body — presence, not fidelity (fidelity is reviewed by humans).
+            brief_text = inside(jobdir, "brief.md").read_text()
+            for led in sorted(set(re.findall(r"LED-\d+", brief_text))):
+                require(led in inside(jobdir, args.artifacts[0]).read_text(),
+                        f"Analysis does not address brief ledger row {led}")
         for name in upstream:
             intact(jobdir, job["artifacts"][name])
         required = [job["artifacts"][n]["path"] for n in upstream]
@@ -431,6 +453,8 @@ def execute(args, repo, state, board):
                 shutil.copyfile(path, archive / path.name)
                 path.unlink()
         job["artifacts"] = {"feature": prior["artifacts"]["feature"]}
+        if "brief" in prior["artifacts"]:
+            job["artifacts"]["brief"] = prior["artifacts"]["brief"]  # intent contract survives rework
         path = "rework-" + str(job["cycle"]) + ".md"
         (jobdir / path).write_text(render("rework", job, human_note=note))
         job["artifacts"]["rework"] = record(jobdir, path)
@@ -472,6 +496,7 @@ def parser():
     init.add_argument("--target", default="main")
     create = sub.add_parser("create")
     create.add_argument("--feature-file", required=True)
+    create.add_argument("--brief-file", help="Optional engram-frame brief; registered as a required analysis input")
     create.add_argument("--slug", required=True)
     create.add_argument("--profiles", default="full-stack", help="Comma-separated profiles")
     status = sub.add_parser("status")

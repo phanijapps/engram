@@ -77,13 +77,16 @@ class FactoryTests(unittest.TestCase):
         header = "\n".join(key + ": " + json.dumps(value) for key, value in fields.items())
         output.write_text("---\n" + header + "\n---\n\n# Controller fixture\n\n## Evidence\n\n"
                           "Synthetic fixture for exercising controller integrity gates only. "
-                          "This is not a real feature analysis, execution result, review or approval.\n")
+                          "This is not a real feature analysis, execution result, review or approval.\n"
+                          + (extra.get("append") or ""))
         return path
 
     def upstream(self):
         job = self.job()
         extra = [job["artifacts"]["rework"]["path"]] if "rework" in job["artifacts"] else []
-        self.fill("analysis", "engram-analyzer", ["feature.md"] + extra)
+        brief = ["brief.md"] if "brief" in job["artifacts"] else []
+        led = "Addresses LED-1: preserved verbatim." if brief else ""
+        self.fill("analysis", "engram-analyzer", ["feature.md"] + brief + extra, append=led)
         self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
         self.fill("plan", "engram-planner", ["analysis.md"] + extra)
         self.run_cli("complete", "--job", self.job_id, "--stage", "plan", "--artifacts", "plan.md")
@@ -324,6 +327,77 @@ class FactoryTests(unittest.TestCase):
         self.fill("analysis", "engram-analyzer", ["feature.md"])
         (self.jobdir / "feature.md").write_text("tampered feature")
         self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+
+    def valid_brief(self, ask=None):
+        ask = ask or self.feature.read_text()
+        return ("# Brief\n\n## The ask\n\n" + ask + "\n## Decision ledger\n\n"
+                "| ID | Choice | Authority | Statement / boundary | Revisit trigger |\n"
+                "|---|---|---|---|---|\n"
+                "| LED-1 | rollout owner | HUMAN-DECIDED | owner picked A: keep behavior | on incident |\n\n"
+                "## Owner ratification\n\n"
+                "| Actor | Channel | Date | Confirmation (verbatim) |\n"
+                "|---|---|---|---|\n"
+                "| test-owner | session | 2026-10-25 | \"Ship the sourced-batch behavior.\" |\n")
+
+    def test_brief_is_registered_and_required_by_analysis(self):
+        brief = self.root / "brief.md"
+        brief.write_text(self.valid_brief())
+        result = self.run_cli("create", "--feature-file", str(self.feature), "--slug", "approval-flow", "--brief-file", str(brief))
+        self.job_id = result["result"]["job_id"]
+        self.jobdir = self.repo / ".engram-factory" / "jobs" / self.job_id
+        self.assertIn("brief", self.job()["artifacts"])
+        self.fill("analysis", "engram-analyzer", ["feature.md"], append="Notes: none.")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.fill("analysis", "engram-analyzer", ["feature.md", "brief.md"], append="Ignores the rollout-owner decision entirely.")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.fill("analysis", "engram-analyzer", ["feature.md", "brief.md"], append="Addresses LED-1: preserved verbatim.")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
+        self.assertEqual(self.job()["stage"], "plan")
+        (self.jobdir / "brief.md").write_text("tampered")
+        self.fill("plan", "engram-planner", ["analysis.md"])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "plan", "--artifacts", "plan.md", fail=True)
+
+    def test_brief_backward_compatible_without_one(self):
+        self.create()  # no --brief-file
+        self.assertNotIn("brief", self.job()["artifacts"])
+        self.fill("analysis", "engram-analyzer", ["feature.md"])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
+        self.assertEqual(self.job()["stage"], "plan")
+
+    def test_empty_brief_is_rejected_at_create(self):
+        empty = self.root / "empty-brief.md"
+        empty.write_text("   \n")
+        self.run_cli("create", "--feature-file", str(self.feature), "--slug", "approval-flow",
+                     "--brief-file", str(empty), fail=True)
+
+    def test_brief_must_frame_the_registered_feature(self):
+        mismatch = self.root / "brief.md"
+        mismatch.write_text(self.valid_brief(ask="Some other older feature entirely.\n"))
+        self.run_cli("create", "--feature-file", str(self.feature), "--slug", "approval-flow",
+                     "--brief-file", str(mismatch), fail=True)
+        hollow = self.root / "hollow.md"
+        hollow.write_text(self.valid_brief().replace("| test-owner | session | 2026-10-25 | \"Ship the sourced-batch behavior.\" |", "| — | — | — | — |"))
+        self.run_cli("create", "--feature-file", str(self.feature), "--slug", "approval-flow-2",
+                     "--brief-file", str(hollow), fail=True)
+
+    def test_brief_requirement_survives_rework_cycle(self):
+        brief = self.root / "brief.md"
+        brief.write_text(self.valid_brief())
+        result = self.run_cli("create", "--feature-file", str(self.feature), "--slug", "approval-flow", "--brief-file", str(brief))
+        self.job_id = result["result"]["job_id"]
+        self.jobdir = self.repo / ".engram-factory" / "jobs" / self.job_id
+        self.upstream()  # analysis..tasks with brief listed
+        self.run_cli("block", "--job", self.job_id, "--reason", "owner rework at boundary")
+        note = self.root / "rework.txt"
+        note.write_text("Re-scope: tighten supersession boundaries.")
+        self.run_cli("rework", "--job", self.job_id, "--note-file", str(note))
+        # cycle 2: analysis MUST still include feature + rework + brief
+        rework_path = self.job()["artifacts"]["rework"]["path"]
+        self.fill("analysis", "engram-analyzer", ["feature.md", rework_path])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.fill("analysis", "engram-analyzer", ["feature.md", rework_path, "brief.md"], append="Addresses LED-1: preserved verbatim.")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
+        self.assertEqual(self.job()["stage"], "plan")
 
     def test_single_job_and_stale_revision_enforced(self):
         self.create()

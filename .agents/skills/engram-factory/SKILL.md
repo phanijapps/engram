@@ -88,6 +88,7 @@ All paths are relative to the primary repository checkout.
     |-- jobs/
     |   `-- <job-id>/
     |       |-- feature.md
+    |       |-- brief.md
     |       |-- analysis.md
     |       |-- plan.md
     |       |-- tasks.md
@@ -109,7 +110,7 @@ Keep `.engram-factory/` ignored and outside source commits.
 Build on `factory/<job-id>` in the assigned worktree.
 
 Use templates from `assets/templates/`.
-Use `references/templates.md` for metadata and traceability rules.
+Use `references/templates.md` for metadata, writing and traceability rules.
 
 ## Board
 
@@ -152,6 +153,10 @@ Do not require a clean tree merely to display status.
 ## /engram-factory <feature>
 
 1. **Create the job.** Preserve the feature text verbatim.
+   If an engram-frame brief exists, pass it at creation
+   (`create --brief-file <brief>`): the controller registers it as an
+   immutable artifact and a REQUIRED analysis input; analysis honors its
+   decision ledger.
 2. **Create the worktree.** Use branch `factory/<job-id>`.
 3. **Analyze.** Spawn engram-analyzer with the feature and relevant profiles.
 4. **Validate analysis.** Require actionable acceptance criteria, constraints,

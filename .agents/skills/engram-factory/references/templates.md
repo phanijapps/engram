@@ -1,5 +1,34 @@
 # Template contract
 
+## Writing rules (v2 — house style, enforced by reviewers and the placeholder gate)
+
+**Line discipline.** One sentence per line. Do not hard-wrap prose — the
+renderer wraps. Never break a path or a file:line citation across lines;
+grep-ability is a gate-worthy property. Keep lists tight: no blank line between
+items of one list.
+
+**Sentence discipline (STE-derived, for imperative content).** Short sentences.
+Active voice. Present tense. One idea per sentence. One instruction per step.
+For tasks, steps, rollback, and self-check sections: write imperatives you can
+execute verbatim.
+
+**Vocabulary discipline.** Use approved terms from the job glossary. One term,
+one meaning. Do not invent synonyms for mechanisms that already have a name.
+Modality is fixed vocabulary: MUST / SHOULD / MAY (RFC-2119) for requirements;
+PASS / CHANGES / ERROR for verdicts; NOT_RUN / PASS / FAIL for checks.
+
+**Requirement statements.** Use EARS: `When <trigger> [<precondition>], the
+system shall <response>`. One requirement, one sentence, one id.
+
+**Tables.** One idea per row. A cell that needs a paragraph becomes a named
+detail block below the table instead. Never wrap a table row across a cell.
+
+**Structure discipline.** Declare reader and question. Respect the word budget;
+state a reason when over. Decisions carry authority tags (`[HUMAN-DECIDED]` or
+`[DELEGATED: rationale]`). Negative evidence is mandatory: state what was
+deliberately not verified, with reason, owner, and revisit trigger. Each fact
+lives once — link ids, never restate another artifact's content.
+
 ## Metadata
 
 Use assets/templates. Preserve YAML frontmatter using **one JSON value per line**,
@@ -67,6 +96,7 @@ performance, or regulatory requirements.
 | Artifact | Author | Mutation |
 | --- | --- | --- |
 | feature.md | Orchestrator, verbatim input | Immutable |
+| brief.md | engram-frame with the human owner, before the job | Immutable once registered by create; required analysis input while pinned |
 | analysis.md | Analyzer | Freeze after acceptance |
 | plan.md | Planner | Freeze after acceptance |
 | tasks.md | Task author, then builder progress | Versioned handoffs |

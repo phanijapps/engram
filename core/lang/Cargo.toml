@@ -17,9 +17,9 @@ tree-sitter-erlang = { version = "0.21", optional = true }
 tree-sitter-ocaml = { version = "0.26", optional = true }
 tree-sitter-haskell = { version = "0.24", optional = true }
 # Legacy modernization pack: COBOL, Fortran, SQL.
-tree-sitter-cobol = { path = "grammars/tree-sitter-cobol", optional = true }
+tree-sitter-cobol = { path = "grammars/tree-sitter-cobol", version = "0.0.1", optional = true }
 tree-sitter-fortran = { version = "0.6", optional = true }
-tree-sitter-sql = { path = "grammars/tree-sitter-sql", optional = true }
+tree-sitter-sql = { path = "grammars/tree-sitter-sql", version = "0.0.1", optional = true }
 
 [features]
 default = ["lua", "julia", "zig", "dart", "erlang", "ocaml", "haskell", "cobol", "fortran", "sql"]

@@ -6,7 +6,9 @@
 //! shape the memory adapter uses for its write-idempotency table. The
 //! supersession hot path reads through `idx_source_batch_ledger_source`
 //! (tenant, source_id, superseded_at) — never a full-table scan — and every
-//! query is scope-bounded. `record_id` values stay opaque strings (entity and
+//! query is scope-bounded by the canonical scope rule (a `None` request field
+//! is unconstrained, a `Some` field requires equality; a NULL record column
+//! is not a wildcard). `record_id` values stay opaque strings (entity and
 //! relationship ids verbatim; engine-assigned memory ids), never memory
 //! internals.
 
@@ -14,7 +16,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use engram_domain::Scope;
 use engram_knowledge::{SourceBatchLedger, SourceBatchRecord, SourceBatchRecordKind};
-use engram_runtime::CoreResult;
+use engram_runtime::{CoreError, CoreResult};
 
 use crate::knowledge::schema::sql_error;
 use crate::knowledge::service::SqlKnowledgeStore;
@@ -56,9 +58,11 @@ fn parse_kind(raw: &str) -> SourceBatchRecordKind {
 #[async_trait]
 impl SourceBatchLedger for SqlKnowledgeStore {
     /// Lists the source's not-yet-superseded rows within `scope` (all batch
-    /// keys), via the (tenant, source_id, superseded_at) index. Scope
-    /// visibility mirrors the sibling knowledge reads: NULL record scope
-    /// columns are wildcards, Some request fields require equality.
+    /// keys), via the (tenant, source_id, superseded_at) index. The scope
+    /// predicate is the canonical rule (scope.rs `scope_allows`, the
+    /// service.rs list_chunk_refs shape): a `None` request field is
+    /// unconstrained, a `Some` request field requires record equality — a
+    /// NULL record column is NOT a wildcard (FIND-security-002 / FIND-data-001).
     async fn list_source_batch_records(
         &self,
         scope: &Scope,
@@ -71,9 +75,11 @@ impl SourceBatchLedger for SqlKnowledgeStore {
                 SELECT batch_key, record_kind, record_id
                 FROM source_batch_ledger
                 WHERE tenant = ?1
-                    AND (subject IS NULL OR subject = ?2)
-                    AND (workspace IS NULL OR workspace = ?3)
-                    AND source_id = ?4
+                    AND (?2 IS NULL OR subject = ?2)
+                    AND (?3 IS NULL OR workspace = ?3)
+                    AND (?4 IS NULL OR session = ?4)
+                    AND (?5 IS NULL OR environment = ?5)
+                    AND source_id = ?6
                     AND superseded_at IS NULL
                 ORDER BY batch_key, record_id
                 "#,
@@ -81,7 +87,14 @@ impl SourceBatchLedger for SqlKnowledgeStore {
             .map_err(sql_error)?;
         let rows = stmt
             .query_map(
-                rusqlite::params![scope.tenant, scope.subject, scope.workspace, source_id],
+                rusqlite::params![
+                    scope.tenant,
+                    scope.subject,
+                    scope.workspace,
+                    scope.session,
+                    scope.environment,
+                    source_id
+                ],
                 |row| {
                     Ok(SourceBatchRecord {
                         source_id: source_id.to_owned(),
@@ -154,7 +167,13 @@ impl SourceBatchLedger for SqlKnowledgeStore {
         Ok(())
     }
 
-    /// Marks one ledger row superseded (idempotent overwrite of the stamp).
+    /// Marks one ledger row superseded. The UPDATE is addressed by ledger
+    /// identity (source, batch, kind, record) scoped by the SAME canonical
+    /// predicates the list uses — never by a scope-reconstructed row key, so
+    /// every row the list returns is retirable from that scope (no
+    /// permanently-eligible churn). An UPDATE that matches no rows for a
+    /// listed row is a loud error, not a silent no-op
+    /// (FIND-security-002 / FIND-data-001 / FIND-code-003).
     async fn mark_source_batch_superseded(
         &self,
         scope: &Scope,
@@ -165,15 +184,43 @@ impl SourceBatchLedger for SqlKnowledgeStore {
     ) -> CoreResult<()> {
         let now = Utc::now().to_rfc3339();
         let connection = self.lock()?;
-        connection
+        let affected = connection
             .execute(
-                "UPDATE source_batch_ledger SET superseded_at = ?1 WHERE row_key = ?2",
+                r#"
+                UPDATE source_batch_ledger SET superseded_at = ?1
+                WHERE tenant = ?2
+                    AND (?3 IS NULL OR subject = ?3)
+                    AND (?4 IS NULL OR workspace = ?4)
+                    AND (?5 IS NULL OR session = ?5)
+                    AND (?6 IS NULL OR environment = ?6)
+                    AND source_id = ?7
+                    AND batch_key = ?8
+                    AND record_kind = ?9
+                    AND record_id = ?10
+                "#,
                 rusqlite::params![
                     now,
-                    row_key(scope, source_id, batch_key, kind_name(kind), record_id)
+                    scope.tenant,
+                    scope.subject,
+                    scope.workspace,
+                    scope.session,
+                    scope.environment,
+                    source_id,
+                    batch_key,
+                    kind_name(kind),
+                    record_id
                 ],
             )
             .map_err(sql_error)?;
+        if affected == 0 {
+            return Err(CoreError::Adapter {
+                adapter: "source_batch_ledger".to_owned(),
+                message: format!(
+                    "mark_source_batch_superseded matched no row for source {source_id}, \
+                     batch {batch_key}, record {record_id} within the request scope"
+                ),
+            });
+        }
         Ok(())
     }
 }
@@ -182,8 +229,10 @@ impl SourceBatchLedger for SqlKnowledgeStore {
 mod tests {
     //! In-module ledger unit tests: upsert idempotency (re-record clears the
     //! superseded stamp), supersession filtering (superseded rows leave the
-    //! list → second pass is a zero-count no-op), and scope bounding (a
-    //! different tenant's rows are invisible).
+    //! list → second pass is a zero-count no-op), scope bounding (a different
+    //! tenant's rows are invisible and a cross-tenant mark fails loudly), and
+    //! canonical optional-dim visibility (session drift, NULL-vs-Some
+    //! subject).
 
     use super::*;
     use engram_domain::Scope;
@@ -267,18 +316,116 @@ mod tests {
         let b_rows = futures_block_on(store.list_source_batch_records(&scope_b, "docs/x.md"))
             .expect("list B");
         assert!(b_rows.is_empty(), "cross-tenant ledger read must be empty");
-        // Marking in scope B affects no rows.
-        futures_block_on(store.mark_source_batch_superseded(
+        // Marking in scope B affects no rows — and now fails LOUDLY instead of
+        // silently returning Ok(0) (FIND-security-002).
+        let mark = futures_block_on(store.mark_source_batch_superseded(
             &scope_b,
             "docs/x.md",
             "batch-1",
             SourceBatchRecordKind::MemoryRecord,
             "memory-1",
-        ))
-        .expect("mark in B");
+        ));
+        assert!(mark.is_err(), "cross-scope mark must error, not no-op");
         let a_rows = futures_block_on(store.list_source_batch_records(&scope_a, "docs/x.md"))
             .expect("list A");
-        assert_eq!(a_rows.len(), 1, "A's row untouched by B's mark");
+        assert_eq!(a_rows.len(), 1, "A's row untouched by B's rejected mark");
+    }
+
+    /// Canonical scope visibility (FIND-security-002 / FIND-data-001):
+    /// session/environment are constrained exactly like subject/workspace — a
+    /// Some request field requires equality (drifted session ⇒ foreign rows
+    /// invisible), a None request field is unconstrained (canonical rule), a
+    /// NULL record column is not a wildcard (a subject=None row is invisible
+    /// to a Some(subject) request), and a row listed from a scope is always
+    /// retirable from that scope (marks use the same predicates).
+    #[test]
+    fn ledger_visibility_follows_canonical_scope_rule() {
+        let store = SqlKnowledgeStore::open_in_memory().expect("open");
+        let owner = Scope {
+            session: Some("session-1".to_owned()),
+            ..scope("tenant-a")
+        };
+        futures_block_on(store.record_source_batch_writes(
+            &owner,
+            "docs/x.md",
+            "batch-1",
+            SourceBatchRecordKind::Entity,
+            &["e-1".to_owned()],
+        ))
+        .expect("record under session-1");
+
+        // A drifted session is a foreign scope: the row is invisible.
+        let drifted = Scope {
+            session: Some("session-2".to_owned()),
+            ..scope("tenant-a")
+        };
+        assert!(
+            futures_block_on(store.list_source_batch_records(&drifted, "docs/x.md"))
+                .expect("list drifted")
+                .is_empty(),
+            "drifted session must not see the row"
+        );
+        let drifted_mark = futures_block_on(store.mark_source_batch_superseded(
+            &drifted,
+            "docs/x.md",
+            "batch-1",
+            SourceBatchRecordKind::Entity,
+            "e-1",
+        ));
+        assert!(
+            drifted_mark.is_err(),
+            "a scope that cannot list the row cannot retire it either"
+        );
+
+        // The owning scope lists it, retires it, and the second pass sees zero.
+        assert_eq!(
+            futures_block_on(store.list_source_batch_records(&owner, "docs/x.md"))
+                .expect("list owner")
+                .len(),
+            1
+        );
+        futures_block_on(store.mark_source_batch_superseded(
+            &owner,
+            "docs/x.md",
+            "batch-1",
+            SourceBatchRecordKind::Entity,
+            "e-1",
+        ))
+        .expect("owner retires its own row");
+        assert!(
+            futures_block_on(store.list_source_batch_records(&owner, "docs/x.md"))
+                .expect("list owner again")
+                .is_empty(),
+            "retired row leaves the list — zero-count second pass"
+        );
+
+        // A row recorded with subject=None is invisible to a Some(subject)
+        // request (NULL is NOT a wildcard) and visible to a None-subject one.
+        let wide = Scope {
+            subject: None,
+            ..scope("tenant-a")
+        };
+        futures_block_on(store.record_source_batch_writes(
+            &wide,
+            "docs/w.md",
+            "batch-1",
+            SourceBatchRecordKind::MemoryRecord,
+            &["memory-wide".to_owned()],
+        ))
+        .expect("record subject-less");
+        assert!(
+            futures_block_on(store.list_source_batch_records(&scope("tenant-a"), "docs/w.md"))
+                .expect("list narrow")
+                .is_empty(),
+            "Some(subject) request must not adopt a subject=None row"
+        );
+        assert_eq!(
+            futures_block_on(store.list_source_batch_records(&wide, "docs/w.md"))
+                .expect("list wide")
+                .len(),
+            1,
+            "None-subject request sees its own row (canonical unconstrained)"
+        );
     }
 
     /// Drives a future on the current thread without an async runtime.

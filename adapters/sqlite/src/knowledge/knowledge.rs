@@ -559,7 +559,11 @@ impl KnowledgeRepository for SqlKnowledgeStore {
     /// `source_id`, within `scope` (queryable-by-source surface for sourced
     /// distill batches). Scope-filtered scan with the ref membership checked in
     /// Rust over the parsed record — the same shape `list_entities_by_graph`
-    /// uses for un-indexed record fields.
+    /// uses for un-indexed record fields. The scope predicate is the canonical
+    /// rule (`scope_allows`): a `None` request field is unconstrained, a
+    /// `Some` field requires record equality — a NULL record column is NOT a
+    /// wildcard, and session/environment are constrained like subject/workspace
+    /// (FIND-security-002 / FIND-data-001).
     async fn list_entities_by_source_ref(
         &self,
         source_id: &str,
@@ -571,8 +575,10 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                 r#"
                 SELECT record_json FROM knowledge_entities
                 WHERE tenant = ?1
-                    AND (subject IS NULL OR subject = ?2)
-                    AND (workspace IS NULL OR workspace = ?3)
+                    AND (?2 IS NULL OR subject = ?2)
+                    AND (?3 IS NULL OR workspace = ?3)
+                    AND (?4 IS NULL OR session = ?4)
+                    AND (?5 IS NULL OR environment = ?5)
                     AND archived_at IS NULL
                 ORDER BY id
                 "#,
@@ -580,7 +586,13 @@ impl KnowledgeRepository for SqlKnowledgeStore {
             .map_err(sql_error)?;
         let rows = stmt
             .query_map(
-                rusqlite::params![scope.tenant, scope.subject, scope.workspace],
+                rusqlite::params![
+                    scope.tenant,
+                    scope.subject,
+                    scope.workspace,
+                    scope.session,
+                    scope.environment
+                ],
                 |row| row.get::<_, String>(0),
             )
             .map_err(sql_error)?;
@@ -598,7 +610,7 @@ impl KnowledgeRepository for SqlKnowledgeStore {
 
     /// Lists relationships whose `evidence` refs target `source_id`, within
     /// `scope`. Same shape and semantics as
-    /// [`Self::list_entities_by_source_ref`].
+    /// [`Self::list_entities_by_source_ref`] (canonical scope predicate).
     async fn list_relationships_by_source_ref(
         &self,
         source_id: &str,
@@ -610,8 +622,10 @@ impl KnowledgeRepository for SqlKnowledgeStore {
                 r#"
                 SELECT record_json FROM knowledge_relationships
                 WHERE tenant = ?1
-                    AND (subject IS NULL OR subject = ?2)
-                    AND (workspace IS NULL OR workspace = ?3)
+                    AND (?2 IS NULL OR subject = ?2)
+                    AND (?3 IS NULL OR workspace = ?3)
+                    AND (?4 IS NULL OR session = ?4)
+                    AND (?5 IS NULL OR environment = ?5)
                     AND archived_at IS NULL
                 ORDER BY id
                 "#,
@@ -619,7 +633,13 @@ impl KnowledgeRepository for SqlKnowledgeStore {
             .map_err(sql_error)?;
         let rows = stmt
             .query_map(
-                rusqlite::params![scope.tenant, scope.subject, scope.workspace],
+                rusqlite::params![
+                    scope.tenant,
+                    scope.subject,
+                    scope.workspace,
+                    scope.session,
+                    scope.environment
+                ],
                 |row| row.get::<_, String>(0),
             )
             .map_err(sql_error)?;

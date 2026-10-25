@@ -1059,6 +1059,134 @@ fn foreign_fact_adopted_by_key_collision_is_immune() {
     );
 }
 
+// ---------- canonical optional-dim scope (FIND-security-002 / FIND-data-001) --
+
+#[test]
+fn supersession_respects_canonical_session_and_subject_scope() {
+    let (memory, knowledge, batch) = seeded();
+    // v1 runs under session-1: rows land in that scope envelope.
+    let mut v1 = sourced_request(
+        "doc-x@v1",
+        "docs/x.md",
+        vec![memory_record("session-1 fact", "0")],
+        vec![entity("SessionEntity")],
+        Vec::new(),
+    );
+    v1.scope.session = Some("session-1".to_string());
+    block_on(batch.ingest(v1)).expect("v1");
+    let s1_scope = Scope {
+        session: Some("session-1".to_string()),
+        ..scope()
+    };
+    let s1_fact_ids = active_memory_ids(&memory, &s1_scope);
+    assert_eq!(s1_fact_ids.len(), 1, "session-1 fact landed");
+
+    // Re-distill the SAME source_id under a DRIFTED session: canonically a
+    // foreign scope — s1's ledger rows must be invisible (no counts, no
+    // churn), never listed-then-unretirable.
+    let mut v2 = sourced_request("doc-x@v2", "docs/x.md", Vec::new(), Vec::new(), Vec::new());
+    v2.scope.session = Some("session-2".to_string());
+    let v2_outcome = block_on(batch.ingest(v2.clone())).expect("v2 under drifted session");
+    assert_eq!(
+        counts_of(&v2_outcome, BatchStep::Facts),
+        SupersessionCounts::default(),
+        "drifted session sees no foreign ledger rows"
+    );
+    assert_eq!(
+        counts_of(&v2_outcome, BatchStep::Entities),
+        SupersessionCounts::default()
+    );
+    // …and s1's rows/records are untouched (still listed, still active).
+    assert_eq!(
+        ledger_rows(
+            &knowledge,
+            &s1_scope,
+            "docs/x.md",
+            SourceBatchRecordKind::MemoryRecord
+        )
+        .len(),
+        1,
+        "owning scope's ledger row not retired by a foreign session"
+    );
+    assert_eq!(
+        active_fact_texts(&memory, &s1_scope),
+        vec!["session-1 fact".to_string()],
+        "owning scope's fact untouched"
+    );
+
+    // The OWNING scope retires its own rows: second pass counts zero.
+    let mut v3 = sourced_request("doc-x@v3", "docs/x.md", Vec::new(), Vec::new(), Vec::new());
+    v3.scope.session = Some("session-1".to_string());
+    let v3_outcome = block_on(batch.ingest(v3.clone())).expect("v3 from owning scope");
+    assert_eq!(counts_of(&v3_outcome, BatchStep::Facts).forgotten_facts, 1);
+    assert_eq!(
+        counts_of(&v3_outcome, BatchStep::Entities).archived_entities,
+        1
+    );
+    let v3_second = block_on(batch.ingest(v3)).expect("second pass");
+    for step in [
+        BatchStep::Facts,
+        BatchStep::Entities,
+        BatchStep::Relationships,
+    ] {
+        assert_eq!(
+            counts_of(&v3_second, step),
+            SupersessionCounts::default(),
+            "own rows retire — zero-count second pass"
+        );
+    }
+    assert!(active_memory_ids(&memory, &s1_scope).is_empty());
+
+    // NULL-vs-Some subject: rows recorded by a subject=None run are invisible
+    // to a narrower Some(subject) re-distill of the same source id (a NULL
+    // record column is NOT a wildcard), and the wide run's rows retire only
+    // from the wide scope.
+    let wide_scope = Scope {
+        subject: None,
+        ..scope()
+    };
+    let mut wide_v1 = sourced_request(
+        "doc-w@v1",
+        "docs/w.md",
+        vec![memory_record("wide fact", "w0")],
+        vec![entity("WideEntity")],
+        Vec::new(),
+    );
+    wide_v1.scope = wide_scope.clone();
+    block_on(batch.ingest(wide_v1)).expect("wide v1");
+    let narrow = sourced_request("doc-w@v2", "docs/w.md", Vec::new(), Vec::new(), Vec::new());
+    let narrow_outcome = block_on(batch.ingest(narrow)).expect("narrow v2");
+    assert_eq!(
+        counts_of(&narrow_outcome, BatchStep::Facts),
+        SupersessionCounts::default(),
+        "subject=None rows invisible to a Some(subject) request"
+    );
+    assert_eq!(
+        counts_of(&narrow_outcome, BatchStep::Entities),
+        SupersessionCounts::default()
+    );
+    assert_eq!(
+        active_fact_texts(&memory, &wide_scope),
+        vec!["wide fact".to_string()],
+        "wide run's fact untouched by the narrow re-distill"
+    );
+
+    // By-source-ref reads follow the same canonical rule: the narrow scope
+    // cannot see the wide run's stamped entity, the wide scope can.
+    assert!(
+        block_on(knowledge.list_entities_by_source_ref("docs/w.md", &scope()))
+            .expect("narrow by-ref")
+            .is_empty(),
+        "by-source-ref read must not widen a NULL subject to Some"
+    );
+    assert_eq!(
+        block_on(knowledge.list_entities_by_source_ref("docs/w.md", &wide_scope))
+            .expect("wide by-ref")
+            .len(),
+        1
+    );
+}
+
 // ---------- injected partial failure (TEST-010 / NFR-003, RISK-002) ---------
 
 /// A port-level stub that delegates to a real store but fails every

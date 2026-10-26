@@ -227,3 +227,50 @@ test('REQ-012 reinstall of agents is idempotent (same bytes, no orphans)', () =>
     'second install changed agent bytes',
   );
 });
+
+test('FIND-code-002 foreign agent file at a delivered name survives install AND --remove', () => {
+  const { pkg, home, proj } = sandbox('code002');
+  // A user's own agent that merely shares the filename: never installed by
+  // engram, different frontmatter name — the exact reviewer reproduction.
+  const agentDir = path.join(home, '.pi', 'agent', 'agents');
+  fs.mkdirSync(agentDir, { recursive: true });
+  const foreign = path.join(agentDir, 'engram-builder.md');
+  fs.writeFileSync(
+    foreign,
+    '---\nname: user-custom-agent\ndescription: The user own agent; trigger never.\n---\n\n# user content\n',
+  );
+  const install = run(pkg, ['pi'], { cwd: proj, home });
+  assert.equal(install.status, 0, `stderr: ${install.stderr}`);
+  assert.match(
+    fs.readFileSync(foreign, 'utf8'),
+    /user-custom-agent/,
+    'foreign agent file was clobbered on install',
+  );
+  assert.match(install.stdout, /exists with different frontmatter — left untouched/);
+  // And the same file must survive --remove — the tag-gated removal must
+  // spare it while genuinely-ours agent files are cleaned.
+  const remove = run(pkg, ['pi', '--remove'], { cwd: proj, home });
+  assert.equal(remove.status, 0, `stderr: ${remove.stderr}`);
+  assert.ok(fs.existsSync(foreign), 'foreign agent file deleted by --remove');
+  assert.ok(!fs.existsSync(path.join(agentDir, 'engram-planner.md')), 'ours not removed');
+});
+
+test('FIND-security-004 --remove reports every agent file it removes (audit line)', () => {
+  const { pkg, home, proj } = sandbox('sec004');
+  const install = run(pkg, ['claude'], { cwd: proj, home });
+  assert.equal(install.status, 0, `stderr: ${install.stderr}`);
+  const agentDir = path.join(home, '.claude', 'agents');
+  const before = fs.readdirSync(agentDir).sort();
+  assert.ok(before.length >= 15, `expected >=15 agent files, got ${before.length}`);
+  const remove = run(pkg, ['claude', '--remove'], { cwd: proj, home });
+  assert.equal(remove.status, 0, `stderr: ${remove.stderr}`);
+  assert.deepEqual(fs.readdirSync(agentDir), [], 'agent files not removed');
+  // Every removal is named: the audit trail must not understate what the
+  // installer deleted from the user home.
+  for (const f of before) {
+    assert.ok(
+      remove.stdout.includes(`${f} (removed)`),
+      `no cleaned: audit line for ${f}`,
+    );
+  }
+});

@@ -90,6 +90,40 @@ function agentsSource() {
   return null;
 }
 
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** True when the agent file at `to` carries our name tag for `expectedName`
+ *  (REQ-006 discipline extended to agent files, FIND-code-002): markdown
+ *  dialects are verified inside their --- frontmatter block, codex YAML via
+ *  its column-0 top-level keys (nested content is indented, so it cannot
+ *  collide). Missing/unreadable files are never treated as ours. Pointer
+ *  rewriting only edits the body, so our own installed copies stay
+ *  recognized across reinstalls. */
+function agentFileIsOurs(to, expectedName) {
+  let text;
+  try {
+    text = fs.readFileSync(to, 'utf8');
+  } catch {
+    return false;
+  }
+  const nameRe = new RegExp(`^name:[ \\t]*${escapeRegExp(expectedName)}[ \\t]*$`, 'm');
+  if (to.endsWith('.yaml')) return nameRe.test(text);
+  if (!text.startsWith('---\n')) return false; // our markdown agents always carry frontmatter
+  const end = text.indexOf('\n---', 3);
+  return end !== -1 && nameRe.test(text.slice(4, end));
+}
+
+/** Name-tagged agent-file removal with an audit line (FIND-security-004). */
+function removeAgentIfOurs(to, expectedName, written) {
+  if (!fs.existsSync(to)) return;
+  if (!agentFileIsOurs(to, expectedName)) {
+    process.stdout.write(`  note: ${to} exists with different frontmatter — left untouched\n`);
+    return;
+  }
+  fs.rmSync(to, { force: true });
+  written.push(`${to} (removed)`);
+}
+
 /** Install a subagent definition into `destDir` under `fileName`. */
 function copyAgent(destDir, srcName, destName, written) {
   const src = agentsSource();
@@ -99,6 +133,11 @@ function copyAgent(destDir, srcName, destName, written) {
   }
   fs.mkdirSync(destDir, { recursive: true });
   const to = path.join(destDir, destName);
+  // Never clobber a foreign file that merely shares the name (FIND-code-002).
+  if (fs.existsSync(to) && !agentFileIsOurs(to, destName.replace(/\.(md|yaml)$/, ''))) {
+    process.stdout.write(`  note: ${to} exists with different frontmatter — left untouched\n`);
+    return;
+  }
   fs.copyFileSync(path.join(src, srcName), to);
   written.push(to);
 }
@@ -137,10 +176,17 @@ function copySkillAgents(destDir, dialect, pointerRoot, remove, written) {
       const destName = dialectDestName(file, dialect);
       if (!destName) continue;
       const to = path.join(destDir, destName);
+      const expectedName = destName.replace(/\.(md|yaml)$/, '');
       if (remove) {
-        try {
-          fs.rmSync(to);
-        } catch {}
+        removeAgentIfOurs(to, expectedName, written);
+        continue;
+      }
+      // Never remove or overwrite a foreign file that merely shares the
+      // name (FIND-code-002): name-tag check mirrors removeIfOurs.
+      if (fs.existsSync(to) && !agentFileIsOurs(to, expectedName)) {
+        process.stdout.write(
+          `  note: ${to} exists with different frontmatter — left untouched\n`,
+        );
         continue;
       }
       fs.mkdirSync(destDir, { recursive: true });
@@ -315,7 +361,7 @@ const HOSTS = {
       const root = scope === 'project' ? path.join(cwd, '.claude') : path.join(home, '.claude');
       copySkills(path.join(root, 'skills'), written, remove);
       const agentDir = path.join(root, 'agents');
-      if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
+      if (remove) removeAgentIfOurs(path.join(agentDir, 'red-forman.md'), 'red-forman', written);
       else copyAgent(agentDir, 'red-forman.claude.md', 'red-forman.md', written);
       copySkillAgents(agentDir, 'claude', scope === 'project' ? path.join('.claude', 'skills') : path.join(root, 'skills'), remove, written);
       const settings = path.join(root, 'settings.json');
@@ -345,7 +391,7 @@ const HOSTS = {
       // Agents: Codex discovers agents at user level only (~/.codex/agents,
       // YAML form) — no documented project-agent location.
       const agentDir = path.join(home, '.codex', 'agents');
-      if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.yaml')); } catch {} }
+      if (remove) removeAgentIfOurs(path.join(agentDir, 'red-forman.yaml'), 'red-forman', written);
       else {
         copyAgent(agentDir, 'red-forman.codex.yaml', 'red-forman.yaml', written);
         if (scope === 'project') {
@@ -423,7 +469,7 @@ const HOSTS = {
       );
       // Agents: repo-scoped either way (.github/agents/).
       const agentDir = path.join(cwd || process.cwd(), '.github', 'agents');
-      if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
+      if (remove) removeAgentIfOurs(path.join(agentDir, 'red-forman.md'), 'red-forman', written);
       else copyAgent(agentDir, 'red-forman.copilot.md', 'red-forman.md', written);
       copySkillAgents(
         agentDir,
@@ -471,7 +517,7 @@ const HOSTS = {
       // Agents: .pi/agents/ (project) or ~/.pi/agent/agents/ (user).
       const agentDir =
         scope === 'project' ? path.join(cwd, '.pi', 'agents') : path.join(home, '.pi', 'agent', 'agents');
-      if (remove) { try { fs.rmSync(path.join(agentDir, 'red-forman.md')); } catch {} }
+      if (remove) removeAgentIfOurs(path.join(agentDir, 'red-forman.md'), 'red-forman', written);
       else copyAgent(agentDir, 'red-forman.pi.md', 'red-forman.md', written);
       copySkillAgents(
         agentDir,

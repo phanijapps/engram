@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# Render probe matrix for the built site (plan DEC-P03, TASK-016).
-# For each built page x {360px, 1280px} x {light, dark}: drive the site's
-# inert ?probe=1 diagnostics through google-chrome --headless=new --dump-dom,
-# assert LED-1/DEC-P005 tokens, no horizontal overflow at 360px, zero
-# non-same-origin resources, copy buttons on code pages, and diagram src
-# switching with polarity. Writes /tmp/engram-probe-report.json.
+# Render probe matrix for the built site (job 004 DEC-P03; re-derived for the
+# D2 dark-only register in job 008, TASK-011 / DEC-P01).
+# For each built page x {360px, 1280px} x dark (single polarity — the toggle,
+# the forced-polarity storage sentinel and the diagram swap checks are gone
+# with the mechanism): drive the site's inert ?probe=1 diagnostics through
+# google-chrome --headless=new + CDP, assert the D2 token set, the browser-
+# computed DEC-P01 body pairs (>= 4.5:1, worst block-on-plate 6.19:1) and the
+# two --line-ui boundary pairs (>= 3:1), the four font faces, copy buttons on
+# the code-bearing page, no horizontal overflow at 360px and zero non-same-
+# origin resources. Writes /tmp/engram-probe-report.json (8 dark cells).
 # Run after a fresh build: bash site/tools/build.sh && bash site/tools/render-probe.sh
 set -uo pipefail
 
@@ -12,9 +16,8 @@ PORT="${ENGRAM_PROBE_PORT:-8766}"
 BASE="http://127.0.0.1:${PORT}/engram"
 REPORT="/tmp/engram-probe-report.json"
 CHROME=google-chrome
-PAGES=("/" "/factory/" "/engram/" "/install/")
+PAGES=("/" "/factory/" "/engram/" "/get-started/")
 WIDTHS=(360 1280)
-POLARITIES=(light dark)
 
 command -v "$CHROME" >/dev/null 2>&1 || { echo "render-probe: google-chrome not found" >&2; exit 1; }
 test -f site/_site/index.html || { echo "render-probe: site/_site missing — run site/tools/build.sh first" >&2; exit 1; }
@@ -28,9 +31,8 @@ for _ in $(seq 1 40); do
   sleep 0.25
 done
 
-PROBE_PORT="$PORT" PAGES="${PAGES[*]}" WIDTHS="${WIDTHS[*]}" POLARITIES="${POLARITIES[*]}" \
+PROBE_PORT="$PORT" PAGES="${PAGES[*]}" WIDTHS="${WIDTHS[*]}" \
 REPORT="$REPORT" python3 - <<'PYEOF'
-import html
 import json
 import os
 import re
@@ -42,21 +44,26 @@ import urllib.parse
 port = os.environ["PROBE_PORT"]
 pages = os.environ["PAGES"].split()
 widths = [int(w) for w in os.environ["WIDTHS"].split()]
-polarities = os.environ["POLARITIES"].split()
 report_path = os.environ["REPORT"]
 base = f"http://127.0.0.1:{port}/engram"
 
+# D2 Machine Shop, DEC-P01 — the single dark polarity (tokens as authored).
 EXPECTED_TOKENS = {
-    "light": {
-        "--paper": "#f7f5f0", "--ink": "#101418", "--muted": "#3c3a34",
-        "--line": "#d8d2c6", "--accent": "#b3541e", "--link": "#33517a",
-        "--pass": "#5a7d5a",
-    },
-    "dark": {
-        "--paper": "#101418", "--ink": "#e8e6df", "--muted": "#b9b5aa",
-        "--accent": "#e0af68", "--link": "#7e9cc4", "--pass": "#8fb08f",
-    },
+    "--paper": "#0e1116", "--panel": "#12161d", "--chip": "#1b222b",
+    "--card": "#161b23", "--plate": "#1a2029", "--ink": "#dfe5ec",
+    "--muted": "#9aa7b5", "--accent": "#e0af68", "--link": "#7aa2f7",
+    "--pass": "#9ece6a", "--block": "#f7768e", "--code-bg": "#0a0d10",
+    "--code-ink": "#e8e6df", "--line": "#2a3340", "--line-ui": "#56687f",
 }
+
+BODY_PAIRS = (
+    "ink-on-paper", "ink-on-card", "ink-on-plate", "muted-on-panel",
+    "accent-on-paper", "accent-on-card", "link-on-paper", "link-on-card",
+    "pass-on-paper", "block-on-card", "block-on-plate", "paper-on-accent",
+    "paper-on-pass", "paper-on-block", "accent-on-chip", "code-ink-on-code-bg",
+)
+BOUNDARY_PAIRS = ("line-ui-on-paper", "line-ui-on-panel")
+
 
 def rgb_to_hex(rgb: str) -> str | None:
     m = re.match(r"rgba?\((\d+),\s*(\d+),\s*(\d+)", rgb.strip())
@@ -64,13 +71,14 @@ def rgb_to_hex(rgb: str) -> str | None:
         return rgb if rgb.startswith("#") else None
     return "#{:02x}{:02x}{:02x}".format(*(int(g) for g in m.groups()))
 
-def fetch_probe(path: str, width: int, polarity: str, attempts: int = 3) -> dict:
+
+def fetch_probe(path: str, width: int, attempts: int = 3) -> dict:
     """Fetch one probe cell through the CDP driver at an exact viewport width.
 
     --window-size clamps near 500px in new headless, so the matrix uses
     probe-cell.mjs with Emulation.setDeviceMetricsOverride for honest widths.
     """
-    url = f"{base}{urllib.parse.quote(path)}?probe=1&polarity={polarity}"
+    url = f"{base}{urllib.parse.quote(path)}?probe=1"
     for attempt in range(attempts):
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as fh:
             probe_file = fh.name
@@ -85,98 +93,75 @@ def fetch_probe(path: str, width: int, polarity: str, attempts: int = 3) -> dict
             return probe
         os.unlink(probe_file)
     raise RuntimeError(
-        f"probe-cell failed {attempts} times for {path} @{width}px/{polarity}")
+        f"probe-cell failed {attempts} times for {path} @{width}px")
+
 
 failures = []
 report = {"cells": [], "failures": []}
-diagram_src = {}
 
 for path in pages:
     for width in widths:
-        for polarity in polarities:
-            cell = {"page": path, "width": width, "polarity": polarity}
-            try:
-                probe = fetch_probe(path, width, polarity)
-            except Exception as e:
-                failures.append(f"{path} @{width}px/{polarity}: {e}")
-                cell["error"] = str(e)
-                report["cells"].append(cell)
-                continue
-            cell["payload"] = probe
+        cell = {"page": path, "width": width}
+        try:
+            probe = fetch_probe(path, width)
+        except Exception as e:
+            failures.append(f"{path} @{width}px: {e}")
+            cell["error"] = str(e)
             report["cells"].append(cell)
-            tag = f"{path} @{width}px/{polarity}"
+            continue
+        cell["payload"] = probe
+        report["cells"].append(cell)
+        tag = f"{path} @{width}px"
 
-            if probe["polarity"] != polarity:
-                failures.append(f"{tag}: page polarity {probe['polarity']} != requested {polarity}")
+        for token, expected in EXPECTED_TOKENS.items():
+            actual = rgb_to_hex(probe["tokens"].get(token, ""))
+            if actual != expected:
+                failures.append(f"{tag}: token {token} = {actual}, expected {expected}")
 
-            # Forced polarity must apply WITHOUT wiping the stored theme
-            # (FIND-CODE-003/FIND-UX-004): the probe seeds a stored 'dark'
-            # sentinel before init; the old removeItem behavior fails here.
-            if probe.get("forcedStoragePreserved") is not True:
-                failures.append(
-                    f"{tag}: forced polarity did not preserve the stored theme "
-                    f"(forcedStoragePreserved={probe.get('forcedStoragePreserved')})")
+        # Browser-computed AA on the witnessed DEC-P01 pairs (FIND-CODE-002:
+        # the OK message may only claim what is asserted). The worst body pair
+        # block-on-plate (6.19:1) is asserted here like in the static gate.
+        for pair in BODY_PAIRS:
+            value = probe["contrast"].get(pair)
+            if value is None or value < 4.5:
+                failures.append(f"{tag}: browser-computed contrast {pair} = {value} < 4.5:1")
+        for pair in BOUNDARY_PAIRS:
+            value = probe["contrast"].get(pair)
+            if value is None or value < 3.0:
+                failures.append(f"{tag}: browser-computed boundary {pair} = {value} < 3.0:1")
 
-            for token, expected in EXPECTED_TOKENS[polarity].items():
-                actual = rgb_to_hex(probe["tokens"].get(token, ""))
-                if actual != expected:
-                    failures.append(f"{tag}: token {token} = {actual}, expected {expected}")
+        expected_fonts = {
+            "inter400": True, "inter600": True,
+            "jetbrainsMono400": True, "jetbrainsMono700": True,
+        }
+        for font, want in expected_fonts.items():
+            if probe["fonts"].get(font) is not want:
+                failures.append(f"{tag}: font {font} not loaded")
 
-            # Toggle accessible name names the action for the CURRENT polarity
-            # (FIND-UI-003): the light page offers switching to dark.
-            want_switch = "dark" if polarity == "light" else "light"
-            label = (probe.get("toggle") or {}).get("label") or ""
-            if f"Switch to {want_switch} theme" != label:
-                failures.append(f"{tag}: toggle aria-label {label!r} does not name the {want_switch} switch")
+        if width == 360 and probe["overflow"]["hasHorizontalOverflow"]:
+            failures.append(
+                f"{tag}: horizontal overflow at 360px "
+                f"({probe['overflow']['documentScrollWidth']} > {probe['overflow']['documentClientWidth']})")
 
-            if width == 360 and probe["overflow"]["hasHorizontalOverflow"]:
-                failures.append(
-                    f"{tag}: horizontal overflow at 360px "
-                    f"({probe['overflow']['documentScrollWidth']} > {probe['overflow']['documentClientWidth']})")
+        if not probe["sameOriginOnly"]:
+            failures.append(f"{tag}: non-same-origin resources: {probe['resourceOrigins']}")
 
-            if not probe["sameOriginOnly"]:
-                failures.append(f"{tag}: non-same-origin resources: {probe['resourceOrigins']}")
-
-            # Browser-computed AA on the declared component pairs (FIND-CODE-002:
-            # the OK message may only claim what is asserted). line-boundary is
-            # reported, not asserted — a decorative non-interactive border, not
-            # an NFR-001 UI boundary.
-            for pair in ("body-ink-on-paper", "muted-on-paper", "accent-on-paper",
-                         "link-on-paper", "tag-paper-on-ink", "tag-acc-paper-on-accent",
-                         "tag-pass-card-on-pass"):
-                value = probe["contrast"].get(pair)
-                if value is None or value < 4.5:
-                    failures.append(f"{tag}: browser-computed contrast {pair} = {value} < 4.5:1")
-
-            expected_fonts = {
-                "sourceSerif4": True, "inter400": True, "inter600": True,
-                "jetbrainsMono400": True, "jetbrainsMono700": True,
-            }
-            for font, want in expected_fonts.items():
-                if probe["fonts"].get(font) is not want:
-                    failures.append(f"{tag}: font {font} not loaded")
-
-            if path == "/install/" and probe["copyButtons"] < 1:
-                failures.append(f"{tag}: no copy buttons on a code-bearing page")
-
-            for d in probe["diagrams"]:
-                diagram_src.setdefault((path, d["light"]), set()).add(d["current"])
-
-for (path, light_src), currents in diagram_src.items():
-    if len(currents) < 2:
-        failures.append(f"{path}: diagram {light_src} did not switch src between polarities (saw {currents})")
+        if path == "/get-started/" and probe["copyButtons"] < 1:
+            failures.append(f"{tag}: no copy buttons on a code-bearing page")
 
 report["failures"] = failures
 report["ok"] = not failures
 with open(report_path, "w") as fh:
     json.dump(report, fh, indent=1)
 
-print(f"render-probe: {len(report['cells'])} matrix cells across {len(pages)} pages x {len(widths)} widths x {len(polarities)} polarities")
+print(f"render-probe: {len(report['cells'])} matrix cells across {len(pages)} pages x {len(widths)} widths (dark-only)")
 if failures:
     for f in failures:
         print(f"render-probe: FAIL {f}")
     sys.exit(1)
-print(f"render-probe: OK — tokens, browser-computed contrast (7 body pairs ≥ 4.5:1), forced-polarity storage preservation, 360px overflow, same-origin only, fonts, copy buttons and diagram switching all hold; report at {report_path}")
+print(f"render-probe: OK — D2 tokens, browser-computed contrast (16 body pairs ≥ 4.5:1 incl. block-on-plate 6.19:1, "
+      "2 boundary pairs ≥ 3:1), four font faces, copy buttons on /get-started/, 360px overflow and same-origin only "
+      f"all hold on 8 dark cells; no toggle/swap assertions remain; report at {report_path}")
 PYEOF
 STATUS=$?
 exit $STATUS

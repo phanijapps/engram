@@ -22,7 +22,7 @@ toc:
 
 <p>Install the server (alpha) and register with your agent — one command each, no JSON editing:</p>
 
-<div class="card">
+<div class="card" markdown="1">
   <p class="kicker">01 · Install the server</p>
 
 ```
@@ -31,7 +31,7 @@ npm install -g @engramlabs/mcp@alpha
 
 </div>
 
-<div class="card">
+<div class="card" markdown="1">
   <p class="kicker">02 · Register with your client</p>
   <div class="tabs">
     <input type="radio" id="t-claude" name="qs-client" checked>
@@ -92,7 +92,7 @@ engram-mcp install --client copilot
   <p class="small">Claude Code (project scope) · Claude Desktop (user scope) · Cursor (project scope) · Codex CLI (user scope) · pi (project scope) · GitHub Copilot / VS Code.</p>
 </div>
 
-<div class="card">
+<div class="card" markdown="1">
   <p class="kicker">03 · Or run directly without installing</p>
 
 ```
@@ -110,7 +110,7 @@ npx @engramlabs/mcp@alpha --storage ~/.engram
 
 ## Embeddings at startup — one install, two modes {#embeddings}
 
-<div class="card">
+<div class="card" markdown="1">
   <p class="kicker">04 · Pick your runtime mode</p>
 
 ```
@@ -126,7 +126,7 @@ engram-mcp --storage ~/.engram --slim   # Embeddings off
 
 ## The agent bundle — skills, hooks, specialists {#agent-bundle}
 
-<div class="card">
+<div class="card" markdown="1">
   <p class="kicker">05 · Install the agent bundle</p>
   <div class="tabs">
     <input type="radio" id="a-claude" name="qs-agent" checked>

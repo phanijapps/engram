@@ -543,6 +543,57 @@ class FactoryTests(unittest.TestCase):
         schema = json.loads((SKILL / "assets" / "board.schema.json").read_text())
         jsonschema.Draft202012Validator(schema).validate(board)
 
+    def analyze_declaring(self, mode, extra=()):
+        self.fill("analysis", "engram-analyzer", ["feature.md", *extra], mode=mode)
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md")
+
+    def test_mode_declaration_applies_on_unpinned_job(self):
+        self.create_mode()
+        self.analyze_declaring("light")
+        job = self.job()
+        self.assertEqual(job["mode"], "light")
+        self.assertEqual(job["stage"], "plan")
+        self.assertFalse([e for e in job["history"] if e["action"] == "mode-refused"])
+
+    def test_mode_declaration_matching_pin_is_a_no_op(self):
+        self.create_mode("light")
+        self.analyze_declaring("light")
+        job = self.job()
+        self.assertEqual(job["mode"], "light")
+        self.assertEqual(job["stage"], "plan")
+        self.assertFalse([e for e in job["history"] if e["action"] == "mode-refused"])
+
+    def test_mode_declaration_refused_on_create_pinned_job(self):
+        self.create_mode("full")
+        self.analyze_declaring("light")
+        job = self.job()
+        self.assertEqual(job["mode"], "full")
+        self.assertEqual(job["stage"], "plan")
+        refusals = [e for e in job["history"] if e["action"] == "mode-refused"]
+        self.assertEqual(len(refusals), 1)
+        self.assertEqual(refusals[0]["detail"], {"declared": "light", "pinned": "full"})
+
+    def test_mode_declaration_invalid_value_is_rejected(self):
+        self.create_mode()
+        self.fill("analysis", "engram-analyzer", ["feature.md"], mode="fast")
+        self.run_cli("complete", "--job", self.job_id, "--stage", "analyze", "--artifacts", "analysis.md", fail=True)
+        self.assertEqual(self.job()["mode"], "full")
+
+    def test_mode_pin_superseded_by_rework_note(self):
+        self.create_mode("full")
+        self.upstream()
+        self.run_cli("block", "--job", self.job_id, "--reason", "owner rework")
+        note = self.root / "rework.txt"
+        note.write_text("Owner override: run this job in light mode.")
+        self.run_cli("rework", "--job", self.job_id, "--note-file", str(note))
+        self.assertEqual((self.job()["cycle"], self.job()["stage"]), (2, "analyze"))
+        rework_path = self.job()["artifacts"]["rework"]["path"]
+        self.analyze_declaring("light", [rework_path])
+        job = self.job()
+        self.assertEqual(job["mode"], "light")
+        self.assertEqual(job["stage"], "plan")
+        self.assertFalse([e for e in job["history"] if e["action"] == "mode-refused"])
+
 
 if __name__ == "__main__":
     unittest.main()

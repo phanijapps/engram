@@ -10,6 +10,7 @@ source_snapshot: null
 input_artifacts: []
 updated_at: "{{timestamp}}"
 required_reviewers: ["code", "security", "platform"]
+mode: "full"
 ---
 
 <!--

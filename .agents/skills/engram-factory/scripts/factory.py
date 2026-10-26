@@ -182,6 +182,16 @@ def check_board(board):
     require(sum(j["stage"] != "merged" for j in board["jobs"]) <= 1, "Multiple active jobs")
 
 
+def mode_pin(job):
+    # DEC-P02: pin provenance lives in the append-only history. A create-time
+    # owner pin stays authoritative until any rework event supersedes it —
+    # the rework note is the newer owner authority (DEC-003).
+    pinned = any(e["action"] == "create" and e.get("detail", {}).get("mode_pinned")
+                 for e in job["history"])
+    reworked = any(e["action"] == "rework" for e in job["history"])
+    return pinned and not reworked
+
+
 def source_check(repo, jobdir, job, check_target=True):
     require(job["snapshot"], "No source snapshot")
     intact(jobdir, job["snapshot"])
@@ -330,6 +340,19 @@ def execute(args, repo, state, board):
                 require(isinstance(declared, list) and all(isinstance(r, str) for r in declared), "Analysis must declare required_reviewers")
                 require(len(declared) == len(set(declared)) and MANDATORY <= set(declared) <= set(REVIEWERS), "Invalid analysis reviewer set")
                 job["required_reviewers"] = declared
+                # DEC-P01: the analysis mode declaration is validated when
+                # present and tolerated when absent; DEC-P02/DEC-003: apply it
+                # only without an active owner pin, refuse and report otherwise.
+                declared_mode = fields.get("mode")
+                if declared_mode is not None:
+                    require(declared_mode in MODES, "Invalid analysis mode declaration")
+                    if declared_mode != job.get("mode", "full"):
+                        if mode_pin(job):
+                            event(job, "mode-refused", {"declared": declared_mode, "pinned": job.get("mode", "full")})
+                        else:
+                            previous = job.get("mode", "full")
+                            job["mode"] = declared_mode
+                            event(job, "mode-applied", {"mode": declared_mode, "previous": previous})
             records[kind] = record(jobdir, path)
         job["artifacts"].update(records)
         if stage == "build":

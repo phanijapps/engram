@@ -370,6 +370,7 @@ agent “what tools does engram have?” to see what's wired.
 - Design + roadmap: `docs/rfcs/0016-zbot-class-memory-kg-code-as-final-layer.md`
 - Build a connected graph from docs: the **`engram-distill`** skill
 - Install every authored skill + hooks + subagents: **`engram-mcp install --agent <host>`**
+- Uninstall the bundle: **`engram-mcp install --agent <host> --remove`** (name-tagged — only engram-owned files are removed, your own content stays)
 - All commands/flags: run `engram-mcp` with no args (prints usage)
 
 ---

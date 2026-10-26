@@ -54,6 +54,7 @@ npx @engramlabs/mcp@alpha --storage ~/.engram
 
 ```bash
 engram-mcp install --agent claude    # or codex | copilot | pi | all
+engram-mcp install --agent claude --remove   # uninstall (name-tagged: only engram-owned entries go)
 ```
 
 What lands on your machine:

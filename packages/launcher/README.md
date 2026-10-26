@@ -50,7 +50,9 @@ currently seven: `engram-index`, `engram-know`, `engram-mem`,
 `engram-distill`, `outcome-reporting`, plus the software-factory pair
 `engram-factory` and `engram-frame`. New skills flow to delivery with no
 installer change; retired skills from older installs are removed
-automatically unless you replaced them. `engram-factory` also delivers its
+automatically unless you replaced them. Uninstall with
+`engram-mcp install --agent <host> --remove` — removal is name-tagged, so
+files you replaced or added yourself are left untouched. `engram-factory` also delivers its
 14 specialist subagents in each host's native dialect (claude, codex,
 copilot, pi). Use `--scope project` for a repository installation. See the
 [setup guide](https://github.com/phanijapps/engram/blob/main/mcp/engram-mcp/HOW-TO.md).

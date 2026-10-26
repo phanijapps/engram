@@ -367,8 +367,10 @@ not hidden).
 
 1. **Rust one-shot CLI** — `recall --json`, `status --json` subcommands +
    unit/integration tests.
-2. **Skills bundle** — five SKILL.md in `mcp/engram-mcp/skills/`, packaged
-   into the npm tarball (`skills/`, `hooks/`).
+2. **Skills bundle** — skills live in the single authored tree
+   `.agents/skills/` (this RFC originally placed them in
+   `mcp/engram-mcp/skills/`; that fork was deleted), and the npm tarball
+   packs them as the `skills/` payload generated at `prepack`.
 3. **Installer** — `--agent` flows for four platforms; removal; idempotency
    tests.
 4. **pi extension** — in-process recall + staleness; the reference

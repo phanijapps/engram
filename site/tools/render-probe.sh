@@ -122,6 +122,13 @@ for path in pages:
                 if actual != expected:
                     failures.append(f"{tag}: token {token} = {actual}, expected {expected}")
 
+            # Toggle accessible name names the action for the CURRENT polarity
+            # (FIND-UI-003): the light page offers switching to dark.
+            want_switch = "dark" if polarity == "light" else "light"
+            label = (probe.get("toggle") or {}).get("label") or ""
+            if f"Switch to {want_switch} theme" != label:
+                failures.append(f"{tag}: toggle aria-label {label!r} does not name the {want_switch} switch")
+
             if width == 360 and probe["overflow"]["hasHorizontalOverflow"]:
                 failures.append(
                     f"{tag}: horizontal overflow at 360px "

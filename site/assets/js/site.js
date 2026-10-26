@@ -36,6 +36,9 @@
     var button = document.querySelector('[data-theme-toggle]');
     if (button) {
       button.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+      /* Accessible name names the action the button performs now
+       * (FIND-UI-003): in dark polarity it switches to light. */
+      button.setAttribute('aria-label', 'Switch to ' + (theme === 'dark' ? 'light' : 'dark') + ' theme');
       var label = button.querySelector('[data-theme-label]');
       if (label) {
         label.textContent = theme === 'dark' ? 'light' : 'dark';
@@ -196,6 +199,7 @@
       })(),
       toggle: {
         ariaPressed: button ? button.getAttribute('aria-pressed') : null,
+        label: button ? button.getAttribute('aria-label') : null,
         stored: (function () { try { return window.localStorage.getItem(STORE_KEY); } catch (e) { return null; } })()
       },
       tokens: tokens,

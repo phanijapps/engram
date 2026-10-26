@@ -6,8 +6,9 @@
 # with the mechanism): drive the site's inert ?probe=1 diagnostics through
 # google-chrome --headless=new + CDP, assert the D2 token set, the browser-
 # computed DEC-P01 body pairs (>= 4.5:1, worst block-on-plate 6.19:1) and the
-# two --line-ui boundary pairs (>= 3:1), the four font faces, copy buttons on
-# the code-bearing page, no horizontal overflow at 360px and zero non-same-
+# two --line-ui boundary pairs (>= 3:1), the four font faces, ALL fifteen copy
+# buttons on the code-bearing page (FIND-code-002: the count is exact — >= 1
+# let 11 of 15 broken tab panels ship green in round 1 review), no horizontal overflow at 360px and zero non-same-
 # origin resources. Writes /tmp/engram-probe-report.json (8 dark cells).
 # Run after a fresh build: bash site/tools/build.sh && bash site/tools/render-probe.sh
 set -uo pipefail
@@ -63,6 +64,13 @@ BODY_PAIRS = (
     "paper-on-pass", "paper-on-block", "accent-on-chip", "code-ink-on-code-bg",
 )
 BOUNDARY_PAIRS = ("line-ui-on-paper", "line-ui-on-panel")
+
+# FIND-code-002: the /get-started/ copy affordance is asserted per expected
+# count, not >= 1 — site.js wraps every main pre in a copy button, so the
+# count equals rendered command blocks. Fifteen = cards 01/03/04 (one block
+# each) + card 02's six client tabs + card 05's five agent tabs + card 05's
+# uninstall tail. A re-broken tab panel drops a <pre> and FAILS this cell.
+GET_STARTED_CODE_BLOCKS = 15
 
 
 def rgb_to_hex(rgb: str) -> str | None:
@@ -146,8 +154,10 @@ for path in pages:
         if not probe["sameOriginOnly"]:
             failures.append(f"{tag}: non-same-origin resources: {probe['resourceOrigins']}")
 
-        if path == "/get-started/" and probe["copyButtons"] < 1:
-            failures.append(f"{tag}: no copy buttons on a code-bearing page")
+        if path == "/get-started/" and probe["copyButtons"] != GET_STARTED_CODE_BLOCKS:
+            failures.append(
+                f"{tag}: copyButtons {probe['copyButtons']} != {GET_STARTED_CODE_BLOCKS} "
+                "rendered command blocks — every code block must carry the copy affordance")
 
 report["failures"] = failures
 report["ok"] = not failures
@@ -160,7 +170,7 @@ if failures:
         print(f"render-probe: FAIL {f}")
     sys.exit(1)
 print(f"render-probe: OK — D2 tokens, browser-computed contrast (16 body pairs ≥ 4.5:1 incl. block-on-plate 6.19:1, "
-      "2 boundary pairs ≥ 3:1), four font faces, copy buttons on /get-started/, 360px overflow and same-origin only "
+      "2 boundary pairs ≥ 3:1), four font faces, all 15 copy buttons on /get-started/, 360px overflow and same-origin only "
       f"all hold on 8 dark cells; no toggle/swap assertions remain; report at {report_path}")
 PYEOF
 STATUS=$?

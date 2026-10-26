@@ -26,13 +26,19 @@ Walks a built Jekyll tree and asserts:
      claimed count must equal the number of diagram <img> embeds on that
      page; unbound count claims anywhere are violations (LED-2 no-fabrication
      rule, FIND-UX-001 — the home card once said "six diagrams" over a page
-     that embeds seven).
+     that embeds seven);
+  7. no literal ``` fence sequence ships in any built page — a fence that
+     built as text is an unrendered code block (kramdown swallows fenced
+     blocks inside nested raw-HTML wrappers unless every block-level wrapper
+     carries markdown="1"; job 008 round-1 FIND-code-002: 11 of 15 /get-started/
+     blocks shipped as literal text while every gate stayed green).
 
 --selftest builds a synthetic fixture containing one broken link, one
 wrong-root link, one dead cross-page anchor, one dead same-page anchor, one
-live anchor (negative control), one wrong diagram count and one unbound
-diagram count, and FAILS unless the checker rejects the fixture while leaving
-the live anchor unflagged — the negative cases are proven, not assumed.
+live anchor (negative control), one wrong diagram count, one unbound
+diagram count and one literal unrendered fence, and FAILS unless the checker
+rejects the fixture while leaving the live anchor unflagged — the negative
+cases are proven, not assumed.
 
 Usage:
   python3 site/tools/check-links.py site/_site --base /engram/
@@ -260,6 +266,14 @@ def check_tree(tree: Path, base: str, budget: int) -> tuple[Violations, dict[str
     for page in pages:
         rel = str(page.relative_to(tree))
         html = page.read_text(encoding="utf-8", errors="replace")
+        # Assertion 7: a literal ``` sequence in built HTML is a fenced block
+        # that rendered as text (FIND-code-002's defect class — the static
+        # gate catches it without a browser).
+        fence_hits = html.count("```")
+        if fence_hits:
+            v.add("unrendered-fence", rel,
+                  f"{fence_hits} literal ``` sequence(s) — a fenced code block built as "
+                  "text (kramdown markdown=\"1\" missing on a nested block wrapper)")
         payload = page.stat().st_size
         page_css: set[Path] = set()
 
@@ -357,7 +371,8 @@ def selftest() -> int:
             '<a href="/assets/x.css">wrong root</a>'
             '<img src="/engram/assets/missing.png">'
             '<p data-diagrams-for="/engram/gallery.html">two diagrams live there</p>'
-            "<p>plain text claiming five diagrams with no binding</p></body></html>",
+            "<p>plain text claiming five diagrams with no binding</p>"
+            "<p>```</p><p>engram-mcp install --client claude</p><p>```</p></body></html>",
             encoding="utf-8",
         )
         v, payloads, _ = check_tree(tmp, "/engram/", DEFAULT_BUDGET)
@@ -369,10 +384,12 @@ def selftest() -> int:
         live_clean = not any("dead-anchor" in item and ("#live" in item or "#home-top" in item) for item in v.items)
         bad_count = any(item.startswith("diagram-count:") and "embeds 3" in item for item in v.items)
         unbound = any(item.startswith("diagram-count-unbound:") and "five diagrams" in item for item in v.items)
+        unrendered = any(item.startswith("unrendered-fence:") for item in v.items)
         for name, ok in (("broken link", broken), ("wrong-root", wrong_root),
                          ("dead cross-page anchor", dead_cross), ("dead same-page anchor", dead_same),
                          ("live anchors stayed clean", live_clean),
-                         ("wrong diagram count", bad_count), ("unbound diagram count", unbound)):
+                         ("wrong diagram count", bad_count), ("unbound diagram count", unbound),
+                         ("unrendered fence", unrendered)):
             if not ok:
                 print(f"check-links selftest: FAIL — fixture's {name} was not detected")
                 return 1
@@ -381,7 +398,7 @@ def selftest() -> int:
             return 1
         print(f"check-links selftest: OK — defective fixture rejected as expected ({sorted(kinds)}); "
               "broken + wrong-root + dead cross-page anchor + dead same-page anchor + wrong-count + "
-              "unbound-count all detected while the live anchors stay clean")
+              "unbound-count + unrendered-fence all detected while the live anchors stay clean")
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -415,7 +432,7 @@ def main() -> int:
     if v.any():
         return 1
     print("check-links: OK — zero wrong-root hits, zero broken links, zero dead anchors, "
-          "zero external subresources, budget holds, every diagram-count claim matches its target page")
+          "zero external subresources, zero unrendered fences, budget holds, every diagram-count claim matches its target page")
     return 0
 
 

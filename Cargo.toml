@@ -70,3 +70,8 @@ thiserror = "2"
 strip = true
 lto = "thin"
 codegen-units = 1
+
+# Vendored tantivy-sstable 0.3.0 (zstd req widened to ">=0.13, <0.15") so the lockfile can take the patched
+# zstd set and clear RUSTSEC-2026-0391/-0398/-0403/-0410 — see vendor/tantivy-sstable/PROVENANCE.md.
+[patch.crates-io]
+tantivy-sstable = { path = "vendor/tantivy-sstable" }

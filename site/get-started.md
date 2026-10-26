@@ -46,48 +46,48 @@ npm install -g @engramlabs/mcp@alpha
     <label for="t-pi">pi</label>
     <input type="radio" id="t-copilot" name="qs-client">
     <label for="t-copilot">copilot</label>
-    <div class="tab-panel p-t-claude">
+    <div class="tab-panel p-t-claude" markdown="1">
 
 ```
 engram-mcp install --client claude
 ```
 
-    </div>
-    <div class="tab-panel p-t-claude-desktop">
+</div>
+    <div class="tab-panel p-t-claude-desktop" markdown="1">
 
 ```
 engram-mcp install --client claude-desktop
 ```
 
-    </div>
-    <div class="tab-panel p-t-cursor">
+</div>
+    <div class="tab-panel p-t-cursor" markdown="1">
 
 ```
 engram-mcp install --client cursor
 ```
 
-    </div>
-    <div class="tab-panel p-t-codex">
+</div>
+    <div class="tab-panel p-t-codex" markdown="1">
 
 ```
 engram-mcp install --client codex
 ```
 
-    </div>
-    <div class="tab-panel p-t-pi">
+</div>
+    <div class="tab-panel p-t-pi" markdown="1">
 
 ```
 engram-mcp install --client pi
 ```
 
-    </div>
-    <div class="tab-panel p-t-copilot">
+</div>
+    <div class="tab-panel p-t-copilot" markdown="1">
 
 ```
 engram-mcp install --client copilot
 ```
 
-    </div>
+</div>
   </div>
   <p class="small">Claude Code (project scope) · Claude Desktop (user scope) · Cursor (project scope) · Codex CLI (user scope) · pi (project scope) · GitHub Copilot / VS Code.</p>
 </div>
@@ -139,41 +139,41 @@ engram-mcp --storage ~/.engram --slim   # Embeddings off
     <label for="a-pi">pi</label>
     <input type="radio" id="a-all" name="qs-agent">
     <label for="a-all">all</label>
-    <div class="tab-panel p-a-claude">
+    <div class="tab-panel p-a-claude" markdown="1">
 
 ```
 engram-mcp install --agent claude
 ```
 
-    </div>
-    <div class="tab-panel p-a-codex">
+</div>
+    <div class="tab-panel p-a-codex" markdown="1">
 
 ```
 engram-mcp install --agent codex
 ```
 
-    </div>
-    <div class="tab-panel p-a-copilot">
+</div>
+    <div class="tab-panel p-a-copilot" markdown="1">
 
 ```
 engram-mcp install --agent copilot
 ```
 
-    </div>
-    <div class="tab-panel p-a-pi">
+</div>
+    <div class="tab-panel p-a-pi" markdown="1">
 
 ```
 engram-mcp install --agent pi
 ```
 
-    </div>
-    <div class="tab-panel p-a-all">
+</div>
+    <div class="tab-panel p-a-all" markdown="1">
 
 ```
 engram-mcp install --agent all
 ```
 
-    </div>
+</div>
   </div>
 
 ```

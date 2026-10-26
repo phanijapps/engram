@@ -21,7 +21,7 @@ title: Home
     <div class="card">
       <p class="kicker">Deep-dive</p>
       <h3><a href="{{ '/factory/' | relative_url }}">The factory</a></h3>
-      <p>The loop, the agent roster, full versus light team modes, the board's nine stages, and how review rounds resolve — six diagrams, each grounded in the skill's own references.</p>
+      <p data-diagrams-for="{{ '/factory/' | relative_url }}">The loop, the agent roster, full versus light team modes, the board's nine stages, and how review rounds resolve — seven diagrams, each grounded in the skill's own references.</p>
     </div>
     <div class="card">
       <p class="kicker">The product</p>

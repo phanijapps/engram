@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Link, budget and subresource gate for the built site tree (plan DEC-P03).
+"""Link, budget, subresource and claim gate for the built site tree (plan DEC-P03).
 
 Walks a built Jekyll tree and asserts:
   1. every internal href/src/srcset target is rooted at the --base prefix
@@ -11,11 +11,18 @@ Walks a built Jekyll tree and asserts:
      are allowed and reported);
   3. each page's HTML + CSS + font payload stays at or under the budget
      (NFR-002: 200 KiB before diagram assets; .svg images are excluded);
-  4. CSS url(...) references resolve to files.
+  4. CSS url(...) references resolve to files;
+  5. every "<number> diagrams" claim is machine-checked: the claim must sit
+     inside an element carrying data-diagrams-for="<page url>", and the
+     claimed count must equal the number of diagram <img> embeds on that
+     page; unbound count claims anywhere are violations (LED-2 no-fabrication
+     rule, FIND-UX-001 — the home card once said "six diagrams" over a page
+     that embeds seven).
 
---selftest builds a synthetic fixture containing one broken and one
-wrong-root link and FAILS unless the checker rejects that fixture — the
-negative case is proven, not assumed.
+--selftest builds a synthetic fixture containing one broken link, one
+wrong-root link, one wrong diagram count and one unbound diagram count, and
+FAILS unless the checker rejects that fixture — the negative cases are
+proven, not assumed.
 
 Usage:
   python3 site/tools/check-links.py site/_site --base /engram/
@@ -27,6 +34,7 @@ import re
 import shutil
 import sys
 import tempfile
+from html.parser import HTMLParser
 from pathlib import Path
 
 DEFAULT_BUDGET = 200 * 1024  # NFR-002: 200 KiB per page before diagram assets
@@ -38,6 +46,13 @@ SRCSET_RE = re.compile(r"""srcset\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
 TAG_RE = re.compile(r"<\s*(\w+)[^>]*?>", re.I | re.S)
 URL_IN_CSS_RE = re.compile(r"url\(\s*(['\"]?)([^'\")]+)\1\s*\)", re.I)
 
+# Diagram-count claims (assertion 5): "seven diagrams", "7 diagrams", …
+NUMBER_WORDS = {w: n for n, w in enumerate(
+    "one two three four five six seven eight nine ten eleven twelve".split(), start=1)}
+DIAGRAM_CLAIM_RE = re.compile(r"\b(" + "|".join(NUMBER_WORDS) + r"|\d+)\s+diagrams?\b", re.I)
+VOID_TAGS = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+             "meta", "param", "source", "track", "wbr"}
+
 
 class Violations:
     def __init__(self) -> None:
@@ -48,6 +63,60 @@ class Violations:
 
     def any(self) -> bool:
         return bool(self.items)
+
+
+class PageFacts(HTMLParser):
+    """Diagram <img> embeds, bound count claims and unbound claim text per page."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.diagram_imgs = 0
+        self.claims: list[tuple[str, int | None, str]] = []  # (target, claimed, phrase)
+        self.unbound_claims: list[str] = []
+        self._depth = 0
+        self._bound: list[dict] = []
+        self._unbound: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag not in VOID_TAGS:
+            self._depth += 1
+        self._see(tag, attrs)
+
+    def handle_startendtag(self, tag, attrs):
+        self._see(tag, attrs)
+
+    def _see(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "img" and "/assets/diagrams/" in (a.get("src") or ""):
+            self.diagram_imgs += 1
+        target = a.get("data-diagrams-for")
+        if target is not None:
+            self._bound.append({"depth": self._depth, "target": target, "buf": []})
+
+    def handle_endtag(self, tag):
+        while self._bound and self._bound[-1]["depth"] == self._depth:
+            bound = self._bound.pop()
+            text = " ".join(bound["buf"])
+            m = DIAGRAM_CLAIM_RE.search(text)
+            if not m:
+                self.claims.append((bound["target"], None, text.strip()[:60]))
+            else:
+                word = m.group(1).lower()
+                claimed = NUMBER_WORDS[word] if word in NUMBER_WORDS else int(word)
+                self.claims.append((bound["target"], claimed, m.group(0)))
+        if tag not in VOID_TAGS:
+            self._depth -= 1
+
+    def handle_data(self, data):
+        if self._bound:
+            self._bound[-1]["buf"].append(data)
+        else:
+            self._unbound.append(data)
+
+    def close(self) -> None:
+        super().close()
+        text = " ".join(self._unbound)
+        self.unbound_claims = [m.group(0) for m in DIAGRAM_CLAIM_RE.finditer(text)]
 
 
 def strip_frag_query(url: str) -> str:
@@ -72,6 +141,42 @@ def css_urls(css_path: Path):
     for match in URL_IN_CSS_RE.finditer(css_path.read_text(encoding="utf-8", errors="replace")):
         urls.append(match.group(2))
     return urls
+
+
+def check_diagram_claims(tree: Path, base: str, pages: list[Path], v: Violations) -> None:
+    """Assertion 5: every '<n> diagrams' claim matches the target page's real embed count."""
+    facts: dict[Path, PageFacts] = {}
+    for page in pages:
+        f = PageFacts()
+        f.feed(page.read_text(encoding="utf-8", errors="replace"))
+        f.close()
+        facts[page] = f
+        rel = str(page.relative_to(tree))
+        for phrase in f.unbound_claims:
+            v.add("diagram-count-unbound", rel,
+                  f'"{phrase}" — count claims must sit inside an element carrying '
+                  f'data-diagrams-for="<page url>" that matches the target page')
+    for page, f in facts.items():
+        rel = str(page.relative_to(tree))
+        for target, claimed, phrase in f.claims:
+            if claimed is None:
+                v.add("diagram-count-no-claim", rel,
+                      f'data-diagrams-for="{target}" carries no "<n> diagrams" claim')
+                continue
+            if not target.startswith(base):
+                v.add("diagram-count-wrong-root", rel,
+                      f'data-diagrams-for="{target}" — not rooted at {base}')
+                continue
+            t = resolve_internal(base, tree, target)
+            if t is None or not t.is_file() or t not in facts:
+                v.add("diagram-count-unresolved", rel,
+                      f'data-diagrams-for="{target}" does not resolve to a built page')
+                continue
+            actual = facts[t].diagram_imgs
+            if claimed != actual:
+                v.add("diagram-count", rel,
+                      f'claims "{phrase}" via data-diagrams-for="{target}" but that page '
+                      f'embeds {actual} diagram(s)')
 
 
 def check_tree(tree: Path, base: str, budget: int) -> tuple[Violations, dict[str, int], set[str]]:
@@ -156,6 +261,7 @@ def check_tree(tree: Path, base: str, budget: int) -> tuple[Violations, dict[str
         if payload > budget:
             v.add("payload-over-budget", rel, f"{payload} bytes > {budget} bytes HTML+CSS+fonts")
 
+    check_diagram_claims(tree, base, pages, v)
     return v, payloads, externals
 
 
@@ -165,30 +271,45 @@ def selftest() -> int:
         (tmp / "ok.html").write_text("<html><body>ok</body></html>", encoding="utf-8")
         (tmp / "assets").mkdir()
         (tmp / "assets" / "x.css").write_text("body{color:red}", encoding="utf-8")
+        diagrams = tmp / "assets" / "diagrams"
+        diagrams.mkdir()
+        for i in range(3):
+            (diagrams / f"d{i}.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
+        (tmp / "gallery.html").write_text(
+            "<html><body>"
+            '<img src="/engram/assets/diagrams/d0.svg">'
+            '<img src="/engram/assets/diagrams/d1.svg">'
+            '<img src="/engram/assets/diagrams/d2.svg">'
+            "</body></html>",
+            encoding="utf-8",
+        )
         fixture = tmp / "index.html"
         fixture.write_text(
             '<html><head><link rel="stylesheet" href="/engram/assets/x.css"></head>'
             '<body><a href="/engram/ok.html">good</a>'
             '<a href="/engram/missing.html">broken</a>'
             '<a href="/assets/x.css">wrong root</a>'
-            '<img src="/engram/assets/missing.png"></body></html>',
+            '<img src="/engram/assets/missing.png">'
+            '<p data-diagrams-for="/engram/gallery.html">two diagrams live there</p>'
+            "<p>plain text claiming five diagrams with no binding</p></body></html>",
             encoding="utf-8",
         )
         v, payloads, _ = check_tree(tmp, "/engram/", DEFAULT_BUDGET)
         kinds = {item.split(":")[0] for item in v.items}
         broken = any(item.startswith("broken-link:") and "/engram/missing.html" in item for item in v.items)
         wrong_root = any(item.startswith("wrong-root:") for item in v.items)
-        if not broken:
-            print("check-links selftest: FAIL — fixture's broken link was not detected")
-            return 1
-        if not wrong_root:
-            print("check-links selftest: FAIL — fixture's wrong-root link was not detected")
-            return 1
+        bad_count = any(item.startswith("diagram-count:") and "embeds 3" in item for item in v.items)
+        unbound = any(item.startswith("diagram-count-unbound:") and "five diagrams" in item for item in v.items)
+        for name, ok in (("broken link", broken), ("wrong-root", wrong_root),
+                         ("wrong diagram count", bad_count), ("unbound diagram count", unbound)):
+            if not ok:
+                print(f"check-links selftest: FAIL — fixture's {name} was not detected")
+                return 1
         if not v.any():
             print("check-links selftest: FAIL — checker passed a defective fixture")
             return 1
         print(f"check-links selftest: OK — defective fixture rejected as expected ({sorted(kinds)}); "
-              "broken + wrong-root both detected")
+              "broken + wrong-root + wrong-count + unbound-count all detected")
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -221,7 +342,8 @@ def main() -> int:
         print(f"check-links: FAIL {item}")
     if v.any():
         return 1
-    print("check-links: OK — zero wrong-root hits, zero broken links, zero external subresources, budget holds")
+    print("check-links: OK — zero wrong-root hits, zero broken links, zero external subresources, "
+          "budget holds, every diagram-count claim matches its target page")
     return 0
 
 

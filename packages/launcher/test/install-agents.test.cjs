@@ -28,13 +28,21 @@ const AUTHORED_SKILLS = fs
   .sort();
 assert.ok(AUTHORED_SKILLS.length >= 6, `authored set too small: ${AUTHORED_SKILLS}`);
 
+/** Copy the launcher without its generated payload and tests (parallel
+ *  test files may be regenerating the payload via prepack; never race it). */
+function copyLauncher(dest) {
+  fs.cpSync(LAUNCHER, dest, {
+    recursive: true,
+    filter: (src) =>
+      src !== path.join(LAUNCHER, 'skills') && src !== path.join(LAUNCHER, 'test'),
+  });
+}
+
 /** A throwaway sandbox: a launcher copy (payload optional) + home + project. */
 function sandbox(name, { payload = true } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `engram-agents-${name}-`));
   const pkg = path.join(root, 'pkg');
-  fs.cpSync(LAUNCHER, pkg, { recursive: true });
-  fs.rmSync(path.join(pkg, 'skills'), { recursive: true, force: true });
-  fs.rmSync(path.join(pkg, 'test'), { recursive: true, force: true });
+  copyLauncher(pkg);
   if (payload) copyAuthored(pkg, AUTHORED_SKILLS);
   const home = path.join(root, 'home');
   const proj = path.join(root, 'proj');
@@ -227,9 +235,7 @@ test('AC-008 install --agent all names claude-desktop; capable hosts list paths'
 test('DEC-P04 same-path guard: in-source project install skips instead of deleting', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-agents-selfcopy-'));
   const pkg = path.join(root, 'pkg');
-  fs.cpSync(LAUNCHER, pkg, { recursive: true });
-  fs.rmSync(path.join(pkg, 'skills'), { recursive: true, force: true });
-  fs.rmSync(path.join(pkg, 'test'), { recursive: true, force: true });
+  copyLauncher(pkg);
   // Dev fallback resolves <pkg>/../../.agents/skills — the authored-tree
   // position — so the project install below runs with source == destination.
   const authored = path.join(root, '.agents', 'skills');

@@ -24,9 +24,23 @@ test(
   'AC-013 fresh dir: tarball install delivers engram-frame + engram-factory; factory.py runs',
   { timeout: 300000 },
   () => {
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-rehearsal-'));
-    const home = path.join(root, 'home');
+    // 1. Pack a private launcher copy staged like a dev checkout (prepack
+    //    generates the payload inside the copy — parallel test files never
+    //    race over the real packages/launcher/skills).
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-rehearsal-'));
+    const home = path.join(tmpRoot, 'home');
     fs.mkdirSync(home);
+    const pkg = path.join(tmpRoot, 'packages', 'launcher');
+    fs.cpSync(LAUNCHER, pkg, {
+      recursive: true,
+      filter: (src) =>
+        src !== path.join(LAUNCHER, 'skills') && src !== path.join(LAUNCHER, 'test'),
+    });
+    fs.cpSync(
+      path.join(LAUNCHER, '..', '..', '.agents', 'skills'),
+      path.join(tmpRoot, '.agents', 'skills'),
+      { recursive: true },
+    );
     // Isolated npm: cache and config resolve under the temp HOME; no audit,
     // no funding, optional deps off — a local tarball with zero regular
     // dependencies installs fully offline.
@@ -37,14 +51,12 @@ test(
       npm_config_fund: 'false',
       npm_config_update_notifier: 'false',
     };
-
-    // 1. Pack the launcher (prepack generates the payload).
-    const packDir = path.join(root, 'pack');
+    const packDir = path.join(tmpRoot, 'pack');
     fs.mkdirSync(packDir);
     const pack = spawnSync(
       'npm',
       ['pack', '--json', '--pack-destination', packDir],
-      { cwd: LAUNCHER, encoding: 'utf8', timeout: 120000 },
+      { cwd: pkg, encoding: 'utf8', timeout: 120000 },
     );
     assert.equal(pack.status, 0, `npm pack failed: ${pack.stderr}`);
     const jsonStart = pack.stdout.indexOf('[\n');
@@ -52,7 +64,7 @@ test(
     assert.ok(fs.existsSync(tarball), `tarball missing: ${tarball}`);
 
     // 2. Fresh project dir with no prior state; install the tarball.
-    const proj = path.join(root, 'proj');
+    const proj = path.join(tmpRoot, 'proj');
     fs.mkdirSync(proj);
     const install = spawnSync(
       'npm',

@@ -33,9 +33,11 @@ assert.equal(ROLES.length, 14, `expected 14 specialist roles, got ${ROLES.join('
 function sandbox(name) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `engram-skill-agents-${name}-`));
   const pkg = path.join(root, 'pkg');
-  fs.cpSync(LAUNCHER, pkg, { recursive: true });
-  fs.rmSync(path.join(pkg, 'skills'), { recursive: true, force: true });
-  fs.rmSync(path.join(pkg, 'test'), { recursive: true, force: true });
+  fs.cpSync(LAUNCHER, pkg, {
+    recursive: true,
+    filter: (src) =>
+      src !== path.join(LAUNCHER, 'skills') && src !== path.join(LAUNCHER, 'test'),
+  });
   fs.cpSync(AUTHORED, path.join(pkg, 'skills'), { recursive: true });
   const home = path.join(root, 'home');
   const proj = path.join(root, 'proj');

@@ -34,16 +34,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # No later step performs git operations (build, gates, upload all run
+      # over the checked-out tree) — keep the token out of the runner's
+      # .git/config for the job's lifetime (FIND-SEC-001).
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/configure-pages@v6
-      - uses: actions/jekyll-build-pages@v1
+      # Exact builder pin (FIND-PLATFORM-001): v1.0.13 is the same commit the
+      # floating v1 tag pointed at and the exact image site/tools/build.sh
+      # pins — a future v1.x release can no longer change the CI builder
+      # while local parity stays frozen (DEC-P01).
+      - uses: actions/jekyll-build-pages@v1.0.13
         with:
           source: ./site
           destination: ./site/_site
-      - name: Link gate (zero wrong-root hits, payload budget)
+      - name: Link gate (zero wrong-root hits, payload budget, diagram-count claims)
         run: python3 site/tools/check-links.py site/_site --base /engram/
-      - name: Contrast gate (WCAG AA on both polarities)
-        run: python3 site/tools/check-contrast.py
+      - name: Contrast gate (WCAG AA on both polarities, negative selftest first)
+        run: python3 site/tools/check-contrast.py --selftest && python3 site/tools/check-contrast.py
       - uses: actions/upload-pages-artifact@v5
         with:
           path: ./site/_site

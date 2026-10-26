@@ -14,7 +14,12 @@ thesis" is machine evidence, not taste:
   R4 page header     — a page-header lead of at most 35 words on every
                        content page (DEC-004);
   R5 hero buttons    — home carries at least two distinct .btn actions with
-                       internal hrefs (REQ-005);
+                       internal hrefs (REQ-005); home is derived from the
+                       tree (the page at the tree root, index.html
+                       convention when several), not a hardcoded filename —
+                       a moved or renamed home cannot silently escape, and
+                       a tree with no root page fails loudly (round-1
+                       FIND-code-003);
   R6 callout variants— at least two distinct callout variants in use over
                        the scanned pages (REQ-007);
   R7 anchor nav      — on pages with four or more h2 sections, an anchor-nav
@@ -229,6 +234,18 @@ def check_pages(tree: Path, only: str | None) -> tuple[list[str], list[str]]:
     lines: list[str] = []
     plate_variants: set[str] = set()
     scanned = 0
+    # R5 home derivation (round-1 FIND-code-003): home is the page at the
+    # tree root — the index.html convention when several root pages exist —
+    # not a hardcoded filename, so a moved or renamed home stays subject to
+    # R5 and a rootless tree fails loudly instead of silently skipping it.
+    root_pages = sorted(p.name for p in pages if p.parent == tree)
+    if "index.html" in root_pages:
+        home_rel: str | None = "index.html"
+    elif len(root_pages) == 1:
+        home_rel = root_pages[0]
+    else:
+        home_rel = None
+    home_checked = False
     for page in pages:
         rel = str(page.relative_to(tree))
         scan = scan_page(page)
@@ -275,7 +292,8 @@ def check_pages(tree: Path, only: str | None) -> tuple[list[str], list[str]]:
                 violations.append(f"section-without-visual: {rel}: section '{h2}' carries no visual element")
 
         # R5 hero buttons (home only)
-        if rel == "index.html":
+        if home_rel is not None and rel == home_rel:
+            home_checked = True
             if len(scan.btn_hrefs) < MIN_HERO_BUTTONS:
                 violations.append(f"hero-buttons: {rel}: {len(scan.btn_hrefs)} distinct .btn internal action(s) < {MIN_HERO_BUTTONS}")
 
@@ -298,6 +316,14 @@ def check_pages(tree: Path, only: str | None) -> tuple[list[str], list[str]]:
     # R6 callout variants across the scanned set (site-wide on a whole-tree run)
     if scanned and len(plate_variants) < MIN_CALLOUT_VARIANTS:
         violations.append(f"callout-variants: {len(plate_variants)} distinct callout variant(s) in use over {scanned} page(s) < {MIN_CALLOUT_VARIANTS} (found {sorted(plate_variants)})")
+    # R5 loud failure on full runs: a tree with no root page (or an
+    # ambiguous root) must not let R5 pass by absence of a home to check.
+    if only is None and home_rel is None:
+        violations.append("hero-buttons: no unambiguous home page at the tree root "
+                          f"(root-level pages: {root_pages or 'none'}) — R5 cannot be skipped silently (FIND-code-003)")
+    elif only is None and not home_checked:
+        violations.append(f"hero-buttons: tree-root home {home_rel!r} was skipped (redirect stub or no chrome) — "
+                          "R5 needs a content home page")
     return violations, lines
 
 
@@ -405,11 +431,30 @@ def selftest() -> int:
             print(f"check-density selftest: FAIL — toc/h2 set inequality not detected: {violations_mm}")
             return 1
 
+        # FIND-code-003 negatives: home derived from the tree, not the filename —
+        # a renamed home (m.html is the only root page, zero .btn) stays subject
+        # to R5, and a tree with no root page fails loudly instead of skipping R5.
+        if not any(v.startswith("hero-buttons: m.html:") for v in violations_mm):
+            print(f"check-density selftest: FAIL — renamed home escaped R5: {violations_mm}")
+            return 1
+
+        subdir = tmp / "subdir-tree" / "section"
+        subdir.mkdir(parents=True)
+        (subdir / "deep.html").write_text(
+            "<html><body><main><p class='lead'>short lead here.</p>"
+            "<h2 id='d1'>D1</h2><p>text</p><ul><li>x</li></ul></main></body></html>",
+            encoding="utf-8")
+        violations_sub, _ = check_pages(subdir.parent, None)
+        if not any(v.startswith("hero-buttons: no unambiguous home page") for v in violations_sub):
+            print(f"check-density selftest: FAIL — rootless tree skipped R5 silently: {violations_sub}")
+            return 1
+
         print("check-density selftest: OK — bad fixture fired all eight rules "
               "(61-word paragraph, 3-paragraph run, visual-less section, 36-word lead, "
               "one hero button, one callout variant, missing anchor rail, no grounded listing) "
               "while the 90-word .grounded listing, figcaption, pre and li stayed exempt; "
-              "the good fixture passed clean; toc/h2 set inequality detected")
+              "the good fixture passed clean; toc/h2 set inequality detected; the renamed "
+              "home (m.html) stayed under R5 and the rootless tree failed loudly")
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)

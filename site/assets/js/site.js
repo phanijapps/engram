@@ -1,74 +1,18 @@
-/* engram pages — no-framework behavior (job 004, plan DEC-P03).
+/* engram pages — no-framework behavior (job 004 DEC-P03, re-derived for the
+ * D2 dark-only register in job 008, DEC-P01).
  * Progressive enhancement only: without this script the pages remain plain,
- * readable, selectable HTML in the light polarity.
- *  - theme toggle: data-theme on <html>, aria-pressed, localStorage, light default
+ * readable, selectable HTML in the single dark polarity.
  *  - copy affordance on code blocks (added by script; text stays selectable without it)
- *  - diagram polarity swap (DEC-P004 fallback: data-light-src / data-dark-src)
  *  - inert ?probe=1 diagnostics reporter for headless verification
+ * The theme toggle, polarity forcing, diagram pair swap and localStorage
+ * handling are gone: D2 ships dark-only with one SVG per diagram.
  */
 (function () {
   'use strict';
 
   var ROOT = document.documentElement;
-  var STORE_KEY = 'engram-theme';
   var params = new URLSearchParams(window.location.search);
   var PROBE = params.get('probe') === '1';
-  var FORCED = params.get('polarity') === 'dark' || params.get('polarity') === 'light'
-    ? params.get('polarity') : null;
-
-  /* ---------- theme ---------- */
-
-  function currentTheme() {
-    return ROOT.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-  }
-
-  function applyTheme(theme, opts) {
-    ROOT.setAttribute('data-theme', theme);
-    try {
-      if (opts && opts.persist) {
-        window.localStorage.setItem(STORE_KEY, theme);
-      }
-      /* Forced polarity (?polarity=) is session-only by design: it never
-       * writes and never wipes the stored preference (FIND-CODE-003 /
-       * FIND-UX-004 — a harness parameter must not delete a visitor's
-       * saved theme). */
-    } catch (e) { /* storage unavailable — polarity still applies in-session */ }
-    var button = document.querySelector('[data-theme-toggle]');
-    if (button) {
-      button.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
-      /* Accessible name names the action the button performs now
-       * (FIND-UI-003): in dark polarity it switches to light. */
-      button.setAttribute('aria-label', 'Switch to ' + (theme === 'dark' ? 'light' : 'dark') + ' theme');
-      var label = button.querySelector('[data-theme-label]');
-      if (label) {
-        label.textContent = theme === 'dark' ? 'light' : 'dark';
-      }
-    }
-    swapDiagrams(theme);
-    return theme;
-  }
-
-  function swapDiagrams(theme) {
-    var imgs = document.querySelectorAll('img[data-light-src][data-dark-src]');
-    for (var i = 0; i < imgs.length; i++) {
-      var img = imgs[i];
-      img.src = theme === 'dark' ? img.getAttribute('data-dark-src')
-                                 : img.getAttribute('data-light-src');
-    }
-  }
-
-  function initTheme() {
-    var stored = null;
-    try { stored = window.localStorage.getItem(STORE_KEY); } catch (e) { /* ignore */ }
-    var initial = FORCED || (stored === 'dark' ? 'dark' : 'light');
-    applyTheme(initial);
-    var button = document.querySelector('[data-theme-toggle]');
-    if (button) {
-      button.addEventListener('click', function () {
-        applyTheme(currentTheme() === 'dark' ? 'light' : 'dark', { persist: true });
-      });
-    }
-  }
 
   /* ---------- code copy affordance (progressive) ---------- */
 
@@ -111,7 +55,7 @@
     }
   }
 
-  /* ---------- inert probe reporter ---------- */
+  /* ---------- inert probe reporter (D2, single polarity) ---------- */
 
   function luminance(channel) {
     var c = channel / 255;
@@ -135,8 +79,9 @@
 
   function probeTokens() {
     var cs = window.getComputedStyle(ROOT);
-    var names = ['--paper', '--ink', '--muted', '--line', '--accent', '--link', '--pass',
-                 '--card', '--code-bg'];
+    var names = ['--paper', '--panel', '--chip', '--card', '--plate', '--ink',
+                 '--muted', '--accent', '--link', '--pass', '--block',
+                 '--code-bg', '--code-ink', '--line', '--line-ui'];
     var out = {};
     for (var i = 0; i < names.length; i++) {
       out[names[i]] = cs.getPropertyValue(names[i]).trim();
@@ -145,21 +90,30 @@
   }
 
   function probeContrast(tokens) {
-    /* Component pairs mirroring check-contrast.py's witnessed matrix: the
-     * browser computes these from the same tokens so render-probe asserts
-     * AA independently of the static gate (FIND-CODE-002). */
+    /* Component pairs mirroring check-contrast.py's witnessed DEC-P01 matrix:
+     * the browser computes these from the same tokens so render-probe asserts
+     * AA independently of the static gate (FIND-CODE-002 pattern, job 004).
+     * Worst body pair block-on-plate (6.19:1) is included on purpose. */
     function rgb(name) { return 'rgb(' + hexToRgb(tokens[name]).join(',') + ')'; }
-    var paper = rgb('--paper'), ink = rgb('--ink'), accent = rgb('--accent'),
-        link = rgb('--link'), card = rgb('--card'), pass = rgb('--pass');
     return {
-      'body-ink-on-paper': contrast(ink, paper),
-      'muted-on-paper': contrast(rgb('--muted'), paper),
-      'accent-on-paper': contrast(accent, paper),
-      'link-on-paper': contrast(link, paper),
-      'tag-paper-on-ink': contrast(paper, ink),
-      'tag-acc-paper-on-accent': contrast(paper, accent),
-      'tag-pass-card-on-pass': contrast(card, pass),
-      'line-boundary-on-paper': contrast(rgb('--line'), paper)
+      'ink-on-paper': contrast(rgb('--ink'), rgb('--paper')),
+      'ink-on-card': contrast(rgb('--ink'), rgb('--card')),
+      'ink-on-plate': contrast(rgb('--ink'), rgb('--plate')),
+      'muted-on-panel': contrast(rgb('--muted'), rgb('--panel')),
+      'accent-on-paper': contrast(rgb('--accent'), rgb('--paper')),
+      'accent-on-card': contrast(rgb('--accent'), rgb('--card')),
+      'link-on-paper': contrast(rgb('--link'), rgb('--paper')),
+      'link-on-card': contrast(rgb('--link'), rgb('--card')),
+      'pass-on-paper': contrast(rgb('--pass'), rgb('--paper')),
+      'block-on-card': contrast(rgb('--block'), rgb('--card')),
+      'block-on-plate': contrast(rgb('--block'), rgb('--plate')),
+      'paper-on-accent': contrast(rgb('--paper'), rgb('--accent')),
+      'paper-on-pass': contrast(rgb('--paper'), rgb('--pass')),
+      'paper-on-block': contrast(rgb('--paper'), rgb('--block')),
+      'accent-on-chip': contrast(rgb('--accent'), rgb('--chip')),
+      'code-ink-on-code-bg': contrast(rgb('--code-ink'), rgb('--code-bg')),
+      'line-ui-on-paper': contrast(rgb('--line-ui'), rgb('--paper')),
+      'line-ui-on-panel': contrast(rgb('--line-ui'), rgb('--panel'))
     };
   }
 
@@ -180,32 +134,11 @@
         origins[new URL(entries[i].name, window.location.href).origin] = true;
       } catch (e) { origins['unparseable:' + entries[i].name] = true; }
     }
-    var button = document.querySelector('[data-theme-toggle]');
-    var diagrams = [];
-    var imgs = document.querySelectorAll('img[data-light-src][data-dark-src]');
-    for (var j = 0; j < imgs.length; j++) {
-      diagrams.push({
-        light: imgs[j].getAttribute('data-light-src'),
-        dark: imgs[j].getAttribute('data-dark-src'),
-        current: imgs[j].currentSrc || imgs[j].src
-      });
-    }
     var probe = {
       url: window.location.pathname,
-      polarity: currentTheme(),
-      forced: FORCED,
-      forcedStoragePreserved: (function () {
-        try { return window.localStorage.getItem(STORE_KEY) === 'dark'; } catch (e) { return null; }
-      })(),
-      toggle: {
-        ariaPressed: button ? button.getAttribute('aria-pressed') : null,
-        label: button ? button.getAttribute('aria-label') : null,
-        stored: (function () { try { return window.localStorage.getItem(STORE_KEY); } catch (e) { return null; } })()
-      },
       tokens: tokens,
       contrast: probeContrast(tokens),
       fonts: {
-        sourceSerif4: document.fonts.check('600 24px "Source Serif 4"'),
         inter400: document.fonts.check('400 16px Inter'),
         inter600: document.fonts.check('600 16px Inter'),
         jetbrainsMono400: document.fonts.check('400 13px "JetBrains Mono"'),
@@ -220,8 +153,7 @@
       },
       resourceOrigins: Object.keys(origins),
       sameOriginOnly: Object.keys(origins).every(function (o) { return o === window.location.origin; }),
-      copyButtons: document.querySelectorAll('button.code-copy').length,
-      diagrams: diagrams
+      copyButtons: document.querySelectorAll('button.code-copy').length
     };
     var pre = document.createElement('pre');
     pre.id = 'engram-probe';
@@ -230,13 +162,6 @@
   }
 
   function boot() {
-    if (PROBE && FORCED) {
-      /* Regression sentinel for the forced-polarity storage rule: seed a
-       * stored preference BEFORE init, then report whether it survived —
-       * the old behavior (removeItem under ?polarity=) reports false. */
-      try { window.localStorage.setItem(STORE_KEY, 'dark'); } catch (e) { /* ignore */ }
-    }
-    initTheme();
     initCopy();
     if (PROBE) {
       if (document.fonts && document.fonts.ready && document.fonts.ready.then) {

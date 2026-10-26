@@ -650,6 +650,44 @@ class FactoryTests(unittest.TestCase):
         self.review_light("security"); self.review_light("platform")
         self.assertEqual(self.job()["stage"], "approve")
 
+    def test_light_mode_end_to_end(self):
+        self.upstream_light()
+        self.build()
+        self.assertEqual(self.job()["mode"], "light")
+        self.review_light("code", "CHANGES")
+        self.review_light("security")
+        self.review_light("platform")
+        job = self.job()
+        self.assertEqual((job["stage"], job["round"]), ("build", 1))
+        self.build()
+        job = self.job()
+        self.assertEqual(job["round"], 2)
+        error = self.review_light("platform", verdict="BLOCKER", fail=True)
+        self.assertIn("Invalid verdict", error["error"])
+        prior = ("\n## Prior findings status\n\n"
+                 "| Prior finding | Status | Verified by |\n"
+                 "|---|---|---|\n"
+                 "| FIND-code-001 | resolved | rebuild commit · factory eval rerun |\n")
+        path = f"cycle-{job['cycle']}/round-{job['round']}/review-code.md"
+        self.fill("review", "red-forman", [i["path"] for i in job["artifacts"].values()],
+                  job["snapshot"]["path"], path, round=job["round"], discipline="code",
+                  verdict="PASS", append=prior)
+        self.run_cli("review", "--job", self.job_id, "--discipline", "code", "--artifact", path)
+        recorded = self.job()["reviews"]["code"]
+        self.assertEqual(recorded["verdict"], "PASS")
+        self.assertIn("Prior findings status", (self.jobdir / recorded["path"]).read_text())
+        self.review_light("security")
+        self.review_light("platform")
+        self.decision()
+        self.assertEqual((self.job()["stage"], self.job()["status"]), ("approve", "awaiting-approval"))
+        try:
+            import jsonschema
+        except ImportError:
+            jsonschema = None
+        if jsonschema is not None:
+            schema = json.loads((SKILL / "assets" / "board.schema.json").read_text())
+            jsonschema.Draft202012Validator(schema).validate(self.run_cli("status")["result"])
+
 
 if __name__ == "__main__":
     unittest.main()

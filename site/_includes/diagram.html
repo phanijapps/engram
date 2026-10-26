@@ -7,10 +7,10 @@
 {% endcomment %}
 <figure class="diagram">
   <img
-    src="{{ include.id | prepend: 'diagrams/' | relative_url }}"
+    src="{{ include.id | append: '.svg' | prepend: 'assets/diagrams/' | relative_url }}"
     {% if include.pair %}
-    data-light-src="{{ include.id | prepend: 'diagrams/' | relative_url }}"
-    data-dark-src="{{ include.id | append: '-dark' | prepend: 'diagrams/' | relative_url }}"
+    data-light-src="{{ include.id | append: '.svg' | prepend: 'assets/diagrams/' | relative_url }}"
+    data-dark-src="{{ include.id | append: '-dark.svg' | prepend: 'assets/diagrams/' | relative_url }}"
     {% endif %}
     alt="{{ include.alt }}"
     loading="lazy">

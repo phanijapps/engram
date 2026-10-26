@@ -58,3 +58,8 @@ docs/specs/*/state.json
 
 # Launcher npm payload — generated at prepack from .agents/skills (DEC-001)
 packages/launcher/skills/
+
+# GitHub Pages site (job 004) — archify working folders and local Jekyll build output
+.archify/
+site/_site/
+site/.sass-cache/

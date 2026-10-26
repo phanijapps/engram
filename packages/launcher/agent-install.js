@@ -265,6 +265,18 @@ function copySkills(destRoot, written, remove = false) {
       process.stdout.write(`  note: ${to} is the engram skills source — left untouched\n`);
       continue;
     }
+    // Name-tag discipline on the write path too (FIND-security-002 /
+    // FIND-platform-001): replace only what is verifiably ours (REQ-012
+    // idempotency keeps replacing our own delivered copies); foreign
+    // content occupying a delivered name — different SKILL.md frontmatter,
+    // or no readable SKILL.md at all — is left untouched, loudly, mirroring
+    // the removeIfOurs discipline REQ-006 establishes for --remove.
+    if (fs.existsSync(to) && !skillDirIsOurs(to, skill)) {
+      process.stdout.write(
+        `  note: ${to} exists with different frontmatter — left untouched\n`,
+      );
+      continue;
+    }
     fs.rmSync(to, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(to), { recursive: true });
     fs.cpSync(from, to, { recursive: true });

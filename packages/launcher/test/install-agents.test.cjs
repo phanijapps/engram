@@ -326,6 +326,42 @@ test('FIND-security-001 payload-present project install never touches the author
   );
 });
 
+test('FIND-security-002 foreign skill content at a delivered path survives install; our-tagged dirs are replaced', () => {
+  const { pkg, home, proj } = sandbox('sec002');
+  const res0 = run(pkg, ['pi'], { cwd: proj, home });
+  assert.equal(res0.status, 0, `stderr: ${res0.stderr}`);
+  const root = path.join(home, '.pi', 'agent', 'skills');
+  // Foreign replacement in our namespace: different frontmatter name tag.
+  const foreign = path.join(root, 'engram-index');
+  fs.rmSync(foreign, { recursive: true, force: true });
+  fs.mkdirSync(foreign, { recursive: true });
+  fs.writeFileSync(
+    path.join(foreign, 'SKILL.md'),
+    '---\nname: my-own-engram-index\ndescription: User-authored replacement; trigger never.\n---\n\n# mine\n',
+  );
+  fs.writeFileSync(path.join(foreign, 'USER-MARKER'), 'user content\n');
+  // Our own delivered copy with a local extra file: tag matches ours, so
+  // replacement must keep working (REQ-012 idempotency).
+  fs.writeFileSync(path.join(root, 'engram-factory', 'LOCAL-NOTES.md'), 'local edit\n');
+  const res = run(pkg, ['pi'], { cwd: proj, home });
+  assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+  assert.ok(
+    fs.readFileSync(path.join(foreign, 'SKILL.md'), 'utf8').includes('my-own-engram-index'),
+    'foreign skill dir was destroyed by install',
+  );
+  assert.ok(fs.existsSync(path.join(foreign, 'USER-MARKER')), 'foreign content deleted');
+  assert.match(res.stdout, /exists with different frontmatter — left untouched/);
+  assert.match(
+    fs.readFileSync(path.join(root, 'engram-factory', 'SKILL.md'), 'utf8'),
+    /^---\nname: engram-factory\n/m,
+    'our-tagged dir was not refreshed',
+  );
+  assert.ok(
+    !fs.existsSync(path.join(root, 'engram-factory', 'LOCAL-NOTES.md')),
+    'our-tagged dir must be fully replaced (REQ-012), extra local file survived',
+  );
+});
+
 test('FIND-code-001 in-repo --remove never deletes the authored tree', () => {
   const { root, pkg, home, authored } = authoredRepoStage('code001');
   const before = treeHash(authored);

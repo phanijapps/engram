@@ -11,7 +11,7 @@ title: Home
 <section>
   <h2>The factory in one picture</h2>
   <p>A wish enters, gets analyzed, planned and decomposed, built in a worktree, reviewed by discipline specialists, and merges only after an approver recommendation and an explicit human approval. Review rounds are capped at three; exhausted rounds or errors park the job on a human.</p>
-  {% include diagram.html id="factory-loop" pair=true alt="The engram-factory loop: feature through analyze, plan, tasks, build and review to the approver and the human gate, merge to main, review-round rebuilds capped at three, and needs-human rework paths" caption="The factory loop, drawn from SKILL.md — stage names are the board's own vocabulary." %}
+  {% include diagram.html id="factory-loop" pair=true alt="The engram-factory loop: feature through analyze, plan, tasks, build and review to the approver and the human gate, merge to main, review-round rebuilds capped at three, and needs-human rework paths" caption="The factory loop, drawn from SKILL.md — stage names are the skill's loop vocabulary." %}
   <p><a href="{{ '/factory/' | relative_url }}">Read the factory deep-dive →</a></p>
 </section>
 

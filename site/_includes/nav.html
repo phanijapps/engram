@@ -1,8 +1,8 @@
 <span class="brand"><a href="{{ '/' | relative_url }}">engram<span class="brand-slash">/</span>pages</a></span>
 <nav class="nav-links" aria-label="Site">
-  <a href="{{ '/factory/' | relative_url }}">Factory</a>
-  <a href="{{ '/engram/' | relative_url }}">engram</a>
-  <a href="{{ '/install/' | relative_url }}">Install</a>
+  <a href="{{ '/factory/' | relative_url }}"{% if page.url == '/factory/' %} aria-current="page"{% endif %}>Factory</a>
+  <a href="{{ '/engram/' | relative_url }}"{% if page.url == '/engram/' %} aria-current="page"{% endif %}>engram</a>
+  <a href="{{ '/install/' | relative_url }}"{% if page.url == '/install/' %} aria-current="page"{% endif %}>Install</a>
 </nav>
 <span class="spacer"></span>
 {% include theme-toggle.html %}

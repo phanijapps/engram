@@ -228,6 +228,16 @@ function main() {
     process.exit(1);
   }
 
+  // FIND-platform-005: running from an installed position (no authored tree
+  // three levels up) used to crash with an unhandled ENOENT stack trace —
+  // say it in one honest line instead, matching the generator's message.
+  if (!fs.existsSync(DEFAULTS.source)) {
+    console.error(
+      `skills parity: authored tree not found at ${DEFAULTS.source} — this copy looks installed, not a checkout; parity runs from a repository checkout`,
+    );
+    process.exit(1);
+  }
+
   const { errors, authored, payloadPresent, piDialects } = checkParity(DEFAULTS);
   if (errors.length > 0) {
     console.error(`skills parity: FAIL (${errors.length} difference(s))`);

@@ -14,6 +14,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 
 const LAUNCHER = path.join(__dirname, '..');
@@ -42,4 +43,22 @@ test('FIND-operations-001 parity --selftest detects every injected drift kind (e
   for (const kind of kinds) {
     assert.ok(res.stdout.includes(`detected: ${kind}`), `${kind} not detected`);
   }
+});
+
+test('FIND-platform-005 running from an installed position prints one honest line, not a stack trace', () => {
+  // A packed copy carries scripts/ but never the authored tree — the exact
+  // installed-position geometry (member probe round 2).
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-parity-installed-'));
+  const scripts = path.join(root, 'package', 'scripts');
+  fs.mkdirSync(scripts, { recursive: true });
+  fs.copyFileSync(CHECKER, path.join(scripts, 'check-skills-parity.cjs'));
+  const res = spawnSync('node', [path.join(scripts, 'check-skills-parity.cjs')], {
+    encoding: 'utf8',
+    timeout: 60000,
+  });
+  assert.equal(res.status, 1, `installed-position run must exit 1:\n${res.stdout}${res.stderr}`);
+  assert.match(res.stderr, /authored tree not found/);
+  assert.match(res.stderr, /looks installed, not a checkout/);
+  assert.ok(!res.stderr.includes('throw'), `stack trace leaked:\n${res.stderr}`);
+  assert.equal(res.stderr.trim().split('\n').length, 1, 'error output must be exactly one line');
 });

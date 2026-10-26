@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROFILES = ("full-stack", "servicenow", "salesforce", "sap", "maximo")
 REVIEWERS = ("code", "security", "platform", "ux", "ui", "backend", "data", "operations")
 MANDATORY = {"code", "security", "platform"}
+MODES = ("full", "light")
 STAGES = ("analyze", "plan", "tasks", "build", "review", "approve", "merge", "merged", "needs-human")
 
 
@@ -176,6 +177,7 @@ def check_board(board):
         require(job["stage"] in STAGES, "Invalid stage")
         require(1 <= job["cycle"] and 0 <= job["round"] <= 3, "Invalid cycle/round")
         require(set(job["profiles"]) <= set(PROFILES), "Unknown profile")
+        require(job.get("mode", "full") in MODES, "Invalid mode")
         require(set(job["reviews"]) <= set(job["required_reviewers"]), "Unexpected reviewer")
     require(sum(j["stage"] != "merged" for j in board["jobs"]) <= 1, "Multiple active jobs")
 
@@ -222,7 +224,12 @@ def selected(board, job_id):
 def execute(args, repo, state, board):
     cmd = args.command
     if cmd == "status":
-        return selected(board, args.job) if args.job else board
+        # Display-only: legacy records without `mode` read as full; a
+        # read-only command never rewrites the board to say so.
+        if args.job:
+            job = selected(board, args.job)
+            return {**job, "mode": job.get("mode", "full")}
+        return {**board, "jobs": [{**job, "mode": job.get("mode", "full")} for job in board["jobs"]]}
     if cmd == "create":
         require(not any(j["stage"] != "merged" for j in board["jobs"]), "An active job already exists")
         clean(repo)
@@ -243,6 +250,7 @@ def execute(args, repo, state, board):
                     "Owner ratification must carry a non-empty row with a verbatim quoted confirmation")
         profiles = args.profiles.split(",")
         require(profiles and len(set(profiles)) == len(profiles) and set(profiles) <= set(PROFILES), "Invalid profiles")
+        mode = args.mode or "full"  # absent flag means full, unpinned (DEC-P02)
         number = max([int(j["job_id"].split("-")[0]) for j in board["jobs"]] or [0]) + 1
         job_id = f"{number:03d}-{args.slug}"
         jobdir, worktree = state / "jobs" / job_id, state / "worktrees" / job_id
@@ -252,6 +260,7 @@ def execute(args, repo, state, board):
         branch, base = "factory/" + job_id, git(repo, "rev-parse", board["target"])
         job = {"job_id": job_id, "feature": feature, "profiles": profiles,
                "created_at": now(), "updated_at": now(), "stage": "analyze", "status": "running",
+               "mode": mode,
                "cycle": 1, "round": 0, "target": board["target"], "branch": branch,
                "base_sha": base, "worktree": str(worktree), "snapshot": None,
                "required_reviewers": [], "reviews": {}, "artifacts": {}, "approval": None,
@@ -266,7 +275,7 @@ def execute(args, repo, state, board):
         # All job content exists; only now mutate Git. A crash before this line
         # leaves at most an inspectable job directory, never an orphan worktree.
         git(repo, "worktree", "add", "-b", branch, str(worktree), base)
-        event(job, "create", {"base_sha": base})
+        event(job, "create", {"base_sha": base, "mode": mode, "mode_pinned": args.mode is not None})
         board["jobs"].append(job)
         return job
     job = selected(board, args.job)
@@ -499,6 +508,7 @@ def parser():
     create.add_argument("--brief-file", help="Optional engram-frame brief; registered as a required analysis input")
     create.add_argument("--slug", required=True)
     create.add_argument("--profiles", default="full-stack", help="Comma-separated profiles")
+    create.add_argument("--mode", choices=MODES, help="Owner pin: full (default) or light team mode")
     status = sub.add_parser("status")
     status.add_argument("--job")
     for cmd in ("complete", "snapshot", "review", "decision", "approve", "merge", "rework", "block", "resume", "refresh-base", "validate-artifact"):

@@ -475,6 +475,74 @@ class FactoryTests(unittest.TestCase):
         schema = json.loads((SKILL / "assets" / "board.schema.json").read_text())
         jsonschema.Draft202012Validator(schema).validate(board)
 
+    def create_mode(self, mode=None):
+        args = ["create", "--feature-file", str(self.feature), "--slug", "approval-flow"]
+        if mode is not None:
+            args += ["--mode", mode]
+        result = self.run_cli(*args)
+        self.job_id = result["result"]["job_id"]
+        self.jobdir = self.repo / ".engram-factory" / "jobs" / self.job_id
+        return result["result"]
+
+    def board_file(self):
+        return json.loads((self.repo / ".engram-factory" / "board.json").read_text())
+
+    def rewrite_board(self, mutate):
+        boardpath = self.repo / ".engram-factory" / "board.json"
+        disk = json.loads(boardpath.read_text())
+        mutate(disk)
+        boardpath.write_text(json.dumps(disk, indent=2) + "\n")
+        return boardpath
+
+    def test_mode_create_light_is_recorded_and_displayed(self):
+        job = self.create_mode("light")
+        self.assertEqual(job["mode"], "light")
+        self.assertEqual(self.job()["mode"], "light")
+        self.assertEqual(self.board_file()["jobs"][0]["mode"], "light")
+
+    def test_mode_default_create_records_full_explicitly(self):
+        job = self.create_mode()
+        self.assertEqual(job["mode"], "full")
+        self.assertEqual(self.board_file()["jobs"][0]["mode"], "full")
+
+    def test_mode_legacy_record_without_mode_loads_and_displays_full(self):
+        self.create_mode()
+        def strip(disk):
+            del disk["jobs"][0]["mode"]
+        boardpath = self.rewrite_board(strip)
+        before = boardpath.read_bytes()
+        self.assertEqual(self.job()["mode"], "full")
+        self.assertEqual(self.run_cli("status")["result"]["jobs"][0]["mode"], "full")
+        self.assertEqual(boardpath.read_bytes(), before)
+
+    def test_mode_unknown_value_refuses_every_command(self):
+        self.create_mode()
+        def poison(disk):
+            disk["jobs"][0]["mode"] = "fast"
+        self.rewrite_board(poison)
+        self.run_cli("status", fail=True)
+        self.run_cli("status", "--job", self.job_id, fail=True)
+
+    def test_mode_create_flag_rejects_unknown_values(self):
+        command = [sys.executable, str(SCRIPT), "--repo", str(self.repo), "create",
+                   "--feature-file", str(self.feature), "--slug", "approval-flow", "--mode", "fast"]
+        result = subprocess.run(command, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("invalid choice", result.stderr)
+        self.assertEqual(self.run_cli("status")["result"]["jobs"], [])
+
+    def test_mode_board_with_mode_validates_against_published_schema(self):
+        try:
+            import jsonschema
+        except ImportError:
+            self.skipTest("Optional jsonschema package unavailable; core tests use stdlib")
+        self.create_mode("light")
+        self.upstream()
+        board = self.run_cli("status")["result"]
+        self.assertEqual(board["jobs"][0]["mode"], "light")
+        schema = json.loads((SKILL / "assets" / "board.schema.json").read_text())
+        jsonschema.Draft202012Validator(schema).validate(board)
+
 
 if __name__ == "__main__":
     unittest.main()

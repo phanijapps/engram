@@ -1,0 +1,18 @@
+{% comment %}
+  Diagram embed include (plan DEC-P005 asset pipeline).
+  Required: id (asset stem under site/assets/diagrams/), alt, caption.
+  Optional: pair=true when per-polarity SVGs exist (DEC-P004 fallback) —
+  the base id is the light asset (no-JS shows light) and <id>-dark.svg is
+  swapped in by site.js when the page toggles to dark.
+{% endcomment %}
+<figure class="diagram">
+  <img
+    src="{{ include.id | prepend: 'diagrams/' | relative_url }}"
+    {% if include.pair %}
+    data-light-src="{{ include.id | prepend: 'diagrams/' | relative_url }}"
+    data-dark-src="{{ include.id | append: '-dark' | prepend: 'diagrams/' | relative_url }}"
+    {% endif %}
+    alt="{{ include.alt }}"
+    loading="lazy">
+  <figcaption><span class="mono fig-id">{{ include.id }}</span>{{ include.caption }}</figcaption>
+</figure>

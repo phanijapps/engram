@@ -1,0 +1,9 @@
+# engram GitHub Pages site — plugin-free Jekyll source (job 004-github-pages-site).
+# Built by .github/workflows/pages.yml and locally by site/tools/build.sh through
+# the same pinned container (DEC-P01: local evidence equals CI evidence).
+title: engram
+description: Contract-first agentic memory layer — and the software factory that ships it.
+baseurl: "/engram"
+url: "https://phanijapps.github.io"
+markdown: kramdown
+exclude: ["tools"]

@@ -182,6 +182,12 @@ def check_board(board):
     require(sum(j["stage"] != "merged" for j in board["jobs"]) <= 1, "Multiple active jobs")
 
 
+def review_author(job, discipline):
+    # DEC-001/DEC-004: light mode concentrates authorship in red-forman while
+    # every per-discipline file, the mandatory set and the rubric stay intact.
+    return "red-forman" if job.get("mode", "full") == "light" else "reviewer-" + discipline
+
+
 def mode_pin(job):
     # DEC-P02: pin provenance lives in the append-only history. A create-time
     # owner pin stays authoritative until any rework event supersedes it —
@@ -363,7 +369,7 @@ def execute(args, repo, state, board):
             (jobdir / f"cycle-{job['cycle']}" / f"round-{job['round']}").mkdir(parents=True, exist_ok=True)
             for reviewer in reviewers:
                 path = jobdir / f"cycle-{job['cycle']}" / f"round-{job['round']}" / ("review-" + reviewer + ".md")
-                path.write_text(render("review", job, snapshot_path=args.snapshot, discipline=reviewer, round=job["round"]))
+                path.write_text(render("review", job, snapshot_path=args.snapshot, discipline=reviewer, round=job["round"], review_author=review_author(job, reviewer)))
         else:
             job["stage"] = {"analyze": "plan", "plan": "tasks", "tasks": "build"}[stage]
         event(job, "complete-" + stage, records)
@@ -406,7 +412,7 @@ def execute(args, repo, state, board):
         require(job["reviews"][args.discipline]["verdict"] == "pending", "Review already recorded")
         source_check(repo, jobdir, job)
         inputs = [item["path"] for item in job["artifacts"].values()]
-        fields = validate_artifact(jobdir, args.artifact, job, "review", {"reviewer-" + args.discipline}, inputs, job["snapshot"]["path"])
+        fields = validate_artifact(jobdir, args.artifact, job, "review", {review_author(job, args.discipline)}, inputs, job["snapshot"]["path"])
         require(fields.get("round") == job["round"] and fields.get("discipline") == args.discipline, "Wrong review round/discipline")
         require(fields.get("verdict") in {"PASS", "CHANGES", "ERROR"}, "Invalid verdict")
         job["reviews"][args.discipline] = {"verdict": fields["verdict"], **record(jobdir, args.artifact)}

@@ -4,7 +4,7 @@ artifact_type: "review"
 job_id: "{{job_id}}"
 cycle: {{cycle}}
 status: "draft"
-author_role: "reviewer-{{discipline}}"
+author_role: "{{review_author}}"
 profiles: {{profiles_json}}
 source_snapshot: "{{snapshot_path}}"
 input_artifacts: []

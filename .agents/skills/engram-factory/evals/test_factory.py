@@ -594,6 +594,62 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(job["stage"], "plan")
         self.assertFalse([e for e in job["history"] if e["action"] == "mode-refused"])
 
+    def upstream_light(self):
+        self.create_mode("light")
+        self.analyze_declaring("light")
+        self.fill("plan", "engram-planner", ["analysis.md"])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "plan", "--artifacts", "plan.md")
+        for kind in ("tasks", "verification", "release"):
+            self.fill(kind, "engram-tasks", ["analysis.md", "plan.md"])
+        self.run_cli("complete", "--job", self.job_id, "--stage", "tasks", "--artifacts", "tasks.md", "verification.md", "release.md")
+
+    def review_light(self, discipline, verdict="PASS", role="red-forman", attempt="", fail=False):
+        job = self.job()
+        path = f"cycle-{job['cycle']}/round-{job['round']}/review-{discipline}{attempt}.md"
+        self.fill("review", role, [i["path"] for i in job["artifacts"].values()],
+                  job["snapshot"]["path"], path, round=job["round"], discipline=discipline, verdict=verdict)
+        return self.run_cli("review", "--job", self.job_id, "--discipline", discipline, "--artifact", path, fail=fail)
+
+    def test_light_mode_scaffolds_same_per_discipline_files_with_red_forman_author(self):
+        self.upstream_light()
+        self.build()
+        job = self.job()
+        self.assertEqual(job["mode"], "light")
+        self.assertEqual(sorted(job["reviews"]), ["code", "platform", "security"])
+        self.assertEqual(sorted(job["required_reviewers"]), ["code", "platform", "security"])
+        self.assertTrue(all(r["verdict"] == "pending" for r in job["reviews"].values()))
+        for reviewer in ("code", "security", "platform"):
+            path = self.jobdir / "cycle-1" / "round-1" / ("review-" + reviewer + ".md")
+            self.assertTrue(path.is_file(), "missing scaffold: " + reviewer)
+            self.assertIn('author_role: "red-forman"', path.read_text())
+
+    def test_light_author_contract_full_mode_still_scaffolds_specialist_authors(self):
+        self.create(); self.upstream(); self.build()
+        for reviewer in ("code", "security", "platform"):
+            path = self.jobdir / "cycle-1" / "round-1" / ("review-" + reviewer + ".md")
+            self.assertIn('author_role: "reviewer-' + reviewer + '"', path.read_text())
+
+    def test_light_mode_full_geometry_rejects_red_forman_author(self):
+        self.create(); self.upstream(); self.build()
+        before = self.run_cli("status")["revision"]
+        error = self.review_light("code", role="red-forman", fail=True)
+        self.assertIn("Wrong artifact author role", error["error"])
+        self.assertEqual(self.run_cli("status")["revision"], before)
+        self.assertEqual(self.job()["reviews"]["code"]["verdict"], "pending")
+
+    def test_light_mode_accepts_red_forman_only_and_keeps_other_validations(self):
+        self.upstream_light(); self.build()
+        result = self.review_light("code")
+        self.assertEqual(result["result"]["reviews"]["code"]["verdict"], "PASS")
+        before = self.run_cli("status")["revision"]
+        error = self.review_light("security", role="reviewer-security", fail=True)
+        self.assertIn("Wrong artifact author role", error["error"])
+        self.assertEqual(self.run_cli("status")["revision"], before)
+        error = self.review_light("platform", verdict="BLOCKER", fail=True)
+        self.assertIn("Invalid verdict", error["error"])
+        self.review_light("security"); self.review_light("platform")
+        self.assertEqual(self.job()["stage"], "approve")
+
 
 if __name__ == "__main__":
     unittest.main()

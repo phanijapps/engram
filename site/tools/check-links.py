@@ -1,0 +1,229 @@
+#!/usr/bin/env python3
+"""Link, budget and subresource gate for the built site tree (plan DEC-P03).
+
+Walks a built Jekyll tree and asserts:
+  1. every internal href/src/srcset target is rooted at the --base prefix
+     (wrong-root hits are the getbootstrap.com custom-domain trap, RISK-002)
+     and resolves to a real file in the tree (adding index.html for
+     directory URLs);
+  2. no external subresource is referenced (scripts, stylesheets, images,
+     frames — NFR-002 third-party-request zero; plain external <a> anchors
+     are allowed and reported);
+  3. each page's HTML + CSS + font payload stays at or under the budget
+     (NFR-002: 200 KiB before diagram assets; .svg images are excluded);
+  4. CSS url(...) references resolve to files.
+
+--selftest builds a synthetic fixture containing one broken and one
+wrong-root link and FAILS unless the checker rejects that fixture — the
+negative case is proven, not assumed.
+
+Usage:
+  python3 site/tools/check-links.py site/_site --base /engram/
+  python3 site/tools/check-links.py --selftest
+"""
+from __future__ import annotations
+
+import re
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+DEFAULT_BUDGET = 200 * 1024  # NFR-002: 200 KiB per page before diagram assets
+EXTERNAL_OK_ANCHOR_SCHEMES = ("http://", "https://", "mailto:")
+SUBRESOURCE_TAGS = ("script", "img", "iframe", "source", "link", "video", "audio", "embed", "track")
+
+ATTR_RE = re.compile(r"""(?:href|src|data-light-src|data-dark-src)\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
+SRCSET_RE = re.compile(r"""srcset\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
+TAG_RE = re.compile(r"<\s*(\w+)[^>]*?>", re.I | re.S)
+URL_IN_CSS_RE = re.compile(r"url\(\s*(['\"]?)([^'\")]+)\1\s*\)", re.I)
+
+
+class Violations:
+    def __init__(self) -> None:
+        self.items: list[str] = []
+
+    def add(self, kind: str, page: str, detail: str) -> None:
+        self.items.append(f"{kind}: {page}: {detail}")
+
+    def any(self) -> bool:
+        return bool(self.items)
+
+
+def strip_frag_query(url: str) -> str:
+    return url.split("#", 1)[0].split("?", 1)[0]
+
+
+def resolve_internal(base: str, tree: Path, url: str) -> Path | None:
+    """Map an internal absolute URL to a file in the tree, or None."""
+    if not url.startswith(base):
+        return None
+    rel = url[len(base):].lstrip("/")
+    if rel == "":
+        return tree / "index.html"
+    candidate = tree / rel
+    if candidate.suffix == "":
+        return candidate / "index.html"
+    return candidate
+
+
+def css_urls(css_path: Path):
+    urls: list[str] = []
+    for match in URL_IN_CSS_RE.finditer(css_path.read_text(encoding="utf-8", errors="replace")):
+        urls.append(match.group(2))
+    return urls
+
+
+def check_tree(tree: Path, base: str, budget: int) -> tuple[Violations, dict[str, int], set[str]]:
+    v = Violations()
+    payloads: dict[str, int] = {}
+    externals: set[str] = set()
+    pages = sorted(tree.rglob("*.html"))
+
+    css_assets: set[Path] = set()
+    for css in sorted(tree.rglob("*.css")):
+        css_assets.add(css)
+        for url in css_urls(css):
+            url = strip_frag_query(url.strip())
+            if not url or url.startswith(("data:", "#")) or url.startswith(EXTERNAL_OK_ANCHOR_SCHEMES):
+                if url.startswith(EXTERNAL_OK_ANCHOR_SCHEMES):
+                    v.add("external-css-subresource", str(css), url)
+                continue
+            target = (css.parent / url).resolve()
+            if not target.exists():
+                v.add("broken-css-asset", str(css), url)
+            elif target.suffix in (".woff", ".woff2", ".otf", ".ttf"):
+                css_assets.add(target)
+
+    for page in pages:
+        rel = str(page.relative_to(tree))
+        html = page.read_text(encoding="utf-8", errors="replace")
+        payload = page.stat().st_size
+        page_css: set[Path] = set()
+
+        for tag_match in TAG_RE.finditer(html):
+            tag = tag_match.group(1).lower()
+            blob = tag_match.group(0)
+            for attr in ATTR_RE.finditer(blob):
+                url = strip_frag_query(attr.group(2) or attr.group(3) or "")
+                if not url or url.startswith(("#", "data:", "javascript:")):
+                    continue
+                if url.startswith(EXTERNAL_OK_ANCHOR_SCHEMES):
+                    if tag == "a":
+                        externals.add(url)  # plain outbound anchor — allowed
+                    elif tag in SUBRESOURCE_TAGS:
+                        v.add("external-subresource", rel, f"<{tag}> {url} (NFR-002 forbids third-party subresources)")
+                    continue
+                if not url.startswith("/"):
+                    v.add("relative-url", rel, f"<{tag}> {url} — must be absolute under {base}")
+                    continue
+                if not url.startswith(base):
+                    v.add("wrong-root", rel, f"<{tag}> {url} — not rooted at {base}")
+                    continue
+                target = resolve_internal(base, tree, url)
+                if target is None or not target.is_file():
+                    v.add("broken-link", rel, f"<{tag}> {url}")
+                    continue
+                if tag == "link" and target.suffix == ".css":
+                    page_css.add(target)
+                elif tag in ("img", "source") and target.suffix in (".woff2", ".woff", ".css"):
+                    page_css.add(target)  # font/style loaded via media elements
+
+            for attr in SRCSET_RE.finditer(blob):
+                for candidate in attr.group(2).split(","):
+                    url = strip_frag_query(candidate.strip().split(" ")[0])
+                    if not url:
+                        continue
+                    if url.startswith(EXTERNAL_OK_ANCHOR_SCHEMES):
+                        v.add("external-subresource", rel, f"srcset {url}")
+                        continue
+                    if not url.startswith(base):
+                        v.add("wrong-root", rel, f"srcset {url} — not rooted at {base}")
+                        continue
+                    target = resolve_internal(base, tree, url)
+                    if target is None or not target.is_file():
+                        v.add("broken-link", rel, f"srcset {url}")
+
+        for css in page_css:
+            payload += css.stat().st_size
+            for url in css_urls(css):
+                url = strip_frag_query(url.strip())
+                if url and not url.startswith(("data:", "#")) and not url.startswith(EXTERNAL_OK_ANCHOR_SCHEMES):
+                    target = (css.parent / url).resolve()
+                    if target.suffix in (".woff2", ".woff", ".otf", ".ttf") and target.is_file():
+                        payload += target.stat().st_size
+        payloads[rel] = payload
+        if payload > budget:
+            v.add("payload-over-budget", rel, f"{payload} bytes > {budget} bytes HTML+CSS+fonts")
+
+    return v, payloads, externals
+
+
+def selftest() -> int:
+    tmp = Path(tempfile.mkdtemp(prefix="engram-check-links-selftest-"))
+    try:
+        (tmp / "ok.html").write_text("<html><body>ok</body></html>", encoding="utf-8")
+        (tmp / "assets").mkdir()
+        (tmp / "assets" / "x.css").write_text("body{color:red}", encoding="utf-8")
+        fixture = tmp / "index.html"
+        fixture.write_text(
+            '<html><head><link rel="stylesheet" href="/engram/assets/x.css"></head>'
+            '<body><a href="/engram/ok.html">good</a>'
+            '<a href="/engram/missing.html">broken</a>'
+            '<a href="/assets/x.css">wrong root</a>'
+            '<img src="/engram/assets/missing.png"></body></html>',
+            encoding="utf-8",
+        )
+        v, payloads, _ = check_tree(tmp, "/engram/", DEFAULT_BUDGET)
+        kinds = {item.split(":")[0] for item in v.items}
+        broken = any(item.startswith("broken-link:") and "/engram/missing.html" in item for item in v.items)
+        wrong_root = any(item.startswith("wrong-root:") for item in v.items)
+        if not broken:
+            print("check-links selftest: FAIL — fixture's broken link was not detected")
+            return 1
+        if not wrong_root:
+            print("check-links selftest: FAIL — fixture's wrong-root link was not detected")
+            return 1
+        if not v.any():
+            print("check-links selftest: FAIL — checker passed a defective fixture")
+            return 1
+        print(f"check-links selftest: OK — defective fixture rejected as expected ({sorted(kinds)}); "
+              "broken + wrong-root both detected")
+        return 0
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if args[:1] == ["--selftest"]:
+        return selftest()
+    if len(args) < 3 or args[1] != "--base":
+        print(__doc__)
+        return 2
+    tree = Path(args[0])
+    base = args[2]
+    budget = DEFAULT_BUDGET
+    if "--budget" in args:
+        budget = int(args[args.index("--budget") + 1])
+    if not tree.is_dir():
+        print(f"check-links: FAIL built tree {tree} not found (run site/tools/build.sh first)")
+        return 1
+    if not base.startswith("/") or not base.endswith("/"):
+        print(f"check-links: FAIL --base must be an absolute path with trailing slash, got {base!r}")
+        return 2
+    v, payloads, externals = check_tree(tree, base, budget)
+    pages = sorted(payloads)
+    print(f"check-links: {len(pages)} page(s), base {base}, budget {budget} bytes")
+    for rel in pages:
+        print(f"  payload {payloads[rel]:>7} bytes  {rel}")
+    for item in v.items:
+        print(f"check-links: FAIL {item}")
+    if v.any():
+        return 1
+    print("check-links: OK — zero wrong-root hits, zero broken links, zero external subresources, budget holds")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

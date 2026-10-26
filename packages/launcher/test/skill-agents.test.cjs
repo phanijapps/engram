@@ -255,6 +255,36 @@ test('FIND-code-002 foreign agent file at a delivered name survives install AND 
   assert.ok(!fs.existsSync(path.join(agentDir, 'engram-planner.md')), 'ours not removed');
 });
 
+test('FIND-platform-003 cross-skill agent name collision: first skill wins, later skipped loudly', () => {
+  const { pkg, home, proj } = sandbox('collide');
+  // Two fixture skills claiming the same installed agent name.
+  for (const [skill, body] of [
+    ['aaa-fixture', '# from aaa-fixture\n'],
+    ['zzz-fixture', '# from zzz-fixture\n'],
+  ]) {
+    const dir = path.join(pkg, 'skills', skill);
+    fs.mkdirSync(path.join(dir, 'agents'), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'SKILL.md'),
+      `---\nname: ${skill}\ndescription: Fixture; trigger never.\n---\n\n# ${skill}\n`,
+    );
+    fs.writeFileSync(
+      path.join(dir, 'agents', 'engram-collide.pi.md'),
+      `---\nname: engram-collide\ndescription: Collision probe; trigger never.\n---\n\n${body}`,
+    );
+  }
+  const res = run(pkg, ['pi'], { cwd: proj, home });
+  assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+  const dest = path.join(home, '.pi', 'agent', 'agents', 'engram-collide.md');
+  assert.ok(fs.existsSync(dest), 'colliding agent not delivered at all');
+  assert.match(
+    fs.readFileSync(dest, 'utf8'),
+    /from aaa-fixture/,
+    'later skill silently overwrote the first claim',
+  );
+  assert.match(res.stderr, /collides with aaa-fixture's — skipped/);
+});
+
 test('FIND-security-004 --remove reports every agent file it removes (audit line)', () => {
   const { pkg, home, proj } = sandbox('sec004');
   const install = run(pkg, ['claude'], { cwd: proj, home });

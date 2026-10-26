@@ -171,6 +171,7 @@ function dialectDestName(file, dialect) {
 function copySkillAgents(destDir, dialect, pointerRoot, remove, written) {
   const src = skillsSource();
   if (!src) return; // copySkills already reported the missing source
+  const claimedBy = new Map(); // destName -> owning skill (FIND-platform-003)
   for (const skill of deriveShippedSkills(src)) {
     const agentsSrc = path.join(src, skill, 'agents');
     if (!fs.existsSync(agentsSrc)) continue;
@@ -188,6 +189,18 @@ function copySkillAgents(destDir, dialect, pointerRoot, remove, written) {
         removeAgentIfOurs(to, expectedName, written);
         continue;
       }
+      // Cross-skill role-name collision (FIND-platform-003): the per-host
+      // agents dir is shared by every skill, so a later skill claiming an
+      // already-installed name must not silently overwrite it — first
+      // (sorted) skill wins, the collision is reported loudly.
+      const prior = claimedBy.get(destName);
+      if (prior) {
+        process.stderr.write(
+          `  note: ${skill} agent ${destName} collides with ${prior}'s — skipped\n`,
+        );
+        continue;
+      }
+      claimedBy.set(destName, skill);
       // Never remove or overwrite a foreign file that merely shares the
       // name (FIND-code-002): name-tag check mirrors removeIfOurs.
       if (fs.existsSync(to) && !agentFileIsOurs(to, expectedName)) {

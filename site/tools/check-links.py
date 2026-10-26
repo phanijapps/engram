@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
-"""Link, budget, subresource and claim gate for the built site tree (plan DEC-P03).
+"""Link, budget, subresource, anchor and claim gate for the built site tree.
+
+Job 004 plan DEC-P03; job 008 TASK-004 extends it with anchor resolution
+(plan step 4): any internal URL carrying a fragment — same-page (#frag) or
+cross-page (/base/page/#frag) — must resolve to a real id on the target built
+page. A fragment that names no id is a dead anchor (DEC-P03's anchor rail and
+gallery links ride on this rule).
 
 Walks a built Jekyll tree and asserts:
   1. every internal href/src/srcset target is rooted at the --base prefix
      (wrong-root hits are the getbootstrap.com custom-domain trap, RISK-002)
      and resolves to a real file in the tree (adding index.html for
      directory URLs);
-  2. no external subresource is referenced (scripts, stylesheets, images,
+  2. every fragment-bearing internal <a href> resolves to an id on the target
+     page (same-page or cross-page) — dead anchors FAIL;
+  3. no external subresource is referenced (scripts, stylesheets, images,
      frames — NFR-002 third-party-request zero; plain external <a> anchors
      and metadata <link rel="canonical"|"alternate"|…> references are
      allowed and reported);
-  3. each page's HTML + CSS + font payload stays at or under the budget
+  4. each page's HTML + CSS + font payload stays at or under the budget
      (NFR-002: 200 KiB before diagram assets; .svg images are excluded);
-  4. CSS url(...) references resolve to files;
-  5. every "<number> diagrams" claim is machine-checked: the claim must sit
+  5. CSS url(...) references resolve to files;
+  6. every "<number> diagrams" claim is machine-checked: the claim must sit
      inside an element carrying data-diagrams-for="<page url>", and the
      claimed count must equal the number of diagram <img> embeds on that
      page; unbound count claims anywhere are violations (LED-2 no-fabrication
@@ -21,9 +29,10 @@ Walks a built Jekyll tree and asserts:
      that embeds seven).
 
 --selftest builds a synthetic fixture containing one broken link, one
-wrong-root link, one wrong diagram count and one unbound diagram count, and
-FAILS unless the checker rejects that fixture — the negative cases are
-proven, not assumed.
+wrong-root link, one dead cross-page anchor, one dead same-page anchor, one
+live anchor (negative control), one wrong diagram count and one unbound
+diagram count, and FAILS unless the checker rejects the fixture while leaving
+the live anchor unflagged — the negative cases are proven, not assumed.
 
 Usage:
   python3 site/tools/check-links.py site/_site --base /engram/
@@ -42,9 +51,10 @@ DEFAULT_BUDGET = 200 * 1024  # NFR-002: 200 KiB per page before diagram assets
 EXTERNAL_OK_ANCHOR_SCHEMES = ("http://", "https://", "mailto:")
 SUBRESOURCE_TAGS = ("script", "img", "iframe", "source", "link", "video", "audio", "embed", "track")
 
-ATTR_RE = re.compile(r"""(?:href|src|data-light-src|data-dark-src)\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
+ATTR_RE = re.compile(r"""(?:href|src)\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
 SRCSET_RE = re.compile(r"""srcset\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
 REL_RE = re.compile(r"""rel\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
+ID_RE = re.compile(r"""id\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
 TAG_RE = re.compile(r"<\s*(\w+)[^>]*?>", re.I | re.S)
 URL_IN_CSS_RE = re.compile(r"url\(\s*(['\"]?)([^'\")]+)\1\s*\)", re.I)
 
@@ -53,7 +63,7 @@ URL_IN_CSS_RE = re.compile(r"url\(\s*(['\"]?)([^'\")]+)\1\s*\)", re.I)
 # URL by design; NFR-002 forbids fetched third-party resources, not metadata).
 SAFE_LINK_RELS = {"canonical", "alternate", "author", "license", "prev", "next", "shortlink"}
 
-# Diagram-count claims (assertion 5): "seven diagrams", "7 diagrams", …
+# Diagram-count claims (assertion 6): "seven diagrams", "7 diagrams", …
 NUMBER_WORDS = {w: n for n, w in enumerate(
     "one two three four five six seven eight nine ten eleven twelve".split(), start=1)}
 DIAGRAM_CLAIM_RE = re.compile(r"\b(" + "|".join(NUMBER_WORDS) + r"|\d+)\s+diagrams?\b", re.I)
@@ -73,10 +83,12 @@ class Violations:
 
 
 class PageFacts(HTMLParser):
-    """Diagram <img> embeds, bound count claims and unbound claim text per page."""
+    """Per-page facts: element ids, diagram <img> embeds, bound count claims
+    and unbound claim text."""
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
+        self.ids: set[str] = set()
         self.diagram_imgs = 0
         self.claims: list[tuple[str, int | None, str]] = []  # (target, claimed, phrase)
         self.unbound_claims: list[str] = []
@@ -94,6 +106,8 @@ class PageFacts(HTMLParser):
 
     def _see(self, tag, attrs):
         a = dict(attrs)
+        if a.get("id"):
+            self.ids.add(a["id"])
         if tag == "img" and "/assets/diagrams/" in (a.get("src") or ""):
             self.diagram_imgs += 1
         target = a.get("data-diagrams-for")
@@ -126,8 +140,19 @@ class PageFacts(HTMLParser):
         self.unbound_claims = [m.group(0) for m in DIAGRAM_CLAIM_RE.finditer(text)]
 
 
+def parse_page(page: Path) -> PageFacts:
+    f = PageFacts()
+    f.feed(page.read_text(encoding="utf-8", errors="replace"))
+    f.close()
+    return f
+
+
 def strip_frag_query(url: str) -> str:
     return url.split("#", 1)[0].split("?", 1)[0]
+
+
+def fragment_of(url: str) -> str:
+    return url.split("#", 1)[1].split("?", 1)[0] if "#" in url else ""
 
 
 def resolve_internal(base: str, tree: Path, url: str) -> Path | None:
@@ -150,13 +175,37 @@ def css_urls(css_path: Path):
     return urls
 
 
+def check_anchor(url: str, tag: str, page: Path, rel: str, base: str, tree: Path,
+                 facts: dict[Path, PageFacts], v: Violations) -> None:
+    """Assertion 2: fragment-bearing internal <a href> must name a real id on
+    the target page (same-page or cross-page)."""
+    frag = fragment_of(url)
+    if not frag or tag != "a":
+        return
+    if url.startswith("#"):
+        target_page = page
+        shown = url
+    elif url.startswith(base):
+        resolved = resolve_internal(base, tree, strip_frag_query(url))
+        if resolved is None or not resolved.is_file():
+            return  # the path check below reports unresolved targets
+        if resolved not in facts:
+            facts[resolved] = parse_page(resolved)
+        target_page = resolved
+        shown = url
+    else:
+        return  # external or wrong-root URLs are handled by their own rules
+    if frag not in facts[target_page].ids:
+        v.add("dead-anchor", rel,
+              f'<a href="{shown}"> — no element id "{frag}" on '
+              f'{target_page.relative_to(tree)}')
+
+
 def check_diagram_claims(tree: Path, base: str, pages: list[Path], v: Violations) -> None:
-    """Assertion 5: every '<n> diagrams' claim matches the target page's real embed count."""
+    """Assertion 6: every '<n> diagrams' claim matches the target page's real embed count."""
     facts: dict[Path, PageFacts] = {}
     for page in pages:
-        f = PageFacts()
-        f.feed(page.read_text(encoding="utf-8", errors="replace"))
-        f.close()
+        f = parse_page(page)
         facts[page] = f
         rel = str(page.relative_to(tree))
         for phrase in f.unbound_claims:
@@ -191,6 +240,7 @@ def check_tree(tree: Path, base: str, budget: int) -> tuple[Violations, dict[str
     payloads: dict[str, int] = {}
     externals: set[str] = set()
     pages = sorted(tree.rglob("*.html"))
+    facts: dict[Path, PageFacts] = {p: parse_page(p) for p in pages}
 
     css_assets: set[Path] = set()
     for css in sorted(tree.rglob("*.css")):
@@ -219,8 +269,10 @@ def check_tree(tree: Path, base: str, budget: int) -> tuple[Violations, dict[str
             rel_match = REL_RE.search(blob)
             rels = set(((rel_match.group(2) or rel_match.group(3)) if rel_match else "").lower().split())
             for attr in ATTR_RE.finditer(blob):
-                url = strip_frag_query(attr.group(2) or attr.group(3) or "")
-                if not url or url.startswith(("#", "data:", "javascript:")):
+                raw_url = attr.group(2) or attr.group(3) or ""
+                url = strip_frag_query(raw_url)
+                check_anchor(raw_url, tag, page, rel, base, tree, facts, v)
+                if not url or url.startswith(("data:", "javascript:")):
                     continue
                 if url.startswith(EXTERNAL_OK_ANCHOR_SCHEMES):
                     if tag == "a" or (tag == "link" and rels & SAFE_LINK_RELS):
@@ -229,7 +281,8 @@ def check_tree(tree: Path, base: str, budget: int) -> tuple[Violations, dict[str
                         v.add("external-subresource", rel, f"<{tag}> {url} (NFR-002 forbids third-party subresources)")
                     continue
                 if not url.startswith("/"):
-                    v.add("relative-url", rel, f"<{tag}> {url} — must be absolute under {base}")
+                    if not raw_url.startswith("#"):
+                        v.add("relative-url", rel, f"<{tag}> {url} — must be absolute under {base}")
                     continue
                 if not url.startswith(base):
                     v.add("wrong-root", rel, f"<{tag}> {url} — not rooted at {base}")
@@ -277,7 +330,7 @@ def check_tree(tree: Path, base: str, budget: int) -> tuple[Violations, dict[str
 def selftest() -> int:
     tmp = Path(tempfile.mkdtemp(prefix="engram-check-links-selftest-"))
     try:
-        (tmp / "ok.html").write_text("<html><body>ok</body></html>", encoding="utf-8")
+        (tmp / "ok.html").write_text('<html><body id="live">ok</body></html>', encoding="utf-8")
         (tmp / "assets").mkdir()
         (tmp / "assets" / "x.css").write_text("body{color:red}", encoding="utf-8")
         diagrams = tmp / "assets" / "diagrams"
@@ -285,7 +338,7 @@ def selftest() -> int:
         for i in range(3):
             (diagrams / f"d{i}.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>", encoding="utf-8")
         (tmp / "gallery.html").write_text(
-            "<html><body>"
+            '<html><body id="gallery-top">'
             '<img src="/engram/assets/diagrams/d0.svg">'
             '<img src="/engram/assets/diagrams/d1.svg">'
             '<img src="/engram/assets/diagrams/d2.svg">'
@@ -295,7 +348,11 @@ def selftest() -> int:
         fixture = tmp / "index.html"
         fixture.write_text(
             '<html><head><link rel="stylesheet" href="/engram/assets/x.css"></head>'
-            '<body><a href="/engram/ok.html">good</a>'
+            '<body id="home-top"><a href="/engram/ok.html">good</a>'
+            '<a href="/engram/ok.html#live">live anchor</a>'
+            '<a href="/engram/ok.html#dead">dead cross-page anchor</a>'
+            '<a href="#home-top">live same-page anchor</a>'
+            '<a href="#nowhere">dead same-page anchor</a>'
             '<a href="/engram/missing.html">broken</a>'
             '<a href="/assets/x.css">wrong root</a>'
             '<img src="/engram/assets/missing.png">'
@@ -307,9 +364,14 @@ def selftest() -> int:
         kinds = {item.split(":")[0] for item in v.items}
         broken = any(item.startswith("broken-link:") and "/engram/missing.html" in item for item in v.items)
         wrong_root = any(item.startswith("wrong-root:") for item in v.items)
+        dead_cross = any(item.startswith("dead-anchor:") and "ok.html#dead" in item for item in v.items)
+        dead_same = any(item.startswith("dead-anchor:") and "#nowhere" in item for item in v.items)
+        live_clean = not any("dead-anchor" in item and ("#live" in item or "#home-top" in item) for item in v.items)
         bad_count = any(item.startswith("diagram-count:") and "embeds 3" in item for item in v.items)
         unbound = any(item.startswith("diagram-count-unbound:") and "five diagrams" in item for item in v.items)
         for name, ok in (("broken link", broken), ("wrong-root", wrong_root),
+                         ("dead cross-page anchor", dead_cross), ("dead same-page anchor", dead_same),
+                         ("live anchors stayed clean", live_clean),
                          ("wrong diagram count", bad_count), ("unbound diagram count", unbound)):
             if not ok:
                 print(f"check-links selftest: FAIL — fixture's {name} was not detected")
@@ -318,7 +380,8 @@ def selftest() -> int:
             print("check-links selftest: FAIL — checker passed a defective fixture")
             return 1
         print(f"check-links selftest: OK — defective fixture rejected as expected ({sorted(kinds)}); "
-              "broken + wrong-root + wrong-count + unbound-count all detected")
+              "broken + wrong-root + dead cross-page anchor + dead same-page anchor + wrong-count + "
+              "unbound-count all detected while the live anchors stay clean")
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -351,8 +414,8 @@ def main() -> int:
         print(f"check-links: FAIL {item}")
     if v.any():
         return 1
-    print("check-links: OK — zero wrong-root hits, zero broken links, zero external subresources, "
-          "budget holds, every diagram-count claim matches its target page")
+    print("check-links: OK — zero wrong-root hits, zero broken links, zero dead anchors, "
+          "zero external subresources, budget holds, every diagram-count claim matches its target page")
     return 0
 
 

@@ -72,6 +72,13 @@ Explicit human rework starts a new cycle. Preserve previous evidence.
 | Approve | engram-approver | decision.md |
 
 Use `references/agents.md` for role contracts and dispatch instructions.
+Use `references/agent-team.md` for the two team shapes: Full Team and
+light mode (red-forman as the single review author).
+Dispatch the review stage by the job's recorded `mode`. Full mode — the
+default — spawns one specialist reviewer per required discipline. In
+light mode, spawn ONE red-forman invocation which authors every required
+`review-<discipline>.md`; the reviewer set, evidence freeze and rubric are
+identical in both modes.
 Keep builder, reviewers and approver in separate agent invocations.
 
 Always require code, security and platform reviews. Add UX, UI, backend,
@@ -123,6 +130,7 @@ Use `assets/board.schema.json`.
 - `status`: execution or waiting condition within the stage.
 - `cycle`: current approval cycle, starting at 1.
 - `round`: current review round, starting at 0 before the first review.
+- `mode`: the job's team shape, `full` or `light`; absent means `full`.
 - `required_reviewers`: accepted reviewer set for the cycle.
 - `reviews`: current round only; each verdict is pending, PASS,
   CHANGES or ERROR.
@@ -159,6 +167,11 @@ Do not require a clean tree merely to display status.
    (`create --brief-file <brief>`): the controller registers it as an
    immutable artifact and a REQUIRED analysis input; analysis honors its
    decision ledger.
+   Record the team mode: `create --mode <full-or-light>` is the owner pin
+   (default `full`); the analyzer's frontmatter `mode` recommendation is
+   applied at analyze completion unless a pin refuses it — the refusal is
+   recorded as a `mode-refused` history event, and a human rework note
+   supersedes any pin.
 2. **Create the worktree.** Use branch `factory/<job-id>`.
 3. **Analyze.** Spawn engram-analyzer with the feature and relevant profiles.
 4. **Validate analysis.** Require actionable acceptance criteria, constraints,
@@ -189,7 +202,10 @@ Never record an unexecuted check as PASS.
 ## Review
 
 1. Freeze the source snapshot and accepted input hashes.
-2. Spawn every required reviewer against the same evidence.
+2. Spawn reviews by the recorded mode against the same evidence: full mode
+   spawns every required specialist reviewer; light mode spawns ONE
+   red-forman invocation authoring every required `review-<discipline>.md`
+   under the same rubric.
 3. Wait for every required reviewer.
 4. Validate and record each report.
 5. Resolve the round:
@@ -247,7 +263,7 @@ Do not discard existing source changes or previous review evidence.
 
 ## /engram-factory status [job-id]
 
-Report stage, status, cycle, round, review outcomes, blockers
+Report stage, status, cycle, round, mode, review outcomes, blockers
 and the next permitted action.
 
 Do not change state.

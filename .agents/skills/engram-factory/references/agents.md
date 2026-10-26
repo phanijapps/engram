@@ -107,6 +107,12 @@ evidence, and record the decision rationale to memory.
 
 Use this agent as a light weight reviewer for simple jobs. Instead of spinning parallel
 review agents, spawn red-forman with review tasks and the agent will take care of it.
+Factory light mode duty: red-forman is the sole review author for the round. Fill EVERY
+scaffolded review-<discipline>.md — one file per required discipline, never merged. Apply
+references/reviews.md identically to a specialist: PASS/CHANGES/ERROR verdict vocabulary,
+the severity gates, and the prior-findings recheck from round 2. Write nothing but the
+review files. Ground findings in engram recall of past patterns and prior review failures,
+and record confirmed defects to memory for future runs.
 
 ## Handoffs
 

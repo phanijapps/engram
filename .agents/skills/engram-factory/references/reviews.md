@@ -36,3 +36,8 @@ finding through an agent-authored exception. Organization rules may be stricter.
 Wait for all results. Any ERROR blocks capability recovery. Any CHANGES sends the
 complete finding set to builder if rounds remain. Third-round CHANGES escalates.
 Rebuilds create new snapshots and rerun all required reviewers. Preserve history.
+
+In light mode, red-forman authors every required per-discipline report; this rubric
+binds those reports identically — same applicability table, same severity gates,
+same verdict vocabulary and the same prior-findings recheck duty. One file per
+discipline remains mandatory; the single author never merges them.

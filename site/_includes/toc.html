@@ -1,0 +1,18 @@
+{% comment %}
+  On-this-page anchor rail (job 008, TASK-007 / DEC-P03 nav device).
+  Pages declare a frontmatter array; each entry carries id and label:
+    toc:
+      - id: the-loop
+        label: "The loop"
+  The entry set must equal the page's h2 id set — machine-checked by
+  site/tools/check-density.py (anchor-nav set equality) and every fragment
+  is resolved by the anchor-aware link gate.
+{% endcomment %}
+{% if page.toc %}
+<nav class="toc" aria-label="On this page">
+  <span class="toc-label">On this page</span>
+  {%- for item in page.toc %}
+  <a href="#{{ item.id }}">{{ item.label }}</a>
+  {%- endfor %}
+</nav>
+{% endif %}

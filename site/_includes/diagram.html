@@ -1,18 +1,15 @@
 {% comment %}
-  Diagram embed include (plan DEC-P005 asset pipeline).
+  Diagram showcase plate include (job 008, TASK-007 / DEC-P05).
   Required: id (asset stem under site/assets/diagrams/), alt, caption.
-  Optional: pair=true when per-polarity SVGs exist (DEC-P004 fallback) —
-  the base id is the light asset (no-JS shows light) and <id>-dark.svg is
-  swapped in by site.js when the page toggles to dark.
+  Dark-only: one SVG per diagram — no pair swap mechanism. The plate is
+  titled (caption above the plate image), anchored (id="fig-<id>" for the
+  anchor rail and gallery links) and mono-labeled (figcaption + fig-id chip).
+  Captions and ids are byte-stable content (LED-5, RISK-003): never reword.
 {% endcomment %}
-<figure class="diagram">
+<figure class="diagram" id="fig-{{ include.id }}">
+  <figcaption><span class="mono fig-id">{{ include.id }}</span>{{ include.caption }}</figcaption>
   <img
     src="{{ include.id | append: '.svg' | prepend: 'assets/diagrams/' | relative_url }}"
-    {% if include.pair %}
-    data-light-src="{{ include.id | append: '.svg' | prepend: 'assets/diagrams/' | relative_url }}"
-    data-dark-src="{{ include.id | append: '-dark.svg' | prepend: 'assets/diagrams/' | relative_url }}"
-    {% endif %}
     alt="{{ include.alt }}"
     loading="lazy">
-  <figcaption><span class="mono fig-id">{{ include.id }}</span>{{ include.caption }}</figcaption>
 </figure>

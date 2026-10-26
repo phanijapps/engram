@@ -139,6 +139,18 @@ test('AC-004 the factory skill payload packs whole: dialects + controller travel
   }
 });
 
+test('FIND-platform-002 the prepack script ships in the tarball (installed copies can re-pack)', () => {
+  const { members } = packReal();
+  assert.ok(
+    members.includes('package/scripts/generate-skills-payload.cjs'),
+    'prepack script not packed — re-packing an installed copy crashes on a missing module',
+  );
+  assert.ok(
+    members.includes('package/scripts/check-skills-parity.cjs'),
+    'parity checker not packed',
+  );
+});
+
 test('FIND-security-003 symlinks never enter the payload (generator lstat filter)', () => {
   const { pkg } = launcherCopy('symlink');
   // Plant a link in the authored-tree position the generator resolves.

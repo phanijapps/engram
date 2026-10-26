@@ -19,7 +19,8 @@
     "CONFIGURATION.md",
     "hooks/",
     "skills/",
-    "agents/"
+    "agents/",
+    "scripts/"
   ],
   "engines": {
     "node": ">=18"

@@ -256,3 +256,85 @@ test('DEC-P04 same-path guard: in-source project install skips instead of deleti
     'agent delivery still ran',
   );
 });
+
+/** Content hash of every file under `dir` — proves byte-stability of a tree. */
+function treeHash(dir) {
+  const h = crypto.createHash('sha256');
+  for (const rel of tree(dir)) {
+    if (!fs.statSync(path.join(dir, rel)).isFile()) continue;
+    h.update(rel);
+    h.update(fs.readFileSync(path.join(dir, rel)));
+  }
+  return h.digest('hex');
+}
+
+/** Stage `<root>` as the authored repo: launcher copy at
+ *  <root>/packages/launcher WITH the generated payload present (what
+ *  prepack/tests produce, so skillsSource() picks the payload), authored
+ *  tree at <root>/.agents/skills carrying an uncommitted edit, and a stale
+ *  byte in the payload copy — the exact FIND-security-001 reproduction at
+ *  the real repo layout (launcher two levels below the tree root). */
+function authoredRepoStage(name) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), `engram-agents-${name}-`));
+  const pkg = path.join(root, 'packages', 'launcher');
+  copyLauncher(pkg);
+  copyAuthored(pkg, AUTHORED_SKILLS); // payload present: skillsSource() picks it
+  const authored = path.join(root, '.agents', 'skills');
+  fs.mkdirSync(authored, { recursive: true });
+  fs.cpSync(AUTHORED, authored, { recursive: true });
+  fs.appendFileSync(
+    path.join(authored, 'engram-index', 'SKILL.md'),
+    '\n<!-- UNCOMMITTED EDIT -->\n',
+  );
+  fs.writeFileSync(
+    path.join(authored, 'engram-index', 'UNCOMMITTED.md'),
+    'uncommitted authoring work must survive\n',
+  );
+  fs.appendFileSync(
+    path.join(pkg, 'skills', 'engram-index', 'SKILL.md'),
+    '\n<!-- stale payload byte -->\n',
+  );
+  const home = path.join(root, 'home');
+  fs.mkdirSync(home);
+  return { root, pkg, home, authored };
+}
+
+test('FIND-security-001 payload-present project install never touches the authored tree', () => {
+  const { root, pkg, home, authored } = authoredRepoStage('sec001');
+  const before = treeHash(authored);
+  const res = run(pkg, ['pi', '--scope', 'project'], { cwd: root, home });
+  assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+  // The guard fired (loudly) instead of copying...
+  assert.match(res.stdout, /is the engram skills source — left untouched/);
+  // ...and the authored tree is byte-identical: the uncommitted edit lives,
+  // the stale payload byte never landed, nothing was deleted.
+  assert.equal(treeHash(authored), before, 'authored tree changed by install');
+  assert.ok(
+    fs.readFileSync(path.join(authored, 'engram-index', 'SKILL.md'), 'utf8').includes(
+      'UNCOMMITTED EDIT',
+    ),
+    'uncommitted authored edit destroyed',
+  );
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(authored, 'engram-index', 'SKILL.md'), 'utf8'),
+    /stale payload byte/,
+    'authored tree was overwritten with (stale) payload bytes',
+  );
+  assert.ok(
+    fs.existsSync(path.join(root, '.pi', 'agents', 'red-forman.md')),
+    'agent delivery still ran',
+  );
+});
+
+test('FIND-code-001 in-repo --remove never deletes the authored tree', () => {
+  const { root, pkg, home, authored } = authoredRepoStage('code001');
+  const before = treeHash(authored);
+  const res = run(pkg, ['pi', '--scope', 'project', '--remove'], { cwd: root, home });
+  assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+  assert.equal(treeHash(authored), before, '--remove deleted authored content');
+  assert.ok(
+    fs.existsSync(path.join(authored, 'engram-index', 'UNCOMMITTED.md')),
+    'uncommitted authoring work destroyed by --remove',
+  );
+  assert.match(res.stdout, /is the engram skills source — left untouched/);
+});

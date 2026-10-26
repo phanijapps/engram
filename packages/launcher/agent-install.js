@@ -28,14 +28,54 @@ const TAG = 'engram (engram-mcp installer)';
 
 /** Locate the skills source: installed package first, dev checkout second. */
 function skillsSource() {
-  const candidates = [
-    path.join(LAUNCHER_DIR, 'skills'),
-    path.join(LAUNCHER_DIR, '..', '..', '.agents', 'skills'),
-  ];
+  const candidates = skillsSourceCandidates();
   for (const c of candidates) {
     if (fs.existsSync(path.join(c, 'engram-index', 'SKILL.md'))) return c;
   }
   return null;
+}
+
+/** Every directory this installer can read skills from — the generated
+ *  payload and the authored .agents/skills dev fallback (FIND-security-001:
+ *  the guard must consider BOTH, not just the candidate that won). */
+function skillsSourceCandidates() {
+  return [
+    path.join(LAUNCHER_DIR, 'skills'),
+    path.join(LAUNCHER_DIR, '..', '..', '.agents', 'skills'),
+  ];
+}
+
+/** Resolve `p` to its physical spelling: realpath of the deepest existing
+ *  ancestor plus the not-yet-created remainder, so symlinked, aliased, or
+ *  textual spellings of one directory compare equal. */
+function physicalPath(p) {
+  const abs = path.resolve(p);
+  let prefix = abs;
+  const rest = [];
+  while (!fs.existsSync(prefix)) {
+    rest.unshift(path.basename(prefix));
+    const parent = path.dirname(prefix);
+    if (parent === prefix) return abs; // filesystem root reached
+    prefix = parent;
+  }
+  try {
+    return path.join(fs.realpathSync(prefix), ...rest);
+  } catch {
+    return abs;
+  }
+}
+
+/** DEC-P04 self-copy guard, hardened (FIND-security-001 / FIND-code-001):
+ *  true when `p` is, or lives inside, ANY skills-source candidate. Such a
+ *  path is never written and never removed — install and --remove alike —
+ *  whatever spelling reached it (payload-present runs, dev fallback, cwd
+ *  aliases). Comparison is resolution-based, never textual. */
+function isSkillsSourcePath(p) {
+  const phys = physicalPath(p);
+  return skillsSourceCandidates().some((c) => {
+    const root = physicalPath(c);
+    return phys === root || phys.startsWith(root + path.sep);
+  });
 }
 
 /** Locate the agents source (subagent definitions, per-platform dialects). */
@@ -178,20 +218,25 @@ function deriveShippedSkills(src) {
     .sort();
 }
 
+/** True when `to/SKILL.md` carries our name tag for `skill`. */
+function skillDirIsOurs(to, skill) {
+  const marker = path.join(to, 'SKILL.md');
+  try {
+    return fs.readFileSync(marker, 'utf8').startsWith(`---\nname: ${skill}\n`);
+  } catch {
+    return false; // missing or unreadable: never treat as ours
+  }
+}
+
 /** Name-tagged removal: only delete a skill dir whose SKILL.md is ours. */
 function removeIfOurs(to, skill, written, label) {
-  const marker = path.join(to, 'SKILL.md');
-  if (!fs.existsSync(marker)) return;
-  let ours = false;
-  try {
-    ours = fs.readFileSync(marker, 'utf8').startsWith(`---\nname: ${skill}\n`);
-  } catch {
-    ours = false; // unreadable: never delete what we cannot verify
+  if (isSkillsSourcePath(to)) {
+    process.stdout.write(`  note: ${to} is the engram skills source — left untouched\n`);
+    return;
   }
-  if (ours) {
-    fs.rmSync(to, { recursive: true, force: true });
-    written.push(`${to} (${label})`);
-  }
+  if (!skillDirIsOurs(to, skill)) return;
+  fs.rmSync(to, { recursive: true, force: true });
+  written.push(`${to} (${label})`);
 }
 
 function copySkills(destRoot, written, remove = false) {
@@ -212,10 +257,14 @@ function copySkills(destRoot, written, remove = false) {
     const from = path.join(src, skill);
     const to = path.join(destRoot, skill);
     if (!fs.existsSync(path.join(from, 'SKILL.md'))) continue;
-    // DEC-P04 self-copy guard: when destination equals source (a project-
-    // scope install inside the authored repo), skip — never remove — so the
-    // authored tree survives its own install.
-    if (path.resolve(from) === path.resolve(to)) continue;
+    // DEC-P04 self-copy guard (resolution-based, FIND-security-001): a
+    // destination that is any skills-source candidate — the authored tree
+    // reached through the payload or the dev fallback — is skipped, never
+    // written, so the authored tree survives its own install.
+    if (isSkillsSourcePath(to)) {
+      process.stdout.write(`  note: ${to} is the engram skills source — left untouched\n`);
+      continue;
+    }
     fs.rmSync(to, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(to), { recursive: true });
     fs.cpSync(from, to, { recursive: true });

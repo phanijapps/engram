@@ -91,7 +91,14 @@
 }
 
 .tag.acc { background: var(--accent); }
-.tag.pass { background: var(--pass); }
+/* .tag.pass text comes from --card, not the .tag default --paper: LED-1 fixes
+   light --pass at #5a7d5a where --paper computes 4.27:1 (below AA), while
+   --card gives 4.65:1 light and 7.17:1 dark — check-contrast.py guards both
+   rows with a rule witness (FIND-CODE-001 / FIND-UI-001). */
+.tag.pass {
+  background: var(--pass);
+  color: var(--card);
+}
 
 .note {
   border-left: 3px solid var(--accent);

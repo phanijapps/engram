@@ -66,7 +66,7 @@ What lands on your machine:
 | **Recall hooks** | Every prompt recalls relevant memory — gated: irrelevant results stay silent (separation gate, no LLM in the hot path). Session-start packs, stale-index reminders, kill switch (`ENGRAM_HOOKS=0`), fail-open always |
 | **`red-forman` subagent** | Read-only adversarial reviewer — severity-tagged findings (BLOCKER/DEFECT/SMELL) with file:line evidence and a one-line fix each. Dispatch it before declaring work done |
 
-Per-platform notes: Codex agents use YAML (`~/.codex/agents/*.yaml`); Copilot command hooks cannot inject per-prompt context (platform limitation — session-start recall only, honestly documented); pi gets an in-process extension; claude-desktop hosts MCP registration only (no skills/agents filesystem — `install --agent all` prints that limitation).
+Per-platform notes: Codex agents use YAML (`~/.codex/agents/*.yaml`); Copilot command hooks cannot inject per-prompt context (platform limitation — session-start recall only, honestly documented); Copilot agents are repo-scoped either way — even `--scope user` writes 15 agent files into the current repo's `.github/agents/`, so run that install from the repo that should carry them; pi gets an in-process extension; claude-desktop hosts MCP registration only (no skills/agents filesystem — `install --agent all` prints that limitation).
 
 **Project scope** — install the bundle into the repo instead (committed, shared with the team):
 

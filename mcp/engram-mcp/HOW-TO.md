@@ -219,6 +219,13 @@ host's dialect — installs via the launcher bundle:
 engram-mcp install --agent claude    # or codex | copilot | pi | all
 ```
 
+Copilot note: that platform discovers agents per repository only, so even
+`--scope user` writes the 15 agent files (14 specialists + `red-forman.md`,
+refreshing copies carrying our name tag) into the **current repository's**
+`.github/agents/` — including overwriting the repo's own tracked
+`red-forman.md` when it is ours. Run the install from the repo that should
+carry them, and expect that side effect in any repo you are standing in.
+
 ---
 
 ## Security check — `cargo audit`

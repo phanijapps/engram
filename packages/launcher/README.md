@@ -54,7 +54,13 @@ automatically unless you replaced them. Uninstall with
 `engram-mcp install --agent <host> --remove` — removal is name-tagged, so
 files you replaced or added yourself are left untouched. `engram-factory` also delivers its
 14 specialist subagents in each host's native dialect (claude, codex,
-copilot, pi). Use `--scope project` for a repository installation. See the
+copilot, pi). Use `--scope project` for a repository installation.
+Copilot is the exception at user scope: that platform discovers agents only
+per repository, so `install --agent copilot` writes its 15 agent files
+(14 specialists plus `red-forman.md`, refreshing copies carrying our name
+tag) into the **current repository's** `.github/agents/` even with
+`--scope user` — run it from the repo that should carry them, and expect
+that side effect in any repo you are standing in. See the
 [setup guide](https://github.com/phanijapps/engram/blob/main/mcp/engram-mcp/HOW-TO.md).
 
 ## Platforms and configuration

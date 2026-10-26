@@ -1,0 +1,15 @@
+# Vendored font manifest (plan DEC-P02) — latin static woff2 subset per weight.
+# Paths are repository-root relative so 'sha256sum -c site/assets/fonts/MANIFEST.sha256' works from the root.
+# Each file's authoritative source URL is the comment line above its digest.
+# Fetched from Google Fonts (fonts.googleapis.com css2 API, static-instance UA) 2026-10-26.
+# Licenses: OFL-*.txt beside this manifest (SIL Open Font License 1.1).
+# site/assets/fonts/source-serif-4-600.woff2 https://fonts.gstatic.com/s/sourceserif4/v15/vEFy2_tTDB4M7-auWDN0ahZJW3IX2ih5nk3AucvUHf6OAVIJmeUDygwjisltnhtdDg.woff2
+f2b7e1cf1d277b7608231868135648f8ad8e2b58d8e97ca088bee15dc357bee7  site/assets/fonts/source-serif-4-600.woff2
+# site/assets/fonts/inter-400.woff2 https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiA.woff2
+8909904ab6c872eb994093482a88a28eca2cd95912d7b6fecd72103b0dc07edc  site/assets/fonts/inter-400.woff2
+# site/assets/fonts/inter-600.woff2 https://fonts.gstatic.com/s/inter/v20/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuGKYAZ9hiA.woff2
+f9a06e79cd3a2a20951c0f0e28f66dd0e6d3fda73911d640a2125c8fcb78f21a  site/assets/fonts/inter-600.woff2
+# site/assets/fonts/jetbrains-mono-400.woff2 https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKxTOlOV.woff2
+14425ba9c695763c1547f48a206b7aa60350a33ae23de09f0407877f3fcd89eb  site/assets/fonts/jetbrains-mono-400.woff2
+# site/assets/fonts/jetbrains-mono-700.woff2 https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbY2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8L6tTOlOV.woff2
+d0d4e818808f2a0ba39b2b09d1989366f63494e295f003c7ef436697378507e8  site/assets/fonts/jetbrains-mono-700.woff2

@@ -103,6 +103,11 @@ source merge; it does not authorize deployment or impersonate a human decision.
 Weigh engram recall of this repository's history and prior review failures as
 evidence, and record the decision rationale to memory.
 
+### red-forman
+
+Use this agent as a light weight reviewer for simple jobs. Instead of spinning parallel
+review agents, spawn red-forman with review tasks and the agent will take care of it.
+
 ## Handoffs
 
 Check readiness, input hashes, ownership, sections, traceability and source identity,

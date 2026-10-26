@@ -256,13 +256,10 @@ function copySkillAgents(destDir, dialect, pointerRoot, remove, written) {
       // a file at the destination that is not verifiably ours is never
       // overwritten, canonical or not.
       const prior = claimedBy.get(destName);
+      let canonicalClaim = false;
       if (prior && prior !== skill) {
-        const canonicalClaim = skill === 'engram-factory' && destName.startsWith('engram-');
-        if (canonicalClaim) {
-          process.stderr.write(
-            `  note: ${skill} agent ${destName} replaces ${prior}'s — the canonical factory dialect wins\n`,
-          );
-        } else {
+        canonicalClaim = skill === 'engram-factory' && destName.startsWith('engram-');
+        if (!canonicalClaim) {
           process.stderr.write(
             `  note: ${skill} agent ${destName} collides with ${prior}'s — skipped\n`,
           );
@@ -272,17 +269,31 @@ function copySkillAgents(destDir, dialect, pointerRoot, remove, written) {
       claimedBy.set(destName, skill);
       // Never remove or overwrite a foreign file that merely shares the
       // name (FIND-code-002): name-tag check mirrors removeIfOurs.
+      // FIND-security-009: the canonical-wins note moved below this gate —
+      // it prints only when the replacement actually proceeds, so the
+      // audit line never claims a replacement the gate just refused.
       if (fs.existsSync(to) && !agentFileIsOurs(to, expectedName)) {
         process.stdout.write(
           `  note: ${to} exists with different frontmatter — left untouched\n`,
         );
         continue;
       }
+      if (canonicalClaim) {
+        process.stderr.write(
+          `  note: ${skill} agent ${destName} replaces ${prior}'s — the canonical factory dialect wins\n`,
+        );
+      }
       fs.mkdirSync(destDir, { recursive: true });
       let text = fs.readFileSync(path.join(agentsSrc, file), 'utf8');
       if (text.includes(rel)) {
         text = text.split(rel).join(target);
       }
+      // FIND-security-008: the dest file itself may be a planted link —
+      // the destDir check above guards only the directory; mirror
+      // copyAgent's file-level guard (:192) so the write never goes
+      // through a link, whatever tree it targets (rides the per-host
+      // partial-install catch above).
+      assertRealDest(to);
       fs.writeFileSync(to, text);
       written.push(to);
     }

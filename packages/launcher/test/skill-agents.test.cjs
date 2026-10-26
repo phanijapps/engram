@@ -316,6 +316,146 @@ test('FIND-security-006 canonical factory dialect wins an engram-<role> name ove
   assert.match(res.stderr, /engram-factory agent engram-qa\.md replaces aaa-shadow's — the canonical factory dialect wins/);
 });
 
+test('FIND-security-008 dest-file symlink at an agent dest is refused, target untouched (R3-P4)', () => {
+  const { pkg, home, proj, root } = sandbox('sec008-p4');
+  // A genuine ours-tagged engram-qa file carrying a local edit, living in a
+  // foreign tree (the reviewer's <B> checkout), reached through a link at
+  // the dest FILE itself — the copySkillAgents write site.
+  const foreign = path.join(root, 'foreign', 'engram-qa.md');
+  fs.mkdirSync(path.dirname(foreign), { recursive: true });
+  const victimBytes =
+    '---\nname: engram-qa\ndescription: Genuine installed dialect; trigger never.\n---\n\nLOCAL EDIT MARKER 7f3a\n';
+  fs.writeFileSync(foreign, victimBytes);
+  const agentDir = path.join(home, '.claude', 'agents');
+  fs.mkdirSync(agentDir, { recursive: true });
+  const link = path.join(agentDir, 'engram-qa.md');
+  fs.symlinkSync(foreign, link); // absolute target: the refusal names both
+  const res = run(pkg, ['claude'], { cwd: proj, home });
+  assert.notEqual(res.status, 0, 'install exited 0 writing through a dest-file link');
+  // The refusal names the link and its target (FIND-security-005 contract).
+  assert.match(res.stderr, /error: refusing to write through a symlinked destination/);
+  assert.ok(res.stderr.includes(link), 'refusal does not name the planted link');
+  assert.ok(res.stderr.includes(foreign), 'refusal does not name the link target');
+  // No wrote line names the linked file, and the host is counted failed
+  // (FIND-operations-003 partial-install contract).
+  assert.doesNotMatch(res.stdout, /wrote: .*engram-qa\.md/);
+  assert.match(res.stdout, /Incomplete: 1 host\(s\) failed/);
+  // The victim is byte-identical, local edit intact.
+  assert.equal(fs.readFileSync(foreign, 'utf8'), victimBytes, 'link target was clobbered');
+  assert.ok(fs.lstatSync(link).isSymbolicLink(), 'planted link was replaced by a real file');
+});
+
+test('FIND-security-008 committed relative repo link refused at project scope; other hosts still install (R3-P8b)', () => {
+  const { pkg, home, proj } = sandbox('sec008-p8b');
+  // The victim's genuine home agent file with a local edit.
+  const victimDir = path.join(home, '.claude', 'agents');
+  fs.mkdirSync(victimDir, { recursive: true });
+  const victim = path.join(victimDir, 'engram-qa.md');
+  const victimBytes =
+    '---\nname: engram-qa\ndescription: Genuine installed dialect; trigger never.\n---\n\nLOCAL EDIT MARKER 91c4\n';
+  fs.writeFileSync(victim, victimBytes);
+  // A "committed" relative link inside the cloned repo — no username
+  // knowledge needed — pointing at the victim's home file.
+  const repoAgents = path.join(proj, '.github', 'agents');
+  fs.mkdirSync(repoAgents, { recursive: true });
+  fs.symlinkSync('../../../home/.claude/agents/engram-qa.md', path.join(repoAgents, 'engram-qa.md'));
+  const res = run(pkg, ['all', '--scope', 'project'], { cwd: proj, home });
+  assert.notEqual(res.status, 0, 'copilot host wrote through the committed repo link');
+  assert.match(res.stderr, /error: refusing to write through a symlinked destination/);
+  assert.ok(res.stderr.includes(path.join(repoAgents, 'engram-qa.md')), 'refusal does not name the planted link');
+  // Partial-install contract: only the copilot host fails...
+  assert.match(res.stdout, /Incomplete: 1 host\(s\) failed/);
+  // ...claude/codex/pi still delivered their agents at project scope.
+  for (const f of [
+    path.join(proj, '.claude', 'agents', 'engram-qa.md'),
+    path.join(home, '.codex', 'agents', 'engram-qa.yaml'),
+    path.join(proj, '.pi', 'agents', 'engram-qa.md'),
+  ]) {
+    assert.ok(fs.existsSync(f), `${f} not installed — partial install broke other hosts`);
+  }
+  assert.equal(fs.readFileSync(victim, 'utf8'), victimBytes, 'victim home agent file was clobbered');
+});
+
+test('FIND-security-009 mismatched-tag squatter stays, no canonical-wins line (R3-P6)', () => {
+  const { pkg, home, proj } = sandbox('sec009-p6');
+  const squatter = path.join(pkg, 'skills', 'aaa-shadow');
+  fs.mkdirSync(path.join(squatter, 'agents'), { recursive: true });
+  fs.writeFileSync(
+    path.join(squatter, 'SKILL.md'),
+    '---\nname: aaa-shadow\ndescription: Fixture squatter; trigger never.\n---\n\n# aaa-shadow\n',
+  );
+  // Mismatched tag: the file lands at the canonical engram-qa slot but its
+  // frontmatter claims aaa-shadow, so the name-tag gate must leave it.
+  fs.writeFileSync(
+    path.join(squatter, 'agents', 'engram-qa.claude.md'),
+    '---\nname: aaa-shadow\ndescription: Squatter dialect; trigger never.\n---\n\n# squatter body stays\n',
+  );
+  const res = run(pkg, ['claude'], { cwd: proj, home });
+  assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+  const dest = path.join(home, '.claude', 'agents', 'engram-qa.md');
+  assert.ok(fs.existsSync(dest), 'squatter agent not delivered');
+  assert.match(fs.readFileSync(dest, 'utf8'), /squatter body stays/, 'squatter file was replaced');
+  assert.match(res.stdout, /exists with different frontmatter — left untouched/);
+  // The audit line must not claim a replacement the tag gate refused.
+  assert.doesNotMatch(
+    res.stderr,
+    /replaces aaa-shadow's — the canonical factory dialect wins/,
+    'false canonical-wins claim printed for a file left untouched',
+  );
+});
+
+test('FIND-security-009 masquerade replaced with an accurate wins line naming only what it replaced (R3-P6a)', () => {
+  const { pkg, home, proj } = sandbox('sec009-p6a');
+  const squatter = path.join(pkg, 'skills', 'aaa-shadow');
+  fs.mkdirSync(path.join(squatter, 'agents'), { recursive: true });
+  fs.writeFileSync(
+    path.join(squatter, 'SKILL.md'),
+    '---\nname: aaa-shadow\ndescription: Fixture squatter; trigger never.\n---\n\n# aaa-shadow\n',
+  );
+  // Masquerade at the qa slot (tag claims engram-qa — genuinely replaced)
+  // beside a mismatched-tag file at the planner slot (left untouched): the
+  // wins line must be accurate for BOTH — the cycle-1 masquerade assertion
+  // (skill-agents.test.cjs:316) extended to the accuracy corner.
+  fs.writeFileSync(
+    path.join(squatter, 'agents', 'engram-qa.claude.md'),
+    '---\nname: engram-qa\ndescription: Squatter dialect; trigger never.\n---\n\n# squatter body qa\n',
+  );
+  fs.writeFileSync(
+    path.join(squatter, 'agents', 'engram-planner.claude.md'),
+    '---\nname: aaa-shadow\ndescription: Squatter dialect; trigger never.\n---\n\n# squatter body planner\n',
+  );
+  const res = run(pkg, ['claude'], { cwd: proj, home });
+  assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+  const agentsDir = path.join(home, '.claude', 'agents');
+  // Masquerade replaced: delivered bytes equal the canonical dialect with
+  // this install's pointer rewrite, and no squatter qa content survives.
+  const rel = '.agents/skills/engram-factory/';
+  const target = `${path.join(home, '.claude', 'skills', 'engram-factory')}/`;
+  const expected = fs
+    .readFileSync(path.join(FACTORY_AGENTS, 'engram-qa.claude.md'), 'utf8')
+    .split(rel)
+    .join(target);
+  assert.equal(
+    fs.readFileSync(path.join(agentsDir, 'engram-qa.md'), 'utf8'),
+    expected,
+    'masquerade was not replaced by the canonical dialect',
+  );
+  assert.doesNotMatch(res.stdout + res.stderr, /squatter body qa/, 'squatter qa content survived');
+  // The mismatched planner file stays squatter content, left untouched...
+  assert.match(
+    fs.readFileSync(path.join(agentsDir, 'engram-planner.md'), 'utf8'),
+    /squatter body planner/,
+    'mismatched-tag planner file was replaced',
+  );
+  // ...so the wins line names qa only — no replacement claim for planner.
+  assert.match(res.stderr, /engram-factory agent engram-qa\.md replaces aaa-shadow's — the canonical factory dialect wins/);
+  assert.doesNotMatch(
+    res.stderr,
+    /engram-factory agent engram-planner\.md replaces aaa-shadow's/,
+    'wins line claimed the planner file the gate left untouched',
+  );
+});
+
 test('FIND-security-004 --remove reports every agent file it removes (audit line)', () => {
   const { pkg, home, proj } = sandbox('sec004');
   const install = run(pkg, ['claude'], { cwd: proj, home });

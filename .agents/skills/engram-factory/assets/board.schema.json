@@ -48,6 +48,7 @@
         "updated_at": {"type": "string", "format": "date-time"},
         "stage": {"enum": ["analyze", "plan", "tasks", "build", "review", "approve", "merge", "merged", "needs-human"]},
         "status": {"enum": ["running", "blocked", "awaiting-recommendation", "awaiting-approval", "approved", "complete"]},
+        "mode": {"enum": ["full", "light"]},
         "cycle": {"type": "integer", "minimum": 1},
         "round": {"type": "integer", "minimum": 0, "maximum": 3},
         "target": {"type": "string"},

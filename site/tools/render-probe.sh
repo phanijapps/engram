@@ -130,6 +130,17 @@ for path in pages:
             if not probe["sameOriginOnly"]:
                 failures.append(f"{tag}: non-same-origin resources: {probe['resourceOrigins']}")
 
+            # Browser-computed AA on the declared component pairs (FIND-CODE-002:
+            # the OK message may only claim what is asserted). line-boundary is
+            # reported, not asserted — a decorative non-interactive border, not
+            # an NFR-001 UI boundary.
+            for pair in ("body-ink-on-paper", "muted-on-paper", "accent-on-paper",
+                         "link-on-paper", "tag-paper-on-ink", "tag-acc-paper-on-accent",
+                         "tag-pass-card-on-pass"):
+                value = probe["contrast"].get(pair)
+                if value is None or value < 4.5:
+                    failures.append(f"{tag}: browser-computed contrast {pair} = {value} < 4.5:1")
+
             expected_fonts = {
                 "sourceSerif4": True, "inter400": True, "inter600": True,
                 "jetbrainsMono400": True, "jetbrainsMono700": True,
@@ -158,7 +169,7 @@ if failures:
     for f in failures:
         print(f"render-probe: FAIL {f}")
     sys.exit(1)
-print(f"render-probe: OK — tokens, contrast probes, 360px overflow, same-origin only, fonts, copy buttons and diagram switching all hold; report at {report_path}")
+print(f"render-probe: OK — tokens, browser-computed contrast (7 body pairs ≥ 4.5:1), forced-polarity storage preservation, 360px overflow, same-origin only, fonts, copy buttons and diagram switching all hold; report at {report_path}")
 PYEOF
 STATUS=$?
 exit $STATUS

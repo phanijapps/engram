@@ -142,17 +142,22 @@
   }
 
   function probeContrast(tokens) {
-    var paper = 'rgb(' + hexToRgb(tokens['--paper']).join(',') + ')';
-    var pairs = {
-      'body-ink-on-paper': contrast('rgb(' + hexToRgb(tokens['--ink']).join(',') + ')', paper),
-      'muted-on-paper': contrast('rgb(' + hexToRgb(tokens['--muted']).join(',') + ')', paper),
-      'accent-on-paper': contrast('rgb(' + hexToRgb(tokens['--accent']).join(',') + ')', paper),
-      'link-on-paper': contrast('rgb(' + hexToRgb(tokens['--link']).join(',') + ')', paper),
-      'pass-on-paper': contrast('rgb(' + hexToRgb(tokens['--pass']).join(',') + ')', paper),
-      'white-on-pass': contrast('rgb(255,255,255)', 'rgb(' + hexToRgb(tokens['--pass']).join(',') + ')'),
-      'line-boundary-on-paper': contrast('rgb(' + hexToRgb(tokens['--line']).join(',') + ')', paper)
+    /* Component pairs mirroring check-contrast.py's witnessed matrix: the
+     * browser computes these from the same tokens so render-probe asserts
+     * AA independently of the static gate (FIND-CODE-002). */
+    function rgb(name) { return 'rgb(' + hexToRgb(tokens[name]).join(',') + ')'; }
+    var paper = rgb('--paper'), ink = rgb('--ink'), accent = rgb('--accent'),
+        link = rgb('--link'), card = rgb('--card'), pass = rgb('--pass');
+    return {
+      'body-ink-on-paper': contrast(ink, paper),
+      'muted-on-paper': contrast(rgb('--muted'), paper),
+      'accent-on-paper': contrast(accent, paper),
+      'link-on-paper': contrast(link, paper),
+      'tag-paper-on-ink': contrast(paper, ink),
+      'tag-acc-paper-on-accent': contrast(paper, accent),
+      'tag-pass-card-on-pass': contrast(card, pass),
+      'line-boundary-on-paper': contrast(rgb('--line'), paper)
     };
-    return pairs;
   }
 
   function hexToRgb(hex) {

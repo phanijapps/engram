@@ -19,13 +19,14 @@
 //! - TEST-005 case 5 — two-doc overlap ref-counts shared records.
 //! - TEST-006 case 6 — retraction idempotency (second pass zero counts) +
 //!   re-assert-after-archive restore.
+//!
 //! Regressions: TEST-007 unsourced legacy behavior; TEST-008 code-entity
 //! immunity (ref membership, never name); TEST-010 injected partial failure;
 //! TEST-013 cross-scope isolation + empty source_id treated as unsourced;
 //! review-r1 FIND-security-001 facts immunity (a foreign record adopted
 //! through a per-record idempotency-key collision is never forgotten).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -212,7 +213,7 @@ fn counts_of(outcome: &BatchOutcome, step: BatchStep) -> SupersessionCounts {
         .iter()
         .find(|s| s.step == step)
         .unwrap_or_else(|| panic!("step {step:?} missing"));
-    found.supersession.clone().unwrap_or_else(|| {
+    found.supersession.unwrap_or_else(|| {
         panic!("step {step:?} must carry supersession counts for a sourced batch")
     })
 }
@@ -415,7 +416,7 @@ fn case_2_retry_same_payload_converges() {
             "Factory",
         )],
     );
-    let first = block_on(batch.ingest(request.clone())).expect("first");
+    block_on(batch.ingest(request.clone())).expect("first");
     let first_ids = active_memory_ids(&memory, &scope());
 
     let second = block_on(batch.ingest(request)).expect("retry");

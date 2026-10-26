@@ -135,7 +135,7 @@ class PageScan(HTMLParser):
             if self._visual_here(tag, cls):
                 self.events.append(("visual", section))
                 for c in cls:
-                    if c.startswith("plate-"):
+                    if c.startswith("plate-") and c != "plate-title":
                         self.plate_variants.add(c)
             if tag == "p":
                 self._p_depth = depth
@@ -222,10 +222,9 @@ class _LeadScan(HTMLParser):
 def check_pages(tree: Path, only: str | None) -> tuple[list[str], list[str]]:
     pages = sorted(tree.rglob("*.html"))
     if only:
-        pages = [p for p in pages if str(p.relative_to(tree)) == only
-                 or str(p.relative_to(tree)).endswith("/" + only)]
+        pages = [p for p in pages if str(p.relative_to(tree)) == only]
         if not pages:
-            return ([f"--only {only!r} matches no built page"], [])
+            return ([f"--only {only!r} matches no built page (use the tree-relative path, e.g. factory/index.html)"], [])
     violations: list[str] = []
     lines: list[str] = []
     plate_variants: set[str] = set()

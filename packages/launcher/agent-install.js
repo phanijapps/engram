@@ -92,6 +92,10 @@ function agentsSource() {
 
 const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** Hygiene filter shared with the generator (FIND-code-004): __pycache__
+ *  and *.pyc never ship, whichever source the copy runs from. */
+const isHygiene = (p) => path.basename(p) === '__pycache__' || p.endsWith('.pyc');
+
 /** True when the agent file at `to` carries our name tag for `expectedName`
  *  (REQ-006 discipline extended to agent files, FIND-code-002): markdown
  *  dialects are verified inside their --- frontmatter block, codex YAML via
@@ -328,7 +332,7 @@ function copySkills(destRoot, written, remove = false) {
     }
     fs.rmSync(to, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.cpSync(from, to, { recursive: true });
+    fs.cpSync(from, to, { recursive: true, filter: (s) => !isHygiene(s) });
     written.push(to);
   }
   for (const skill of RETIRED_SKILLS) {

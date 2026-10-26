@@ -326,6 +326,42 @@ test('FIND-security-001 payload-present project install never touches the author
   );
 });
 
+test('FIND-code-004 dev-fallback copy applies the hygiene filter (__pycache__/*.pyc never ship)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-agents-hygiene-'));
+  const pkg = path.join(root, 'packages', 'launcher');
+  copyLauncher(pkg); // no payload: skillsSource() resolves the dev fallback
+  const authored = path.join(root, '.agents', 'skills');
+  fs.mkdirSync(authored, { recursive: true });
+  fs.cpSync(path.join(AUTHORED, 'engram-index'), path.join(authored, 'engram-index'), {
+    recursive: true,
+  });
+  fs.cpSync(path.join(AUTHORED, 'engram-factory'), path.join(authored, 'engram-factory'), {
+    recursive: true,
+  });
+  // A dev checkout's local Python debris under the source tree.
+  fs.mkdirSync(path.join(authored, 'engram-factory', 'scripts', '__pycache__'), {
+    recursive: true,
+  });
+  fs.writeFileSync(
+    path.join(authored, 'engram-factory', 'scripts', '__pycache__', 'factory.cpython-311.pyc'),
+    'junk',
+  );
+  fs.writeFileSync(path.join(authored, 'engram-factory', 'scripts', 'junk.pyc'), 'junk');
+  const home = path.join(root, 'home');
+  fs.mkdirSync(home);
+  const proj = path.join(root, 'proj');
+  fs.mkdirSync(proj);
+  const res = run(pkg, ['pi'], { cwd: proj, home });
+  assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+  const delivered = path.join(home, '.pi', 'agent', 'skills');
+  assert.ok(fs.existsSync(path.join(delivered, 'engram-index', 'SKILL.md')), 'skills missing');
+  assert.ok(
+    !fs.existsSync(path.join(delivered, 'engram-factory', 'scripts', '__pycache__')),
+    '__pycache__ shipped',
+  );
+  assert.ok(!fs.existsSync(path.join(delivered, 'engram-factory', 'scripts', 'junk.pyc')), '*.pyc shipped');
+});
+
 test('FIND-security-002 foreign skill content at a delivered path survives install; our-tagged dirs are replaced', () => {
   const { pkg, home, proj } = sandbox('sec002');
   const res0 = run(pkg, ['pi'], { cwd: proj, home });

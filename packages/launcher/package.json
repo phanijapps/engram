@@ -41,6 +41,6 @@
   },
   "scripts": {
     "prepack": "node scripts/generate-skills-payload.cjs",
-    "test": "node --test test/*.test.cjs"
+    "test": "node scripts/check-skills-parity.cjs && node --test test/*.test.cjs"
   }
 }

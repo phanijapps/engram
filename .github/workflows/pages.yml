@@ -1,0 +1,59 @@
+name: Pages
+
+# GitHub Pages site (job 004-github-pages-site): builds the plugin-free Jekyll
+# tree under site/ with the official Pages builder and deploys it.
+#   - additive: this is the only new workflow; no existing workflow changes
+#   - secretless: rides the GitHub-provided token with pinned permissions
+#   - fail-visible: link and contrast gates run BEFORE any artifact upload,
+#     so a bad build never deploys
+# Pages must be enabled with the "GitHub Actions" source by the owner before
+# the first deploy succeeds (RISK-001 runbook in the job's release.md).
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# Exactly the Pages permission triple (REQ-009); no secrets context anywhere.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; queued runs deploy the latest main (official
+# Pages pattern — same shape as release.yml's serialized group).
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v6
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./site
+          destination: ./site/_site
+      - name: Link gate (zero wrong-root hits, payload budget)
+        run: python3 site/tools/check-links.py site/_site --base /engram/
+      - name: Contrast gate (WCAG AA on both polarities)
+        run: python3 site/tools/check-contrast.py
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./site/_site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

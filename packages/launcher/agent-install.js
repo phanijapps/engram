@@ -78,6 +78,57 @@ function isSkillsSourcePath(p) {
   });
 }
 
+/** FIND-security-005: candidate enumeration is location-derived, so a
+ *  destination root that is a symlink into ANOTHER checkout's skills tree
+ *  resolves outside every candidate of THIS launcher and would be written
+ *  through the link — silently destroying that tree with payload bytes
+ *  (round-2 security review, two repro paths). Policy: never write or
+ *  remove through a symlinked path component below the host root (home at
+ *  user scope, cwd at project scope) — refuse loudly, whatever tree the
+ *  link points at, instead of enumerating candidate spellings. Returns the
+ *  first symlinked component found, or null when the destination is
+ *  link-free (or outside every host root, where this policy does not
+ *  apply). */
+function destSymlinkComponent(p) {
+  const abs = path.resolve(p);
+  const anchors = [...new Set([path.resolve(os.homedir()), path.resolve(process.cwd())])].sort(
+    (a, b) => b.length - a.length,
+  ); // tightest containing root first: a project dest never trips on links above the cwd
+  for (const anchor of anchors) {
+    if (abs !== anchor && !abs.startsWith(anchor + path.sep)) continue;
+    let cur = abs;
+    while (cur !== anchor) {
+      let st = null;
+      try {
+        st = fs.lstatSync(cur);
+      } catch {} // not created yet (or unreadable): no link to refuse there
+      if (st && st.isSymbolicLink()) return cur;
+      const parent = path.dirname(cur);
+      if (parent === cur) break; // filesystem root reached without the anchor
+      cur = parent;
+    }
+    return null;
+  }
+  return null;
+}
+
+/** Throw when a destination crosses a symlinked component (FIND-security-005).
+ *  Throwing rides the FIND-operations-003 partial-install contract: the
+ *  host is counted failed, remaining hosts still run, exit code non-zero. */
+function assertRealDest(p) {
+  const link = destSymlinkComponent(p);
+  if (!link) return;
+  let target = '';
+  try {
+    target = ` -> ${fs.readlinkSync(link)}`;
+  } catch {}
+  throw new Error(
+    `refusing to write through a symlinked destination: ${link}${target} — destinations ` +
+      `below the host root must be real directories; remove the link or point the host's ` +
+      `config dir at a real path (FIND-security-005)`,
+  );
+}
+
 /** Locate the agents source (subagent definitions, per-platform dialects). */
 function agentsSource() {
   const candidates = [
@@ -124,6 +175,7 @@ function removeAgentIfOurs(to, expectedName, written) {
     process.stdout.write(`  note: ${to} exists with different frontmatter — left untouched\n`);
     return;
   }
+  assertRealDest(to); // FIND-security-005: never remove through a link either
   fs.rmSync(to, { force: true });
   written.push(`${to} (removed)`);
 }
@@ -135,6 +187,9 @@ function copyAgent(destDir, srcName, destName, written) {
     process.stderr.write('engram-mcp: agents source not found (package incomplete?)\n');
     return;
   }
+  // FIND-security-005: agents dest roots carry the same refusal — checked
+  // before mkdirSync so not even a directory is created through a link.
+  assertRealDest(path.join(destDir, destName));
   fs.mkdirSync(destDir, { recursive: true });
   const to = path.join(destDir, destName);
   // Never clobber a foreign file that merely shares the name (FIND-code-002).
@@ -171,6 +226,7 @@ function dialectDestName(file, dialect) {
 function copySkillAgents(destDir, dialect, pointerRoot, remove, written) {
   const src = skillsSource();
   if (!src) return; // copySkills already reported the missing source
+  assertRealDest(destDir); // FIND-security-005: agents dest roots refuse links, remove included
   const claimedBy = new Map(); // destName -> owning skill (FIND-platform-003)
   for (const skill of deriveShippedSkills(src)) {
     const agentsSrc = path.join(src, skill, 'agents');
@@ -237,6 +293,7 @@ function readJson(file) {
 }
 
 function writeJson(file, obj) {
+  assertRealDest(file); // FIND-security-005: settings/hooks files refuse linked dest roots
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(obj, null, 2) + '\n');
 }
@@ -245,6 +302,7 @@ function writeTomlSection(file, section, body) {
   // Appends a TOML section ([[hooks.UserPromptSubmit]] style) or removes
   // previously-installed tagged sections. Simple line-based append; Codex
   // merges hooks.json + inline tables, and we own only our tagged block.
+  assertRealDest(file); // FIND-security-005: config files refuse linked dest roots
   fs.mkdirSync(path.dirname(file), { recursive: true });
   let text = '';
   try {
@@ -301,6 +359,7 @@ function removeIfOurs(to, skill, written, label) {
     return;
   }
   if (!skillDirIsOurs(to, skill)) return;
+  assertRealDest(to); // FIND-security-005: never delete through a linked dest component
   fs.rmSync(to, { recursive: true, force: true });
   written.push(`${to} (${label})`);
 }
@@ -343,6 +402,7 @@ function copySkills(destRoot, written, remove = false) {
       );
       continue;
     }
+    assertRealDest(to); // FIND-security-005: no write through a linked dest root, whatever tree it targets
     fs.rmSync(to, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(to), { recursive: true });
     fs.cpSync(from, to, { recursive: true, filter: (s) => !isHygiene(s) });
@@ -431,6 +491,7 @@ const HOSTS = {
         // Project hooks live in <repo>/.codex/hooks.json (JSON, not TOML).
         const file = path.join(cwd, '.codex', 'hooks.json');
         if (remove) {
+          assertRealDest(file); // FIND-security-005
           try { fs.rmSync(file); } catch {}
         } else {
           writeJson(file, {
@@ -505,6 +566,7 @@ const HOSTS = {
           ? path.join(cwd, '.github', 'hooks', 'engram.json')
           : path.join(home, '.copilot', 'hooks', 'engram.json');
       if (remove) {
+        assertRealDest(file); // FIND-security-005
         try { fs.rmSync(file); } catch {}
       } else {
         writeJson(file, {
@@ -552,6 +614,7 @@ const HOSTS = {
         scope === 'project'
           ? path.join(cwd, '.pi', 'extensions', 'engram-recall.cjs')
           : path.join(home, '.pi', 'agent', 'extensions', 'engram-recall.cjs');
+      assertRealDest(ext); // FIND-security-005: extensions refuse linked dest roots
       if (remove) {
         try {
           fs.rmSync(ext);

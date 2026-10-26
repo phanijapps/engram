@@ -436,3 +436,88 @@ test('FIND-code-001 in-repo --remove never deletes the authored tree', () => {
   );
   assert.match(res.stdout, /is the engram skills source — left untouched/);
 });
+
+// ------------------------------------------- FIND-security-005 (round-2 review)
+// The guard's candidate list is location-derived, so a dest root symlinked
+// into ANOTHER checkout's skills tree resolves outside every candidate —
+// these tests reproduce the reviewer's two bypass probes (project `.claude`
+// link; user `~/.agents/skills` link) and must fail loudly, never write.
+
+/** A SECOND checkout `<B>` carrying a full authored skills tree with an
+ *  uncommitted edit — the tree a linked dest root would silently destroy. */
+function foreignCheckout(name) {
+  const b = fs.mkdtempSync(path.join(os.tmpdir(), `engram-agents-${name}-`));
+  const authored = path.join(b, '.agents', 'skills');
+  fs.mkdirSync(authored, { recursive: true });
+  fs.cpSync(AUTHORED, authored, { recursive: true });
+  fs.appendFileSync(
+    path.join(authored, 'engram-index', 'SKILL.md'),
+    '\n<!-- FOREIGN UNCOMMITTED EDIT -->\n',
+  );
+  return { b, authored };
+}
+
+test('FIND-security-005 repro 1: project .claude symlinked into a foreign tree — refused, tree survives', () => {
+  const { root, pkg, home } = authoredRepoStage('sec005a'); // checkout <A> at <root>
+  const { b, authored } = foreignCheckout('sec005b'); // a DIFFERENT checkout <B>
+  fs.symlinkSync(path.join(b, '.agents'), path.join(root, '.claude'));
+  const before = treeHash(authored);
+  const res = run(pkg, ['claude', '--scope', 'project'], { cwd: root, home });
+  assert.notEqual(res.status, 0, 'install through a symlinked dest root must not exit 0');
+  assert.match(res.stderr, /refusing to write through a symlinked destination/);
+  assert.match(res.stderr, /\.claude/);
+  assert.equal(treeHash(authored), before, 'foreign authored tree modified through the link');
+  assert.ok(
+    !fs
+      .readFileSync(path.join(authored, 'engram-index', 'SKILL.md'), 'utf8')
+      .includes('stale payload byte'),
+    'payload bytes landed in the foreign tree through the link',
+  );
+  // --remove must refuse through the same link, not delete the foreign tree.
+  const rem = run(pkg, ['claude', '--scope', 'project', '--remove'], { cwd: root, home });
+  assert.notEqual(rem.status, 0, '--remove through a symlinked dest root must not exit 0');
+  assert.match(rem.stderr, /refusing to write through a symlinked destination/);
+  assert.equal(treeHash(authored), before, '--remove deleted foreign content through the link');
+});
+
+test('FIND-security-005 repro 2: ~/.agents/skills symlinked into a foreign tree — refused before any write', () => {
+  const { root, pkg, home } = authoredRepoStage('sec005c'); // launcher at <A>
+  const { b, authored } = foreignCheckout('sec005d');
+  fs.mkdirSync(path.join(home, '.agents'));
+  fs.symlinkSync(path.join(b, '.agents', 'skills'), path.join(home, '.agents', 'skills'));
+  const before = treeHash(authored);
+  const res = run(pkg, ['codex'], { cwd: root, home });
+  assert.notEqual(res.status, 0, 'user-scope install through a linked skills root must not exit 0');
+  assert.match(res.stderr, /refusing to write through a symlinked destination/);
+  assert.equal(treeHash(authored), before, 'foreign authored tree modified through the link');
+  // Fail-closed within the host: the skills copy is first, so the refusal
+  // fires before agents/config writes — nothing else lands either.
+  assert.ok(!fs.existsSync(path.join(home, '.codex')), 'host continued writing after the refusal');
+});
+
+test('FIND-security-005 agents and settings dest roots carry the same refusal', () => {
+  const { pkg, home, proj } = sandbox('sec005e');
+  const { b, authored } = foreignCheckout('sec005f');
+  fs.mkdirSync(path.join(home, '.claude')); // skills dest is real…
+  fs.symlinkSync(path.join(b, '.agents'), path.join(home, '.claude', 'agents')); // …agents dest is a link
+  const before = treeHash(authored);
+  const res = run(pkg, ['claude'], { cwd: proj, home });
+  assert.notEqual(res.status, 0, 'install through a symlinked agents dir must not exit 0');
+  assert.match(res.stderr, /refusing to write through a symlinked destination/);
+  // Skills landed (their dest is a real dir)…
+  assert.ok(
+    fs.existsSync(path.join(home, '.claude', 'skills', 'engram-index', 'SKILL.md')),
+    'skills delivery broken by the agents-dir refusal',
+  );
+  // …but no agent file was written through the link and settings never landed.
+  assert.ok(!fs.existsSync(path.join(b, '.agents', 'red-forman.md')), 'agent written through the link');
+  assert.ok(
+    !fs.existsSync(path.join(b, '.agents', 'engram-builder.md')),
+    'dialect agent written through the link',
+  );
+  assert.ok(
+    !fs.existsSync(path.join(home, '.claude', 'settings.json')),
+    'settings written after the host should have aborted',
+  );
+  assert.equal(treeHash(authored), before, 'foreign tree modified through the agents link');
+});

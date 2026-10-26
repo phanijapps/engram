@@ -521,3 +521,26 @@ test('FIND-security-005 agents and settings dest roots carry the same refusal', 
   );
   assert.equal(treeHash(authored), before, 'foreign tree modified through the agents link');
 });
+
+test('FIND-security-007 ≡ FIND-code-006 dev-fallback copy never delivers symlinks from skill bodies', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-agents-bodylink-'));
+  const pkg = path.join(root, 'packages', 'launcher');
+  copyLauncher(pkg); // no payload: the authored dev fallback is the source
+  const authored = path.join(root, '.agents', 'skills');
+  fs.mkdirSync(authored, { recursive: true });
+  fs.cpSync(AUTHORED, authored, { recursive: true });
+  // A link planted in a dirty dev tree — the reviewer's /etc/passwd probe.
+  fs.symlinkSync('/etc/passwd', path.join(authored, 'engram-index', 'dev-link'));
+  const home = path.join(root, 'home');
+  fs.mkdirSync(home);
+  const res = run(pkg, ['pi'], { cwd: root, home });
+  assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+  const delivered = path.join(home, '.pi', 'agent', 'skills', 'engram-index');
+  assert.ok(fs.existsSync(path.join(delivered, 'SKILL.md')), 'skills missing');
+  assert.ok(!fs.existsSync(path.join(delivered, 'dev-link')), 'a live symlink shipped into the user skills dir');
+  assert.ok(
+    !fs.readdirSync(path.join(home, '.pi', 'agent', 'skills', 'engram-index')).includes('dev-link'),
+    'link entry present under any spelling',
+  );
+  assert.match(res.stdout, /dev-link is a symlink — not shipped/, 'refusal must be loud');
+});

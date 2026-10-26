@@ -405,7 +405,27 @@ function copySkills(destRoot, written, remove = false) {
     assertRealDest(to); // FIND-security-005: no write through a linked dest root, whatever tree it targets
     fs.rmSync(to, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.cpSync(from, to, { recursive: true, filter: (s) => !isHygiene(s) });
+    // Symlinks never ship, whichever source the copy runs from — the same
+    // lstat discipline the generator and the agents/ payload path already
+    // apply (FIND-security-003): the payload is generator- and parity-gated
+    // at pack/test time, but the dev fallback is not, so a link planted in
+    // a dirty authored tree is skipped loudly here instead of riding the
+    // install verbatim (FIND-security-007 ≡ FIND-code-006).
+    fs.cpSync(from, to, {
+      recursive: true,
+      filter: (s) => {
+        if (isHygiene(s)) return false;
+        try {
+          if (fs.lstatSync(s).isSymbolicLink()) {
+            process.stdout.write(
+              `  note: ${path.relative(from, s) || s} is a symlink — not shipped (skills never deliver links)\n`,
+            );
+            return false;
+          }
+        } catch {}
+        return true;
+      },
+    });
     written.push(to);
   }
   for (const skill of RETIRED_SKILLS) {

@@ -2,15 +2,30 @@
 layout: page
 title: What engram is
 permalink: /engram/
+toc:
+  - id: what-it-is-not
+    label: "What it is not"
+  - id: the-conceptual-model
+    label: "The conceptual model"
+  - id: how-data-flows
+    label: "How data flows"
+  - id: status
+    label: "Status"
 ---
 <p class="kicker">engram · the product the factory ships</p>
 <h1>Local-first memory and knowledge for AI agents.</h1>
-<p class="lead">engram is an open-source agentic knowledge and memory layer: a Rust core that owns deterministic memory, knowledge-graph, belief, hierarchy and retrieval behavior, with TypeScript bindings — so agents get reliable, structured, long-lived knowledge and memory instead of opaque, disposable context windows.</p>
+<p class="lead">engram is an open-source agentic knowledge and memory layer: a Rust core owning memory, knowledge-graph, belief, hierarchy and retrieval behavior, with TypeScript bindings.</p>
+<p>Agents get reliable, structured, long-lived knowledge and memory instead of opaque, disposable context windows.</p>
+{% include toc.html %}
 
-<h2>What it is not</h2>
-<p>The README is blunt about this, and so is this page: engram is <strong>not a vector database</strong> — vectors are one retrieval mode among six. It is <strong>not just a memory store</strong> — knowledge is source-grounded, not free-floating, and memory is experiential, not factual. It is the layer where raw observations become durable beliefs, where code becomes a queryable graph, and where policy, provenance and scope govern every read and write — so knowledge and memory are auditable, not accidental.</p>
+## What it is not {#what-it-is-not}
 
-<h2>The conceptual model — eight commitments</h2>
+<p>The README is blunt about this, and so is this page: engram is <strong>not a vector database</strong> — vectors are one retrieval mode among six. It is <strong>not just a memory store</strong> — knowledge is source-grounded, not free-floating, and memory is experiential, not factual.</p>
+<p><span class="chip chip-block">NOT a vector database</span> <span class="chip chip-block">NOT just a memory store</span></p>
+<p>It is the layer where raw observations become durable beliefs, where code becomes a queryable graph, and where policy, provenance and scope govern every read and write — so knowledge and memory are auditable, not accidental.</p>
+
+## The conceptual model — eight commitments {#the-conceptual-model}
+
 <div class="grid g2">
   <div class="card">
     <p class="kicker">1 · Memory</p>
@@ -46,13 +61,38 @@ permalink: /engram/
   </div>
 </div>
 
-<h2>How data flows</h2>
-<p>One direction on the write path: an agent writes (or ingests a source) → engram processes and stores across swappable engine cells, stamping policy and provenance on every row → a separate retrieval-composition layer fuses the recall modes into one policy-filtered context packet returned to the agent. Storage and retrieval are deliberately decoupled.</p>
+## How data flows {#how-data-flows}
 
-<h2>Status — alpha, stated plainly</h2>
-<div class="note">
-  <p><strong>engram is pre-1.0 — demo-driven, not production-ready.</strong> The conceptual model is direction-fixed; the frozen v1 contract covers the memory + retrieval + evaluation vertical; belief, contradiction, hierarchy and consolidation are direction-fixed draft extension contracts, not frozen. The validated surface today: memory (SQLite), knowledge graph (SQLite), belief and hierarchy (SQLite + SurrealDB), vector retrieval, retrieval composition with fusion and rerankers, consolidation, MCP servers, the full <code class="inline">EngramProvider</code> surface reachable from TypeScript, and backend swap by config string. Read the README's Status section before depending on any of it.</p>
+<p>One direction on the write path:</p>
+<ul>
+  <li>an agent writes, or ingests a source;</li>
+  <li>engram processes and stores across swappable engine cells, stamping policy and provenance on every row;</li>
+  <li>a separate retrieval-composition layer fuses the recall modes into one policy-filtered context packet returned to the agent.</li>
+</ul>
+<p>Storage and retrieval are deliberately decoupled.</p>
+
+## Status — alpha, stated plainly {#status}
+
+<div class="plate plate-ok">
+  <span class="plate-title">Status · OK</span>
+  <p>The conceptual model is direction-fixed and the memory + retrieval + evaluation vertical is under a frozen v1 contract. <span class="chip chip-pass">VALIDATED SURFACE</span></p>
 </div>
+<div class="plate plate-block">
+  <span class="plate-title">Status · BLOCK</span>
+  <p>engram is pre-1.0 — demo-driven, not production-ready. Belief, contradiction, hierarchy and consolidation are direction-fixed draft extension contracts, not frozen. Read the README's Status section before depending on any of it.</p>
+</div>
+<p>The validated surface today:</p>
+<ul>
+  <li><span class="mark-ok">OK</span> memory (SQLite)</li>
+  <li><span class="mark-ok">OK</span> knowledge graph (SQLite)</li>
+  <li><span class="mark-ok">OK</span> belief and hierarchy (SQLite + SurrealDB)</li>
+  <li><span class="mark-ok">OK</span> vector retrieval</li>
+  <li><span class="mark-ok">OK</span> retrieval composition with fusion and rerankers</li>
+  <li><span class="mark-ok">OK</span> consolidation</li>
+  <li><span class="mark-ok">OK</span> MCP servers</li>
+  <li><span class="mark-ok">OK</span> the full <code class="inline">EngramProvider</code> surface reachable from TypeScript</li>
+  <li><span class="mark-ok">OK</span> backend swap by config string</li>
+</ul>
 
 <p><a href="{{ '/install/' | relative_url }}">Install engram →</a> · <a href="{{ '/factory/' | relative_url }}">Meet the factory that develops it →</a></p>
 

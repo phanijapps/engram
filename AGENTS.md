@@ -303,6 +303,12 @@ feature-specific traps.
   `OntologyRepository` is durable (ADR-0008); its `validate_graph` is advisory
   only.
 
-  # engram-mcp Memory Layer
-  All your findings can be saved in engram mcp. If you have any doubt, use engram mcp to query.
-  Also periodically reindex after Code merges to main to keep the knowledge current.
+  ## engram-mcp 
+  >   Also periodically reindex after Code merges to main to keep the knowledge current.
+  ### Knowledge
+  - Use the code indexed in your knowledge when in doubt.
+  - Docs also get associated in the knowledge.
+  - This is a powerful layer, it is your responsibility to keep it upto date when you see a drift with main branch.
+  ### Memory Layer
+   - Distill memory skill is used to find processes, facts etc to save in  memory. 
+   - If you have any doubt, use engram mcp to query.

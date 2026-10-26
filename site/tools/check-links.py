@@ -8,7 +8,8 @@ Walks a built Jekyll tree and asserts:
      directory URLs);
   2. no external subresource is referenced (scripts, stylesheets, images,
      frames — NFR-002 third-party-request zero; plain external <a> anchors
-     are allowed and reported);
+     and metadata <link rel="canonical"|"alternate"|…> references are
+     allowed and reported);
   3. each page's HTML + CSS + font payload stays at or under the budget
      (NFR-002: 200 KiB before diagram assets; .svg images are excluded);
   4. CSS url(...) references resolve to files;
@@ -43,8 +44,14 @@ SUBRESOURCE_TAGS = ("script", "img", "iframe", "source", "link", "video", "audio
 
 ATTR_RE = re.compile(r"""(?:href|src|data-light-src|data-dark-src)\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
 SRCSET_RE = re.compile(r"""srcset\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
+REL_RE = re.compile(r"""rel\s*=\s*("([^"]*)"|'([^']*)')""", re.I)
 TAG_RE = re.compile(r"<\s*(\w+)[^>]*?>", re.I | re.S)
 URL_IN_CSS_RE = re.compile(r"url\(\s*(['\"]?)([^'\")]+)\1\s*\)", re.I)
+
+# <link rel> values that reference metadata without fetching a subresource
+# (a canonical URL points at the page's own preferred address — an absolute
+# URL by design; NFR-002 forbids fetched third-party resources, not metadata).
+SAFE_LINK_RELS = {"canonical", "alternate", "author", "license", "prev", "next", "shortlink"}
 
 # Diagram-count claims (assertion 5): "seven diagrams", "7 diagrams", …
 NUMBER_WORDS = {w: n for n, w in enumerate(
@@ -209,13 +216,15 @@ def check_tree(tree: Path, base: str, budget: int) -> tuple[Violations, dict[str
         for tag_match in TAG_RE.finditer(html):
             tag = tag_match.group(1).lower()
             blob = tag_match.group(0)
+            rel_match = REL_RE.search(blob)
+            rels = set(((rel_match.group(2) or rel_match.group(3)) if rel_match else "").lower().split())
             for attr in ATTR_RE.finditer(blob):
                 url = strip_frag_query(attr.group(2) or attr.group(3) or "")
                 if not url or url.startswith(("#", "data:", "javascript:")):
                     continue
                 if url.startswith(EXTERNAL_OK_ANCHOR_SCHEMES):
-                    if tag == "a":
-                        externals.add(url)  # plain outbound anchor — allowed
+                    if tag == "a" or (tag == "link" and rels & SAFE_LINK_RELS):
+                        externals.add(url)  # outbound anchor or metadata link — allowed
                     elif tag in SUBRESOURCE_TAGS:
                         v.add("external-subresource", rel, f"<{tag}> {url} (NFR-002 forbids third-party subresources)")
                     continue

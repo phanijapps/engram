@@ -38,7 +38,7 @@ test('FIND-operations-001 parity --selftest detects every injected drift kind (e
     1,
     `selftest must exit 1 when detection works (got ${res.status}):\n${res.stdout}${res.stderr}`,
   );
-  const kinds = ['set drift', 'hygiene drift', 'wrapper drift', 'orphan wrapper'];
+  const kinds = ['set drift', 'hygiene drift', 'wrapper drift', 'orphan wrapper', 'payload symlink'];
   for (const kind of kinds) {
     assert.ok(res.stdout.includes(`detected: ${kind}`), `${kind} not detected`);
   }

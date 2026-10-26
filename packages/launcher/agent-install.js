@@ -173,6 +173,9 @@ function copySkillAgents(destDir, dialect, pointerRoot, remove, written) {
     const rel = `.agents/skills/${skill}/`;
     const target = `${path.join(pointerRoot, skill).split(path.sep).join('/')}/`;
     for (const file of fs.readdirSync(agentsSrc).sort()) {
+      // Never dereference a planted symlink (FIND-security-003): the
+      // generator refuses them, so a link here means a tampered payload.
+      if (fs.lstatSync(path.join(agentsSrc, file)).isSymbolicLink()) continue;
       const destName = dialectDestName(file, dialect);
       if (!destName) continue;
       const to = path.join(destDir, destName);

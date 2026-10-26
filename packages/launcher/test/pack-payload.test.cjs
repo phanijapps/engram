@@ -16,6 +16,23 @@ const path = require('node:path');
 const LAUNCHER = path.join(__dirname, '..');
 const REPO = path.join(LAUNCHER, '..', '..');
 const AUTHORED = path.join(REPO, '.agents', 'skills');
+
+/** Symlink entries under dir, any depth (lstat-based, never followed). */
+function symlinksUnder(dir) {
+  const out = [];
+  const walk = (d, prefix) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const rel = prefix ? `${prefix}/${e.name}` : e.name;
+      if (e.isSymbolicLink()) {
+        out.push(rel);
+        continue;
+      }
+      if (e.isDirectory()) walk(path.join(d, e.name), rel);
+    }
+  };
+  walk(dir, '');
+  return out;
+}
 const AUTHORED_SKILLS = fs
   .readdirSync(AUTHORED, { withFileTypes: true })
   .filter((d) => d.isDirectory() && fs.existsSync(path.join(AUTHORED, d.name, 'SKILL.md')))
@@ -120,6 +137,29 @@ test('AC-004 the factory skill payload packs whole: dialects + controller travel
   for (const f of ['red-forman.claude.md', 'red-forman.pi.md', 'red-forman.copilot.md', 'red-forman.codex.yaml']) {
     assert.ok(members.includes(`package/agents/${f}`), `package/agents/${f} not packed`);
   }
+});
+
+test('FIND-security-003 symlinks never enter the payload (generator lstat filter)', () => {
+  const { pkg } = launcherCopy('symlink');
+  // Plant a link in the authored-tree position the generator resolves.
+  fs.symlinkSync('/etc/passwd', path.join(pkg, '..', '..', '.agents', 'skills', 'engram-index', 'secret-link'));
+  const gen = spawnSync('node', ['scripts/generate-skills-payload.cjs'], {
+    cwd: pkg,
+    encoding: 'utf8',
+    timeout: 60000,
+  });
+  assert.equal(gen.status, 0, `generator failed: ${gen.stderr}`);
+  const links = symlinksUnder(path.join(pkg, 'skills'));
+  assert.deepEqual(links, [], `payload preserved symlinks: ${links}`);
+  // And the parity checker flags the authored link instead of comparing
+  // through it — resolution check runs the real checker on this fixture.
+  const parity = spawnSync('node', ['scripts/check-skills-parity.cjs'], {
+    cwd: pkg,
+    encoding: 'utf8',
+    timeout: 60000,
+  });
+  assert.notEqual(parity.status, 0, 'parity must fail on an authored symlink');
+  assert.match(parity.stderr, /authored tree contains symlink/);
 });
 
 test('RISK-001 stale payload aborts: verify-launcher-package.py asserts the payload', () => {

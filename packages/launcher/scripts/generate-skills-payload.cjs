@@ -33,6 +33,18 @@ function isHygiene(src) {
   return base === '__pycache__' || base.endsWith('.pyc');
 }
 
+/** Symlinks never ship (FIND-security-003): a planted link would ride the
+ *  payload verbatim — installed into every user's skills dir and read
+ *  through by prompt-executed agents — so the filter lstat-rejects them
+ *  instead of dereferencing or preserving them. */
+function isSymlink(src) {
+  try {
+    return fs.lstatSync(src).isSymbolicLink();
+  } catch {
+    return false;
+  }
+}
+
 function main() {
   if (!fs.existsSync(path.join(SOURCE, 'engram-index', 'SKILL.md'))) {
     process.stderr.write(`generate-skills-payload: authored tree not found at ${SOURCE}\n`);
@@ -44,7 +56,7 @@ function main() {
   for (const skill of skills) {
     fs.cpSync(path.join(SOURCE, skill), path.join(DEST, skill), {
       recursive: true,
-      filter: (src) => !isHygiene(src),
+      filter: (src) => !isHygiene(src) && !isSymlink(src),
     });
   }
   process.stdout.write(`generated skills payload: ${skills.length} skills from ${SOURCE}\n`);

@@ -44,6 +44,31 @@ function skillDirs(root) {
 
 const isHygiene = (p) => path.basename(p) === '__pycache__' || p.endsWith('.pyc');
 
+/** Symlink entries under dir, any depth — lstat-based, never followed
+ *  (FIND-security-003): a planted link must fail parity as a link, not
+ *  compare byte-identical through its target. */
+function symlinksUnder(dir) {
+  const out = [];
+  const walk = (d, prefix) => {
+    let entries;
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const rel = prefix ? `${prefix}/${e.name}` : e.name;
+      if (e.isSymbolicLink()) {
+        out.push(rel);
+        continue;
+      }
+      if (e.isDirectory()) walk(path.join(d, e.name), rel);
+    }
+  };
+  walk(dir, '');
+  return out;
+}
+
 /** Relative file list under dir, skipping hygiene entries (source side). */
 function filesUnder(dir, { skipHygiene = false } = {}) {
   const out = [];
@@ -66,6 +91,9 @@ function checkParity({ source, payload, piAgents }) {
 
   // --- 1. payload parity (when the generated payload exists) ---
   if (fs.existsSync(payload)) {
+    for (const link of symlinksUnder(payload)) {
+      errors.push(`payload contains symlink: ${link}`);
+    }
     const delivered = fs
       .readdirSync(payload, { withFileTypes: true })
       .filter((d) => d.isDirectory())
@@ -94,14 +122,32 @@ function checkParity({ source, payload, piAgents }) {
       }
       for (const f of srcFiles) {
         if (!dstFiles.includes(f)) continue;
-        const a = fs.readFileSync(path.join(srcDir, f));
-        const b = fs.readFileSync(path.join(dstDir, f));
+        let a;
+        let b;
+        try {
+          a = fs.readFileSync(path.join(srcDir, f));
+          b = fs.readFileSync(path.join(dstDir, f));
+        } catch {
+          continue; // unreadable (e.g. dangling link): the symlink scan above already failed the run
+        }
         if (!a.equals(b)) errors.push(`payload file differs from source: ${skill}/${f}`);
       }
     }
   }
 
+  // --- 1b. authored-tree symlink rejection (FIND-security-003) ---
+  // The generator drops symlinks, so an authored link would silently vanish
+  // from delivery — flag it here and force the author to resolve it.
+  for (const link of symlinksUnder(source)) {
+    errors.push(`authored tree contains symlink (not shippable): ${link}`);
+  }
+
   // --- 2. wrapper parity (DEC-P01) ---
+  if (fs.existsSync(piAgents)) {
+    for (const link of symlinksUnder(piAgents)) {
+      errors.push(`pi agents dir contains symlink: .pi/agents/${link}`);
+    }
+  }
   const dialectDir = path.join(source, 'engram-factory', 'agents');
   const piDialects = fs.existsSync(dialectDir)
     ? fs.readdirSync(dialectDir).filter((f) => /^engram-.+\.pi\.md$/.test(f)).sort()
@@ -159,6 +205,10 @@ function main() {
     // drift 4: orphan wrapper
     fs.writeFileSync(path.join(piAgents, 'engram-ghost.md'), '---\nname: engram-ghost\n---\n');
     injected.push('orphan wrapper');
+    // drift 5: symlink planted in the payload (must fail as a link, never
+    // compare byte-identical through its target — FIND-security-003)
+    fs.symlinkSync('/etc/passwd', path.join(payload, 'engram-index', 'secret-link'));
+    injected.push('payload symlink');
 
     const { errors } = checkParity({ source, payload, piAgents });
     const caught = {
@@ -166,6 +216,7 @@ function main() {
       'hygiene drift': errors.some((e) => e.includes('hygiene violation')),
       'wrapper drift': errors.some((e) => e.includes('byte drift: .pi/agents/engram-planner.md')),
       'orphan wrapper': errors.some((e) => e.includes('orphan pi wrapper')),
+      'payload symlink': errors.some((e) => e.includes('payload contains symlink: engram-index/secret-link')),
     };
     const missed = injected.filter((k) => !caught[k]);
     if (missed.length > 0) {

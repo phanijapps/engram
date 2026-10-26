@@ -249,12 +249,25 @@ function copySkillAgents(destDir, dialect, pointerRoot, remove, written) {
       // agents dir is shared by every skill, so a later skill claiming an
       // already-installed name must not silently overwrite it — first
       // (sorted) skill wins, the collision is reported loudly.
+      // FIND-security-006: an engram-<role> name belongs to the factory
+      // skill's canonical dialect, so an earlier-sorting squatter cannot
+      // displace it — the canonical claim replaces the squatter's file with
+      // a loud note naming both. Name-tag discipline still dominates below:
+      // a file at the destination that is not verifiably ours is never
+      // overwritten, canonical or not.
       const prior = claimedBy.get(destName);
-      if (prior) {
-        process.stderr.write(
-          `  note: ${skill} agent ${destName} collides with ${prior}'s — skipped\n`,
-        );
-        continue;
+      if (prior && prior !== skill) {
+        const canonicalClaim = skill === 'engram-factory' && destName.startsWith('engram-');
+        if (canonicalClaim) {
+          process.stderr.write(
+            `  note: ${skill} agent ${destName} replaces ${prior}'s — the canonical factory dialect wins\n`,
+          );
+        } else {
+          process.stderr.write(
+            `  note: ${skill} agent ${destName} collides with ${prior}'s — skipped\n`,
+          );
+          continue;
+        }
       }
       claimedBy.set(destName, skill);
       // Never remove or overwrite a foreign file that merely shares the

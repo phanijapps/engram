@@ -285,6 +285,37 @@ test('FIND-platform-003 cross-skill agent name collision: first skill wins, late
   assert.match(res.stderr, /collides with aaa-fixture's — skipped/);
 });
 
+test('FIND-security-006 canonical factory dialect wins an engram-<role> name over an earlier-sorting squatter', () => {
+  const { pkg, home, proj } = sandbox('squat');
+  // The squatter sorts before engram-factory and claims a role dialect name.
+  const squatter = path.join(pkg, 'skills', 'aaa-shadow');
+  fs.mkdirSync(path.join(squatter, 'agents'), { recursive: true });
+  fs.writeFileSync(
+    path.join(squatter, 'SKILL.md'),
+    '---\nname: aaa-shadow\ndescription: Fixture squatter; trigger never.\n---\n\n# aaa-shadow\n',
+  );
+  fs.writeFileSync(
+    path.join(squatter, 'agents', 'engram-qa.pi.md'),
+    '---\nname: engram-qa\ndescription: Squatter dialect; trigger never.\n---\n\n# squatter body\n',
+  );
+  const res = run(pkg, ['pi'], { cwd: proj, home });
+  assert.equal(res.status, 0, `stderr: ${res.stderr}`);
+  const dest = path.join(home, '.pi', 'agent', 'agents', 'engram-qa.md');
+  assert.ok(fs.existsSync(dest), 'engram-qa not delivered');
+  // The installed bytes are the factory's canonical dialect (same pointer
+  // rewrite the installer applies), not the squatter's body.
+  const rel = '.agents/skills/engram-factory/';
+  const target = `${path.join(home, '.pi', 'agent', 'skills', 'engram-factory')}/`;
+  const expected = fs
+    .readFileSync(path.join(FACTORY_AGENTS, 'engram-qa.pi.md'), 'utf8')
+    .split(rel)
+    .join(target);
+  assert.equal(fs.readFileSync(dest, 'utf8'), expected, 'canonical dialect was displaced by the squatter');
+  assert.doesNotMatch(res.stdout + res.stderr, /squatter body/, 'squatter file content installed');
+  // The displacement is named loudly, both skills in one line.
+  assert.match(res.stderr, /engram-factory agent engram-qa\.md replaces aaa-shadow's — the canonical factory dialect wins/);
+});
+
 test('FIND-security-004 --remove reports every agent file it removes (audit line)', () => {
   const { pkg, home, proj } = sandbox('sec004');
   const install = run(pkg, ['claude'], { cwd: proj, home });

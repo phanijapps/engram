@@ -591,6 +591,7 @@ function agentInstall(args) {
     process.exit(1);
   }
   const ids = target === 'all' ? Object.keys(HOSTS) : [target];
+  let failedHosts = 0; // FIND-operations-003: a partial install must be detectable by exit code
   process.stdout.write(
     `${remove ? 'Removing' : 'Installing'} engram agent bundle (skills + hooks + subagents)\n` +
       `  scope: ${scope}${scope === 'project' ? ` (${cwd})` : ''}\n` +
@@ -619,9 +620,18 @@ function agentInstall(args) {
         );
       }
     } catch (e) {
+      failedHosts += 1; // fail-open: remaining hosts still run below…
       process.stderr.write(`  error: ${e.message}\n`);
     }
     process.stdout.write('\n');
+  }
+  if (failedHosts > 0) {
+    // …but the run must not exit 0 (FIND-operations-003): scripted installs
+    // and bootstrap runs detect partial failure by exit code.
+    process.stdout.write(
+      `Incomplete: ${failedHosts} host(s) failed (see errors above); the remaining hosts were attempted.\n`,
+    );
+    process.exit(1);
   }
   process.stdout.write('Done. MCP server registration: engram-mcp install --client <id>\n');
 }

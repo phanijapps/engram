@@ -326,6 +326,32 @@ test('FIND-security-001 payload-present project install never touches the author
   );
 });
 
+test('FIND-operations-003 a failing host exits non-zero while remaining hosts complete', () => {
+  const { pkg, home, proj } = sandbox('partial');
+  // Poison one host: ~/.claude as a file makes its mkdir fail (ENOTDIR).
+  fs.writeFileSync(path.join(home, '.claude'), 'not a directory\n');
+  const res = run(pkg, ['all'], { cwd: proj, home });
+  assert.notEqual(res.status, 0, 'partial install must not exit 0');
+  assert.match(res.stderr, /ENOTDIR/);
+  assert.match(res.stdout, /Incomplete: 1 host\(s\) failed/);
+  // Fail-open continuation: every other host section completed its writes.
+  for (const label of ['[Codex]', '[GitHub Copilot]', '[pi]']) {
+    assert.ok(res.stdout.includes(label), `${label} section missing`);
+  }
+  assert.ok(
+    fs.existsSync(path.join(home, '.pi', 'agent', 'skills', 'engram-index', 'SKILL.md')),
+    'pi host did not complete after claude failed',
+  );
+  assert.ok(
+    fs.existsSync(path.join(home, '.agents', 'skills', 'engram-index', 'SKILL.md')),
+    'codex/copilot host did not complete after claude failed',
+  );
+  // The healthy-path exit code is unchanged (0) — sanity against collateral.
+  const { pkg: pkg2, home: home2, proj: proj2 } = sandbox('partial-ok');
+  const ok = run(pkg2, ['all'], { cwd: proj2, home: home2 });
+  assert.equal(ok.status, 0, `healthy run must stay exit 0: ${ok.stderr}`);
+});
+
 test('FIND-code-004 dev-fallback copy applies the hygiene filter (__pycache__/*.pyc never ship)', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engram-agents-hygiene-'));
   const pkg = path.join(root, 'packages', 'launcher');

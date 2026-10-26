@@ -316,6 +316,45 @@ figure.diagram .fig-id {
 
 .site-footer p { margin: 4px 0; opacity: .8; }
 
+/* CSS radio tabs (DEC-P02 Get Started): every panel stays in the DOM and
+ * works without JS — the radio state only switches visibility. Labels are
+ * chips on the panel surface; the checked chip lights amber on chip. */
+.tabs { margin: 1em 0; }
+.tabs input[type="radio"] { position: absolute; opacity: 0; }
+.tabs label {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line-ui);
+  border-radius: 2px;
+  padding: 4px 12px;
+  margin: 0 6px 6px 0;
+  display: inline-block;
+  cursor: pointer;
+}
+.tabs input[type="radio"]:checked + label {
+  background: var(--chip);
+  color: var(--accent);
+  border-color: var(--chip);
+}
+.tabs input[type="radio"]:focus-visible + label {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+.tabs .tab-panel { display: none; }
+#t-claude:checked ~ .p-t-claude,
+#t-claude-desktop:checked ~ .p-t-claude-desktop,
+#t-cursor:checked ~ .p-t-cursor,
+#t-codex:checked ~ .p-t-codex,
+#t-pi:checked ~ .p-t-pi,
+#t-copilot:checked ~ .p-t-copilot,
+#a-claude:checked ~ .p-a-claude,
+#a-codex:checked ~ .p-a-codex,
+#a-copilot:checked ~ .p-a-copilot,
+#a-pi:checked ~ .p-a-pi,
+#a-all:checked ~ .p-a-all { display: block; }
+
 #engram-probe {
   position: static;
   max-height: 40vh;

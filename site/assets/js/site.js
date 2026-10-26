@@ -27,9 +27,11 @@
     try {
       if (opts && opts.persist) {
         window.localStorage.setItem(STORE_KEY, theme);
-      } else if (opts && opts.force) {
-        window.localStorage.removeItem(STORE_KEY);
       }
+      /* Forced polarity (?polarity=) is session-only by design: it never
+       * writes and never wipes the stored preference (FIND-CODE-003 /
+       * FIND-UX-004 — a harness parameter must not delete a visitor's
+       * saved theme). */
     } catch (e) { /* storage unavailable — polarity still applies in-session */ }
     var button = document.querySelector('[data-theme-toggle]');
     if (button) {
@@ -56,7 +58,7 @@
     var stored = null;
     try { stored = window.localStorage.getItem(STORE_KEY); } catch (e) { /* ignore */ }
     var initial = FORCED || (stored === 'dark' ? 'dark' : 'light');
-    applyTheme(initial, FORCED ? { force: true } : {});
+    applyTheme(initial);
     var button = document.querySelector('[data-theme-toggle]');
     if (button) {
       button.addEventListener('click', function () {
@@ -183,6 +185,10 @@
     var probe = {
       url: window.location.pathname,
       polarity: currentTheme(),
+      forced: FORCED,
+      forcedStoragePreserved: (function () {
+        try { return window.localStorage.getItem(STORE_KEY) === 'dark'; } catch (e) { return null; }
+      })(),
       toggle: {
         ariaPressed: button ? button.getAttribute('aria-pressed') : null,
         stored: (function () { try { return window.localStorage.getItem(STORE_KEY); } catch (e) { return null; } })()
@@ -215,6 +221,12 @@
   }
 
   function boot() {
+    if (PROBE && FORCED) {
+      /* Regression sentinel for the forced-polarity storage rule: seed a
+       * stored preference BEFORE init, then report whether it survived —
+       * the old behavior (removeItem under ?polarity=) reports false. */
+      try { window.localStorage.setItem(STORE_KEY, 'dark'); } catch (e) { /* ignore */ }
+    }
     initTheme();
     initCopy();
     if (PROBE) {

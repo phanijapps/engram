@@ -109,6 +109,14 @@ for path in pages:
             if probe["polarity"] != polarity:
                 failures.append(f"{tag}: page polarity {probe['polarity']} != requested {polarity}")
 
+            # Forced polarity must apply WITHOUT wiping the stored theme
+            # (FIND-CODE-003/FIND-UX-004): the probe seeds a stored 'dark'
+            # sentinel before init; the old removeItem behavior fails here.
+            if probe.get("forcedStoragePreserved") is not True:
+                failures.append(
+                    f"{tag}: forced polarity did not preserve the stored theme "
+                    f"(forcedStoragePreserved={probe.get('forcedStoragePreserved')})")
+
             for token, expected in EXPECTED_TOKENS[polarity].items():
                 actual = rgb_to_hex(probe["tokens"].get(token, ""))
                 if actual != expected:

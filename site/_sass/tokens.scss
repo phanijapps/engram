@@ -1,0 +1,37 @@
+// Direction B "Lab Notebook" tokens (LED-1 / DEC-001) — light exact,
+// dark per DEC-P005 with WCAG-AA-computed values.
+:root {
+  --paper: #f7f5f0;
+  --ink: #101418;
+  --muted: #3c3a34;
+  --line: #d8d2c6;
+  --accent: #b3541e;
+  --link: #33517a;
+  --pass: #5a7d5a;
+  --card: #ffffff;
+  --card-inset: #ece8df;
+  --code-bg: #101418;
+  --code-ink: #e8e6df;
+  --code-k: #e0af68;
+  --code-s: #9ece6a;
+  --code-c: #8a949c;
+  --shadow: rgba(16, 20, 24, .08);
+  --serif: "Source Serif 4", Georgia, serif;
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+[data-theme="dark"] {
+  --paper: #101418;
+  --ink: #e8e6df;
+  --muted: #b9b5aa;
+  --line: #4a5360;
+  --accent: #e0af68;
+  --link: #7e9cc4;
+  --pass: #8fb08f;
+  --card: #161c22;
+  --card-inset: #1c232b;
+  --code-bg: #0a0d10;
+  --code-ink: #e8e6df;
+  --shadow: rgba(0, 0, 0, .45);
+}

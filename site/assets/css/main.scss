@@ -1,4 +1,8 @@
 ---
-# Placeholder stylesheet — fully authored in TASK-005 (Direction B tokens).
+# Direction B "Lab Notebook" stylesheet (LED-1 / DEC-001 / DEC-P005).
+# sass-converter 1.5.2: @import partials only; compressed output keeps the
+# built CSS inside the per-page payload budget (NFR-002).
 ---
-body { margin: 0; }
+@import "tokens";
+@import "base";
+@import "components";

@@ -1,0 +1,51 @@
+// Base: reset-ish defaults, typography roles (LED-1 stack), links, focus.
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: var(--sans);
+  background: var(--paper);
+  color: var(--ink);
+  line-height: 1.55;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--serif);
+  font-weight: 600;
+  line-height: 1.15;
+  margin: 0 0 .4em;
+}
+
+h1 { font-size: 44px; letter-spacing: -.01em; }
+h2 { font-size: 24px; margin-top: 2.2em; border-bottom: 1px solid var(--line); padding-bottom: .35em; }
+h3 { font-size: 17px; margin-top: 1.6em; }
+
+p { max-width: 72ch; }
+
+a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: var(--accent); }
+
+:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+img { max-width: 100%; height: auto; }
+
+.mono { font-family: var(--mono); }
+.small { font-size: 13px; }
+
+.wrap {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+@media (max-width: 720px) {
+  h1 { font-size: 32px; }
+  h2 { font-size: 20px; }
+  .wrap { padding: 0 16px; }
+}

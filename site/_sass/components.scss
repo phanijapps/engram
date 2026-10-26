@@ -1,10 +1,12 @@
-// Component set from the owner-approved design preview (Direction B):
-// sticky header, nav, pill toggle, hero, kicker, cards, grids, tags, note,
-// tables, code blocks with copy affordance, diagram figures, footer, probe.
+// D2 "Machine Shop" component set (job 008, DEC-P01) — squared edges, amber
+// top-rule cards, status plates, stage-chip nav, showcase framing.
+// Every color-bearing rule here is a witness candidate for
+// site/tools/check-contrast.py's DEC-P01 pair matrix: a matrix row without a
+// rule in this file is a phantom pair (FIND-CODE-001 class, never again).
 
 .site-header {
-  border-bottom: 2px solid var(--ink);
-  background: var(--paper);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
   z-index: 5;
@@ -14,7 +16,7 @@
   display: flex;
   gap: 18px;
   align-items: center;
-  padding: 14px 0;
+  padding: 12px 0;
   font-size: 14px;
 }
 
@@ -29,27 +31,33 @@
 
 .nav .brand-slash { color: var(--accent); }
 
+/* Stage-chip nav: mono chips on the panel strip. Muted text on panel (7.40:1)
+ * with a --line-ui boundary (3.18:1); the aria-current chip lights amber on
+ * the chip surface (8.01:1). */
 .nav-links {
   display: flex;
-  gap: 16px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
-.nav-links a { color: var(--ink); text-decoration: none; opacity: .75; }
-.nav-links a:hover, .nav-links a[aria-current="page"] { opacity: 1; }
+.nav-links a {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line-ui);
+  border-radius: 2px;
+  padding: 4px 12px;
+  text-decoration: none;
+}
+.nav-links a:hover { color: var(--ink); }
+.nav-links a[aria-current="page"] {
+  background: var(--chip);
+  border-color: var(--chip);
+  color: var(--accent);
+}
 
 .nav .spacer { flex: 1; }
-
-.pill {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--ink);
-  border: 1px solid var(--ink);
-  border-radius: 99px;
-  padding: 3px 12px;
-  background: var(--paper);
-  cursor: pointer;
-}
 
 .hero { padding: 64px 0 40px; }
 .hero .lead { font-size: 19px; max-width: 46em; color: var(--muted); }
@@ -63,50 +71,131 @@
   margin-bottom: 10px;
 }
 
+/* Hero action buttons (REQ-005): amber primary (paper text on accent, 9.46:1)
+ * and ghost (ink text on paper behind a 3.32:1 --line-ui boundary). */
+.btn {
+  display: inline-block;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 14px;
+  text-decoration: none;
+  border-radius: 2px;
+  padding: 10px 18px;
+  margin: 4px 10px 4px 0;
+}
+.btn:hover { filter: brightness(1.08); }
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--paper);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--line-ui);
+}
+
 .page { padding-bottom: 24px; }
+
+/* On-this-page anchor rail (DEC-P03 nav device): mono chips on the panel. */
+.toc {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 10px 14px;
+  margin: 0 0 28px;
+}
+.toc .toc-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--muted);
+  display: block;
+  margin-bottom: 6px;
+}
+.toc a {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--link);
+  background: var(--panel);
+  border: 1px solid var(--line-ui);
+  border-radius: 2px;
+  padding: 3px 10px;
+  margin: 0 6px 6px 0;
+  text-decoration: none;
+}
+.toc a:hover { color: var(--accent); }
 
 .grid { display: grid; gap: 16px; }
 .g2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
 .g3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 
+/* Amber-top-rule card (ink on card 13.63:1; kicker accent on card 8.64:1;
+ * card titles link 6.86:1; LIMIT stamp block on card 6.53:1). */
 .card {
-  border: 1px solid var(--ink);
-  border-radius: 10px;
   background: var(--card);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--accent);
+  border-radius: 0;
   padding: 18px 20px;
-  box-shadow: 4px 4px 0 var(--shadow);
 }
 
 .card h3 { margin-top: 0; }
+.card h3 a { color: var(--link); text-decoration: none; }
+.card h3 a:hover { color: var(--accent); text-decoration: underline; }
 
-.tag {
+/* Status chips (preview D2 tags row): filled mono stamps, paper text on the
+ * status color — pass 10.35:1, block 7.15:1, accent 9.46:1. */
+.chip {
   display: inline-block;
   font-family: var(--mono);
   font-size: 11px;
-  background: var(--ink);
-  color: var(--paper);
-  border-radius: 4px;
-  padding: 2px 7px;
+  letter-spacing: .04em;
+  border-radius: 2px;
+  padding: 2px 8px;
   margin: 0 6px 6px 0;
 }
+.chip-stage { background: var(--accent); color: var(--paper); }
+.chip-pass { background: var(--pass); color: var(--paper); }
+.chip-block { background: var(--block); color: var(--paper); }
 
-.tag.acc { background: var(--accent); }
-/* .tag.pass text comes from --card, not the .tag default --paper: LED-1 fixes
-   light --pass at #5a7d5a where --paper computes 4.27:1 (below AA), while
-   --card gives 4.65:1 light and 7.17:1 dark — check-contrast.py guards both
-   rows with a rule witness (FIND-CODE-001 / FIND-UI-001). */
-.tag.pass {
-  background: var(--pass);
-  color: var(--card);
-}
-
-.note {
+/* Status plates (DEC-P03 callout variants): ink on plate 12.91:1; the block
+ * variant's title is --block on plate 6.19:1 — the worst body pair, asserted. */
+.plate {
+  background: var(--plate);
   border-left: 3px solid var(--accent);
-  background: var(--card);
-  border-radius: 0 8px 8px 0;
   padding: 12px 16px;
   font-size: 14px;
+  margin: 14px 0;
 }
+.plate-warn { border-left-color: var(--accent); }
+.plate-ok { border-left-color: var(--pass); }
+.plate-block { border-left-color: var(--block); }
+.plate .plate-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+.plate-ok .plate-title { color: var(--pass); }
+.plate-block .plate-title { color: var(--block); }
+
+/* Inline inspection marks: pass text on paper 10.35:1 (validated list),
+ * block text on card 6.53:1 (limitation stamps). */
+.mark-ok, .mark-block {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.mark-ok { color: var(--pass); }
+.mark-block { color: var(--block); }
 
 table {
   border-collapse: collapse;
@@ -139,7 +228,7 @@ pre {
   font-family: var(--mono);
   font-size: 13px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 2px;
   padding: 16px;
   overflow: auto;
   margin: 1em 0;
@@ -157,8 +246,8 @@ pre .s { color: var(--code-s); }
   font-size: 11px;
   color: var(--code-ink);
   background: var(--code-bg);
-  border: 1px solid var(--line);
-  border-radius: 99px;
+  border: 1px solid var(--line-ui);
+  border-radius: 2px;
   padding: 2px 10px;
   cursor: pointer;
 }
@@ -168,25 +257,29 @@ pre .s { color: var(--code-s); }
 code.inline, p code, li code, td code {
   font-family: var(--mono);
   font-size: .92em;
-  background: var(--card-inset);
+  background: var(--chip);
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: 2px;
   padding: 1px 5px;
 }
 
-figure.diagram { margin: 1.6em 0; }
+/* Showcase plate framing (DEC-P05): the figure is a titled panel with a mono
+ * plate label; figcaption runs muted on panel 7.40:1; the fig id chip is
+ * accent on chip 8.01:1. */
+figure.diagram {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 14px 14px 10px;
+  margin: 1.6em 0;
+}
 
 figure.diagram img {
   display: block;
   width: 100%;
-  background: #fff;
-  border: 1px solid var(--ink);
-  border-radius: 10px;
-}
-
-[data-theme="dark"] figure.diagram img {
-  background: #101418;
-  border-color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0;
 }
 
 figure.diagram figcaption {
@@ -197,9 +290,10 @@ figure.diagram figcaption {
 }
 
 figure.diagram .fig-id {
-  background: var(--ink);
-  color: var(--paper);
-  border-radius: 4px;
+  font-weight: 700;
+  background: var(--chip);
+  color: var(--accent);
+  border-radius: 2px;
   padding: 1px 6px;
   margin-right: 8px;
 }
@@ -214,7 +308,7 @@ figure.diagram .fig-id {
 
 .site-footer {
   margin-top: 60px;
-  border-top: 2px solid var(--ink);
+  border-top: 1px solid var(--line);
   padding: 16px 0 30px;
   font-size: 13px;
   font-family: var(--mono);

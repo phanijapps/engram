@@ -1,4 +1,5 @@
-// Base: reset-ish defaults, typography roles (LED-1 stack), links, focus.
+// Base: reset-ish defaults, typography roles (D2: Inter throughout, JetBrains
+// Mono stage labels, mono-prefixed h2 counters), links, focus, squared edges.
 * { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
@@ -12,17 +13,36 @@ body {
 }
 
 h1, h2, h3, h4 {
-  font-family: var(--serif);
-  font-weight: 600;
+  font-family: var(--sans);
+  font-weight: 700;
   line-height: 1.15;
   margin: 0 0 .4em;
 }
 
-h1 { font-size: 44px; letter-spacing: -.01em; }
-h2 { font-size: 24px; margin-top: 2.2em; border-bottom: 1px solid var(--line); padding-bottom: .35em; }
+h1 { font-size: 44px; letter-spacing: -.015em; }
+
+/* Machine-shop section plates: every h2 carries a mono stage prefix
+ * (DEC-P01 mono-prefixed headings) over a hairline rule (decorative). */
+body { counter-reset: sec; }
+h2 {
+  font-size: 24px;
+  margin-top: 2.4em;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: .35em;
+}
+h2::before {
+  counter-increment: sec;
+  content: counter(sec, decimal-leading-zero);
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: .1em;
+  margin-right: 12px;
+}
 h3 { font-size: 17px; margin-top: 1.6em; }
 
-p { max-width: 72ch; }
+p { max-width: 65ch; }
 
 a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
 a:hover { color: var(--accent); }
@@ -30,7 +50,6 @@ a:hover { color: var(--accent); }
 :focus-visible {
   outline: 2px solid var(--link);
   outline-offset: 2px;
-  border-radius: 2px;
 }
 
 img { max-width: 100%; height: auto; }

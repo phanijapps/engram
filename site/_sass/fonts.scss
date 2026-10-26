@@ -1,14 +1,7 @@
-// Self-hosted fonts (plan DEC-P02, NFR-002: zero third-party runtime
-// requests). Latin static woff2 subsets vendored under assets/fonts with
-// OFL license texts and MANIFEST.sha256 (path, source URL, digest).
-@font-face {
-  font-family: "Source Serif 4";
-  src: url("../fonts/source-serif-4-600.woff2") format("woff2");
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-
+// Self-hosted fonts (job 004 DEC-P02, job 008 DEC-P06: serif leaves the
+// stack — Inter 400/600 + JetBrains Mono 400/700 remain). Zero third-party
+// runtime requests (NFR-002): latin static woff2 subsets vendored under
+// assets/fonts with OFL license texts and MANIFEST.sha256.
 @font-face {
   font-family: "Inter";
   src: url("../fonts/inter-400.woff2") format("woff2");

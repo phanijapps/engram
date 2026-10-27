@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "core/lang",
+    "core/packs",
     "core/domain",
     "core/runtime",
     "core/memory",

@@ -1145,6 +1145,41 @@ pub(crate) mod tests {
         );
     }
 
+    /// FIND-code-001 regression guard: a SOURCED batch (source_id set — the
+    /// revision flow the tool description recommends) must persist every
+    /// fact's verdict, not just count it in the result text.
+    #[test]
+    fn sourced_store_knowledge_persists_verdicts() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let res = store_knowledge(
+            &app,
+            &json!({
+                "source_id": "docs/verdict-sourced.md",
+                "facts": [
+                    { "content": "Qwvpx sourced verdict fact: transfers settle T+1.",
+                      "verdict": "grounded_in_source" }
+                ]
+            }),
+        )
+        .expect("sourced store_knowledge should succeed");
+        let text = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            text.contains("Verdicts: GroundedInSource=1."),
+            "result reports the verdict count: {text}"
+        );
+        let recalled = recall(
+            &app,
+            &json!({ "query": "Qwvpx sourced verdict fact", "limit": 5, "lanes": ["memory"] }),
+        )
+        .expect("recall");
+        let rtext = recalled["content"][0]["text"].as_str().unwrap();
+        assert!(
+            rtext.contains("verdict: grounded_in_source"),
+            "the SOURCED path must persist the verdict, not drop it: {rtext}"
+        );
+    }
+
     /// Verdict stamping (DEC-P06): default, accepted word, reserved-word
     /// rejection, closed-set rejection, and counts in the result payload.
     #[test]

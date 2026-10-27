@@ -425,7 +425,10 @@ where
             provenance: stamped.provenance.clone(),
             policy: stamped.policy.clone(),
             links: stamped.links.clone(),
-            verdict: None,
+            // FIND-code-001: the fact's verdict survives the supersession
+            // rewrite (the unsourced path already passed it through —
+            // core/integration/src/sqlite/batch.rs step_facts).
+            verdict: stamped.verdict,
             idempotency_key: Some(per_record_key),
         };
         match memory.write_memory(write_request).await {

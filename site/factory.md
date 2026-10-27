@@ -3,10 +3,10 @@ layout: page
 title: The factory
 permalink: /factory/
 toc:
-  - id: the-loop
-    label: "The loop"
   - id: the-team
     label: "The team"
+  - id: the-loop
+    label: "How it works"
   - id: the-board
     label: "The board"
   - id: review-rounds
@@ -22,18 +22,14 @@ toc:
 ---
 <p class="kicker">engram-factory · the staged delivery loop</p>
 <h1>A factory that turns a wish into a merged, reviewed change.</h1>
-<p class="lead">You bring intent; the factory brings discipline: an interview, agents that analyze, plan and build, discipline reviewers that reproduce claims, and a human gate nothing merges without.</p>
+<p class="lead">You bring intent; the factory brings discipline: an interview, agents that analyze, plan and build, adversarial reviewers that reproduce claims, and a human gate nothing merges without.</p>
+<p>The factory exists to ship <a href="{{ '/engram/' | relative_url }}">engram</a> — a local-first memory and knowledge layer for AI agents — so this page carries both stories: what engram is, and the machine that builds it. Every diagram is drawn from the factory's own artifacts.</p>
 <p>This page explains the whole machine. Every diagram is drawn from the factory's own artifacts — the rail below jumps to any stage.</p>
 {% include toc.html %}
 
-## The loop {#the-loop}
-
-<p>The spine is eight stages, in the loop vocabulary of the factory skill's own <code class="inline">SKILL.md</code>: <code class="inline">FEATURE</code> → <code class="inline">ANALYZE</code> → <code class="inline">PLAN</code> → <code class="inline">TASKS</code> → <code class="inline">BUILD</code> → <code class="inline">REVIEW</code> → <code class="inline">APPROVE</code> → <code class="inline">MERGE</code>.</p>
-<p>The first build starts review round 1. <code class="inline">MAX_REVIEW_ROUNDS = 3</code> allows at most two review-driven rebuilds, and a third round that still requests changes escalates to you instead of looping forever.</p>
-{% include diagram.html id="factory-loop" alt="The factory loop with the review-round rebuild edge, the human gate, merge to main, and the needs-human rework paths" caption="The loop, verbatim semantics from SKILL.md lines 21–59." %}
-<p>(The board's own stage vocabulary is the lowercase nine in <a href="#the-board">the board</a>.)</p>
-
 ## The team — and its two shapes {#the-team}
+
+<p class="kicker">high level · pick a shape, the rest follows</p>
 
 <p>Every job spawns specialist agents: <code class="inline">engram-analyzer</code> writes <code class="inline">analysis.md</code>, <code class="inline">engram-planner</code> writes <code class="inline">plan.md</code>, <code class="inline">engram-tasks</code> writes the task/verification/release trio, <code class="inline">engram-builder</code> builds in an assigned worktree, and <code class="inline">engram-approver</code> writes <code class="inline">decision.md</code>.</p>
 <p>Review comes in exactly two shapes, recorded on the job before the first build:</p>
@@ -49,6 +45,13 @@ toc:
   <p>This very site was built under light mode — that choice is visible in the job's board record, not buried.</p>
 </div>
 {% include diagram.html id="agent-roster" alt="Tree of the factory roster: analyzer, planner, tasks, builder, the eight specialist reviewers, red-forman, qa and the approver, each with the artifact it writes" caption="The roster — every role and the artifact it owns." %}
+
+## How it works — the loop {#the-loop}
+
+<p>The spine is eight stages, in the loop vocabulary of the factory skill's own <code class="inline">SKILL.md</code>: <code class="inline">FEATURE</code> → <code class="inline">ANALYZE</code> → <code class="inline">PLAN</code> → <code class="inline">TASKS</code> → <code class="inline">BUILD</code> → <code class="inline">REVIEW</code> → <code class="inline">APPROVE</code> → <code class="inline">MERGE</code>.</p>
+<p>The first build starts review round 1. <code class="inline">MAX_REVIEW_ROUNDS = 3</code> allows at most two review-driven rebuilds, and a third round that still requests changes escalates to you instead of looping forever.</p>
+{% include diagram.html id="factory-loop" alt="The factory loop with the review-round rebuild edge, the human gate, merge to main, and the needs-human rework paths" caption="The loop, verbatim semantics from SKILL.md lines 21–59." %}
+<p>(The board's own stage vocabulary is the lowercase nine in <a href="#the-board">the board</a>.)</p>
 
 ## The board — nine stages, one job at a time {#the-board}
 

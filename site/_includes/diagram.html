@@ -6,7 +6,7 @@
   anchor rail and gallery links) and mono-labeled (figcaption + fig-id chip).
   Captions and ids are byte-stable content (LED-5, RISK-003): never reword.
 {% endcomment %}
-<figure class="diagram" id="fig-{{ include.id }}">
+<figure class="diagram{% if include.size == 'small' %} small{% endif %}" id="fig-{{ include.id }}">
   <figcaption><span class="mono fig-id">{{ include.id }}</span>{{ include.caption }}</figcaption>
   <img
     src="{{ include.id | append: '.svg' | prepend: 'assets/diagrams/' | relative_url }}"

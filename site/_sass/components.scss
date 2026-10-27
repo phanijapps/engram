@@ -366,3 +366,6 @@ figure.diagram .fig-id {
   .nav { flex-wrap: wrap; gap: 10px; }
   table { font-size: 13px; }
 }
+
+/* owner quick-fix: compact plate for high-level figures — no scroll fatigue */
+.diagram.small svg { max-height: 340px; width: auto; max-width: 100%; margin: 0 auto; display: block; }

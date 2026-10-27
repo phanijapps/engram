@@ -59,8 +59,8 @@ function main() {
       filter: (src) => !isHygiene(src) && !isSymlink(src),
     });
   }
-  process.stdout.write(`generated skills payload: ${skills.length} skills from ${SOURCE}\n`);
-  process.stdout.write(`  ${skills.join(', ')}\n`);
+  process.stderr.write(`generated skills payload: ${skills.length} skills from ${SOURCE}\n`);
+  process.stderr.write(`  ${skills.join(', ')}\n`);
 }
 
 main();

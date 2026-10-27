@@ -1119,7 +1119,9 @@ dependencies = [
 name = "engram-packs"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "engram-domain",
+ "oxrdf",
  "oxrdfio",
  "serde",
  "serde_json",

@@ -7,11 +7,13 @@ rust-version.workspace = true
 
 [dependencies]
 engram-domain = { path = "../domain", version = "0.1.0" }
+chrono = { workspace = true }
 # DEC-P02: oxrdfio parses BOTH pinned formats (Turtle + RDF/XML). The plan
 # named `turtle`/`rdf-xml` cargo features — those do not exist on this crate:
 # oxrdfio compiles oxttl (Turtle) and oxrdfxml (RDF/XML) unconditionally in
 # every published version, so both formats are covered without features.
 oxrdfio = "0.2.7"
+oxrdf = "0.3"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

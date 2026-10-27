@@ -13,8 +13,10 @@
 //! writes, and reporting; this crate owns the pure rules they run.
 
 pub mod catalogue;
+pub mod converter;
 
 pub use catalogue::{
     Catalogue, CatalogueEntry, EMBEDDED_CATALOGUE_JSON, EXCLUDED_LANGUAGE_BASES,
     EXPECTED_ENTRY_COUNT, PackFormat,
 };
+pub use converter::{ConvertedPack, convert_pack};

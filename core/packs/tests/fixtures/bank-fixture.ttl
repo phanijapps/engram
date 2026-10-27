@@ -1,0 +1,55 @@
+# Committed fixture pack (Turtle leg): a small FIBO-shaped banking
+# vocabulary with a two-level class hierarchy and domain/range wiring.
+# Builder-owned test bytes for core/packs converter tests (TASK-006) —
+# deliberately tiny; real pinned pack bytes are fetched by the CLI, never
+# committed here.
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix fibo: <https://spec.edmcouncil.org/fibo/ontology/FIXTURE/> .
+
+<https://spec.edmcouncil.org/fibo/ontology/FIXTURE> a owl:Ontology ;
+    rdfs:label "Fixture banking vocabulary" .
+
+fibo:FinancialInstrument a owl:Class ;
+    rdfs:label "Financial Instrument" .
+
+fibo:DebtInstrument a owl:Class ;
+    rdfs:label "Debt Instrument" ;
+    rdfs:subClassOf fibo:FinancialInstrument .
+
+fibo:Loan a owl:Class ;
+    rdfs:label "Loan" ;
+    rdfs:comment "A debt instrument where one party lends money to another." ;
+    rdfs:subClassOf fibo:DebtInstrument .
+
+fibo:MortgageLoan a owl:Class ;
+    rdfs:label "Mortgage Loan" ;
+    rdfs:subClassOf fibo:Loan .
+
+fibo:DepositAccount a owl:Class ;
+    rdfs:label "Deposit Account" ;
+    rdfs:subClassOf fibo:FinancialInstrument .
+
+fibo:FinancialInstitution a owl:Class ;
+    rdfs:label "Financial Institution" .
+
+fibo:hasBorrower a owl:ObjectProperty ;
+    rdfs:label "has borrower" ;
+    rdfs:domain fibo:Loan ;
+    rdfs:range fibo:FinancialInstitution .
+
+fibo:hasLender a owl:ObjectProperty ;
+    rdfs:label "has lender" ;
+    rdfs:domain fibo:Loan ;
+    rdfs:range fibo:FinancialInstitution .
+
+fibo:principalAmount a owl:DatatypeProperty ;
+    rdfs:label "principal amount" ;
+    rdfs:domain fibo:Loan ;
+    rdfs:range xsd:decimal .
+
+fibo:accountBalance a owl:DatatypeProperty ;
+    rdfs:label "account balance" ;
+    rdfs:domain fibo:DepositAccount ;
+    rdfs:range xsd:decimal .

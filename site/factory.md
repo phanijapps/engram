@@ -129,8 +129,8 @@ toc:
 
 <p>Every figure on this page, titled and anchored — jump straight to a plate:</p>
 <ul>
-  <li><a href="#fig-factory-loop">The factory loop</a></li>
   <li><a href="#fig-team-modes">Team modes</a></li>
+  <li><a href="#fig-factory-loop">The factory loop</a></li>
   <li><a href="#fig-agent-roster">The agent roster</a></li>
   <li><a href="#fig-board-states">The board state machine</a></li>
   <li><a href="#fig-review-rounds">One review round</a></li>

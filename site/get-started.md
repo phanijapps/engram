@@ -34,16 +34,7 @@ npm install -g @engramlabs/mcp@alpha
 <p>Install the server (alpha) and register with your agent — one command each, no JSON editing:</p>
 
 <div class="card" markdown="1">
-  <p class="kicker">01 · Install the server</p>
-
-```
-npm install -g @engramlabs/mcp@alpha
-```
-
-</div>
-
-<div class="card" markdown="1">
-  <p class="kicker">02 · Register with your client</p>
+  <p class="kicker">01 · Register with your client</p>
   <div class="tabs">
     <input type="radio" id="t-claude" name="qs-client" checked>
     <label for="t-claude">claude</label>

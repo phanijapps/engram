@@ -70,7 +70,7 @@ BOUNDARY_PAIRS = ("line-ui-on-paper", "line-ui-on-panel")
 # count equals rendered command blocks. Fifteen = cards 01/03/04 (one block
 # each) + card 02's six client tabs + card 05's five agent tabs + card 05's
 # uninstall tail. A re-broken tab panel drops a <pre> and FAILS this cell.
-GET_STARTED_CODE_BLOCKS = 16  # 15 config blocks + 1 direct install block (owner quick-fix)
+GET_STARTED_CODE_BLOCKS = 15  # 14 config blocks + 1 direct install block (owner quick-fix dedup)
 
 
 def rgb_to_hex(rgb: str) -> str | None:

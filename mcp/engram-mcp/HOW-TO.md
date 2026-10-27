@@ -290,12 +290,29 @@ per-request wiring, always `None` today.
 ```
 engram-mcp recall --storage <dir> --project <p> --query "<text>" [--json] [--limit N]
 engram-mcp status --storage <dir> --project <p> [--json]
+engram-mcp pack list [--catalogue <path>]
+engram-mcp pack install <id> [--slice-size <n>|all] [--validate-graph <id>] \
+                     [--catalogue <path>] --storage <dir> --project <p>
+engram-mcp pack widen <id> [--slice-size <n>|all] --storage <dir> --project <p>
+engram-mcp pack status --storage <dir>
 ```
 
 `recall --json` emits `{ok, hit_count, top_score, elapsed_ms, results:
 [{kind, score, source_score, lanes, evidence, title, content, path}]}`
 — the shape the launcher's recall hook consumes. Errors exit 0 with
 `{ok:false, error}` so hooks fail open.
+
+`pack` manages pinned standard-ontology packs against the project store:
+`pack list` prints the 33-entry pinned catalogue; `pack install` fetches
+once (sha256-verified against the pin; a mismatch is a hard error), caches
+under `<storage>/packs/cache/`, writes the FULL class/property/hierarchy set
+through the existing structural repositories, derives a bounded launch
+slice (default top-150 classes / 40 predicates by descendant count — always
+reported as sliced-vs-available counts), and emits the conventional launch
+configs at `<storage>/packs/launch/<workspace>/{ontology,taxonomy}.json`;
+`pack widen` regenerates a broader slice offline from the cache (restart
+the server to activate); `pack status` prints cache entries with hashes,
+launch-config file hashes, and sliced-vs-available counts.
 
 ### Version identity
 

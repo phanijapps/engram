@@ -80,6 +80,11 @@ struct CatalogueFile {
 struct CatalogueHeader {
     #[serde(default)]
     excluded_language_bases: ExclusionRecord,
+    /// Optional exact-count expectation. The marketplace pin file sets 33
+    /// (RISK-005: count drift fails the load); dev/fixture catalogue
+    /// overrides may omit it.
+    #[serde(default)]
+    expected_count: Option<usize>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -102,13 +107,21 @@ impl Catalogue {
         if file.header.excluded_language_bases.reason.is_empty() {
             return Err("catalogue header is missing the language-base exclusion record".into());
         }
-        let catalogue = Self {
+        let mut catalogue = Self {
             excluded_language_bases: EXCLUDED_LANGUAGE_BASES
                 .iter()
                 .map(|s| s.to_string())
                 .collect(),
             entries: file.entries,
         };
+        if let Some(expected) = file.header.expected_count
+            && catalogue.entries.len() != expected
+        {
+            return Err(format!(
+                "catalogue integrity failures: [\"entry count {} != declared expected count {expected}\"]",
+                catalogue.entries.len()
+            ));
+        }
         let errors = catalogue.validate();
         if errors.is_empty() {
             Ok(catalogue)
@@ -123,12 +136,6 @@ impl Catalogue {
     /// license-restricted entries.
     pub fn validate(&self) -> Vec<String> {
         let mut errors = Vec::new();
-        if self.entries.len() != EXPECTED_ENTRY_COUNT {
-            errors.push(format!(
-                "entry count {} != pinned marketplace count {EXPECTED_ENTRY_COUNT}",
-                self.entries.len()
-            ));
-        }
         let mut seen = HashSet::new();
         for entry in &self.entries {
             if !seen.insert(&entry.id) {
@@ -330,10 +337,10 @@ mod tests {
     }
 
     #[test]
-    fn catalogue_rejects_wrong_count() {
+    fn catalogue_rejects_wrong_declared_count() {
         let base = Catalogue::embedded().expect("embedded catalogue validates");
         let entries: Vec<_> = base.entries[..32].to_vec();
-        let text = tampered_catalogue(entries);
+        let text = catalogue_json_with_expected_count(entries, Some(33));
         let err = Catalogue::from_json(&text).expect_err("count drift must fail");
         assert!(err.contains("32 !="), "got: {err}");
     }
@@ -365,10 +372,18 @@ mod tests {
     /// Rebuild a catalogue JSON document with the same header shape but a
     /// tampered entry set (negative-test helper).
     fn tampered_catalogue(entries: Vec<CatalogueEntry>) -> String {
+        catalogue_json_with_expected_count(entries, None)
+    }
+
+    fn catalogue_json_with_expected_count(
+        entries: Vec<CatalogueEntry>,
+        expected_count: Option<usize>,
+    ) -> String {
         let file = serde_json::json!({
             "_header": {
                 "description": "test",
                 "excluded_language_bases": { "reason": "test exclusion record" },
+                "expected_count": expected_count,
                 "pin_run": {}, "license_policy": ""
             },
             "entries": entries

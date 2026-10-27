@@ -18,6 +18,7 @@ engram-retrieval = { path = "../../core/retrieval", version = "0.1.0" }
 engram-belief = { path = "../../core/belief", version = "0.1.0" }
 engram-hierarchy = { path = "../../core/hierarchy", version = "0.1.0" }
 engram-codegraph-queries = { path = "../../codegraph/queries", version = "0.1.0" }
+engram-packs = { path = "../../core/packs", version = "0.1.0" }
 engram-codegraph-temporal = { path = "../../codegraph/temporal", version = "0.1.0" }
 async-trait = { workspace = true }
 chrono = { workspace = true }

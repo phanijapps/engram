@@ -27,6 +27,9 @@ mod oneshot;
 mod ontology;
 mod outcomes;
 mod ownership;
+mod pack;
+#[cfg(test)]
+mod pack_tests;
 mod predict;
 mod procedures;
 mod proposals;
@@ -115,6 +118,11 @@ LAUNCH FLAGS
 ONE-SHOT SUBCOMMANDS
   recall  --query <text> [--json] [--limit N]   (also honors --storage/--project)
   status  [--json]                              (also honors --storage/--project)
+  pack list|install|widen|status                (pinned standard-ontology packs;
+                                                 honors --storage/--project; install
+                                                 is fetch-once + sha256-verified;
+                                                 launch configs land under
+                                                 <storage>/packs/launch/<workspace>/)
 
 SCOPE RULE
   tenant    = --org || "default"
@@ -173,6 +181,12 @@ fn main() {
     // the recall-on-submit and stale-index hooks.
     if oneshot::is_oneshot(&argv) {
         std::process::exit(oneshot::run(&argv));
+    }
+
+    // Pack one-shot subcommands (plan S7): `engram-mcp pack list|install|widen|status`
+    // run against the store + local cache and exit — no MCP server loop.
+    if pack::is_pack_command(&argv) {
+        std::process::exit(pack::run(&argv[1..]));
     }
 
     // Help/version: recognized anywhere in the flags, exit before parsing

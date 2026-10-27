@@ -13,7 +13,8 @@
       "one_time": true,
       "note": "sha256 recorded from a single first fetch per entry; a later first-fetch mismatch is a hard error with a re-pin procedure (RISK-001) - never overwrite a pin to make a fetch pass."
     },
-    "license_policy": "license_source is 'pack-bytes' when the fetched pack declares its license, else 'publisher' for the publisher's documented license. Zero entries carry license-restricted terms (AC-016)."
+    "license_policy": "license_source is 'pack-bytes' when the fetched pack declares its license, else 'publisher' for the publisher's documented license. Zero entries carry license-restricted terms (AC-016).",
+    "expected_count": 33
   },
   "entries": [
     {

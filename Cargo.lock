@@ -1063,6 +1063,7 @@ dependencies = [
  "engram-ingest",
  "engram-integration",
  "engram-knowledge",
+ "engram-packs",
  "engram-retrieval",
  "futures",
  "regex",

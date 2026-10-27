@@ -21,6 +21,7 @@ pub use catalogue::{
     EXPECTED_ENTRY_COUNT, PackFormat,
 };
 pub use converter::{ConvertedPack, convert_pack};
+pub use slice::{DEFAULT_CLASS_CAP, DEFAULT_PREDICATE_CAP, SliceRule, SliceSelection, SliceSize};
 
 #[cfg(test)]
 mod test_support;

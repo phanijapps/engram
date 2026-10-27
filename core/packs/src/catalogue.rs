@@ -107,7 +107,7 @@ impl Catalogue {
         if file.header.excluded_language_bases.reason.is_empty() {
             return Err("catalogue header is missing the language-base exclusion record".into());
         }
-        let mut catalogue = Self {
+        let catalogue = Self {
             excluded_language_bases: EXCLUDED_LANGUAGE_BASES
                 .iter()
                 .map(|s| s.to_string())

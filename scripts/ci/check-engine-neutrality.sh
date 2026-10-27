@@ -48,6 +48,7 @@ else
     "$ROOT/mcp/engram-mcp/src"
     "$ROOT/core/integration/src/knowledge_query.rs"
     "$ROOT/core/integration/src/lexical_feed.rs"
+    "$ROOT/core/packs/src"
   )
 fi
 

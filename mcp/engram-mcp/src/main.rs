@@ -551,7 +551,7 @@ fn register_all_tools(registry: &mut ToolRegistry<App>) {
         input_schema: json!({
             "type": "object",
             "properties": {
-                "facts": { "type": "array", "items": { "type": "object", "properties": { "content": { "type": "string" } }, "required": ["content"] } },
+                "facts": { "type": "array", "items": { "type": "object", "properties": { "content": { "type": "string" }, "verdict": { "type": "string", "enum": ["asserted_by_agent", "grounded_in_source"], "description": "Optional assertion verdict for this fact (DEC-P06). Default asserted_by_agent; 'derived' is reserved for the derivation layer and rejected." } }, "required": ["content"] } },
                 "entities": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "kind": { "type": "string" } }, "required": ["name"] } },
                 "relationships": { "type": "array", "items": { "type": "object", "properties": { "subject": { "type": "string" }, "predicate": { "type": "string" }, "object": { "type": "string" } }, "required": ["subject", "predicate", "object"] } },
                 "idempotency_key": { "type": "string", "description": "Omit only if you do not need re-send dedup; otherwise supply a stable caller-chosen key. Use a NEW key for a revision (same key + changed payload dedupes to the old content)." },

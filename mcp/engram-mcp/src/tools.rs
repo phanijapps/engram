@@ -1145,6 +1145,27 @@ pub(crate) mod tests {
         );
     }
 
+    /// FIND-code-003 regression: the advertised store_knowledge schema must
+    /// carry the per-fact verdict property so schema-driven agents discover
+    /// the input REQ-012 depends on.
+    #[test]
+    fn store_knowledge_schema_advertises_fact_verdict() {
+        let text = include_str!("main.rs");
+        let start = text
+            .find("name: \"store_knowledge\"")
+            .expect("tool registration");
+        let schema_at = text[start..].find("input_schema").expect("schema follows") + start;
+        let window = &text[schema_at..schema_at + 1200];
+        assert!(
+            window.contains("\"verdict\"") && window.contains("\"grounded_in_source\""),
+            "facts item schema advertises the verdict enum"
+        );
+        assert!(
+            !window.contains("\"derived\""),
+            "the advertised write enum carries only the two writable words"
+        );
+    }
+
     /// FIND-code-002 / FIND-platform-002 regression: the facade write_memory
     /// surface (the seam N-API writeMemoryJson and every Rust embedder ride)
     /// inherits the reserved-verdict rejection from the shared validation —

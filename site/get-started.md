@@ -16,6 +16,17 @@ toc:
 <h1>Install engram.</h1>
 <p class="lead">One npm command installs the MCP server; one <code class="inline">engram-mcp</code> command registers it with your agent or delivers the full skill bundle.</p>
 <p>Everything below is the launcher's own documented flow — including the warts. Copy any block with the button at its top-right corner.</p>
+
+<div class="card" markdown="1">
+  <p class="kicker">install · copy and go</p>
+
+```
+npm install -g @engramlabs/mcp@alpha
+```
+
+  <p><a class="btn primary" href="#quick-start">More setup → configs</a> <a class="btn ghost" href="#agent-bundle">Agent bundle</a></p>
+</div>
+
 {% include toc.html %}
 
 ## Quick start {#quick-start}

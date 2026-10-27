@@ -70,7 +70,7 @@ BOUNDARY_PAIRS = ("line-ui-on-paper", "line-ui-on-panel")
 # count equals rendered command blocks. Fifteen = cards 01/03/04 (one block
 # each) + card 02's six client tabs + card 05's five agent tabs + card 05's
 # uninstall tail. A re-broken tab panel drops a <pre> and FAILS this cell.
-GET_STARTED_CODE_BLOCKS = 15
+GET_STARTED_CODE_BLOCKS = 16  # 15 config blocks + 1 direct install block (owner quick-fix)
 
 
 def rgb_to_hex(rgb: str) -> str | None:
@@ -170,7 +170,7 @@ if failures:
         print(f"render-probe: FAIL {f}")
     sys.exit(1)
 print(f"render-probe: OK — D2 tokens, browser-computed contrast (16 body pairs ≥ 4.5:1 incl. block-on-plate 6.19:1, "
-      "2 boundary pairs ≥ 3:1), four font faces, all 15 copy buttons on /get-started/, 360px overflow and same-origin only "
+      "2 boundary pairs ≥ 3:1), four font faces, all ${GET_STARTED_CODE_BLOCKS} copy buttons on /get-started/, 360px overflow and same-origin only "
       f"all hold on 8 dark cells; no toggle/swap assertions remain; report at {report_path}")
 PYEOF
 STATUS=$?

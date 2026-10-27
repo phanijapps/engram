@@ -221,18 +221,43 @@ fn main() {
         std::process::exit(1);
     });
 
-    // Resolve the multi-layer ontology + taxonomy config (file or baked-in
-    // default). Persistence into the ontology/taxonomy repositories lands in T4b.
-    let ontology = ontology::resolve_ontology_config(config.ontology_path.as_deref())
-        .unwrap_or_else(|message| {
-            eprintln!("engram-mcp: {message}");
-            std::process::exit(1);
-        });
-    let taxonomy = ontology::resolve_taxonomy_config(config.taxonomy_path.as_deref())
-        .unwrap_or_else(|message| {
-            eprintln!("engram-mcp: {message}");
-            std::process::exit(1);
-        });
+    // Resolve the multi-layer ontology + taxonomy config. Precedence (DEC-P03):
+    // explicit --ontology/--taxonomy flag > conventional per-workspace launch
+    // file written by `engram-mcp pack install` (loaded only when present and
+    // no flag is passed) > baked-in 3-layer default. With no pack installed
+    // and no flag, the default is byte-identical to the pre-pack behavior.
+    let launch_workspace = {
+        let launch_scope = scope::resolve_scope(
+            config.org.as_deref(),
+            config.domain.as_deref(),
+            config.subdomain.as_deref(),
+            &config.project,
+        );
+        launch_scope
+            .workspace
+            .clone()
+            .unwrap_or_else(|| "default".to_owned())
+    };
+    let conventional_ontology =
+        ontology::conventional_ontology_path(&config.storage_path, &launch_workspace);
+    let conventional_taxonomy =
+        ontology::conventional_taxonomy_path(&config.storage_path, &launch_workspace);
+    let ontology = ontology::resolve_ontology_config_with_conventional(
+        config.ontology_path.as_deref(),
+        Some(&conventional_ontology),
+    )
+    .unwrap_or_else(|message| {
+        eprintln!("engram-mcp: {message}");
+        std::process::exit(1);
+    });
+    let taxonomy = ontology::resolve_taxonomy_config_with_conventional(
+        config.taxonomy_path.as_deref(),
+        Some(&conventional_taxonomy),
+    )
+    .unwrap_or_else(|message| {
+        eprintln!("engram-mcp: {message}");
+        std::process::exit(1);
+    });
 
     let app = App {
         provider,

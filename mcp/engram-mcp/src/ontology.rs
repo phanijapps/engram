@@ -12,7 +12,7 @@
 //! `across` predicates bridge layers (e.g. `realized_by` ties a business
 //! concept to a technical artifact).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -189,6 +189,77 @@ pub fn resolve_ontology_config(path: Option<&Path>) -> Result<OntologyConfig, St
     }
 }
 
+/// The conventional per-workspace launch path (DEC-P03):
+/// `<storage>/packs/launch/<workspace>/ontology.json`.
+pub fn conventional_ontology_path(storage: &Path, workspace: &str) -> PathBuf {
+    storage
+        .join("packs")
+        .join("launch")
+        .join(workspace)
+        .join("ontology.json")
+}
+
+/// The conventional per-workspace taxonomy path (DEC-P03).
+pub fn conventional_taxonomy_path(storage: &Path, workspace: &str) -> PathBuf {
+    storage
+        .join("packs")
+        .join("launch")
+        .join(workspace)
+        .join("taxonomy.json")
+}
+
+/// Fallback-only conventional resolution (DEC-P03): the conventional file
+/// loads ONLY when no explicit flag is passed AND the file exists; the
+/// explicit flag always wins; with neither, the baked-in default returns
+/// unchanged (no-pack behavior stays byte-identical, AC-011).
+/// A malformed conventional file is an honest error — it is never silently
+/// skipped, because a pack install wrote it and hiding it would hide the
+/// pack.
+pub fn resolve_ontology_config_with_conventional(
+    flag: Option<&Path>,
+    conventional: Option<&Path>,
+) -> Result<OntologyConfig, String> {
+    match (flag, conventional.filter(|p| p.exists())) {
+        (Some(explicit), _) => resolve_ontology_config(Some(explicit)),
+        (None, Some(path)) => {
+            let text = std::fs::read_to_string(path).map_err(|e| {
+                format!("read conventional ontology config {}: {e}", path.display())
+            })?;
+            OntologyConfig::from_json(&text).map_err(|e| {
+                format!(
+                    "conventional launch config {} is malformed — delete it or re-run \
+                     `engram-mcp pack install`: {e}",
+                    path.display()
+                )
+            })
+        }
+        (None, None) => Ok(OntologyConfig::default()),
+    }
+}
+
+/// Taxonomy twin of [`resolve_ontology_config_with_conventional`].
+pub fn resolve_taxonomy_config_with_conventional(
+    flag: Option<&Path>,
+    conventional: Option<&Path>,
+) -> Result<TaxonomyConfig, String> {
+    match (flag, conventional.filter(|p| p.exists())) {
+        (Some(explicit), _) => resolve_taxonomy_config(Some(explicit)),
+        (None, Some(path)) => {
+            let text = std::fs::read_to_string(path).map_err(|e| {
+                format!("read conventional taxonomy config {}: {e}", path.display())
+            })?;
+            TaxonomyConfig::from_json(&text).map_err(|e| {
+                format!(
+                    "conventional taxonomy config {} is malformed — delete it or re-run \
+                     `engram-mcp pack install`: {e}",
+                    path.display()
+                )
+            })
+        }
+        (None, None) => Ok(TaxonomyConfig::default()),
+    }
+}
+
 /// Resolve the taxonomy config from a file path, or fall back to the default.
 pub fn resolve_taxonomy_config(path: Option<&Path>) -> Result<TaxonomyConfig, String> {
     match path {
@@ -300,6 +371,76 @@ mod tests {
     fn resolve_ontology_defaults_when_no_path() {
         let cfg = resolve_ontology_config(None).unwrap();
         assert_eq!(cfg, OntologyConfig::default());
+    }
+
+    #[test]
+    fn resolve_explicit_flag_wins_over_conventional() {
+        let dir = tempfile::tempdir().unwrap();
+        let flag_path = dir.path().join("flag.json");
+        std::fs::write(
+            &flag_path,
+            r#"{"layers":[{"name":"technical","classes":["FromFlag"]}],"predicates":{}}"#,
+        )
+        .unwrap();
+        let conventional = dir.path().join("conventional.json");
+        std::fs::write(
+            &conventional,
+            r#"{"layers":[{"name":"technical","classes":["FromPack"]}],"predicates":{}}"#,
+        )
+        .unwrap();
+        let cfg = resolve_ontology_config_with_conventional(Some(&flag_path), Some(&conventional))
+            .unwrap();
+        assert_eq!(cfg.layers[0].classes, vec!["FromFlag".to_owned()]);
+    }
+
+    #[test]
+    fn resolve_conventional_loads_only_when_no_flag_and_present() {
+        let dir = tempfile::tempdir().unwrap();
+        let conventional = dir.path().join("conventional.json");
+        std::fs::write(
+            &conventional,
+            r#"{"layers":[{"name":"technical","classes":["FromPack"]}],"predicates":{}}"#,
+        )
+        .unwrap();
+        let cfg = resolve_ontology_config_with_conventional(None, Some(&conventional)).unwrap();
+        assert_eq!(cfg.layers[0].classes, vec!["FromPack".to_owned()]);
+        // The conventional path may also be absent.
+        let absent = dir.path().join("missing.json");
+        let cfg = resolve_ontology_config_with_conventional(None, Some(&absent)).unwrap();
+        assert_eq!(cfg, OntologyConfig::default());
+    }
+
+    #[test]
+    fn resolve_absent_conventional_is_the_byte_identical_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let absent = dir.path().join("missing.json");
+        let cfg = resolve_ontology_config_with_conventional(None, Some(&absent)).unwrap();
+        assert_eq!(cfg, OntologyConfig::default());
+        let taxonomy = resolve_taxonomy_config_with_conventional(None, Some(&absent)).unwrap();
+        assert_eq!(taxonomy, TaxonomyConfig::default());
+    }
+
+    #[test]
+    fn resolve_malformed_conventional_is_an_honest_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let conventional = dir.path().join("conventional.json");
+        std::fs::write(&conventional, "{ not json").unwrap();
+        let err = resolve_ontology_config_with_conventional(None, Some(&conventional)).unwrap_err();
+        assert!(err.contains("malformed"), "got: {err}");
+        assert!(err.contains("pack install"), "names the repair: {err}");
+    }
+
+    #[test]
+    fn resolve_conventional_paths_are_per_workspace() {
+        let storage = std::path::Path::new("/tmp/somewhere");
+        assert_eq!(
+            conventional_ontology_path(storage, "proj-a"),
+            std::path::PathBuf::from("/tmp/somewhere/packs/launch/proj-a/ontology.json")
+        );
+        assert_eq!(
+            conventional_taxonomy_path(storage, "proj-b"),
+            std::path::PathBuf::from("/tmp/somewhere/packs/launch/proj-b/taxonomy.json")
+        );
     }
 
     #[test]

@@ -257,8 +257,8 @@ table must not drift from it).
 | `--org <name>` | Organization → `scope.tenant` | `"default"` |
 | `--domain <name>` | Domain → overrides `--project` as workspace | — |
 | `--subdomain <name>` | With `--domain`: workspace becomes `domain/subdomain` | — |
-| `--ontology <path>` | Multi-layer ontology config (JSON) | baked-in default |
-| `--taxonomy <path>` | Taxonomy config (JSON) | baked-in default |
+| `--ontology <path>` | Multi-layer ontology config (JSON); always wins over the conventional path below | baked-in default |
+| `--taxonomy <path>` | Taxonomy config (JSON); always wins over the conventional path below | baked-in default |
 | `--layout single\|multi` | SQLite file layout | `single` |
 | `--db-file <name>` | DB filename override | — |
 | `--tools core\|full\|all\|consolidated` | Tool profile (21 / 28 / all / 7) | `core` |
@@ -278,6 +278,16 @@ survive mode switches. New content ingested while off needs explicit backfill;
 changing model/provider/dimensions can instead require a vector-only rebuild.
 See the [configuration guide](../../packages/launcher/CONFIGURATION.md) before
 resetting vectors: never delete the shared database to repair the vector lane.
+
+**Conventional launch path (pack installs).** When no `--ontology` /
+`--taxonomy` flag is passed and `<storage>/packs/launch/<workspace>/ontology.json`
+(or `taxonomy.json`) exists — written by `engram-mcp pack install` — the
+server loads it as the launch config. The explicit flag always wins; an
+absent conventional file means the baked-in default, byte-identical to
+behaving with no packs installed. A malformed conventional file is a hard
+start error naming the file and the repair (`pack install` re-run). Config
+is read once at start: after `pack install` or `pack widen`, restart the
+server to activate the new slice.
 
 **Scope rule** (`scope.rs`): `tenant = --org || "default"`;
 `workspace = --domain/--subdomain || --domain || --project`. The scope

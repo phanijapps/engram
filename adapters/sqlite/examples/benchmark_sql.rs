@@ -57,6 +57,7 @@ fn write_request(index: usize) -> WriteMemoryRequest {
         provenance: provenance(),
         policy: policy(),
         links: Vec::new(),
+        verdict: None,
         idempotency_key: Some(format!("benchmark-memory-{index}")),
     }
 }

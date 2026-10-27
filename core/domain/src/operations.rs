@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ConsolidationRunId, ContextPayload, DeleteMode, EvidenceRef, MemoryContent, MemoryEvent,
     MemoryKind, MemoryLink, MemoryRecord, Policy, Provenance, Requester, Scope, SourceId,
-    Timestamp,
+    Timestamp, Verdict,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -23,6 +23,10 @@ pub struct WriteMemoryRequest {
     pub policy: Policy,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub links: Vec<MemoryLink>,
+    /// Optional assertion verdict stamped onto the written record
+    /// (DEC-P06); absent means no verdict on this write surface.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub verdict: Option<Verdict>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<String>,
 }

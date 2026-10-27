@@ -206,6 +206,7 @@ impl ProposalService {
             },
             policy: payload.policy,
             links: payload.links,
+            verdict: None,
             idempotency_key: Some(promotion_key.clone()),
         };
         let written = match self.memory.write_memory(write).await {

@@ -284,6 +284,20 @@ impl MatchMode {
     }
 }
 
+/// Additive verdict metadata for the recall item header (DEC-P06): the
+/// fact's verdict word rides the existing `metadata` slot (None for legacy
+/// records — no field is added, removed, or retyped).
+pub(crate) fn verdict_metadata(record: &MemoryRecord) -> Option<engram_domain::Metadata> {
+    let verdict = record.verdict?;
+    let word = serde_json::to_value(verdict)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_owned))
+        .unwrap_or_default();
+    let mut map = engram_domain::Metadata::new();
+    map.insert("verdict".to_owned(), serde_json::json!(word));
+    Some(map)
+}
+
 fn build_result(
     index: usize,
     total: f32,
@@ -304,6 +318,7 @@ fn build_result(
     let matched_cues = cm.as_ref().map(|m| m.matched.clone()).unwrap_or_default();
     let cm_score = cm.map(|m| m.score);
 
+    let verdict_meta = verdict_metadata(&record);
     let explanation = include_explanation.then(|| RetrievalExplanation {
         reason: mode.reason().to_owned(),
         matched_cues,
@@ -346,7 +361,7 @@ fn build_result(
             discard_reason: None,
             deduplicated_with: Vec::new(),
         }),
-        metadata: None,
+        metadata: verdict_meta,
     }
 }
 

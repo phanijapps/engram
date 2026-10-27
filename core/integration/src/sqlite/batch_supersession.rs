@@ -425,6 +425,7 @@ where
             provenance: stamped.provenance.clone(),
             policy: stamped.policy.clone(),
             links: stamped.links.clone(),
+            verdict: None,
             idempotency_key: Some(per_record_key),
         };
         match memory.write_memory(write_request).await {

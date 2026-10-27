@@ -277,6 +277,7 @@ fn write(text: &str) -> SequentialEvent {
         },
         policy: policy(),
         links: vec![],
+        verdict: None,
         idempotency_key: None,
     })
 }

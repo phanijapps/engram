@@ -97,6 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 delete_mode: Some(DeleteMode::Tombstone),
             },
             links: Vec::new(),
+            verdict: None,
             idempotency_key: None,
         })
         .await?;

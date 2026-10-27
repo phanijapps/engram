@@ -67,6 +67,7 @@ fn write_request(tenant: &str) -> WriteMemoryRequest {
         provenance: provenance(),
         policy: policy(),
         links: Vec::new(),
+        verdict: None,
         idempotency_key: None,
     }
 }

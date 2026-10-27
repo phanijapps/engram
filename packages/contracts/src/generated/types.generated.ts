@@ -453,6 +453,10 @@ export interface WriteMemoryRequest {
   provenance: Provenance;
   requester: Requester;
   scope: Scope;
+  /**
+   * Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface.
+   */
+  verdict?: "asserted_by_agent" | "grounded_in_source" | "derived";
 }
 export interface MemoryContent {
   entities?: EntityRef[];

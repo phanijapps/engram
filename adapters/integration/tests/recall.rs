@@ -157,6 +157,7 @@ fn seed_memory(memory: &Arc<SqlMemoryService>, query: &str, suffix: &str) -> Id 
         provenance: provenance(),
         policy: policy(),
         links: Vec::new(),
+        verdict: None,
         idempotency_key: None,
     }))
     .expect("write memory");
@@ -997,6 +998,7 @@ fn facts_request(text: &str, method: Option<String>) -> engram_domain::WriteMemo
         provenance,
         policy: policy(),
         links: vec![],
+        verdict: None,
         idempotency_key: None,
     }
 }

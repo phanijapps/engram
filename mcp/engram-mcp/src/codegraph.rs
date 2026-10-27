@@ -194,15 +194,25 @@ fn provenance_repo_label(source: &str) -> String {
 /// WHERE each result came from AND how strongly that lane matched on its own
 /// scale (cosine / BM25 / …), not just the fused rank score.
 fn recall_provenance_suffix(item: &RetrievalResult) -> String {
+    // Verdict segment (DEC-P06, additive-only): appended when the record
+    // carries a verdict word; legacy records render exactly as before.
+    let verdict_seg = item
+        .metadata
+        .as_ref()
+        .and_then(|m| m.get("verdict"))
+        .and_then(|v| v.as_str())
+        .filter(|word| !word.is_empty())
+        .map(|word| format!(", verdict: {word}"))
+        .unwrap_or_default();
     match item.fusion_trace.as_ref() {
         Some(t) => match t.source_score {
             Some(raw) => format!(
-                "[{}, raw={:.2}, rrf={:.2}]",
+                "[{}, raw={:.2}, rrf={:.2}{verdict_seg}]",
                 t.source, raw, item.score.total
             ),
-            None => format!("[{}, rrf={:.2}]", t.source, item.score.total),
+            None => format!("[{}, rrf={:.2}{verdict_seg}]", t.source, item.score.total),
         },
-        None => format!("[?, rrf={:.2}]", item.score.total),
+        None => format!("[?, rrf={:.2}{verdict_seg}]", item.score.total),
     }
 }
 
@@ -4515,6 +4525,26 @@ mod tests {
     }
 
     #[test]
+    fn verdict_segment_is_additive_on_suffix() {
+        let mut item = recall_item(RetrievalTargetType::Memory, "m1");
+        item.fusion_trace = Some(make_trace("facts+temporal", Some(0.71)));
+        let mut metadata = engram_domain::Metadata::new();
+        metadata.insert(
+            "verdict".to_owned(),
+            serde_json::json!("grounded_in_source"),
+        );
+        item.metadata = Some(metadata);
+        let suffix = recall_provenance_suffix(&item);
+        assert!(
+            suffix.contains("verdict: grounded_in_source"),
+            "verdict rides the suffix additively: {suffix}"
+        );
+        assert!(
+            suffix.contains("raw=0.71") && suffix.contains("rrf="),
+            "existing segments stay untouched: {suffix}"
+        );
+    }
+
     fn recall_provenance_suffix_shows_raw_and_rrf() {
         // Option B: evidence-mode suffix surfaces raw lane score + rrf.
         let mut item = recall_item(RetrievalTargetType::Entity, "e1");

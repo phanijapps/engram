@@ -74,6 +74,7 @@ fn write_req(text: &str) -> WriteMemoryRequest {
             delete_mode: None,
         },
         links: Vec::new(),
+        verdict: None,
         idempotency_key: None,
     }
 }

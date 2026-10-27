@@ -107,6 +107,7 @@ fn rust_write_memory_request_matches_v1_schema() {
         provenance: provenance(),
         policy: policy(),
         links: Vec::new(),
+        verdict: None,
         idempotency_key: Some("schema-write-001".to_owned()),
     };
 

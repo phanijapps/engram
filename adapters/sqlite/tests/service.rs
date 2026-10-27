@@ -72,6 +72,7 @@ fn role_request(
             delete_mode: Some(DeleteMode::Archive),
         },
         links: Vec::new(),
+        verdict: None,
         idempotency_key: Some(key.to_owned()),
     }
 }

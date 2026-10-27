@@ -152,6 +152,7 @@ pub fn write_memory(app: &App, args: &Value) -> Result<Value, ToolError> {
         provenance: provenance("mcp-write"),
         policy: policy(),
         links: Vec::new(),
+        verdict: None,
         idempotency_key: None,
     };
     let response = block_on(memory.write_memory(request)).map_err(internal)?;
@@ -418,11 +419,22 @@ pub fn recall(app: &App, args: &Value) -> Result<Value, ToolError> {
         } else {
             lane_names.to_owned()
         };
+        // Verdict header segment (DEC-P06, additive-only): a fact item whose
+        // record carries a verdict word gains ONE segment; nothing is removed
+        // or retyped. Legacy records (no verdict) render exactly as before.
+        let verdict_seg = item
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("verdict"))
+            .and_then(|v| v.as_str())
+            .filter(|word| !word.is_empty())
+            .map(|word| format!(" · verdict: {word}"))
+            .unwrap_or_default();
         let header = match (raw_seg.is_empty(), lanes_seg == "—") {
-            (true, true) => format!("[{kind}]"),
-            (true, false) => format!("[{kind} · lanes: {lanes_seg}]"),
-            (false, true) => format!("[{kind} · {raw_seg}]"),
-            (false, false) => format!("[{kind} · {raw_seg} · lanes: {lanes_seg}]"),
+            (true, true) => format!("[{kind}{verdict_seg}]"),
+            (true, false) => format!("[{kind} · lanes: {lanes_seg}{verdict_seg}]"),
+            (false, true) => format!("[{kind} · {raw_seg}{verdict_seg}]"),
+            (false, false) => format!("[{kind} · {raw_seg} · lanes: {lanes_seg}{verdict_seg}]"),
         };
         // +1 for the header/content newline, +5 for the "\n---\n" separator.
         let would_be = joined.len() + header.len() + excerpt.len() + 6;
@@ -1069,6 +1081,7 @@ pub(crate) mod tests {
             provenance: provenance("test"),
             policy: policy(),
             links: Vec::new(),
+            verdict: None,
             idempotency_key: None,
         };
         block_on(memory.write_memory(write_req)).expect("write");
@@ -1093,6 +1106,42 @@ pub(crate) mod tests {
         assert!(
             !leaked,
             "recall under a different workspace must be isolated"
+        );
+    }
+
+    /// Verdict surfacing (DEC-P06, additive-only): recall fact-item headers
+    /// gain exactly one verdict segment; existing segments stay untouched.
+    #[test]
+    fn verdict_word_surfaces_on_recall_fact_headers() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        store_knowledge(
+            &app,
+            &json!({
+                "facts": [
+                    { "content": "Zqwxj lodgment fee applies to every transfer.", "verdict": "grounded_in_source" },
+                    { "content": "Zqwxj plain agent assertion without a source." }
+                ]
+            }),
+        )
+        .expect("store facts");
+        let res = recall(
+            &app,
+            &json!({ "query": "Zqwxj", "limit": 10, "lanes": ["memory"] }),
+        )
+        .expect("recall");
+        let text = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            text.contains("verdict: grounded_in_source"),
+            "the grounded fact carries its verdict word: {text}"
+        );
+        assert!(
+            text.contains("verdict: asserted_by_agent"),
+            "the default-stamped fact carries its verdict word: {text}"
+        );
+        assert!(
+            text.contains("[memory"),
+            "the kind segment is untouched (additive-only): {text}"
         );
     }
 

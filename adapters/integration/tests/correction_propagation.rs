@@ -82,6 +82,7 @@ fn write_request(text: &str) -> WriteMemoryRequest {
         },
         policy: policy(),
         links: vec![],
+        verdict: None,
         idempotency_key: None,
     }
 }

@@ -2046,6 +2046,13 @@ export const engramV1Schema = {
         },
         "scope": {
           "$ref": "#/$defs/Scope"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict",
+          "description": "Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface.",
+          "examples": [
+            "grounded_in_source"
+          ]
         }
       },
       "required": [

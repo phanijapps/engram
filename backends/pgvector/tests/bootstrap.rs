@@ -562,6 +562,7 @@ fn pg_recipe_sqlite_export_import_round_trip() {
         provenance: provenance.clone(),
         policy: policy.clone(),
         links: Vec::new(),
+        verdict: None,
         idempotency_key: None,
     };
     let memory = sqlite.require_memory().expect("memory handle");
@@ -610,6 +611,7 @@ fn pg_recipe_sqlite_export_import_round_trip() {
                     provenance: provenance.clone(),
                     policy: policy_json,
                     links: Vec::new(),
+                    verdict: None,
                     idempotency_key: None,
                 })
                 .await

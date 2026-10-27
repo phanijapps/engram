@@ -171,7 +171,7 @@ fn memory_result(record: &MemoryRecord, score: f32) -> RetrievalResult {
             discard_reason: None,
             deduplicated_with: Vec::new(),
         }),
-        metadata: None,
+        metadata: crate::memory::retrieval::verdict_metadata(record),
     }
 }
 

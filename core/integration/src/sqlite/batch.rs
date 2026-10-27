@@ -180,6 +180,7 @@ impl SqlBatchIngest {
                 provenance: record.provenance.clone(),
                 policy: record.policy.clone(),
                 links: record.links.clone(),
+                verdict: record.verdict,
                 idempotency_key: Some(per_record_key),
             };
             match self.memory.write_memory(write_request).await {

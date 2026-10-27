@@ -170,7 +170,7 @@ if failures:
         print(f"render-probe: FAIL {f}")
     sys.exit(1)
 print(f"render-probe: OK — D2 tokens, browser-computed contrast (16 body pairs ≥ 4.5:1 incl. block-on-plate 6.19:1, "
-      "2 boundary pairs ≥ 3:1), four font faces, all ${GET_STARTED_CODE_BLOCKS} copy buttons on /get-started/, 360px overflow and same-origin only "
+      "2 boundary pairs ≥ 3:1), four font faces, all '"$GET_STARTED_CODE_BLOCKS"' copy buttons on /get-started/, 360px overflow and same-origin only "
       f"all hold on 8 dark cells; no toggle/swap assertions remain; report at {report_path}")
 PYEOF
 STATUS=$?

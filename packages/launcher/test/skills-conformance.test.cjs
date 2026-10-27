@@ -125,8 +125,12 @@ test('expected set derives from the authored source, knowledge skills all ship',
     assert.ok(AUTHORED_SKILLS.includes(skill), `knowledge skill ${skill} missing from the authored set`);
   }
   // The workflow class is exactly the authored set minus knowledge — today
-  // engram-factory, engram-frame, outcome-reporting (DEC-005).
-  assert.deepEqual(WORKFLOW_SKILLS, ['engram-factory', 'engram-frame', 'outcome-reporting'].sort());
+  // engram-domain, engram-factory, engram-frame, outcome-reporting
+  // (DEC-005; engram-domain joined with the standard-ontology-packs job).
+  assert.deepEqual(
+    WORKFLOW_SKILLS,
+    ['engram-domain', 'engram-factory', 'engram-frame', 'outcome-reporting'].sort(),
+  );
 });
 
 for (const skill of KNOWLEDGE_SKILLS) {
@@ -231,7 +235,9 @@ test('every tool named in skills exists on the live server', { timeout: 30000 },
     'engram-mem': [],
     'engram-distill': ['--tools', 'all'],
     // Workflow skills document the core profile (factory/frame carry no
-    // tool-call examples; outcome-reporting uses report_outcome).
+    // tool-call examples; outcome-reporting uses report_outcome;
+    // engram-domain documents ontology/taxonomy reads like distill).
+    'engram-domain': ['--tools', 'all'],
     'engram-factory': [],
     'engram-frame': [],
     'outcome-reporting': [],

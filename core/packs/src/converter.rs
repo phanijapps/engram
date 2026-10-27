@@ -64,7 +64,15 @@ pub fn convert_pack(
         PackFormat::RdfXml => RdfFormat::RdfXml,
     };
     let mut quads: Vec<Quad> = Vec::new();
-    for quad in RdfParser::from_format(rdf_format).for_slice(bytes) {
+    // Lenient parsing (real-world packs): curated standards bytes still carry
+    // occasional syntax drift (e.g. relative IRIs in the archived locn.ttl and
+    // void.ttl). Lenient mode skips those lines with warnings instead of
+    // failing the whole pack; the empty-pack guard below still refuses a pack
+    // that declares no terms.
+    for quad in RdfParser::from_format(rdf_format)
+        .lenient()
+        .for_slice(bytes)
+    {
         let quad = quad.map_err(|e| format!("parse pack {pack_id}: {e}"))?;
         quads.push(quad);
     }

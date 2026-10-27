@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Curated GoodRelations-term fixture pack (commerce leg, RDF/XML). REAL
+     GoodRelations e-commerce vocabulary terms (purl.org/goodrelations/v1
+     URIs, CC BY 3.0 — see core/packs/data/catalogue.json entry
+     `goodrelations`) selected for the third-domain offline rehearsal.
+     Builder-owned committed fixture bytes for
+     scripts/dev/pack_catalogue_check.sh. -->
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+         xmlns:owl="http://www.w3.org/2002/07/owl#"
+         xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+         xmlns:gr="http://purl.org/goodrelations/v1#">
+
+  <owl:Ontology rdf:about="http://purl.org/goodrelations/v1">
+    <rdfs:label>GoodRelations commerce fixture</rdfs:label>
+  </owl:Ontology>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#BusinessEntity">
+    <rdfs:label>Business Entity</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#Offering">
+    <rdfs:label>Offering</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#ProductOrService">
+    <rdfs:label>Product Or Service</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#ProductOrServiceModel">
+    <rdfs:label>Product Or Service Model</rdfs:label>
+    <rdfs:subClassOf rdf:resource="http://purl.org/goodrelations/v1#ProductOrService"/>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#SomeItems">
+    <rdfs:label>Some Items</rdfs:label>
+    <rdfs:subClassOf rdf:resource="http://purl.org/goodrelations/v1#ProductOrService"/>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#Individual">
+    <rdfs:label>Individual</rdfs:label>
+    <rdfs:subClassOf rdf:resource="http://purl.org/goodrelations/v1#ProductOrService"/>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#PriceSpecification">
+    <rdfs:label>Price Specification</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#UnitPriceSpecification">
+    <rdfs:label>Unit Price Specification</rdfs:label>
+    <rdfs:subClassOf rdf:resource="http://purl.org/goodrelations/v1#PriceSpecification"/>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#DeliveryChargeSpecification">
+    <rdfs:label>Delivery Charge Specification</rdfs:label>
+    <rdfs:subClassOf rdf:resource="http://purl.org/goodrelations/v1#PriceSpecification"/>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#PaymentChargeSpecification">
+    <rdfs:label>Payment Charge Specification</rdfs:label>
+    <rdfs:subClassOf rdf:resource="http://purl.org/goodrelations/v1#PriceSpecification"/>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#Location">
+    <rdfs:label>Location</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#OpeningHoursSpecification">
+    <rdfs:label>Opening Hours Specification</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#WarrantyPromise">
+    <rdfs:label>Warranty Promise</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#WarrantyScope">
+    <rdfs:label>Warranty Scope</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#QuantitativeValue">
+    <rdfs:label>Quantitative Value</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#TypeAndQuantityNode">
+    <rdfs:label>Type And Quantity Node</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#Brand">
+    <rdfs:label>Brand</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#N-Ary-Relations">
+    <rdfs:label>N-Ary Relations</rdfs:label>
+  </owl:Class>
+
+  <owl:Class rdf:about="http://purl.org/goodrelations/v1#BusinessFunction">
+    <rdfs:label>Business Function</rdfs:label>
+  </owl:Class>
+
+  <owl:ObjectProperty rdf:about="http://purl.org/goodrelations/v1#hasPriceSpecification">
+    <rdfs:label>has price specification</rdfs:label>
+    <rdfs:domain rdf:resource="http://purl.org/goodrelations/v1#Offering"/>
+    <rdfs:range rdf:resource="http://purl.org/goodrelations/v1#PriceSpecification"/>
+  </owl:ObjectProperty>
+
+  <owl:ObjectProperty rdf:about="http://purl.org/goodrelations/v1#includesObject">
+    <rdfs:label>includes object</rdfs:label>
+    <rdfs:domain rdf:resource="http://purl.org/goodrelations/v1#Offering"/>
+    <rdfs:range rdf:resource="http://purl.org/goodrelations/v1#TypeAndQuantityNode"/>
+  </owl:ObjectProperty>
+
+  <owl:ObjectProperty rdf:about="http://purl.org/goodrelations/v1#hasBusinessFunction">
+    <rdfs:label>has business function</rdfs:label>
+    <rdfs:domain rdf:resource="http://purl.org/goodrelations/v1#Offering"/>
+    <rdfs:range rdf:resource="http://purl.org/goodrelations/v1#BusinessFunction"/>
+  </owl:ObjectProperty>
+
+  <owl:ObjectProperty rdf:about="http://purl.org/goodrelations/v1#eligibleCustomerTypes">
+    <rdfs:label>eligible customer types</rdfs:label>
+    <rdfs:domain rdf:resource="http://purl.org/goodrelations/v1#Offering"/>
+    <rdfs:range rdf:resource="http://purl.org/goodrelations/v1#BusinessEntity"/>
+  </owl:ObjectProperty>
+
+  <owl:ObjectProperty rdf:about="http://purl.org/goodrelations/v1#availableAtOrFrom">
+    <rdfs:label>available at or from</rdfs:label>
+    <rdfs:domain rdf:resource="http://purl.org/goodrelations/v1#Offering"/>
+    <rdfs:range rdf:resource="http://purl.org/goodrelations/v1#Location"/>
+  </owl:ObjectProperty>
+
+  <owl:ObjectProperty rdf:about="http://purl.org/goodrelations/v1#hasWarrantyPromise">
+    <rdfs:label>has warranty promise</rdfs:label>
+    <rdfs:domain rdf:resource="http://purl.org/goodrelations/v1#Offering"/>
+    <rdfs:range rdf:resource="http://purl.org/goodrelations/v1#WarrantyPromise"/>
+  </owl:ObjectProperty>
+
+  <owl:DatatypeProperty rdf:about="http://purl.org/goodrelations/v1#name">
+    <rdfs:label>name</rdfs:label>
+    <rdfs:domain rdf:resource="http://purl.org/goodrelations/v1#BusinessEntity"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+  </owl:DatatypeProperty>
+
+  <owl:DatatypeProperty rdf:about="http://purl.org/goodrelations/v1#description">
+    <rdfs:label>description</rdfs:label>
+    <rdfs:domain rdf:resource="http://purl.org/goodrelations/v1#Offering"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+  </owl:DatatypeProperty>
+
+</rdf:RDF>

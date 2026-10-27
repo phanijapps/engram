@@ -1,0 +1,84 @@
+# Curated FIBO-term fixture pack (finance leg). REAL FIBO vocabulary terms
+# (spec.edmcouncil.org/fibo URIs, EDM Council MIT license — see
+# core/packs/data/catalogue.json entry `fibo`) selected for the offline
+# banking-proof rehearsal: lending, accounts, institutions. Builder-owned
+# committed fixture bytes for scripts/dev/pack_catalogue_check.sh — the
+# owner-run proof executes the engram-domain runbook on a real banking repo.
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix fibo: <https://spec.edmcouncil.org/fibo/ontology/FD/fixture/> .
+
+<https://spec.edmcouncil.org/fibo/ontology/FD/fixture> a owl:Ontology ;
+    rdfs:label "FIBO banking fixture" .
+
+fibo:FinancialInstrument a owl:Class ; rdfs:label "Financial Instrument" .
+fibo:DebtInstrument a owl:Class ; rdfs:label "Debt Instrument" ;
+    rdfs:subClassOf fibo:FinancialInstrument .
+fibo:Loan a owl:Class ; rdfs:label "Loan" ;
+    rdfs:subClassOf fibo:DebtInstrument .
+fibo:MortgageLoan a owl:Class ; rdfs:label "Mortgage Loan" ;
+    rdfs:subClassOf fibo:Loan .
+fibo:ConsumerLoan a owl:Class ; rdfs:label "Consumer Loan" ;
+    rdfs:subClassOf fibo:Loan .
+fibo:CommercialLoan a owl:Class ; rdfs:label "Commercial Loan" ;
+    rdfs:subClassOf fibo:Loan .
+fibo:CreditLine a owl:Class ; rdfs:label "Credit Line" ;
+    rdfs:subClassOf fibo:DebtInstrument .
+fibo:DepositAccount a owl:Class ; rdfs:label "Deposit Account" ;
+    rdfs:subClassOf fibo:FinancialInstrument .
+fibo:SavingsAccount a owl:Class ; rdfs:label "Savings Account" ;
+    rdfs:subClassOf fibo:DepositAccount .
+fibo:CheckingAccount a owl:Class ; rdfs:label "Checking Account" ;
+    rdfs:subClassOf fibo:DepositAccount .
+fibo:FinancialInstitution a owl:Class ; rdfs:label "Financial Institution" .
+fibo:Bank a owl:Class ; rdfs:label "Bank" ;
+    rdfs:subClassOf fibo:FinancialInstitution .
+fibo:CreditUnion a owl:Class ; rdfs:label "Credit Union" ;
+    rdfs:subClassOf fibo:FinancialInstitution .
+fibo:Borrower a owl:Class ; rdfs:label "Borrower" .
+fibo:Lender a owl:Class ; rdfs:label "Lender" .
+fibo:LoanServicer a owl:Class ; rdfs:label "Loan Servicer" .
+fibo:Collateral a owl:Class ; rdfs:label "Collateral" .
+fibo:RealEstateCollateral a owl:Class ; rdfs:label "Real Estate Collateral" ;
+    rdfs:subClassOf fibo:Collateral .
+fibo:InterestRate a owl:Class ; rdfs:label "Interest Rate" .
+fibo:FixedInterestRate a owl:Class ; rdfs:label "Fixed Interest Rate" ;
+    rdfs:subClassOf fibo:InterestRate .
+fibo:Principal a owl:Class ; rdfs:label "Principal" .
+fibo:LoanPayment a owl:Class ; rdfs:label "Loan Payment" .
+fibo:AmortizationSchedule a owl:Class ; rdfs:label "Amortization Schedule" .
+fibo:AccountHolder a owl:Class ; rdfs:label "Account Holder" .
+fibo:OverdraftFacility a owl:Class ; rdfs:label "Overdraft Facility" ;
+    rdfs:subClassOf fibo:CreditLine .
+fibo:Security a owl:Class ; rdfs:label "Security" ;
+    rdfs:subClassOf fibo:FinancialInstrument .
+fibo:EquityInstrument a owl:Class ; rdfs:label "Equity Instrument" ;
+    rdfs:subClassOf fibo:Security .
+fibo:DebtSecurity a owl:Class ; rdfs:label "Debt Security" ;
+    rdfs:subClassOf fibo:Security .
+fibo:MoneyMarketAccount a owl:Class ; rdfs:label "Money Market Account" ;
+    rdfs:subClassOf fibo:DepositAccount .
+fibo:CertificateOfDeposit a owl:Class ; rdfs:label "Certificate of Deposit" ;
+    rdfs:subClassOf fibo:DepositAccount .
+
+fibo:hasBorrower a owl:ObjectProperty ; rdfs:label "has borrower" ;
+    rdfs:domain fibo:Loan ; rdfs:range fibo:Borrower .
+fibo:hasLender a owl:ObjectProperty ; rdfs:label "has lender" ;
+    rdfs:domain fibo:Loan ; rdfs:range fibo:Lender .
+fibo:hasPrincipalAmount a owl:DatatypeProperty ; rdfs:label "has principal amount" ;
+    rdfs:domain fibo:Loan ; rdfs:range xsd:decimal .
+fibo:hasInterestRate a owl:DatatypeProperty ; rdfs:label "has interest rate" ;
+    rdfs:domain fibo:Loan ; rdfs:range xsd:decimal .
+fibo:hasCollateral a owl:ObjectProperty ; rdfs:label "has collateral" ;
+    rdfs:domain fibo:Loan ; rdfs:range fibo:Collateral .
+fibo:heldBy a owl:ObjectProperty ; rdfs:label "held by" ;
+    rdfs:domain fibo:DepositAccount ; rdfs:range fibo:AccountHolder .
+fibo:offeredBy a owl:ObjectProperty ; rdfs:label "offered by" ;
+    rdfs:domain fibo:DepositAccount ; rdfs:range fibo:FinancialInstitution .
+fibo:originatedBy a owl:ObjectProperty ; rdfs:label "originated by" ;
+    rdfs:domain fibo:Loan ; rdfs:range fibo:FinancialInstitution .
+fibo:servicedBy a owl:ObjectProperty ; rdfs:label "serviced by" ;
+    rdfs:domain fibo:Loan ; rdfs:range fibo:LoanServicer .
+fibo:hasMaturityDate a owl:DatatypeProperty ; rdfs:label "has maturity date" ;
+    rdfs:domain fibo:Loan ; rdfs:range xsd:date .

@@ -1,0 +1,69 @@
+# Curated schema.org-term fixture pack (travel leg). REAL schema.org travel
+# vocabulary terms (schema.org URIs, CC BY-SA 3.0 — see
+# core/packs/data/catalogue.json entry `schema-org`) selected for the
+# offline travel-proof rehearsal: lodging, flights, attractions, trips.
+# Builder-owned committed fixture bytes for scripts/dev/pack_catalogue_check.sh.
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix sch:  <https://schema.org/> .
+
+<https://schema.org/docs/travel_fixture.html> a owl:Ontology ;
+    rdfs:label "schema.org travel fixture" .
+
+sch:Thing a owl:Class ; rdfs:label "Thing" .
+sch:Place a owl:Class ; rdfs:label "Place" ; rdfs:subClassOf sch:Thing .
+sch:LocalBusiness a owl:Class ; rdfs:label "Local Business" ; rdfs:subClassOf sch:Place .
+sch:LodgingBusiness a owl:Class ; rdfs:label "Lodging Business" ; rdfs:subClassOf sch:LocalBusiness .
+sch:Hotel a owl:Class ; rdfs:label "Hotel" ; rdfs:subClassOf sch:LodgingBusiness .
+sch:Motel a owl:Class ; rdfs:label "Motel" ; rdfs:subClassOf sch:LodgingBusiness .
+sch:Resort a owl:Class ; rdfs:label "Resort" ; rdfs:subClassOf sch:Hotel .
+sch:BedAndBreakfast a owl:Class ; rdfs:label "Bed And Breakfast" ; rdfs:subClassOf sch:LodgingBusiness .
+sch:Hostel a owl:Class ; rdfs:label "Hostel" ; rdfs:subClassOf sch:LodgingBusiness .
+sch:Campground a owl:Class ; rdfs:label "Campground" ; rdfs:subClassOf sch:LodgingBusiness .
+sch:Product a owl:Class ; rdfs:label "Product" ; rdfs:subClassOf sch:Thing .
+sch:Trip a owl:Class ; rdfs:label "Trip" ; rdfs:subClassOf sch:Thing .
+sch:TouristTrip a owl:Class ; rdfs:label "Tourist Trip" ; rdfs:subClassOf sch:Trip .
+sch:BusinessTrip a owl:Class ; rdfs:label "Business Trip" ; rdfs:subClassOf sch:Trip .
+sch:Flight a owl:Class ; rdfs:label "Flight" ; rdfs:subClassOf sch:Trip .
+sch:TrainTrip a owl:Class ; rdfs:label "Train Trip" ; rdfs:subClassOf sch:Trip .
+sch:BusTrip a owl:Class ; rdfs:label "Bus Trip" ; rdfs:subClassOf sch:Trip .
+sch:CruiseTrip a owl:Class ; rdfs:label "Cruise Trip" ; rdfs:subClassOf sch:Trip .
+sch:TouristAttraction a owl:Class ; rdfs:label "Tourist Attraction" ; rdfs:subClassOf sch:Place .
+sch:LandmarksOrHistoricalBuildings a owl:Class ; rdfs:label "Landmarks Or Historical Buildings" ;
+    rdfs:subClassOf sch:TouristAttraction .
+sch:Museum a owl:Class ; rdfs:label "Museum" ; rdfs:subClassOf sch:TouristAttraction .
+sch:Zoo a owl:Class ; rdfs:label "Zoo" ; rdfs:subClassOf sch:TouristAttraction .
+sch:Beach a owl:Class ; rdfs:label "Beach" ; rdfs:subClassOf sch:TouristAttraction .
+sch:Reservation a owl:Class ; rdfs:label "Reservation" ; rdfs:subClassOf sch:Thing .
+sch:LodgingReservation a owl:Class ; rdfs:label "Lodging Reservation" ; rdfs:subClassOf sch:Reservation .
+sch:FlightReservation a owl:Class ; rdfs:label "Flight Reservation" ; rdfs:subClassOf sch:Reservation .
+sch:Person a owl:Class ; rdfs:label "Person" ; rdfs:subClassOf sch:Thing .
+sch:Offer a owl:Class ; rdfs:label "Offer" ; rdfs:subClassOf sch:Thing .
+sch:PriceSpecification a owl:Class ; rdfs:label "Price Specification" ; rdfs:subClassOf sch:Thing .
+sch:QuantitativeValue a owl:Class ; rdfs:label "Quantitative Value" ; rdfs:subClassOf sch:Thing .
+
+sch:name a owl:DatatypeProperty ; rdfs:label "name" ;
+    rdfs:domain sch:Thing ; rdfs:range xsd:string .
+sch:starRating a owl:ObjectProperty ; rdfs:label "star rating" ;
+    rdfs:domain sch:LodgingBusiness ; rdfs:range sch:QuantitativeValue .
+sch:checkinTime a owl:DatatypeProperty ; rdfs:label "checkin time" ;
+    rdfs:domain sch:LodgingReservation ; rdfs:range xsd:dateTime .
+sch:checkoutTime a owl:DatatypeProperty ; rdfs:label "checkout time" ;
+    rdfs:domain sch:LodgingReservation ; rdfs:range xsd:dateTime .
+sch:numAdults a owl:DatatypeProperty ; rdfs:label "num adults" ;
+    rdfs:domain sch:LodgingReservation ; rdfs:range xsd:integer .
+sch:price a owl:ObjectProperty ; rdfs:label "price" ;
+    rdfs:domain sch:Offer ; rdfs:range sch:PriceSpecification .
+sch:provider a owl:ObjectProperty ; rdfs:label "provider" ;
+    rdfs:domain sch:Reservation ; rdfs:range sch:Thing .
+sch:reservationFor a owl:ObjectProperty ; rdfs:label "reservation for" ;
+    rdfs:domain sch:Reservation ; rdfs:range sch:Thing .
+sch:underName a owl:ObjectProperty ; rdfs:label "under name" ;
+    rdfs:domain sch:Reservation ; rdfs:range sch:Person .
+sch:includedInDataCatalog a owl:ObjectProperty ; rdfs:label "included in data catalog" ;
+    rdfs:domain sch:Thing ; rdfs:range sch:Thing .
+sch:flightDistance a owl:DatatypeProperty ; rdfs:label "flight distance" ;
+    rdfs:domain sch:Flight ; rdfs:range xsd:string .
+sch:touristType a owl:ObjectProperty ; rdfs:label "tourist type" ;
+    rdfs:domain sch:TouristAttraction ; rdfs:range sch:Thing .

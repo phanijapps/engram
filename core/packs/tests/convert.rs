@@ -197,3 +197,29 @@ fn convert_ontology_metadata_carries_counts() {
         metadata
     );
 }
+
+#[test]
+fn convert_leniently_skips_relative_iri_lines() {
+    // Regression guard: the pinned locn.ttl and void.ttl carry relative-IRI
+    // lines that strict parsing rejects wholesale; lenient parsing keeps the
+    // declared vocabulary (found during the TASK-014 catalogue loop).
+    let turtle = b"@prefix owl: <http://www.w3.org/2002/07/owl#> .\n\n<https://example.org/v/Loan> a owl:Class .\n\n<relative-only-id> a owl:Class .\n";
+    let pack = convert_pack(
+        "lenient-pack",
+        "fixture://lenient.ttl",
+        PackFormat::Turtle,
+        turtle,
+        "0".repeat(64).as_str(),
+        &scope(),
+        fixed_now(),
+    )
+    .expect("lenient parse keeps the declared vocabulary");
+    assert!(
+        pack.classes.iter().any(|c| c.label == "Loan"),
+        "absolute-IRI classes survive: {:?}",
+        pack.classes
+            .iter()
+            .map(|c| c.label.clone())
+            .collect::<Vec<_>>()
+    );
+}

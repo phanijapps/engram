@@ -97,7 +97,7 @@ pub enum MemoryStatus {
 /// (docs/domain-data-model.md § Memory Model → Verdict). `derived` is
 /// reserved for the future derivation layer: nothing in v1 emits it, and
 /// write surfaces reject it as input with a reserved-for-derivation error.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Verdict {
     AssertedByAgent,

@@ -11,7 +11,7 @@ use engram_domain::{
     ForgetRequest, ForgetTargetType, Id, KnowledgeChunk, KnowledgeEntity, KnowledgeRelationship,
     KnowledgeSource, MemoryContent, MemoryKind, MemoryRecord, MemoryStatus, Policy, Provenance,
     Requester, Retention, RetrievalRequest, RetrievalTargetType, Sensitivity, SourceDocument,
-    SourceDocumentKind, SourceKind, SourceLocation, Visibility, WriteMemoryRequest,
+    SourceDocumentKind, SourceKind, SourceLocation, Verdict, Visibility, WriteMemoryRequest,
 };
 use engram_ingest::{
     Chunker, MarkdownChunker, PlainTextChunker, PlainTextChunkerOptions, content_hash,
@@ -525,6 +525,12 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
     let pol = policy();
 
     // Facts (memories). Entries without non-empty `content` are skipped.
+    // Verdict stamping (DEC-P06/LED-14): optional per-fact `verdict` from the
+    // closed set; absent defaults to `asserted_by_agent`; `derived` is
+    // RESERVED for the derivation layer and rejected as input; an unknown
+    // word is rejected because the set is closed.
+    let mut verdict_counts: std::collections::BTreeMap<Verdict, u32> =
+        std::collections::BTreeMap::new();
     let facts: Vec<MemoryRecord> = args["facts"]
         .as_array()
         .into_iter()
@@ -532,7 +538,26 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
         .enumerate()
         .filter_map(|(i, f)| {
             let content = f["content"].as_str().filter(|s| !s.is_empty())?;
-            Some(MemoryRecord {
+            let verdict = match f["verdict"].as_str() {
+                None | Some("") => Verdict::AssertedByAgent,
+                Some("asserted_by_agent") => Verdict::AssertedByAgent,
+                Some("grounded_in_source") => Verdict::GroundedInSource,
+                Some("derived") => {
+                    return Some(Err(invalid(
+                        "'derived' is reserved for the derivation layer (LED-14): write surfaces \
+                         accept only 'asserted_by_agent' or 'grounded_in_source'",
+                    )));
+                }
+                Some(other) => {
+                    return Some(Err(invalid(format!(
+                        "unknown verdict {other:?}: the closed set is \
+                         {{asserted_by_agent, grounded_in_source, derived}} (derived is reserved \
+                         for the derivation layer and rejected as input)"
+                    ))));
+                }
+            };
+            *verdict_counts.entry(verdict).or_insert(0) += 1;
+            Some(Ok(MemoryRecord {
                 id: Id::from(format!("{idempotency_key}#{i}")),
                 kind: MemoryKind::Observation,
                 content: MemoryContent {
@@ -550,13 +575,13 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
                 status: MemoryStatus::Active,
                 links: Vec::new(),
                 assertions: Vec::new(),
-                verdict: None,
+                verdict: Some(verdict),
                 created_at: Utc::now(),
                 updated_at: None,
                 metadata: None,
-            })
+            }))
         })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()?;
 
     // Entities. Entries without a non-empty `name` or with an unknown kind are skipped.
     let entities: Vec<KnowledgeEntity> = args["entities"]
@@ -683,8 +708,17 @@ pub fn store_knowledge(app: &App, args: &Value) -> Result<Value, ToolError> {
     } else {
         ""
     };
+    let verdicts_note = if fact_count > 0 {
+        let parts: Vec<String> = verdict_counts
+            .iter()
+            .map(|(verdict, count)| format!("{verdict:?}={count}"))
+            .collect();
+        format!(" Verdicts: {}.", parts.join(", "))
+    } else {
+        String::new()
+    };
     Ok(protocol::text_content(format!(
-        "Batch {:?} (guarantee: {:?}). {} fact(s), {} entities, {} relationship(s){skipped_note}. [{}]{}",
+        "Batch {:?} (guarantee: {:?}). {} fact(s), {} entities, {} relationship(s){skipped_note}.{verdicts_note} [{}]{}",
         outcome.status,
         outcome.guarantee,
         fact_count,
@@ -1059,6 +1093,72 @@ pub(crate) mod tests {
         assert!(
             !leaked,
             "recall under a different workspace must be isolated"
+        );
+    }
+
+    /// Verdict stamping (DEC-P06): default, accepted word, reserved-word
+    /// rejection, closed-set rejection, and counts in the result payload.
+    #[test]
+    fn store_knowledge_stamps_verdicts_with_counts() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let res = store_knowledge(
+            &app,
+            &json!({
+                "facts": [
+                    { "content": "Default verdict fact." },
+                    { "content": "Sourced verdict fact.", "verdict": "grounded_in_source" },
+                    { "content": "Explicit agent fact.", "verdict": "asserted_by_agent" }
+                ]
+            }),
+        )
+        .expect("store_knowledge should succeed");
+        let text = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            text.contains("Verdicts: AssertedByAgent=2, GroundedInSource=1."),
+            "counts surface in the payload: {text}"
+        );
+    }
+
+    #[test]
+    fn store_knowledge_rejects_derived_verdict() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let err = store_knowledge(
+            &app,
+            &json!({
+                "facts": [
+                    { "content": "x", "verdict": "derived" }
+                ]
+            }),
+        )
+        .expect_err("derived is reserved for the derivation layer");
+        assert!(
+            err.message.contains("reserved"),
+            "error states the reservation: {err:?}"
+        );
+        assert!(
+            err.message.contains("derived"),
+            "error names the word: {err:?}"
+        );
+    }
+
+    #[test]
+    fn store_knowledge_rejects_unknown_verdict_words() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let err = store_knowledge(
+            &app,
+            &json!({
+                "facts": [
+                    { "content": "x", "verdict": "asserted_by_human" }
+                ]
+            }),
+        )
+        .expect_err("the verdict set is closed");
+        assert!(
+            err.message.contains("closed set"),
+            "error states the closed set: {err:?}"
         );
     }
 

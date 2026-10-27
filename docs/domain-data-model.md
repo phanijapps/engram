@@ -302,9 +302,29 @@ Fields:
 | `status` | yes | MemoryStatus | Lifecycle state |
 | `links` | no | MemoryLink[] | Links to other domain objects |
 | `assertions` | no | MemoryAssertion[] | Structured claims represented by this memory |
+| `verdict` | no | Verdict | Optional assertion verdict word for this record (see Verdict) |
 | `createdAt` | yes | Timestamp | Creation time |
 | `updatedAt` | no | Timestamp | Last material update |
 | `metadata` | no | object | Non-contract attributes |
+
+### Verdict
+
+Optional assertion verdict carried by `MemoryRecord.verdict`.
+The vocabulary is a closed set of exactly three snake_case words.
+`derived` is reserved for the future derivation layer and is emitted by
+nothing in v1; write surfaces reject it as input.
+
+Enum:
+
+- `asserted_by_agent`: the record's claim is asserted directly by an agent without quoted source grounding.
+- `grounded_in_source`: the record's claim is grounded in an indexed source (chunk, document, or file evidence).
+- `derived`: reserved; produced only by the derivation layer when it lands, never by agents or write surfaces.
+
+Rules:
+
+- `MemoryRecord.verdict` is optional and absent from legacy records; deserialization defaults it to absent.
+- Write surfaces accept only `asserted_by_agent` and `grounded_in_source` as explicit input; `derived` input is rejected with a reserved-for-derivation error.
+- Fact surfaces surface the verdict word additively; no existing field is removed or retyped.
 
 ### MemoryKind
 

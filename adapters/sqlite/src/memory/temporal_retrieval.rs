@@ -295,6 +295,7 @@ mod tests {
             status: MemoryStatus::Active,
             links: Vec::new(),
             assertions: Vec::new(),
+            verdict: None,
             created_at,
             updated_at: None,
             metadata: None,

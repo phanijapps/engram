@@ -298,6 +298,7 @@ fn seed_scope(
             status: MemoryStatus::Active,
             links: Vec::new(),
             assertions: Vec::new(),
+            verdict: None,
             created_at: chrono::Utc::now(),
             updated_at: None,
             metadata: None,

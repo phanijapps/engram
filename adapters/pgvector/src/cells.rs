@@ -236,6 +236,7 @@ impl engram_memory::MemoryService for PgMemoryService {
             status: MemoryStatus::Active,
             links: request.links,
             assertions: vec![],
+            verdict: None,
             created_at: now,
             updated_at: None,
             metadata: None,

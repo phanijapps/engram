@@ -1044,6 +1044,13 @@ export const engramV1Schema = {
         },
         "updatedAt": {
           "$ref": "#/$defs/Timestamp"
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict",
+          "description": "Optional assertion verdict word for this record.",
+          "examples": [
+            "asserted_by_agent"
+          ]
         }
       },
       "required": [
@@ -1998,6 +2005,15 @@ export const engramV1Schema = {
         "pending",
         "resolved",
         "failed"
+      ],
+      "type": "string"
+    },
+    "Verdict": {
+      "description": "Optional assertion verdict word carried by MemoryRecord.verdict. Closed set of three snake_case words; 'derived' is reserved for the future derivation layer and is emitted by nothing in v1 (write surfaces reject it as input).",
+      "enum": [
+        "asserted_by_agent",
+        "grounded_in_source",
+        "derived"
       ],
       "type": "string"
     },

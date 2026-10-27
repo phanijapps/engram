@@ -91,6 +91,20 @@ pub enum MemoryStatus {
     Expired,
 }
 
+/// Optional assertion verdict word carried by `MemoryRecord.verdict`.
+///
+/// Closed vocabulary of exactly three snake_case words
+/// (docs/domain-data-model.md § Memory Model → Verdict). `derived` is
+/// reserved for the future derivation layer: nothing in v1 emits it, and
+/// write surfaces reject it as input with a reserved-for-derivation error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Verdict {
+    AssertedByAgent,
+    GroundedInSource,
+    Derived,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryContentFormat {
@@ -172,6 +186,10 @@ pub struct MemoryRecord {
     pub links: Vec<MemoryLink>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub assertions: Vec<MemoryAssertion>,
+    /// Optional assertion verdict word; absent on legacy `record_json` rows
+    /// (serde default) so old persisted records deserialize unchanged.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub verdict: Option<Verdict>,
     pub created_at: Timestamp,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<Timestamp>,

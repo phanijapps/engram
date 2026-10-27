@@ -72,6 +72,7 @@ fn memory(id: &str, tenant: &str) -> MemoryRecord {
         status: MemoryStatus::Active,
         links: Vec::new(),
         assertions: Vec::new(),
+        verdict: None,
         created_at: fixed_time(),
         updated_at: None,
         metadata: None,

@@ -81,6 +81,7 @@ fn record(text: &str) -> MemoryRecord {
         status: MemoryStatus::Active,
         links: vec![],
         assertions: vec![],
+        verdict: None,
         created_at: now(),
         updated_at: None,
         metadata: None,

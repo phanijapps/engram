@@ -129,6 +129,7 @@ fn rust_write_memory_response_matches_v1_schema() {
         status: MemoryStatus::Active,
         links: Vec::new(),
         assertions: Vec::new(),
+        verdict: None,
         created_at: now,
         updated_at: None,
         metadata: None,

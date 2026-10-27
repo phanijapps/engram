@@ -98,6 +98,10 @@ export type ScanStatus = "in_progress" | "completed" | "partial";
  * Lifecycle of a recorded unresolved cross-file code reference. pending -> resolved (orphan sweep); pending -> failed (operator only); terminal states never change.
  */
 export type UnresolvedReferenceStatus = "pending" | "resolved" | "failed";
+/**
+ * Optional assertion verdict word carried by MemoryRecord.verdict. Closed set of three snake_case words; 'derived' is reserved for the future derivation layer and is emitted by nothing in v1 (write surfaces reject it as input).
+ */
+export type Verdict = "asserted_by_agent" | "grounded_in_source" | "derived";
 
 export interface EngramV1Types {
   Actor: Actor;
@@ -166,6 +170,7 @@ export interface EngramV1Types {
   Timestamp: Timestamp;
   UnresolvedReference: UnresolvedReference;
   UnresolvedReferenceStatus: UnresolvedReferenceStatus;
+  Verdict: Verdict;
   WriteMemoryRequest: WriteMemoryRequest;
   WriteMemoryResponse: WriteMemoryResponse;
 }
@@ -556,6 +561,10 @@ export interface MemoryRecord {
   scope: Scope;
   status: MemoryStatus;
   updatedAt?: Timestamp;
+  /**
+   * Optional assertion verdict word for this record.
+   */
+  verdict?: "asserted_by_agent" | "grounded_in_source" | "derived";
 }
 /**
  * Inert, reviewable pending write. Never a recall target; approval promotes through the policy-checked memory write path.

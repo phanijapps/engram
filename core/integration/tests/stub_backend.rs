@@ -295,6 +295,7 @@ impl MemoryService for StubMemoryService {
             status: MemoryStatus::Active,
             links: request.links,
             assertions: Vec::new(),
+            verdict: None,
             created_at: now,
             updated_at: None,
             metadata: None,

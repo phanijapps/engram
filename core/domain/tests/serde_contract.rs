@@ -65,6 +65,7 @@ fn memory_record_uses_contract_json_names() {
         status: MemoryStatus::Active,
         links: Vec::new(),
         assertions: Vec::new(),
+        verdict: None,
         created_at: now,
         updated_at: None,
         metadata: None,
@@ -81,6 +82,159 @@ fn memory_record_uses_contract_json_names() {
     );
     assert!(value.get("created_at").is_none());
     assert!(value["content"].get("structured").is_none());
+}
+
+#[test]
+fn verdict_round_trips_snake_case() {
+    let now = Utc::now();
+    let mut record = MemoryRecord {
+        id: Id::from("mem-verdict"),
+        kind: MemoryKind::Observation,
+        content: MemoryContent {
+            text: "Loan matures in 2030.".to_owned(),
+            summary: None,
+            entities: Vec::new(),
+            language: None,
+            format: None,
+            structured: None,
+            hash: None,
+        },
+        scope: scope(),
+        provenance: provenance(now),
+        policy: policy(),
+        status: MemoryStatus::Active,
+        links: Vec::new(),
+        assertions: Vec::new(),
+        verdict: None,
+        created_at: now,
+        updated_at: None,
+        metadata: None,
+    };
+    assert!(record.verdict.is_none());
+
+    record.verdict = Some(Verdict::GroundedInSource);
+    let value = serde_json::to_value(&record).expect("serialize verdict record");
+    assert_eq!(value["verdict"], json!("grounded_in_source"));
+
+    let back: MemoryRecord = serde_json::from_value(value).expect("deserialize verdict record");
+    assert_eq!(back.verdict, Some(Verdict::GroundedInSource));
+
+    record.verdict = Some(Verdict::AssertedByAgent);
+    assert_eq!(
+        serde_json::to_value(&record).unwrap()["verdict"],
+        json!("asserted_by_agent")
+    );
+    record.verdict = Some(Verdict::Derived);
+    assert_eq!(
+        serde_json::to_value(&record).unwrap()["verdict"],
+        json!("derived")
+    );
+}
+
+#[test]
+fn verdict_field_is_skipped_when_absent() {
+    let now = Utc::now();
+    let record = MemoryRecord {
+        id: Id::from("mem-noverdict"),
+        kind: MemoryKind::Observation,
+        content: MemoryContent {
+            text: "Legacy row.".to_owned(),
+            summary: None,
+            entities: Vec::new(),
+            language: None,
+            format: None,
+            structured: None,
+            hash: None,
+        },
+        scope: scope(),
+        provenance: provenance(now),
+        policy: policy(),
+        status: MemoryStatus::Active,
+        links: Vec::new(),
+        assertions: Vec::new(),
+        verdict: None,
+        created_at: now,
+        updated_at: None,
+        metadata: None,
+    };
+    let value = serde_json::to_value(&record).expect("serialize");
+    assert!(
+        value.get("verdict").is_none(),
+        "absent verdict must not serialize"
+    );
+}
+
+#[test]
+fn legacy_record_json_without_verdict_deserializes() {
+    // A pre-verdict `record_json` row exactly as persisted by older builds:
+    // no `verdict` key anywhere. Deserialization must succeed with the
+    // field defaulting to None (serde default) — no migration needed.
+    let legacy = json!({
+        "id": "mem-legacy",
+        "kind": "fact",
+        "content": {
+            "text": "The service exposes a health endpoint."
+        },
+        "scope": {
+            "tenant": "tenant-a",
+            "subject": "subject-a",
+            "workspace": "workspace-a",
+            "environment": "test"
+        },
+        "provenance": {
+            "source": "test",
+            "actor": {
+                "id": "actor-1",
+                "kind": "agent",
+                "displayName": "agent"
+            },
+            "observedAt": "2024-01-01T00:00:00Z"
+        },
+        "policy": {
+            "visibility": "workspace",
+            "retention": "durable",
+            "allowedUses": ["retrieval", "evaluation"]
+        },
+        "status": "active",
+        "createdAt": "2024-01-01T00:00:00Z"
+    });
+    let record: MemoryRecord =
+        serde_json::from_value(legacy).expect("legacy record_json must deserialize");
+    assert_eq!(record.id, Id::from("mem-legacy"));
+    assert_eq!(record.verdict, None, "legacy rows default verdict to None");
+}
+
+#[test]
+fn unknown_verdict_word_is_rejected() {
+    // The vocabulary is a closed set: a misspelled word must fail
+    // deserialization instead of silently defaulting.
+    let now = Utc::now();
+    let record = MemoryRecord {
+        id: Id::from("mem-bad"),
+        kind: MemoryKind::Observation,
+        content: MemoryContent {
+            text: "x".to_owned(),
+            summary: None,
+            entities: Vec::new(),
+            language: None,
+            format: None,
+            structured: None,
+            hash: None,
+        },
+        scope: scope(),
+        provenance: provenance(now),
+        policy: policy(),
+        status: MemoryStatus::Active,
+        links: Vec::new(),
+        assertions: Vec::new(),
+        verdict: None,
+        created_at: now,
+        updated_at: None,
+        metadata: None,
+    };
+    let mut value = serde_json::to_value(&record).unwrap();
+    value["verdict"] = json!("asserted_by_human");
+    assert!(serde_json::from_value::<MemoryRecord>(value).is_err());
 }
 
 #[test]

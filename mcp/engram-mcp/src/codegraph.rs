@@ -3251,6 +3251,49 @@ pub fn capability_report(app: &App, _args: &Value) -> Result<Value, ToolError> {
 
 #[cfg(test)]
 mod tests {
+
+    /// FIND-code-004 regression guard: no function in this tests module may
+    /// silently lose its `#[test]` attribute (a test inserted between an
+    /// attribute and its fn compiles green but stops running). Every
+    /// module-level `fn` here must either carry `#[test]` on the previous
+    /// non-empty line or be an explicitly listed helper.
+    #[test]
+    fn no_dead_test_function_in_this_module() {
+        let source =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/codegraph.rs"))
+                .expect("read own source");
+        let start = source.find("mod tests {").expect("tests module");
+        let region = &source[start..];
+        let helpers = [
+            "tmp_root",
+            "recall_item",
+            "make_entity",
+            "hit",
+            "hit_with_raw",
+            "hit_chunk",
+            "make_trace",
+            "make_symbol_context",
+        ];
+        let mut offenders: Vec<String> = Vec::new();
+        let mut previous_non_empty = "";
+        for line in region.lines() {
+            if let Some(rest) = line.strip_prefix("    fn ") {
+                let name = rest.split(['(', '<', ' ']).next().unwrap_or("");
+                if !helpers.contains(&name) && previous_non_empty.trim() != "#[test]" {
+                    offenders.push(name.to_owned());
+                }
+            }
+            if !line.trim().is_empty() {
+                previous_non_empty = line;
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "test fns missing their #[test] attribute (dead guards): {offenders:?} — \
+             if a new helper fn is added, extend the helpers list deliberately"
+        );
+    }
+
     use super::*;
     use serde_json::json;
 
@@ -4545,6 +4588,7 @@ mod tests {
         );
     }
 
+    #[test]
     fn recall_provenance_suffix_shows_raw_and_rrf() {
         // Option B: evidence-mode suffix surfaces raw lane score + rrf.
         let mut item = recall_item(RetrievalTargetType::Entity, "e1");

@@ -13,9 +13,9 @@ use std::collections::BTreeMap;
 
 use chrono::{DateTime, Utc};
 use engram_domain::{
-    Actor, ActorKind, AllowedUse, DeleteMode, Id, Metadata, Ontology, OntologyClass,
-    OntologyClassId, OntologyLanguage, OntologyProperty, OntologyPropertyId, OntologyStatus,
-    OntologyTermStatus, Policy, Provenance, Retention, Scope, Sensitivity, Timestamp, Visibility,
+    Actor, ActorKind, AllowedUse, DeleteMode, Metadata, Ontology, OntologyClass, OntologyClassId,
+    OntologyLanguage, OntologyProperty, OntologyPropertyId, OntologyStatus, OntologyTermStatus,
+    Policy, Provenance, Retention, Scope, Sensitivity, Visibility,
 };
 use oxrdf::{NamedOrBlankNodeRef, Quad, TermRef};
 use oxrdfio::{RdfFormat, RdfParser};
@@ -175,7 +175,6 @@ pub fn convert_pack(
         ));
     }
 
-    let mut class_uris = class_uris;
     class_uris.sort();
     let mut property_uris: Vec<String> = property_kinds.keys().cloned().collect();
     property_uris.sort();

@@ -2048,11 +2048,15 @@ export const engramV1Schema = {
           "$ref": "#/$defs/Scope"
         },
         "verdict": {
-          "$ref": "#/$defs/Verdict",
-          "description": "Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface.",
+          "description": "Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface. 'derived' is reserved for the derivation layer and is rejected by every write surface \u2014 it is not a legal value here.",
+          "enum": [
+            "asserted_by_agent",
+            "grounded_in_source"
+          ],
           "examples": [
             "grounded_in_source"
-          ]
+          ],
+          "type": "string"
         }
       },
       "required": [

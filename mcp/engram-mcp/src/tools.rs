@@ -1145,6 +1145,43 @@ pub(crate) mod tests {
         );
     }
 
+    /// FIND-code-002 / FIND-platform-002 regression: the facade write_memory
+    /// surface (the seam N-API writeMemoryJson and every Rust embedder ride)
+    /// inherits the reserved-verdict rejection from the shared validation —
+    /// a hand-crafted `derived` write is refused, never persisted.
+    #[test]
+    fn facade_write_memory_rejects_derived_verdict() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        let memory = app.provider.require_memory().expect("memory handle");
+        let mut request = WriteMemoryRequest {
+            kind: MemoryKind::Observation,
+            content: MemoryContent {
+                text: "hand-crafted derived write".to_owned(),
+                summary: None,
+                entities: Vec::new(),
+                language: None,
+                format: None,
+                structured: None,
+                hash: None,
+            },
+            scope: app.scope.clone(),
+            requester: requester(),
+            provenance: provenance("test-derived"),
+            policy: policy(),
+            links: Vec::new(),
+            verdict: None,
+            idempotency_key: None,
+        };
+        request.verdict = Some(Verdict::Derived);
+        let err = block_on(memory.write_memory(request))
+            .expect_err("derived must be rejected at the shared write boundary");
+        assert!(
+            err.to_string().contains("reserved"),
+            "error carries the reserved-for-derivation reason: {err}"
+        );
+    }
+
     /// FIND-code-001 regression guard: a SOURCED batch (source_id set — the
     /// revision flow the tool description recommends) must persist every
     /// fact's verdict, not just count it in the result text.

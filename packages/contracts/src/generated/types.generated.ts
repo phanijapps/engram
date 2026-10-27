@@ -454,9 +454,9 @@ export interface WriteMemoryRequest {
   requester: Requester;
   scope: Scope;
   /**
-   * Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface.
+   * Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface. 'derived' is reserved for the derivation layer and is rejected by every write surface — it is not a legal value here.
    */
-  verdict?: "asserted_by_agent" | "grounded_in_source" | "derived";
+  verdict?: "asserted_by_agent" | "grounded_in_source";
 }
 export interface MemoryContent {
   entities?: EntityRef[];

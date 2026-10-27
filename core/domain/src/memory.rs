@@ -105,6 +105,16 @@ pub enum Verdict {
     Derived,
 }
 
+impl Verdict {
+    /// True for the derivation-layer-reserved word. Nothing in v1 emits
+    /// `derived`; write surfaces MUST reject it as input (LED-14) — the
+    /// single runtime definition of that reservation, reused by every
+    /// write-boundary check.
+    pub fn is_reserved(self) -> bool {
+        matches!(self, Self::Derived)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MemoryContentFormat {

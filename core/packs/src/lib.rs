@@ -11,3 +11,10 @@
 //!
 //! The `engram-mcp pack` one-shot subcommand owns fetch, cache, facade
 //! writes, and reporting; this crate owns the pure rules they run.
+
+pub mod catalogue;
+
+pub use catalogue::{
+    Catalogue, CatalogueEntry, EMBEDDED_CATALOGUE_JSON, EXCLUDED_LANGUAGE_BASES,
+    EXPECTED_ENTRY_COUNT, PackFormat,
+};

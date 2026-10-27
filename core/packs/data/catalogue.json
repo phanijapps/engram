@@ -1,0 +1,389 @@
+{
+  "_header": {
+    "description": "Pinned catalogue of 33 standard ontology marketplace packs (DEC-P07). Identity source: open-ontologies marketplace at 9e73d95 (36 entries).",
+    "excluded_language_bases": {
+      "reason": "owl, rdfs and rdf are RDF language bases, not domain vocabularies; they are excluded from the installable marketplace per DEC-P07.",
+      "owl": "https://www.w3.org/2002/07/owl#",
+      "rdfs": "https://www.w3.org/2000/01/rdf-schema#",
+      "rdf": "https://www.w3.org/1999/02/22-rdf-syntax-ns"
+    },
+    "pin_run": {
+      "date": "2026-10-28",
+      "entries_fetched": 33,
+      "one_time": true,
+      "note": "sha256 recorded from a single first fetch per entry; a later first-fetch mismatch is a hard error with a re-pin procedure (RISK-001) - never overwrite a pin to make a fetch pass."
+    },
+    "license_policy": "license_source is 'pack-bytes' when the fetched pack declares its license, else 'publisher' for the publisher's documented license. Zero entries carry license-restricted terms (AC-016)."
+  },
+  "entries": [
+    {
+      "id": "adms",
+      "name": "ADMS (Asset Description Metadata Schema)",
+      "description": "EU ISA vocabulary for describing semantic assets and interoperability solutions",
+      "domain": "egovernment",
+      "url": "https://web.archive.org/web/20240413223816id_/https://uri.semic.eu/w3c/ns/adms.ttl",
+      "format": "turtle",
+      "license": "CC-BY-4.0",
+      "license_source": "pack-bytes",
+      "sha256": "c79e727528515e5280fb83113eb6d72d448dd00a1143239ddf244c7b1833bd89",
+      "upstream_url": "https://www.w3.org/ns/adms.ttl",
+      "pin_note": "marketplace URL unavailable at pin time; pinned from an immutable Internet Archive snapshot of the same resource (build.md deviation)"
+    },
+    {
+      "id": "bfo",
+      "name": "BFO (Basic Formal Ontology)",
+      "description": "ISO 21838 upper-level ontology \u2014 foundational categories for continuants and occurrents",
+      "domain": "upper-ontology",
+      "url": "https://raw.githubusercontent.com/BFO-ontology/BFO/v2019-08-26/bfo_classes_only.owl",
+      "format": "rdf-xml",
+      "license": "CC-BY-4.0",
+      "license_source": "pack-bytes",
+      "sha256": "ca399c2b8b79f4d12b296d5c4ea4c00940e1f82cee7d1a50ddc292aa4f6c4666"
+    },
+    {
+      "id": "bibo",
+      "name": "BIBO (Bibliographic Ontology)",
+      "description": "Documents, citations and publication metadata",
+      "domain": "bibliographic",
+      "url": "http://purl.org/ontology/bibo/",
+      "format": "turtle",
+      "license": "CC-BY-3.0",
+      "license_source": "publisher",
+      "sha256": "2cf16dfa7421e5deb41e2e8ee5575e91913f443a758214b07a9682c9d6025310"
+    },
+    {
+      "id": "cc",
+      "name": "Creative Commons",
+      "description": "Vocabulary for describing copyright licenses and permissions",
+      "domain": "rights",
+      "url": "https://creativecommons.org/schema.rdf",
+      "format": "rdf-xml",
+      "license": "W3C-Document",
+      "license_source": "publisher",
+      "sha256": "3f5949ce6af4ad0c351853f8d6641e43444e0d65f631030ce5b94509d350ffb6"
+    },
+    {
+      "id": "cidoc-crm",
+      "name": "CIDOC CRM (Conceptual Reference Model)",
+      "description": "ISO 21127 reference model for cultural heritage documentation (v7.1.3)",
+      "domain": "cultural-heritage",
+      "url": "https://cidoc-crm.org/rdfs/7.1.3/CIDOC_CRM_v7.1.3.rdf",
+      "format": "rdf-xml",
+      "license": "CC-BY-4.0",
+      "license_source": "pack-bytes",
+      "sha256": "05074c0e3010fcef5fae70ae8c80e0428d7cab251e30657737d2475db0bcf07d"
+    },
+    {
+      "id": "dc-elements",
+      "name": "Dublin Core Elements",
+      "description": "15 core metadata elements for describing resources",
+      "domain": "metadata",
+      "url": "http://www.dublincore.org/specifications/dublin-core/dcmi-terms/dublin_core_elements.ttl",
+      "format": "turtle",
+      "license": "CC-BY-4.0",
+      "license_source": "publisher",
+      "sha256": "ffb46b7a21e40344b93bc4ad2e6808b24dd53e261995ec3a926df6bcd87bbfa5"
+    },
+    {
+      "id": "dc-terms",
+      "name": "Dublin Core Terms",
+      "description": "Extended Dublin Core metadata terms with refined properties",
+      "domain": "metadata",
+      "url": "https://www.dublincore.org/specifications/dublin-core/dcmi-terms/dublin_core_terms.ttl",
+      "format": "turtle",
+      "license": "CC-BY-4.0",
+      "license_source": "publisher",
+      "sha256": "13df401072dd7015bf9d75162f3e41c8138075304b7b9cc1aa1e9c16db976797"
+    },
+    {
+      "id": "dcat",
+      "name": "DCAT (Data Catalog Vocabulary)",
+      "description": "W3C vocabulary for interoperability between data catalogs",
+      "domain": "data-catalogs",
+      "url": "https://www.w3.org/ns/dcat.ttl",
+      "format": "turtle",
+      "license": "CC-BY-4.0",
+      "license_source": "pack-bytes",
+      "sha256": "d1624d3bbf364f6fc1d43b9a188bbb9e67639b1a7d46a5cb7ea3f5d47d02b62f"
+    },
+    {
+      "id": "doap",
+      "name": "DOAP (Description of a Project)",
+      "description": "Vocabulary for describing software projects, repositories, and releases",
+      "domain": "software",
+      "url": "https://raw.githubusercontent.com/ewilderj/doap/master/schema/doap.rdf",
+      "format": "rdf-xml",
+      "license": "Apache-2.0",
+      "license_source": "pack-bytes",
+      "sha256": "ac0ee7a1f393dcd91e3063f75e977d785dd8fb07684ad0042cf5dd5ded14497a"
+    },
+    {
+      "id": "dolce",
+      "name": "DOLCE/DUL (Descriptive Ontology)",
+      "description": "Upper-level ontology providing foundational categories for knowledge representation",
+      "domain": "upper-ontology",
+      "url": "http://www.ontologydesignpatterns.org/ont/dul/DUL.owl",
+      "format": "turtle",
+      "license": "CC-BY-3.0",
+      "license_source": "publisher",
+      "sha256": "e5f6429596d2c7014730bad85aaaa9c39530235f27f596cd0e7ce85e6bbcba66"
+    },
+    {
+      "id": "fibo",
+      "name": "FIBO (Financial Industry Business Ontology)",
+      "description": "EDM Council ontology for financial industry concepts",
+      "domain": "finance",
+      "url": "https://spec.edmcouncil.org/fibo/ontology/master/latest/prod.fibo-quickstart.ttl",
+      "format": "turtle",
+      "license": "MIT",
+      "license_source": "pack-bytes",
+      "sha256": "8e51c4908e4ef67c107dc9bbde6921db0cb522530e5721098eb8c91eae7b888f"
+    },
+    {
+      "id": "foaf",
+      "name": "FOAF (Friend of a Friend)",
+      "description": "Vocabulary for describing people, activities, and relationships",
+      "domain": "people",
+      "url": "http://xmlns.com/foaf/spec/index.rdf",
+      "format": "rdf-xml",
+      "license": "CC-BY-1.0",
+      "license_source": "publisher",
+      "sha256": "3d859b5d92a2c3d041545d014fa826f682ca06d056af8c7b31e32d930abf2bc5"
+    },
+    {
+      "id": "geosparql",
+      "name": "GeoSPARQL",
+      "description": "OGC ontology for spatial objects, geometries, and topological relations",
+      "domain": "geospatial",
+      "url": "http://schemas.opengis.net/geosparql/1.0/geosparql_vocab_all.rdf",
+      "format": "rdf-xml",
+      "license": "OGC-Standard",
+      "license_source": "pack-bytes",
+      "sha256": "4b835ce5469f0cbef201fbbddc366c15c98f83d101002b5cd896bcea671af9fb"
+    },
+    {
+      "id": "goodrelations",
+      "name": "GoodRelations",
+      "description": "Ontology for e-commerce \u2014 products, services, prices, and offers",
+      "domain": "commerce",
+      "url": "https://web.archive.org/web/20191223154440id_/http://www.heppnetz.de/ontologies/goodrelations/v1.owl",
+      "format": "rdf-xml",
+      "license": "CC-BY-3.0",
+      "license_source": "pack-bytes",
+      "sha256": "4eeecc843408390fc16d69a291cb2ba5454fb124eaedef24a9618f6dd40c1f9e",
+      "upstream_url": "http://www.heppnetz.de/ontologies/goodrelations/v1.owl",
+      "pin_note": "marketplace URL unavailable at pin time; pinned from an immutable Internet Archive snapshot of the same resource (build.md deviation)"
+    },
+    {
+      "id": "ies",
+      "name": "IES Common (Information Exchange Standard)",
+      "description": "UK NDTP core ontology for information exchange \u2014 511 classes, 206 properties, 4D extensionalist (BORO) patterns for entities, events, states, and relationships",
+      "domain": "upper-ontology",
+      "url": "https://raw.githubusercontent.com/IES-Org/ont-ies/main/docs/specification/ies-common.ttl",
+      "format": "turtle",
+      "license": "MIT",
+      "license_source": "pack-bytes",
+      "sha256": "f742233837b6f43d28c3cec201054dfc9a77b44cd5f19bf39d2233627e4b37e5"
+    },
+    {
+      "id": "ies-4.3.1",
+      "name": "IES4 v4.3.1 (frozen MIT baseline)",
+      "description": "Last public MIT-licensed snapshot of IES4 from the archived dstl/IES4 repo (tag v4.3.1, released 3 Mar 2025). Use as a reproducible compliance baseline when you need a frozen reference that won't shift with upstream changes. 4.3.2+ development continues in the IES-Org working group \u2014 use the `ies` preset for live work.",
+      "domain": "upper-ontology",
+      "url": "https://raw.githubusercontent.com/dstl/IES4/v4.3.1/IES%20Specification%20Docs/ies4.ttl",
+      "format": "turtle",
+      "license": "MIT",
+      "license_source": "publisher",
+      "sha256": "083afb47a8e68d96bbb07eaa369715670a66733f4bf5f2cf4fb45061118965cc"
+    },
+    {
+      "id": "ies-core",
+      "name": "IES Core Ontology",
+      "description": "Core IES patterns \u2014 persons, states, events, identifiers, periods. The middle layer of the IES framework",
+      "domain": "upper-ontology",
+      "url": "https://raw.githubusercontent.com/IES-Org/ies-core/main/spec/ies-core.ttl",
+      "format": "turtle",
+      "license": "MIT",
+      "license_source": "pack-bytes",
+      "sha256": "f28bf6979a252c79f4843346380a578ddcd869e96827ded56cfc432887ff84f3"
+    },
+    {
+      "id": "ies-top",
+      "name": "IES Top Level Ontology (ToLO)",
+      "description": "BORO foundational ontology \u2014 extensional 4-dimensionalism and pluralities, the upper layer of the IES framework",
+      "domain": "upper-ontology",
+      "url": "https://raw.githubusercontent.com/IES-Org/ies-top/main/spec/ies-top.ttl",
+      "format": "turtle",
+      "license": "MIT",
+      "license_source": "pack-bytes",
+      "sha256": "c6177d0228dadb7f499c8a44bbc3d7f213b301a4aaa28f8cafa051537fdfd303"
+    },
+    {
+      "id": "locn",
+      "name": "LOCN (Location Core Vocabulary)",
+      "description": "EU ISA vocabulary for describing places by name, address, or geometry",
+      "domain": "geospatial",
+      "url": "https://web.archive.org/web/20231207202635id_/https://uri.semic.eu/w3c/ns/locn.ttl",
+      "format": "turtle",
+      "license": "ISA-Open-Metadata-1.1",
+      "license_source": "pack-bytes",
+      "sha256": "b6661139db549f0a277a4b1842ed6cb25ee6980f89291f3629b786213de0258e",
+      "upstream_url": "https://www.w3.org/ns/locn.ttl",
+      "pin_note": "marketplace URL unavailable at pin time; pinned from an immutable Internet Archive snapshot of the same resource (build.md deviation)"
+    },
+    {
+      "id": "odrl",
+      "name": "ODRL (Open Digital Rights Language)",
+      "description": "W3C vocabulary for expressing permissions, prohibitions, and obligations",
+      "domain": "rights",
+      "url": "https://www.w3.org/ns/odrl/2/ODRL22.ttl",
+      "format": "turtle",
+      "license": "W3C-Software-And-Document",
+      "license_source": "publisher",
+      "sha256": "7895765e80d86d1d0349d945a28b8a2479f03169572345080a5b3e561ef31457"
+    },
+    {
+      "id": "org",
+      "name": "W3C Organization Ontology",
+      "description": "Vocabulary for organizational structures, membership, roles, and sites",
+      "domain": "organizations",
+      "url": "https://www.w3.org/ns/org.ttl",
+      "format": "turtle",
+      "license": "PDDL-1.0",
+      "license_source": "pack-bytes",
+      "sha256": "3e01f89a17475a88f8b1606ca0fae04800d34dbbf93adc6db12dc30929848729"
+    },
+    {
+      "id": "owl-time",
+      "name": "OWL-Time",
+      "description": "W3C/OGC ontology for temporal concepts \u2014 instants, intervals, durations",
+      "domain": "temporal",
+      "url": "https://www.w3.org/2006/time.ttl",
+      "format": "turtle",
+      "license": "CC-BY-4.0",
+      "license_source": "pack-bytes",
+      "sha256": "251bd6970b0d7a5efa97ff681afe81a297df85deab3d860fa4f8eeba72d8f16c"
+    },
+    {
+      "id": "prov-o",
+      "name": "PROV-O (Provenance Ontology)",
+      "description": "W3C ontology for representing provenance \u2014 entities, activities, agents",
+      "domain": "provenance",
+      "url": "https://www.w3.org/ns/prov-o.ttl",
+      "format": "turtle",
+      "license": "W3C-Software-And-Document",
+      "license_source": "publisher",
+      "sha256": "7d203989f67b38bca572253942acc5a1bf24ce3ccfece16f072dcb4be2b79a96"
+    },
+    {
+      "id": "qudt",
+      "name": "QUDT (Quantities, Units, Dimensions, Types)",
+      "description": "Ontology for physical quantities, units of measure, and dimensions",
+      "domain": "science",
+      "url": "http://qudt.org/2.1/schema/qudt",
+      "format": "turtle",
+      "license": "CC-BY-4.0",
+      "license_source": "pack-bytes",
+      "sha256": "25e9d4c127f5579b3fee083870fcbc38e0e01502f581b587c771a327b172107e"
+    },
+    {
+      "id": "saref",
+      "name": "SAREF (Smart Applications REFerence ontology)",
+      "description": "ETSI core ontology for IoT devices, measurements, commands and services (v3.2.1)",
+      "domain": "iot",
+      "url": "https://saref.etsi.org/core/v3.2.1/saref.ttl",
+      "format": "turtle",
+      "license": "ETSI-Software-License",
+      "license_source": "pack-bytes",
+      "sha256": "d3d859e57c7a07558a8c674868eb37a5f529636876ac7f4b26c140b2bedb218a"
+    },
+    {
+      "id": "schema-org",
+      "name": "Schema.org",
+      "description": "Collaborative vocabulary for structured data markup on the web",
+      "domain": "general",
+      "url": "https://schema.org/version/latest/schemaorg-current-https.ttl",
+      "format": "turtle",
+      "license": "CC-BY-SA-3.0",
+      "license_source": "publisher",
+      "sha256": "7f15ca89398c4f235f478a4b3b8d1f975d63c5a860b77c8a8fce01f791b7ae2f"
+    },
+    {
+      "id": "shacl",
+      "name": "SHACL (Shapes Constraint Language)",
+      "description": "W3C vocabulary for validating RDF graphs against shapes and constraints",
+      "domain": "validation",
+      "url": "https://www.w3.org/ns/shacl.ttl",
+      "format": "turtle",
+      "license": "W3C-Software-And-Document",
+      "license_source": "publisher",
+      "sha256": "0e5d8aea0eab98a072d4a02faaee1ee914ec99eab2ca473429726faed4a13f69"
+    },
+    {
+      "id": "sioc",
+      "name": "SIOC (Semantically-Interlinked Online Communities)",
+      "description": "Ontology for describing online communities, forums, and posts",
+      "domain": "social",
+      "url": "https://raw.githubusercontent.com/VisualDataWeb/OWL2VOWL/master/ontologies/sioc.rdf",
+      "format": "rdf-xml",
+      "license": "CC-BY-3.0",
+      "license_source": "publisher",
+      "sha256": "9be2d007f076b16200998efbff985766981816f37311cd07b22f0ee3a94bd177"
+    },
+    {
+      "id": "skos",
+      "name": "SKOS (Simple Knowledge Organization System)",
+      "description": "W3C vocabulary for thesauri, classification schemes, and taxonomies",
+      "domain": "knowledge-organization",
+      "url": "https://www.w3.org/2009/08/skos-reference/skos.rdf",
+      "format": "rdf-xml",
+      "license": "W3C-Software-And-Document",
+      "license_source": "publisher",
+      "sha256": "e79633b8d0564816cee8a99f5c9acf9a0e6fc7257c7209acd684ecad53a89dd6"
+    },
+    {
+      "id": "sosa",
+      "name": "SOSA (Sensor, Observation, Sample, Actuator)",
+      "description": "Lightweight core of SSN for sensors and observations",
+      "domain": "iot",
+      "url": "http://www.w3.org/ns/sosa/",
+      "format": "turtle",
+      "license": "W3C-Software-And-Document",
+      "license_source": "pack-bytes",
+      "sha256": "c70b0d1c843c0047e4c98e0a89392e46a05752ff6365bda7f7f55303905a0392"
+    },
+    {
+      "id": "ssn",
+      "name": "SSN (Semantic Sensor Network)",
+      "description": "W3C/OGC ontology for sensors, actuators, observations, and sampling",
+      "domain": "iot",
+      "url": "http://www.w3.org/ns/ssn/",
+      "format": "turtle",
+      "license": "W3C-Software-And-Document",
+      "license_source": "pack-bytes",
+      "sha256": "184d86189191146e314cc52b1bceb96fca11e70aacbc160d71588102a5153eb9"
+    },
+    {
+      "id": "vcard",
+      "name": "vCard Ontology",
+      "description": "Ontology for representing contact information in RDF",
+      "domain": "people",
+      "url": "http://www.w3.org/2006/vcard/ns",
+      "format": "turtle",
+      "license": "W3C-Software-And-Document",
+      "license_source": "publisher",
+      "sha256": "2442baf3d07d660910a0e24dd96b1efe1ec22cb26d12cdfd415195da91b43a0c"
+    },
+    {
+      "id": "void",
+      "name": "VoID (Vocabulary of Interlinked Datasets)",
+      "description": "Vocabulary for expressing metadata about RDF datasets",
+      "domain": "data-catalogs",
+      "url": "https://raw.githubusercontent.com/cygri/void/master/rdfs/void.ttl",
+      "format": "turtle",
+      "license": "W3C-Software-And-Document",
+      "license_source": "publisher",
+      "sha256": "52f249226d826b1731e9b46a1943afeda48186fcf8f37a0c819c217c031f8064"
+    }
+  ]
+}

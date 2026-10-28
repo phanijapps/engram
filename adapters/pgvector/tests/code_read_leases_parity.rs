@@ -1613,6 +1613,42 @@ fn postgres_renewal_waits_on_publication_authority_then_extends_anchored_lease()
     );
     assert_eq!(renewed_epoch, old_lease.eligibility.epoch);
 
+    // Independent durable-record proof (parent-side, after the actual child has been
+    // joined and its writer authority released): read the committed renewal row over
+    // the parent-owned observer connection and compare the complete decoded record —
+    // never partial child stdout values — against an expected clone of the original
+    // lease with only fence+1 and the requested expiry changed. The stored scope key,
+    // fence and expiry-ms columns are compared separately so a persisted column drift
+    // cannot hide behind a correct record_json (or vice versa), and this comparison is
+    // never substituted by the automatic previous-generation retention rule.
+    let durable_row = block_on(observer.client.query_one(
+        "SELECT scope_key,fence,expires_ms,record_json FROM code_read_leases WHERE lease_id=$1",
+        &[&old_lease.id],
+    ))
+    .expect("committed renewed lease row");
+    let durable_scope_key: String = durable_row.get(0);
+    let durable_fence: i64 = durable_row.get(1);
+    let durable_expires_ms: i64 = durable_row.get(2);
+    let durable_record: CodeReadLease =
+        serde_json::from_value(durable_row.get::<_, serde_json::Value>(3))
+            .expect("decode committed renewed lease record");
+    let mut expected_durable = old_lease.clone();
+    expected_durable.fencing_token = old_lease.fencing_token + 1;
+    expected_durable.expires_at = old_lease.expires_at + chrono::Duration::minutes(1);
+    assert_eq!(durable_record, expected_durable);
+    assert_eq!(
+        durable_scope_key,
+        serde_json::to_string(&old_lease.eligibility.scope).expect("expected durable scope key")
+    );
+    assert_eq!(
+        durable_fence,
+        i64::try_from(expected_durable.fencing_token).expect("expected durable fence")
+    );
+    assert_eq!(
+        durable_expires_ms,
+        expected_durable.expires_at.timestamp_millis()
+    );
+
     assert_eq!(
         block_on(store.get_binding(&test_scope, &bound.repo_id)).expect("published binding"),
         Some(published_binding)

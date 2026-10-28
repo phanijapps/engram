@@ -184,7 +184,7 @@ struct CacheManifest {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum FetchSource {
+pub(crate) enum FetchSource {
     Cache,
     Fetch,
 }
@@ -196,7 +196,10 @@ enum FetchSource {
 /// fetched entry that mismatches the pinned sha256 is a hard error naming
 /// the entry and the re-pin procedure (RISK-001) — divergent bytes are
 /// never installed and the pin is never overwritten.
-fn obtain_bytes(storage: &Path, entry: &CatalogueEntry) -> Result<(Vec<u8>, FetchSource), String> {
+pub(crate) fn obtain_bytes(
+    storage: &Path,
+    entry: &CatalogueEntry,
+) -> Result<(Vec<u8>, FetchSource), String> {
     let dir = cache_dir(storage, &entry.id);
     let pack_path = dir.join(format!("pack.{}", entry.format.extension()));
     let manifest_path = dir.join("manifest.json");
@@ -210,13 +213,15 @@ fn obtain_bytes(storage: &Path, entry: &CatalogueEntry) -> Result<(Vec<u8>, Fetc
         .map_err(|e| format!("parse cache manifest: {e}"))?;
         let actual = sha256_hex(&bytes);
         if actual != manifest.sha256 || manifest.sha256 != entry.sha256 {
+            // FIND-code-008: a disk-read manifest can be arbitrarily corrupt —
+            // hash excerpts degrade to "?" instead of slicing to a panic.
+            let manifest_excerpt = manifest.sha256.get(..12).unwrap_or("?");
             return Err(format!(
-                "pack cache for {} is corrupt or off-pin (manifest {}, catalog {}, bytes {}): \
+                "pack cache for {} is corrupt or off-pin (manifest {manifest_excerpt}, catalog {}, bytes {}): \
                  delete {} and re-run to refetch from the pinned URL",
                 entry.id,
-                &manifest.sha256[..12],
-                &entry.sha256[..12],
-                &actual[..12],
+                entry.sha256.get(..12).unwrap_or("?"),
+                actual.get(..12).unwrap_or("?"),
                 dir.display()
             ));
         }
@@ -244,6 +249,22 @@ fn obtain_bytes(storage: &Path, entry: &CatalogueEntry) -> Result<(Vec<u8>, Fetc
     Ok((bytes, FetchSource::Fetch))
 }
 
+/// Total-time budget for one pinned-URL fetch (FIND-code-007). The
+/// `ENGRAM_PACK_FETCH_TIMEOUT_SECS` override exists for tests and tightly
+/// controlled environments; production keeps the 120s default.
+fn fetch_total_timeout_secs() -> u64 {
+    std::env::var("ENGRAM_PACK_FETCH_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(120)
+        .max(1)
+}
+
+/// Connect-time budget for one pinned-URL fetch (FIND-code-007).
+fn fetch_connect_timeout_secs() -> u64 {
+    fetch_total_timeout_secs().min(10)
+}
+
 /// Fetch pinned bytes: `file://` reads a local file (the dev/fixture
 /// mechanism — deterministic, offline), `http(s)://` uses the blocking
 /// reqwest client with the rustls transport.
@@ -254,7 +275,15 @@ fn fetch_url(url: &str) -> Result<Vec<u8>, String> {
     if !url.starts_with("https://") && !url.starts_with("http://") {
         return Err(format!("unsupported URL scheme: {url}"));
     }
-    let response = reqwest::blocking::get(url).map_err(|e| format!("http: {e}"))?;
+    // FIND-code-007: a hung pinned URL must fail fast, not wedge the one-shot
+    // install — connect+total timeouts per the embedding HTTP precedent
+    // (adapters/embedding/http/src/provider.rs).
+    let client = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(fetch_total_timeout_secs()))
+        .connect_timeout(std::time::Duration::from_secs(fetch_connect_timeout_secs()))
+        .build()
+        .map_err(|e| format!("build http client: {e}"))?;
+    let response = client.get(url).send().map_err(|e| format!("http: {e}"))?;
     if !response.status().is_success() {
         return Err(format!("http status {}", response.status()));
     }

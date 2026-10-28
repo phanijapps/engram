@@ -536,3 +536,100 @@ fn pack_label_collisions_wire_hierarchy_by_id() {
         taxonomy.concepts
     );
 }
+
+/// FIND-code-008 regression: a corrupt cache manifest (arbitrary hash length)
+/// produces the corrupt-cache ERROR, never a slicing panic.
+#[test]
+fn pack_corrupt_manifest_errors_instead_of_panicking() {
+    let dir = tempfile::tempdir().unwrap();
+    let storage = dir.path().join("store");
+    let entry = load_catalogue(dir.path())
+        .find("bank-fixture")
+        .unwrap()
+        .clone();
+    // Plant a cache whose manifest carries a truncated hash.
+    let cache = pack::cache_dir(&storage, "bank-fixture");
+    std::fs::create_dir_all(&cache).unwrap();
+    std::fs::write(cache.join("pack.ttl"), bank_fixture_bytes()).unwrap();
+    std::fs::write(
+        cache.join("manifest.json"),
+        r#"{"id":"bank-fixture","sha256":"deadbeef","license":"CC-BY-4.0","format":"Turtle","url":"x","classes":1,"properties":1}"#,
+    )
+    .unwrap();
+    let err = pack::obtain_bytes(&storage, &entry).expect_err("corrupt manifest must error");
+    assert!(
+        err.contains("corrupt or off-pin"),
+        "named corrupt-cache error: {err}"
+    );
+    assert!(
+        err.contains("delete") && err.contains("refetch"),
+        "error names the repair: {err}"
+    );
+}
+
+/// FIND-code-007 regression: a pinned URL that accepts the connection but
+/// never responds fails fast under the fetch timeout instead of wedging the
+/// one-shot install.
+#[test]
+fn pack_fetch_times_out_against_a_hung_url() {
+    use std::io::Write as _;
+    // A local TCP server that accepts and never responds.
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { break };
+            // Deliberately never write a response.
+            let _ = stream.write(&[]);
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        }
+    });
+    let dir = tempfile::tempdir().unwrap();
+    let storage = dir.path().join("store");
+    let catalogue = serde_json::json!({
+        "_header": {
+            "description": "hung-url catalogue", "excluded_language_bases": { "reason": "r" },
+            "pin_run": {}, "license_policy": ""
+        },
+        "entries": [{
+            "id": "hung-pack", "name": "Hung", "description": "", "domain": "finance",
+            "url": format!("http://127.0.0.1:{port}/pack.ttl"),
+            "format": "turtle", "license": "CC-BY-4.0", "license_source": "pack-bytes",
+            "sha256": "0".repeat(64)
+        }]
+    });
+    let path = dir.path().join("hung.json");
+    std::fs::write(&path, catalogue.to_string()).unwrap();
+    let parsed = Catalogue::from_json(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let entry = parsed.find("hung-pack").unwrap().clone();
+
+    let guard = std::env::var("ENGRAM_PACK_FETCH_TIMEOUT_SECS").ok();
+    // SAFETY: this is the only test in the process that reads this variable
+    // (no parallel pack test performs an http fetch), and the write is
+    // bracketed by the restore below.
+    unsafe { std::env::set_var("ENGRAM_PACK_FETCH_TIMEOUT_SECS", "1") };
+    let started = std::time::Instant::now();
+    let err = pack::obtain_bytes(&storage, &entry).expect_err("hung URL must time out");
+    let elapsed = started.elapsed();
+    // SAFETY: see above.
+    unsafe {
+        match guard {
+            Some(v) => std::env::set_var("ENGRAM_PACK_FETCH_TIMEOUT_SECS", v),
+            None => std::env::remove_var("ENGRAM_PACK_FETCH_TIMEOUT_SECS"),
+        }
+    }
+    drop(server);
+    assert!(err.contains("http"), "error names the http failure: {err}");
+    assert!(
+        elapsed < std::time::Duration::from_secs(10),
+        "failed fast ({elapsed:?}), not wedged"
+    );
+}
+
+fn bank_fixture_bytes() -> Vec<u8> {
+    std::fs::read(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../core/packs/tests/fixtures/bank-fixture.ttl"),
+    )
+    .unwrap()
+}

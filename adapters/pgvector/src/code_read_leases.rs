@@ -19,6 +19,16 @@ fn fence(value: u64) -> CoreResult<i64> {
     i64::try_from(value).map_err(|_| changed())
 }
 
+async fn lease_authority(tx: &tokio_postgres::Transaction<'_>, lease_id: &str) -> CoreResult<()> {
+    tx.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+        &[&format!("engram-code-read-lease-id:{lease_id}")],
+    )
+    .await
+    .map_err(|_| storage_error())?;
+    Ok(())
+}
+
 async fn eligibility(
     tx: &tokio_postgres::Transaction<'_>,
     scope: &Scope,
@@ -73,7 +83,8 @@ impl CodeReadLeases for PgCodeBindingRepository {
             if eligibility(&tx, &lease.eligibility.scope).await? != lease.eligibility {
                 return Err(changed());
             }
-            if tx.query_opt("SELECT 1 FROM code_read_lease_tombstones WHERE lease_id=$1 FOR KEY SHARE", &[&lease.id]).await.map_err(|_| storage_error())?.is_some() {
+            lease_authority(&tx, &lease.id).await?;
+            if tx.query_opt("SELECT 1 FROM code_read_lease_tombstones WHERE lease_id=$1", &[&lease.id]).await.map_err(|_| storage_error())?.is_some() {
                 return Err(changed());
             }
             let previous = tx.query_opt("SELECT record_json FROM code_read_leases WHERE lease_id=$1 FOR UPDATE", &[&lease.id]).await.map_err(|_| storage_error())?;
@@ -81,8 +92,8 @@ impl CodeReadLeases for PgCodeBindingRepository {
                 return Err(changed());
             }
             tx.execute("INSERT INTO code_read_leases(lease_id,scope_key,fence,expires_ms,record_json) VALUES($1,$2,$3,$4,$5) ON CONFLICT(lease_id) DO NOTHING", &[&lease.id, &scope, &lease_fence, &lease.expires_at.timestamp_millis(), &record]).await.map_err(|_| storage_error())?;
-            let durable = tx.query_one("SELECT record_json FROM code_read_leases WHERE lease_id=$1 FOR UPDATE", &[&lease.id]).await.map_err(|_| storage_error())?.get::<_, serde_json::Value>(0);
-            if durable != record {
+            let durable = tx.query_opt("SELECT record_json FROM code_read_leases WHERE lease_id=$1 FOR UPDATE", &[&lease.id]).await.map_err(|_| storage_error())?.map(|row| row.get::<_, serde_json::Value>(0));
+            if durable != Some(record) {
                 return Err(changed());
             }
             tx.commit().await.map_err(|_| storage_error())?;
@@ -109,6 +120,7 @@ impl CodeReadLeases for PgCodeBindingRepository {
             if eligibility(&tx, &lease.eligibility.scope).await? != lease.eligibility {
                 return Err(changed());
             }
+            lease_authority(&tx, &lease.id).await?;
             let previous = tx.query_opt("SELECT record_json FROM code_read_leases WHERE lease_id=$1 FOR UPDATE", &[&lease.id]).await.map_err(|_| storage_error())?;
             if previous.map(|row| row.get::<_, serde_json::Value>(0)) != Some(old) {
                 return Err(changed());
@@ -134,6 +146,7 @@ impl CodeReadLeases for PgCodeBindingRepository {
         self.blocking(move |store| {
             crate::connection::runtime().block_on(async {
                 let tx = store.connection.client.transaction().await.map_err(|_| storage_error())?;
+                lease_authority(&tx, &lease.id).await?;
                 let durable = tx.query_opt("SELECT record_json FROM code_read_leases WHERE lease_id=$1 FOR UPDATE", &[&lease.id]).await.map_err(|_| storage_error())?;
                 if durable.map(|row| row.get::<_, serde_json::Value>(0)) != Some(record) {
                     return Err(changed());

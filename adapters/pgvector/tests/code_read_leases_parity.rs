@@ -658,7 +658,7 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
         ))
         .expect("observe fixture barrier waiters")
         .get(0);
-        if waiters == 2 {
+        if waiters == 1 {
             both_prechecks_waiting = true;
             break;
         }
@@ -666,7 +666,7 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
     }
     assert!(
         both_prechecks_waiting,
-        "both child acquisitions did not reach the post-precheck insert barrier"
+        "the winning child did not reach the post-precheck insert barrier"
     );
     block_on(barrier_tx.commit()).expect("release fixture insert barrier");
     let first_output = collect_child(first);

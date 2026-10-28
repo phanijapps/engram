@@ -208,10 +208,22 @@ fn stop_injected(
     until: Instant,
     fault: Option<CleanupFault>,
 ) -> Result<ExitStatus, StageFailure> {
-    let termination = match fault {
-        Some(CleanupFault::Termination) => Err(StageFailure::os("job.terminate")),
-        _ => job.terminate(),
-    };
+    // A failed termination or an exhausted allowance means custody genuinely cannot
+    // be resolved here: return the stage failure immediately so the pending registry
+    // retains the handles (the killed leader alone would otherwise drain accounting
+    // to zero and hide the unresolved-termination scenario the fault models).
+    if matches!(fault, Some(CleanupFault::Termination)) {
+        let _ = child.kill();
+        return Err(StageFailure::os("job.terminate"));
+    }
+    if matches!(fault, Some(CleanupFault::Deadline)) {
+        let _ = child.kill();
+        return Err(StageFailure::invariant(
+            "cleanup.deadline",
+            "job_terminate=1;child_kill=1".into(),
+        ));
+    }
+    let termination = job.terminate();
     let direct = child.kill();
     let mut status = None;
     loop {
@@ -229,7 +241,7 @@ fn stop_injected(
         if status.is_some() && job.active()? == 0 {
             return Ok(status.unwrap());
         }
-        if Instant::now() >= until || matches!(fault, Some(CleanupFault::Deadline)) {
+        if Instant::now() >= until {
             return Err(StageFailure::invariant(
                 "cleanup.deadline",
                 format!(

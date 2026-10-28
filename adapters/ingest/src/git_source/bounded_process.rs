@@ -6,6 +6,63 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Fixed operation label plus the OS failure captured immediately at the failing call.
+/// Diagnostics carry only the fixed stage, numeric raw OS error, error kind and a
+/// fixed-form invariant detail; never argv, paths, credentials or free-form strings.
+#[derive(Debug)]
+pub(crate) struct StageFailure {
+    stage: &'static str,
+    error: Option<std::io::Error>,
+    detail: Option<String>,
+}
+impl StageFailure {
+    pub(crate) fn os(stage: &'static str) -> Self {
+        Self {
+            stage,
+            error: Some(std::io::Error::last_os_error()),
+            detail: None,
+        }
+    }
+    pub(crate) fn from_error(stage: &'static str, error: std::io::Error) -> Self {
+        Self {
+            stage,
+            error: Some(error),
+            detail: None,
+        }
+    }
+    pub(crate) fn invariant(stage: &'static str, detail: String) -> Self {
+        Self {
+            stage,
+            error: None,
+            detail: Some(detail),
+        }
+    }
+    pub(crate) fn report(&self) -> String {
+        match &self.error {
+            Some(error) => format!(
+                "stage={}; os_error={:?}; kind={:?}",
+                self.stage,
+                error.raw_os_error(),
+                error.kind()
+            ),
+            None => format!(
+                "stage={}; os_error=none; kind=Other; detail={}",
+                self.stage,
+                self.detail.as_deref().unwrap_or("invariant")
+            ),
+        }
+    }
+}
+fn operation_failed(failure: StageFailure) -> CoreError {
+    CoreError::Adapter {
+        adapter: "engram-ingest-git".into(),
+        message: format!(
+            "owned Git subprocess operation failed; {}",
+            failure.report()
+        ),
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct GitResourceLimits {
     pub subprocess_timeout: Duration,
@@ -45,17 +102,36 @@ impl Default for GitResourceLimits {
 }
 
 #[cfg(unix)]
-fn prepare_pipe<T: std::os::fd::AsRawFd>(pipe: &T) -> std::io::Result<()> {
+fn prepare_read_pipe<T: std::os::fd::AsRawFd>(
+    pipe: &T,
+    get_stage: &'static str,
+    set_stage: &'static str,
+) -> Result<(), StageFailure> {
     let fd = pipe.as_raw_fd();
     // SAFETY: the live owned pipe descriptor is not shared with another reader/writer.
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
-    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
-        return Err(std::io::Error::last_os_error());
+    if flags < 0 {
+        return Err(StageFailure::os(get_stage));
+    }
+    if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        return Err(StageFailure::os(set_stage));
     }
     Ok(())
 }
+#[cfg(unix)]
+fn prepare_write_pipe<T: std::os::fd::AsRawFd>(
+    pipe: &T,
+    get_stage: &'static str,
+    set_stage: &'static str,
+) -> Result<(), StageFailure> {
+    prepare_read_pipe(pipe, get_stage, set_stage)
+}
 #[cfg(windows)]
-fn prepare_pipe<T: std::os::windows::io::AsRawHandle>(pipe: &T) -> std::io::Result<()> {
+fn prepare_read_pipe<T: std::os::windows::io::AsRawHandle>(
+    pipe: &T,
+    get_stage: &'static str,
+    set_stage: &'static str,
+) -> Result<(), StageFailure> {
     use windows_sys::Win32::System::Pipes::{
         GetNamedPipeHandleStateW, PIPE_NOWAIT, SetNamedPipeHandleState,
     };
@@ -72,7 +148,7 @@ fn prepare_pipe<T: std::os::windows::io::AsRawHandle>(pipe: &T) -> std::io::Resu
         )
     } == 0
     {
-        return Err(std::io::Error::last_os_error());
+        return Err(StageFailure::os(get_stage));
     }
     mode |= PIPE_NOWAIT;
     if unsafe {
@@ -84,7 +160,45 @@ fn prepare_pipe<T: std::os::windows::io::AsRawHandle>(pipe: &T) -> std::io::Resu
         )
     } == 0
     {
-        return Err(std::io::Error::last_os_error());
+        return Err(StageFailure::os(set_stage));
+    }
+    Ok(())
+}
+#[cfg(windows)]
+fn prepare_write_pipe<T: std::os::windows::io::AsRawHandle>(
+    pipe: &T,
+    get_stage: &'static str,
+    set_stage: &'static str,
+) -> Result<(), StageFailure> {
+    use windows_sys::Win32::System::Pipes::{
+        GetNamedPipeHandleStateW, PIPE_NOWAIT, SetNamedPipeHandleState,
+    };
+    let mut mode = 0;
+    if unsafe {
+        GetNamedPipeHandleStateW(
+            pipe.as_raw_handle(),
+            &mut mode,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        )
+    } == 0
+    {
+        return Err(StageFailure::os(get_stage));
+    }
+    mode |= PIPE_NOWAIT;
+    if unsafe {
+        SetNamedPipeHandleState(
+            pipe.as_raw_handle(),
+            &mode,
+            std::ptr::null(),
+            std::ptr::null(),
+        )
+    } == 0
+    {
+        return Err(StageFailure::os(set_stage));
     }
     Ok(())
 }
@@ -92,17 +206,23 @@ fn prepare_pipe<T: std::os::windows::io::AsRawHandle>(pipe: &T) -> std::io::Resu
 fn read_ready<T: Read + std::os::fd::AsRawFd>(
     pipe: &mut T,
     buffer: &mut [u8],
-) -> std::io::Result<Option<usize>> {
+    _peek_stage: &'static str,
+    read_stage: &'static str,
+) -> Result<Option<usize>, StageFailure> {
     match pipe.read(buffer) {
         Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
-        other => other.map(Some),
+        other => other
+            .map(Some)
+            .map_err(|e| StageFailure::from_error(read_stage, e)),
     }
 }
 #[cfg(windows)]
 fn read_ready<T: Read + std::os::windows::io::AsRawHandle>(
     pipe: &mut T,
     buffer: &mut [u8],
-) -> std::io::Result<Option<usize>> {
+    peek_stage: &'static str,
+    read_stage: &'static str,
+) -> Result<Option<usize>, StageFailure> {
     use windows_sys::Win32::{
         Foundation::{ERROR_BROKEN_PIPE, ERROR_PIPE_NOT_CONNECTED},
         System::Pipes::PeekNamedPipe,
@@ -124,14 +244,16 @@ fn read_ready<T: Read + std::os::windows::io::AsRawHandle>(
         {
             Ok(Some(0))
         } else {
-            Err(error)
+            Err(StageFailure::from_error(peek_stage, error))
         };
     }
     if available == 0 {
         return Ok(None);
     }
     let len = (available as usize).min(buffer.len());
-    pipe.read(&mut buffer[..len]).map(Some)
+    pipe.read(&mut buffer[..len])
+        .map(Some)
+        .map_err(|e| StageFailure::from_error(read_stage, e))
 }
 #[cfg(windows)]
 fn write_initial(pipe: &mut std::process::ChildStdin, bytes: &[u8]) -> std::io::Result<usize> {
@@ -171,6 +293,10 @@ fn leader_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
 fn leader_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
     child.try_wait().map(|s| s.is_some())
 }
+#[cfg(unix)]
+const LEADER_STAGE: &str = "child.waitid";
+#[cfg(windows)]
+const LEADER_STAGE: &str = "child.try_wait";
 
 /// Runs one child with bounded, concurrently drained pipes, a wall-clock deadline, and a Unix file-size limit.
 pub(crate) fn run_limited(
@@ -243,25 +369,29 @@ pub(crate) fn run_limited_input(
         message: "Git subprocess could not start".into(),
     })?;
     #[cfg(windows)]
-    let (mut child, owned_job) =
-        super::windows_job::spawn(command).map_err(|error| CoreError::Adapter {
-            adapter: "engram-ingest-git".into(),
-            message: super::windows_job::diagnostic(&error),
-        })?;
+    let (mut child, owned_job) = super::windows_job::spawn(command).map_err(operation_failed)?;
     let outcome = (|| {
         let mut stdout = child.stdout.take().expect("piped stdout");
         let mut stderr = child.stderr.take().expect("piped stderr");
-        prepare_pipe(&stdout).map_err(|_| pipe_error())?;
-        prepare_pipe(&stderr).map_err(|_| pipe_error())?;
+        prepare_read_pipe(&stdout, "stdout.get_state", "stdout.set_state")
+            .map_err(operation_failed)?;
+        prepare_read_pipe(&stderr, "stderr.get_state", "stderr.set_state")
+            .map_err(operation_failed)?;
         let mut stdin = child.stdin.take();
         if let Some(stdin) = &stdin {
-            prepare_pipe(stdin).map_err(|_| pipe_error())?;
+            prepare_write_pipe(stdin, "stdin.get_state", "stdin.set_state")
+                .map_err(operation_failed)?;
         }
         let input = input.unwrap_or_default();
         let mut written = 0;
         let deadline = Instant::now()
             .checked_add(limits.subprocess_timeout)
-            .ok_or_else(pipe_error)?;
+            .ok_or_else(|| {
+                operation_failed(StageFailure::invariant(
+                    "deadline.overflow",
+                    "arithmetic".into(),
+                ))
+            })?;
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let (mut out_done, mut err_done) = (false, false);
         let mut buffer = [0u8; 8192];
@@ -277,10 +407,18 @@ pub(crate) fn run_limited_input(
                 });
             }
             if written < input.len() {
-                match write_initial(stdin.as_mut().ok_or_else(pipe_error)?, &input[written..]) {
+                let stdin_handle = stdin.as_mut().ok_or_else(|| {
+                    operation_failed(StageFailure::invariant(
+                        "stdin.closed",
+                        "handle-dropped".into(),
+                    ))
+                })?;
+                match write_initial(stdin_handle, &input[written..]) {
                     Ok(n) => written += n,
                     Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-                    Err(_) => return Err(pipe_error()),
+                    Err(e) => {
+                        return Err(operation_failed(StageFailure::from_error("stdin.write", e)));
+                    }
                 }
             }
             if written == input.len() {
@@ -290,7 +428,9 @@ pub(crate) fn run_limited_input(
                 if out_done {
                     break;
                 }
-                match read_ready(&mut stdout, &mut buffer).map_err(|_| pipe_error())? {
+                match read_ready(&mut stdout, &mut buffer, "stdout.peek", "stdout.read")
+                    .map_err(operation_failed)?
+                {
                     Some(0) => out_done = true,
                     Some(n) => {
                         if n > stdout_limit.saturating_sub(out.len()) {
@@ -305,7 +445,9 @@ pub(crate) fn run_limited_input(
                 if err_done {
                     break;
                 }
-                match read_ready(&mut stderr, &mut buffer).map_err(|_| pipe_error())? {
+                match read_ready(&mut stderr, &mut buffer, "stderr.peek", "stderr.read")
+                    .map_err(operation_failed)?
+                {
                     Some(0) => err_done = true,
                     Some(n) => {
                         if n > limits.max_stderr_bytes.saturating_sub(err.len()) {
@@ -316,7 +458,11 @@ pub(crate) fn run_limited_input(
                     None => break,
                 }
             }
-            if leader_exited(&mut child).map_err(|_| pipe_error())? && out_done && err_done {
+            if leader_exited(&mut child)
+                .map_err(|e| operation_failed(StageFailure::from_error(LEADER_STAGE, e)))?
+                && out_done
+                && err_done
+            {
                 return Ok((out, err));
             }
             thread::sleep(Duration::from_millis(2));
@@ -330,26 +476,25 @@ pub(crate) fn run_limited_input(
         if outcome.is_err() {
             let _ = child.kill();
         }
-        child.wait().map_err(|_| pipe_error())?
+        child
+            .wait()
+            .map_err(|e| operation_failed(StageFailure::from_error("child.wait", e)))?
     };
     #[cfg(windows)]
-    let status =
-        super::windows_job::finish(child, owned_job).map_err(|error| CoreError::Adapter {
-            adapter: "engram-ingest-git".into(),
-            message: super::windows_job::diagnostic(&error),
-        })?;
+    let status = super::windows_job::finish(child, owned_job);
+    // Return the primary operation failure first; unresolved cleanup custody is retained
+    // in the owned-job registry and its evidence is reachable through diagnostic().
     let (stdout, stderr) = outcome?;
+    #[cfg(windows)]
+    let status = status.map_err(|error| CoreError::Adapter {
+        adapter: "engram-ingest-git".into(),
+        message: super::windows_job::diagnostic(&error),
+    })?;
     Ok(Output {
         status,
         stdout,
         stderr,
     })
-}
-fn pipe_error() -> CoreError {
-    CoreError::Adapter {
-        adapter: "engram-ingest-git".into(),
-        message: "owned Git subprocess pipe/status failed".into(),
-    }
 }
 fn output_error() -> CoreError {
     CoreError::InvalidRequest {
@@ -379,7 +524,8 @@ mod task_008 {
         let start = Instant::now();
         let result = run_limited(&mut command, &limits, 64);
         assert!(
-            matches!(result, Err(CoreError::InvalidRequest { reason }) if reason.contains("time limit"))
+            matches!(&result, Err(CoreError::InvalidRequest { reason }) if reason.contains("time limit")),
+            "sanitized result: {result:?}"
         );
         assert!(start.elapsed() < Duration::from_secs(3));
     }
@@ -390,13 +536,17 @@ mod task_008 {
         limits.max_stderr_bytes = 64;
         let mut stdout = Command::new(fixture_python());
         stdout.args(["-c", "import sys; sys.stdout.write('x'*10000000)"]);
+        let stdout_result = run_limited(&mut stdout, &limits, 128);
         assert!(
-            matches!(run_limited(&mut stdout, &limits, 128), Err(CoreError::InvalidRequest { reason }) if reason.contains("output exceeded"))
+            matches!(&stdout_result, Err(CoreError::InvalidRequest { reason }) if reason.contains("output exceeded")),
+            "sanitized result: {stdout_result:?}"
         );
         let mut stderr = Command::new(fixture_python());
         stderr.args(["-c", "import sys; sys.stderr.write('x'*10000000)"]);
+        let stderr_result = run_limited(&mut stderr, &limits, 128);
         assert!(
-            matches!(run_limited(&mut stderr, &limits, 128), Err(CoreError::InvalidRequest { reason }) if reason.contains("output exceeded"))
+            matches!(&stderr_result, Err(CoreError::InvalidRequest { reason }) if reason.contains("output exceeded")),
+            "sanitized result: {stderr_result:?}"
         );
     }
 
@@ -430,7 +580,9 @@ mod task_008 {
                             )
                         };
                         if handle.is_null() {
-                            return Err(pipe_error());
+                            return Err(operation_failed(StageFailure::os(
+                                "descendant.open_process",
+                            )));
                         }
                         keeper = Some(unsafe {
                             std::os::windows::io::OwnedHandle::from_raw_handle(handle)
@@ -445,10 +597,11 @@ mod task_008 {
         });
         assert!(
             observed,
-            "owned fixture must start the actual pipe-holding descendant"
+            "owned fixture must start the actual pipe-holding descendant; sanitized result: {result:?}"
         );
         assert!(
-            matches!(result,Err(CoreError::InvalidRequest {reason}) if reason.contains("time limit"))
+            matches!(&result,Err(CoreError::InvalidRequest {reason}) if reason.contains("time limit")),
+            "sanitized result: {result:?}"
         );
         #[cfg(windows)]
         {
@@ -470,9 +623,11 @@ mod task_008 {
         let mut command = Command::new(fixture_python());
         command.args(["-c", "import sys;sys.exit(7)"]);
         let start = Instant::now();
-        let output = run_limited(&mut command, &GitResourceLimits::default(), 128).unwrap();
-        assert_eq!(output.status.code(), Some(7));
-        assert!(output.stdout.is_empty());
+        let output = run_limited(&mut command, &GitResourceLimits::default(), 128);
+        assert!(
+            matches!(&output, Ok(out) if out.status.code() == Some(7) && out.stdout.is_empty()),
+            "sanitized result: {output:?}"
+        );
         assert!(start.elapsed() < Duration::from_secs(3));
     }
 
@@ -509,11 +664,50 @@ mod task_008 {
         command.args(["-c", "import time; time.sleep(30)"]);
         let mut limits = GitResourceLimits::default();
         limits.subprocess_timeout = Duration::from_millis(50);
+        let admitted = run_limited_input(&mut command, &limits, 128, Some(vec![0; 512]), || Ok(()));
         assert!(
-            matches!(run_limited_input(&mut command,&limits,128,Some(vec![0;512]),||Ok(())),Err(CoreError::InvalidRequest {reason}) if reason.contains("time limit"))
+            matches!(&admitted,Err(CoreError::InvalidRequest {reason}) if reason.contains("time limit")),
+            "sanitized result: {admitted:?}"
+        );
+        let rejected = run_limited_input(&mut command, &limits, 128, Some(vec![0; 513]), || Ok(()));
+        assert!(
+            matches!(&rejected,Err(CoreError::InvalidRequest {reason}) if reason.contains("input exceeds")),
+            "sanitized result: {rejected:?}"
+        );
+    }
+    #[test]
+    fn task_008_native_stage_observation_smallest_child_without_stdin() {
+        let mut command = Command::new(fixture_python());
+        command.args([
+            "-c",
+            "import sys; sys.stdout.write('out'); sys.stderr.write('err'); sys.exit(7)",
+        ]);
+        let result = run_limited(&mut command, &GitResourceLimits::default(), 128);
+        assert!(
+            matches!(&result, Ok(output) if output.status.code() == Some(7)
+                && output.stdout.as_slice() == b"out"
+                && output.stderr.as_slice() == b"err"),
+            "smallest-child no-stdin observation: {result:?}"
+        );
+    }
+    #[test]
+    fn task_008_native_stage_observation_protocol_stdin_roundtrip() {
+        let mut command = Command::new(fixture_python());
+        command.args([
+            "-c",
+            "import sys; data = sys.stdin.buffer.read(); sys.stdout.write(str(len(data))); sys.exit(0)",
+        ]);
+        let result = run_limited_input(
+            &mut command,
+            &GitResourceLimits::default(),
+            128,
+            Some(vec![b'x'; 512]),
+            || Ok(()),
         );
         assert!(
-            matches!(run_limited_input(&mut command,&limits,128,Some(vec![0;513]),||Ok(())),Err(CoreError::InvalidRequest {reason}) if reason.contains("input exceeds"))
+            matches!(&result, Ok(output) if output.status.code() == Some(0)
+                && output.stdout.as_slice() == b"512"),
+            "protocol-stdin observation: {result:?}"
         );
     }
     #[test]
@@ -527,7 +721,8 @@ mod task_008 {
             })
         });
         assert!(
-            matches!(result, Err(CoreError::InvalidRequest { reason }) if reason.contains("storage limit"))
+            matches!(&result, Err(CoreError::InvalidRequest { reason }) if reason.contains("storage limit")),
+            "sanitized result: {result:?}"
         );
         assert!(start.elapsed() < Duration::from_secs(3));
     }

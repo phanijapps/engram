@@ -1,4 +1,5 @@
 //! Assign a suspended child to an owned kill-on-close job before running any helper code.
+use super::bounded_process::StageFailure;
 use std::{
     io, mem,
     os::windows::{
@@ -33,15 +34,13 @@ const MAX_OWNED_JOBS: usize = 16;
 static RESERVED: AtomicUsize = AtomicUsize::new(0);
 struct Permit;
 impl Permit {
-    fn acquire() -> io::Result<Self> {
+    fn acquire() -> Result<Self, StageFailure> {
         RESERVED
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
                 (n < MAX_OWNED_JOBS).then_some(n + 1)
             })
             .map(|_| Self)
-            .map_err(|_| {
-                io::Error::other("owned helper capacity exhausted; pending custody must resolve")
-            })
+            .map_err(|_| StageFailure::invariant("job.permit", "capacity=16".into()))
     }
 }
 impl Drop for Permit {
@@ -67,14 +66,22 @@ struct CleanupPending {
     id: u64,
     pid: u32,
     operation: &'static str,
+    cause: Option<String>,
 }
 impl std::fmt::Display for CleanupPending {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "cleanup_pending; retry_owner=windows-owned-job-registry; registry_id={}; pid={}; operation={}; retry uses retained handles, never PID alone",
-            self.id, self.pid, self.operation
-        )
+        match &self.cause {
+            Some(cause) => write!(
+                f,
+                "cleanup_pending; retry_owner=windows-owned-job-registry; registry_id={}; pid={}; operation={}; cause={}; retry uses retained handles, never PID alone",
+                self.id, self.pid, self.operation, cause
+            ),
+            None => write!(
+                f,
+                "cleanup_pending; retry_owner=windows-owned-job-registry; registry_id={}; pid={}; operation={}; retry uses retained handles, never PID alone",
+                self.id, self.pid, self.operation
+            ),
+        }
     }
 }
 impl std::error::Error for CleanupPending {}
@@ -87,12 +94,12 @@ pub(super) fn diagnostic(error: &io::Error) -> String {
 }
 
 impl OwnedJob {
-    fn new() -> io::Result<Self> {
+    fn new() -> Result<Self, StageFailure> {
         // SAFETY: null security/name pointers request an unnamed, non-inheritable owned handle.
         let permit = Permit::acquire()?;
         let raw = unsafe { CreateJobObjectW(ptr::null(), ptr::null()) };
         if raw.is_null() {
-            return Err(io::Error::last_os_error());
+            return Err(StageFailure::os("job.create"));
         }
         // SAFETY: successful CreateJobObjectW transfers this handle to this guard exactly once.
         static NEXT: AtomicU64 = AtomicU64::new(1);
@@ -113,17 +120,17 @@ impl OwnedJob {
             )
         };
         if ok == 0 {
-            return Err(io::Error::last_os_error());
+            return Err(StageFailure::os("job.set_limits"));
         }
         Ok(job)
     }
-    fn terminate(&self) -> io::Result<()> {
+    fn terminate(&self) -> Result<(), StageFailure> {
         if unsafe { TerminateJobObject(self.handle.as_raw_handle(), 1) } == 0 {
-            return Err(io::Error::last_os_error());
+            return Err(StageFailure::os("job.terminate"));
         }
         Ok(())
     }
-    fn active(&self) -> io::Result<u32> {
+    fn active(&self) -> Result<u32, StageFailure> {
         let mut info: JOBOBJECT_BASIC_ACCOUNTING_INFORMATION = unsafe { mem::zeroed() };
         if unsafe {
             QueryInformationJobObject(
@@ -135,16 +142,16 @@ impl OwnedJob {
             )
         } == 0
         {
-            return Err(io::Error::last_os_error());
+            return Err(StageFailure::os("job.query_active"));
         }
         Ok(info.ActiveProcesses)
     }
 }
-fn resume_initial_thread(pid: u32) -> io::Result<()> {
+fn resume_initial_thread(pid: u32) -> Result<(), StageFailure> {
     // SAFETY: a system snapshot handle is owned below; this call mutates no foreign process.
     let raw = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
     if raw == INVALID_HANDLE_VALUE {
-        return Err(io::Error::last_os_error());
+        return Err(StageFailure::os("thread.snapshot"));
     }
     let snapshot = unsafe { OwnedHandle::from_raw_handle(raw) };
     let mut entry: THREADENTRY32 = unsafe { mem::zeroed() };
@@ -156,40 +163,52 @@ fn resume_initial_thread(pid: u32) -> io::Result<()> {
             // Only the suspended child's initial thread is eligible; it cannot have spawned descendants yet.
             let raw = unsafe { OpenThread(THREAD_SUSPEND_RESUME, 0, entry.th32ThreadID) };
             if raw.is_null() {
-                return Err(io::Error::last_os_error());
+                return Err(StageFailure::os("thread.open"));
             }
             let thread = unsafe { OwnedHandle::from_raw_handle(raw) };
-            if unsafe { ResumeThread(thread.as_raw_handle()) } != 1 {
-                return Err(io::Error::other(
-                    "child's initial suspension could not be released",
+            let resumed = unsafe { ResumeThread(thread.as_raw_handle()) };
+            if resumed == u32::MAX {
+                // Distinguish the failure sentinel from a successful-but-unexpected count.
+                return Err(StageFailure::os("thread.resume"));
+            }
+            if resumed != 1 {
+                return Err(StageFailure::invariant(
+                    "thread.resume.count",
+                    format!("suspend-count={resumed}"),
                 ));
             }
             return Ok(());
         }
         found = unsafe { Thread32Next(snapshot.as_raw_handle(), &mut entry) };
     }
-    Err(io::Error::other(
-        "suspended child's initial thread is unavailable",
+    Err(StageFailure::invariant(
+        "thread.missing",
+        "initial-thread".into(),
     ))
 }
 
-fn stop(child: &mut Child, job: &OwnedJob, until: Instant) -> io::Result<ExitStatus> {
+fn stop(child: &mut Child, job: &OwnedJob, until: Instant) -> Result<ExitStatus, StageFailure> {
     let termination = job.terminate();
     let direct = child.kill();
     let mut status = None;
     loop {
         if status.is_none() {
-            status = child.try_wait()?;
+            status = child
+                .try_wait()
+                .map_err(|e| StageFailure::from_error("cleanup.try_wait", e))?;
         }
         if status.is_some() && job.active()? == 0 {
             return Ok(status.unwrap());
         }
         if Instant::now() >= until {
-            return Err(io::Error::other(format!(
-                "bounded helper cleanup did not finish; job termination={}; child termination={}",
-                termination.is_ok(),
-                direct.is_ok()
-            )));
+            return Err(StageFailure::invariant(
+                "cleanup.deadline",
+                format!(
+                    "job_terminate={};child_kill={}",
+                    termination.is_ok() as u8,
+                    direct.is_ok() as u8
+                ),
+            ));
         }
         std::thread::sleep(Duration::from_millis(2));
     }
@@ -206,11 +225,17 @@ fn retry_pending() {
         }
     }
 }
-fn retain_pending(child: Child, job: OwnedJob, operation: &'static str) -> io::Error {
+fn retain_pending(
+    child: Child,
+    job: OwnedJob,
+    operation: &'static str,
+    cause: Option<String>,
+) -> io::Error {
     let error = CleanupPending {
         id: job.id,
         pid: child.id(),
         operation,
+        cause,
     };
     // Every active or pending job retains one of the same 16 permits, so this registry cannot grow without bound.
     registry()
@@ -226,26 +251,37 @@ pub(super) fn finish(mut child: Child, job: OwnedJob) -> io::Result<ExitStatus> 
         Instant::now() + Duration::from_millis(250),
     ) {
         Ok(status) => Ok(status),
-        Err(_) => Err(retain_pending(child, job, "termination-and-reap")),
+        Err(failure) => Err(retain_pending(
+            child,
+            job,
+            "termination-and-reap",
+            Some(format!(
+                "owned Git subprocess operation failed; {}",
+                failure.report()
+            )),
+        )),
     }
 }
-fn assign(job: &OwnedJob, child: &Child) -> io::Result<()> {
+fn assign(job: &OwnedJob, child: &Child) -> Result<(), StageFailure> {
     if unsafe { AssignProcessToJobObject(job.handle.as_raw_handle(), child.as_raw_handle()) } == 0 {
-        return Err(io::Error::last_os_error());
+        return Err(StageFailure::os("job.assign"));
     }
     Ok(())
 }
 fn spawn_with(
     command: &mut Command,
-    assign_child: impl FnOnce(&OwnedJob, &Child) -> io::Result<()>,
-    resume: impl FnOnce(u32) -> io::Result<()>,
-) -> io::Result<(Child, OwnedJob)> {
+    assign_child: impl FnOnce(&OwnedJob, &Child) -> Result<(), StageFailure>,
+    resume: impl FnOnce(u32) -> Result<(), StageFailure>,
+) -> Result<(Child, OwnedJob), StageFailure> {
     retry_pending();
     let job = OwnedJob::new()?;
     command.creation_flags(CREATE_SUSPENDED);
-    let mut child = command.spawn()?;
+    let mut child = command
+        .spawn()
+        .map_err(|e| StageFailure::from_error("child.spawn", e))?;
     let started = assign_child(&job, &child).and_then(|_| resume(child.id()));
     if let Err(error) = started {
+        let cause = format!("owned Git subprocess operation failed; {}", error.report());
         if stop(
             &mut child,
             &job,
@@ -253,13 +289,21 @@ fn spawn_with(
         )
         .is_err()
         {
-            return Err(retain_pending(child, job, "assignment-or-resume"));
+            return Err(stage_from_pending(retain_pending(
+                child,
+                job,
+                "assignment-or-resume",
+                Some(cause),
+            )));
         }
         return Err(error);
     }
     Ok((child, job))
 }
-pub(super) fn spawn(command: &mut Command) -> io::Result<(Child, OwnedJob)> {
+fn stage_from_pending(error: io::Error) -> StageFailure {
+    StageFailure::invariant("cleanup.pending", error.to_string())
+}
+pub(super) fn spawn(command: &mut Command) -> Result<(Child, OwnedJob), StageFailure> {
     spawn_with(command, assign, resume_initial_thread)
 }
 
@@ -298,10 +342,10 @@ mod tests {
                     if after_assignment {
                         assign(job, child)
                     } else {
-                        Err(io::Error::other("injected assignment failure"))
+                        Err(StageFailure::invariant("job.assign", "injected".into()))
                     }
                 },
-                |_| Err(io::Error::other("injected resume failure")),
+                |_| Err(StageFailure::invariant("thread.resume", "injected".into())),
             );
             assert!(result.is_err());
             let keeper = keeper.into_inner().unwrap();

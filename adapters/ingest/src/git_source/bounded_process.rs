@@ -127,68 +127,20 @@ fn prepare_write_pipe<T: std::os::fd::AsRawFd>(
     prepare_read_pipe(pipe, get_stage, set_stage)
 }
 #[cfg(windows)]
-fn prepare_read_pipe<T: std::os::windows::io::AsRawHandle>(
-    pipe: &T,
-    get_stage: &'static str,
-    set_stage: &'static str,
-) -> Result<(), StageFailure> {
-    use windows_sys::Win32::System::Pipes::{
-        GetNamedPipeHandleStateW, PIPE_NOWAIT, SetNamedPipeHandleState,
-    };
-    let mut mode = 0;
-    if unsafe {
-        GetNamedPipeHandleStateW(
-            pipe.as_raw_handle(),
-            &mut mode,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            0,
-        )
-    } == 0
-    {
-        return Err(StageFailure::os(get_stage));
-    }
-    mode |= PIPE_NOWAIT;
-    if unsafe {
-        SetNamedPipeHandleState(
-            pipe.as_raw_handle(),
-            &mode,
-            std::ptr::null(),
-            std::ptr::null(),
-        )
-    } == 0
-    {
-        return Err(StageFailure::os(set_stage));
-    }
-    Ok(())
-}
-#[cfg(windows)]
 fn prepare_write_pipe<T: std::os::windows::io::AsRawHandle>(
     pipe: &T,
-    get_stage: &'static str,
     set_stage: &'static str,
 ) -> Result<(), StageFailure> {
     use windows_sys::Win32::System::Pipes::{
-        GetNamedPipeHandleStateW, PIPE_NOWAIT, SetNamedPipeHandleState,
+        PIPE_NOWAIT, PIPE_READMODE_BYTE, SetNamedPipeHandleState,
     };
-    let mut mode = 0;
-    if unsafe {
-        GetNamedPipeHandleStateW(
-            pipe.as_raw_handle(),
-            &mut mode,
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            std::ptr::null_mut(),
-            0,
-        )
-    } == 0
-    {
-        return Err(StageFailure::os(get_stage));
-    }
-    mode |= PIPE_NOWAIT;
+    // Native observation (run 40756669401): read-endpoint state changes fail with
+    // os_error=5 because the parent endpoints lack FILE_WRITE_ATTRIBUTES, and the
+    // write endpoint lacks the read attributes its state query would need. The write
+    // endpoint has documented write access, so set byte+nowait mode directly without
+    // querying current state. Reads never change mode: the sole reader peeks first and
+    // reads no more bytes than the peek reports available.
+    let mode = PIPE_READMODE_BYTE | PIPE_NOWAIT;
     if unsafe {
         SetNamedPipeHandleState(
             pipe.as_raw_handle(),
@@ -373,14 +325,20 @@ pub(crate) fn run_limited_input(
     let outcome = (|| {
         let mut stdout = child.stdout.take().expect("piped stdout");
         let mut stderr = child.stderr.take().expect("piped stderr");
-        prepare_read_pipe(&stdout, "stdout.get_state", "stdout.set_state")
-            .map_err(operation_failed)?;
-        prepare_read_pipe(&stderr, "stderr.get_state", "stderr.set_state")
-            .map_err(operation_failed)?;
+        #[cfg(unix)]
+        {
+            prepare_read_pipe(&stdout, "stdout.get_state", "stdout.set_state")
+                .map_err(operation_failed)?;
+            prepare_read_pipe(&stderr, "stderr.get_state", "stderr.set_state")
+                .map_err(operation_failed)?;
+        }
         let mut stdin = child.stdin.take();
         if let Some(stdin) = &stdin {
+            #[cfg(unix)]
             prepare_write_pipe(stdin, "stdin.get_state", "stdin.set_state")
                 .map_err(operation_failed)?;
+            #[cfg(windows)]
+            prepare_write_pipe(stdin, "stdin.set_state").map_err(operation_failed)?;
         }
         let input = input.unwrap_or_default();
         let mut written = 0;

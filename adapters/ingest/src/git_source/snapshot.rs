@@ -18,38 +18,6 @@ fn invalid(reason: &str) -> CoreError {
         reason: reason.into(),
     }
 }
-/// Win32 path normalization resolves a name shaped like a generated 8.3 alias
-/// (`ABCDEF~1.EXT`) to the aliased long file, while capability-relative
-/// literal opens address the name itself. Reject that shape during preflight
-/// so a retained tree never depends on which namespace a later reader uses.
-#[cfg(windows)]
-fn windows_short_name_alias(name: &str) -> bool {
-    if !name.contains('~') {
-        return false;
-    }
-    let (stem, ext) = match name.split_once('.') {
-        Some((stem, ext)) => (stem, Some(ext)),
-        None => (name, None),
-    };
-    let Some((base, tail)) = stem.split_once('~') else {
-        return false;
-    };
-    let stem_matches = stem.len() <= 8
-        && !base.is_empty()
-        && base.len() <= 6
-        && base
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'$')
-        && !tail.is_empty()
-        && tail.bytes().all(|b| b.is_ascii_digit());
-    if !stem_matches {
-        return false;
-    }
-    match ext {
-        Some(ext) => ext.len() <= 3 && ext.bytes().all(|b| b.is_ascii_alphanumeric()),
-        None => true,
-    }
-}
 fn valid_oid(oid: &str, format: &str) -> bool {
     let length = match format {
         "sha1" => 40,
@@ -162,40 +130,73 @@ pub fn retain_snapshot_with_limits(
                 .directory
                 .as_ref()
                 .expect("owned snapshot directory");
-            let mut preflight = Vec::new();
+            let mut file_identities = std::collections::BTreeMap::new();
             let mut directories = std::collections::BTreeSet::new();
             // Create every zero-byte destination before writing any content. The destination filesystem
             // rejects case/normalization/short-name aliases and file/directory conflicts itself.
-            for (_, file) in &inventory {
-                #[cfg(windows)]
-                if file.path.components().any(|component| {
-                    windows_short_name_alias(&component.as_os_str().to_string_lossy())
-                }) {
-                    return Err(invalid(
-                        "snapshot inventory contains a Windows short-name alias",
-                    ));
-                }
+            for (path, file) in &inventory {
                 let parent = file.path.parent().unwrap_or(Path::new(""));
                 let dir = temp.ensure_subdirectory(parent).map_err(io_error)?;
                 let out = dir
                     .create_file(Path::new(file.path.file_name().expect("validated leaf")))
                     .map_err(io_error)?;
-                preflight.push(super::private_storage::file_identity(&out).map_err(io_error)?);
+                file_identities.insert(
+                    path.clone(),
+                    super::private_storage::file_identity(&out).map_err(io_error)?,
+                );
                 let mut path = parent;
                 while !path.as_os_str().is_empty() {
                     directories.insert(path.to_path_buf());
                     path = path.parent().unwrap_or(Path::new(""));
                 }
             }
+            let mut directory_identities = std::collections::BTreeMap::new();
+            for directory in &directories {
+                let handle = temp.child(directory).map_err(io_error)?;
+                directory_identities.insert(
+                    directory.clone(),
+                    super::private_storage::directory_identity_of(&handle.dir)
+                        .map_err(io_error)?,
+                );
+            }
+            // Identity preflight before any payload byte: every placeholder, including
+            // directory components, must reopen through ordinary native path resolution
+            // (where short-name, case and Unicode aliasing actually apply) to the exact
+            // identity captured at creation. No spelling, sorting or case folding is
+            // guessed: an actual alias conflict resolves to a different identity and is
+            // rejected; independently representable names keep distinct identities.
+            let attempt_root = temp.path.clone();
+            for (path, _) in &inventory {
+                let native = super::private_storage::native_file_identity(&attempt_root.join(path))
+                    .map_err(io_error)?;
+                if native != file_identities[path] {
+                    return Err(invalid(
+                        "snapshot placeholder resolves to a different identity under native path resolution",
+                    ));
+                }
+            }
+            for (directory, expected) in &directory_identities {
+                let native =
+                    super::private_storage::native_directory_identity(&attempt_root.join(directory))
+                        .map_err(io_error)?;
+                if native != *expected {
+                    return Err(invalid(
+                        "snapshot directory resolves to a different identity under native path resolution",
+                    ));
+                }
+            }
             let mut hash = Sha256::new();
-            for ((path, file), expected) in inventory.iter().zip(preflight) {
+            for (path, file) in &inventory {
+                let expected = file_identities
+                    .get(path)
+                    .expect("placeholder identity recorded");
                 let mut options = cap_std::fs::OpenOptions::new();
                 options.write(true);
                 let mut out = temp.dir.open_with(&file.path, &options).map_err(io_error)?;
                 let actual = out.metadata().map_err(io_error)?;
                 if !actual.is_file()
                     || actual.len() != 0
-                    || super::private_storage::file_identity(&out).map_err(io_error)? != expected
+                    || super::private_storage::file_identity(&out).map_err(io_error)? != *expected
                 {
                     return Err(invalid("snapshot preflight identity changed"));
                 }
@@ -298,17 +299,6 @@ mod tests {
         assert!(retain_snapshot(&temp.path().join("first"), commit(), &reversed).is_err());
         assert!(retained.root.is_dir());
     }
-    #[cfg(windows)]
-    #[test]
-    fn task_008_windows_short_name_alias_shapes_are_rejected() {
-        assert!(super::windows_short_name_alias("LONGFI~1.RS"));
-        assert!(super::windows_short_name_alias("abcdef~12"));
-        assert!(!super::windows_short_name_alias("case.rs"));
-        assert!(!super::windows_short_name_alias("\u{e9}.rs"));
-        assert!(!super::windows_short_name_alias("foo~1.tar.gz"));
-        assert!(!super::windows_short_name_alias("LongFileName.rs"));
-        assert!(!super::windows_short_name_alias("a~b.rs"));
-    }
     #[test]
     fn task_008_retention_preflights_host_aliases_before_content_writes() {
         let temp = tempfile::tempdir().unwrap();
@@ -316,40 +306,61 @@ mod tests {
             ("Case.rs", "case.rs"),
             ("é.rs", "e\u{301}.rs"),
             ("LongFileName.rs", "LONGFI~1.RS"),
+            // Reversed insertion order: alias allocation depends on which name exists
+            // first, so both orderings must follow the host's actual behavior.
+            ("LONGFI~1.RS", "LongFileName.rs"),
+            // Alias-shaped directory components follow the same identity rule.
+            ("LongDirName/keep.rs", "LONGDI~1/keep.rs"),
         ]
         .into_iter()
         .enumerate()
         {
             let probe = temp.path().join(format!("probe-{n}"));
             std::fs::create_dir(&probe).unwrap();
+            let first_parent = probe.join(Path::new(first).parent().unwrap_or(Path::new("")));
+            std::fs::create_dir_all(&first_parent).unwrap();
             std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(probe.join(first))
                 .unwrap();
-            let distinct = std::fs::OpenOptions::new()
+            let second_parent = probe.join(Path::new(second).parent().unwrap_or(Path::new("")));
+            std::fs::create_dir_all(&second_parent).unwrap();
+            let aliased = std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(probe.join(second))
-                .is_ok();
+                .is_err();
             let root = temp.path().join(format!("managed-{n}"));
             let result = retain_snapshot(
                 &root,
                 commit(),
                 &[file(first, b"first"), file(second, b"second")],
             );
-            if distinct {
-                let retained = result.unwrap();
+            if aliased {
+                assert!(
+                    result.is_err(),
+                    "aliased pair must be rejected; sanitized result: {result:?}"
+                );
+                assert_eq!(std::fs::read_dir(root).unwrap().count(), 0);
+            } else {
+                let retained =
+                    result.unwrap_or_else(|error| panic!("distinct pair must retain: {error}"));
                 assert_eq!(std::fs::read(retained.root.join(first)).unwrap(), b"first");
                 assert_eq!(
                     std::fs::read(retained.root.join(second)).unwrap(),
                     b"second"
                 );
-            } else {
-                assert!(result.is_err());
-                assert_eq!(std::fs::read_dir(root).unwrap().count(), 0);
             }
         }
+        // A standalone literal alias-shaped name is independently representable and
+        // must never be rejected by spelling alone.
+        let root = temp.path().join("managed-standalone");
+        let retained = retain_snapshot(&root, commit(), &[file("LONGFI~1.RS", b"only")]).unwrap();
+        assert_eq!(
+            std::fs::read(retained.root.join("LONGFI~1.RS")).unwrap(),
+            b"only"
+        );
     }
     #[test]
     fn task_008_retention_rejects_reserved_dot_alias_and_directory_conflicts() {

@@ -36,6 +36,50 @@ fn directory_identity(dir: &Dir) -> io::Result<DirectoryId> {
         platform::identity_handle(dir.as_raw_handle())
     }
 }
+pub(crate) fn directory_identity_of(dir: &Dir) -> io::Result<DirectoryId> {
+    directory_identity(dir)
+}
+/// Identity of a freshly created placeholder reopened through ordinary native path
+/// resolution, where host aliasing (short names, case, Unicode forms) applies.
+pub(crate) fn native_file_identity(path: &Path) -> io::Result<DirectoryId> {
+    #[cfg(unix)]
+    {
+        std_native_identity(path)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        let file = std::fs::File::open(path)?;
+        platform::identity_handle(file.as_raw_handle())
+    }
+}
+/// Directory variant; Windows requires backup semantics to open a directory handle.
+pub(crate) fn native_directory_identity(path: &Path) -> io::Result<DirectoryId> {
+    #[cfg(unix)]
+    {
+        std_native_identity(path)
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use std::os::windows::io::AsRawHandle;
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)?;
+        platform::identity_handle(file.as_raw_handle())
+    }
+}
+#[cfg(unix)]
+fn std_native_identity(path: &Path) -> io::Result<DirectoryId> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = std::fs::metadata(path)?;
+    Ok(DirectoryId {
+        volume: meta.dev(),
+        index: (meta.ino() as u128).to_le_bytes(),
+    })
+}
 pub(crate) fn file_identity(file: &cap_std::fs::File) -> io::Result<DirectoryId> {
     #[cfg(unix)]
     {
@@ -584,15 +628,66 @@ mod tests {
     }
     #[cfg(unix)]
     #[test]
-    fn task_008_non_utf8_retry_target_survives_diagnostic_but_is_publicly_redacted() {
+    fn task_008_non_utf8_native_unit_serialization_is_lossless_and_redacted() {
+        use std::os::unix::ffi::OsStringExt;
+        // Synthetic lossless serialization: no filesystem entry is required, so this
+        // runs on every Unix host regardless of what byte sequences its mount accepts.
+        let name = OsString::from_vec(b"fixture-root/private-\xff".to_vec());
+        let target_os = std::env::temp_dir().join(&name);
+        let target = target_os.as_path();
+        let error = pending_error(
+            "fixture-owner",
+            "sync-parent-after-removal",
+            target,
+            None,
+            &failed(),
+            &io::Error::other("injected sync failure"),
+        );
+        let redacted = error.to_redacted().to_string();
+        assert!(!redacted.contains("native-units="));
+        assert!(!redacted.contains(target.to_string_lossy().as_ref()));
+        let detail = pending(error);
+        let expected: Vec<u32> = {
+            use std::os::unix::ffi::OsStrExt;
+            target_os
+                .as_os_str()
+                .as_bytes()
+                .iter()
+                .map(|&x| x as u32)
+                .collect()
+        };
+        assert_eq!(
+            detail["target_native_units"].as_str().unwrap(),
+            &format!("<private native-units={expected:?}>")
+        );
+        assert_eq!(detail["target_encoding"], "unix-bytes");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn task_008_non_utf8_filesystem_roundtrip_only_where_representable() {
         use std::os::unix::ffi::OsStringExt;
         let temp = tempfile::tempdir().unwrap();
-        let root = private_directory(
-            &temp
-                .path()
-                .join(OsString::from_vec(b"private-\xff".to_vec())),
-        )
-        .unwrap();
+        let dir = temp
+            .path()
+            .join(OsString::from_vec(b"private-\xff".to_vec()));
+        // Direct disposable filesystem probe preserving the actual OS outcome; unrelated
+        // permission, ownership or capability failures must fail, never skip silently.
+        if let Err(error) = std::fs::create_dir(&dir) {
+            assert_eq!(
+                error.kind(),
+                std::io::ErrorKind::InvalidInput,
+                "unsupported-name probe os_error={:?}",
+                error.raw_os_error()
+            );
+            assert!(!dir.exists());
+            assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+            return;
+        }
+        // The probe only answers representability; remove it so private_directory
+        // bootstraps the real owner-private root itself.
+        std::fs::remove_dir(&dir).unwrap();
+        assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+        let root = private_directory(&dir).unwrap();
         let attempt = OwnedAttempt::create(&root, "sync-failure", "fixture-owner").unwrap();
         let error = attempt
             .finish_with_sync::<()>(Err(failed()), |_| {
@@ -603,11 +698,18 @@ mod tests {
         assert!(!redacted.contains("native-units="));
         assert!(!redacted.contains(root.path.to_string_lossy().as_ref()));
         let detail = pending(error);
-        assert!(
-            detail["target_native_units"]
-                .as_str()
-                .unwrap()
-                .contains("255")
+        let expected: Vec<u32> = {
+            use std::os::unix::ffi::OsStrExt;
+            root.path
+                .as_os_str()
+                .as_bytes()
+                .iter()
+                .map(|&x| x as u32)
+                .collect()
+        };
+        assert_eq!(
+            detail["target_native_units"].as_str().unwrap(),
+            &format!("<private native-units={expected:?}>")
         );
         assert_eq!(detail["target_encoding"], "unix-bytes");
     }
@@ -620,11 +722,19 @@ mod tests {
                 Err(io::Error::other("injected sync failure"))
             })
             .unwrap_err();
+        let redacted = error.to_redacted().to_string();
+        assert!(!redacted.contains("native-units="));
+        assert!(!redacted.contains(root.path.to_string_lossy().as_ref()));
         let pending = pending(error);
         assert_eq!(pending["state"], "cleanup_pending");
         assert_eq!(pending["retry_owner"], "fixture-owner");
         assert_eq!(pending["action"], "sync-parent-after-removal");
         assert_eq!(pending["target"], root.path.to_str().unwrap());
+        let expected: Vec<u32> = native_path_units(&root.path);
+        assert_eq!(
+            pending["target_native_units"].as_str().unwrap(),
+            &format!("<private native-units={expected:?}>")
+        );
         assert!(pending["directory_id"].is_object());
         assert_eq!(root.dir.entries().unwrap().count(), 0);
         root.sync().unwrap();

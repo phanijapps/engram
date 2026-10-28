@@ -13,6 +13,7 @@
 
 mod batch_ledger;
 mod changes;
+pub mod code_binding;
 mod graph;
 mod identity;
 #[allow(clippy::module_inception)]

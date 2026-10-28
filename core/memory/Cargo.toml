@@ -7,5 +7,6 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+chrono = { workspace = true }
 engram-domain = { path = "../domain", version = "0.1.0" }
 engram-runtime = { path = "../runtime", version = "0.1.0" }

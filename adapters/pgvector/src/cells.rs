@@ -224,6 +224,9 @@ impl engram_memory::MemoryEventRepository for PgMemoryService {
 #[async_trait]
 impl engram_memory::MemoryService for PgMemoryService {
     async fn write_memory(&self, request: WriteMemoryRequest) -> CoreResult<WriteMemoryResponse> {
+        // FIND-code-101: same shared write-rule seam the SQLite path rides —
+        // engine-neutral validation in engram-memory, one definition.
+        engram_memory::validate_write_request(&request)?;
         let now = chrono::Utc::now();
         let memory_id = MemoryId::from(format!("mem-{}", now.timestamp_nanos_opt().unwrap_or(0)));
         let record = MemoryRecord {
@@ -236,7 +239,9 @@ impl engram_memory::MemoryService for PgMemoryService {
             status: MemoryStatus::Active,
             links: request.links,
             assertions: vec![],
-            verdict: None,
+            // FIND-code-101: the caller's verdict persists (was hard-coded
+            // None, silently discarding every verdict on this backend).
+            verdict: request.verdict,
             created_at: now,
             updated_at: None,
             metadata: None,

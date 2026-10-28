@@ -5,7 +5,9 @@
 //! vector indexes, or source ingestion are stored.
 
 pub mod extraction;
+pub mod validation;
 pub use extraction::{extract, merge_entities};
+pub use validation::validate_write_request;
 
 use async_trait::async_trait;
 use engram_domain::*;

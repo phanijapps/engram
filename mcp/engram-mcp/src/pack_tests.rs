@@ -457,3 +457,82 @@ fn pack_widen_without_cache_is_an_honest_offline_error() {
         "error names the cache path + one-time network requirement: {err}"
     );
 }
+
+/// FIND-code-006 regression: classes sharing a label must never cross-wire
+/// hierarchy — the broader pairs are derived from parent_class_ids (unique
+/// ids), and the derived taxonomy config resolves a colliding label to the
+/// FIRST occurrence's parent.
+#[test]
+fn pack_label_collisions_wire_hierarchy_by_id() {
+    use engram_packs::{ConvertedPack, convert_pack};
+
+    // Two "Shared" classes under different parents, plus the parents.
+    let turtle = br#"@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<https://v.test/ParentA> a owl:Class ; rdfs:label "Parent A" .
+<https://v.test/ParentB> a owl:Class ; rdfs:label "Parent B" .
+<https://v.test/SharedOne> a owl:Class ; rdfs:label "Shared" ; rdfs:subClassOf <https://v.test/ParentA> .
+<https://v.test/SharedTwo> a owl:Class ; rdfs:label "Shared" ; rdfs:subClassOf <https://v.test/ParentB> .
+"#;
+    let converted = convert_pack(
+        "collision-fixture",
+        "fixture://collision.ttl",
+        engram_packs::PackFormat::Turtle,
+        turtle,
+        "0".repeat(64).as_str(),
+        &Scope {
+            tenant: "default".to_owned(),
+            subject: None,
+            workspace: Some("collision".to_owned()),
+            session: None,
+            environment: None,
+        },
+        chrono::TimeZone::timestamp_opt(&chrono::Utc, 0, 0).unwrap(),
+    )
+    .expect("collision fixture converts");
+
+    // Wiring pairs keyed by unique id: each Shared child points at ITS parent.
+    let pairs = pack::pack_concept_broader_pairs(&converted);
+    let by_child: std::collections::BTreeMap<String, String> = pairs
+        .iter()
+        .map(|(child, parent)| (child.to_string(), parent.to_string()))
+        .collect();
+    let id_of = |suffix: &str| {
+        converted
+            .classes
+            .iter()
+            .find(|c| c.uri.ends_with(suffix))
+            .map(|c| c.id.to_string())
+            .unwrap_or_default()
+    };
+    assert_eq!(
+        by_child.get(&id_of("SharedOne")).map(String::as_str),
+        Some(id_of("ParentA").as_str()),
+        "SharedOne -> ParentA by id, not by the shared label"
+    );
+    assert_eq!(
+        by_child.get(&id_of("SharedTwo")).map(String::as_str),
+        Some(id_of("ParentB").as_str()),
+        "SharedTwo -> ParentB by id"
+    );
+
+    // Derived taxonomy config: the colliding label resolves deterministically
+    // to the first occurrence's parent (ParentA — SharedOne sorts first by uri).
+    let selection = engram_packs::SliceRule::default().select(
+        "collision-fixture",
+        &converted.classes,
+        &converted.properties,
+    );
+    let taxonomy = pack::compose_taxonomy_config("collision-fixture", &converted, &selection);
+    let shared = taxonomy
+        .concepts
+        .iter()
+        .find(|c| c.label == "Shared")
+        .expect("one Shared concept in the config");
+    assert_eq!(
+        shared.broader.as_deref(),
+        Some("Parent A"),
+        "first occurrence wins: {:?}",
+        taxonomy.concepts
+    );
+}

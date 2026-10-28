@@ -400,14 +400,13 @@ pub(crate) fn install_pack(
         updated_at: None,
     }))
     .map_err(|e| format!("put_concept_scheme: {e}"))?;
-    let mut class_ids_by_label: std::collections::BTreeMap<String, ConceptId> =
-        std::collections::BTreeMap::new();
-    for class in &converted.classes {
-        class_ids_by_label.insert(class.label.clone(), ConceptId::from(class.id.to_string()));
-    }
+    // FIND-code-006: concepts and their broader wiring are keyed by the
+    // unique class id (labels are display-only — classes can share a label).
+    let concept_id =
+        |class_id: &engram_domain::OntologyClassId| ConceptId::from(class_id.to_string());
     for class in &converted.classes {
         block_on(taxonomy_port.put_concept(Concept {
-            id: ConceptId::from(class.id.to_string()),
+            id: concept_id(&class.id),
             uri: class.uri.clone(),
             scheme_id: scheme_id.clone(),
             pref_label: ConceptLabel {
@@ -424,33 +423,17 @@ pub(crate) fn install_pack(
         }))
         .map_err(|e| format!("put_concept {}: {e}", class.label))?;
     }
-    for class in &converted.classes {
-        for parent_id in &class.parent_class_ids {
-            let Some(child) = class_ids_by_label.get(&class.label) else {
-                continue;
-            };
-            let Some(parent_label) = converted
-                .classes
-                .iter()
-                .find(|c| c.id == *parent_id)
-                .map(|c| c.label.clone())
-            else {
-                continue;
-            };
-            let Some(parent) = class_ids_by_label.get(&parent_label) else {
-                continue;
-            };
-            block_on(taxonomy_port.put_concept_relation(ConceptRelation {
-                id: format!("{}>{}", child, parent),
-                scheme_id: scheme_id.clone(),
-                subject_id: child.clone(),
-                predicate: ConceptRelationKind::Broader,
-                object_id: parent.clone(),
-                provenance: class.provenance.clone(),
-                created_at: now,
-            }))
-            .map_err(|e| format!("put_concept_relation: {e}"))?;
-        }
+    for (child, parent) in pack_concept_broader_pairs(&converted) {
+        block_on(taxonomy_port.put_concept_relation(ConceptRelation {
+            id: format!("{}>{}", child, parent),
+            scheme_id: scheme_id.clone(),
+            subject_id: child,
+            predicate: ConceptRelationKind::Broader,
+            object_id: parent,
+            provenance: converted.ontology.provenance.clone(),
+            created_at: now,
+        }))
+        .map_err(|e| format!("put_concept_relation: {e}"))?;
     }
 
     // Derived launch slice (DEC-P05) + config emit (DEC-P04).
@@ -576,20 +559,27 @@ pub fn compose_taxonomy_config(
     converted: &engram_packs::ConvertedPack,
     selection: &engram_packs::SliceSelection,
 ) -> ontology::TaxonomyConfig {
+    // FIND-code-006: hierarchy lookup keyed by the unique class ID; a label
+    // collision resolves to the FIRST occurrence (the same class the slice's
+    // dedupe kept), so a shared label never attaches another class's parent.
     let id_to_label: std::collections::BTreeMap<String, String> = converted
         .classes
         .iter()
         .map(|c| (c.id.to_string(), c.label.clone()))
         .collect();
-    let label_to_parent: std::collections::BTreeMap<String, String> = converted
-        .classes
-        .iter()
-        .filter_map(|class| {
-            let parent_id = class.parent_class_ids.first()?;
-            let parent_label = id_to_label.get(parent_id.as_str())?;
-            Some((class.label.clone(), parent_label.clone()))
-        })
-        .collect();
+    let mut label_to_parent: std::collections::BTreeMap<String, String> =
+        std::collections::BTreeMap::new();
+    for class in &converted.classes {
+        let Some(parent_id) = class.parent_class_ids.first() else {
+            continue;
+        };
+        let Some(parent_label) = id_to_label.get(parent_id.as_str()) else {
+            continue;
+        };
+        label_to_parent
+            .entry(class.label.clone())
+            .or_insert(parent_label.clone());
+    }
     let concepts = selection
         .class_labels
         .iter()
@@ -605,6 +595,30 @@ pub fn compose_taxonomy_config(
         name: pack_id.to_owned(),
         concepts,
     }
+}
+
+/// Broader (child → parent) concept-id pairs for the taxonomy mirror —
+/// derived from `parent_class_ids` (unique ids), never from labels, so
+/// colliding labels cannot cross-wire hierarchy edges (FIND-code-006).
+pub(crate) fn pack_concept_broader_pairs(
+    converted: &engram_packs::ConvertedPack,
+) -> Vec<(ConceptId, ConceptId)> {
+    let known: std::collections::BTreeSet<String> =
+        converted.classes.iter().map(|c| c.id.to_string()).collect();
+    converted
+        .classes
+        .iter()
+        .flat_map(|class| {
+            class.parent_class_ids.iter().filter_map(|parent_id| {
+                known.contains(parent_id.as_str()).then(|| {
+                    (
+                        ConceptId::from(class.id.to_string()),
+                        ConceptId::from(parent_id.to_string()),
+                    )
+                })
+            })
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

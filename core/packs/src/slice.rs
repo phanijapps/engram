@@ -138,7 +138,11 @@ impl SliceRule {
         });
         let class_labels = dedupe_labels(ranked.iter().map(|c| c.label.as_str()))
             .take(self.class_cap)
-            .collect();
+            .collect::<Vec<_>>();
+        // FIND-code-005: the reported sliced count is what the emitted config
+        // actually carries — deduplicated labels after the cap — never the
+        // raw ranked class count (labels can collide).
+        let sliced_classes = class_labels.len();
 
         let mut ranked_props: Vec<&OntologyProperty> = properties.iter().collect();
         ranked_props.sort_by(|a, b| a.uri.cmp(&b.uri));
@@ -150,12 +154,7 @@ impl SliceRule {
             pack_id: pack_id.to_owned(),
             class_labels,
             predicate_labels,
-            sliced_classes: ranked
-                .iter()
-                .map(|c| c.label.as_str())
-                .collect::<Vec<_>>()
-                .len()
-                .min(self.class_cap),
+            sliced_classes,
             available_classes: classes.len(),
             sliced_predicates: properties.len().min(self.predicate_cap),
             available_predicates: properties.len(),
@@ -297,6 +296,33 @@ mod tests {
         assert_eq!(
             line,
             "classes 150/200 available, predicates 40/60 available"
+        );
+    }
+
+    #[test]
+    fn slice_counts_deduped_labels_not_raw_classes() {
+        // FIND-code-005 regression: classes sharing a label count once in the
+        // sliced report — the line must state what the config carries.
+        let mut classes = synthetic_classes(4);
+        // class-3 and class-2 exist; make three of the four collide on "Shared".
+        for class in classes.iter_mut().take(3) {
+            class.label = "Shared".to_owned();
+        }
+        let selection = SliceRule::default().select("synthetic", &classes, &[]);
+        assert_eq!(selection.available_classes, 4);
+        assert_eq!(
+            selection.class_labels.len(),
+            2,
+            "labels dedupe: {selection:?}"
+        );
+        assert_eq!(
+            selection.sliced_classes, 2,
+            "sliced counts emitted labels, not raw classes"
+        );
+        assert!(
+            selection.counts_line().starts_with("classes 2/4 available"),
+            "counts line is honest: {}",
+            selection.counts_line()
         );
     }
 

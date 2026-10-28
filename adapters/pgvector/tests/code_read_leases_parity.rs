@@ -568,6 +568,26 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
     let second_repo = format!("global-id-second-repo-{suffix}");
     block_on(store.bind(binding(&first_scope, &first_repo))).expect("bind first scope");
     block_on(store.bind(binding(&second_scope, &second_repo))).expect("bind second scope");
+    let first_generation = generation(&format!("global-id-first-generation-one-{suffix}"));
+    let second_generation = generation(&format!("global-id-second-generation-one-{suffix}"));
+    publish_generation(
+        &store,
+        &first_scope,
+        &first_repo,
+        first_generation.clone(),
+        0,
+        None,
+        &format!("global-id-first-attempt-one-{suffix}"),
+    );
+    publish_generation(
+        &store,
+        &second_scope,
+        &second_repo,
+        second_generation.clone(),
+        0,
+        None,
+        &format!("global-id-second-attempt-one-{suffix}"),
+    );
     let lease_id = format!("global-lease-id-{suffix}");
     let now = chrono::Utc::now();
     let expires_at = now + chrono::Duration::minutes(5);
@@ -669,6 +689,56 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
     } else {
         &first_lease
     };
+    publish_generation(
+        &store,
+        &first_scope,
+        &first_repo,
+        generation(&format!("global-id-first-generation-two-{suffix}")),
+        1,
+        Some(first_generation.id.clone()),
+        &format!("global-id-first-attempt-two-{suffix}"),
+    );
+    publish_generation(
+        &store,
+        &first_scope,
+        &first_repo,
+        generation(&format!("global-id-first-generation-three-{suffix}")),
+        2,
+        Some(format!("global-id-first-generation-two-{suffix}")),
+        &format!("global-id-first-attempt-three-{suffix}"),
+    );
+    publish_generation(
+        &store,
+        &second_scope,
+        &second_repo,
+        generation(&format!("global-id-second-generation-two-{suffix}")),
+        1,
+        Some(second_generation.id.clone()),
+        &format!("global-id-second-attempt-two-{suffix}"),
+    );
+    publish_generation(
+        &store,
+        &second_scope,
+        &second_repo,
+        generation(&format!("global-id-second-generation-three-{suffix}")),
+        2,
+        Some(format!("global-id-second-generation-two-{suffix}")),
+        &format!("global-id-second-attempt-three-{suffix}"),
+    );
+    let first_retained = block_on(store.retained_generations(&first_scope, now, 0))
+        .expect("first retained generations");
+    let second_retained = block_on(store.retained_generations(&second_scope, now, 0))
+        .expect("second retained generations");
+    assert_eq!(
+        first_retained.contains(&first_generation.id),
+        first_won,
+        "only the durable winner retains its lease-only generation"
+    );
+    assert_eq!(
+        second_retained.contains(&second_generation.id),
+        second_won,
+        "only the durable winner retains its lease-only generation"
+    );
     block_on(store.release_read_lease(winner)).expect("release durable winner");
     assert!(matches!(
         block_on(store.release_read_lease(loser)),
@@ -1926,6 +1996,34 @@ fn receipt(store: &PgCodeBindingRepository, attempt: &CodeAttempt, generation: &
         digest: "receipt".into(),
     }))
     .expect("record receipt");
+}
+
+fn publish_generation(
+    store: &PgCodeBindingRepository,
+    scope: &Scope,
+    repo: &str,
+    generation: CodeGeneration,
+    expected_epoch: u64,
+    expected_active_generation: Option<String>,
+    attempt_id: &str,
+) {
+    let allocated = block_on(store.begin_attempt(
+        scope,
+        &RepoId(repo.into()),
+        generation.clone(),
+        attempt(attempt_id, expected_epoch, expected_active_generation, 0),
+    ))
+    .expect("allocate publication attempt");
+    receipt(store, &allocated, &generation);
+    block_on(store.mark_ready(
+        scope,
+        &RepoId(repo.into()),
+        &allocated.id,
+        allocated.fencing_token,
+    ))
+    .expect("ready publication attempt");
+    block_on(store.publish(scope, &RepoId(repo.into()), &allocated.id, expected_epoch))
+        .expect("publish generation");
 }
 
 fn unique() -> String {

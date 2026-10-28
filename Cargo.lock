@@ -1298,6 +1298,7 @@ dependencies = [
  "fastembed",
  "futures",
  "rusqlite",
+ "serde",
  "serde_json",
  "sha2",
  "sqlite-vec",

@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use std::path::Path;
 
 pub struct SqlCodeBindingStore {
-    connection: Connection,
+    pub(super) connection: Connection,
 }
 impl SqlCodeBindingStore {
     pub fn open(path: impl AsRef<Path>) -> rusqlite::Result<Self> {
@@ -34,6 +34,9 @@ impl SqlCodeBindingStore {
             tx.commit()
                 .map_err(|_| CodeBindingError::PersistenceFailure)?;
             return Ok(result);
+        }
+        if binding.active_generation.is_some() || binding.epoch != 0 || binding.version != 1 {
+            return Err(CodeBindingError::InvalidBindingVersion);
         }
         let json =
             serde_json::to_string(binding).map_err(|_| CodeBindingError::PersistenceFailure)?;
@@ -83,31 +86,105 @@ impl SqlCodeBindingStore {
         scope: &engram_domain::Scope,
         repo: &str,
         generation: &CodeGeneration,
-        a: &CodeAttempt,
+        attempt: &CodeAttempt,
     ) -> Result<(), CodeBindingError> {
-        a.validate()?;
+        let mut canonical = attempt.clone();
+        generation.validate()?;
         let key = serde_json::to_string(scope).map_err(|_| CodeBindingError::PersistenceFailure)?;
-        let json = serde_json::to_string(a).map_err(|_| CodeBindingError::PersistenceFailure)?;
-        let bound: Option<(i64,i64,Option<String>)> = self.connection.query_row("SELECT version,epoch,active_generation FROM code_repo_bindings WHERE tenant=?1 AND scope_key=?2 AND repo_id=?3", params![scope.tenant,key,repo], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(|_|CodeBindingError::PersistenceFailure)?;
+        let generation_json =
+            serde_json::to_string(generation).map_err(|_| CodeBindingError::PersistenceFailure)?;
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| CodeBindingError::PersistenceFailure)?;
+        let bound: Option<(i64,i64,Option<String>)> = tx.query_row("SELECT version,epoch,active_generation FROM code_repo_bindings WHERE tenant=?1 AND scope_key=?2 AND repo_id=?3", params![scope.tenant,key,repo], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(|_|CodeBindingError::PersistenceFailure)?;
         let (version, epoch, active) = bound.ok_or(CodeBindingError::BindingRequired)?;
-        if version as u64 != a.binding_version
-            || generation.binding_version != a.binding_version
-            || epoch as u64 != a.expected_epoch
-            || active != a.expected_active_generation
-        {
-            return Err(CodeBindingError::StaleGeneration);
-        }
-        let existing: Option<String> = self.connection.query_row("SELECT record_json FROM code_attempts WHERE tenant=?1 AND scope_key=?2 AND repo_id=?3 AND idempotency_key=?4", params![scope.tenant,key,repo,a.idempotency_key], |r| r.get(0)).optional().map_err(|_|CodeBindingError::PersistenceFailure)?;
-        if let Some(record) = existing {
-            return if record == json {
+        let existing: Option<(String,String)> = tx.query_row("SELECT record_json,generation_id FROM code_attempts WHERE tenant=?1 AND scope_key=?2 AND repo_id=?3 AND idempotency_key=?4", params![scope.tenant,key,repo,attempt.idempotency_key], |r| Ok((r.get(0)?,r.get(1)?))).optional().map_err(|_|CodeBindingError::PersistenceFailure)?;
+        if let Some((stored, generation_id)) = existing {
+            let previous: CodeAttempt =
+                serde_json::from_str(&stored).map_err(|_| CodeBindingError::PersistenceFailure)?;
+            if canonical.fencing_token == 0 {
+                canonical.fencing_token = previous.fencing_token;
+            }
+            canonical.validate()?;
+            return if previous == canonical && generation_id == generation.id {
                 Ok(())
             } else {
                 Err(CodeBindingError::InvalidAttempt)
             };
         }
-        self.stage_generation(generation)?;
-        self.connection.execute("INSERT INTO code_attempts(attempt_id,tenant,scope_key,repo_id,generation_id,binding_version,expected_epoch,expected_active_generation,fence,idempotency_key,state,receipts_json,record_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",params![a.id,scope.tenant,key,repo,generation.id,a.binding_version,a.expected_epoch,a.expected_active_generation,a.fencing_token,a.idempotency_key,format!("{:?}",a.state),serde_json::to_string(&a.receipt_kinds).unwrap(),json]).map_err(|_|CodeBindingError::InvalidAttempt)?;
-        Ok(())
+        if version as u64 != attempt.binding_version
+            || generation.binding_version != attempt.binding_version
+            || epoch as u64 != attempt.expected_epoch
+            || active != attempt.expected_active_generation
+        {
+            return Err(CodeBindingError::StaleGeneration);
+        }
+        let latest: Option<i64> = tx.query_row("SELECT MAX(fence) FROM code_attempts WHERE tenant=?1 AND scope_key=?2 AND repo_id=?3",params![scope.tenant,key,repo],|r| r.get(0)).map_err(|_| CodeBindingError::PersistenceFailure)?;
+        if canonical.fencing_token == 0 {
+            canonical.fencing_token = latest
+                .unwrap_or(0)
+                .checked_add(1)
+                .ok_or(CodeBindingError::InvalidAttempt)?
+                as u64;
+        }
+        canonical.validate()?;
+        let attempt = &canonical;
+        let fence =
+            i64::try_from(attempt.fencing_token).map_err(|_| CodeBindingError::InvalidAttempt)?;
+        let json =
+            serde_json::to_string(attempt).map_err(|_| CodeBindingError::PersistenceFailure)?;
+        if latest.is_some_and(|old| fence <= old) {
+            return Err(CodeBindingError::InvalidAttempt);
+        }
+        let stored: Option<String> = tx
+            .query_row(
+                "SELECT record_json FROM code_generations WHERE generation_id=?1",
+                [&generation.id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|_| CodeBindingError::PersistenceFailure)?;
+        if stored.as_ref().is_some_and(|old| old != &generation_json) {
+            return Err(CodeBindingError::InvalidSource);
+        }
+        tx.execute(
+            "INSERT OR IGNORE INTO code_generations(generation_id,record_json) VALUES(?1,?2)",
+            params![generation.id, generation_json],
+        )
+        .map_err(|_| CodeBindingError::PersistenceFailure)?;
+        tx.execute("INSERT INTO code_attempts(attempt_id,tenant,scope_key,repo_id,generation_id,binding_version,expected_epoch,expected_active_generation,fence,idempotency_key,state,receipts_json,record_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",params![attempt.id,scope.tenant,key,repo,generation.id,attempt.binding_version,attempt.expected_epoch,attempt.expected_active_generation,fence,attempt.idempotency_key,format!("{:?}",attempt.state),serde_json::to_string(&attempt.receipt_kinds).map_err(|_|CodeBindingError::InvalidAttempt)?,json]).map_err(|_|CodeBindingError::InvalidAttempt)?;
+        tx.commit()
+            .map_err(|_| CodeBindingError::PersistenceFailure)
+    }
+
+    pub fn attempt(
+        &self,
+        scope: &engram_domain::Scope,
+        repo: &str,
+        attempt_id: &str,
+    ) -> Result<Option<(CodeGeneration, CodeAttempt)>, CodeBindingError> {
+        let key = serde_json::to_string(scope).map_err(|_| CodeBindingError::PersistenceFailure)?;
+        let row: Option<(String,String,String)> = self.connection.query_row("SELECT g.record_json,a.record_json,a.state FROM code_attempts a JOIN code_generations g ON g.generation_id=a.generation_id WHERE a.attempt_id=?1 AND a.tenant=?2 AND a.scope_key=?3 AND a.repo_id=?4",params![attempt_id,scope.tenant,key,repo],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(|_|CodeBindingError::PersistenceFailure)?;
+        row.map(|(g, a, state)| {
+            let generation =
+                serde_json::from_str(&g).map_err(|_| CodeBindingError::PersistenceFailure)?;
+            let mut attempt: CodeAttempt =
+                serde_json::from_str(&a).map_err(|_| CodeBindingError::PersistenceFailure)?;
+            attempt.state = match state.as_str() {
+                "Created" => engram_domain::CodeAttemptState::Created,
+                "Acquiring" => engram_domain::CodeAttemptState::Acquiring,
+                "Staging" => engram_domain::CodeAttemptState::Staging,
+                "Ready" => engram_domain::CodeAttemptState::Ready,
+                "Published" => engram_domain::CodeAttemptState::Published,
+                "Failed" => engram_domain::CodeAttemptState::Failed,
+                "Superseded" => engram_domain::CodeAttemptState::Superseded,
+                "CleanupPending" => engram_domain::CodeAttemptState::CleanupPending,
+                _ => return Err(CodeBindingError::PersistenceFailure),
+            };
+            Ok((generation, attempt))
+        })
+        .transpose()
     }
     pub fn put_lineage(
         &mut self,
@@ -175,6 +252,21 @@ impl SqlCodeBindingStore {
         if lane.is_empty() || digest.is_empty() {
             return Err(CodeBindingError::InvalidAttempt);
         }
+        let declared: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT receipts_json FROM code_attempts WHERE attempt_id=?1",
+                [attempt_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|_| CodeBindingError::PersistenceFailure)?;
+        let required: Vec<String> =
+            serde_json::from_str(&declared.ok_or(CodeBindingError::InvalidAttempt)?)
+                .map_err(|_| CodeBindingError::PersistenceFailure)?;
+        if !required.iter().any(|required| required == lane) {
+            return Err(CodeBindingError::InvalidAttempt);
+        }
         let existing: Option<String> = self
             .connection
             .query_row(
@@ -224,6 +316,19 @@ impl SqlCodeBindingStore {
         ) = row.ok_or(CodeBindingError::StaleGeneration)?;
         let bound: CodeBinding = serde_json::from_str(&binding_json)
             .map_err(|_| CodeBindingError::PersistenceFailure)?;
+        if state == "Published"
+            && bound.active_generation.as_deref() == Some(generation.as_str())
+            && epoch == expected + 1
+            && attempt_version as u64 == bound.version
+        {
+            tx.commit()
+                .map_err(|_| CodeBindingError::PersistenceFailure)?;
+            return Ok(bound);
+        }
+        let latest: i64 = tx.query_row("SELECT MAX(fence) FROM code_attempts WHERE tenant=?1 AND scope_key=?2 AND repo_id=?3",params![scope.tenant,key,repo],|r|r.get(0)).map_err(|_|CodeBindingError::PersistenceFailure)?;
+        if fence != latest {
+            return Err(CodeBindingError::StaleGeneration);
+        }
         if expected != epoch
             || attempt_version as u64 != bound.version
             || bound.active_generation != expected_active

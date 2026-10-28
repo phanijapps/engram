@@ -14,6 +14,7 @@
 mod batch_ledger;
 mod changes;
 pub mod code_binding;
+mod code_binding_port;
 mod generation_staging;
 mod graph;
 mod identity;
@@ -27,6 +28,7 @@ mod scope;
 mod service;
 mod taxonomy;
 
+pub use code_binding_port::SqlCodeBindingRepository;
 pub use identity::SqlIdentityStore;
 pub use retrieval::{GraphCandidateSource, GraphRetrievalIndex};
 pub use service::SqlKnowledgeStore;

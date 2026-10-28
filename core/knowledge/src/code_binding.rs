@@ -51,12 +51,35 @@ pub trait CodeBindingRepository: Send + Sync {
         &self,
         scope: &Scope,
         repo_id: &engram_domain::RepoId,
+        generation: CodeGeneration,
         attempt: CodeAttempt,
     ) -> CoreResult<CodeAttempt>;
+    async fn get_attempt(
+        &self,
+        scope: &Scope,
+        repo_id: &engram_domain::RepoId,
+        attempt_id: &str,
+    ) -> CoreResult<Option<(CodeGeneration, CodeAttempt)>>;
     async fn put_generation(&self, generation: CodeGeneration) -> CoreResult<CodeGeneration>;
-    async fn put_lineage(&self, lineage: CodeLineage) -> CoreResult<CodeLineage>;
-    async fn put_source_descriptor(&self, source: IndexedSource) -> CoreResult<IndexedSource>;
+    async fn put_lineage(
+        &self,
+        scope: &Scope,
+        record_id: &str,
+        lineage: CodeLineage,
+    ) -> CoreResult<CodeLineage>;
+    async fn put_source_descriptor(
+        &self,
+        scope: &Scope,
+        source: IndexedSource,
+    ) -> CoreResult<IndexedSource>;
     async fn record_receipt(&self, receipt: StageReceipt) -> CoreResult<StageReceipt>;
+    async fn mark_ready(
+        &self,
+        scope: &Scope,
+        repo_id: &engram_domain::RepoId,
+        attempt_id: &str,
+        fencing_token: u64,
+    ) -> CoreResult<CodeAttempt>;
     async fn publish(
         &self,
         scope: &Scope,

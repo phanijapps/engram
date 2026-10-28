@@ -69,6 +69,9 @@ A knowledge readiness receipt identifies its attempt, generation, lane, and dige
 The adapter emits a receipt only after durable record, contributor, source descriptor, and manifest writes succeed.
 A matching retry reuses its durable receipt without reconciling or deleting an active generation.
 An internal manifest is not a publication pointer, a new scope authority, or evidence of cross-store ACID.
+The durable attempt lookup returns its immutable generation association with the attempt record so a crash retry cannot substitute another generation.
+A newer durable fencing token supersedes an older token before either attempt publishes; merely requiring a positive token is insufficient.
+The coordinator authorizes each binding operation before storage access and derives required receipt lanes from trusted configuration rather than accepting a caller-selected reduced set.
 
 ## Modeling Principles
 

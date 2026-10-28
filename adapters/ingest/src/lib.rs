@@ -10,6 +10,7 @@ mod contract;
 mod contract_entities;
 mod extractor;
 mod filesystem;
+mod generation_stage;
 pub mod git;
 mod git_detect;
 pub mod git_source;
@@ -36,6 +37,10 @@ pub use engram_code::CodeSymbolChunker;
 pub use engram_code::TreeSitterChunker;
 pub use extractor::{ExtractedGraph, GraphExtractor, register_entities, resolve_call_refs};
 pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
+pub use generation_stage::{
+    CommittedGenerationFiles, PreparedGeneration, StagedDocument, prepare_generation,
+    write_prepared_generation,
+};
 pub use git::GitSourceReader;
 pub use git_detect::detect_git;
 pub use hash::content_hash;

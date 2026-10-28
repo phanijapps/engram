@@ -70,8 +70,27 @@ where
     where
         R: KnowledgeRepository + ?Sized,
     {
-        validate_request(&request)?;
+        let prepared = self.assemble_with_candidates(request, candidates)?;
+        let source = repository.put_source(prepared.source).await?;
+        let document = repository.put_document(prepared.document).await?;
+        let mut persisted_chunks = Vec::with_capacity(prepared.chunks.len());
+        for chunk in prepared.chunks {
+            persisted_chunks.push(repository.put_chunk(chunk).await?);
+        }
+        Ok(IngestedKnowledge {
+            source,
+            document,
+            chunks: persisted_chunks,
+        })
+    }
 
+    /// Assemble records without writes so generation staging can namespace all identities first.
+    pub fn assemble_with_candidates(
+        &self,
+        request: DocumentIngestRequest,
+        candidates: Vec<crate::ChunkCandidate>,
+    ) -> CoreResult<IngestedKnowledge> {
+        validate_request(&request)?;
         let document_hash = content_hash(&request.text);
         let source_id = source_id(&request);
         let document_id = document_id(&source_id, &request.document, &document_hash);
@@ -167,17 +186,10 @@ where
             })
             .collect::<Vec<_>>();
 
-        let source = repository.put_source(source).await?;
-        let document = repository.put_document(document).await?;
-        let mut persisted_chunks = Vec::with_capacity(chunks.len());
-        for chunk in chunks {
-            persisted_chunks.push(repository.put_chunk(chunk).await?);
-        }
-
         Ok(IngestedKnowledge {
             source,
             document,
-            chunks: persisted_chunks,
+            chunks,
         })
     }
 }

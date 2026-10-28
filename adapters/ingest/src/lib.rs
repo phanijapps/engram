@@ -12,6 +12,7 @@ mod extractor;
 mod filesystem;
 pub mod git;
 mod git_detect;
+pub mod git_source;
 mod hash;
 pub(crate) mod ingestor;
 mod markdown_chunker;

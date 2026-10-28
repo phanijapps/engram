@@ -87,6 +87,59 @@ impl Drop for FixtureLeaseInsertBarrier {
     }
 }
 
+struct FixtureLeaseReleaseBarrier {
+    connection: PgConnection,
+    trigger: String,
+    function: String,
+    key: String,
+}
+
+impl FixtureLeaseReleaseBarrier {
+    fn install(url: &str, lease_id: &str, suffix: &str) -> Self {
+        let trigger = format!("terra_lease_release_trigger_{suffix}");
+        let function = format!("terra_lease_release_function_{suffix}");
+        let barrier_key = format!("terra-lease-release-barrier-{suffix}");
+        let connection = PgConnection::connect(url).expect("fixture release barrier connection");
+        let statement = format!(
+            "CREATE FUNCTION {function}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF OLD.lease_id = '{lease_id}' THEN PERFORM pg_advisory_xact_lock(hashtextextended('{barrier_key}', 0)); END IF; RETURN OLD; END; $$; CREATE TRIGGER {trigger} BEFORE DELETE ON code_read_leases FOR EACH ROW EXECUTE FUNCTION {function}()"
+        );
+        block_on(connection.client.batch_execute(&statement))
+            .expect("install fixture release barrier");
+        Self {
+            connection,
+            trigger,
+            function,
+            key: barrier_key,
+        }
+    }
+
+    fn cleanup(&self) {
+        let statement = format!(
+            "DROP TRIGGER IF EXISTS {} ON code_read_leases; DROP FUNCTION IF EXISTS {}()",
+            self.trigger, self.function
+        );
+        block_on(self.connection.client.batch_execute(&statement))
+            .expect("remove fixture release barrier");
+        let absent: bool = block_on(self.connection.client.query_one(
+            "SELECT NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname=$1) AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname=$2)",
+            &[&self.trigger, &self.function],
+        ))
+        .expect("verify fixture release barrier removal")
+        .get(0);
+        assert!(absent, "fixture release barrier objects remain");
+    }
+}
+
+impl Drop for FixtureLeaseReleaseBarrier {
+    fn drop(&mut self) {
+        let statement = format!(
+            "DROP TRIGGER IF EXISTS {} ON code_read_leases; DROP FUNCTION IF EXISTS {}()",
+            self.trigger, self.function
+        );
+        let _ = block_on(self.connection.client.batch_execute(&statement));
+    }
+}
+
 #[test]
 fn neutral_repository_port_is_send_sync() {
     fn assert_port<T: CodeBindingRepository + Send + Sync>() {}
@@ -629,6 +682,34 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
         &lease_id,
         &expires_at.to_rfc3339(),
     );
+    wait_ready(&mut first);
+    let first_pid = first.backend_pid.expect("first global-id child pid");
+    first
+        .child
+        .stdin
+        .take()
+        .expect("first child stdin")
+        .write_all(b"G")
+        .expect("release first global-id child");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut first_waiting_on_fixture = false;
+    while std::time::Instant::now() < deadline {
+        let waiting: bool = block_on(observer.client.query_one(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks holder JOIN pg_locks waiter ON waiter.locktype=holder.locktype AND waiter.database IS NOT DISTINCT FROM holder.database AND waiter.classid IS NOT DISTINCT FROM holder.classid AND waiter.objid IS NOT DISTINCT FROM holder.objid AND waiter.objsubid IS NOT DISTINCT FROM holder.objsubid WHERE holder.locktype='advisory' AND holder.pid=$1 AND holder.granted AND waiter.pid=$2 AND NOT waiter.granted)",
+            &[&holder_pid, &first_pid],
+        ))
+        .expect("observe first fixture-barrier wait")
+        .get(0);
+        if waiting {
+            first_waiting_on_fixture = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        first_waiting_on_fixture,
+        "first child did not reach fixture insert barrier"
+    );
     let mut second = spawn_race_child(
         "acquire-global-id",
         &second_scope,
@@ -636,37 +717,32 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
         &lease_id,
         &expires_at.to_rfc3339(),
     );
-    wait_ready(&mut first);
     wait_ready(&mut second);
-    let first_pid = first.backend_pid.expect("first global-id child pid");
     let second_pid = second.backend_pid.expect("second global-id child pid");
-    for child in [&mut first, &mut second] {
-        child
-            .child
-            .stdin
-            .take()
-            .expect("child stdin")
-            .write_all(b"G")
-            .expect("release global-id child");
-    }
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    let mut both_prechecks_waiting = false;
+    second
+        .child
+        .stdin
+        .take()
+        .expect("second child stdin")
+        .write_all(b"G")
+        .expect("release second global-id child");
+    let mut second_waiting_on_first_global_id = false;
     while std::time::Instant::now() < deadline {
-        let waiters: i64 = block_on(observer.client.query_one(
-            "SELECT count(DISTINCT waiter.pid) FROM pg_locks holder JOIN pg_locks waiter ON waiter.locktype=holder.locktype AND waiter.database IS NOT DISTINCT FROM holder.database AND waiter.classid IS NOT DISTINCT FROM holder.classid AND waiter.objid IS NOT DISTINCT FROM holder.objid AND waiter.objsubid IS NOT DISTINCT FROM holder.objsubid WHERE holder.locktype='advisory' AND holder.pid=$1 AND holder.granted AND waiter.pid IN ($2,$3) AND NOT waiter.granted",
-            &[&holder_pid, &first_pid, &second_pid],
+        let waiting: bool = block_on(observer.client.query_one(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks holder JOIN pg_locks waiter ON waiter.locktype=holder.locktype AND waiter.database IS NOT DISTINCT FROM holder.database AND waiter.classid IS NOT DISTINCT FROM holder.classid AND waiter.objid IS NOT DISTINCT FROM holder.objid AND waiter.objsubid IS NOT DISTINCT FROM holder.objsubid WHERE holder.locktype='advisory' AND holder.pid=$1 AND holder.granted AND waiter.pid=$2 AND NOT waiter.granted)",
+            &[&first_pid, &second_pid],
         ))
-        .expect("observe fixture barrier waiters")
+        .expect("observe second global-ID wait")
         .get(0);
-        if waiters == 1 {
-            both_prechecks_waiting = true;
+        if waiting {
+            second_waiting_on_first_global_id = true;
             break;
         }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     assert!(
-        both_prechecks_waiting,
-        "the winning child did not reach the post-precheck insert barrier"
+        second_waiting_on_first_global_id,
+        "second child did not wait on first child's production lease-ID authority"
     );
     block_on(barrier_tx.commit()).expect("release fixture insert barrier");
     let first_output = collect_child(first);
@@ -745,6 +821,286 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
         Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
     ));
     barrier.cleanup();
+}
+
+#[ignore = "requires parent-authorized marked disposable PostgreSQL"]
+#[test]
+fn postgres_release_first_blocks_acquire_and_retires_global_lease_id() {
+    for same_scope_replay in [true, false] {
+        let store = repository();
+        let suffix = unique();
+        let first_scope = scope(&format!("release-first-a-{suffix}"), "factory-test");
+        let second_scope = if same_scope_replay {
+            first_scope.clone()
+        } else {
+            scope(&format!("release-first-b-{suffix}"), "factory-test")
+        };
+        let first_repo = format!("release-first-a-repo-{suffix}");
+        let second_repo = if same_scope_replay {
+            first_repo.clone()
+        } else {
+            format!("release-first-b-repo-{suffix}")
+        };
+        block_on(store.bind(binding(&first_scope, &first_repo))).expect("bind first scope");
+        if !same_scope_replay {
+            block_on(store.bind(binding(&second_scope, &second_repo))).expect("bind second scope");
+        }
+        let now = chrono::Utc::now();
+        let expires_at = now + chrono::Duration::minutes(5);
+        let lease_id = format!("release-first-id-{suffix}");
+        let original = block_on(store.acquire_read_lease(
+            CodeReadLease {
+                id: lease_id.clone(),
+                eligibility: block_on(store.eligibility(&first_scope)).expect("first eligibility"),
+                fencing_token: 1,
+                expires_at,
+            },
+            now,
+        ))
+        .expect("acquire original lease");
+        let url =
+            std::env::var("ENGRAM_TEST_PG_URL").expect("marked disposable PostgreSQL URL required");
+        let mut barrier = FixtureLeaseReleaseBarrier::install(&url, &lease_id, &suffix);
+        let observer = PgConnection::connect(&url).expect("release barrier observer");
+        let holder_pid: i32 = block_on(
+            barrier
+                .connection
+                .client
+                .query_one("SELECT pg_backend_pid()", &[]),
+        )
+        .expect("fixture release barrier backend pid")
+        .get(0);
+        let barrier_tx =
+            block_on(barrier.connection.client.transaction()).expect("fixture release transaction");
+        block_on(barrier_tx.execute(
+            "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+            &[&barrier.key],
+        ))
+        .expect("hold fixture release barrier");
+        let mut releasing = spawn_race_child(
+            "release-global-id",
+            &first_scope,
+            &first_repo,
+            &lease_id,
+            &expires_at.to_rfc3339(),
+        );
+        wait_ready(&mut releasing);
+        let release_pid = releasing.backend_pid.expect("release child backend pid");
+        releasing
+            .child
+            .stdin
+            .take()
+            .expect("release child stdin")
+            .write_all(b"G")
+            .expect("start release child");
+        wait_for_advisory_wait(
+            &observer,
+            holder_pid,
+            release_pid,
+            "release fixture barrier",
+        );
+        let global_key = format!("engram-code-read-lease-id:{lease_id}");
+        assert!(
+            block_on(observer.client.query_one(
+                "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=$1 AND granted AND ((classid::bigint << 32) + objid::bigint) = hashtextextended($2, 0))",
+                &[&release_pid, &global_key],
+            ))
+            .expect("observe release global-ID authority")
+            .get::<_, bool>(0),
+            "release child did not grant the production global lease-ID authority"
+        );
+        let mut acquiring = spawn_race_child(
+            "acquire-global-id",
+            &second_scope,
+            &second_repo,
+            &lease_id,
+            &expires_at.to_rfc3339(),
+        );
+        wait_ready(&mut acquiring);
+        let acquire_pid = acquiring.backend_pid.expect("acquire child backend pid");
+        acquiring
+            .child
+            .stdin
+            .take()
+            .expect("acquire child stdin")
+            .write_all(b"G")
+            .expect("start acquire child");
+        wait_for_advisory_wait(
+            &observer,
+            release_pid,
+            acquire_pid,
+            "production global-ID authority",
+        );
+        block_on(barrier_tx.commit()).expect("release fixture barrier");
+        assert!(collect_child(releasing)
+            .lines()
+            .any(|line| line == "LEASE_RELEASED"));
+        assert!(collect_child(acquiring)
+            .lines()
+            .any(|line| line == "LEASE_CONFLICT"));
+        let state = block_on(observer.client.query_one(
+            "SELECT EXISTS (SELECT 1 FROM code_read_lease_tombstones WHERE lease_id=$1), EXISTS (SELECT 1 FROM code_read_leases WHERE lease_id=$1)",
+            &[&lease_id],
+        ))
+        .expect("inspect retired lease state");
+        assert!(
+            state.get::<_, bool>(0),
+            "released lease tombstone is durable"
+        );
+        assert!(!state.get::<_, bool>(1), "released lease has no live row");
+        assert!(matches!(
+            block_on(store.release_read_lease(&original)),
+            Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+        ));
+        assert!(matches!(
+            block_on(store.renew_read_lease(
+                &original,
+                now,
+                expires_at + chrono::Duration::minutes(1),
+            )),
+            Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+        ));
+        barrier.cleanup();
+    }
+}
+
+#[ignore = "requires parent-authorized marked disposable PostgreSQL"]
+#[test]
+fn postgres_acquire_first_blocks_release_and_retires_global_lease_id() {
+    for same_scope_replay in [true, false] {
+        let store = repository();
+        let suffix = unique();
+        let first_scope = scope(&format!("acquire-first-a-{suffix}"), "factory-test");
+        let second_scope = if same_scope_replay {
+            first_scope.clone()
+        } else {
+            scope(&format!("acquire-first-b-{suffix}"), "factory-test")
+        };
+        let first_repo = format!("acquire-first-a-repo-{suffix}");
+        let second_repo = if same_scope_replay {
+            first_repo.clone()
+        } else {
+            format!("acquire-first-b-repo-{suffix}")
+        };
+        block_on(store.bind(binding(&first_scope, &first_repo))).expect("bind first scope");
+        if !same_scope_replay {
+            block_on(store.bind(binding(&second_scope, &second_repo))).expect("bind second scope");
+        }
+        let now = chrono::Utc::now();
+        let expires_at = now + chrono::Duration::minutes(5);
+        let lease_id = format!("acquire-first-id-{suffix}");
+        let original = block_on(store.acquire_read_lease(
+            CodeReadLease {
+                id: lease_id.clone(),
+                eligibility: block_on(store.eligibility(&first_scope)).expect("first eligibility"),
+                fencing_token: 1,
+                expires_at,
+            },
+            now,
+        ))
+        .expect("acquire original lease");
+        let url =
+            std::env::var("ENGRAM_TEST_PG_URL").expect("marked disposable PostgreSQL URL required");
+        let mut row_holder = PgConnection::connect(&url).expect("owned row pause connection");
+        let observer = PgConnection::connect(&url).expect("acquire-first observer");
+        let holder_pid: i32 = block_on(row_holder.client.query_one("SELECT pg_backend_pid()", &[]))
+            .expect("owned row pause backend pid")
+            .get(0);
+        let row_tx =
+            block_on(row_holder.client.transaction()).expect("owned row pause transaction");
+        block_on(row_tx.query_one(
+            "SELECT lease_id FROM code_read_leases WHERE lease_id=$1 FOR UPDATE",
+            &[&lease_id],
+        ))
+        .expect("lock fresh owned live lease row");
+        let mut acquiring = spawn_race_child(
+            "acquire-global-id",
+            &second_scope,
+            &second_repo,
+            &lease_id,
+            &expires_at.to_rfc3339(),
+        );
+        wait_ready(&mut acquiring);
+        let acquire_pid = acquiring.backend_pid.expect("acquire child backend pid");
+        acquiring
+            .child
+            .stdin
+            .take()
+            .expect("acquire child stdin")
+            .write_all(b"G")
+            .expect("start acquire child");
+        let global_key = format!("engram-code-read-lease-id:{lease_id}");
+        wait_for_lease_authority(
+            &observer,
+            acquire_pid,
+            &global_key,
+            "acquire global-ID authority",
+        );
+        wait_for_blocker(&observer, holder_pid, acquire_pid, "owned live lease row");
+        let mut releasing = spawn_race_child(
+            "release-global-id",
+            &first_scope,
+            &first_repo,
+            &lease_id,
+            &expires_at.to_rfc3339(),
+        );
+        wait_ready(&mut releasing);
+        let release_pid = releasing.backend_pid.expect("release child backend pid");
+        releasing
+            .child
+            .stdin
+            .take()
+            .expect("release child stdin")
+            .write_all(b"G")
+            .expect("start release child");
+        wait_for_advisory_wait(
+            &observer,
+            acquire_pid,
+            release_pid,
+            "acquire child production global-ID authority",
+        );
+        block_on(row_tx.commit()).expect("release owned row pause");
+        let acquire_output = collect_child(acquiring);
+        if same_scope_replay {
+            assert!(
+                acquire_output.lines().any(|line| line == "LEASE_OWNER"),
+                "identical replay did not return the canonical lease"
+            );
+        } else {
+            assert!(
+                acquire_output.lines().any(|line| line == "LEASE_CONFLICT"),
+                "different record did not return typed GenerationChanged"
+            );
+        }
+        assert!(
+            collect_child(releasing)
+                .lines()
+                .any(|line| line == "LEASE_RELEASED"),
+            "release did not complete after acquire ended"
+        );
+        let state = block_on(observer.client.query_one(
+            "SELECT EXISTS (SELECT 1 FROM code_read_lease_tombstones WHERE lease_id=$1), EXISTS (SELECT 1 FROM code_read_leases WHERE lease_id=$1)",
+            &[&lease_id],
+        ))
+        .expect("inspect retired lease state");
+        assert!(
+            state.get::<_, bool>(0),
+            "released lease tombstone is durable"
+        );
+        assert!(!state.get::<_, bool>(1), "released lease has no live row");
+        assert!(matches!(
+            block_on(store.release_read_lease(&original)),
+            Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+        ));
+        assert!(matches!(
+            block_on(store.renew_read_lease(
+                &original,
+                now,
+                expires_at + chrono::Duration::minutes(1),
+            )),
+            Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+        ));
+    }
 }
 
 #[ignore = "requires parent-authorized marked disposable PostgreSQL"]
@@ -1632,6 +1988,28 @@ fn race_child(mode: &str) {
             );
             println!("STALE");
         }
+        "release-global-id" => {
+            let eligibility = block_on(store.eligibility(&test_scope)).expect("child eligibility");
+            let lease_id = std::env::var("TERRA_PG_RACE_ATTEMPT").expect("global lease id");
+            let expires_at = std::env::var("TERRA_PG_RACE_EPOCH")
+                .expect("global lease expiry")
+                .parse()
+                .expect("global lease expiry timestamp");
+            println!("READY|{backend_pid}");
+            std::io::stdout().flush().expect("flush barrier");
+            let mut signal = [0];
+            std::io::stdin()
+                .read_exact(&mut signal)
+                .expect("read barrier");
+            block_on(store.release_read_lease(&CodeReadLease {
+                id: lease_id,
+                eligibility,
+                fencing_token: 1,
+                expires_at,
+            }))
+            .expect("release lease through repository port");
+            println!("LEASE_RELEASED");
+        }
         "acquire-global-id" => {
             let eligibility = block_on(store.eligibility(&test_scope)).expect("child eligibility");
             let lease_id = std::env::var("TERRA_PG_RACE_ATTEMPT").expect("global lease id");
@@ -1881,6 +2259,57 @@ fn spawn_retention_child(
         output,
         backend_pid: None,
     }
+}
+
+fn wait_for_lease_authority(observer: &PgConnection, pid: i32, key: &str, name: &str) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        let granted: bool = block_on(observer.client.query_one(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=$1 AND granted AND ((classid::bigint << 32) + objid::bigint) = hashtextextended($2, 0))",
+            &[&pid, &key],
+        ))
+        .expect("observe exact lease authority")
+        .get(0);
+        if granted {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("child did not grant {name}");
+}
+
+fn wait_for_blocker(observer: &PgConnection, blocker_pid: i32, blocked_pid: i32, name: &str) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        let blocked: bool = block_on(observer.client.query_one(
+            "SELECT $1 = ANY(pg_blocking_pids($2))",
+            &[&blocker_pid, &blocked_pid],
+        ))
+        .expect("observe blocking graph")
+        .get(0);
+        if blocked {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("child did not wait on {name}");
+}
+
+fn wait_for_advisory_wait(observer: &PgConnection, holder_pid: i32, waiter_pid: i32, name: &str) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        let waiting: bool = block_on(observer.client.query_one(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks holder JOIN pg_locks waiter ON waiter.locktype=holder.locktype AND waiter.database IS NOT DISTINCT FROM holder.database AND waiter.classid IS NOT DISTINCT FROM holder.classid AND waiter.objid IS NOT DISTINCT FROM holder.objid AND waiter.objsubid IS NOT DISTINCT FROM holder.objsubid WHERE holder.locktype='advisory' AND holder.pid=$1 AND holder.granted AND waiter.pid=$2 AND NOT waiter.granted)",
+            &[&holder_pid, &waiter_pid],
+        ))
+        .expect("observe exact advisory wait")
+        .get(0);
+        if waiting {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("child did not wait on {name}");
 }
 
 fn wait_ready(child: &mut BoundedChild) {

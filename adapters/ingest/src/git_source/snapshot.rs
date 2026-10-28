@@ -165,7 +165,7 @@ pub fn retain_snapshot_with_limits(
             // identity captured at creation. No spelling, sorting or case folding is
             // guessed: an actual alias conflict resolves to a different identity and is
             // rejected; independently representable names keep distinct identities.
-            let attempt_root = temp.path.clone();
+            let attempt_root = super::private_storage::ordinary_resolution_path(&temp.path);
             for (path, _) in &inventory {
                 let native = super::private_storage::native_file_identity(&attempt_root.join(path))
                     .map_err(io_error)?;

@@ -564,15 +564,25 @@ mod task_008 {
         #[cfg(windows)]
         {
             use std::os::windows::io::AsRawHandle;
-            assert_eq!(
-                unsafe {
+            // Termination was initiated and observed through job accounting; the
+            // retained handle must signal it within a bounded wait rather than an
+            // instant snapshot that races the kernel's cross-core signal delivery.
+            let deadline = Instant::now() + Duration::from_secs(2);
+            loop {
+                let waited = unsafe {
                     windows_sys::Win32::System::Threading::WaitForSingleObject(
-                        keeper.unwrap().as_raw_handle(),
-                        0,
+                        keeper.as_ref().unwrap().as_raw_handle(),
+                        25,
                     )
-                },
-                windows_sys::Win32::Foundation::WAIT_OBJECT_0
-            );
+                };
+                if waited == windows_sys::Win32::Foundation::WAIT_OBJECT_0 {
+                    break;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "retained descendant handle never signaled termination"
+                );
+            }
         }
         assert!(start.elapsed() < Duration::from_secs(3));
     }

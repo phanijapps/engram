@@ -39,6 +39,30 @@ fn directory_identity(dir: &Dir) -> io::Result<DirectoryId> {
 pub(crate) fn directory_identity_of(dir: &Dir) -> io::Result<DirectoryId> {
     directory_identity(dir)
 }
+/// Strip Windows verbatim-prefix conventions (`\\?\` and `\\?\UNC\`) so identity
+/// preflight reopens go through ordinary host path resolution, where aliasing
+/// (short names, case, Unicode forms) actually applies. Unix paths pass through.
+pub(crate) fn ordinary_resolution_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::{OsStrExt, OsStringExt};
+        let mut units: Vec<u16> = path.as_os_str().encode_wide().collect();
+        const VERBATIM: [u16; 4] = [92, 92, 63, 92];
+        const VERBATIM_UNC: [u16; 8] = [92, 92, 63, 92, 85, 78, 67, 92];
+        if units.starts_with(&VERBATIM_UNC) {
+            let rest = units[8..].to_vec();
+            units = vec![92, 92];
+            units.extend(rest);
+        } else if units.starts_with(&VERBATIM) {
+            units = units[4..].to_vec();
+        }
+        return PathBuf::from(std::ffi::OsString::from_wide(&units));
+    }
+    #[cfg(unix)]
+    {
+        path.to_path_buf()
+    }
+}
 /// Identity of a freshly created placeholder reopened through ordinary native path
 /// resolution, where host aliasing (short names, case, Unicode forms) applies.
 pub(crate) fn native_file_identity(path: &Path) -> io::Result<DirectoryId> {
@@ -673,10 +697,16 @@ mod tests {
         // Direct disposable filesystem probe preserving the actual OS outcome; unrelated
         // permission, ownership or capability failures must fail, never skip silently.
         if let Err(error) = std::fs::create_dir(&dir) {
-            assert_eq!(
+            // Native observation (run 40758578615): macOS rejects the name with
+            // EILSEQ (raw os_error 92), which maps to Uncategorized, not InvalidInput.
+            // Accept only the illegal-sequence/invalid-name family; permission,
+            // ownership or capability failures must still fail the test.
+            let unsupported_name = matches!(error.kind(), std::io::ErrorKind::InvalidInput)
+                || matches!(error.raw_os_error(), Some(22 | 84 | 92));
+            assert!(
+                unsupported_name,
+                "unexpected probe failure kind={:?} os_error={:?}",
                 error.kind(),
-                std::io::ErrorKind::InvalidInput,
-                "unsupported-name probe os_error={:?}",
                 error.raw_os_error()
             );
             assert!(!dir.exists());

@@ -633,3 +633,32 @@ fn bank_fixture_bytes() -> Vec<u8> {
     )
     .unwrap()
 }
+
+/// FIND-code-103 regression: `pack status` degrades a corrupt manifest hash
+/// excerpt instead of panicking — the status path, matching obtain_bytes.
+#[test]
+fn pack_status_degrades_corrupt_manifest_instead_of_panicking() {
+    let dir = tempfile::tempdir().unwrap();
+    let storage = dir.path().join("store");
+    std::fs::create_dir_all(pack::cache_dir(&storage, "corrupt-pack")).unwrap();
+    std::fs::write(
+        pack::cache_dir(&storage, "corrupt-pack").join("manifest.json"),
+        r#"{"id":"corrupt-pack","sha256":"deadbeef","license":"CC-BY-4.0","format":"Turtle","url":"x","classes":1,"properties":1}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        pack::cache_dir(&storage, "corrupt-pack").join("pack.ttl"),
+        b"@prefix owl: <http://www.w3.org/2002/07/owl#> .\n",
+    )
+    .unwrap();
+    // Drive the status listing body the same way run_status does (it prints;
+    // call the parsing/excerpt path indirectly through run_status exit code —
+    // a panic here would abort the test process).
+    let config = mcp_config(&storage, "status-corrupt");
+    let exit = pack::run(&[
+        "status".to_owned(),
+        "--storage".to_owned(),
+        config.storage_path.display().to_string(),
+    ]);
+    assert_eq!(exit, 0, "pack status survives a corrupt manifest");
+}

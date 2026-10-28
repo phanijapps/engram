@@ -146,9 +146,12 @@ impl SliceRule {
 
         let mut ranked_props: Vec<&OntologyProperty> = properties.iter().collect();
         ranked_props.sort_by(|a, b| a.uri.cmp(&b.uri));
+        // FIND-code-102: predicate labels dedupe exactly like class labels, and
+        // the sliced count reports what the config emits, not raw properties.
         let predicate_labels = dedupe_labels(ranked_props.iter().map(|p| p.label.as_str()))
             .take(self.predicate_cap)
-            .collect();
+            .collect::<Vec<_>>();
+        let sliced_predicates = predicate_labels.len();
 
         SliceSelection {
             pack_id: pack_id.to_owned(),
@@ -156,7 +159,7 @@ impl SliceRule {
             predicate_labels,
             sliced_classes,
             available_classes: classes.len(),
-            sliced_predicates: properties.len().min(self.predicate_cap),
+            sliced_predicates,
             available_predicates: properties.len(),
         }
     }
@@ -296,6 +299,37 @@ mod tests {
         assert_eq!(
             line,
             "classes 150/200 available, predicates 40/60 available"
+        );
+    }
+
+    #[test]
+    fn slice_counts_deduped_predicate_labels_not_raw_properties() {
+        // FIND-code-102 regression: colliding predicate labels count once in
+        // the sliced report — mirroring the class-side fix.
+        let classes = synthetic_classes(1);
+        let mut properties = synthetic_properties(5);
+        for (index, property) in properties.iter_mut().enumerate() {
+            if index < 3 {
+                property.label = "samePredicate".to_owned();
+            }
+        }
+        let selection = SliceRule::default().select("synthetic", &classes, &properties);
+        assert_eq!(selection.available_predicates, 5);
+        assert_eq!(
+            selection.predicate_labels.len(),
+            3,
+            "labels dedupe: {selection:?}"
+        );
+        assert_eq!(
+            selection.sliced_predicates, 3,
+            "sliced counts emitted labels, not raw properties"
+        );
+        assert!(
+            selection
+                .counts_line()
+                .ends_with("predicates 3/5 available"),
+            "counts line is honest: {}",
+            selection.counts_line()
         );
     }
 

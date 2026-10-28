@@ -81,6 +81,22 @@ struct PackArgs {
     pack_id: Option<String>,
 }
 
+/// Launch/store flags `McpConfig::from_args` parses — each takes one value.
+const PACK_PASS_THROUGH_VALUE_FLAGS: [&str; 12] = [
+    "--storage",
+    "--project",
+    "--org",
+    "--domain",
+    "--subdomain",
+    "--ontology",
+    "--taxonomy",
+    "--layout",
+    "--db-file",
+    "--tools",
+    "--backend",
+    "--pg-connection-string",
+];
+
 fn parse_pack_args(argv: &[String]) -> Result<PackArgs, String> {
     let mut args = PackArgs {
         rest: Vec::new(),
@@ -111,6 +127,16 @@ fn parse_pack_args(argv: &[String]) -> Result<PackArgs, String> {
             }
             other if !other.starts_with("--") && args.pack_id.is_none() => {
                 args.pack_id = Some(other.to_owned());
+            }
+            // Launch/store flags the pack surface passes through take a
+            // VALUE — consume it together so a positional-less subcommand
+            // (`pack status --storage X`) never mistakes the value for a
+            // pack id (surfaced by the FIND-code-103 status regression test).
+            other if PACK_PASS_THROUGH_VALUE_FLAGS.contains(&other) => {
+                args.rest.push(other.to_owned());
+                if let Some(value) = it.next() {
+                    args.rest.push(value.to_owned());
+                }
             }
             other => args.rest.push(other.to_owned()),
         }
@@ -804,10 +830,12 @@ fn run_status(argv: &[String]) -> i32 {
                     .ok()
                     .and_then(|t| serde_json::from_str(&t).ok());
             match manifest {
+                // FIND-code-103: the manifest is disk-read — degrade a
+                // corrupt hash excerpt instead of slicing to a panic.
                 Some(m) => lines.push(format!(
                     "  {} sha256 {}… license {} ({} classes / {} properties available)",
                     id,
-                    &m.sha256[..12],
+                    m.sha256.get(..12).unwrap_or("?"),
                     m.license,
                     m.classes,
                     m.properties

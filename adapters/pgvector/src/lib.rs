@@ -9,6 +9,7 @@
 //! zero-dep default.
 
 pub mod cells;
+pub mod code_binding;
 pub mod connection;
 pub mod knowledge;
 pub mod memory;

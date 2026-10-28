@@ -346,19 +346,25 @@ mod tests {
         {
             let probe = temp.path().join(format!("probe-{n}"));
             std::fs::create_dir(&probe).unwrap();
-            let first_parent = probe.join(Path::new(first).parent().unwrap_or(Path::new("")));
+            // Probe in retention's actual creation order: the inventory is sorted
+            // before placeholders are created, so alias allocation (for example a
+            // literal LONGFI~1.RS allocated before the long name generates its own
+            // short alias) must be observed in exactly that order.
+            let mut ordered = [first, second];
+            ordered.sort_unstable();
+            let first_parent = probe.join(Path::new(ordered[0]).parent().unwrap_or(Path::new("")));
             std::fs::create_dir_all(&first_parent).unwrap();
             std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
-                .open(probe.join(first))
+                .open(probe.join(ordered[0]))
                 .unwrap();
-            let second_parent = probe.join(Path::new(second).parent().unwrap_or(Path::new("")));
+            let second_parent = probe.join(Path::new(ordered[1]).parent().unwrap_or(Path::new("")));
             std::fs::create_dir_all(&second_parent).unwrap();
             let aliased = std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)
-                .open(probe.join(second))
+                .open(probe.join(ordered[1]))
                 .is_err();
             let root = temp.path().join(format!("managed-{n}"));
             let result = retain_snapshot(

@@ -1,12 +1,15 @@
 //! Authorized, engine-neutral code binding and publication coordination.
+mod eligibility;
 mod publication;
 mod registration;
+mod status;
 use async_trait::async_trait;
 use engram_domain::{
     Actor, CodeAttempt, CodeBinding, CodeGeneration, CodeReceiptKind, RepoId, Scope,
 };
 use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
 pub use publication::CodeRebuildRequest;
+pub use status::CodeBindingStatus;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -44,6 +47,7 @@ pub struct CodeBindingCoordinator {
     store: Arc<dyn CodeBindingRepository>,
     authorizer: Arc<dyn CodeBindingAuthorizer>,
     required_lanes: Vec<CodeReceiptKind>,
+    clock: Arc<dyn engram_runtime::Clock>,
 }
 impl CodeBindingCoordinator {
     /// Required source and knowledge lanes cannot be removed by a request.
@@ -62,6 +66,19 @@ impl CodeBindingCoordinator {
             store,
             authorizer,
             required_lanes,
+            clock: Arc::new(UtcClock),
         }
+    }
+}
+struct UtcClock;
+impl engram_runtime::Clock for UtcClock {
+    fn now(&self) -> engram_domain::Timestamp {
+        chrono::Utc::now()
+    }
+}
+impl CodeBindingCoordinator {
+    pub fn with_clock(mut self, clock: Arc<dyn engram_runtime::Clock>) -> Self {
+        self.clock = clock;
+        self
     }
 }

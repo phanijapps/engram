@@ -86,11 +86,22 @@ pub struct EngramProvider {
     community_query: Option<Arc<dyn crate::CommunityQuery>>,
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
+    code_bindings: Option<Arc<crate::code_binding::CodeBindingCoordinator>>,
     schema_version: String,
     adapter_version: String,
 }
 
 impl EngramProvider {
+    /// Reach authorized code operations through the same neutral coordinator used by transports.
+    pub fn code_bindings(&self) -> CoreResult<&Arc<crate::code_binding::CodeBindingCoordinator>> {
+        self.code_bindings
+            .as_ref()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "code-binding".into(),
+                reason: "code binding coordinator is not configured".into(),
+            })
+    }
+
     /// Validates configuration and returns a provider with no handles.
     ///
     /// This is the config-validation entry point. Every family is reported
@@ -675,6 +686,7 @@ impl EngramProvider {
             community_query: None,
             lexical_feed: None,
             graph_cache: None,
+            code_bindings: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -718,6 +730,7 @@ pub struct EngramProviderBuilder {
     community_query: Option<Arc<dyn crate::CommunityQuery>>,
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
+    code_bindings: Option<Arc<crate::code_binding::CodeBindingCoordinator>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -755,6 +768,7 @@ impl EngramProviderBuilder {
             community_query: None,
             lexical_feed: None,
             graph_cache: None,
+            code_bindings: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
         }
@@ -943,6 +957,14 @@ impl EngramProviderBuilder {
         self
     }
 
+    pub fn code_bindings(
+        mut self,
+        coordinator: Arc<crate::code_binding::CodeBindingCoordinator>,
+    ) -> Self {
+        self.code_bindings = Some(coordinator);
+        self
+    }
+
     /// Builds the provider.
     pub fn build(self) -> EngramProvider {
         EngramProvider {
@@ -975,6 +997,7 @@ impl EngramProviderBuilder {
             community_query: self.community_query,
             lexical_feed: self.lexical_feed,
             graph_cache: self.graph_cache,
+            code_bindings: self.code_bindings,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }

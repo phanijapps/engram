@@ -15,6 +15,7 @@ mod batch_ledger;
 mod changes;
 pub mod code_binding;
 mod code_binding_port;
+mod code_read_leases;
 mod generation_staging;
 mod graph;
 mod identity;

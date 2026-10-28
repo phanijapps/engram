@@ -73,6 +73,13 @@ The durable attempt lookup returns its immutable generation association with the
 A newer durable fencing token supersedes an older token before either attempt publishes; merely requiring a positive token is insufficient.
 The coordinator authorizes each binding operation before storage access and derives required receipt lanes from trusted configuration rather than accepting a caller-selected reduced set.
 
+A request-local read lease pins one authorized scope, durable code epoch, and complete published generation set until its configured expiry.
+The store atomically compares the epoch and generation set when it acquires a lease; renewal and release require the current lease fencing token.
+Every successful binding/publication/reset visibility change increments a scope-wide code epoch, not the maximum of independent repository counters.
+A reader revalidates this epoch before returning and retries at most once; a second change returns a retryable generation-change error.
+Retention protects active, immediately previous, nonterminal-attempt and unexpired or configured-grace-period leased generations.
+An expired lease never authorizes cleanup by itself; exact no-reference proof and separate cleanup authority remain required.
+
 ## Modeling Principles
 
 - Domain contracts are independent of storage engines, APIs, and language

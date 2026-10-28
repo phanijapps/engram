@@ -29,7 +29,7 @@ fn error(error: CodeBindingError) -> CoreError {
         },
     }
 }
-fn storage_error() -> CoreError {
+pub(super) fn storage_error() -> CoreError {
     CoreError::Adapter {
         adapter: "engram-code-binding".into(),
         message: "durable code authority is unavailable".into(),
@@ -44,7 +44,7 @@ impl SqlCodeBindingRepository {
             store: Mutex::new(SqlCodeBindingStore::open(path).map_err(|_| storage_error())?),
         })
     }
-    fn lock(&self) -> CoreResult<MutexGuard<'_, SqlCodeBindingStore>> {
+    pub(super) fn lock(&self) -> CoreResult<MutexGuard<'_, SqlCodeBindingStore>> {
         self.store.lock().map_err(|_| storage_error())
     }
 }
@@ -244,30 +244,13 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         store.publish(scope, &repo_id.0, attempt_id).map_err(error)
     }
     async fn eligibility(&self, scope: &Scope) -> CoreResult<CodeEligibility> {
-        let store = self.lock()?;
-        let key = json(scope)?;
-        let mut statement = store.connection.prepare("SELECT repo_id,active_generation,epoch FROM code_repo_bindings WHERE tenant=?1 AND scope_key=?2 AND active_generation IS NOT NULL ORDER BY repo_id").map_err(|_| storage_error())?;
-        let rows = statement
-            .query_map(params![scope.tenant, key], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, String>(1)?,
-                    r.get::<_, u64>(2)?,
-                ))
-            })
+        let mut store = self.lock()?;
+        let tx = store
+            .connection
+            .transaction()
             .map_err(|_| storage_error())?;
-        let mut result = CodeEligibility {
-            scope: scope.clone(),
-            epoch: 0,
-            generations: Vec::new(),
-            repository_ids: Vec::new(),
-        };
-        for row in rows {
-            let (repo, generation, epoch) = row.map_err(|_| storage_error())?;
-            result.repository_ids.push(repo);
-            result.generations.push(generation);
-            result.epoch = result.epoch.max(epoch);
-        }
+        let result = read_eligibility(&tx, scope)?;
+        tx.commit().map_err(|_| storage_error())?;
         Ok(result)
     }
     async fn preview_reset(&self, _: &Scope, _: &RepoId) -> CoreResult<CodeResetPreview> {
@@ -282,4 +265,38 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
             reason: "permission-bound reset journal is not yet wired".into(),
         })
     }
+}
+
+pub(super) fn read_eligibility(
+    connection: &rusqlite::Connection,
+    scope: &Scope,
+) -> CoreResult<CodeEligibility> {
+    let key = json(scope)?;
+    let epoch = connection
+        .query_row(
+            "SELECT epoch FROM code_scope_epochs WHERE scope_key=?1",
+            [&key],
+            |r| r.get::<_, u64>(0),
+        )
+        .optional()
+        .map_err(|_| storage_error())?
+        .unwrap_or(0);
+    let mut statement = connection.prepare("SELECT repo_id,active_generation FROM code_repo_bindings WHERE tenant=?1 AND scope_key=?2 AND active_generation IS NOT NULL ORDER BY repo_id").map_err(|_|storage_error())?;
+    let rows = statement
+        .query_map(params![scope.tenant, key], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })
+        .map_err(|_| storage_error())?;
+    let mut result = CodeEligibility {
+        scope: scope.clone(),
+        epoch,
+        generations: Vec::new(),
+        repository_ids: Vec::new(),
+    };
+    for row in rows {
+        let (repo, generation) = row.map_err(|_| storage_error())?;
+        result.repository_ids.push(repo);
+        result.generations.push(generation);
+    }
+    Ok(result)
 }

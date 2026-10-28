@@ -18,7 +18,8 @@ pub enum AcquisitionMode {
     LocalOnly,
     ConfiguredRemote,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeEligibility {
     pub scope: Scope,
     pub epoch: u64,
@@ -36,7 +37,7 @@ pub struct StageReceipt {
 
 #[allow(clippy::double_must_use)]
 #[async_trait]
-pub trait CodeBindingRepository: Send + Sync {
+pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
     async fn register(
         &self,
         registration: RepositoryRegistration,

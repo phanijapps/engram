@@ -3,7 +3,7 @@ name: Portable acquisition custody
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, factory/010-project-bound-branch-indexing]
 
 permissions:
   contents: read

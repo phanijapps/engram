@@ -25,3 +25,4 @@ async-trait = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
+engram-integration = { path = "../../core/integration", version = "0.1.0", default-features = false }

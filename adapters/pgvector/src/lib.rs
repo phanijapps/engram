@@ -22,7 +22,7 @@ pub use cells::{PgBeliefStore, PgHierarchyStore, PgMemoryService, PgProcedureSto
 pub use code_binding_port::PgCodeBindingRepository;
 pub use connection::PgConnection;
 pub use knowledge::PgKnowledgeStore;
-pub use memory::{PgMemoryRow, read_recent, write_memory};
+pub use memory::{read_recent, write_memory, PgMemoryRow};
 pub use vector::PgVectorIndex;
 
 /// Content-hash for vector dedup (SHA-256 of the f32 bytes, like the SQLite adapter).

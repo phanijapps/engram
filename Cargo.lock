@@ -1420,6 +1420,7 @@ dependencies = [
  "engram-consolidation",
  "engram-domain",
  "engram-hierarchy",
+ "engram-integration",
  "engram-knowledge",
  "engram-memory",
  "engram-procedures",

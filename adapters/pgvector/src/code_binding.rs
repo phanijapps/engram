@@ -1,5 +1,5 @@
 //! PostgreSQL persistence for project-bound code identity and fenced publication.
-use crate::connection::{PgConnection, runtime};
+use crate::connection::{runtime, PgConnection};
 use engram_domain::{
     CodeAttempt, CodeBinding, CodeBindingError, CodeGeneration, CodeLineage, CodeResetJournal,
     CodeResetPreview, IndexedSource, RepoId, Scope,
@@ -58,44 +58,61 @@ impl PgCodeBindingStore {
         runtime().block_on(async{db(self.connection.client.execute("INSERT INTO code_generations(generation_id,record_json) VALUES($1,$2) ON CONFLICT(generation_id) DO NOTHING",&[&g.id,&value]).await)?;let row=db(self.connection.client.query_one("SELECT record_json FROM code_generations WHERE generation_id=$1",&[&g.id]).await)?;let stored:serde_json::Value=row.get(0);if stored!=value{return Err(CodeBindingError::InvalidSource)}Ok(g.clone())})
     }
     pub fn begin_attempt(
-        &self,
+        &mut self,
         scope: &Scope,
         repo: &RepoId,
-        g: &CodeGeneration,
-        a: &CodeAttempt,
+        generation: &CodeGeneration,
+        request: &CodeAttempt,
     ) -> Result<CodeAttempt, CodeBindingError> {
-        a.validate()?;
-        g.validate()?;
-        if g.binding_version != a.binding_version {
-            return Err(CodeBindingError::StaleGeneration);
-        }
+        generation.validate()?;
         let key = scope_key(scope)?;
-        let binding = self
-            .get_binding(scope, repo)?
-            .ok_or(CodeBindingError::BindingRequired)?;
-        if binding.version != a.binding_version
-            || binding.epoch != a.expected_epoch
-            || binding.active_generation != a.expected_active_generation
-        {
-            return Err(CodeBindingError::StaleGeneration);
-        }
-        let av = json(a)?;
-        let existing: Option<serde_json::Value> = runtime().block_on(async { let row=db(self.connection.client.query_opt("SELECT record_json FROM code_attempts WHERE tenant=$1 AND scope_key=$2 AND repo_id=$3 AND idempotency_key=$4",&[&scope.tenant,&key,&repo.0,&a.idempotency_key]).await)?; Ok::<_,CodeBindingError>(row.map(|r|r.get(0))) })?;
-        if let Some(previous) = existing {
-            return if previous == av {
-                Ok(a.clone())
-            } else {
-                Err(CodeBindingError::InvalidAttempt)
-            };
-        }
-        let max_fence: Option<i64> = runtime().block_on(async { let row=db(self.connection.client.query_one("SELECT MAX(fence) FROM code_attempts WHERE tenant=$1 AND scope_key=$2 AND repo_id=$3",&[&scope.tenant,&key,&repo.0]).await)?; Ok::<_,CodeBindingError>(row.get(0)) })?;
-        if max_fence.is_some_and(|fence| a.fencing_token as i64 <= fence) {
-            return Err(CodeBindingError::InvalidAttempt);
-        }
-        self.put_generation(g)?;
-        let gv = json(g)?;
-        let required = json(&a.receipt_kinds)?;
-        runtime().block_on(async{let inserted=db(self.connection.client.execute("INSERT INTO code_attempts(attempt_id,tenant,scope_key,repo_id,generation_id,binding_version,expected_epoch,expected_active_generation,fence,idempotency_key,state,required_receipts,record_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT(tenant,scope_key,repo_id,idempotency_key) DO NOTHING",&[&a.id,&scope.tenant,&key,&repo.0,&g.id,&(a.binding_version as i64),&(a.expected_epoch as i64),&a.expected_active_generation,&(a.fencing_token as i64),&a.idempotency_key,&serde_json::to_value(&a.state).unwrap().as_str().unwrap_or(""),&required,&av]).await)?;if inserted==0{let row=db(self.connection.client.query_opt("SELECT record_json FROM code_attempts WHERE tenant=$1 AND scope_key=$2 AND repo_id=$3 AND idempotency_key=$4",&[&scope.tenant,&key,&repo.0,&a.idempotency_key]).await)?.ok_or(CodeBindingError::PersistenceFailure)?;let prior:serde_json::Value=row.get(0);if prior!=av{return Err(CodeBindingError::InvalidAttempt)}}let _=gv;Ok(a.clone())})
+        let generation_json = json(generation)?;
+        runtime().block_on(async {
+            let tx = self.connection.client.transaction().await.map_err(|_| CodeBindingError::PersistenceFailure)?;
+            db(tx.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", &[&format!("{}:{key}", scope.tenant)]).await)?;
+            let binding = db(tx.query_opt("SELECT version,epoch,active_generation FROM code_repo_bindings WHERE tenant=$1 AND scope_key=$2 AND repo_id=$3 FOR UPDATE", &[&scope.tenant, &key, &repo.0]).await)?.ok_or(CodeBindingError::BindingRequired)?;
+            let version: i64 = binding.get(0);
+            let epoch: i64 = binding.get(1);
+            let active: Option<String> = binding.get(2);
+            if u64::try_from(version).map_err(|_| CodeBindingError::StaleGeneration)? != request.binding_version
+                || u64::try_from(epoch).map_err(|_| CodeBindingError::StaleGeneration)? != request.expected_epoch
+                || active != request.expected_active_generation
+                || generation.binding_version != request.binding_version {
+                return Err(CodeBindingError::StaleGeneration);
+            }
+            if let Some(row) = db(tx.query_opt("SELECT g.record_json,a.record_json,a.fence FROM code_attempts a JOIN code_generations g ON g.generation_id=a.generation_id WHERE a.tenant=$1 AND a.scope_key=$2 AND a.repo_id=$3 AND a.idempotency_key=$4", &[&scope.tenant, &key, &repo.0, &request.idempotency_key]).await)? {
+                let stored_generation: CodeGeneration = serde_json::from_value(row.get(0)).map_err(|_| CodeBindingError::PersistenceFailure)?;
+                let stored: CodeAttempt = serde_json::from_value(row.get(1)).map_err(|_| CodeBindingError::PersistenceFailure)?;
+                let mut canonical_request = request.clone();
+                if canonical_request.fencing_token == 0 {
+                    canonical_request.fencing_token = stored.fencing_token;
+                }
+                if stored_generation == *generation && stored == canonical_request {
+                    tx.commit().await.map_err(|_| CodeBindingError::PersistenceFailure)?;
+                    return Ok(stored);
+                }
+                return Err(CodeBindingError::InvalidAttempt);
+            }
+            let max: Option<i64> = db(tx.query_one("SELECT MAX(fence) FROM code_attempts WHERE tenant=$1 AND scope_key=$2 AND repo_id=$3", &[&scope.tenant, &key, &repo.0]).await)?.get(0);
+            let next = max.unwrap_or(0).checked_add(1).ok_or(CodeBindingError::InvalidAttempt)?;
+            let mut attempt = request.clone();
+            if attempt.fencing_token == 0 {
+                attempt.fencing_token = u64::try_from(next).map_err(|_| CodeBindingError::InvalidAttempt)?;
+            }
+            let fence = i64::try_from(attempt.fencing_token).map_err(|_| CodeBindingError::InvalidAttempt)?;
+            if fence != next {
+                return Err(CodeBindingError::InvalidAttempt);
+            }
+            attempt.validate()?;
+            let attempt_json = json(&attempt)?;
+            let required = json(&attempt.receipt_kinds)?;
+            db(tx.execute("INSERT INTO code_generations(generation_id,record_json) VALUES($1,$2) ON CONFLICT(generation_id) DO NOTHING", &[&generation.id, &generation_json]).await)?;
+            let stored_generation: serde_json::Value = db(tx.query_one("SELECT record_json FROM code_generations WHERE generation_id=$1", &[&generation.id]).await)?.get(0);
+            if stored_generation != generation_json { return Err(CodeBindingError::InvalidSource); }
+            db(tx.execute("INSERT INTO code_attempts(attempt_id,tenant,scope_key,repo_id,generation_id,binding_version,expected_epoch,expected_active_generation,fence,idempotency_key,state,required_receipts,record_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)", &[&attempt.id,&scope.tenant,&key,&repo.0,&generation.id,&version,&epoch,&attempt.expected_active_generation,&fence,&attempt.idempotency_key,&serde_json::to_value(&attempt.state).unwrap().as_str().unwrap_or(""),&required,&attempt_json]).await)?;
+            tx.commit().await.map_err(|_| CodeBindingError::PersistenceFailure)?;
+            Ok(attempt)
+        })
     }
     pub fn put_lineage(
         &self,
@@ -132,7 +149,7 @@ impl PgCodeBindingStore {
         expected_epoch: u64,
     ) -> Result<CodeBinding, CodeBindingError> {
         let key = scope_key(scope)?;
-        runtime().block_on(async{if let Some(done)=db(self.connection.client.query_opt("SELECT a.state,a.generation_id,b.epoch,b.record_json FROM code_attempts a JOIN code_repo_bindings b ON b.tenant=a.tenant AND b.scope_key=a.scope_key AND b.repo_id=a.repo_id WHERE a.attempt_id=$1 AND a.tenant=$2 AND a.scope_key=$3 AND a.repo_id=$4",&[&attempt_id,&scope.tenant,&key,&repo.0]).await)?{let state:String=done.get(0);let generation:String=done.get(1);let epoch:i64=done.get(2);if state=="published"&&u64::try_from(epoch).ok()==expected_epoch.checked_add(1){let binding=jsonb_to_binding(done.get(3))?;if binding.active_generation.as_deref()==Some(generation.as_str()){return Ok(binding)}}}let tx=self.connection.client.transaction().await.map_err(|_|CodeBindingError::PersistenceFailure)?;db(tx.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",&[&format!("{}:{key}",scope.tenant)]).await)?;let row=db(tx.query_opt("SELECT a.expected_epoch,a.binding_version,a.expected_active_generation,a.generation_id,a.fence,a.state,a.required_receipts,b.epoch,b.version,b.active_generation,b.record_json FROM code_attempts a JOIN code_repo_bindings b ON b.tenant=a.tenant AND b.scope_key=a.scope_key AND b.repo_id=a.repo_id WHERE a.attempt_id=$1 AND a.tenant=$2 AND a.scope_key=$3 AND a.repo_id=$4 FOR UPDATE OF b",&[&attempt_id,&scope.tenant,&key,&repo.0]).await)?.ok_or(CodeBindingError::StaleGeneration)?;let (epoch,ver,prev,generation_id,fence,state,required,current_epoch,binding_ver,current_active,_bjson):(i64,i64,Option<String>,String,i64,String,serde_json::Value,i64,i64,Option<String>,serde_json::Value)=(row.get(0),row.get(1),row.get(2),row.get(3),row.get(4),row.get(5),row.get(6),row.get(7),row.get(8),row.get(9),row.get(10));if u64::try_from(epoch).map_err(|_|CodeBindingError::StaleGeneration)?!=expected_epoch||epoch!=current_epoch||ver!=binding_ver||prev!=current_active||fence<=0||state!="ready"{return Err(CodeBindingError::StaleGeneration)}let mut expected:Vec<String>=serde_json::from_value(required).map_err(|_|CodeBindingError::PersistenceFailure)?;expected.sort();let rows=db(tx.query("SELECT lane FROM code_attempt_receipts WHERE attempt_id=$1",&[&attempt_id]).await)?;let mut actual:Vec<String>=rows.iter().map(|r|r.get(0)).collect();actual.sort();if expected.is_empty()||expected!=actual{return Err(CodeBindingError::StaleGeneration)}let n=db(tx.execute("UPDATE code_repo_bindings SET active_generation=$1,epoch=epoch+1,record_json=jsonb_set(jsonb_set(record_json,'{activeGeneration}',to_jsonb($1::text)),'{epoch}',to_jsonb(epoch+1)) WHERE tenant=$2 AND scope_key=$3 AND repo_id=$4 AND epoch=$5 AND version=$6 AND active_generation IS NOT DISTINCT FROM $7",&[&generation_id,&scope.tenant,&key,&repo.0,&i64::try_from(expected_epoch).map_err(|_|CodeBindingError::StaleGeneration)?,&ver,&prev]).await)?;if n!=1{return Err(CodeBindingError::StaleGeneration)}db(tx.execute("INSERT INTO code_epochs(tenant,scope_key,epoch) VALUES($1,$2,1) ON CONFLICT(tenant,scope_key) DO UPDATE SET epoch=code_epochs.epoch+1",&[&scope.tenant,&key]).await)?;db(tx.execute("UPDATE code_attempts SET state='published' WHERE attempt_id=$1 AND fence=$2",&[&attempt_id,&fence]).await)?;let updated=jsonb_to_binding(tx.query_one("SELECT record_json FROM code_repo_bindings WHERE tenant=$1 AND scope_key=$2 AND repo_id=$3",&[&scope.tenant,&key,&repo.0]).await.map_err(|_|CodeBindingError::PersistenceFailure)?.get(0))?;tx.commit().await.map_err(|_|CodeBindingError::PersistenceFailure)?;Ok(updated)})
+        runtime().block_on(async{if let Some(done)=db(self.connection.client.query_opt("SELECT a.state,a.generation_id,b.epoch,b.record_json FROM code_attempts a JOIN code_repo_bindings b ON b.tenant=a.tenant AND b.scope_key=a.scope_key AND b.repo_id=a.repo_id WHERE a.attempt_id=$1 AND a.tenant=$2 AND a.scope_key=$3 AND a.repo_id=$4",&[&attempt_id,&scope.tenant,&key,&repo.0]).await)?{let state:String=done.get(0);let generation:String=done.get(1);let epoch:i64=done.get(2);if state=="published"&&u64::try_from(epoch).ok()==expected_epoch.checked_add(1){let binding=jsonb_to_binding(done.get(3))?;if binding.active_generation.as_deref()==Some(generation.as_str()){return Ok(binding)}}}let tx=self.connection.client.transaction().await.map_err(|_|CodeBindingError::PersistenceFailure)?;db(tx.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",&[&format!("{}:{key}",scope.tenant)]).await)?;let row=db(tx.query_opt("SELECT a.expected_epoch,a.binding_version,a.expected_active_generation,a.generation_id,a.fence,a.state,a.required_receipts,b.epoch,b.version,b.active_generation,b.record_json FROM code_attempts a JOIN code_repo_bindings b ON b.tenant=a.tenant AND b.scope_key=a.scope_key AND b.repo_id=a.repo_id WHERE a.attempt_id=$1 AND a.tenant=$2 AND a.scope_key=$3 AND a.repo_id=$4 FOR UPDATE OF b",&[&attempt_id,&scope.tenant,&key,&repo.0]).await)?.ok_or(CodeBindingError::StaleGeneration)?;let (epoch,ver,prev,generation_id,fence,state,required,current_epoch,binding_ver,current_active,_bjson):(i64,i64,Option<String>,String,i64,String,serde_json::Value,i64,i64,Option<String>,serde_json::Value)=(row.get(0),row.get(1),row.get(2),row.get(3),row.get(4),row.get(5),row.get(6),row.get(7),row.get(8),row.get(9),row.get(10));if u64::try_from(epoch).map_err(|_|CodeBindingError::StaleGeneration)?!=expected_epoch||epoch!=current_epoch||ver!=binding_ver||prev!=current_active||fence<=0||state!="ready"{return Err(CodeBindingError::StaleGeneration)}let latest:Option<i64>=db(tx.query_one("SELECT MAX(fence) FROM code_attempts WHERE tenant=$1 AND scope_key=$2 AND repo_id=$3",&[&scope.tenant,&key,&repo.0]).await)?.get(0);if latest!=Some(fence){return Err(CodeBindingError::StaleGeneration)}let mut expected:Vec<String>=serde_json::from_value(required).map_err(|_|CodeBindingError::PersistenceFailure)?;expected.sort();let rows=db(tx.query("SELECT lane FROM code_attempt_receipts WHERE attempt_id=$1",&[&attempt_id]).await)?;let mut actual:Vec<String>=rows.iter().map(|r|r.get(0)).collect();actual.sort();if expected.is_empty()||expected!=actual{return Err(CodeBindingError::StaleGeneration)}let n=db(tx.execute("UPDATE code_repo_bindings SET active_generation=$1,epoch=epoch+1,record_json=jsonb_set(jsonb_set(record_json,'{activeGeneration}',to_jsonb($1::text)),'{epoch}',to_jsonb(epoch+1)) WHERE tenant=$2 AND scope_key=$3 AND repo_id=$4 AND epoch=$5 AND version=$6 AND active_generation IS NOT DISTINCT FROM $7",&[&generation_id,&scope.tenant,&key,&repo.0,&i64::try_from(expected_epoch).map_err(|_|CodeBindingError::StaleGeneration)?,&ver,&prev]).await)?;if n!=1{return Err(CodeBindingError::StaleGeneration)}db(tx.execute("INSERT INTO code_epochs(tenant,scope_key,epoch) VALUES($1,$2,1) ON CONFLICT(tenant,scope_key) DO UPDATE SET epoch=code_epochs.epoch+1",&[&scope.tenant,&key]).await)?;db(tx.execute("UPDATE code_attempts SET state='published' WHERE attempt_id=$1 AND fence=$2",&[&attempt_id,&fence]).await)?;let updated=jsonb_to_binding(tx.query_one("SELECT record_json FROM code_repo_bindings WHERE tenant=$1 AND scope_key=$2 AND repo_id=$3",&[&scope.tenant,&key,&repo.0]).await.map_err(|_|CodeBindingError::PersistenceFailure)?.get(0))?;tx.commit().await.map_err(|_|CodeBindingError::PersistenceFailure)?;Ok(updated)})
     }
     pub fn eligibility(&mut self, scope: &Scope) -> Result<CodeEligibility, CodeBindingError> {
         let key = scope_key(scope)?;

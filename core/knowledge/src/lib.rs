@@ -10,6 +10,7 @@
 
 mod batch_ledger;
 pub mod changes;
+pub mod code_binding;
 mod graph;
 pub mod identity;
 mod ingest;
@@ -23,6 +24,10 @@ pub use engram_runtime::{CoreError, CoreResult};
 
 pub use batch_ledger::{SourceBatchLedger, SourceBatchRecord, SourceBatchRecordKind};
 pub use changes::{KnowledgeChangeLog, ScanCheckpointStore};
+pub use code_binding::{
+    AcquisitionMode, CodeBindingRepository, CodeEligibility, CodeEligibilityGate,
+    ConstrainedCodeQuery, RepositoryRegistration, StageReceipt,
+};
 pub use graph::KnowledgeGraphRepository;
 pub use identity::EntityIdentityRepository;
 pub use ingest::{Chunker, IngestionService, SourceReader};

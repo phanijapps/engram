@@ -33,6 +33,18 @@ impl CodeReadLeases for SqlCodeBindingRepository {
         }
         let scope = value(&lease.eligibility.scope)?;
         let json = value(&lease)?;
+        if tx
+            .query_row(
+                "SELECT 1 FROM code_read_lease_tombstones WHERE lease_id=?1",
+                [&lease.id],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(|_| storage_error())?
+            .is_some()
+        {
+            return Err(changed());
+        }
         let previous: Option<String> = tx
             .query_row(
                 "SELECT record_json FROM code_read_leases WHERE lease_id=?1",
@@ -45,6 +57,16 @@ impl CodeReadLeases for SqlCodeBindingRepository {
             return Err(changed());
         }
         tx.execute("INSERT OR IGNORE INTO code_read_leases(lease_id,scope_key,fence,expires_ms,record_json) VALUES(?1,?2,?3,?4,?5)",params![lease.id,scope,lease.fencing_token,lease.expires_at.timestamp_millis(),json]).map_err(|_|storage_error())?;
+        let durable: String = tx
+            .query_row(
+                "SELECT record_json FROM code_read_leases WHERE lease_id=?1",
+                [&lease.id],
+                |r| r.get(0),
+            )
+            .map_err(|_| storage_error())?;
+        if durable != value(&lease)? {
+            return Err(changed());
+        }
         tx.commit().map_err(|_| storage_error())?;
         Ok(lease)
     }
@@ -62,6 +84,9 @@ impl CodeReadLeases for SqlCodeBindingRepository {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| storage_error())?;
+        if read_eligibility(&tx, &lease.eligibility.scope)? != lease.eligibility {
+            return Err(changed());
+        }
         let previous: Option<String> = tx
             .query_row(
                 "SELECT record_json FROM code_read_leases WHERE lease_id=?1",
@@ -84,9 +109,23 @@ impl CodeReadLeases for SqlCodeBindingRepository {
         Ok(renewed)
     }
     async fn release_read_lease(&self, lease: &CodeReadLease) -> CoreResult<()> {
-        let store = self.lock()?;
-        let changed_rows = store
+        let mut store = self.lock()?;
+        let tx = store
             .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| storage_error())?;
+        let durable: Option<String> = tx
+            .query_row(
+                "SELECT record_json FROM code_read_leases WHERE lease_id=?1",
+                [&lease.id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(|_| storage_error())?;
+        if durable.as_deref() != Some(&value(lease)?) {
+            return Err(changed());
+        }
+        let changed_rows = tx
             .execute(
                 "DELETE FROM code_read_leases WHERE lease_id=?1 AND scope_key=?2 AND fence=?3",
                 params![
@@ -99,6 +138,12 @@ impl CodeReadLeases for SqlCodeBindingRepository {
         if changed_rows != 1 {
             return Err(changed());
         }
+        tx.execute(
+            "INSERT OR IGNORE INTO code_read_lease_tombstones(lease_id) VALUES(?1)",
+            [&lease.id],
+        )
+        .map_err(|_| storage_error())?;
+        tx.commit().map_err(|_| storage_error())?;
         Ok(())
     }
     async fn retained_generations(

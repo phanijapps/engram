@@ -73,11 +73,18 @@ impl CodeReadLeases for PgCodeBindingRepository {
             if eligibility(&tx, &lease.eligibility.scope).await? != lease.eligibility {
                 return Err(changed());
             }
+            if tx.query_opt("SELECT 1 FROM code_read_lease_tombstones WHERE lease_id=$1 FOR KEY SHARE", &[&lease.id]).await.map_err(|_| storage_error())?.is_some() {
+                return Err(changed());
+            }
             let previous = tx.query_opt("SELECT record_json FROM code_read_leases WHERE lease_id=$1 FOR UPDATE", &[&lease.id]).await.map_err(|_| storage_error())?;
             if previous.is_some_and(|row| row.get::<_, serde_json::Value>(0) != record) {
                 return Err(changed());
             }
             tx.execute("INSERT INTO code_read_leases(lease_id,scope_key,fence,expires_ms,record_json) VALUES($1,$2,$3,$4,$5) ON CONFLICT(lease_id) DO NOTHING", &[&lease.id, &scope, &lease_fence, &lease.expires_at.timestamp_millis(), &record]).await.map_err(|_| storage_error())?;
+            let durable = tx.query_one("SELECT record_json FROM code_read_leases WHERE lease_id=$1 FOR UPDATE", &[&lease.id]).await.map_err(|_| storage_error())?.get::<_, serde_json::Value>(0);
+            if durable != record {
+                return Err(changed());
+            }
             tx.commit().await.map_err(|_| storage_error())?;
             Ok(lease)
         })).await
@@ -123,25 +130,23 @@ impl CodeReadLeases for PgCodeBindingRepository {
         let lease = lease.clone();
         let scope = serde_json::to_string(&lease.eligibility.scope).map_err(|_| storage_error())?;
         let lease_fence = fence(lease.fencing_token)?;
-        let changed_rows = self
-            .blocking(move |store| {
-                crate::connection::runtime().block_on(async {
-                    store
-                .connection
-                .client
-                .execute(
-                    "DELETE FROM code_read_leases WHERE lease_id=$1 AND scope_key=$2 AND fence=$3",
-                    &[&lease.id, &scope, &lease_fence],
-                )
-                .await
-                .map_err(|_| storage_error())
-                })
+        let record = value(&lease)?;
+        self.blocking(move |store| {
+            crate::connection::runtime().block_on(async {
+                let tx = store.connection.client.transaction().await.map_err(|_| storage_error())?;
+                let durable = tx.query_opt("SELECT record_json FROM code_read_leases WHERE lease_id=$1 FOR UPDATE", &[&lease.id]).await.map_err(|_| storage_error())?;
+                if durable.map(|row| row.get::<_, serde_json::Value>(0)) != Some(record) {
+                    return Err(changed());
+                }
+                let changed_rows = tx.execute("DELETE FROM code_read_leases WHERE lease_id=$1 AND scope_key=$2 AND fence=$3", &[&lease.id, &scope, &lease_fence]).await.map_err(|_| storage_error())?;
+                if changed_rows != 1 {
+                    return Err(changed());
+                }
+                tx.execute("INSERT INTO code_read_lease_tombstones(lease_id) VALUES($1) ON CONFLICT(lease_id) DO NOTHING", &[&lease.id]).await.map_err(|_| storage_error())?;
+                tx.commit().await.map_err(|_| storage_error())?;
+                Ok(())
             })
-            .await?;
-        if changed_rows != 1 {
-            return Err(changed());
-        }
-        Ok(())
+        }).await
     }
 
     async fn retained_generations(

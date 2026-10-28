@@ -39,7 +39,7 @@ impl PgCodeBindingRepository {
         let store = PgCodeBindingStore::new(connection);
         store.initialize().map_err(error)?;
         crate::connection::runtime().block_on(async {
-            store.connection.client.batch_execute("CREATE TABLE IF NOT EXISTS code_read_leases(lease_id TEXT PRIMARY KEY,scope_key TEXT NOT NULL,fence BIGINT NOT NULL,expires_ms BIGINT NOT NULL,record_json JSONB NOT NULL);").await.map_err(|_| storage_error())
+            store.connection.client.batch_execute("CREATE TABLE IF NOT EXISTS code_read_leases(lease_id TEXT PRIMARY KEY,scope_key TEXT NOT NULL,fence BIGINT NOT NULL,expires_ms BIGINT NOT NULL,record_json JSONB NOT NULL); CREATE TABLE IF NOT EXISTS code_read_lease_tombstones(lease_id TEXT PRIMARY KEY);").await.map_err(|_| storage_error())
         })?;
         Ok(Self {
             store: Arc::new(Mutex::new(store)),

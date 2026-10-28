@@ -507,6 +507,140 @@ async fn postgres_tokio_binding_and_lease_operations_do_not_panic() {
 
 #[ignore = "requires parent-authorized marked disposable PostgreSQL"]
 #[test]
+fn postgres_global_lease_id_race_has_one_durable_owner() {
+    let store = repository();
+    let suffix = unique();
+    let first_scope = scope(&format!("global-id-first-{suffix}"), "factory-test");
+    let second_scope = scope(&format!("global-id-second-{suffix}"), "factory-test");
+    let first_repo = format!("global-id-first-repo-{suffix}");
+    let second_repo = format!("global-id-second-repo-{suffix}");
+    block_on(store.bind(binding(&first_scope, &first_repo))).expect("bind first scope");
+    block_on(store.bind(binding(&second_scope, &second_repo))).expect("bind second scope");
+    let lease_id = format!("global-lease-id-{suffix}");
+    let now = chrono::Utc::now();
+    let expires_at = now + chrono::Duration::minutes(5);
+    let first_lease = CodeReadLease {
+        id: lease_id.clone(),
+        eligibility: block_on(store.eligibility(&first_scope)).expect("first eligibility"),
+        fencing_token: 1,
+        expires_at,
+    };
+    let second_lease = CodeReadLease {
+        id: lease_id.clone(),
+        eligibility: block_on(store.eligibility(&second_scope)).expect("second eligibility"),
+        fencing_token: 1,
+        expires_at,
+    };
+    let mut first = spawn_race_child(
+        "acquire-global-id",
+        &first_scope,
+        &first_repo,
+        &lease_id,
+        &expires_at.to_rfc3339(),
+    );
+    let mut second = spawn_race_child(
+        "acquire-global-id",
+        &second_scope,
+        &second_repo,
+        &lease_id,
+        &expires_at.to_rfc3339(),
+    );
+    wait_ready(&mut first);
+    wait_ready(&mut second);
+    for child in [&mut first, &mut second] {
+        child
+            .child
+            .stdin
+            .take()
+            .expect("child stdin")
+            .write_all(b"G")
+            .expect("release global-id child");
+    }
+    let first_output = collect_child(first);
+    let second_output = collect_child(second);
+    let first_won = first_output.lines().any(|line| line == "LEASE_OWNER");
+    let second_won = second_output.lines().any(|line| line == "LEASE_OWNER");
+    assert_ne!(first_won, second_won, "exactly one child owns the lease ID");
+    assert!(
+        first_output.lines().any(|line| line == "LEASE_CONFLICT")
+            || second_output.lines().any(|line| line == "LEASE_CONFLICT"),
+        "the losing child returned typed conflict"
+    );
+    let winner = if first_won {
+        &first_lease
+    } else {
+        &second_lease
+    };
+    let loser = if first_won {
+        &second_lease
+    } else {
+        &first_lease
+    };
+    block_on(store.release_read_lease(winner)).expect("release durable winner");
+    assert!(matches!(
+        block_on(store.release_read_lease(loser)),
+        Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+    ));
+}
+
+#[ignore = "requires parent-authorized marked disposable PostgreSQL"]
+#[test]
+fn postgres_released_lease_id_is_durably_rejected_across_reopen() {
+    let store = repository();
+    let suffix = unique();
+    let first_scope = scope(&format!("released-id-first-{suffix}"), "factory-test");
+    let second_scope = scope(&format!("released-id-second-{suffix}"), "factory-test");
+    block_on(store.bind(binding(
+        &first_scope,
+        &format!("released-id-first-repo-{suffix}"),
+    )))
+    .expect("bind first scope");
+    let now = chrono::Utc::now();
+    let expires_at = now + chrono::Duration::minutes(5);
+    let first_lease = block_on(store.acquire_read_lease(
+        CodeReadLease {
+            id: format!("released-id-{suffix}"),
+            eligibility: block_on(store.eligibility(&first_scope)).expect("first eligibility"),
+            fencing_token: 1,
+            expires_at,
+        },
+        now,
+    ))
+    .expect("acquire first lease");
+    block_on(store.release_read_lease(&first_lease)).expect("release first lease");
+
+    let reopened = repository();
+    block_on(reopened.bind(binding(
+        &second_scope,
+        &format!("released-id-second-repo-{suffix}"),
+    )))
+    .expect("bind second scope");
+    let replacement = CodeReadLease {
+        id: first_lease.id.clone(),
+        eligibility: block_on(reopened.eligibility(&second_scope)).expect("second eligibility"),
+        fencing_token: 1,
+        expires_at: expires_at + chrono::Duration::minutes(1),
+    };
+    assert!(matches!(
+        block_on(reopened.acquire_read_lease(replacement, now)),
+        Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+    ));
+    assert!(matches!(
+        block_on(reopened.release_read_lease(&first_lease)),
+        Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+    ));
+    assert!(matches!(
+        block_on(reopened.renew_read_lease(
+            &first_lease,
+            now,
+            expires_at + chrono::Duration::minutes(2),
+        )),
+        Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+    ));
+}
+
+#[ignore = "requires parent-authorized marked disposable PostgreSQL"]
+#[test]
 fn postgres_scope_epoch_and_read_lease_parity() {
     let store = repository();
     let suffix = unique();
@@ -1333,6 +1467,36 @@ fn race_child(mode: &str) {
                 matches!(result, Err(CoreError::Conflict { reason }) if reason == "GenerationChanged")
             );
             println!("STALE");
+        }
+        "acquire-global-id" => {
+            let eligibility = block_on(store.eligibility(&test_scope)).expect("child eligibility");
+            let lease_id = std::env::var("TERRA_PG_RACE_ATTEMPT").expect("global lease id");
+            println!("READY|{backend_pid}");
+            std::io::stdout().flush().expect("flush barrier");
+            let mut signal = [0];
+            std::io::stdin()
+                .read_exact(&mut signal)
+                .expect("read barrier");
+            match block_on(
+                store.acquire_read_lease(
+                    CodeReadLease {
+                        id: lease_id,
+                        eligibility,
+                        fencing_token: 1,
+                        expires_at: std::env::var("TERRA_PG_RACE_EPOCH")
+                            .expect("global lease expiry")
+                            .parse()
+                            .expect("global lease expiry timestamp"),
+                    },
+                    chrono::Utc::now(),
+                ),
+            ) {
+                Ok(_) => println!("LEASE_OWNER"),
+                Err(CoreError::Conflict { reason }) if reason == "GenerationChanged" => {
+                    println!("LEASE_CONFLICT")
+                }
+                Err(_) => panic!("unexpected lease acquisition error"),
+            }
         }
         "renew-stale" => {
             let lease = CodeReadLease {

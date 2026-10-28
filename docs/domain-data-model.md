@@ -80,6 +80,17 @@ A reader revalidates this epoch before returning and retries at most once; a sec
 Retention protects active, immediately previous, nonterminal-attempt and unexpired or configured-grace-period leased generations.
 An expired lease never authorizes cleanup by itself; exact no-reference proof and separate cleanup authority remain required.
 
+### Acquisition custody and resource limits
+
+Concrete retained file paths must contain only unambiguous repository-relative components.
+Acquisition rejects traversal, control characters, Windows device/stream names and trailing-dot/space components rather than renaming or silently dropping them.
+Retention preflights destination filesystem aliases before writing file content; logical identities and exact case remain unchanged.
+Every parsed tree entry and scheduled traversal item consumes a finite admission before allocation or enqueue, including repeated subtree references.
+The fetched-data boundary is the sum of logical regular-file bytes admitted to one attempt-owned cache, not physical filesystem blocks, resident memory or the total retained cache across attempts.
+Transport capture, cumulative inflated/delta reconstruction work, object count, tree-entry work, traversal/depth and selected snapshot bytes have independent limits.
+A failed operation whose owned cleanup cannot complete reports cleanup-pending custody with the exact retry target; that target does not authorize deleting successful referenced generations.
+These adapter resource/custody semantics add no frozen-v1 wire fields and do not change binding/reset authority.
+
 ## Modeling Principles
 
 - Domain contracts are independent of storage engines, APIs, and language

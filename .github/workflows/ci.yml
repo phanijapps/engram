@@ -62,6 +62,11 @@ jobs:
       # subsumes a separate `cargo check --workspace` pass.
       - name: Clippy (workspace + tests)
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Prepare owned acquisition transport fixtures
+        run: python scripts/ci/prepare-acquisition-fixtures.py
       - name: Test
         run: cargo test --workspace
       - name: Engine-neutrality lint (ADR-0022 rule 1)

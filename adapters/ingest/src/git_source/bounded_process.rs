@@ -2,7 +2,6 @@ use engram_knowledge::{CoreError, CoreResult};
 use std::{
     io::Read,
     process::{Command, Output, Stdio},
-    sync::mpsc,
     thread,
     time::{Duration, Instant},
 };
@@ -16,6 +15,13 @@ pub struct GitResourceLimits {
     pub max_file_bytes: usize,
     pub max_snapshot_bytes: usize,
     pub max_fetched_storage_bytes: u64,
+    pub max_remote_transport_bytes: usize,
+    pub max_inflated_git_bytes: usize,
+    pub max_git_objects: usize,
+    pub max_advertised_refs: usize,
+    pub max_delta_depth: usize,
+    pub max_tree_entries: usize,
+    pub max_tree_depth: usize,
 }
 impl Default for GitResourceLimits {
     fn default() -> Self {
@@ -27,46 +33,143 @@ impl Default for GitResourceLimits {
             max_file_bytes: 2 * 1024 * 1024,
             max_snapshot_bytes: 128 * 1024 * 1024,
             max_fetched_storage_bytes: 256 * 1024 * 1024,
+            max_remote_transport_bytes: 256 * 1024 * 1024,
+            max_inflated_git_bytes: 256 * 1024 * 1024,
+            max_git_objects: 100_000,
+            max_advertised_refs: 100_000,
+            max_delta_depth: 64,
+            max_tree_entries: 100_000,
+            max_tree_depth: 128,
         }
     }
 }
 
-#[derive(Clone, Copy)]
-enum Stream {
-    Stdout,
-    Stderr,
-}
-enum Event {
-    Data(Stream, Vec<u8>),
-    LimitExceeded,
-}
-fn drain<R: Read + Send + 'static>(
-    mut reader: R,
-    limit: usize,
-    stream: Stream,
-    tx: mpsc::Sender<Event>,
-) {
-    let mut bytes = Vec::with_capacity(limit.min(64 * 1024));
-    let mut buffer = [0u8; 8192];
-    loop {
-        match reader.read(&mut buffer) {
-            Ok(0) => {
-                let _ = tx.send(Event::Data(stream, bytes));
-                return;
-            }
-            Ok(n) => {
-                if n > limit.saturating_sub(bytes.len()) {
-                    let _ = tx.send(Event::LimitExceeded);
-                    return;
-                }
-                bytes.extend_from_slice(&buffer[..n]);
-            }
-            Err(_) => {
-                let _ = tx.send(Event::LimitExceeded);
-                return;
-            }
-        }
+#[cfg(unix)]
+fn prepare_pipe<T: std::os::fd::AsRawFd>(pipe: &T) -> std::io::Result<()> {
+    let fd = pipe.as_raw_fd();
+    // SAFETY: the live owned pipe descriptor is not shared with another reader/writer.
+    let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
+    if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
+        return Err(std::io::Error::last_os_error());
     }
+    Ok(())
+}
+#[cfg(windows)]
+fn prepare_pipe<T: std::os::windows::io::AsRawHandle>(pipe: &T) -> std::io::Result<()> {
+    use windows_sys::Win32::System::Pipes::{
+        GetNamedPipeHandleStateW, PIPE_NOWAIT, SetNamedPipeHandleState,
+    };
+    let mut mode = 0;
+    if unsafe {
+        GetNamedPipeHandleStateW(
+            pipe.as_raw_handle(),
+            &mut mode,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    mode |= PIPE_NOWAIT;
+    if unsafe {
+        SetNamedPipeHandleState(
+            pipe.as_raw_handle(),
+            &mode,
+            std::ptr::null(),
+            std::ptr::null(),
+        )
+    } == 0
+    {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+#[cfg(unix)]
+fn read_ready<T: Read + std::os::fd::AsRawFd>(
+    pipe: &mut T,
+    buffer: &mut [u8],
+) -> std::io::Result<Option<usize>> {
+    match pipe.read(buffer) {
+        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+        other => other.map(Some),
+    }
+}
+#[cfg(windows)]
+fn read_ready<T: Read + std::os::windows::io::AsRawHandle>(
+    pipe: &mut T,
+    buffer: &mut [u8],
+) -> std::io::Result<Option<usize>> {
+    use windows_sys::Win32::{
+        Foundation::{ERROR_BROKEN_PIPE, ERROR_PIPE_NOT_CONNECTED},
+        System::Pipes::PeekNamedPipe,
+    };
+    let mut available = 0;
+    let ok = unsafe {
+        PeekNamedPipe(
+            pipe.as_raw_handle(),
+            std::ptr::null_mut(),
+            0,
+            std::ptr::null_mut(),
+            &mut available,
+            std::ptr::null_mut(),
+        )
+    };
+    if ok == 0 {
+        let error = std::io::Error::last_os_error();
+        return if matches!(error.raw_os_error(),Some(code) if code==ERROR_BROKEN_PIPE as i32 || code==ERROR_PIPE_NOT_CONNECTED as i32)
+        {
+            Ok(Some(0))
+        } else {
+            Err(error)
+        };
+    }
+    if available == 0 {
+        return Ok(None);
+    }
+    let len = (available as usize).min(buffer.len());
+    pipe.read(&mut buffer[..len]).map(Some)
+}
+#[cfg(windows)]
+fn write_initial(pipe: &mut std::process::ChildStdin, bytes: &[u8]) -> std::io::Result<usize> {
+    use std::io::Write;
+    match pipe.write(bytes) {
+        Err(e)
+            if e.raw_os_error() == Some(windows_sys::Win32::Foundation::ERROR_NO_DATA as i32) =>
+        {
+            Err(std::io::Error::from(std::io::ErrorKind::WouldBlock))
+        }
+        result => result,
+    }
+}
+#[cfg(unix)]
+fn write_initial(pipe: &mut std::process::ChildStdin, bytes: &[u8]) -> std::io::Result<usize> {
+    use std::io::Write;
+    pipe.write(bytes)
+}
+#[cfg(unix)]
+fn leader_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
+    // Do not reap until the final owned-group kill; WNOWAIT reserves the group leader's PID against reuse.
+    let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+    let status = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            child.id() as libc::id_t,
+            &mut info,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    };
+    if status != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(unsafe { info.si_pid() } != 0)
+}
+#[cfg(windows)]
+fn leader_exited(child: &mut std::process::Child) -> std::io::Result<bool> {
+    child.try_wait().map(|s| s.is_some())
 }
 
 /// Runs one child with bounded, concurrently drained pipes, a wall-clock deadline, and a Unix file-size limit.
@@ -83,14 +186,33 @@ pub(crate) fn run_limited_checked(
     command: &mut Command,
     limits: &GitResourceLimits,
     stdout_limit: usize,
+    check_storage: impl FnMut() -> CoreResult<()>,
+) -> CoreResult<Output> {
+    run_limited_input(command, limits, stdout_limit, None, check_storage)
+}
+
+pub(crate) fn run_limited_input(
+    command: &mut Command,
+    limits: &GitResourceLimits,
+    stdout_limit: usize,
+    input: Option<Vec<u8>>,
     mut check_storage: impl FnMut() -> CoreResult<()>,
 ) -> CoreResult<Output> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     return Err(CoreError::InvalidRequest {
-        reason: "bounded Git acquisition requires Unix process-group support".into(),
+        reason: "bounded Git acquisition requires a supported child-process platform".into(),
     });
+    if input.as_ref().is_some_and(|bytes| bytes.len() > 512) {
+        return Err(CoreError::InvalidRequest {
+            reason: "Git subprocess input exceeds its protocol limit".into(),
+        });
+    }
     command
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     #[cfg(unix)]
@@ -115,81 +237,124 @@ pub(crate) fn run_limited_checked(
             });
         }
     }
+    #[cfg(unix)]
     let mut child = command.spawn().map_err(|_| CoreError::Adapter {
         adapter: "engram-ingest-git".into(),
         message: "Git subprocess could not start".into(),
     })?;
-    let stdout = child.stdout.take().expect("piped stdout");
-    let stderr = child.stderr.take().expect("piped stderr");
-    let (tx, rx) = mpsc::channel();
-    let out_tx = tx.clone();
-    let out_thread = thread::spawn(move || drain(stdout, stdout_limit, Stream::Stdout, out_tx));
-    let stderr_limit = limits.max_stderr_bytes;
-    let err_thread = thread::spawn(move || drain(stderr, stderr_limit, Stream::Stderr, tx));
-    let deadline = Instant::now() + limits.subprocess_timeout;
-    let mut out = None;
-    let mut err = None;
-    let mut status = None;
-    let mut failure = None;
-    loop {
-        while let Ok(event) = rx.try_recv() {
-            match event {
-                Event::Data(Stream::Stdout, bytes) => out = Some(bytes),
-                Event::Data(Stream::Stderr, bytes) => err = Some(bytes),
-                Event::LimitExceeded => {
-                    failure = Some("Git subprocess output exceeded its configured limit")
+    #[cfg(windows)]
+    let (mut child, owned_job) =
+        super::windows_job::spawn(command).map_err(|error| CoreError::Adapter {
+            adapter: "engram-ingest-git".into(),
+            message: super::windows_job::diagnostic(&error),
+        })?;
+    let outcome = (|| {
+        let mut stdout = child.stdout.take().expect("piped stdout");
+        let mut stderr = child.stderr.take().expect("piped stderr");
+        prepare_pipe(&stdout).map_err(|_| pipe_error())?;
+        prepare_pipe(&stderr).map_err(|_| pipe_error())?;
+        let mut stdin = child.stdin.take();
+        if let Some(stdin) = &stdin {
+            prepare_pipe(stdin).map_err(|_| pipe_error())?;
+        }
+        let input = input.unwrap_or_default();
+        let mut written = 0;
+        let deadline = Instant::now()
+            .checked_add(limits.subprocess_timeout)
+            .ok_or_else(pipe_error)?;
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let (mut out_done, mut err_done) = (false, false);
+        let mut buffer = [0u8; 8192];
+        loop {
+            if Instant::now() >= deadline {
+                return Err(CoreError::InvalidRequest {
+                    reason: "Git subprocess exceeded its configured time limit".into(),
+                });
+            }
+            if check_storage().is_err() {
+                return Err(CoreError::InvalidRequest {
+                    reason: "Git subprocess exceeded its configured storage limit".into(),
+                });
+            }
+            if written < input.len() {
+                match write_initial(stdin.as_mut().ok_or_else(pipe_error)?, &input[written..]) {
+                    Ok(n) => written += n,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+                    Err(_) => return Err(pipe_error()),
                 }
             }
-        }
-        if check_storage().is_err() {
-            failure = Some("Git subprocess exceeded its configured storage limit");
-        }
-        if failure.is_some() {
-            break;
-        }
-        match child.try_wait() {
-            Ok(Some(done)) => status = Some(done),
-            Ok(None) => {}
-            Err(_) => {
-                failure = Some("Git subprocess status could not be collected");
-                break;
+            if written == input.len() {
+                stdin.take();
             }
+            for _ in 0..4 {
+                if out_done {
+                    break;
+                }
+                match read_ready(&mut stdout, &mut buffer).map_err(|_| pipe_error())? {
+                    Some(0) => out_done = true,
+                    Some(n) => {
+                        if n > stdout_limit.saturating_sub(out.len()) {
+                            return Err(output_error());
+                        }
+                        out.extend_from_slice(&buffer[..n]);
+                    }
+                    None => break,
+                }
+            }
+            for _ in 0..4 {
+                if err_done {
+                    break;
+                }
+                match read_ready(&mut stderr, &mut buffer).map_err(|_| pipe_error())? {
+                    Some(0) => err_done = true,
+                    Some(n) => {
+                        if n > limits.max_stderr_bytes.saturating_sub(err.len()) {
+                            return Err(output_error());
+                        }
+                        err.extend_from_slice(&buffer[..n]);
+                    }
+                    None => break,
+                }
+            }
+            if leader_exited(&mut child).map_err(|_| pipe_error())? && out_done && err_done {
+                return Ok((out, err));
+            }
+            thread::sleep(Duration::from_millis(2));
         }
-        if status.is_some() && out.is_some() && err.is_some() {
-            break;
-        }
-        if Instant::now() >= deadline {
-            failure = Some("Git subprocess exceeded its configured time limit");
-            break;
-        }
-        thread::sleep(Duration::from_millis(2));
-    }
-    // Even a successfully exited leader may leave a helper holding a pipe.
-    // Kill the whole owned group before joining pipe readers on every path.
+    })();
     #[cfg(unix)]
-    unsafe {
-        libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL);
-    }
-    if failure.is_some() {
-        let _ = child.kill();
-    }
-    let waited = child.wait();
-    let _ = out_thread.join();
-    let _ = err_thread.join();
-    let final_status = waited.map_err(|_| CoreError::Adapter {
-        adapter: "engram-ingest-git".into(),
-        message: "Git subprocess could not be reaped".into(),
-    })?;
-    if let Some(reason) = failure {
-        return Err(CoreError::InvalidRequest {
-            reason: reason.into(),
-        });
-    }
+    let status = {
+        unsafe {
+            libc::kill(-(child.id() as libc::pid_t), libc::SIGKILL);
+        }
+        if outcome.is_err() {
+            let _ = child.kill();
+        }
+        child.wait().map_err(|_| pipe_error())?
+    };
+    #[cfg(windows)]
+    let status =
+        super::windows_job::finish(child, owned_job).map_err(|error| CoreError::Adapter {
+            adapter: "engram-ingest-git".into(),
+            message: super::windows_job::diagnostic(&error),
+        })?;
+    let (stdout, stderr) = outcome?;
     Ok(Output {
-        status: final_status,
-        stdout: out.unwrap_or_default(),
-        stderr: err.unwrap_or_default(),
+        status,
+        stdout,
+        stderr,
     })
+}
+fn pipe_error() -> CoreError {
+    CoreError::Adapter {
+        adapter: "engram-ingest-git".into(),
+        message: "owned Git subprocess pipe/status failed".into(),
+    }
+}
+fn output_error() -> CoreError {
+    CoreError::InvalidRequest {
+        reason: "Git subprocess output exceeded its configured limit".into(),
+    }
 }
 
 #[cfg(test)]
@@ -227,20 +392,120 @@ mod task_008 {
 
     #[test]
     fn inherited_pipe_descendant_cannot_block_cleanup() {
+        let temp = tempfile::tempdir().unwrap();
+        let marker = temp.path().join("descendant.pid");
         let mut limits = GitResourceLimits::default();
-        limits.subprocess_timeout = Duration::from_millis(200);
+        limits.subprocess_timeout = Duration::from_millis(700);
         let mut command = Command::new("python3");
-        command.args([
-            "-c",
-            "import os,time; p=os.fork(); time.sleep(30) if p==0 else None",
-        ]);
+        command.args(["-c","import subprocess,sys; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); open(sys.argv[1],'w').write(str(p.pid))"]).arg(&marker);
+        let mut observed = false;
+        #[cfg(windows)]
+        let mut keeper = None;
         let start = Instant::now();
+        let result = run_limited_checked(&mut command, &limits, 128, || {
+            if !observed {
+                if let Ok(pid) = std::fs::read_to_string(&marker)
+                    .unwrap_or_default()
+                    .parse::<u32>()
+                {
+                    #[cfg(windows)]
+                    {
+                        use std::os::windows::io::FromRawHandle;
+                        use windows_sys::Win32::System::Threading::*;
+                        let handle = unsafe {
+                            OpenProcess(
+                                PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
+                                0,
+                                pid,
+                            )
+                        };
+                        if handle.is_null() {
+                            return Err(pipe_error());
+                        }
+                        keeper = Some(unsafe {
+                            std::os::windows::io::OwnedHandle::from_raw_handle(handle)
+                        });
+                    }
+                    #[cfg(unix)]
+                    let _ = pid;
+                    observed = true;
+                }
+            }
+            Ok(())
+        });
         assert!(
-            matches!(run_limited(&mut command, &limits, 128), Err(CoreError::InvalidRequest { reason }) if reason.contains("time limit"))
+            observed,
+            "owned fixture must start the actual pipe-holding descendant"
         );
+        assert!(
+            matches!(result,Err(CoreError::InvalidRequest {reason}) if reason.contains("time limit"))
+        );
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            assert_eq!(
+                unsafe {
+                    windows_sys::Win32::System::Threading::WaitForSingleObject(
+                        keeper.unwrap().as_raw_handle(),
+                        0,
+                    )
+                },
+                windows_sys::Win32::Foundation::WAIT_OBJECT_0
+            );
+        }
+        assert!(start.elapsed() < Duration::from_secs(3));
+    }
+    #[test]
+    fn task_008_early_child_exit_preserves_status_and_reaps_without_io_threads() {
+        let mut command = Command::new("python3");
+        command.args(["-c", "import sys;sys.exit(7)"]);
+        let start = Instant::now();
+        let output = run_limited(&mut command, &GitResourceLimits::default(), 128).unwrap();
+        assert_eq!(output.status.code(), Some(7));
+        assert!(output.stdout.is_empty());
         assert!(start.elapsed() < Duration::from_secs(3));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn task_008_session_escape_cannot_hold_reader_threads() {
+        let dir = tempfile::tempdir().unwrap();
+        let pid_path = dir.path().join("escaped.pid");
+        let mut command = Command::new("python3");
+        command.args(["-c", "import os,sys,time; p=os.fork();\nif p==0:\n os.setsid(); open(sys.argv[1],'w').write(str(os.getpid())); time.sleep(30)\nelse:\n time.sleep(30)"]).arg(&pid_path);
+        let mut limits = GitResourceLimits::default();
+        limits.subprocess_timeout = Duration::from_millis(300);
+        let started = Instant::now();
+        let result = run_limited(&mut command, &limits, 128);
+        let pid = std::fs::read_to_string(pid_path)
+            .expect("owned escaping fixture must establish its custody marker")
+            .parse::<libc::pid_t>()
+            .unwrap();
+        // The escaped test process is deliberately outside the owned group; the fixture retains exact cleanup custody.
+        assert_eq!(unsafe { libc::kill(pid, 0) }, 0);
+        assert_eq!(
+            unsafe { libc::kill(pid, libc::SIGKILL) },
+            0,
+            "exact separately owned escaped fixture must be stopped"
+        );
+        assert!(
+            matches!(result,Err(CoreError::InvalidRequest {reason}) if reason.contains("time limit"))
+        );
+        assert!(started.elapsed() < Duration::from_secs(3));
+    }
+    #[test]
+    fn task_008_blocked_stdin_is_pre_admitted_and_never_uses_an_io_thread() {
+        let mut command = Command::new("python3");
+        command.args(["-c", "import time; time.sleep(30)"]);
+        let mut limits = GitResourceLimits::default();
+        limits.subprocess_timeout = Duration::from_millis(50);
+        assert!(
+            matches!(run_limited_input(&mut command,&limits,128,Some(vec![0;512]),||Ok(())),Err(CoreError::InvalidRequest {reason}) if reason.contains("time limit"))
+        );
+        assert!(
+            matches!(run_limited_input(&mut command,&limits,128,Some(vec![0;513]),||Ok(())),Err(CoreError::InvalidRequest {reason}) if reason.contains("input exceeds"))
+        );
+    }
     #[test]
     fn storage_budget_checked_before_process_completion() {
         let mut command = Command::new("python3");

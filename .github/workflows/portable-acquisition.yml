@@ -1,0 +1,61 @@
+name: Portable acquisition custody
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  acquisition:
+    name: Acquisition on ${{ matrix.host }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            host: x86_64-unknown-linux-gnu
+            python_arch: x64
+          - runner: ubuntu-24.04-arm
+            host: aarch64-unknown-linux-gnu
+            python_arch: arm64
+          - runner: macos-15
+            host: aarch64-apple-darwin
+            python_arch: arm64
+          - runner: windows-2025
+            host: x86_64-pc-windows-msvc
+            python_arch: x64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: ${{ matrix.python_arch }}
+      - name: Attest actual native host
+        env:
+          EXPECTED_HOST: ${{ matrix.host }}
+        run: |
+          date -u +%FT%TZ
+          rustc -vV
+          python -c 'import os,subprocess; h=[x[6:] for x in subprocess.check_output(["rustc","-vV"],text=True).splitlines() if x.startswith("host: ")][0]; assert h==os.environ["EXPECTED_HOST"],(h,os.environ["EXPECTED_HOST"])'
+          git --version
+          ssh -V
+      - name: Prepare owned loopback transport fixtures without services or privileges
+        run: "python scripts/ci/prepare-acquisition-fixtures.py"
+      - name: Unit resource, collision, filesystem, deadline and custody regressions
+        run: "cargo test -p engram-ingest --lib task_008 -- --test-threads=1"
+      - name: TASK-007 focused
+        run: "cargo test -p engram-ingest --test bound_git_source task_007:: -- --test-threads=1"
+      - name: TASK-008 focused including real HTTPS and SSH acquire-retain-reopen
+        run: "cargo test -p engram-ingest --test bound_git_source task_008:: -- --test-threads=1"
+      - name: TEST-042 paired current-source proof
+        run: "cargo test -p engram-ingest --test bound_git_source"

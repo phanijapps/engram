@@ -95,7 +95,7 @@ where
 {
     let key = generation_manifest_key(binding, prepared, attempt_id)?;
     let expected = receipt(binding, prepared, attempt_id)?;
-    crate::git_source::private_directory(root)?;
+    let _private_root = crate::git_source::private_directory(root)?;
     let final_path = root.join(format!("{key}.json"));
     let lock_path = root.join(format!("{key}.lock"));
     let mut lock_options = OpenOptions::new();

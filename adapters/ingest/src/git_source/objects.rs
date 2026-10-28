@@ -54,6 +54,12 @@ fn git_with_limits(
         .env("GIT_TERMINAL_PROMPT", "0")
         .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
         .env_remove("GIT_OBJECT_DIRECTORY");
+    #[cfg(windows)]
+    for variable in ["SYSTEMROOT", "WINDIR"] {
+        if let Some(value) = std::env::var_os(variable) {
+            command.env(variable, value);
+        }
+    }
     let out = run_limited(&mut command, limits, output_limit)?;
     if !out.status.success() {
         return Err(CoreError::InvalidRequest {
@@ -185,6 +191,15 @@ pub fn read_resolved_commit_with_limits(
             return Err(CoreError::InvalidRequest {
                 reason: "source file count exceeded its configured limit".into(),
             });
+        }
+        for component in relative_path.components() {
+            if let std::path::Component::Normal(name) = component {
+                super::safety::validate_retained_component(name.to_str().ok_or(
+                    CoreError::InvalidRequest {
+                        reason: "committed path is not UTF-8".into(),
+                    },
+                )?)?;
+            }
         }
         let size_out = git_with_limits(&root, &["cat-file", "-s", blob_oid], limits, 64)?.stdout;
         let size = std::str::from_utf8(&size_out)

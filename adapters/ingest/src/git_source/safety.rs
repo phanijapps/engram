@@ -51,3 +51,38 @@ pub fn validate_repo_path(path: &Path) -> CoreResult<PathBuf> {
     }
     Ok(p)
 }
+
+/// Reject filesystem-special components before any source content is persisted.
+pub(crate) fn validate_retained_component(name: &str) -> CoreResult<()> {
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .trim_end_matches(' ')
+        .to_ascii_uppercase();
+    let reserved = matches!(
+        stem.as_str(),
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" | "CLOCK$"
+    ) || ["COM", "LPT"].iter().any(|prefix| {
+        stem.strip_prefix(prefix).is_some_and(|tail| {
+            matches!(
+                tail,
+                "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+            )
+        })
+    });
+    if name.is_empty()
+        || matches!(name, "." | "..")
+        || name.eq_ignore_ascii_case(".git")
+        || name.ends_with([' ', '.'])
+        || name
+            .chars()
+            .any(|c| c.is_control() || "/\\:*?\"<>|".contains(c))
+        || reserved
+    {
+        return Err(CoreError::InvalidRequest {
+            reason: "committed path contains a nonportable or reserved component".into(),
+        });
+    }
+    Ok(())
+}

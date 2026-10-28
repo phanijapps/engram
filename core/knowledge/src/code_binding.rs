@@ -6,13 +6,14 @@ use engram_domain::{
 };
 use engram_runtime::CoreResult;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct RepositoryRegistration {
     pub repo_id: engram_domain::RepoId,
     pub locator_id: String,
     pub acquisition: AcquisitionMode,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum AcquisitionMode {
     LocalOnly,
     ConfiguredRemote,

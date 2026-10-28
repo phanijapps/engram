@@ -1021,6 +1021,7 @@ dependencies = [
  "chrono",
  "engram-domain",
  "engram-runtime",
+ "serde",
  "tokio",
 ]
 

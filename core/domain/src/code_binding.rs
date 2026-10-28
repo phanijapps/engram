@@ -21,6 +21,8 @@ pub struct CodeGeneration {
     pub binding_version: u64,
     pub commit_oid: String,
     pub snapshot_digest: String,
+    pub parser_fingerprint: String,
+    pub filter_fingerprint: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -28,6 +30,7 @@ pub struct CodeLineage {
     pub repo_id: RepoId,
     pub generation_id: String,
     pub source_path: String,
+    pub contributors: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -40,10 +43,51 @@ pub struct IndexedSource {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CodeAttempt {
+    pub id: String,
+    pub idempotency_key: String,
+    pub binding_version: u64,
+    pub expected_epoch: u64,
+    pub fencing_token: u64,
+    pub state: CodeAttemptState,
+    pub receipt_kinds: Vec<CodeReceiptKind>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodeAttemptState {
+    Created,
+    Acquiring,
+    Staging,
+    Ready,
+    Published,
+    Failed,
+    Superseded,
+    CleanupPending,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodeReceiptKind {
+    Source,
+    Knowledge,
+    Vector,
+    Lexical,
+    Derived,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CodeResetPreview {
     pub binding: CodeBinding,
     pub preview_hash: String,
     pub target_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CodeResetJournal {
+    pub preview: CodeResetPreview,
+    pub checkpoints: Vec<String>,
+    pub preservation_digests: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -55,6 +99,7 @@ pub enum CodeBindingError {
     StaleGeneration,
     InvalidSource,
     InvalidResetPreview,
+    InvalidAttempt,
 }
 
 impl CodeBinding {
@@ -62,13 +107,107 @@ impl CodeBinding {
         if self.repo_id.0.trim().is_empty() {
             return Err(CodeBindingError::InvalidRepoId);
         }
-        if !self.branch_ref.starts_with("refs/heads/")
-            || self.branch_ref.len() <= "refs/heads/".len()
-            || self.branch_ref.contains("..")
-            || self.branch_ref.ends_with('/')
-            || self.branch_ref.contains('@')
+        let suffix = self
+            .branch_ref
+            .strip_prefix("refs/heads/")
+            .ok_or(CodeBindingError::InvalidBranchRef)?;
+        if suffix.is_empty()
+            || suffix.starts_with('/')
+            || suffix.ends_with('/')
+            || suffix.ends_with('.')
+            || suffix.contains("..")
+            || suffix.contains("@{")
+            || suffix.contains("//")
+            || suffix
+                .chars()
+                .any(|c| c.is_control() || " ~^:?*[\\".contains(c))
+            || suffix
+                .split('/')
+                .any(|part| part.is_empty() || part.starts_with('.') || part.ends_with(".lock"))
         {
             return Err(CodeBindingError::InvalidBranchRef);
+        }
+        Ok(())
+    }
+}
+
+impl CodeGeneration {
+    pub fn validate(&self) -> Result<(), CodeBindingError> {
+        if self.id.trim().is_empty()
+            || self.binding_version == 0
+            || !matches!(self.commit_oid.len(), 40 | 64)
+            || !self.commit_oid.bytes().all(|b| b.is_ascii_hexdigit())
+            || self.snapshot_digest.len() != 64
+            || !self.snapshot_digest.bytes().all(|b| b.is_ascii_hexdigit())
+            || self.parser_fingerprint.is_empty()
+            || self.filter_fingerprint.is_empty()
+        {
+            return Err(CodeBindingError::InvalidSource);
+        }
+        Ok(())
+    }
+}
+
+impl CodeLineage {
+    pub fn validate(&self) -> Result<(), CodeBindingError> {
+        if self.repo_id.0.trim().is_empty()
+            || self.generation_id.trim().is_empty()
+            || self.source_path.is_empty()
+            || self.source_path.starts_with('/')
+            || self
+                .source_path
+                .split('/')
+                .any(|p| p == ".." || p.is_empty())
+            || self.contributors.is_empty()
+            || self.contributors.iter().any(|x| x.trim().is_empty())
+        {
+            return Err(CodeBindingError::InvalidSource);
+        }
+        Ok(())
+    }
+}
+
+impl IndexedSource {
+    pub fn validate(&self) -> Result<(), CodeBindingError> {
+        if self.repo_id.0.trim().is_empty()
+            || self.generation_id.trim().is_empty()
+            || self.path.is_empty()
+            || self.path.starts_with('/')
+            || self.path.split('/').any(|p| p == ".." || p.is_empty())
+            || !matches!(self.commit_oid.len(), 40 | 64)
+            || !self.commit_oid.bytes().all(|b| b.is_ascii_hexdigit())
+            || self.content_digest.len() != 64
+            || !self.content_digest.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(CodeBindingError::InvalidSource);
+        }
+        Ok(())
+    }
+}
+
+impl CodeAttempt {
+    pub fn validate(&self) -> Result<(), CodeBindingError> {
+        if self.id.trim().is_empty()
+            || self.idempotency_key.trim().is_empty()
+            || self.binding_version == 0
+            || self.fencing_token == 0
+            || (self.state == CodeAttemptState::Ready && self.receipt_kinds.is_empty())
+        {
+            return Err(CodeBindingError::InvalidAttempt);
+        }
+        Ok(())
+    }
+}
+
+impl CodeResetPreview {
+    pub fn validate(&self) -> Result<(), CodeBindingError> {
+        self.binding.validate()?;
+        if self.preview_hash.len() != 64
+            || !self.preview_hash.bytes().all(|b| b.is_ascii_hexdigit())
+            || self.target_ids.is_empty()
+            || self.target_ids.iter().any(|x| x.trim().is_empty())
+        {
+            return Err(CodeBindingError::InvalidResetPreview);
         }
         Ok(())
     }

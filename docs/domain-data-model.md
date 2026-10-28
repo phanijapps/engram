@@ -56,6 +56,14 @@ and API payloads must conform to these artifacts. Rust domain types may become
 the generation source later, but they do not override accepted v1 contract files
 without an explicit compatibility review.
 
+## Project-Bound Code Indexing (V2 Extension)
+
+Branch-indexed code is a versioned extension contract, not an additive mutation of the frozen v1 wire schema. A repository has an opaque RepoId independent of its URL or checkout path. A binding associates one authorized tenant/workspace scope and RepoId with one exact case-sensitive `refs/heads/...` ref, a monotonically increasing binding version and epoch, and at most one published generation. The binding is durable authority; caller paths and branch arguments cannot create or widen it.
+
+A generation identifies the full Git object ID, immutable retained snapshot digest, parser fingerprint, and filter fingerprint. Indexed records carry generation-specific lineage and contributor identities. An attempt carries an idempotency key, expected binding version and epoch, a fencing token, lifecycle state, and typed lane receipts. Publication is permitted only after required lane receipts are durable and the expected binding version, epoch, and fencing token still match. A reset preview binds an exact target set to a digest; its journal records checkpoints and preservation digests. Retry and cleanup authority belongs to durable records, not process-local locks.
+
+The portable domain model defines validation for identity, canonical branch-ref shape, source object/digest identifiers, repository-relative paths, contributor lineage, attempt fencing metadata, and exact reset previews. Git ref resolution, repository acquisition, SQL persistence, and cryptographic preview verification remain adapter/coordinator responsibilities. This extension is intentionally versioned separately because making a binding and generation mandatory changes observable code-selection and ingestion behavior; legacy v1 callers do not receive an inferred binding or automatic conversion. Public activation requires explicit versioned schemas and no automatic legacy migration.
+
 ## Modeling Principles
 
 - Domain contracts are independent of storage engines, APIs, and language

@@ -121,9 +121,11 @@ impl CodeReadLeases for PgCodeBindingRepository {
         self.blocking(move |store| crate::connection::runtime().block_on(async {
             let tx = store.connection.client.transaction().await.map_err(|_| storage_error())?;
             tx.execute("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", &[&format!("{}:{scope}", lease.eligibility.scope.tenant)]).await.map_err(|_| storage_error())?;
-            if eligibility(&tx, &lease.eligibility.scope).await? != lease.eligibility {
-                return Err(changed());
-            }
+            // Renewal deliberately differs from acquisition here: a current, unexpired
+            // lease protects its immutable historical eligibility snapshot, so later
+            // publications or unrelated scope epoch advances must not block renewal.
+            // Stale handles are still rejected by the exact durable-record comparison
+            // below (superseded fence or expired/retired record), never by eligibility drift.
             lease_authority(&tx, &lease.id).await?;
             let previous = tx.query_opt("SELECT record_json FROM code_read_leases WHERE lease_id=$1 FOR UPDATE", &[&lease.id]).await.map_err(|_| storage_error())?;
             if previous.map(|row| row.get::<_, serde_json::Value>(0)) != Some(old) {

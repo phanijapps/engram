@@ -84,9 +84,11 @@ impl CodeReadLeases for SqlCodeBindingRepository {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| storage_error())?;
-        if read_eligibility(&tx, &lease.eligibility.scope)? != lease.eligibility {
-            return Err(changed());
-        }
+        // Renewal deliberately differs from acquisition here: a current, unexpired
+        // lease protects its immutable historical eligibility snapshot, so later
+        // publications or unrelated scope epoch advances must not block renewal.
+        // Stale handles are still rejected by the exact durable-record comparison
+        // below (superseded fence or expired/retired record), never by eligibility drift.
         let previous: Option<String> = tx
             .query_row(
                 "SELECT record_json FROM code_read_leases WHERE lease_id=?1",

@@ -1435,7 +1435,7 @@ fn postgres_first_bind_waited_stale_lease_is_rejected() {
 
 #[ignore = "requires parent-authorized marked disposable PostgreSQL"]
 #[test]
-fn postgres_renewal_waited_behind_publication_rejects_old_eligibility() {
+fn postgres_renewal_waits_on_publication_authority_then_extends_anchored_lease() {
     let store = repository();
     let suffix = unique();
     let test_scope = scope(&format!("renew-publication-{suffix}"), "factory-test");
@@ -1490,6 +1490,11 @@ fn postgres_renewal_waited_behind_publication_rejects_old_eligibility() {
     let child_pid = renewal_child
         .backend_pid
         .expect("renewal child backend pid");
+    // Instrumentation-only concurrent publication writer: this raw-SQL transaction is
+    // manufactured solely to hold the exact production scope advisory authority tuple
+    // while the renewal child provably waits behind it. Actual repository/coordinator
+    // publication-port behavior is proven in
+    // postgres_anchored_renewal_retains_historical_generation_across_publications.
     let mut writer = PgConnection::connect(
         &std::env::var("ENGRAM_TEST_PG_URL").expect("marked disposable PostgreSQL URL required"),
     )
@@ -1581,10 +1586,32 @@ fn postgres_renewal_waited_behind_publication_rejects_old_eligibility() {
             .success(),
         "renewal child failed"
     );
-    assert!(
-        child_output.lines().any(|line| line == "RENEW_STALE"),
-        "renewal child did not reject old lease eligibility"
+    let renewed_line = child_output
+        .lines()
+        .find_map(|line| line.strip_prefix("RENEWED|"))
+        .expect("renewal child did not renew its anchored historical lease");
+    let mut renewed_parts = renewed_line.split('|');
+    let renewed_fence: u64 = renewed_parts
+        .next()
+        .expect("renewed fence")
+        .parse()
+        .expect("renewed fence number");
+    let renewed_expiry: chrono::DateTime<chrono::Utc> = renewed_parts
+        .next()
+        .expect("renewed expiry")
+        .parse()
+        .expect("renewed expiry timestamp");
+    let renewed_epoch: u64 = renewed_parts
+        .next()
+        .expect("renewed epoch")
+        .parse()
+        .expect("renewed epoch number");
+    assert_eq!(renewed_fence, old_lease.fencing_token + 1);
+    assert_eq!(
+        renewed_expiry,
+        old_lease.expires_at + chrono::Duration::minutes(1)
     );
+    assert_eq!(renewed_epoch, old_lease.eligibility.epoch);
 
     assert_eq!(
         block_on(store.get_binding(&test_scope, &bound.repo_id)).expect("published binding"),
@@ -1594,6 +1621,9 @@ fn postgres_renewal_waited_behind_publication_rejects_old_eligibility() {
     assert_eq!(committed.epoch, old_eligibility.epoch + 1);
     assert_eq!(committed.repository_ids, vec![bound.repo_id.0.clone()]);
     assert_eq!(committed.generations, vec![next_generation.id.clone()]);
+    // The superseded pre-renewal handle must still be rejected: the durable record
+    // advanced to fence 2, so this conflict comes from the stale-fence/record
+    // comparison, never from the (now deliberately permitted) eligibility drift.
     assert!(matches!(
         block_on(store.renew_read_lease(
             &old_lease,
@@ -1602,10 +1632,198 @@ fn postgres_renewal_waited_behind_publication_rejects_old_eligibility() {
         )),
         Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
     ));
+    assert!(matches!(
+        block_on(store.release_read_lease(&old_lease)),
+        Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+    ));
     let retained = block_on(store.retained_generations(&test_scope, chrono::Utc::now(), 0))
-        .expect("retained generations after stale renewal");
+        .expect("retained generations after anchored renewal");
     assert!(retained.contains(&old_generation.id));
     assert!(retained.contains(&next_generation.id));
+}
+
+#[ignore = "requires parent-authorized marked disposable PostgreSQL"]
+#[test]
+fn postgres_anchored_renewal_retains_historical_generation_across_publications() {
+    use chrono::TimeZone;
+    // Real repository/coordinator publication port only (no raw-SQL writer here):
+    // three publications must not block renewal of a current anchored lease, and
+    // only an actual lease — never the automatic previous-generation rule — keeps
+    // the historical generation pinned once later publications replace it.
+    let store = repository();
+    let suffix = unique();
+    let test_scope = scope(&format!("anchored-renewal-{suffix}"), "factory-test");
+    let bound = binding(&test_scope, &format!("anchored-renewal-repo-{suffix}"));
+    block_on(store.bind(bound.clone())).expect("bind anchored scope");
+    let old_generation = generation(&format!("anchored-old-generation-{suffix}"));
+    publish_generation(
+        &store,
+        &test_scope,
+        &bound.repo_id.0,
+        old_generation.clone(),
+        0,
+        None,
+        &format!("anchored-old-attempt-{suffix}"),
+    );
+    let old_eligibility = block_on(store.eligibility(&test_scope)).expect("old eligibility");
+    // Acquire while the historical snapshot is still current: initial acquisition
+    // requires current eligibility, then later publications only drift around it.
+    let start = chrono::Utc.timestamp_opt(1_800_000_000, 0).unwrap();
+    let lease = block_on(store.acquire_read_lease(
+        CodeReadLease {
+            id: format!("anchored-renewal-lease-{suffix}"),
+            eligibility: old_eligibility.clone(),
+            fencing_token: 1,
+            expires_at: start + chrono::Duration::minutes(10),
+        },
+        start,
+    ))
+    .expect("acquire anchored historical lease");
+    let middle_generation = generation(&format!("anchored-middle-generation-{suffix}"));
+    publish_generation(
+        &store,
+        &test_scope,
+        &bound.repo_id.0,
+        middle_generation.clone(),
+        1,
+        Some(old_generation.id.clone()),
+        &format!("anchored-middle-attempt-{suffix}"),
+    );
+    let latest_generation = generation(&format!("anchored-latest-generation-{suffix}"));
+    publish_generation(
+        &store,
+        &test_scope,
+        &bound.repo_id.0,
+        latest_generation.clone(),
+        2,
+        Some(middle_generation.id.clone()),
+        &format!("anchored-latest-attempt-{suffix}"),
+    );
+    let current = block_on(store.eligibility(&test_scope)).expect("latest eligibility");
+    assert_eq!(current.generations, vec![latest_generation.id.clone()]);
+    assert!(current.epoch > old_eligibility.epoch);
+    assert_eq!(
+        lease.eligibility.generations,
+        vec![old_generation.id.clone()],
+        "the anchored lease pins only its own historical generation"
+    );
+    let retained =
+        block_on(store.retained_generations(&test_scope, start + chrono::Duration::minutes(5), 0))
+            .expect("retained before renewal");
+    assert!(retained.contains(&old_generation.id));
+    assert!(retained.contains(&middle_generation.id));
+    assert!(retained.contains(&latest_generation.id));
+    let renewed = block_on(store.renew_read_lease(
+        &lease,
+        start + chrono::Duration::minutes(1),
+        start + chrono::Duration::minutes(20),
+    ))
+    .expect("renew anchored lease across two later publications");
+    assert_eq!(renewed.fencing_token, lease.fencing_token + 1);
+    assert_eq!(renewed.eligibility, lease.eligibility);
+    let beyond_original_expiry =
+        block_on(store.retained_generations(&test_scope, start + chrono::Duration::minutes(15), 0))
+            .expect("retained past the original expiry");
+    assert!(
+        beyond_original_expiry.contains(&old_generation.id),
+        "renewal keeps the anchored snapshot past its original expiry"
+    );
+    assert!(beyond_original_expiry.contains(&middle_generation.id));
+    assert!(beyond_original_expiry.contains(&latest_generation.id));
+    assert!(
+        matches!(
+            block_on(store.renew_read_lease(
+                &lease,
+                start + chrono::Duration::minutes(2),
+                start + chrono::Duration::minutes(30),
+            )),
+            Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+        ),
+        "superseded pre-renewal handle rejects through the stale-fence record comparison"
+    );
+    assert!(matches!(
+        block_on(store.release_read_lease(&lease)),
+        Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+    ));
+    assert!(
+        matches!(
+            block_on(store.acquire_read_lease(
+                CodeReadLease {
+                    id: format!("anchored-stale-acquire-{suffix}"),
+                    eligibility: old_eligibility.clone(),
+                    fencing_token: 1,
+                    expires_at: start + chrono::Duration::minutes(30),
+                },
+                start + chrono::Duration::minutes(2),
+            )),
+            Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+        ),
+        "initial acquisition still requires current eligibility"
+    );
+    assert!(
+        matches!(
+            block_on(store.renew_read_lease(
+                &renewed,
+                start + chrono::Duration::minutes(25),
+                start + chrono::Duration::minutes(30),
+            )),
+            Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+        ),
+        "renewal of an expired handle rejects"
+    );
+    let within_grace = block_on(store.retained_generations(
+        &test_scope,
+        start + chrono::Duration::minutes(21),
+        120_000,
+    ))
+    .expect("retained inside grace");
+    assert!(
+        within_grace.contains(&old_generation.id),
+        "grace protects the recently expired anchored custody"
+    );
+    let past_grace =
+        block_on(store.retained_generations(&test_scope, start + chrono::Duration::minutes(21), 0))
+            .expect("retained past grace");
+    assert!(
+        !past_grace.contains(&old_generation.id),
+        "the anchored generation drops once the renewed expiry passes without grace"
+    );
+    assert!(past_grace.contains(&middle_generation.id));
+    assert!(past_grace.contains(&latest_generation.id));
+    block_on(store.release_read_lease(&renewed)).expect("release renewed lease");
+    let after_release =
+        block_on(store.retained_generations(&test_scope, start + chrono::Duration::minutes(16), 0))
+            .expect("retained after release");
+    assert!(
+        !after_release.contains(&old_generation.id),
+        "only an actual lease pins the historical generation after release"
+    );
+    assert!(after_release.contains(&middle_generation.id));
+    assert!(after_release.contains(&latest_generation.id));
+    assert!(
+        matches!(
+            block_on(store.renew_read_lease(
+                &renewed,
+                start + chrono::Duration::minutes(17),
+                start + chrono::Duration::minutes(30),
+            )),
+            Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
+        ),
+        "renewal of a released lease rejects"
+    );
+    let retired = block_on(store.acquire_read_lease(
+        CodeReadLease {
+            id: lease.id.clone(),
+            eligibility: current.clone(),
+            fencing_token: 1,
+            expires_at: start + chrono::Duration::minutes(40),
+        },
+        start + chrono::Duration::minutes(17),
+    ));
+    assert!(
+        matches!(retired, Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"),
+        "the released lease id is durably retired"
+    );
 }
 
 #[ignore = "requires parent-authorized marked disposable PostgreSQL"]
@@ -1911,14 +2129,15 @@ fn postgres_three_generation_lease_only_retention_obeys_grace() {
     assert!(!retained_after_grace.contains(&generation_one.id));
     assert!(retained_after_grace.contains(&generation_two.id));
     assert!(retained_after_grace.contains(&generation_three.id));
-    assert!(matches!(
-        block_on(store.renew_read_lease(
-            &lease,
-            chrono::Utc::now(),
-            lease.expires_at + chrono::Duration::minutes(1),
-        )),
-        Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
-    ));
+    let renewed_again = block_on(store.renew_read_lease(
+        &lease,
+        chrono::Utc::now(),
+        lease.expires_at + chrono::Duration::minutes(1),
+    ))
+    .expect("renew the anchored historical lease after later publications");
+    assert_eq!(renewed_again.fencing_token, lease.fencing_token + 1);
+    assert_eq!(renewed_again.eligibility, lease.eligibility);
+    block_on(store.release_read_lease(&renewed_again)).expect("release renewed lease");
 }
 
 #[ignore = "requires parent-authorized marked disposable PostgreSQL"]
@@ -2027,19 +2246,22 @@ fn postgres_cross_process_binding_publication_and_read_lease_fencing() {
         block_on(store.eligibility(&test_scope)).expect("eligibility after child publish");
     assert!(after_publish.epoch > after_bind.epoch);
     assert!(after_publish.generations.contains(&next_generation.id));
-    assert!(matches!(
-        block_on(store.renew_read_lease(
-            &renewed,
-            chrono::Utc::now(),
-            chrono::Utc::now() + chrono::Duration::minutes(4),
-        )),
-        Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
-    ));
+    let after_publish_renewed = block_on(store.renew_read_lease(
+        &renewed,
+        chrono::Utc::now(),
+        chrono::Utc::now() + chrono::Duration::minutes(4),
+    ))
+    .expect("renew the current anchored lease after the child publication");
+    assert_eq!(
+        after_publish_renewed.fencing_token,
+        renewed.fencing_token + 1
+    );
+    assert_eq!(after_publish_renewed.eligibility, renewed.eligibility);
     let retained = block_on(store.retained_generations(&test_scope, chrono::Utc::now(), 0))
         .expect("retained generations");
     assert!(retained.contains(&old_generation.id));
     assert!(retained.contains(&next_generation.id));
-    block_on(store.release_read_lease(&renewed)).expect("release current fence");
+    block_on(store.release_read_lease(&after_publish_renewed)).expect("release current fence");
 }
 
 fn race_child(mode: &str) {
@@ -2159,7 +2381,7 @@ fn race_child(mode: &str) {
                 Err(_) => panic!("unexpected lease acquisition error"),
             }
         }
-        "renew-stale" => {
+        "renew-anchored" => {
             let lease = CodeReadLease {
                 id: std::env::var("TERRA_PG_RACE_LEASE_ID").expect("renewal lease id"),
                 eligibility: engram_knowledge::CodeEligibility {
@@ -2184,15 +2406,21 @@ fn race_child(mode: &str) {
             std::io::stdin()
                 .read_exact(&mut signal)
                 .expect("read barrier");
-            let result = block_on(store.renew_read_lease(
+            let renewed = block_on(store.renew_read_lease(
                 &lease,
                 chrono::Utc::now(),
                 lease.expires_at + chrono::Duration::minutes(1),
-            ));
-            assert!(
-                matches!(result, Err(CoreError::Conflict { reason }) if reason == "GenerationChanged")
+            ))
+            .expect("renew anchored historical lease behind publication authority");
+            assert_eq!(renewed.eligibility, lease.eligibility);
+            assert_eq!(renewed.fencing_token, lease.fencing_token + 1);
+            assert!(renewed.expires_at > lease.expires_at);
+            println!(
+                "RENEWED|{}|{}|{}",
+                renewed.fencing_token,
+                renewed.expires_at.to_rfc3339(),
+                renewed.eligibility.epoch
             );
-            println!("RENEW_STALE");
         }
         "retain" => {
             let old_generation =
@@ -2348,7 +2576,7 @@ fn spawn_renewal_child(scope: &Scope, repo: &str, lease: &CodeReadLease) -> Boun
             "--ignored",
             "--nocapture",
         ])
-        .env("TERRA_PG_RACE_MODE", "renew-stale")
+        .env("TERRA_PG_RACE_MODE", "renew-anchored")
         .env("TERRA_PG_RACE_TENANT", &scope.tenant)
         .env(
             "TERRA_PG_RACE_WORKSPACE",

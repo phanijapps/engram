@@ -5,6 +5,7 @@
 //! providers, policy engines, graph databases, or model rerankers.
 
 mod artifacts;
+pub mod code_eligibility;
 mod composer;
 mod config;
 mod graph_cache;
@@ -18,6 +19,9 @@ mod vector_index;
 mod weighted;
 
 pub use artifacts::{CODE_ARTIFACT_KINDS, is_code_artifact, suppresses_code_artifacts};
+pub use code_eligibility::{
+    CodeCandidateLane, CodeEligibilityToken, CodeLaneState, authorize_before_selection,
+};
 pub use composer::{RetrievalCompositionInput, compose_context};
 pub use config::{
     KNOWN_LANE_TAGS, RecallFusionConfig, ReciprocalFusionConfig, RerankConfig, TrustWeights,

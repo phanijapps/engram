@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub struct RepoId(pub String);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeBinding {
     pub scope: crate::Scope,
     pub repo_id: RepoId,
@@ -16,6 +17,7 @@ pub struct CodeBinding {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeGeneration {
     pub id: String,
     pub binding_version: u64,
@@ -26,6 +28,7 @@ pub struct CodeGeneration {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeLineage {
     pub repo_id: RepoId,
     pub generation_id: String,
@@ -34,6 +37,7 @@ pub struct CodeLineage {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct IndexedSource {
     pub repo_id: RepoId,
     pub generation_id: String,
@@ -43,6 +47,7 @@ pub struct IndexedSource {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeAttempt {
     pub id: String,
     pub idempotency_key: String,
@@ -77,6 +82,7 @@ pub enum CodeReceiptKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeResetPreview {
     pub binding: CodeBinding,
     pub preview_hash: String,
@@ -84,6 +90,7 @@ pub struct CodeResetPreview {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeResetJournal {
     pub preview: CodeResetPreview,
     pub checkpoints: Vec<String>,
@@ -91,9 +98,12 @@ pub struct CodeResetJournal {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CodeBindingError {
     InvalidRepoId,
     InvalidBranchRef,
+    InvalidBindingVersion,
+    InvalidGeneration,
     BindingConflict,
     BindingRequired,
     StaleGeneration,
@@ -106,6 +116,12 @@ impl CodeBinding {
     pub fn validate(&self) -> Result<(), CodeBindingError> {
         if self.repo_id.0.trim().is_empty() {
             return Err(CodeBindingError::InvalidRepoId);
+        }
+        if self.version == 0 {
+            return Err(CodeBindingError::InvalidBindingVersion);
+        }
+        if self.active_generation.as_deref() == Some("") {
+            return Err(CodeBindingError::InvalidGeneration);
         }
         let suffix = self
             .branch_ref

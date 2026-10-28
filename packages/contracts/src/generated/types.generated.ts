@@ -105,9 +105,15 @@ export type Verdict = "asserted_by_agent" | "grounded_in_source" | "derived";
 
 export interface EngramV1Types {
   Actor: Actor;
+  CodeAttempt: CodeAttempt;
+  CodeBinding: CodeBinding;
   CodeEdgeKind: CodeEdgeKind;
   CodeEdgeResolution: CodeEdgeResolution;
+  CodeGeneration: CodeGeneration;
   CodeGraphStaleness: CodeGraphStaleness;
+  CodeLineage: CodeLineage;
+  CodeResetJournal: CodeResetJournal;
+  CodeResetPreview: CodeResetPreview;
   ConceptRef: ConceptRef;
   ContextBudget: ContextBudget;
   ContextPayload: ContextPayload;
@@ -126,6 +132,7 @@ export interface EngramV1Types {
   ForgetResult: ForgetResult;
   FusionTrace: FusionTrace;
   Identifier: Identifier;
+  IndexedSource: IndexedSource;
   KnowledgeChange: KnowledgeChange;
   KnowledgeChangeOp: KnowledgeChangeOp;
   KnowledgeChangeTargetType: KnowledgeChangeTargetType;
@@ -183,6 +190,30 @@ export interface Actor {
 export interface Metadata {
   [k: string]: unknown;
 }
+export interface CodeAttempt {
+  bindingVersion: number;
+  expectedEpoch: number;
+  fencingToken: number;
+  id: string;
+  idempotencyKey: string;
+  receiptKinds: ("source" | "knowledge" | "vector" | "lexical" | "derived")[];
+  state: "created" | "acquiring" | "staging" | "ready" | "published" | "failed" | "superseded" | "cleanup_pending";
+}
+export interface CodeBinding {
+  activeGeneration: string | null;
+  branchRef: string;
+  epoch: number;
+  repoId: string;
+  scope: Scope;
+  version: number;
+}
+export interface Scope {
+  environment?: string;
+  session?: string;
+  subject?: string;
+  tenant: string;
+  workspace?: string;
+}
 /**
  * Typed resolution evidence stamped on code relationships (KnowledgeRelationship.codeResolution; absent on non-code relationships).
  */
@@ -192,6 +223,14 @@ export interface CodeEdgeResolution {
    */
   resolvedBy: string;
   tier: ResolutionTier;
+}
+export interface CodeGeneration {
+  bindingVersion: number;
+  commitOid: string;
+  filterFingerprint: string;
+  id: string;
+  parserFingerprint: string;
+  snapshotDigest: string;
 }
 /**
  * Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown — never a fabricated 0.
@@ -210,6 +249,28 @@ export interface CodeGraphStaleness {
   scanInProgress: boolean;
   sourceKey: string;
   status: StalenessStatus;
+}
+export interface CodeLineage {
+  /**
+   * @minItems 1
+   */
+  contributors: [string, ...string[]];
+  generationId: string;
+  repoId: string;
+  sourcePath: string;
+}
+export interface CodeResetJournal {
+  checkpoints: string[];
+  preservationDigests: string[];
+  preview: CodeResetPreview;
+}
+export interface CodeResetPreview {
+  binding: CodeBinding;
+  previewHash: string;
+  /**
+   * @minItems 1
+   */
+  targetIds: [string, ...string[]];
 }
 export interface ConceptRef {
   id?: Identifier;
@@ -388,13 +449,6 @@ export interface Requester {
   permissions?: string[];
   roles?: string[];
 }
-export interface Scope {
-  environment?: string;
-  session?: string;
-  subject?: string;
-  tenant: string;
-  workspace?: string;
-}
 export interface EvaluationFixture {
   cases: EvaluationCase[];
   createdAt: Timestamp;
@@ -528,6 +582,13 @@ export interface MemoryEvent {
   provenance: Provenance;
   recordedAt: Timestamp;
   scope: Scope;
+}
+export interface IndexedSource {
+  commitOid: string;
+  contentDigest: string;
+  generationId: string;
+  path: string;
+  repoId: string;
 }
 /**
  * One committed knowledge mutation (invalidation metadata, never recallable content). seq is a decimal string on JSON surfaces.

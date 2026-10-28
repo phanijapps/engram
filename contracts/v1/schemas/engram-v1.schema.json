@@ -1347,7 +1347,7 @@
         },
         "verdict": {
           "type": "string",
-          "description": "Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface. 'derived' is reserved for the derivation layer and is rejected by every write surface — it is not a legal value here.",
+          "description": "Optional assertion verdict stamped onto the written record (DEC-P06); absent means no verdict on this write surface. 'derived' is reserved for the derivation layer and is rejected by every write surface \u2014 it is not a legal value here.",
           "enum": [
             "asserted_by_agent",
             "grounded_in_source"
@@ -1878,7 +1878,7 @@
     },
     "KnowledgeChangesPage": {
       "type": "object",
-      "description": "One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window — take a fresh snapshot.",
+      "description": "One bounded page of changes plus resume state. resetRequired means the cursor predates the retained window \u2014 take a fresh snapshot.",
       "additionalProperties": false,
       "properties": {
         "items": {
@@ -1979,7 +1979,7 @@
     },
     "CodeGraphStaleness": {
       "type": "object",
-      "description": "Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown — never a fabricated 0.",
+      "description": "Code-graph freshness vs its repository. commitsBehind is local-ancestry-only; null means unknown \u2014 never a fabricated 0.",
       "additionalProperties": false,
       "properties": {
         "sourceKey": {
@@ -2023,7 +2023,7 @@
     },
     "TaskOutcome": {
       "type": "object",
-      "description": "Host-verified task result. Association data — never causal proof.",
+      "description": "Host-verified task result. Association data \u2014 never causal proof.",
       "additionalProperties": false,
       "properties": {
         "success": {
@@ -2090,6 +2090,260 @@
         "grounded_in_source",
         "derived"
       ]
+    },
+    "CodeBinding": {
+      "type": "object",
+      "required": [
+        "scope",
+        "repoId",
+        "branchRef",
+        "version",
+        "activeGeneration",
+        "epoch"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "repoId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "branchRef": {
+          "type": "string",
+          "pattern": "^refs/heads/(?!.*(?:\\.\\.|//|@\\{))[A-Za-z0-9._/-]+$"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "activeGeneration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "epoch": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeGeneration": {
+      "type": "object",
+      "required": [
+        "id",
+        "bindingVersion",
+        "commitOid",
+        "snapshotDigest",
+        "parserFingerprint",
+        "filterFingerprint"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bindingVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "commitOid": {
+          "type": "string",
+          "pattern": "^([a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"
+        },
+        "snapshotDigest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "parserFingerprint": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filterFingerprint": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeLineage": {
+      "type": "object",
+      "required": [
+        "repoId",
+        "generationId",
+        "sourcePath",
+        "contributors"
+      ],
+      "properties": {
+        "repoId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourcePath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contributors": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "IndexedSource": {
+      "type": "object",
+      "required": [
+        "repoId",
+        "generationId",
+        "commitOid",
+        "path",
+        "contentDigest"
+      ],
+      "properties": {
+        "repoId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "generationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commitOid": {
+          "type": "string",
+          "pattern": "^([a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contentDigest": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeAttempt": {
+      "type": "object",
+      "required": [
+        "id",
+        "idempotencyKey",
+        "bindingVersion",
+        "expectedEpoch",
+        "fencingToken",
+        "state",
+        "receiptKinds"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bindingVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "expectedEpoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fencingToken": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "state": {
+          "enum": [
+            "created",
+            "acquiring",
+            "staging",
+            "ready",
+            "published",
+            "failed",
+            "superseded",
+            "cleanup_pending"
+          ]
+        },
+        "receiptKinds": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "source",
+              "knowledge",
+              "vector",
+              "lexical",
+              "derived"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeResetPreview": {
+      "type": "object",
+      "required": [
+        "binding",
+        "previewHash",
+        "targetIds"
+      ],
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/CodeBinding"
+        },
+        "previewHash": {
+          "type": "string",
+          "pattern": "^[a-fA-F0-9]{64}$"
+        },
+        "targetIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "CodeResetJournal": {
+      "type": "object",
+      "required": [
+        "preview",
+        "checkpoints",
+        "preservationDigests"
+      ],
+      "properties": {
+        "preview": {
+          "$ref": "#/$defs/CodeResetPreview"
+        },
+        "checkpoints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "preservationDigests": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

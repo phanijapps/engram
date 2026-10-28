@@ -148,9 +148,152 @@ mod task_001 {
     }
     #[test]
     fn breaking_selection() {
-        let b = binding();
+        let mut b = binding();
         b.validate().unwrap();
-        assert_eq!(b.branch_ref, "refs/heads/main");
-        assert_eq!(b.active_generation, None);
+        let wire = serde_json::to_value(&b).unwrap();
+        assert_eq!(wire["branchRef"], "refs/heads/main");
+        assert_eq!(wire["activeGeneration"], serde_json::Value::Null);
+        assert!(wire.get("branch_ref").is_none());
+        b.version = 0;
+        assert_eq!(b.validate(), Err(CodeBindingError::InvalidBindingVersion));
+        let mut b = binding();
+        b.active_generation = Some(String::new());
+        assert_eq!(b.validate(), Err(CodeBindingError::InvalidGeneration));
+        let error = serde_json::to_value(CodeBindingError::BindingRequired).unwrap();
+        assert_eq!(error, "binding_required");
+        let mut attempt = CodeAttempt {
+            id: "a".into(),
+            idempotency_key: "k".into(),
+            binding_version: 1,
+            expected_epoch: 0,
+            fencing_token: 1,
+            state: CodeAttemptState::Ready,
+            receipt_kinds: vec![],
+        };
+        assert_eq!(attempt.validate(), Err(CodeBindingError::InvalidAttempt));
+        attempt.receipt_kinds.push(CodeReceiptKind::Knowledge);
+        attempt.validate().unwrap();
+        let journal = CodeResetJournal {
+            preview: CodeResetPreview {
+                binding: binding(),
+                preview_hash: "a".repeat(64),
+                target_ids: vec!["x".into()],
+            },
+            checkpoints: vec!["start".into()],
+            preservation_digests: vec!["b".repeat(64)],
+        };
+        let wire = serde_json::to_value(journal).unwrap();
+        assert_eq!(wire["preservationDigests"][0], "b".repeat(64));
+    }
+}
+
+mod task_002 {
+    use super::*;
+    use std::{fs, path::PathBuf, process::Command};
+    fn schema() -> serde_json::Value {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../contracts/v1/schemas/engram-v1.schema.json");
+        serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+    }
+    fn valid_values() -> Vec<(&'static str, serde_json::Value)> {
+        let b = binding();
+        let g = generation();
+        let l = CodeLineage {
+            repo_id: b.repo_id.clone(),
+            generation_id: g.id.clone(),
+            source_path: "src/lib.rs".into(),
+            contributors: vec!["src/lib.rs".into()],
+        };
+        let source = IndexedSource {
+            repo_id: b.repo_id.clone(),
+            generation_id: g.id.clone(),
+            commit_oid: g.commit_oid.clone(),
+            path: l.source_path.clone(),
+            content_digest: "c".repeat(64),
+        };
+        let attempt = CodeAttempt {
+            id: "a1".into(),
+            idempotency_key: "k1".into(),
+            binding_version: 1,
+            expected_epoch: 0,
+            fencing_token: 1,
+            state: CodeAttemptState::Ready,
+            receipt_kinds: vec![CodeReceiptKind::Knowledge],
+        };
+        let preview = CodeResetPreview {
+            binding: b,
+            preview_hash: "d".repeat(64),
+            target_ids: vec!["target".into()],
+        };
+        vec![
+            ("CodeBinding", serde_json::to_value(binding()).unwrap()),
+            ("CodeGeneration", serde_json::to_value(g).unwrap()),
+            ("CodeLineage", serde_json::to_value(l).unwrap()),
+            ("IndexedSource", serde_json::to_value(source).unwrap()),
+            ("CodeAttempt", serde_json::to_value(attempt).unwrap()),
+            (
+                "CodeResetPreview",
+                serde_json::to_value(preview.clone()).unwrap(),
+            ),
+            (
+                "CodeResetJournal",
+                serde_json::to_value(CodeResetJournal {
+                    preview,
+                    checkpoints: vec!["start".into()],
+                    preservation_digests: vec!["e".repeat(64)],
+                })
+                .unwrap(),
+            ),
+        ]
+    }
+    fn accepted(def: &str) -> serde_json::Value {
+        serde_json::json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$ref":format!("#/$defs/{def}"),"$defs":schema()["$defs"].clone()})
+    }
+    #[test]
+    fn generated_shapes_match_model() {
+        let doc = schema();
+        for (name, value) in valid_values() {
+            assert!(doc["$defs"].get(name).is_some(), "missing {name}");
+            assert!(
+                jsonschema::draft202012::validate(&accepted(name), &value).is_ok(),
+                "invalid {name}: {value}"
+            );
+        }
+        let wire = serde_json::to_value(binding()).unwrap();
+        assert!(wire.get("repoId").is_some());
+        assert!(wire.get("repo_id").is_none());
+    }
+    #[test]
+    fn generated_output_reproducibility() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let before =
+            fs::read(root.join("packages/contracts/src/generated/schema.generated.ts")).unwrap();
+        let status = Command::new("pnpm")
+            .args(["run", "contracts:generate"])
+            .current_dir(&root)
+            .status()
+            .expect("run contract generator");
+        assert!(status.success());
+        let after =
+            fs::read(root.join("packages/contracts/src/generated/schema.generated.ts")).unwrap();
+        assert_eq!(before, after, "generation must be byte reproducible");
+    }
+    #[test]
+    fn breaking_compatibility_no_migration() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let text = fs::read_to_string(root.join("contracts/v1/compatibility.md")).unwrap();
+        assert!(text.contains("breaking behavior change"));
+        assert!(text.contains("MUST NOT infer bindings"));
+        assert!(!text.contains("contracts/v2/"));
+        let mut invalid = binding();
+        invalid.branch_ref = "refs/heads/a..b".into();
+        assert!(invalid.validate().is_err());
+        assert!(
+            jsonschema::draft202012::validate(
+                &accepted("CodeBinding"),
+                &serde_json::to_value(invalid).unwrap()
+            )
+            .is_err()
+        );
     }
 }

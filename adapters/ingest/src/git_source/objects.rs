@@ -172,6 +172,18 @@ pub fn read_resolved_commit_with_limits(
         let relative = std::str::from_utf8(path).map_err(|_| CoreError::InvalidRequest {
             reason: "committed path is not valid UTF-8".into(),
         })?;
+        // Validate the raw slash-delimited Git path BEFORE any host-path
+        // interpretation: a literal backslash byte is part of the committed Git
+        // name (never a host directory separator), so Windows must reject it the
+        // same way Unix and remote acquisition do instead of reinterpreting the
+        // spelling as a nested path and changing the inventory identity.
+        for component in relative.split('/') {
+            super::safety::validate_retained_component(component).map_err(|_| {
+                CoreError::InvalidRequest {
+                    reason: "committed path contains a nonportable or reserved component".into(),
+                }
+            })?;
+        }
         let relative_path = Path::new(relative);
         if relative_path.is_absolute()
             || relative_path.components().any(|c| {
@@ -191,15 +203,6 @@ pub fn read_resolved_commit_with_limits(
             return Err(CoreError::InvalidRequest {
                 reason: "source file count exceeded its configured limit".into(),
             });
-        }
-        for component in relative_path.components() {
-            if let std::path::Component::Normal(name) = component {
-                super::safety::validate_retained_component(name.to_str().ok_or(
-                    CoreError::InvalidRequest {
-                        reason: "committed path is not UTF-8".into(),
-                    },
-                )?)?;
-            }
         }
         let size_out = git_with_limits(&root, &["cat-file", "-s", blob_oid], limits, 64)?.stdout;
         let size = std::str::from_utf8(&size_out)

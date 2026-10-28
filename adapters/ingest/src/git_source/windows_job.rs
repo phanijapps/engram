@@ -61,6 +61,10 @@ static PENDING: OnceLock<Mutex<Vec<Pending>>> = OnceLock::new();
 fn registry() -> &'static Mutex<Vec<Pending>> {
     PENDING.get_or_init(|| Mutex::new(Vec::with_capacity(MAX_OWNED_JOBS)))
 }
+#[cfg(test)]
+pub(super) fn pending_count() -> usize {
+    registry().lock().unwrap_or_else(|e| e.into_inner()).len()
+}
 #[derive(Debug)]
 struct CleanupPending {
     id: u64,
@@ -187,20 +191,45 @@ fn resume_initial_thread(pid: u32) -> Result<(), StageFailure> {
     ))
 }
 
+/// Selectable cleanup-stage fault for tests; production passes `None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum CleanupFault {
+    Termination,
+    StatusQuery,
+    ActiveQuery,
+    Deadline,
+}
 fn stop(child: &mut Child, job: &OwnedJob, until: Instant) -> Result<ExitStatus, StageFailure> {
-    let termination = job.terminate();
+    stop_injected(child, job, until, None)
+}
+fn stop_injected(
+    child: &mut Child,
+    job: &OwnedJob,
+    until: Instant,
+    fault: Option<CleanupFault>,
+) -> Result<ExitStatus, StageFailure> {
+    let termination = match fault {
+        Some(CleanupFault::Termination) => Err(StageFailure::os("job.terminate")),
+        _ => job.terminate(),
+    };
     let direct = child.kill();
     let mut status = None;
     loop {
         if status.is_none() {
+            if matches!(fault, Some(CleanupFault::StatusQuery)) {
+                return Err(StageFailure::os("cleanup.try_wait"));
+            }
             status = child
                 .try_wait()
                 .map_err(|e| StageFailure::from_error("cleanup.try_wait", e))?;
         }
+        if matches!(fault, Some(CleanupFault::ActiveQuery)) {
+            return Err(StageFailure::os("job.query_active"));
+        }
         if status.is_some() && job.active()? == 0 {
             return Ok(status.unwrap());
         }
-        if Instant::now() >= until {
+        if Instant::now() >= until || matches!(fault, Some(CleanupFault::Deadline)) {
             return Err(StageFailure::invariant(
                 "cleanup.deadline",
                 format!(
@@ -245,10 +274,18 @@ fn retain_pending(
     io::Error::other(error)
 }
 pub(super) fn finish(mut child: Child, job: OwnedJob) -> io::Result<ExitStatus> {
-    match stop(
+    finish_injected(child, job, None)
+}
+pub(super) fn finish_injected(
+    mut child: Child,
+    job: OwnedJob,
+    fault: Option<CleanupFault>,
+) -> io::Result<ExitStatus> {
+    match stop_injected(
         &mut child,
         &job,
         Instant::now() + Duration::from_millis(250),
+        fault,
     ) {
         Ok(status) => Ok(status),
         Err(failure) => Err(retain_pending(

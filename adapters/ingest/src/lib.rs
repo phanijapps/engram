@@ -38,6 +38,8 @@ pub use engram_code::CodeSymbolChunker;
 pub use engram_code::TreeSitterChunker;
 pub use extractor::{ExtractedGraph, GraphExtractor, register_entities, resolve_call_refs};
 pub use filesystem::{FilesystemSourceReader, FilesystemSourceReaderOptions};
+#[doc(hidden)]
+pub use generation_manifest::stage_generation_records_with_options;
 pub use generation_manifest::{generation_manifest_key, stage_generation_records};
 pub use generation_stage::{
     CommittedGenerationFiles, PreparedGeneration, StagedDocument, prepare_generation,

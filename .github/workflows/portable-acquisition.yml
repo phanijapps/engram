@@ -59,3 +59,9 @@ jobs:
         run: "cargo test -p engram-ingest --test bound_git_source task_008:: -- --test-threads=1"
       - name: TEST-042 paired current-source proof
         run: "cargo test -p engram-ingest --test bound_git_source"
+      - name: TASK-009 focused generation staging
+        run: "cargo test -p engram-ingest --test bound_generation_scan task_009:: -- --test-threads=1"
+      - name: TASK-010 focused manifest durability and writer exclusion
+        run: "cargo test -p engram-ingest --test bound_generation_scan task_010:: -- --test-threads=1"
+      - name: Paired generation staging and retraction proof
+        run: "cargo test -p engram-ingest --test bound_generation_scan && cargo test -p engram-ingest --test graph_retraction"

@@ -389,6 +389,88 @@ mod task_007 {
             engram_knowledge::CoreError::InvalidRequest { .. }
         ));
     }
+    #[test]
+    fn literal_backslash_git_name_is_rejected_before_retention() {
+        // Construct the tree purely through Git object plumbing (no checkout): the
+        // literal filename byte sequence a\b.rs (97,92,98,46,114,115) coexists with
+        // a genuinely nested a/b.rs. Every host must reject the backslash name from
+        // the RAW Git path before any host-path interpretation or retention.
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path().join("adversarial.git");
+        assert!(
+            std::process::Command::new("git")
+                .args(["init", "--bare", "-b", "main", repo.to_str().unwrap()])
+                .current_dir(dir.path())
+                .output()
+                .unwrap()
+                .status
+                .success()
+        );
+        let hash = |content: &str| -> String {
+            use std::io::Write as _;
+            use std::process::Stdio;
+            let mut child = std::process::Command::new("git")
+                .args(["hash-object", "-w", "--stdin"])
+                .current_dir(&repo)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap();
+            child
+                .stdin
+                .as_mut()
+                .unwrap()
+                .write_all(content.as_bytes())
+                .unwrap();
+            String::from_utf8(child.wait_with_output().unwrap().stdout)
+                .unwrap()
+                .trim()
+                .to_string()
+        };
+        let mktree = |input: String| -> String {
+            use std::io::Write as _;
+            use std::process::Stdio;
+            let mut child = std::process::Command::new("git")
+                .args(["mktree"])
+                .current_dir(&repo)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .spawn()
+                .unwrap();
+            child
+                .stdin
+                .as_mut()
+                .unwrap()
+                .write_all(input.as_bytes())
+                .unwrap();
+            String::from_utf8(child.wait_with_output().unwrap().stdout)
+                .unwrap()
+                .trim()
+                .to_string()
+        };
+        let backslash = hash("backslash-name\n");
+        let nested = hash("nested-name\n");
+        let subtree = mktree(format!("100644 blob {nested}\tb.rs\n"));
+        let root_tree = mktree(format!(
+            "100644 blob {backslash}\ta\\b.rs\n040000 tree {subtree}\ta\n"
+        ));
+        let commit = run(&repo, &["commit-tree", &root_tree, "-m", "adversarial"]);
+        run(&repo, &["update-ref", "refs/heads/main", commit.trim()]);
+        let listed = run(&repo, &["ls-tree", "-rz", "--full-tree", "refs/heads/main"]);
+        assert!(
+            listed.bytes().any(|b| b == 92),
+            "fixture must contain the literal backslash filename byte"
+        );
+        match acquire_local_branch(&repo, "refs/heads/main") {
+            Err(engram_knowledge::CoreError::InvalidRequest { reason }) => {
+                assert!(
+                    reason.contains("nonportable or reserved component"),
+                    "sanitized reason: {reason}"
+                );
+            }
+            other => panic!("literal backslash name must be rejected: {other:?}"),
+        }
+    }
 }
 
 mod task_008 {

@@ -248,7 +248,9 @@ mod task_009 {
 mod task_010 {
     use super::*;
     use async_trait::async_trait;
-    use engram_ingest::{generation_manifest_key, stage_generation_records};
+    use engram_ingest::{
+        generation_manifest_key, stage_generation_records, stage_generation_records_with_options,
+    };
     use engram_knowledge::{CodeGenerationStaging, CoreError, CoreResult};
 
     struct FailedSourceStore(SqlKnowledgeStore);
@@ -454,5 +456,282 @@ mod task_010 {
                 .unwrap()
                 .is_some()
         );
+    }
+    fn git(repo: &std::path::Path, args: &[&str]) {
+        let output = std::process::Command::new("git")
+            .args(args)
+            .current_dir(repo)
+            .env("GIT_AUTHOR_NAME", "Generation Fixture")
+            .env("GIT_AUTHOR_EMAIL", "fixture@example.test")
+            .env("GIT_COMMITTER_NAME", "Generation Fixture")
+            .env("GIT_COMMITTER_EMAIL", "fixture@example.test")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    #[test]
+    fn native_staging_chain_and_idempotent_retry_reestablish_durability() {
+        // Real local chain: acquire -> retain -> prepare -> stage with an injected
+        // post-rename directory-sync failure -> reopen -> idempotent retry must
+        // reestablish the publication durability boundary before readiness.
+        let dir = tempdir().unwrap();
+        let repo = dir.path().join("source");
+        std::fs::create_dir_all(repo.join("src")).unwrap();
+        git(&repo, &["init", "-q", "-b", "main", "."]);
+        std::fs::write(repo.join("src/lib.rs"), b"pub fn chain() {}\n").unwrap();
+        git(&repo, &["add", "."]);
+        git(&repo, &["commit", "-q", "-m", "chain"]);
+        let (commit, files) =
+            engram_ingest::git_source::acquire_local_branch(&repo, "refs/heads/main").unwrap();
+        let retained = engram_ingest::git_source::retain_snapshot(
+            &dir.path().join("retained"),
+            commit.clone(),
+            &files,
+        )
+        .unwrap();
+        assert!(retained.root.join("src/lib.rs").is_file());
+        let b = binding();
+        let mut chain_generation = generation("chain");
+        chain_generation.commit_oid = commit.oid.clone();
+        let prepared = prepare_generation(
+            &b,
+            &chain_generation,
+            &CommittedGenerationFiles {
+                commit: &commit,
+                files: &files,
+            },
+            &options(&b),
+        )
+        .unwrap();
+        let db = dir.path().join("knowledge.db");
+        let store = SqlKnowledgeStore::open_file(&db).unwrap();
+        let root = dir.path().join("manifests");
+        let failed = block_on(stage_generation_records_with_options(
+            &root,
+            &b,
+            &prepared,
+            "attempt-chain",
+            &store,
+            true,
+            false,
+        ))
+        .unwrap_err();
+        assert!(
+            matches!(&failed, CoreError::Adapter { message, .. } if message
+                .contains("generation manifest operation failed")),
+            "sanitized: {failed:?}"
+        );
+        let key = generation_manifest_key(&b, &prepared, "attempt-chain").unwrap();
+        // The rename completed before the injected durability failure: the manifest
+        // exists but readiness was NOT reported.
+        let manifest_path = root.join(format!("{key}.json"));
+        assert!(manifest_path.exists());
+        let receipt = block_on(stage_generation_records_with_options(
+            &root,
+            &b,
+            &prepared,
+            "attempt-chain",
+            &store,
+            false,
+            false,
+        ))
+        .unwrap();
+        let reopened: engram_knowledge::StageReceipt =
+            serde_json::from_slice(&std::fs::read(&manifest_path).unwrap()).unwrap();
+        assert_eq!(receipt, reopened);
+        // A further idempotent retry reports readiness without re-staging.
+        let again = block_on(stage_generation_records_with_options(
+            &root,
+            &b,
+            &prepared,
+            "attempt-chain",
+            &store,
+            false,
+            false,
+        ))
+        .unwrap();
+        assert_eq!(again, receipt);
+    }
+    fn wait_for_temp(root: &std::path::Path, key: &str) {
+        let prefix = format!(".{key}.");
+        for _ in 0..500 {
+            let held = std::fs::read_dir(root)
+                .map(|entries| {
+                    entries.filter_map(|e| e.ok()).any(|e| {
+                        e.file_name()
+                            .to_str()
+                            .is_some_and(|n| n.starts_with(&prefix) && n.ends_with(".tmp"))
+                    })
+                })
+                .unwrap_or(false);
+            if held {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        panic!("paused writer never published its temporary manifest");
+    }
+    #[test]
+    fn manifest_writer_exclusion_same_process_allows_one_owner() {
+        let dir = tempdir().unwrap();
+        let b = binding();
+        let p = prepare(&b, "exclusive", &[file("a.rs", "pub fn a() {}\n")]);
+        let root = dir.path().join("manifests");
+        let writer_db = dir.path().join("writer.db");
+        let contender_db = dir.path().join("contender.db");
+        let writer_store = SqlKnowledgeStore::open_file(&writer_db).unwrap();
+        let contender_store = SqlKnowledgeStore::open_file(&contender_db).unwrap();
+        let exclusive_key = generation_manifest_key(
+            &binding(),
+            &prepare(&binding(), "exclusive", &[file("a.rs", "pub fn a() {}\n")]),
+            "attempt-exclusive",
+        )
+        .unwrap();
+        let paused = std::thread::spawn(move || {
+            block_on(stage_generation_records_with_options(
+                &root,
+                &b,
+                &p,
+                "attempt-exclusive",
+                &writer_store,
+                false,
+                true,
+            ))
+        });
+        // Order the race: only probe once the paused writer provably holds the lock
+        // at temporary publication (its key-named temporary exists).
+        wait_for_temp(&dir.path().join("manifests"), &exclusive_key);
+        match block_on(stage_generation_records_with_options(
+            &dir.path().join("manifests"),
+            &binding(),
+            &prepare(&binding(), "exclusive", &[file("a.rs", "pub fn a() {}\n")]),
+            "attempt-exclusive",
+            &contender_store,
+            false,
+            false,
+        )) {
+            Err(CoreError::Conflict { .. }) => {}
+            Ok(_) => panic!("contender staged while the exclusive writer was paused"),
+            Err(other) => panic!("unexpected error: {other:?}"),
+        }
+        let writer_receipt = paused.join().unwrap().unwrap();
+        let contender_receipt = block_on(stage_generation_records_with_options(
+            &dir.path().join("manifests"),
+            &binding(),
+            &prepare(&binding(), "exclusive", &[file("a.rs", "pub fn a() {}\n")]),
+            "attempt-exclusive",
+            &contender_store,
+            false,
+            false,
+        ))
+        .unwrap();
+        assert_eq!(writer_receipt, contender_receipt);
+    }
+    #[test]
+    fn manifest_writer_exclusion_cross_process_crash_and_retry() {
+        const CHILD_MODE: &str = "ENGRAM_MANIFEST_LOCK_CHILD";
+        const CHILD_ROOT: &str = "ENGRAM_MANIFEST_LOCK_CHILD_ROOT";
+        const CHILD_DB: &str = "ENGRAM_MANIFEST_LOCK_CHILD_DB";
+        let dir = tempdir().unwrap();
+        let root = dir.path().join("manifests");
+        let child_db = dir.path().join("child.db");
+        if std::env::var_os(CHILD_MODE).is_some() {
+            // Child role: stage into the PARENT-provided manifest root under the same
+            // key, pausing at temporary publication until crashed or completed.
+            let child_root =
+                std::path::PathBuf::from(std::env::var_os(CHILD_ROOT).expect("child root env"));
+            let child_db =
+                std::path::PathBuf::from(std::env::var_os(CHILD_DB).expect("child db env"));
+            let b = binding();
+            let p = prepare(&b, "crash", &[file("c.rs", "pub fn c() {}\n")]);
+            let store = SqlKnowledgeStore::open_file(&child_db).unwrap();
+            let _ = block_on(stage_generation_records_with_options(
+                &child_root,
+                &b,
+                &p,
+                "attempt-crash",
+                &store,
+                false,
+                true,
+            ));
+            std::process::exit(0);
+        }
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "task_010::manifest_writer_exclusion_cross_process_crash_and_retry",
+                "--test-threads=1",
+                "--nocapture",
+            ])
+            .env(CHILD_MODE, "1")
+            .env(CHILD_ROOT, &root)
+            .env(CHILD_DB, &child_db)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let b = binding();
+        let p = prepare(&b, "crash", &[file("c.rs", "pub fn c() {}\n")]);
+        let parent_db = dir.path().join("parent.db");
+        let store = SqlKnowledgeStore::open_file(&parent_db).unwrap();
+        // Order the race: probe only after the child provably holds the lock at
+        // temporary publication; exactly one owner exists while it is paused.
+        let crash_key = generation_manifest_key(&b, &p, "attempt-crash").unwrap();
+        wait_for_temp(&root, &crash_key);
+        match block_on(stage_generation_records_with_options(
+            &root,
+            &b,
+            &p,
+            "attempt-crash",
+            &store,
+            false,
+            false,
+        )) {
+            Err(CoreError::Conflict { .. }) => {}
+            Ok(_) => panic!("parent staged while the paused child owned the lock"),
+            Err(other) => panic!("unexpected error: {other:?}"),
+        }
+        // Crash the paused writer: the OS releases the kernel-held lock and its
+        // temporary is a stale leftover with no receipt authority.
+        child.kill().unwrap();
+        let _ = child.wait();
+        let receipt = block_on(stage_generation_records_with_options(
+            &root,
+            &b,
+            &p,
+            "attempt-crash",
+            &store,
+            false,
+            false,
+        ))
+        .unwrap();
+        assert!(
+            root.join(format!(
+                "{}.json",
+                generation_manifest_key(&b, &p, "attempt-crash").unwrap()
+            ))
+            .exists()
+        );
+        // No stale temporary for this key remains after successful staging.
+        let key_prefix = format!(
+            ".{}.",
+            generation_manifest_key(&b, &p, "attempt-crash").unwrap()
+        );
+        let leftovers = std::fs::read_dir(&root)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_str()
+                    .is_some_and(|n| n.starts_with(&key_prefix) && n.ends_with(".tmp"))
+            })
+            .count();
+        assert_eq!(leftovers, 0, "stale writer temporary was not reclaimed");
+        drop(receipt);
     }
 }

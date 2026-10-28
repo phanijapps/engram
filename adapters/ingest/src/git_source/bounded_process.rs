@@ -274,7 +274,39 @@ pub(crate) fn run_limited_input(
     limits: &GitResourceLimits,
     stdout_limit: usize,
     input: Option<Vec<u8>>,
+    check_storage: impl FnMut() -> CoreResult<()>,
+) -> CoreResult<Output> {
+    run_limited_faulted(command, limits, stdout_limit, input, check_storage, None)
+}
+#[cfg(windows)]
+pub(crate) type FinishFault = Option<super::windows_job::CleanupFault>;
+#[cfg(not(windows))]
+pub(crate) type FinishFault = Option<core::convert::Infallible>;
+#[cfg(windows)]
+pub(crate) fn run_limited_input_faulted(
+    command: &mut Command,
+    limits: &GitResourceLimits,
+    stdout_limit: usize,
+    input: Option<Vec<u8>>,
+    check_storage: impl FnMut() -> CoreResult<()>,
+    finish_fault: FinishFault,
+) -> CoreResult<Output> {
+    run_limited_faulted(
+        command,
+        limits,
+        stdout_limit,
+        input,
+        check_storage,
+        finish_fault,
+    )
+}
+fn run_limited_faulted(
+    command: &mut Command,
+    limits: &GitResourceLimits,
+    stdout_limit: usize,
+    input: Option<Vec<u8>>,
     mut check_storage: impl FnMut() -> CoreResult<()>,
+    finish_fault: FinishFault,
 ) -> CoreResult<Output> {
     #[cfg(not(any(unix, windows)))]
     return Err(CoreError::InvalidRequest {
@@ -439,20 +471,48 @@ pub(crate) fn run_limited_input(
             .map_err(|e| operation_failed(StageFailure::from_error("child.wait", e)))?
     };
     #[cfg(windows)]
-    let status = super::windows_job::finish(child, owned_job);
-    // Return the primary operation failure first; unresolved cleanup custody is retained
-    // in the owned-job registry and its evidence is reachable through diagnostic().
-    let (stdout, stderr) = outcome?;
+    let status = super::windows_job::finish_injected(child, owned_job, finish_fault);
+    #[cfg(unix)]
+    {
+        let (stdout, stderr) = outcome?;
+        Ok(Output {
+            status,
+            stdout,
+            stderr,
+        })
+    }
     #[cfg(windows)]
-    let status = status.map_err(|error| CoreError::Adapter {
-        adapter: "engram-ingest-git".into(),
-        message: super::windows_job::diagnostic(&error),
-    })?;
-    Ok(Output {
-        status,
-        stdout,
-        stderr,
-    })
+    match (status, outcome) {
+        (Ok(status), Ok((stdout, stderr))) => Ok(Output {
+            status,
+            stdout,
+            stderr,
+        }),
+        (Err(cleanup), Err(primary)) => {
+            // Report BOTH: the primary operation failure with its fixed stage/code and
+            // the unresolved cleanup custody (registry identity and retry owner) that
+            // retains the handles until a later retry resolves them.
+            let custody = super::windows_job::diagnostic(&cleanup);
+            Err(match primary {
+                CoreError::InvalidRequest { reason } => CoreError::InvalidRequest {
+                    reason: format!("{reason}; {custody}"),
+                },
+                CoreError::Adapter { adapter, message } => CoreError::Adapter {
+                    adapter,
+                    message: format!("{message}; {custody}"),
+                },
+                other => CoreError::Adapter {
+                    adapter: "engram-ingest-git".into(),
+                    message: format!("{other}; {custody}"),
+                },
+            })
+        }
+        (Err(cleanup), Ok(_)) => Err(CoreError::Adapter {
+            adapter: "engram-ingest-git".into(),
+            message: super::windows_job::diagnostic(&cleanup),
+        }),
+        (Ok(_), Err(primary)) => Err(primary),
+    }
 }
 fn output_error() -> CoreError {
     CoreError::InvalidRequest {
@@ -677,6 +737,93 @@ mod task_008 {
                 && output.stdout.as_slice() == b"512"),
             "protocol-stdin observation: {result:?}"
         );
+    }
+    #[cfg(windows)]
+    #[test]
+    fn task_008_primary_failure_reports_unresolved_cleanup_custody_and_retry_resolves() {
+        use super::super::windows_job::CleanupFault;
+        let primaries: &[(&str, fn(&mut Command, &mut GitResourceLimits))] = &[
+            ("time limit", |command, limits| {
+                command.args(["-c", "import time; time.sleep(30)"]);
+                limits.subprocess_timeout = Duration::from_millis(50);
+            }),
+            ("output exceeded", |command, limits| {
+                command.args(["-c", "import sys; sys.stdout.write('x'*10000000)"]);
+                limits.subprocess_timeout = Duration::from_secs(2);
+                limits.max_stderr_bytes = 64;
+            }),
+        ];
+        let faults = [
+            CleanupFault::Termination,
+            CleanupFault::StatusQuery,
+            CleanupFault::ActiveQuery,
+            CleanupFault::Deadline,
+        ];
+        for (expected_primary, configure) in primaries {
+            for fault in faults {
+                let mut limits = GitResourceLimits::default();
+                let mut command = Command::new(fixture_python());
+                configure(&mut command, &mut limits);
+                let result = run_limited_input_faulted(
+                    &mut command,
+                    &limits,
+                    128,
+                    None,
+                    || Ok(()),
+                    Some(fault),
+                );
+                match &result {
+                    Err(CoreError::InvalidRequest { reason }) => {
+                        assert!(
+                            reason.contains(*expected_primary),
+                            "primary missing for {fault:?}: {reason}"
+                        );
+                        assert!(
+                            reason.contains("cleanup_pending"),
+                            "custody missing for {fault:?}: {reason}"
+                        );
+                        assert!(
+                            reason.contains("retry_owner=windows-owned-job-registry"),
+                            "retry owner missing for {fault:?}: {reason}"
+                        );
+                    }
+                    other => panic!("expected combined failure: {other:?}"),
+                }
+            }
+        }
+        // storage-check primary with an unresolved deadline cleanup
+        let mut command = Command::new(fixture_python());
+        command.args(["-c", "import time; time.sleep(30)"]);
+        let result = run_limited_input_faulted(
+            &mut command,
+            &GitResourceLimits::default(),
+            128,
+            None,
+            || {
+                Err(CoreError::InvalidRequest {
+                    reason: "fixture quota".into(),
+                })
+            },
+            Some(CleanupFault::Deadline),
+        );
+        match &result {
+            Err(CoreError::InvalidRequest { reason }) => {
+                assert!(reason.contains("storage limit"), "sanitized: {reason}");
+                assert!(reason.contains("cleanup_pending"), "sanitized: {reason}");
+            }
+            other => panic!("expected combined storage failure: {other:?}"),
+        }
+        assert!(super::super::windows_job::pending_count() > 0);
+        // The next owned operation retries the retained custody and must succeed,
+        // draining the registry exactly as the reporting promises.
+        let mut command = Command::new(fixture_python());
+        command.args(["-c", "import sys; sys.exit(0)"]);
+        let retried = run_limited(&mut command, &GitResourceLimits::default(), 128);
+        assert!(
+            matches!(&retried, Ok(output) if output.status.code() == Some(0)),
+            "sanitized result: {retried:?}"
+        );
+        assert_eq!(super::super::windows_job::pending_count(), 0);
     }
     #[test]
     fn storage_budget_checked_before_process_completion() {

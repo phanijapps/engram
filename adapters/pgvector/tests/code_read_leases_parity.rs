@@ -22,6 +22,8 @@ use std::{
     },
 };
 
+const LEASE_ID_ADVISORY_NAMESPACE: i32 = 0x454e_4752;
+
 struct BoundedChild {
     child: std::process::Child,
     output: BufReader<std::process::ChildStdout>,
@@ -825,6 +827,93 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
 
 #[ignore = "requires parent-authorized marked disposable PostgreSQL"]
 #[test]
+fn postgres_scope_and_lease_id_authorities_use_disjoint_domains() {
+    let store = repository();
+    let suffix = unique();
+    let tenant = "engram-code-read-lease-id";
+    let first_scope = scope(&format!("namespace-a-{suffix}"), tenant);
+    let second_scope = scope(&format!("namespace-b-{suffix}"), tenant);
+    let first_repo = format!("namespace-a-repo-{suffix}");
+    let second_repo = format!("namespace-b-repo-{suffix}");
+    block_on(store.bind(binding(&first_scope, &first_repo))).expect("bind first scope");
+    block_on(store.bind(binding(&second_scope, &second_repo))).expect("bind second scope");
+    let first_eligibility = block_on(store.eligibility(&first_scope)).expect("first eligibility");
+    let second_eligibility =
+        block_on(store.eligibility(&second_scope)).expect("second eligibility");
+    let first_scope_key = serde_json::to_string(&first_scope).expect("first scope key");
+    let second_scope_key = serde_json::to_string(&second_scope).expect("second scope key");
+    let url =
+        std::env::var("ENGRAM_TEST_PG_URL").expect("marked disposable PostgreSQL URL required");
+    let mut holder = PgConnection::connect(&url).expect("namespace row holder");
+    let observer = PgConnection::connect(&url).expect("namespace observer");
+    let holder_pid: i32 = block_on(holder.client.query_one("SELECT pg_backend_pid()", &[]))
+        .expect("namespace holder backend pid")
+        .get(0);
+    let holder_tx = block_on(holder.client.transaction()).expect("namespace holder transaction");
+    for key in [&first_scope_key, &second_scope_key] {
+        block_on(holder_tx.query_one(
+            "SELECT epoch FROM code_epochs WHERE tenant=$1 AND scope_key=$2 FOR UPDATE",
+            &[&tenant, key],
+        ))
+        .expect("lock fresh owned epoch row");
+    }
+    let expiry = (chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339();
+    let mut first = spawn_namespace_child(
+        &first_scope,
+        &first_repo,
+        &second_scope_key,
+        first_eligibility.epoch,
+        &expiry,
+    );
+    let mut second = spawn_namespace_child(
+        &second_scope,
+        &second_repo,
+        &first_scope_key,
+        second_eligibility.epoch,
+        &expiry,
+    );
+    wait_ready(&mut first);
+    wait_ready(&mut second);
+    let first_pid = first.backend_pid.expect("first namespace child pid");
+    let second_pid = second.backend_pid.expect("second namespace child pid");
+    for child in [&mut first, &mut second] {
+        child
+            .child
+            .stdin
+            .take()
+            .expect("namespace child stdin")
+            .write_all(b"G")
+            .expect("start namespace child");
+    }
+    wait_for_scope_authority(&observer, first_pid, &first_scope, "first scope authority");
+    wait_for_scope_authority(
+        &observer,
+        second_pid,
+        &second_scope,
+        "second scope authority",
+    );
+    wait_for_blocker(&observer, holder_pid, first_pid, "first owned epoch row");
+    wait_for_blocker(&observer, holder_pid, second_pid, "second owned epoch row");
+    block_on(holder_tx.commit()).expect("release owned epoch rows");
+    assert!(collect_child(first)
+        .lines()
+        .any(|line| line == "LEASE_OWNER"));
+    assert!(collect_child(second)
+        .lines()
+        .any(|line| line == "LEASE_OWNER"));
+    for lease_id in [&second_scope_key, &first_scope_key] {
+        let state = block_on(observer.client.query_one(
+            "SELECT EXISTS (SELECT 1 FROM code_read_leases WHERE lease_id=$1), NOT EXISTS (SELECT 1 FROM code_read_lease_tombstones WHERE lease_id=$1)",
+            &[lease_id],
+        ))
+        .expect("inspect namespace lease");
+        assert!(state.get::<_, bool>(0));
+        assert!(state.get::<_, bool>(1));
+    }
+}
+
+#[ignore = "requires parent-authorized marked disposable PostgreSQL"]
+#[test]
 fn postgres_release_first_blocks_acquire_and_retires_global_lease_id() {
     for same_scope_replay in [true, false] {
         let store = repository();
@@ -899,15 +988,11 @@ fn postgres_release_first_blocks_acquire_and_retires_global_lease_id() {
             release_pid,
             "release fixture barrier",
         );
-        let global_key = format!("engram-code-read-lease-id:{lease_id}");
-        assert!(
-            block_on(observer.client.query_one(
-                "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=$1 AND granted AND ((classid::bigint << 32) + objid::bigint) = hashtextextended($2, 0))",
-                &[&release_pid, &global_key],
-            ))
-            .expect("observe release global-ID authority")
-            .get::<_, bool>(0),
-            "release child did not grant the production global lease-ID authority"
+        wait_for_lease_authority(
+            &observer,
+            release_pid,
+            &lease_id,
+            "release global-ID authority",
         );
         let mut acquiring = spawn_race_child(
             "acquire-global-id",
@@ -1029,11 +1114,10 @@ fn postgres_acquire_first_blocks_release_and_retires_global_lease_id() {
             .expect("acquire child stdin")
             .write_all(b"G")
             .expect("start acquire child");
-        let global_key = format!("engram-code-read-lease-id:{lease_id}");
         wait_for_lease_authority(
             &observer,
             acquire_pid,
-            &global_key,
+            &lease_id,
             "acquire global-ID authority",
         );
         wait_for_blocker(&observer, holder_pid, acquire_pid, "owned live lease row");
@@ -2010,6 +2094,41 @@ fn race_child(mode: &str) {
             .expect("release lease through repository port");
             println!("LEASE_RELEASED");
         }
+        "acquire-namespace" => {
+            let lease_id = std::env::var("TERRA_PG_RACE_ATTEMPT").expect("namespace lease id");
+            let eligibility = engram_knowledge::CodeEligibility {
+                scope: test_scope,
+                epoch: std::env::var("TERRA_PG_RACE_LEASE_EPOCH")
+                    .expect("namespace lease epoch")
+                    .parse()
+                    .expect("namespace lease epoch number"),
+                generations: vec![],
+                repository_ids: vec![],
+            };
+            println!("READY|{backend_pid}");
+            std::io::stdout().flush().expect("flush barrier");
+            let mut signal = [0];
+            std::io::stdin()
+                .read_exact(&mut signal)
+                .expect("read barrier");
+            match block_on(
+                store.acquire_read_lease(
+                    CodeReadLease {
+                        id: lease_id,
+                        eligibility,
+                        fencing_token: 1,
+                        expires_at: std::env::var("TERRA_PG_RACE_LEASE_EXPIRY")
+                            .expect("namespace lease expiry")
+                            .parse()
+                            .expect("namespace lease expiry timestamp"),
+                    },
+                    chrono::Utc::now(),
+                ),
+            ) {
+                Ok(_) => println!("LEASE_OWNER"),
+                Err(_) => panic!("namespace lease acquisition failed"),
+            }
+        }
         "acquire-global-id" => {
             let eligibility = block_on(store.eligibility(&test_scope)).expect("child eligibility");
             let lease_id = std::env::var("TERRA_PG_RACE_ATTEMPT").expect("global lease id");
@@ -2180,6 +2299,45 @@ fn spawn_race_child(
     }
 }
 
+fn spawn_namespace_child(
+    scope: &Scope,
+    repo: &str,
+    lease_id: &str,
+    epoch: u64,
+    expiry: &str,
+) -> BoundedChild {
+    let mut child = Command::new("timeout")
+        .arg("30s")
+        .arg(std::env::current_exe().expect("test executable"))
+        .args([
+            "--exact",
+            "postgres_cross_process_binding_publication_and_read_lease_fencing",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env("TERRA_PG_RACE_MODE", "acquire-namespace")
+        .env("TERRA_PG_RACE_TENANT", &scope.tenant)
+        .env(
+            "TERRA_PG_RACE_WORKSPACE",
+            scope.workspace.as_deref().expect("workspace"),
+        )
+        .env("TERRA_PG_RACE_REPO", repo)
+        .env("TERRA_PG_RACE_ATTEMPT", lease_id)
+        .env("TERRA_PG_RACE_LEASE_EPOCH", epoch.to_string())
+        .env("TERRA_PG_RACE_LEASE_EXPIRY", expiry)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn namespace child process");
+    let output = BufReader::new(child.stdout.take().expect("child stdout"));
+    BoundedChild {
+        child,
+        output,
+        backend_pid: None,
+    }
+}
+
 fn spawn_renewal_child(scope: &Scope, repo: &str, lease: &CodeReadLease) -> BoundedChild {
     let mut child = Command::new("timeout")
         .arg("30s")
@@ -2261,12 +2419,31 @@ fn spawn_retention_child(
     }
 }
 
-fn wait_for_lease_authority(observer: &PgConnection, pid: i32, key: &str, name: &str) {
+fn wait_for_scope_authority(observer: &PgConnection, pid: i32, scope: &Scope, name: &str) {
+    let key = serde_json::to_string(scope).expect("scope authority key");
+    let authority = format!("{}:{key}", scope.tenant);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
         let granted: bool = block_on(observer.client.query_one(
-            "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=$1 AND granted AND ((classid::bigint << 32) + objid::bigint) = hashtextextended($2, 0))",
-            &[&pid, &key],
+            "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=$1 AND granted AND ((classid::bigint << 32) + objid::bigint) = hashtextextended($2, 0) AND objsubid=1)",
+            &[&pid, &authority],
+        ))
+        .expect("observe exact scope authority")
+        .get(0);
+        if granted {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    panic!("child did not grant {name}");
+}
+
+fn wait_for_lease_authority(observer: &PgConnection, pid: i32, lease_id: &str, name: &str) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while std::time::Instant::now() < deadline {
+        let granted: bool = block_on(observer.client.query_one(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=$1 AND granted AND classid=($2::int4)::oid AND objid=hashtext($3)::oid AND objsubid=2)",
+            &[&pid, &LEASE_ID_ADVISORY_NAMESPACE, &lease_id],
         ))
         .expect("observe exact lease authority")
         .get(0);

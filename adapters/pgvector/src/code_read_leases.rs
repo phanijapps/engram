@@ -19,10 +19,14 @@ fn fence(value: u64) -> CoreResult<i64> {
     i64::try_from(value).map_err(|_| changed())
 }
 
+// PostgreSQL keeps bigint and two-int advisory keys in distinct lock domains.
+// Keep lease identity in this reserved two-int namespace so it cannot alias scope's bigint key.
+const LEASE_ID_ADVISORY_NAMESPACE: i32 = 0x454e_4752;
+
 async fn lease_authority(tx: &tokio_postgres::Transaction<'_>, lease_id: &str) -> CoreResult<()> {
     tx.execute(
-        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
-        &[&format!("engram-code-read-lease-id:{lease_id}")],
+        "SELECT pg_advisory_xact_lock($1, hashtext($2))",
+        &[&LEASE_ID_ADVISORY_NAMESPACE, &lease_id],
     )
     .await
     .map_err(|_| storage_error())?;

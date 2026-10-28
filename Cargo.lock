@@ -955,12 +955,14 @@ dependencies = [
  "engram-store-sqlite",
  "futures",
  "ignore",
+ "libc",
  "rayon",
  "serde",
  "serde_json",
  "serde_norway",
  "sha2",
  "tempfile",
+ "url",
 ]
 
 [[package]]

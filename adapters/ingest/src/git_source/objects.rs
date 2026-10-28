@@ -1,3 +1,4 @@
+use super::bounded_process::{GitResourceLimits, run_limited};
 use super::{validate_branch_ref, validate_repo_path};
 use engram_knowledge::{CoreError, CoreResult};
 use std::{
@@ -18,22 +19,42 @@ pub struct CommittedFile {
     pub mode: String,
     pub bytes: Vec<u8>,
 }
-fn git(repo: &Path, args: &[&str]) -> CoreResult<Output> {
-    let out = Command::new("git")
+fn git_with_limits(
+    repo: &Path,
+    args: &[&str],
+    limits: &GitResourceLimits,
+    output_limit: usize,
+) -> CoreResult<Output> {
+    let mut command = Command::new("git");
+    command
+        .env_clear()
+        .env("PATH", std::env::var_os("PATH").unwrap_or_default())
+        .args([
+            "--no-lazy-fetch",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "core.fsmonitor=false",
+            "-c",
+            "core.attributesFile=/dev/null",
+            "-c",
+            "protocol.allow=never",
+            "-c",
+            "credential.helper=",
+        ])
         .args(args)
         .current_dir(repo)
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
+        .env("GIT_CONFIG_SYSTEM", "/dev/null")
+        .env("GIT_CONFIG_COUNT", "0")
+        .env("GIT_NO_LAZY_FETCH", "1")
         .env("GIT_OPTIONAL_LOCKS", "0")
         .env("GIT_NO_REPLACE_OBJECTS", "1")
         .env("GIT_TERMINAL_PROMPT", "0")
         .env_remove("GIT_ALTERNATE_OBJECT_DIRECTORIES")
-        .env_remove("GIT_OBJECT_DIRECTORY")
-        .output()
-        .map_err(|_| CoreError::Adapter {
-            adapter: "engram-ingest-git".into(),
-            message: "git command could not start".into(),
-        })?;
+        .env_remove("GIT_OBJECT_DIRECTORY");
+    let out = run_limited(&mut command, limits, output_limit)?;
     if !out.status.success() {
         return Err(CoreError::InvalidRequest {
             reason: "requested committed Git object is unavailable".into(),
@@ -49,9 +70,16 @@ fn text(out: Output) -> CoreResult<String> {
         })
 }
 pub fn resolve_local_branch(repo: &Path, branch_ref: &str) -> CoreResult<ResolvedCommit> {
+    resolve_local_branch_with_limits(repo, branch_ref, &GitResourceLimits::default())
+}
+pub fn resolve_local_branch_with_limits(
+    repo: &Path,
+    branch_ref: &str,
+    limits: &GitResourceLimits,
+) -> CoreResult<ResolvedCommit> {
     validate_branch_ref(branch_ref)?;
     let root = validate_repo_path(repo)?;
-    let oid = text(git(
+    let oid = text(git_with_limits(
         &root,
         &[
             "rev-parse",
@@ -59,13 +87,20 @@ pub fn resolve_local_branch(repo: &Path, branch_ref: &str) -> CoreResult<Resolve
             "--end-of-options",
             &format!("{branch_ref}^{{commit}}"),
         ],
+        limits,
+        128,
     )?)?;
     if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(CoreError::InvalidRequest {
             reason: "Git returned an invalid full commit object ID".into(),
         });
     }
-    let object_format = text(git(&root, &["rev-parse", "--show-object-format"])?)?;
+    let object_format = text(git_with_limits(
+        &root,
+        &["rev-parse", "--show-object-format"],
+        limits,
+        128,
+    )?)?;
     Ok(ResolvedCommit {
         branch_ref: branch_ref.into(),
         oid,
@@ -76,6 +111,13 @@ pub fn read_resolved_commit(
     repo: &Path,
     commit: &ResolvedCommit,
 ) -> CoreResult<Vec<CommittedFile>> {
+    read_resolved_commit_with_limits(repo, commit, &GitResourceLimits::default())
+}
+pub fn read_resolved_commit_with_limits(
+    repo: &Path,
+    commit: &ResolvedCommit,
+    limits: &GitResourceLimits,
+) -> CoreResult<Vec<CommittedFile>> {
     validate_branch_ref(&commit.branch_ref)?;
     if !matches!(commit.oid.len(), 40 | 64) || !commit.oid.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(CoreError::InvalidRequest {
@@ -83,8 +125,15 @@ pub fn read_resolved_commit(
         });
     }
     let root = validate_repo_path(repo)?;
-    let raw = git(&root, &["ls-tree", "-rz", "--full-tree", &commit.oid])?.stdout;
+    let raw = git_with_limits(
+        &root,
+        &["ls-tree", "-rz", "--full-tree", &commit.oid],
+        limits,
+        limits.max_stdout_bytes,
+    )?
+    .stdout;
     let mut files = Vec::new();
+    let mut total_bytes = 0usize;
     for item in raw.split(|b| *b == 0).filter(|b| !b.is_empty()) {
         let separator =
             item.iter()
@@ -132,7 +181,48 @@ pub fn read_resolved_commit(
                 reason: "committed path escapes repository root".into(),
             });
         }
-        let bytes = git(&root, &["cat-file", "blob", blob_oid])?.stdout;
+        if files.len() >= limits.max_source_files {
+            return Err(CoreError::InvalidRequest {
+                reason: "source file count exceeded its configured limit".into(),
+            });
+        }
+        let size_out = git_with_limits(&root, &["cat-file", "-s", blob_oid], limits, 64)?.stdout;
+        let size = std::str::from_utf8(&size_out)
+            .ok()
+            .and_then(|x| x.trim().parse::<usize>().ok())
+            .ok_or(CoreError::InvalidRequest {
+                reason: "invalid Git blob size".into(),
+            })?;
+        if size > limits.max_file_bytes
+            || total_bytes
+                .checked_add(size)
+                .is_none_or(|n| n > limits.max_snapshot_bytes)
+        {
+            return Err(CoreError::InvalidRequest {
+                reason: "source file or aggregate snapshot exceeded its configured byte limit"
+                    .into(),
+            });
+        }
+        let bytes = git_with_limits(
+            &root,
+            &["cat-file", "blob", blob_oid],
+            limits,
+            limits.max_file_bytes,
+        )?
+        .stdout;
+        if bytes.len() != size {
+            return Err(CoreError::InvalidRequest {
+                reason: "Git blob size changed while reading".into(),
+            });
+        }
+        total_bytes += size;
+        if bytes.starts_with(b"version https://git-lfs.github.com/spec/v1\n")
+            || bytes.starts_with(b"version https://git-lfs.github.com/spec/v1\r\n")
+        {
+            return Err(CoreError::InvalidRequest {
+                reason: "selected tree contains an unsupported Git LFS pointer".into(),
+            });
+        }
         files.push(CommittedFile {
             path: relative_path.to_path_buf(),
             oid: blob_oid.into(),
@@ -147,7 +237,14 @@ pub fn acquire_local_branch(
     repo: &Path,
     branch_ref: &str,
 ) -> CoreResult<(ResolvedCommit, Vec<CommittedFile>)> {
-    let pinned = resolve_local_branch(repo, branch_ref)?;
-    let files = read_resolved_commit(repo, &pinned)?;
+    acquire_local_branch_with_limits(repo, branch_ref, &GitResourceLimits::default())
+}
+pub fn acquire_local_branch_with_limits(
+    repo: &Path,
+    branch_ref: &str,
+    limits: &GitResourceLimits,
+) -> CoreResult<(ResolvedCommit, Vec<CommittedFile>)> {
+    let pinned = resolve_local_branch_with_limits(repo, branch_ref, limits)?;
+    let files = read_resolved_commit_with_limits(repo, &pinned, limits)?;
     Ok((pinned, files))
 }

@@ -14,11 +14,13 @@ engram-domain = { path = "../../core/domain", version = "0.1.0" }
 engram-knowledge = { path = "../../core/knowledge", version = "0.1.0" }
 futures.workspace = true
 ignore.workspace = true
+libc = "0.2"
 rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_norway = "0.9"
 sha2.workspace = true
+url = "2.5.8"
 
 [dev-dependencies]
 engram-store-sqlite = { path = "../sqlite", version = "0.1.0" }

@@ -31,13 +31,20 @@ pub fn validate_repo_path(path: &Path) -> CoreResult<PathBuf> {
             reason: "registered repository path is not a directory".into(),
         });
     }
-    let git = p.join(".git");
-    if !git.exists() {
+    let git_dir = if p.join(".git").is_dir() {
+        p.join(".git")
+    } else if p.join(".git").is_file() {
         return Err(CoreError::InvalidRequest {
-            reason: "registered local repository has no .git directory".into(),
+            reason: "linked worktree metadata is unsupported".into(),
         });
-    }
-    if p.join(".git/objects/info/alternates").exists() {
+    } else if p.join("HEAD").is_file() && p.join("objects").is_dir() && p.join("config").is_file() {
+        p.clone()
+    } else {
+        return Err(CoreError::InvalidRequest {
+            reason: "registered path is not a supported Git repository".into(),
+        });
+    };
+    if git_dir.join("objects/info/alternates").exists() {
         return Err(CoreError::InvalidRequest {
             reason: "repository object alternates are unsupported".into(),
         });

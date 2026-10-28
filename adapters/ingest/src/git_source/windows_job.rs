@@ -259,7 +259,15 @@ fn retry_pending() {
     let mut index = 0;
     while index < pending.len() {
         let entry = &mut pending[index];
-        if stop(&mut entry.child, &entry.job, Instant::now()).is_ok() {
+        // Same bounded allowance as finish: a zero deadline could never observe an
+        // exit issued moments earlier, stranding resolved custody in the registry.
+        if stop(
+            &mut entry.child,
+            &entry.job,
+            Instant::now() + Duration::from_millis(250),
+        )
+        .is_ok()
+        {
             pending.swap_remove(index);
         } else {
             index += 1;

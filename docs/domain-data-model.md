@@ -64,6 +64,12 @@ A generation identifies the full Git object ID, immutable retained snapshot dige
 
 The portable domain model defines validation for identity, canonical branch-ref shape, source object/digest identifiers, repository-relative paths, contributor lineage, attempt fencing metadata, and exact reset previews. Git ref resolution, repository acquisition, SQL persistence, and cryptographic preview verification remain adapter/coordinator responsibilities. The typed payload definitions are additive schema definitions under the existing contract package. Requiring a binding for code selection changes observable behavior and must be explicitly activated and documented as a breaking behavior change; it does not change existing v1 field meanings or infer a binding for legacy records. No automatic legacy migration is permitted.
 
+A binding-keyed staging manifest identifies the full authorized scope, RepoId, canonical ref, binding version, generation, pinned object ID, parser/filter fingerprints, and attempt ID.
+A knowledge readiness receipt identifies its attempt, generation, lane, and digest of the staged target/contributor and exact-source inventories.
+The adapter emits a receipt only after durable record, contributor, source descriptor, and manifest writes succeed.
+A matching retry reuses its durable receipt without reconciling or deleting an active generation.
+An internal manifest is not a publication pointer, a new scope authority, or evidence of cross-store ACID.
+
 ## Modeling Principles
 
 - Domain contracts are independent of storage engines, APIs, and language

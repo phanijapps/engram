@@ -11,6 +11,7 @@
 mod batch_ledger;
 pub mod changes;
 pub mod code_binding;
+mod generation_staging;
 mod graph;
 pub mod identity;
 mod ingest;
@@ -28,6 +29,7 @@ pub use code_binding::{
     AcquisitionMode, CodeBindingRepository, CodeEligibility, CodeEligibilityGate,
     ConstrainedCodeQuery, RepositoryRegistration, StageReceipt,
 };
+pub use generation_staging::CodeGenerationStaging;
 pub use graph::KnowledgeGraphRepository;
 pub use identity::EntityIdentityRepository;
 pub use ingest::{Chunker, IngestionService, SourceReader};

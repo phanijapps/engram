@@ -33,7 +33,7 @@ fn valid_oid(oid: &str, format: &str) -> bool {
     };
     oid.len() == length && oid.bytes().all(|b| b.is_ascii_hexdigit())
 }
-fn private_directory(path: &Path) -> CoreResult<()> {
+pub(crate) fn private_directory(path: &Path) -> CoreResult<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]

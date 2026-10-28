@@ -12,4 +12,5 @@ pub use objects::{
     resolve_local_branch_with_limits,
 };
 pub use safety::{validate_branch_ref, validate_repo_path};
+pub(crate) use snapshot::private_directory;
 pub use snapshot::{RetainedSnapshot, retain_snapshot};

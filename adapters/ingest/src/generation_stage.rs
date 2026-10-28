@@ -21,6 +21,7 @@ pub struct StagedDocument {
 }
 #[derive(Debug)]
 pub struct PreparedGeneration {
+    pub binding: CodeBinding,
     pub generation: CodeGeneration,
     pub documents: Vec<StagedDocument>,
     /// Target IDs and complete contributor inventories, including generation-owned repository anchors.
@@ -196,6 +197,7 @@ pub fn prepare_generation(
             .map_err(|_| invalid("invalid staged contributor lineage"))?;
     }
     Ok(PreparedGeneration {
+        binding: binding.clone(),
         generation: generation.clone(),
         documents,
         lineage,

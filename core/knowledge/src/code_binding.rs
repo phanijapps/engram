@@ -25,7 +25,8 @@ pub struct CodeEligibility {
     pub generations: Vec<String>,
     pub repository_ids: Vec<String>,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StageReceipt {
     pub attempt_id: String,
     pub generation_id: String,

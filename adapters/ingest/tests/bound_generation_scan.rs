@@ -244,3 +244,215 @@ mod task_009 {
         }
     }
 }
+
+mod task_010 {
+    use super::*;
+    use async_trait::async_trait;
+    use engram_ingest::{generation_manifest_key, stage_generation_records};
+    use engram_knowledge::{CodeGenerationStaging, CoreError, CoreResult};
+
+    struct FailedSourceStore(SqlKnowledgeStore);
+    #[async_trait]
+    impl KnowledgeRepository for FailedSourceStore {
+        async fn put_source(&self, s: KnowledgeSource) -> CoreResult<KnowledgeSource> {
+            self.0.put_source(s).await
+        }
+        async fn put_document(&self, d: SourceDocument) -> CoreResult<SourceDocument> {
+            self.0.put_document(d).await
+        }
+        async fn put_chunk(&self, c: KnowledgeChunk) -> CoreResult<KnowledgeChunk> {
+            self.0.put_chunk(c).await
+        }
+        async fn get_chunk(
+            &self,
+            id: &ChunkId,
+            scope: &Scope,
+        ) -> CoreResult<Option<KnowledgeChunk>> {
+            self.0.get_chunk(id, scope).await
+        }
+        async fn put_entity(&self, e: KnowledgeEntity) -> CoreResult<KnowledgeEntity> {
+            self.0.put_entity(e).await
+        }
+        async fn put_relationship(
+            &self,
+            r: KnowledgeRelationship,
+        ) -> CoreResult<KnowledgeRelationship> {
+            self.0.put_relationship(r).await
+        }
+    }
+    #[async_trait]
+    impl KnowledgeGraphRepository for FailedSourceStore {
+        async fn put_graph(&self, g: KnowledgeGraph) -> CoreResult<KnowledgeGraph> {
+            self.0.put_graph(g).await
+        }
+        async fn get_graph(
+            &self,
+            id: &KnowledgeGraphId,
+            scope: &Scope,
+        ) -> CoreResult<Option<KnowledgeGraph>> {
+            self.0.get_graph(id, scope).await
+        }
+        async fn neighbors(
+            &self,
+            id: &KnowledgeGraphId,
+            node: &EntityId,
+            scope: &Scope,
+            limit: Option<u32>,
+        ) -> CoreResult<Vec<KnowledgeRelationship>> {
+            self.0.neighbors(id, node, scope, limit).await
+        }
+    }
+    #[async_trait]
+    impl CodeGenerationStaging for FailedSourceStore {
+        async fn stage_lineage(
+            &self,
+            scope: &Scope,
+            id: &str,
+            lineage: &CodeLineage,
+        ) -> CoreResult<()> {
+            self.0.stage_lineage(scope, id, lineage).await
+        }
+        async fn stage_source(&self, _: &Scope, _: &IndexedSource) -> CoreResult<()> {
+            Err(CoreError::Adapter {
+                adapter: "fixture-source-stage".into(),
+                message: "injected durable source failure".into(),
+            })
+        }
+    }
+    #[test]
+    fn durable_receipt_order() {
+        let d = tempdir().unwrap();
+        let db = d.path().join("knowledge.db");
+        let b = binding();
+        let p = prepare(&b, "stage", &[file("a.rs", "pub fn stored() {}\n")]);
+        let failed = FailedSourceStore(SqlKnowledgeStore::open_file(&db).unwrap());
+        let root = d.path().join("manifests");
+        let key = generation_manifest_key(&b, &p, "attempt").unwrap();
+        let error =
+            block_on(stage_generation_records(&root, &b, &p, "attempt", &failed)).unwrap_err();
+        assert!(
+            matches!(error, CoreError::Adapter { adapter, .. } if adapter == "fixture-source-stage")
+        );
+        assert!(
+            !root.join(format!("{key}.json")).exists(),
+            "failed stage emitted readiness"
+        );
+        drop(failed);
+        let store = SqlKnowledgeStore::open_file(&db).unwrap();
+        let receipt = block_on(stage_generation_records(&root, &b, &p, "attempt", &store)).unwrap();
+        drop(store);
+        let store = SqlKnowledgeStore::open_file(&db).unwrap();
+        let connection = store.shared_connection();
+        let conn = connection.lock().unwrap();
+        let source_count: usize = conn
+            .query_row("SELECT count(*) FROM code_stage_sources", [], |r| r.get(0))
+            .unwrap();
+        let lineage_count: usize = conn
+            .query_row("SELECT count(*) FROM code_stage_lineage", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(source_count, p.documents.len());
+        assert_eq!(lineage_count, p.lineage.len());
+        let saved: engram_knowledge::StageReceipt =
+            serde_json::from_slice(&std::fs::read(root.join(format!("{key}.json"))).unwrap())
+                .unwrap();
+        assert_eq!(saved, receipt);
+    }
+    #[test]
+    fn manifest_binding_keys() {
+        let b = binding();
+        let files = [file("a.rs", "pub fn same() {}\n")];
+        let p = prepare(&b, "stage", &files);
+        let base = generation_manifest_key(&b, &p, "attempt").unwrap();
+        let mut keys = HashSet::from([base]);
+        assert!(keys.insert(generation_manifest_key(&b, &p, "other-attempt").unwrap()));
+        let mut other = b.clone();
+        other.scope.workspace = Some("b".into());
+        assert!(keys.insert(
+            generation_manifest_key(&other, &prepare(&other, "stage", &files), "attempt").unwrap()
+        ));
+        let mut other = b.clone();
+        other.repo_id = RepoId("different-repo".into());
+        assert!(keys.insert(
+            generation_manifest_key(&other, &prepare(&other, "stage", &files), "attempt").unwrap()
+        ));
+        let mut p = prepare(&b, "different-generation", &files);
+        assert!(keys.insert(generation_manifest_key(&b, &p, "attempt").unwrap()));
+        p.generation.parser_fingerprint = "changed-parser".into();
+        assert!(keys.insert(generation_manifest_key(&b, &p, "attempt").unwrap()));
+        p.generation.filter_fingerprint = "changed-filter".into();
+        assert!(keys.insert(generation_manifest_key(&b, &p, "attempt").unwrap()));
+    }
+    #[test]
+    fn idempotent_stage_resume() {
+        let d = tempdir().unwrap();
+        let b = binding();
+        let p = prepare(&b, "stage", &[file("a.rs", "pub fn retry() {}\n")]);
+        let db = d.path().join("knowledge.db");
+        let root = d.path().join("manifests");
+        let store = SqlKnowledgeStore::open_file(&db).unwrap();
+        let first = block_on(stage_generation_records(&root, &b, &p, "attempt", &store)).unwrap();
+        let chunk = block_on(store.get_chunk(&p.documents[0].records.chunks[0].id, &b.scope))
+            .unwrap()
+            .unwrap();
+        drop(store);
+        let store = SqlKnowledgeStore::open_file(&db).unwrap();
+        let second = block_on(stage_generation_records(&root, &b, &p, "attempt", &store)).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(
+            block_on(store.get_chunk(&chunk.id, &b.scope))
+                .unwrap()
+                .unwrap(),
+            chunk
+        );
+        let mut conflicting = prepare(&b, "stage", &[file("a.rs", "pub fn replaced() {}\n")]);
+        conflicting.generation = p.generation.clone();
+        assert!(
+            matches!(block_on(stage_generation_records(&root, &b, &conflicting, "attempt", &store)), Err(CoreError::InvalidRequest { reason }) if reason.contains("manifest"))
+        );
+        assert_eq!(
+            block_on(store.get_chunk(&chunk.id, &b.scope))
+                .unwrap()
+                .unwrap(),
+            chunk
+        );
+    }
+    #[test]
+    fn no_active_predelete() {
+        let d = tempdir().unwrap();
+        let b = binding();
+        let old = prepare(&b, "old", &[file("old.rs", "pub fn old() {}\n")]);
+        let store = SqlKnowledgeStore::open_file(d.path().join("knowledge.db")).unwrap();
+        let root = d.path().join("manifests");
+        block_on(stage_generation_records(
+            &root,
+            &b,
+            &old,
+            "attempt-old",
+            &store,
+        ))
+        .unwrap();
+        let old_graph = block_on(store.get_graph(&old.documents[0].graph.graph.id, &b.scope))
+            .unwrap()
+            .unwrap();
+        let new = prepare(&b, "new", &[file("new.rs", "pub fn new() {}\n")]);
+        block_on(stage_generation_records(
+            &root,
+            &b,
+            &new,
+            "attempt-new",
+            &store,
+        ))
+        .unwrap();
+        assert_eq!(
+            block_on(store.get_graph(&old_graph.id, &b.scope))
+                .unwrap()
+                .unwrap(),
+            old_graph
+        );
+        assert!(
+            block_on(store.get_chunk(&old.documents[0].records.chunks[0].id, &b.scope))
+                .unwrap()
+                .is_some()
+        );
+    }
+}

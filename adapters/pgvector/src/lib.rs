@@ -10,6 +10,8 @@
 
 pub mod cells;
 pub mod code_binding;
+mod code_binding_port;
+mod code_read_leases;
 pub mod connection;
 pub mod knowledge;
 pub mod memory;
@@ -17,9 +19,10 @@ pub mod schema;
 pub mod vector;
 
 pub use cells::{PgBeliefStore, PgHierarchyStore, PgMemoryService, PgProcedureStore};
+pub use code_binding_port::PgCodeBindingRepository;
 pub use connection::PgConnection;
 pub use knowledge::PgKnowledgeStore;
-pub use memory::{read_recent, write_memory, PgMemoryRow};
+pub use memory::{PgMemoryRow, read_recent, write_memory};
 pub use vector::PgVectorIndex;
 
 /// Content-hash for vector dedup (SHA-256 of the f32 bytes, like the SQLite adapter).

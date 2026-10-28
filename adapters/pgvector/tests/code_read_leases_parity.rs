@@ -35,6 +35,58 @@ impl Drop for BoundedChild {
     }
 }
 
+struct FixtureLeaseInsertBarrier {
+    connection: PgConnection,
+    trigger: String,
+    function: String,
+    key: String,
+}
+
+impl FixtureLeaseInsertBarrier {
+    fn install(url: &str, lease_id: &str, suffix: &str) -> Self {
+        let trigger = format!("terra_lease_insert_trigger_{suffix}");
+        let function = format!("terra_lease_insert_function_{suffix}");
+        let barrier_key = format!("terra-lease-insert-barrier-{suffix}");
+        let connection = PgConnection::connect(url).expect("fixture barrier connection");
+        let statement = format!(
+            "CREATE FUNCTION {function}() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.lease_id = '{lease_id}' THEN PERFORM pg_advisory_xact_lock(hashtextextended('{barrier_key}', 0)); END IF; RETURN NEW; END; $$; CREATE TRIGGER {trigger} BEFORE INSERT ON code_read_leases FOR EACH ROW EXECUTE FUNCTION {function}()"
+        );
+        block_on(connection.client.batch_execute(&statement))
+            .expect("install fixture insert barrier");
+        Self {
+            connection,
+            trigger,
+            function,
+            key: barrier_key,
+        }
+    }
+
+    fn cleanup(&self) {
+        let statement = format!(
+            "DROP TRIGGER IF EXISTS {} ON code_read_leases; DROP FUNCTION IF EXISTS {}()",
+            self.trigger, self.function
+        );
+        block_on(self.connection.client.batch_execute(&statement)).expect("remove fixture barrier");
+        let absent: bool = block_on(self.connection.client.query_one(
+            "SELECT NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname=$1) AND NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname=$2)",
+            &[&self.trigger, &self.function],
+        ))
+        .expect("verify fixture barrier removal")
+        .get(0);
+        assert!(absent, "fixture barrier objects remain");
+    }
+}
+
+impl Drop for FixtureLeaseInsertBarrier {
+    fn drop(&mut self) {
+        let statement = format!(
+            "DROP TRIGGER IF EXISTS {} ON code_read_leases; DROP FUNCTION IF EXISTS {}()",
+            self.trigger, self.function
+        );
+        let _ = block_on(self.connection.client.batch_execute(&statement));
+    }
+}
+
 #[test]
 fn neutral_repository_port_is_send_sync() {
     fn assert_port<T: CodeBindingRepository + Send + Sync>() {}
@@ -531,6 +583,25 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
         fencing_token: 1,
         expires_at,
     };
+    let url =
+        std::env::var("ENGRAM_TEST_PG_URL").expect("marked disposable PostgreSQL URL required");
+    let mut barrier = FixtureLeaseInsertBarrier::install(&url, &lease_id, &suffix);
+    let observer = PgConnection::connect(&url).expect("fixture barrier observer");
+    let holder_pid: i32 = block_on(
+        barrier
+            .connection
+            .client
+            .query_one("SELECT pg_backend_pid()", &[]),
+    )
+    .expect("fixture barrier backend pid")
+    .get(0);
+    let barrier_tx =
+        block_on(barrier.connection.client.transaction()).expect("fixture barrier transaction");
+    block_on(barrier_tx.execute(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+        &[&barrier.key],
+    ))
+    .expect("hold fixture insert barrier");
     let mut first = spawn_race_child(
         "acquire-global-id",
         &first_scope,
@@ -547,6 +618,8 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
     );
     wait_ready(&mut first);
     wait_ready(&mut second);
+    let first_pid = first.backend_pid.expect("first global-id child pid");
+    let second_pid = second.backend_pid.expect("second global-id child pid");
     for child in [&mut first, &mut second] {
         child
             .child
@@ -556,6 +629,26 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
             .write_all(b"G")
             .expect("release global-id child");
     }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut both_prechecks_waiting = false;
+    while std::time::Instant::now() < deadline {
+        let waiters: i64 = block_on(observer.client.query_one(
+            "SELECT count(DISTINCT waiter.pid) FROM pg_locks holder JOIN pg_locks waiter ON waiter.locktype=holder.locktype AND waiter.database IS NOT DISTINCT FROM holder.database AND waiter.classid IS NOT DISTINCT FROM holder.classid AND waiter.objid IS NOT DISTINCT FROM holder.objid AND waiter.objsubid IS NOT DISTINCT FROM holder.objsubid WHERE holder.locktype='advisory' AND holder.pid=$1 AND holder.granted AND waiter.pid IN ($2,$3) AND NOT waiter.granted",
+            &[&holder_pid, &first_pid, &second_pid],
+        ))
+        .expect("observe fixture barrier waiters")
+        .get(0);
+        if waiters == 2 {
+            both_prechecks_waiting = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(
+        both_prechecks_waiting,
+        "both child acquisitions did not reach the post-precheck insert barrier"
+    );
+    block_on(barrier_tx.commit()).expect("release fixture insert barrier");
     let first_output = collect_child(first);
     let second_output = collect_child(second);
     let first_won = first_output.lines().any(|line| line == "LEASE_OWNER");
@@ -581,6 +674,7 @@ fn postgres_global_lease_id_race_has_one_durable_owner() {
         block_on(store.release_read_lease(loser)),
         Err(CoreError::Conflict { reason }) if reason == "GenerationChanged"
     ));
+    barrier.cleanup();
 }
 
 #[ignore = "requires parent-authorized marked disposable PostgreSQL"]

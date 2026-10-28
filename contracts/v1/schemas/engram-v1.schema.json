@@ -2240,6 +2240,7 @@
         "idempotencyKey",
         "bindingVersion",
         "expectedEpoch",
+        "expectedActiveGeneration",
         "fencingToken",
         "state",
         "receiptKinds"
@@ -2288,6 +2289,12 @@
               "derived"
             ]
           }
+        },
+        "expectedActiveGeneration": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false

@@ -37,6 +37,12 @@ export const engramV1Schema = {
           "minimum": 1,
           "type": "integer"
         },
+        "expectedActiveGeneration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "expectedEpoch": {
           "minimum": 0,
           "type": "integer"
@@ -83,6 +89,7 @@ export const engramV1Schema = {
         "idempotencyKey",
         "bindingVersion",
         "expectedEpoch",
+        "expectedActiveGeneration",
         "fencingToken",
         "state",
         "receiptKinds"

@@ -36,6 +36,12 @@
           "minimum": 1,
           "type": "integer"
         },
+        "expectedActiveGeneration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "expectedEpoch": {
           "minimum": 0,
           "type": "integer"
@@ -82,6 +88,7 @@
         "idempotencyKey",
         "bindingVersion",
         "expectedEpoch",
+        "expectedActiveGeneration",
         "fencingToken",
         "state",
         "receiptKinds"

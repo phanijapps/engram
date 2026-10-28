@@ -192,6 +192,7 @@ export interface Metadata {
 }
 export interface CodeAttempt {
   bindingVersion: number;
+  expectedActiveGeneration: string | null;
   expectedEpoch: number;
   fencingToken: number;
   id: string;

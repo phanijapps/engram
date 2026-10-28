@@ -53,6 +53,7 @@ pub struct CodeAttempt {
     pub idempotency_key: String,
     pub binding_version: u64,
     pub expected_epoch: u64,
+    pub expected_active_generation: Option<String>,
     pub fencing_token: u64,
     pub state: CodeAttemptState,
     pub receipt_kinds: Vec<CodeReceiptKind>,
@@ -110,6 +111,7 @@ pub enum CodeBindingError {
     InvalidSource,
     InvalidResetPreview,
     InvalidAttempt,
+    PersistenceFailure,
 }
 
 impl CodeBinding {

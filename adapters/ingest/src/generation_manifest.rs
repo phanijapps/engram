@@ -151,12 +151,18 @@ where
     #[cfg(windows)]
     {
         use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::Foundation::ERROR_LOCK_VIOLATION;
         use windows_sys::Win32::Storage::FileSystem::{
             LOCKFILE_EXCLUSIVE_LOCK, LOCKFILE_FAIL_IMMEDIATELY, LockFileEx,
         };
+        use windows_sys::Win32::System::IO::OVERLAPPED;
         // Kernel-held exclusive byte-range lock on the whole lock file; the OS releases
         // it when the handle closes, including after a crash. Equivalent exclusion to
         // the Unix flock across and within processes (separate handles conflict).
+        // LockFileEx requires a valid OVERLAPPED even on this synchronous handle;
+        // a zero-initialized structure at offset zero spans the whole locked range and
+        // only needs to outlive this fail-immediately call, which returns before it.
+        let mut overlapped = OVERLAPPED::default();
         if unsafe {
             LockFileEx(
                 lock.as_raw_handle(),
@@ -164,13 +170,17 @@ where
                 0,
                 u32::MAX,
                 u32::MAX,
-                std::ptr::null_mut(),
+                &mut overlapped as *mut OVERLAPPED,
             )
         } == 0
         {
-            return Err(CoreError::Conflict {
-                reason: "generation staging is already owned by another process".into(),
-            });
+            let error = std::io::Error::last_os_error();
+            if error.raw_os_error() == Some(ERROR_LOCK_VIOLATION as i32) {
+                return Err(CoreError::Conflict {
+                    reason: "generation staging is already owned by another process".into(),
+                });
+            }
+            return Err(io_error(error));
         }
     }
     if let Ok(bytes) = fs::read(&final_path) {

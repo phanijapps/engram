@@ -132,17 +132,36 @@ pub fn retain_snapshot_with_limits(
                 .expect("owned snapshot directory");
             let mut file_identities = std::collections::BTreeMap::new();
             let mut directories = std::collections::BTreeSet::new();
-            // Create every zero-byte destination before writing any content. The destination filesystem
-            // rejects case/normalization/short-name aliases and file/directory conflicts itself.
+            let attempt_root = super::private_storage::ordinary_resolution_path(&temp.path);
+            // Create every zero-byte destination before writing any content, through
+            // ordinary native path resolution inside the verified owned attempt: the
+            // destination filesystem itself rejects case/normalization/short-name
+            // aliases and file/directory conflicts at creation. create_new never
+            // truncates; any resolution failure rejects the attempt rather than
+            // falling back to a broader namespace.
             for (path, file) in &inventory {
                 let parent = file.path.parent().unwrap_or(Path::new(""));
-                let dir = temp.ensure_subdirectory(parent).map_err(io_error)?;
-                let out = dir
-                    .create_file(Path::new(file.path.file_name().expect("validated leaf")))
+                temp.ensure_subdirectory(parent).map_err(io_error)?;
+                let mut options = std::fs::OpenOptions::new();
+                options.write(true).create_new(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    options.mode(0o600);
+                }
+                let placeholder = options
+                    .open(attempt_root.join(&file.path))
                     .map_err(io_error)?;
+                let created_metadata = placeholder.metadata().map_err(io_error)?;
+                if !created_metadata.is_file() {
+                    return Err(invalid(
+                        "snapshot placeholder is not a regular owned file",
+                    ));
+                }
                 file_identities.insert(
                     path.clone(),
-                    super::private_storage::file_identity(&out).map_err(io_error)?,
+                    super::private_storage::std_file_identity(&placeholder)
+                        .map_err(io_error)?,
                 );
                 let mut path = parent;
                 while !path.as_os_str().is_empty() {
@@ -160,16 +179,26 @@ pub fn retain_snapshot_with_limits(
                 );
             }
             // Identity preflight before any payload byte: every placeholder, including
-            // directory components, must reopen through ordinary native path resolution
-            // (where short-name, case and Unicode aliasing actually apply) to the exact
-            // identity captured at creation. No spelling, sorting or case folding is
-            // guessed: an actual alias conflict resolves to a different identity and is
-            // rejected; independently representable names keep distinct identities.
-            let attempt_root = super::private_storage::ordinary_resolution_path(&temp.path);
-            for (path, _) in &inventory {
+            // directory components, must agree across BOTH resolution namespaces —
+            // the capability-relative handle it was created under and an ordinary
+            // native reopen (where short-name, case and Unicode aliasing apply). No
+            // spelling, sorting or case folding is guessed: an actual alias conflict
+            // fails creation or resolves to a different identity and is rejected;
+            // independently representable names keep distinct identities and exact
+            // bytes.
+            for (path, file) in &inventory {
+                let expected = &file_identities[path];
+                let mut cap_options = cap_std::fs::OpenOptions::new();
+                cap_options.read(true);
+                let cap = temp.dir.open_with(&file.path, &cap_options).map_err(io_error)?;
+                if super::private_storage::file_identity(&cap).map_err(io_error)? != *expected {
+                    return Err(invalid(
+                        "snapshot placeholder resolves to a different identity under capability-relative resolution",
+                    ));
+                }
                 let native = super::private_storage::native_file_identity(&attempt_root.join(path))
                     .map_err(io_error)?;
-                if native != file_identities[path] {
+                if native != *expected {
                     return Err(invalid(
                         "snapshot placeholder resolves to a different identity under native path resolution",
                     ));

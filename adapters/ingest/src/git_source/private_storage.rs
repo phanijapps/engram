@@ -95,6 +95,24 @@ pub(crate) fn native_directory_identity(path: &Path) -> io::Result<DirectoryId> 
         platform::identity_handle(file.as_raw_handle())
     }
 }
+/// Identity taken directly from an ordinary native handle, for placeholders that
+/// were themselves created through ordinary path resolution inside the owned attempt.
+pub(crate) fn std_file_identity(file: &std::fs::File) -> io::Result<DirectoryId> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let meta = file.metadata()?;
+        Ok(DirectoryId {
+            volume: meta.dev(),
+            index: (meta.ino() as u128).to_le_bytes(),
+        })
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::io::AsRawHandle;
+        platform::identity_handle(file.as_raw_handle())
+    }
+}
 #[cfg(unix)]
 fn std_native_identity(path: &Path) -> io::Result<DirectoryId> {
     use std::os::unix::fs::MetadataExt;

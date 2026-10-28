@@ -360,11 +360,21 @@ fn output_error() -> CoreError {
 #[cfg(test)]
 mod task_008 {
     use super::*;
+    fn fixture_python() -> std::ffi::OsString {
+        if let Some(python) = std::env::var_os("ENGRAM_TEST_PYTHON") {
+            return python;
+        }
+        if cfg!(windows) {
+            "python".into()
+        } else {
+            "python3".into()
+        }
+    }
     #[test]
     fn child_timeout_is_killed_and_reaped() {
         let mut limits = GitResourceLimits::default();
         limits.subprocess_timeout = Duration::from_millis(50);
-        let mut command = Command::new("python3");
+        let mut command = Command::new(fixture_python());
         command.args(["-c", "import time; time.sleep(10)"]);
         let start = Instant::now();
         let result = run_limited(&mut command, &limits, 64);
@@ -378,12 +388,12 @@ mod task_008 {
         let mut limits = GitResourceLimits::default();
         limits.subprocess_timeout = Duration::from_secs(2);
         limits.max_stderr_bytes = 64;
-        let mut stdout = Command::new("python3");
+        let mut stdout = Command::new(fixture_python());
         stdout.args(["-c", "import sys; sys.stdout.write('x'*10000000)"]);
         assert!(
             matches!(run_limited(&mut stdout, &limits, 128), Err(CoreError::InvalidRequest { reason }) if reason.contains("output exceeded"))
         );
-        let mut stderr = Command::new("python3");
+        let mut stderr = Command::new(fixture_python());
         stderr.args(["-c", "import sys; sys.stderr.write('x'*10000000)"]);
         assert!(
             matches!(run_limited(&mut stderr, &limits, 128), Err(CoreError::InvalidRequest { reason }) if reason.contains("output exceeded"))
@@ -396,7 +406,7 @@ mod task_008 {
         let marker = temp.path().join("descendant.pid");
         let mut limits = GitResourceLimits::default();
         limits.subprocess_timeout = Duration::from_millis(700);
-        let mut command = Command::new("python3");
+        let mut command = Command::new(fixture_python());
         command.args(["-c","import subprocess,sys; p=subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); open(sys.argv[1],'w').write(str(p.pid))"]).arg(&marker);
         let mut observed = false;
         #[cfg(windows)]
@@ -457,7 +467,7 @@ mod task_008 {
     }
     #[test]
     fn task_008_early_child_exit_preserves_status_and_reaps_without_io_threads() {
-        let mut command = Command::new("python3");
+        let mut command = Command::new(fixture_python());
         command.args(["-c", "import sys;sys.exit(7)"]);
         let start = Instant::now();
         let output = run_limited(&mut command, &GitResourceLimits::default(), 128).unwrap();
@@ -471,7 +481,7 @@ mod task_008 {
     fn task_008_session_escape_cannot_hold_reader_threads() {
         let dir = tempfile::tempdir().unwrap();
         let pid_path = dir.path().join("escaped.pid");
-        let mut command = Command::new("python3");
+        let mut command = Command::new(fixture_python());
         command.args(["-c", "import os,sys,time; p=os.fork();\nif p==0:\n os.setsid(); open(sys.argv[1],'w').write(str(os.getpid())); time.sleep(30)\nelse:\n time.sleep(30)"]).arg(&pid_path);
         let mut limits = GitResourceLimits::default();
         limits.subprocess_timeout = Duration::from_millis(300);
@@ -495,7 +505,7 @@ mod task_008 {
     }
     #[test]
     fn task_008_blocked_stdin_is_pre_admitted_and_never_uses_an_io_thread() {
-        let mut command = Command::new("python3");
+        let mut command = Command::new(fixture_python());
         command.args(["-c", "import time; time.sleep(30)"]);
         let mut limits = GitResourceLimits::default();
         limits.subprocess_timeout = Duration::from_millis(50);
@@ -508,7 +518,7 @@ mod task_008 {
     }
     #[test]
     fn storage_budget_checked_before_process_completion() {
-        let mut command = Command::new("python3");
+        let mut command = Command::new(fixture_python());
         command.args(["-c", "import time; time.sleep(30)"]);
         let start = Instant::now();
         let result = run_limited_checked(&mut command, &GitResourceLimits::default(), 128, || {

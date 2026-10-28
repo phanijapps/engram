@@ -18,6 +18,38 @@ fn invalid(reason: &str) -> CoreError {
         reason: reason.into(),
     }
 }
+/// Win32 path normalization resolves a name shaped like a generated 8.3 alias
+/// (`ABCDEF~1.EXT`) to the aliased long file, while capability-relative
+/// literal opens address the name itself. Reject that shape during preflight
+/// so a retained tree never depends on which namespace a later reader uses.
+#[cfg(windows)]
+fn windows_short_name_alias(name: &str) -> bool {
+    if !name.contains('~') {
+        return false;
+    }
+    let (stem, ext) = match name.split_once('.') {
+        Some((stem, ext)) => (stem, Some(ext)),
+        None => (name, None),
+    };
+    let Some((base, tail)) = stem.split_once('~') else {
+        return false;
+    };
+    let stem_matches = stem.len() <= 8
+        && !base.is_empty()
+        && base.len() <= 6
+        && base
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'$')
+        && !tail.is_empty()
+        && tail.bytes().all(|b| b.is_ascii_digit());
+    if !stem_matches {
+        return false;
+    }
+    match ext {
+        Some(ext) => ext.len() <= 3 && ext.bytes().all(|b| b.is_ascii_alphanumeric()),
+        None => true,
+    }
+}
 fn valid_oid(oid: &str, format: &str) -> bool {
     let length = match format {
         "sha1" => 40,
@@ -124,76 +156,85 @@ pub fn retain_snapshot_with_limits(
         ),
         "snapshot-retention",
     )?;
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let temp = attempt
-            .directory
-            .as_ref()
-            .expect("owned snapshot directory");
-        let mut preflight = Vec::new();
-        let mut directories = std::collections::BTreeSet::new();
-        // Create every zero-byte destination before writing any content. The destination filesystem
-        // rejects case/normalization/short-name aliases and file/directory conflicts itself.
-        for (_, file) in &inventory {
-            let parent = file.path.parent().unwrap_or(Path::new(""));
-            let dir = temp.ensure_subdirectory(parent).map_err(io_error)?;
-            let out = dir
-                .create_file(Path::new(file.path.file_name().expect("validated leaf")))
-                .map_err(io_error)?;
-            preflight.push(super::private_storage::file_identity(&out).map_err(io_error)?);
-            let mut path = parent;
-            while !path.as_os_str().is_empty() {
-                directories.insert(path.to_path_buf());
-                path = path.parent().unwrap_or(Path::new(""));
-            }
-        }
-        let mut hash = Sha256::new();
-        for ((path, file), expected) in inventory.iter().zip(preflight) {
-            let mut options = cap_std::fs::OpenOptions::new();
-            options.write(true);
-            let mut out = temp.dir.open_with(&file.path, &options).map_err(io_error)?;
-            let actual = out.metadata().map_err(io_error)?;
-            if !actual.is_file()
-                || actual.len() != 0
-                || super::private_storage::file_identity(&out).map_err(io_error)? != expected
-            {
-                return Err(invalid("snapshot preflight identity changed"));
-            }
-            #[cfg(unix)]
-            {
-                use cap_std::fs::MetadataExt;
-                if actual.nlink() != 1 || actual.uid() != unsafe { libc::geteuid() } {
-                    return Err(invalid("snapshot file ownership/link identity changed"));
+    let result =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let temp = attempt
+                .directory
+                .as_ref()
+                .expect("owned snapshot directory");
+            let mut preflight = Vec::new();
+            let mut directories = std::collections::BTreeSet::new();
+            // Create every zero-byte destination before writing any content. The destination filesystem
+            // rejects case/normalization/short-name aliases and file/directory conflicts itself.
+            for (_, file) in &inventory {
+                #[cfg(windows)]
+                if file.path.components().any(|component| {
+                    windows_short_name_alias(&component.as_os_str().to_string_lossy())
+                }) {
+                    return Err(invalid(
+                        "snapshot inventory contains a Windows short-name alias",
+                    ));
+                }
+                let parent = file.path.parent().unwrap_or(Path::new(""));
+                let dir = temp.ensure_subdirectory(parent).map_err(io_error)?;
+                let out = dir
+                    .create_file(Path::new(file.path.file_name().expect("validated leaf")))
+                    .map_err(io_error)?;
+                preflight.push(super::private_storage::file_identity(&out).map_err(io_error)?);
+                let mut path = parent;
+                while !path.as_os_str().is_empty() {
+                    directories.insert(path.to_path_buf());
+                    path = path.parent().unwrap_or(Path::new(""));
                 }
             }
-            hash.update((path.len() as u64).to_le_bytes());
-            hash.update(path.as_bytes());
-            hash.update(file.mode.as_bytes());
-            hash.update((file.bytes.len() as u64).to_le_bytes());
-            hash.update(&file.bytes);
-            out.write_all(&file.bytes).map_err(io_error)?;
-            let mut permissions = actual.permissions();
-            permissions.set_readonly(true);
-            out.set_permissions(permissions).map_err(io_error)?;
-            out.sync_all().map_err(io_error)?;
-        }
-        for path in directories.iter().rev() {
-            temp.child(path)
-                .map_err(io_error)?
-                .sync()
-                .map_err(io_error)?;
-        }
-        temp.sync().map_err(io_error)?;
-        Ok(hash
-            .finalize()
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>())
-    }))
-    .unwrap_or_else(|_| {
-        Err(invalid(
-            "snapshot operation unwound; failed-attempt cleanup retains exact custody",
-        ))
-    });
+            let mut hash = Sha256::new();
+            for ((path, file), expected) in inventory.iter().zip(preflight) {
+                let mut options = cap_std::fs::OpenOptions::new();
+                options.write(true);
+                let mut out = temp.dir.open_with(&file.path, &options).map_err(io_error)?;
+                let actual = out.metadata().map_err(io_error)?;
+                if !actual.is_file()
+                    || actual.len() != 0
+                    || super::private_storage::file_identity(&out).map_err(io_error)? != expected
+                {
+                    return Err(invalid("snapshot preflight identity changed"));
+                }
+                #[cfg(unix)]
+                {
+                    use cap_std::fs::MetadataExt;
+                    if actual.nlink() != 1 || actual.uid() != unsafe { libc::geteuid() } {
+                        return Err(invalid("snapshot file ownership/link identity changed"));
+                    }
+                }
+                hash.update((path.len() as u64).to_le_bytes());
+                hash.update(path.as_bytes());
+                hash.update(file.mode.as_bytes());
+                hash.update((file.bytes.len() as u64).to_le_bytes());
+                hash.update(&file.bytes);
+                out.write_all(&file.bytes).map_err(io_error)?;
+                let mut permissions = actual.permissions();
+                permissions.set_readonly(true);
+                out.set_permissions(permissions).map_err(io_error)?;
+                out.sync_all().map_err(io_error)?;
+            }
+            for path in directories.iter().rev() {
+                temp.child(path)
+                    .map_err(io_error)?
+                    .sync()
+                    .map_err(io_error)?;
+            }
+            temp.sync().map_err(io_error)?;
+            Ok(hash
+                .finalize()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>())
+        }))
+        .unwrap_or_else(|_| {
+            Err(invalid(
+                "snapshot operation unwound; failed-attempt cleanup retains exact custody",
+            ))
+        });
     let digest = match result {
         Ok(digest) => digest,
         Err(error) => return attempt.finish(Err(error)),
@@ -256,6 +297,17 @@ mod tests {
         assert_eq!(retained.digest, other.digest);
         assert!(retain_snapshot(&temp.path().join("first"), commit(), &reversed).is_err());
         assert!(retained.root.is_dir());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn task_008_windows_short_name_alias_shapes_are_rejected() {
+        assert!(super::windows_short_name_alias("LONGFI~1.RS"));
+        assert!(super::windows_short_name_alias("abcdef~12"));
+        assert!(!super::windows_short_name_alias("case.rs"));
+        assert!(!super::windows_short_name_alias("\u{e9}.rs"));
+        assert!(!super::windows_short_name_alias("foo~1.tar.gz"));
+        assert!(!super::windows_short_name_alias("LongFileName.rs"));
+        assert!(!super::windows_short_name_alias("a~b.rs"));
     }
     #[test]
     fn task_008_retention_preflights_host_aliases_before_content_writes() {

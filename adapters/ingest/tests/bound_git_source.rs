@@ -75,6 +75,9 @@ fn keygen(kind: &str, path: &Path) {
     assert!(output.status.success(), "test-only key generation failed");
 }
 #[cfg(windows)]
+#[path = "../src/git_source/bounded_process.rs"]
+mod bounded_process;
+#[cfg(windows)]
 #[path = "../src/git_source/windows_job.rs"]
 mod windows_job;
 struct OwnedFixtureProcess {

@@ -41,8 +41,8 @@ use engram_domain::{
 use engram_memory::MemoryService;
 use engram_retrieval::compose_context;
 use engram_retrieval::{
-    CodeEligibilityResolver, ReciprocalFusionConfig, ReciprocalRankFusion,
-    RetrievalCompositionInput, RetrievalIndex, resolve_view,
+    CandidateEvidence, CandidateEvidenceResolver, CodeEligibilityResolver, ReciprocalFusionConfig,
+    ReciprocalRankFusion, RetrievalCompositionInput, RetrievalIndex, resolve_view,
 };
 use engram_runtime::{CoreError, CoreResult};
 use futures::future::join_all;
@@ -82,6 +82,7 @@ pub struct SqlUnifiedRecall {
     /// the view once and reuses it for the post-lane guard. `None` keeps
     /// the historical behavior (no binding system in scope).
     code_eligibility: Option<Arc<dyn CodeEligibilityResolver>>,
+    candidate_evidence: Option<Arc<dyn CandidateEvidenceResolver>>,
 }
 
 impl SqlUnifiedRecall {
@@ -123,6 +124,7 @@ impl SqlUnifiedRecall {
             reranker,
             trust: engram_retrieval::TrustWeights::default(),
             code_eligibility: None,
+            candidate_evidence: None,
         }
     }
 
@@ -132,6 +134,15 @@ impl SqlUnifiedRecall {
     /// surviving candidate (defense in depth for lanes that cannot constrain
     /// internally) so ineligible code never reaches rerank input or
     /// `compose_context`. Non-code candidates are never removed (AC-006).
+    /// Wires canonical evidence for degraded code-authority handling.
+    pub fn with_candidate_evidence(
+        mut self,
+        candidate_evidence: Arc<dyn CandidateEvidenceResolver>,
+    ) -> Self {
+        self.candidate_evidence = Some(candidate_evidence);
+        self
+    }
+
     pub fn with_code_eligibility(
         mut self,
         code_eligibility: Arc<dyn CodeEligibilityResolver>,
@@ -189,12 +200,9 @@ impl UnifiedRecall for SqlUnifiedRecall {
                 return view.allows(candidate.target_id.as_str(), false);
             }
             if authority_failed {
-                // Fail closed for code-capable target types; keep the rest.
-                return !matches!(
-                    candidate.target_type,
-                    engram_domain::RetrievalTargetType::Chunk
-                        | engram_domain::RetrievalTargetType::Entity
-                );
+                // The asynchronous canonical-evidence pass below decides this
+                // branch.  Do not use target kind, metadata, or a producer flag.
+                return true;
             }
             true
         };
@@ -308,8 +316,30 @@ impl UnifiedRecall for SqlUnifiedRecall {
         // constraint — is dropped here rather than entering the composed
         // context budget. On AUTHORITY FAILURE the same closed rule denies
         // code-capable targets (finding 6).
-        if code_view.is_some() || authority_failed {
+        if code_view.is_some() {
             candidates.retain(|candidate| eligible_candidate(candidate));
+        } else if authority_failed {
+            let Some(evidence) = &self.candidate_evidence else {
+                candidates.clear();
+                return compose_context(RetrievalCompositionInput {
+                    request: &request,
+                    fusion: &ReciprocalRankFusion::new(self.fusion.clone()),
+                    reranker: self.reranker.as_deref(),
+                    candidates,
+                    omitted,
+                    source_failures,
+                    created_at: now,
+                });
+            };
+            let mut allowed = Vec::with_capacity(candidates.len());
+            for candidate in candidates {
+                match evidence.evidence(&candidate, &request).await {
+                    Ok(CandidateEvidence::Ordinary) => allowed.push(candidate),
+                    Ok(CandidateEvidence::CodeDependent | CandidateEvidence::Unknown) => {}
+                    Err(error) => source_failures.push(lane_failure("candidate_evidence", &error)),
+                }
+            }
+            candidates = allowed;
         }
 
         // ---- Fuse + compose via the existing RRF + compose_context -----------

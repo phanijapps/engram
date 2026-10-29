@@ -539,6 +539,16 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
             fusion,
             reranker,
         );
+        let unified = match &knowledge_store {
+            Some(knowledge_handle) => unified.with_candidate_evidence(Arc::new(
+                crate::candidate_evidence::RepositoryCandidateEvidence::new(
+                    memory_handle.clone() as Arc<dyn engram_memory::MemoryRepository>,
+                    belief_handle.clone() as Arc<dyn engram_belief::BeliefRepository>,
+                    knowledge_handle.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
+                ),
+            )),
+            None => unified,
+        };
         recall = Some(Arc::new(unified));
         unified_recall_state = CapabilityState::Supported;
     }

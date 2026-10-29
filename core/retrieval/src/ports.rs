@@ -29,6 +29,29 @@ pub trait RetrievalIndex: Send + Sync {
     ) -> CoreResult<Vec<RetrievalResult>>;
 }
 
+/// Canonical evidence for deciding whether a candidate can survive an
+/// unavailable code-authority source.
+///
+/// This stays inside orchestration.  It is not serialized on `RetrievalResult`
+/// and cannot be supplied by an arbitrary retrieval producer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CandidateEvidence {
+    Ordinary,
+    CodeDependent,
+    Unknown,
+}
+
+/// Resolves candidate evidence from the owning canonical stores under the
+/// request scope and policy boundary.
+#[async_trait]
+pub trait CandidateEvidenceResolver: Send + Sync {
+    async fn evidence(
+        &self,
+        candidate: &RetrievalResult,
+        request: &RetrievalRequest,
+    ) -> CoreResult<CandidateEvidence>;
+}
+
 /// Merges and reranks candidates from multiple retrieval sources.
 ///
 /// Implementations should preserve or populate `FusionTrace` so callers can see

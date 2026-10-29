@@ -1376,6 +1376,11 @@ mod authority_tests {
             knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
             memory.retrieval_authorizer(),
             Some(ownership.clone() as Arc<dyn engram_knowledge::CodeBindingRepository>),
+            // Real graph repository, mirroring the composed views above: the
+            // graphless fixture records classify through graph_lane_default
+            // via the configured authorizer, while a graph-owned record
+            // would resolve its canonical graph policy instead of denying.
+            Some(knowledge.clone() as Arc<dyn engram_knowledge::KnowledgeGraphRepository>),
         );
         let request = RetrievalRequest {
             query: "parse".to_string(),

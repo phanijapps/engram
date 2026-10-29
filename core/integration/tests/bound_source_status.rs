@@ -341,6 +341,7 @@ mod task_017 {
     /// exact_bytes_and_spans: byte-exact committed content (CRLF + UTF-8
     /// preserved) with full/served digests and same-OID byte spans; bounds
     /// are enforced.
+    #[cfg(unix)]
     #[test]
     fn exact_bytes_and_spans() {
         let dir = tempfile::tempdir().expect("tempdir");

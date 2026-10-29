@@ -165,6 +165,7 @@ mod tests {
 
     /// Custody + integrity on a REAL retained snapshot: exact bytes serve;
     /// tampered bytes, symlink substitution and wrong digests deny sanitized.
+    #[cfg(unix)]
     #[test]
     fn retained_reads_validate_custody_and_digest() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -232,5 +233,31 @@ mod tests {
                 if reason.contains("ExactSourceUnavailable")),
             "missing storage must deny sanitized: {gone:?}"
         );
+    }
+
+    /// Portable positive custody coverage. Windows runs this against the real
+    /// retained adapter without importing Unix-only permission or symlink APIs.
+    #[cfg(windows)]
+    #[test]
+    fn retained_reads_exact_bytes_on_windows() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let storage = dir.path().join("retained");
+        let bytes = b"def alpha():\r\n    return 1\r\n".to_vec();
+        let files = vec![CommittedFile {
+            path: "src/mod.py".into(),
+            oid: "b".repeat(40),
+            mode: "100644".to_owned(),
+            bytes: bytes.clone(),
+        }];
+        let snapshot = retain_snapshot(&storage, commit(&"c".repeat(40)), &files).expect("retain");
+        let view = RetainedSnapshotReader::new(storage)
+            .read_span(
+                &snapshot.commit.oid,
+                "src/mod.py",
+                None,
+                &crate::hash::content_hash(&bytes),
+            )
+            .expect("exact retained source");
+        assert_eq!(view.bytes, bytes);
     }
 }

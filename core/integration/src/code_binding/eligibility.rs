@@ -13,6 +13,31 @@ fn changed() -> CoreError {
     }
 }
 impl CodeBindingCoordinator {
+    /// Resolve the published-generation eligibility view for retrieval lanes
+    /// and graph composition (task_013 / task_015, engine-neutral): the
+    /// scope's published generations + repositories intersected with the
+    /// request's `code_index_keys` narrowing. Requesting an unbound repository
+    /// selects nothing; the wildcard keeps exactly the published set.
+    pub async fn eligibility_view(
+        &self,
+        scope: &Scope,
+        requested_keys: Option<&[String]>,
+    ) -> CoreResult<engram_retrieval::BoundCodeView> {
+        let eligibility = self.store.eligibility(scope).await?;
+        let view = if eligibility.generations.is_empty() {
+            engram_retrieval::BoundCodeView::none_bound()
+        } else {
+            engram_retrieval::BoundCodeView::from_eligibility(
+                &engram_retrieval::BoundCodeEligibility {
+                    epoch: eligibility.epoch,
+                    generations: eligibility.generations,
+                    repositories: eligibility.repository_ids,
+                },
+            )
+        };
+        Ok(view.with_requested_keys(requested_keys))
+    }
+
     /// Pin all published repositories only after authorizing every repository in the set.
     pub async fn pin_read(
         &self,

@@ -475,6 +475,44 @@ mod task_015 {
         );
     }
 
+    /// artifact_suppression_filters_only_discovery_seeds: a File-only query
+    /// does not seed when artifacts are suppressed, but it does when callers
+    /// request artifacts.  The existing cross-repository symbol traversal
+    /// below proves those structural vertices remain in the traversal graph.
+    #[test]
+    fn artifact_suppression_filters_only_discovery_seeds() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (provider, _) = fixture(dir.path());
+        let suppressed = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "app",
+            Some(1),
+            Some(24),
+            Some(64),
+            false,
+        ))
+        .expect("suppressed artifact query");
+        assert!(
+            suppressed.is_empty(),
+            "an artifact-only match must not seed when suppression is false: {suppressed:?}"
+        );
+        let included = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "app",
+            Some(1),
+            Some(24),
+            Some(64),
+            true,
+        ))
+        .expect("included artifact query");
+        assert!(
+            included.iter().any(|node| node.id == "a-app-file"),
+            "the authorized file seeds only when requested: {included:?}"
+        );
+    }
+
     /// bound_cross_repo_edges: an authorized edge BETWEEN two bound
     /// published repositories stays traversable; an import that explicitly
     /// targets repo-b's IDENTICAL PATH resolves there (finding 10) even

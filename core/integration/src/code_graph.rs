@@ -280,11 +280,21 @@ impl EngramProvider {
         let max_nodes = max_nodes.unwrap_or(24);
         let max_edges = max_edges.unwrap_or(64);
         let universe = self.bound_graph_universe(scope, None).await?;
-        if !include_code_artifacts {
-            // Seed-list suppression mirrors the historical flag: structural
-            // artifacts don't SEED; authorized edges still traverse them.
-            let _ = &universe;
-        }
+        // Artifact suppression changes ONLY discovery seeds.  The full
+        // authorized universe remains available to traversal so a symbol can
+        // legitimately cross a File or Module vertex to another symbol.
+        let seed_nodes = universe
+            .nodes
+            .iter()
+            .filter(|(_, _, kind)| {
+                include_code_artifacts
+                    || !matches!(
+                        kind.as_deref(),
+                        Some("file") | Some("module") | Some("package")
+                    )
+            })
+            .cloned()
+            .collect::<Vec<_>>();
         let universe_labels = universe.labels.clone();
         let query_seed = query_text.clone();
         coordinator
@@ -295,6 +305,7 @@ impl EngramProvider {
                 GRAPH_READ_WINDOW,
                 move |_eligibility| {
                     let universe_labels = universe_labels.clone();
+                    let seed_nodes = seed_nodes.clone();
                     let query_text = query_seed.clone();
                     async move {
                         let universe = self.bound_graph_universe(scope, None).await?;
@@ -303,7 +314,7 @@ impl EngramProvider {
                             .iter()
                             .map(|(s, o, p)| (s.as_str(), o.as_str(), p.as_str()))
                             .collect();
-                        let nodes = universe.nodes.clone();
+                        let nodes = seed_nodes.clone();
                         let out = explore_query_by_id(
                             &edge_refs,
                             &nodes,

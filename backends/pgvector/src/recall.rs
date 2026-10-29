@@ -286,17 +286,37 @@ impl UnifiedRecall for PgUnifiedRecall {
             Err(e) => source_failures.push(lane("vector", e)),
         }
 
-        // Post-lane guard (task_013): every fused candidate is re-classified
-        // against the published generation set before compose_context, so an
-        // ineligible code target cannot enter the context budget even if a
-        // lane could not constrain internally. Non-code targets pass.
-        if let Some(resolver) = &self.code_eligibility {
-            let requested = request
-                .filters
-                .as_ref()
-                .and_then(|filters| filters.code_index_keys.as_deref());
-            let view = resolve_view(resolver.as_ref(), &request.scope, requested).await?;
+        // Post-lane guard (task_013): authority resolution is itself a
+        // degradable source.  A failed authority read must not abort ordinary
+        // memory/belief recall, but it must deny code-capable chunk/entity
+        // candidates rather than silently widening the page.
+        let mut authority_failed = false;
+        let code_view = match &self.code_eligibility {
+            Some(resolver) => {
+                let requested = request
+                    .filters
+                    .as_ref()
+                    .and_then(|filters| filters.code_index_keys.as_deref());
+                match resolve_view(resolver.as_ref(), &request.scope, requested).await {
+                    Ok(view) => Some(view),
+                    Err(error) => {
+                        source_failures.push(lane("code_eligibility", error));
+                        authority_failed = true;
+                        None
+                    }
+                }
+            }
+            None => None,
+        };
+        if let Some(view) = &code_view {
             candidates.retain(|candidate| view.allows(candidate.target_id.as_str(), false));
+        } else if authority_failed {
+            candidates.retain(|candidate| {
+                !matches!(
+                    candidate.target_type,
+                    RetrievalTargetType::Chunk | RetrievalTargetType::Entity
+                )
+            });
         }
 
         compose_context(RetrievalCompositionInput {

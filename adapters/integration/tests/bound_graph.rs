@@ -2974,9 +2974,24 @@ mod task_016 {
             .join()
             .expect("publisher thread")
             .expect_err("the publish operation cannot interleave with the held fence");
+        // Final r5 C3 (finding 4): the blocked-outcome predicate matches the
+        // SPECIFIC expected failure — the durable-authority storage failure
+        // (the held IMMEDIATE transaction's busy-timeout at the publish
+        // transaction boundary) — not merely the binding adapter's
+        // identity: an unrelated error from the same adapter (or a CAS
+        // conflict, which is a typed `Conflict`, not a lock failure) does
+        // not satisfy it.
         assert!(
-            matches!(&blocked, CoreError::Adapter { adapter, .. } if adapter == "engram-code-binding"),
-            "the publish operation itself fails against the HELD write fence with the durable-authority storage failure at the publish transaction boundary — not a generic error, and not an attempt-creation failure: {blocked:?}"
+            matches!(
+                &blocked,
+                CoreError::Adapter { adapter, message }
+                    if adapter == "engram-code-binding"
+                        && message.contains("durable code authority")
+            ),
+            "the publish operation itself fails against the HELD write fence with \
+             the durable-authority storage failure at the publish transaction \
+             boundary — the specific lock/conflict outcome, not just the adapter \
+             identity, and not an attempt-creation failure: {blocked:?}"
         );
         let lineage = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
             &*bindings,
@@ -3038,11 +3053,31 @@ mod task_016 {
             Some("gen-after-fence"),
             "the retried publication is the active generation: {advanced:?}"
         );
+        // Final r5 C3 (finding 4): the post-retry retirement proof RELOADS
+        // the durable lineage AFTER the successful publication retry — the
+        // earlier snapshot predates the retry and could not detect a retry
+        // that cleared or rewrote the retirement fact.
+        let reloaded = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
+            &*bindings,
+            &scope(),
+        ))
+        .expect("post-retry durable lineage reload");
+        let target = reloaded
+            .iter()
+            .find(|entry| entry.record_id == "a-render")
+            .expect("the retired target's durable lineage survives the retry");
         assert!(
-            lineage
-                .iter()
-                .any(|entry| entry.record_id == "a-render" && entry.retired),
-            "the retirement persists through the successful retry: {lineage:?}"
+            target.retired,
+            "the retirement persists through the successful publication retry \
+             (fresh post-retry read): {reloaded:?}"
+        );
+        assert_eq!(
+            target.repo_id, "repo-a",
+            "the retired target keeps its original repository association: {target:?}"
+        );
+        assert_eq!(
+            target.generation_id, "gen-a",
+            "the retired target keeps its original generation association: {target:?}"
         );
     }
 }

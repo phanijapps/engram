@@ -546,6 +546,7 @@ pub(crate) fn bootstrap_sqlite(config: &EngramConfig) -> CoreResult<EngramProvid
                     belief_handle.clone() as Arc<dyn engram_belief::BeliefRepository>,
                     knowledge_handle.clone() as Arc<dyn engram_knowledge::KnowledgeRepository>,
                     memory_handle.retrieval_authorizer(),
+                    None,
                 ),
             )),
             None => unified,

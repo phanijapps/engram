@@ -7,7 +7,7 @@ use engram_belief::BeliefRepository;
 use engram_domain::{
     EvidenceTargetType, KnowledgeChunkKind, RetrievalRequest, RetrievalResult, RetrievalTargetType,
 };
-use engram_knowledge::KnowledgeRepository;
+use engram_knowledge::{CodeBindingRepository, KnowledgeRepository};
 use engram_memory::MemoryRepository;
 use engram_retrieval::{CandidateEvidence, CandidateEvidenceResolver};
 use engram_runtime::{CoreResult, PolicyAuthorizer};
@@ -18,6 +18,7 @@ pub struct RepositoryCandidateEvidence {
     beliefs: Arc<dyn BeliefRepository>,
     knowledge: Arc<dyn KnowledgeRepository>,
     authorizer: Arc<dyn PolicyAuthorizer>,
+    ownership: Option<Arc<dyn CodeBindingRepository>>,
 }
 
 impl RepositoryCandidateEvidence {
@@ -26,12 +27,14 @@ impl RepositoryCandidateEvidence {
         beliefs: Arc<dyn BeliefRepository>,
         knowledge: Arc<dyn KnowledgeRepository>,
         authorizer: Arc<dyn PolicyAuthorizer>,
+        ownership: Option<Arc<dyn CodeBindingRepository>>,
     ) -> Self {
         Self {
             memory,
             beliefs,
             knowledge,
             authorizer,
+            ownership,
         }
     }
 }
@@ -155,7 +158,18 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                 .await?
             {
                 Some(record) if candidate.provenance == record.provenance => {
-                    Ok(CandidateEvidence::Unknown)
+                    let Some(ownership) = &self.ownership else {
+                        return Ok(CandidateEvidence::Unknown);
+                    };
+                    let lineage = ownership.target_lineage(&request.scope).await?;
+                    if lineage
+                        .iter()
+                        .any(|entry| entry.record_id == candidate.target_id)
+                    {
+                        Ok(CandidateEvidence::CodeDependent)
+                    } else {
+                        Ok(CandidateEvidence::Unknown)
+                    }
                 }
                 Some(_) | None => Ok(CandidateEvidence::Unknown),
             },

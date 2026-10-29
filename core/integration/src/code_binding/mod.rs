@@ -10,7 +10,7 @@ use engram_domain::{
 };
 use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
 pub use publication::CodeRebuildRequest;
-pub use source::{ExactReadCandidate, ParticipantExactSource};
+pub use source::{BoundParticipant, ExactReadCandidate, ParticipantExactSource};
 pub use status::CodeBindingStatus;
 
 /// Engine-neutral [`CodeEligibilityResolver`] over the durable

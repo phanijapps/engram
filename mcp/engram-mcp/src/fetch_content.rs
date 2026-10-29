@@ -203,28 +203,66 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
             participants,
         } => {
             if mode == "chunks" {
-                // Corrective r4/r5 (canonical 10): the bound path's
-                // best-effort reconstruction consumes ONLY the canonical
-                // current participants the operation validated —
-                // old-generation, unstamped and forged-stamp chunks can
-                // never inject fallback content.
-                let participant_ids: std::collections::BTreeSet<String> =
-                    participants.into_iter().collect();
-                let fallback_chunks: Vec<&engram_domain::KnowledgeChunk> = ordered
-                    .iter()
-                    .copied()
-                    .filter(|chunk| participant_ids.contains(chunk.id.as_str()))
-                    .collect();
-                let source = ordered
+                // Final r5 C4 (verification finding 1): the bound path's
+                // best-effort reconstruction emits ONLY authenticated
+                // retained bytes — each participant's DURABLE canonical
+                // span sliced out of the digest-validated revision blob.
+                // The mutable stored chunk text is NEVER consumed for
+                // bound code output: a current participant whose stored
+                // text was substituted (the retired neighbor's text,
+                // another file's content) rides through nothing — a
+                // validated participant ID is not a validated payload, so
+                // only the span's authenticated bytes can be served.
+                // Ordering/completeness match the stored-text stitch for
+                // legitimate data: every admitted participant's claimed
+                // span EQUALS its durable span, so durable-span order IS
+                // claim order, and the participant set is exactly the set
+                // the old ID filter would have admitted.
+                let mut participants = participants;
+                participants
+                    .sort_by_key(|participant| (participant.start_line, participant.end_line));
+                let mut parts: Vec<&str> = Vec::with_capacity(participants.len());
+                for participant in &participants {
+                    let (start, end) = participant.byte_span;
+                    let text = std::str::from_utf8(&full_view.bytes[start..end]).map_err(|_| {
+                        ToolError::new(
+                            -32602,
+                            format!(
+                                "bound chunks reconstruction unavailable: participant \
+                                     '{}' has a span that is not valid UTF-8 in the retained \
+                                     revision — use the default exact read (it returns the \
+                                     exact bytes, labeled)",
+                                participant.record_id
+                            ),
+                        )
+                    })?;
+                    if !text.is_empty() {
+                        parts.push(text);
+                    }
+                }
+                // The repository label comes from a PARTICIPANT row (the
+                // rows whose authenticated bytes are served) — never from
+                // a non-participant row that merely matched the path.
+                let source = participants
                     .first()
+                    .and_then(|participant| {
+                        ordered
+                            .iter()
+                            .find(|chunk| chunk.id.as_str() == participant.record_id)
+                    })
                     .map(|chunk| chunk.provenance.source.as_str())
                     .unwrap_or_default();
-                return stitch_chunks(
+                return stitch_parts(
                     &path,
                     source,
                     kind,
                     is_code,
-                    &fallback_chunks,
+                    &parts,
+                    participants.len(),
+                    participants
+                        .first()
+                        .map(|participant| participant.start_line),
+                    participants.last().map(|participant| participant.end_line),
                     max_bytes,
                     verbatim_fallback_note,
                 );
@@ -437,16 +475,11 @@ fn stitch_chunks(
     max_bytes: usize,
     verbatim_fallback_note: Option<String>,
 ) -> Result<Value, ToolError> {
-    let separator = if is_code { "\n" } else { "\n\n" };
     let parts: Vec<&str> = fallback_chunks
         .iter()
         .filter(|c| !c.text.is_empty())
         .map(|c| c.text.as_str())
         .collect();
-    let full = parts.join(separator);
-    let total_bytes = full.len();
-    let (content, truncated) = truncate_bytes(&full, max_bytes);
-
     let first_line = fallback_chunks
         .iter()
         .find_map(|c| c.location.as_ref().and_then(|l| l.start_line));
@@ -454,12 +487,49 @@ fn stitch_chunks(
         .iter()
         .rev()
         .find_map(|c| c.location.as_ref().and_then(|l| l.end_line));
+    stitch_parts(
+        path,
+        source,
+        kind,
+        is_code,
+        &parts,
+        fallback_chunks.len(),
+        first_line,
+        last_line,
+        max_bytes,
+        verbatim_fallback_note,
+    )
+}
+
+/// Shared best-effort reconstruction body: joins `parts` with the
+/// kind-appropriate separator, caps at `max_bytes`, and labels the output
+/// as a reconstruction (never exact source). The BOUND path feeds it
+/// slices of digest-validated retained bytes at authenticated durable
+/// spans (r5 C4, verification finding 1); the ordinary unbound path feeds
+/// stored chunk text.
+#[allow(clippy::too_many_arguments)]
+fn stitch_parts(
+    path: &str,
+    source: &str,
+    kind: &str,
+    is_code: bool,
+    parts: &[&str],
+    chunk_count: usize,
+    first_line: Option<u32>,
+    last_line: Option<u32>,
+    max_bytes: usize,
+    verbatim_fallback_note: Option<String>,
+) -> Result<Value, ToolError> {
+    let separator = if is_code { "\n" } else { "\n\n" };
+    let full = parts.join(separator);
+    let total_bytes = full.len();
+    let (content, truncated) = truncate_bytes(&full, max_bytes);
 
     let mut body = json!({
         "path": path,
         "repository": source,
         "kind": kind,
-        "chunk_count": fallback_chunks.len(),
+        "chunk_count": chunk_count,
         "lines": { "first": first_line, "last": last_line },
         "total_bytes": total_bytes,
         "returned_bytes": content.len(),
@@ -2139,6 +2209,167 @@ mod tests {
             "the retired symbol is not selectable: {}",
             retired_symbol.message
         );
+    }
+
+    /// Final r5 C4 (verification finding 1, the DECISIVE payload-substitution
+    /// regression): a current participant with UNCHANGED id, canonical path
+    /// and EXACT canonical span whose STORED TEXT was substituted — first
+    /// with the retired neighbor's text, then with a different file's
+    /// content — rides through NOTHING: the bound chunks reconstruction
+    /// emits only authenticated retained bytes (each participant's durable
+    /// span sliced out of the digest-validated revision blob), so the
+    /// substituted text is never served; a legitimate untouched participant
+    /// still serves correctly beside it, and even the substituted row's own
+    /// symbol serves its AUTHENTICATED span bytes.
+    fn substituted_text_app(dir: &std::path::Path, beta_text: &str) -> App {
+        let source = b"def alpha():\r\n    return 1\r\n\r\ndef beta():\r\n    return 2\r\n\r\ndef retiredfn():\r\n    return 9\r\n".to_vec();
+        let row = |id: &str, name: &str, start: u32, end: u32, text: &str| {
+            engram_domain::KnowledgeChunk {
+                id: engram_domain::Id::from(id),
+                document_id: engram_domain::Id::from("doc-substituted"),
+                source_id: engram_domain::Id::from("src-substituted"),
+                kind: KnowledgeChunkKind::CodeSymbol,
+                text: text.to_owned(),
+                summary: None,
+                location: Some(engram_domain::SourceLocation {
+                    path: Some("src/bound.py".to_owned()),
+                    start_line: Some(start),
+                    end_line: Some(end),
+                    start_offset: None,
+                    end_offset: None,
+                    anchor: None,
+                }),
+                entities: vec![engram_domain::EntityRef {
+                    id: Some(engram_domain::Id::from(id)),
+                    kind: None,
+                    name: Some(name.to_owned()),
+                    aliases: Vec::new(),
+                }],
+                concepts: Vec::new(),
+                embedding_refs: Vec::new(),
+                content_hash: format!("sha256:{id}"),
+                provenance: fixture_provenance(),
+                policy: fixture_policy(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: None,
+            }
+        };
+        // The UNTOUCHED legitimate participant (alpha, lines 1–2), the
+        // SUBSTITUTED current participant (beta, lines 4–5 — id/path/span
+        // exactly as published, only `text` replaced), and the retired
+        // neighbor (retiredfn, lines 7–8) supplying the substitution
+        // payload for the first variant.
+        let rows = vec![
+            row("chunk-current-1", "alpha", 1, 2, "def alpha():"),
+            row("chunk-current-2", "beta", 4, 5, beta_text),
+            row("chunk-retired-1", "retiredfn", 7, 8, "def retiredfn():"),
+        ];
+        let (app, _root, bindings) = bound_app_with_rows(
+            dir,
+            vec![CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "b".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: source,
+            }],
+            rows,
+            &[
+                ("chunk-current-1".to_owned(), "gen-1".to_owned(), 1, 2),
+                ("chunk-current-2".to_owned(), "gen-1".to_owned(), 4, 5),
+            ],
+        );
+        bindings.with_retired_lineage(&[("chunk-retired-1".to_owned(), "gen-1".to_owned())]);
+        app
+    }
+
+    #[test]
+    fn substituted_current_text_cannot_ride_chunks_mode() {
+        for (label, beta_text, forbidden) in [
+            (
+                "retired neighbor's text",
+                "def retiredfn():",
+                "def retiredfn():",
+            ),
+            (
+                "another file's content",
+                "FOREIGN PAYLOAD secret-token from a different file\nimpersonating beta",
+                "FOREIGN PAYLOAD secret-token",
+            ),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let app = substituted_text_app(dir.path(), beta_text);
+
+            // chunks mode serves ONLY authenticated bytes: alpha's and
+            // beta's durable spans sliced from the retained revision, in
+            // durable-span order — never the substituted stored text.
+            let chunks = content_of(
+                &fetch_content(&app, &json!({ "path": "src/bound.py", "mode": "chunks" })).unwrap(),
+            );
+            let chunks_text = chunks["content"].as_str().unwrap();
+            assert_eq!(chunks["source"], "chunks");
+            assert_eq!(chunks["chunk_count"], 2, "both current participants count");
+            assert_eq!(chunks["lines"]["first"], 1);
+            assert_eq!(chunks["lines"]["last"], 5);
+            let alpha_at = chunks_text
+                .find("def alpha():\r\n    return 1")
+                .unwrap_or_else(|| panic!("alpha's authenticated span serves: {chunks_text}"));
+            let beta_at = chunks_text
+                .find("def beta():\r\n    return 2")
+                .unwrap_or_else(|| panic!("beta's authenticated span serves: {chunks_text}"));
+            assert!(
+                alpha_at < beta_at,
+                "participants stitch in durable-span order: {chunks_text}"
+            );
+            assert!(
+                !chunks_text.contains(forbidden),
+                "the substituted stored text ({label}) is NEVER served: {chunks_text}"
+            );
+            assert!(
+                !chunks_text.contains("def retiredfn():"),
+                "the retired neighbor's lines are in no authenticated span: {chunks_text}"
+            );
+
+            // The exact path read is untouched by the substitution: the
+            // whole digest-validated revision still serves.
+            let exact =
+                content_of(&fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap());
+            assert_eq!(exact["source"], "exact");
+            assert!(
+                exact["content"]
+                    .as_str()
+                    .unwrap()
+                    .contains("def retiredfn():"),
+                "the exact read serves the true revision (retiredfn's lines \
+                 ARE retained bytes): {}",
+                exact["content"]
+            );
+
+            // The legitimate untouched participant still serves correctly
+            // beside the substituted row — byte-exact symbol span.
+            let alpha = content_of(
+                &fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "alpha" }))
+                    .unwrap(),
+            );
+            assert_eq!(alpha["source"], "exact");
+            assert_eq!(
+                alpha["content"].as_str().unwrap(),
+                "def alpha():\r\n    return 1\r\n",
+                "the untouched participant serves byte-exactly"
+            );
+
+            // Even the SUBSTITUTED row's own symbol serves its
+            // AUTHENTICATED span bytes, never its stored text.
+            let beta = content_of(
+                &fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "beta" })).unwrap(),
+            );
+            assert_eq!(beta["source"], "exact");
+            assert_eq!(
+                beta["content"].as_str().unwrap(),
+                "def beta():\r\n    return 2\r\n",
+                "the substituted row's symbol serves authenticated bytes only"
+            );
+        }
     }
 
     /// Final r5 C3 (finding 2, the decisive widened-span regression): a

@@ -60,7 +60,7 @@ pub enum ParticipantExactSource {
         reason: String,
     },
     /// Authorized, digest-validated exact bytes plus the revision-bound
-    /// participant span, all resolved inside ONE consistent-read window.
+    /// participant spans, all resolved inside ONE consistent-read window.
     Served {
         repo_id: String,
         generation_id: String,
@@ -68,11 +68,33 @@ pub enum ParticipantExactSource {
         view: ExactSourceView,
         /// Byte span of the selected symbol within `view.bytes`.
         span: Option<(usize, usize)>,
-        /// The canonical participant record ids — the only rows the caller
-        /// may consume for any (explicitly best-effort) fallback
-        /// presentation of this bound path.
-        participants: Vec<String>,
+        /// The AUTHENTICATED participants: each durable record id with its
+        /// durable canonical line span and the VALIDATED byte range of that
+        /// span inside `view.bytes`. The ONLY rows/bytes a caller may
+        /// consume for any (explicitly best-effort) fallback presentation
+        /// of this bound path — mutable stored chunk text is never an
+        /// authenticated payload (r5 C4, verification finding 1).
+        participants: Vec<BoundParticipant>,
     },
+}
+
+/// One AUTHENTICATED participant of a bound exact read (r5 C4,
+/// verification finding 1): the durable record identity plus the DURABLE
+/// canonical line span and its validated byte range inside the served
+/// `ExactSourceView::bytes`. A validated participant ID is not a validated
+/// payload — bound fallback presentation (chunks mode) reconstructs text
+/// EXCLUSIVELY from these authenticated retained bytes, never from the
+/// mutable stored chunk text.
+#[derive(Debug, Clone)]
+pub struct BoundParticipant {
+    pub record_id: String,
+    /// Durable canonical span start (1-based, validated in-window).
+    pub start_line: u32,
+    /// Durable canonical span end (1-based, inclusive, validated in-window).
+    pub end_line: u32,
+    /// Byte range of `[start_line, end_line]` inside `view.bytes` — the
+    /// authenticated payload bytes for this participant.
+    pub byte_span: (usize, usize),
 }
 
 /// Internal immutable participant descriptor (D3): exists only INSIDE this
@@ -248,21 +270,26 @@ fn line_start_offsets(blob: &[u8]) -> Vec<usize> {
     offsets
 }
 
-/// Computes the requested symbol's byte span from the participant
-/// descriptors and VALIDATES every participant's claimed span against the
-/// DURABLE canonical span staged at publication (final r5 finding 2): a
-/// canonical-ID row whose claimed span does not EQUAL its durable span
-/// denies — current durable-ID membership alone never authenticates a
-/// mutable row's span claim, and mutable stored text is never consulted for
-/// span identity (the C2-era "first line found anywhere inside the claimed
-/// span" substring check authenticated neither the span's start nor its
+/// Computes the requested symbol's byte span AND the authenticated
+/// participant payload spans from the participant descriptors, VALIDATING
+/// every participant's claimed span against the DURABLE canonical span
+/// staged at publication (final r5 finding 2): a canonical-ID row whose
+/// claimed span does not EQUAL its durable span denies — current
+/// durable-ID membership alone never authenticates a mutable row's span
+/// claim, and mutable stored text is never consulted for span identity
+/// (the C2-era "first line found anywhere inside the claimed span"
+/// substring check authenticated neither the span's start nor its
 /// width). Malformed claims (missing, zero start, reversed, beyond-file
-/// end) reject; they are never normalized or clamped.
+/// end) reject; they are never normalized or clamped. Every authenticated
+/// participant carries the byte range of its DURABLE span inside the
+/// retained blob — the only payload bytes a fallback consumer may emit
+/// (r5 C4, verification finding 1: a validated ID is not a validated
+/// payload).
 fn participant_span(
     descriptors: &[ParticipantDescriptor],
     symbol: Option<&str>,
     blob: &[u8],
-) -> Result<Option<(usize, usize)>, (bool, String)> {
+) -> Result<(Option<(usize, usize)>, Vec<BoundParticipant>), (bool, String)> {
     let offsets = line_start_offsets(blob);
     // The revision's line count — the exclusive bound every claimed and
     // durable span end is validated against BEFORE any byte offset is
@@ -296,7 +323,7 @@ fn participant_span(
     // enlarged span authenticates nothing — mutable text is not consulted
     // for span identity at all, so missing spans and empty first lines
     // cannot skip this check either: both fail claim equality).
-    let mut durable_spans: Vec<(&ParticipantDescriptor, engram_domain::CanonicalSpan)> =
+    let mut authenticated: Vec<(&ParticipantDescriptor, BoundParticipant)> =
         Vec::with_capacity(descriptors.len());
     for descriptor in descriptors {
         let (Some(claimed_start), Some(claimed_end)) = (descriptor.start_line, descriptor.end_line)
@@ -376,21 +403,55 @@ fn participant_span(
                 ),
             ));
         }
-        durable_spans.push((descriptor, durable));
+        // The authenticated payload span: the byte range of the DURABLE
+        // span inside the digest-validated retained blob (r5 C4,
+        // verification finding 1). Bounds were validated against
+        // `line_count` above, so this cannot miss; if it ever does, the
+        // participant DENIES rather than emitting an unauthenticated
+        // payload.
+        let Some(byte_span) = span_bytes(durable.start_line, durable.end_line) else {
+            return Err((
+                false,
+                format!(
+                    "participant '{}' has a durable canonical span that resolves to no \
+                     byte range inside the retained revision",
+                    descriptor.record_id
+                ),
+            ));
+        };
+        authenticated.push((
+            descriptor,
+            BoundParticipant {
+                record_id: descriptor.record_id.clone(),
+                start_line: durable.start_line,
+                end_line: durable.end_line,
+                byte_span,
+            },
+        ));
     }
     let Some(symbol) = symbol else {
-        return Ok(None);
+        return Ok((
+            None,
+            authenticated
+                .into_iter()
+                .map(|(_, participant)| participant)
+                .collect(),
+        ));
     };
     // Symbol selection: names (mutable row state) select WHICH participant
     // is served, but the SERVED span is always the DURABLE canonical span —
     // repeated headers resolve to the record's canonical occurrence only.
-    let mut spans: Vec<(u32, u32)> = durable_spans
+    let mut spans: Vec<(u32, u32)> = authenticated
         .iter()
         .filter(|(descriptor, _)| descriptor.names.iter().any(|name| name == symbol))
-        .map(|(_, durable)| (durable.start_line, durable.end_line))
+        .map(|(_, participant)| (participant.start_line, participant.end_line))
         .collect();
     spans.sort();
     spans.dedup();
+    let participants = authenticated
+        .into_iter()
+        .map(|(_, participant)| participant)
+        .collect();
     match spans.as_slice() {
         [] => Err((
             true,
@@ -403,7 +464,7 @@ fn participant_span(
                     "the symbol's span is outside the retained blob bounds".to_owned(),
                 ));
             };
-            Ok(Some((start, end)))
+            Ok((Some((start, end)), participants))
         }
         _ => Err((
             true,
@@ -615,24 +676,26 @@ impl CodeBindingCoordinator {
                         })?;
                     // Revision-bound span + content validation over the
                     // digest-authenticated bytes, inside the same window.
-                    let span = match participant_span(&descriptors, symbol.as_deref(), &view.bytes)
-                    {
-                        Ok(span) => span,
-                        Err((symbol_selection, reason)) => {
-                            return Ok(ParticipantExactSource::Denied {
-                                symbol_selection,
-                                reason,
-                            });
-                        }
-                    };
+                    // The authenticated participants (id + durable span +
+                    // payload byte range) come from the SAME validated
+                    // pass — a caller can never receive a participant id
+                    // without its authenticated payload span (r5 C4,
+                    // verification finding 1).
+                    let (span, participants) =
+                        match participant_span(&descriptors, symbol.as_deref(), &view.bytes) {
+                            Ok(resolved) => resolved,
+                            Err((symbol_selection, reason)) => {
+                                return Ok(ParticipantExactSource::Denied {
+                                    symbol_selection,
+                                    reason,
+                                });
+                            }
+                        };
                     Ok(ParticipantExactSource::Served {
                         repo_id,
                         generation_id,
                         span,
-                        participants: descriptors
-                            .iter()
-                            .map(|descriptor| descriptor.record_id.clone())
-                            .collect(),
+                        participants,
                         view,
                     })
                 }

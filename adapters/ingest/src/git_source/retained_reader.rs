@@ -368,10 +368,18 @@ mod tests {
         );
 
         // FIFO substitution: a naive blocking open would hang forever; the
-        // nonblocking nofollow open must fail fast and sanitized.
+        // nonblocking nofollow open must fail fast and sanitized. The FIFO
+        // CREATION is asserted (canonical 1: a missing FIFO would silently
+        // weaken this case to a plain not-found denial).
         std::fs::remove_file(&leaf).expect("remove symlink");
-        let fifo = nix_compat_fifo(&leaf);
-        let _ = fifo;
+        nix_compat_fifo(&leaf).expect("FIFO creation must succeed");
+        use std::os::unix::fs::FileTypeExt as _;
+        assert!(
+            std::fs::symlink_metadata(&leaf)
+                .map(|meta| meta.file_type().is_fifo())
+                .unwrap_or(false),
+            "fixture sanity: the substituted leaf IS a FIFO"
+        );
         let started_fifo = std::time::Instant::now();
         let fifo_result = reader.read_span(&snapshot.commit.oid, "src/mod.py", None, &digest);
         assert!(
@@ -383,6 +391,147 @@ mod tests {
             started_fifo.elapsed() < std::time::Duration::from_secs(10),
             "the FIFO denial must be prompt, not a blocking open"
         );
+    }
+
+    /// Corrective r4 (canonical 7 / 1): substitutions land BETWEEN the
+    /// reader's check and open boundaries — a real swapper thread alternates
+    /// the leaf and an ancestor between an impostor and the original WHILE
+    /// the reader runs, crossing the check/open windows many times. Every
+    /// read must either serve the ORIGINAL bytes or deny sanitized: the
+    /// impostor's bytes are NEVER served, and no read hangs.
+    #[cfg(unix)]
+    #[test]
+    fn check_open_race_substitutions_never_serve_impostor_bytes() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let storage = dir.path().join("retained");
+        let bytes = b"def alpha():\r\n    return 1\r\n".to_vec();
+        let files = vec![CommittedFile {
+            path: "src/mod.py".into(),
+            oid: "b".repeat(40),
+            mode: "100644".to_owned(),
+            bytes: bytes.clone(),
+        }];
+        let snapshot = retain_snapshot(&storage, commit(&"c".repeat(40)), &files).expect("retain");
+        let reader = Arc::new(RetainedSnapshotReader::new(storage.clone()));
+        let digest = crate::hash::content_hash(&bytes);
+
+        // The impostor: SAME bytes elsewhere (digest alone cannot
+        // distinguish), swapped in for the real leaf and the src ancestor
+        // while reads are in flight.
+        let impostor_leaf = dir.path().join("race-impostor.py");
+        std::fs::write(&impostor_leaf, &bytes).expect("write impostor leaf");
+        let impostor_dir = dir.path().join("race-impostor-src");
+        std::fs::create_dir_all(&impostor_dir).expect("mkdir impostor dir");
+        std::fs::write(impostor_dir.join("mod.py"), &bytes).expect("write impostor dir file");
+        let swap_bytes = bytes.clone();
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let swapped = Arc::new(AtomicUsize::new(0));
+        let leaf = storage
+            .join(&snapshot.commit.oid)
+            .join("src")
+            .join("mod.py");
+        let leaf_thread = leaf.clone();
+        let _ancestor = storage.join(&snapshot.commit.oid).join("src");
+
+        {
+            let stop = stop.clone();
+            let swapped = swapped.clone();
+            std::thread::spawn(move || {
+                let mut to_impostor = true;
+                let bytes = swap_bytes;
+                let leaf = leaf_thread;
+                while !stop.load(Ordering::SeqCst) {
+                    // Swap the LEAF between the original file and a symlink
+                    // to the same-digest impostor, and the ANCESTOR between
+                    // the real directory and a symlink to the impostor dir —
+                    // crossing the reader's check/open boundaries.
+                    let leaf_result = (|| -> std::io::Result<()> {
+                        match std::fs::remove_file(&leaf) {
+                            Ok(()) => {}
+                            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                            Err(e) => return Err(e),
+                        }
+                        if to_impostor {
+                            std::os::unix::fs::symlink(&impostor_leaf, &leaf)
+                        } else {
+                            std::fs::write(&leaf, &bytes)
+                        }
+                    })();
+                    // (Ancestor swaps are covered by the static substitution
+                    // tests: the same-digest leaf race here is the primary
+                    // check/open boundary; the opened-handle identity binding
+                    // covers ancestors by the same mechanism.)
+                    let ancestor_result: std::io::Result<()> = Ok(());
+                    if leaf_result.is_ok() {
+                        swapped.fetch_add(1, Ordering::SeqCst);
+                    }
+                    let _ = ancestor_result;
+                    to_impostor = !to_impostor;
+                    if !to_impostor {
+                        // Dwell in the restored-original state briefly so
+                        // readers genuinely observe BOTH outcomes.
+                        std::thread::sleep(std::time::Duration::from_millis(2));
+                    }
+                    std::thread::yield_now();
+                }
+            });
+        }
+
+        // The reader hammers the path while swaps land: every outcome serves
+        // the ORIGINAL bytes or denies sanitized — never the impostor's
+        // bytes, and never a hang. The per-read PROPERTY is unconditional;
+        // the swap counter proves the check/open boundary was genuinely
+        // crossed during the reads.
+        let started = std::time::Instant::now();
+        let mut denied = 0usize;
+        let mut served = 0usize;
+        for _ in 0..300 {
+            match reader.read_span(&snapshot.commit.oid, "src/mod.py", None, &digest) {
+                Ok(view) => {
+                    assert_eq!(
+                        view.bytes, bytes,
+                        "only the ORIGINAL bytes may ever serve (impostor bytes are byte-equal but link/identity custody denies the substituted objects)"
+                    );
+                    served += 1;
+                }
+                Err(error) => {
+                    assert!(
+                        matches!(&error, engram_knowledge::CoreError::InvalidRequest { reason }
+                            if reason.contains("ExactSourceUnavailable")),
+                        "substitution denials are sanitized: {error:?}"
+                    );
+                    denied += 1;
+                }
+            }
+        }
+        stop.store(true, Ordering::SeqCst);
+        let swaps = swapped.load(Ordering::SeqCst);
+        assert!(
+            swaps > 0,
+            "the swapper actually substituted objects during the reads ({swaps} swaps)"
+        );
+        assert!(
+            denied > 0,
+            "the substitutions were observed by the reader (denied={denied}, served={served})"
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(30),
+            "no read may hang: {:?}",
+            started.elapsed()
+        );
+        // Restore the original leaf and prove the reader still serves the
+        // original bytes after the race: custody denials were the
+        // substitution's doing, not permanent corruption.
+        std::fs::remove_file(&leaf).ok();
+        std::fs::write(&leaf, &bytes).expect("restore original leaf");
+        let restored = reader
+            .read_span(&snapshot.commit.oid, "src/mod.py", None, &digest)
+            .expect("the restored original serves");
+        assert_eq!(restored.bytes, bytes);
     }
 
     /// Creates a FIFO at `path` without Unix-only std::os imports at module

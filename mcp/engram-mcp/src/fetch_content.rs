@@ -510,8 +510,19 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     // doc comment nor signature). Docs join with a blank line (section
     // boundaries); code joins with a single newline (line spans are
     // contiguous-ish).
+    //
+    // Corrective r4 (canonical 10, fallback consumption): when the path is
+    // CANONICALLY BOUND (durable-lineage participants exist), the fallback
+    // reconstruction consumes ONLY those participants — old-generation,
+    // unstamped and forged-stamp chunks can never inject fallback content
+    // for a bound path. Unbound paths keep the historical stitching.
+    let fallback_chunks: Vec<&engram_domain::KnowledgeChunk> = if participants.is_empty() {
+        ordered.clone()
+    } else {
+        participants.clone()
+    };
     let separator = if is_code { "\n" } else { "\n\n" };
-    let parts: Vec<&str> = ordered
+    let parts: Vec<&str> = fallback_chunks
         .iter()
         .filter(|c| !c.text.is_empty())
         .map(|c| c.text.as_str())
@@ -520,10 +531,10 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     let total_bytes = full.len();
     let (content, truncated) = truncate_bytes(&full, max_bytes);
 
-    let first_line = ordered
+    let first_line = fallback_chunks
         .iter()
         .find_map(|c| c.location.as_ref().and_then(|l| l.start_line));
-    let last_line = ordered
+    let last_line = fallback_chunks
         .iter()
         .rev()
         .find_map(|c| c.location.as_ref().and_then(|l| l.end_line));
@@ -532,7 +543,7 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
         "path": path,
         "repository": sources[0],
         "kind": kind,
-        "chunk_count": ordered.len(),
+        "chunk_count": fallback_chunks.len(),
         "lines": { "first": first_line, "last": last_line },
         "total_bytes": total_bytes,
         "returned_bytes": content.len(),
@@ -1619,6 +1630,39 @@ mod tests {
         assert_eq!(beta["generation"], "gen-2");
         let beta_content = beta["content"].as_str().unwrap();
         assert_eq!(beta_content, "def beta():\r\n    return 2\r\n");
+    }
+
+    /// Corrective r4 (canonical 10, fallback consumption): in explicit
+    /// `chunks` mode the bound path's reconstruction consumes ONLY the
+    /// canonical current-generation participants — the old-generation and
+    /// impostor chunks can never inject fallback content, and the line span
+    /// reports the participants' span.
+    #[test]
+    fn bound_chunks_fallback_consumes_only_canonical_participants() {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, _retained, current_oid, _len) = mixed_generation_app(dir.path());
+        let _ = current_oid;
+        let out = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py", "mode": "chunks" })).unwrap(),
+        );
+        assert_eq!(
+            out["chunk_count"],
+            json!(2),
+            "only the two current-generation participants: {out}"
+        );
+        assert_eq!(out["lines"]["first"], json!(2), "participants' span: {out}");
+        assert_eq!(out["lines"]["last"], json!(7), "participants' span: {out}");
+        let content = out["content"].as_str().unwrap();
+        for forbidden in ["def gamma", "impostor"] {
+            assert!(
+                !content.contains(forbidden),
+                "old-generation/impostor chunks must not inject fallback content: {content}"
+            );
+        }
+        assert!(
+            content.contains("def beta") && content.contains("def alpha"),
+            "the current generation's participants supply the fallback: {content}"
+        );
     }
 
     /// An OLD-ONLY symbol (present in the superseded generation's chunks,

@@ -87,6 +87,7 @@ pub struct EngramProvider {
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     code_bindings: Option<Arc<crate::code_binding::CodeBindingCoordinator>>,
+    code_source: Option<Arc<crate::code_binding::RetainedCodeSource>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -99,6 +100,20 @@ impl EngramProvider {
             .ok_or_else(|| CoreError::CapabilityUnsupported {
                 capability: "code-binding".into(),
                 reason: "code binding coordinator is not configured".into(),
+            })
+    }
+
+    /// The retained-snapshot reader serving exact committed source bytes
+    /// (task_017). Absent handle ⇒ typed `CapabilityUnsupported`, never a
+    /// checkout fallback.
+    pub fn retained_code_source(
+        &self,
+    ) -> CoreResult<&Arc<crate::code_binding::RetainedCodeSource>> {
+        self.code_source
+            .as_ref()
+            .ok_or_else(|| CoreError::CapabilityUnsupported {
+                capability: "code-source".into(),
+                reason: "retained code source reader is not configured".into(),
             })
     }
 
@@ -687,6 +702,7 @@ impl EngramProvider {
             lexical_feed: None,
             graph_cache: None,
             code_bindings: None,
+            code_source: None,
             schema_version: "unwired".to_string(),
             adapter_version: "unwired".to_string(),
         }
@@ -731,6 +747,7 @@ pub struct EngramProviderBuilder {
     lexical_feed: Option<Arc<dyn LexicalFeed>>,
     graph_cache: Option<Arc<dyn engram_retrieval::GraphCache>>,
     code_bindings: Option<Arc<crate::code_binding::CodeBindingCoordinator>>,
+    code_source: Option<Arc<crate::code_binding::RetainedCodeSource>>,
     schema_version: String,
     adapter_version: String,
 }
@@ -768,6 +785,7 @@ impl EngramProviderBuilder {
             community_query: None,
             lexical_feed: None,
             graph_cache: None,
+            code_source: None,
             code_bindings: None,
             schema_version: "unknown".to_string(),
             adapter_version: "unknown".to_string(),
@@ -965,6 +983,14 @@ impl EngramProviderBuilder {
         self
     }
 
+    /// Attaches the retained-snapshot reader serving exact committed source
+    /// bytes (task_017). Optional: without it, exact fetches report
+    /// `ExactSourceUnavailable` rather than falling back to a checkout.
+    pub fn code_source(mut self, source: Arc<crate::code_binding::RetainedCodeSource>) -> Self {
+        self.code_source = Some(source);
+        self
+    }
+
     /// Builds the provider.
     pub fn build(self) -> EngramProvider {
         EngramProvider {
@@ -998,6 +1024,7 @@ impl EngramProviderBuilder {
             lexical_feed: self.lexical_feed,
             graph_cache: self.graph_cache,
             code_bindings: self.code_bindings,
+            code_source: self.code_source,
             schema_version: self.schema_version,
             adapter_version: self.adapter_version,
         }

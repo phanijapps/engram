@@ -46,4 +46,5 @@ cross-encoder-rerank = ["engram-integration/cross-encoder-rerank"]
 pgvector = ["dep:engram-backend-pgvector", "engram-backend-pgvector/fastembed"]
 
 [dev-dependencies]
+engram-store-sqlite = { path = "../../adapters/sqlite", version = "0.1.0" }
 tempfile = "3"

@@ -36,6 +36,30 @@ pub const DEFAULT_MAX_BYTES: usize = 100 * 1024;
 /// Hard ceiling for `max_bytes` overrides (matches the scanner's 1 MiB limit).
 pub const MAX_BYTES_CEILING: usize = 1024 * 1024;
 
+/// The bound-code origin `(repo_id, generation_id)` of a chunk set: present
+/// exactly when the chunks carry the scanner's generation stamps (task_017).
+/// Non-code / unbound documents return `None` and keep the historical read
+/// paths.
+fn bound_code_origin(chunks: &[&engram_domain::KnowledgeChunk]) -> Option<(String, String)> {
+    let chunk = chunks.iter().find(|chunk| {
+        chunk
+            .metadata
+            .as_ref()
+            .and_then(|meta| meta.get("codeGenerationId"))
+            .is_some()
+    })?;
+    let metadata = chunk.metadata.as_ref()?;
+    let repo = metadata
+        .get("codeRepoId")
+        .and_then(|value| value.as_str())?
+        .to_owned();
+    let generation = metadata
+        .get("codeGenerationId")
+        .and_then(|value| value.as_str())?
+        .to_owned();
+    Some((repo, generation))
+}
+
 /// The `fetch_content` tool handler.
 pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     let path = normalize_path(req_str(args, "path")?);
@@ -147,6 +171,55 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
         )
     });
     let kind = if is_code { "code" } else { "doc" };
+
+    // --- Bound code: EXACT retained committed bytes (task_017) -----------
+    // Chunks stamped with a code generation serve the retained snapshot of
+    // THAT generation's commit — byte-exact, revision-labeled, and with NO
+    // working-tree fallback: a missing snapshot is an error in auto and
+    // verbatim modes alike (REQ-006: exact content or an explicit
+    // unavailable error, never a checkout masquerading as the revision).
+    if mode != "chunks"
+        && let Some((repo_id, generation_id)) = bound_code_origin(&ordered)
+    {
+        let exact = futures::executor::block_on(app.provider.code_fetch_exact_at(
+            &app.scope,
+            &repo_id,
+            &generation_id,
+            &path,
+            None,
+        ));
+        return match exact {
+            Ok(view) => {
+                let total_bytes = view.bytes.len();
+                let content = String::from_utf8_lossy(&view.bytes).into_owned();
+                let (content, truncated) = truncate_bytes(&content, max_bytes);
+                Ok(protocol::text_content(
+                    json!({
+                        "path": path,
+                        "repository": repo_id,
+                        "kind": kind,
+                        "source": "exact",
+                        "revision": view.commit_oid,
+                        "generation": generation_id,
+                        "span": view.span.map(|(start, end)| json!({ "start": start, "end": end })),
+                        "content_sha256": view.served_digest,
+                        "chunk_count": ordered.len(),
+                        "total_bytes": total_bytes,
+                        "returned_bytes": content.len(),
+                        "max_bytes": max_bytes,
+                        "truncated": truncated,
+                        "content": content,
+                        "note": "exact retained committed bytes for the indexed revision (no checkout fallback)",
+                    })
+                    .to_string(),
+                ))
+            }
+            Err(error) => Err(ToolError::new(
+                -32603,
+                format!("exact retained source unavailable: {error}"),
+            )),
+        };
+    }
 
     // --- Verbatim source read (EN-14/EN-16 fix) -------------------------
     // The stored chunk text is a retrieval view, not canonical source
@@ -372,6 +445,304 @@ mod tests {
     fn content_of(result: &Value) -> Value {
         let text = result["content"][0]["text"].as_str().unwrap();
         serde_json::from_str(text).unwrap()
+    }
+
+    // ---------- task_017: bound-code exact retained source ---------------
+
+    use crate::ontology::{OntologyConfig, TaxonomyConfig};
+    use engram_domain::{CodeGeneration, SourceDocument, SourceDocumentKind};
+    use engram_ingest::git_source::{CommittedFile, ResolvedCommit, retain_snapshot};
+    use engram_integration::EngramProviderBuilder;
+    use engram_integration::code_binding::{
+        CodeAuthorityAction, CodeBindingAuthorizer, CodeBindingCoordinator,
+    };
+    use engram_knowledge::{CodeBindingRepository, KnowledgeRepository};
+    use engram_store_sqlite::knowledge::{SqlCodeBindingRepository, SqlKnowledgeStore};
+
+    struct PermissiveAuthorizer;
+    #[async_trait::async_trait]
+    impl CodeBindingAuthorizer for PermissiveAuthorizer {
+        async fn authorize(
+            &self,
+            _actor: &engram_domain::Actor,
+            _scope: &engram_domain::Scope,
+            _repo: &engram_domain::RepoId,
+            _action: CodeAuthorityAction,
+        ) -> engram_knowledge::CoreResult<()> {
+            Ok(())
+        }
+    }
+
+    /// Builds a BOUND MCP app over a real retained snapshot: repo bound +
+    /// published at `gen-1` whose commit OID owns the retained bytes, with
+    /// knowledge chunks stamped for that generation. Returns the app plus the
+    /// retained root for deletion experiments.
+    fn fixture_policy() -> engram_domain::Policy {
+        engram_domain::Policy {
+            visibility: engram_domain::Visibility::Workspace,
+            retention: engram_domain::Retention::Durable,
+            sensitivity: None,
+            allowed_uses: vec![engram_domain::AllowedUse::Retrieval],
+            expires_at: None,
+            delete_mode: None,
+        }
+    }
+
+    fn fixture_provenance() -> engram_domain::Provenance {
+        engram_domain::Provenance {
+            source: "fetch-content-bound-test".to_owned(),
+            actor: engram_domain::Actor {
+                id: engram_domain::Id::from("fetch-content-bound-test"),
+                kind: engram_domain::ActorKind::Agent,
+                display_name: None,
+                metadata: None,
+            },
+            observed_at: chrono::Utc::now(),
+            evidence: Vec::new(),
+            derivations: Vec::new(),
+            confidence: Some(1.0),
+            method: Some("test".to_owned()),
+        }
+    }
+
+    fn bound_app(dir: &std::path::Path, source: &str) -> (App, std::path::PathBuf) {
+        use futures::executor::block_on;
+        let scope = crate::scope::project_scope("bound-project", "default");
+        let commit = ResolvedCommit {
+            branch_ref: "refs/heads/main".to_owned(),
+            oid: "a".repeat(40),
+            object_format: "sha1".to_owned(),
+        };
+        let files = vec![CommittedFile {
+            path: "src/bound.py".into(),
+            oid: "b".repeat(40),
+            mode: "100644".to_owned(),
+            bytes: source.as_bytes().to_vec(),
+        }];
+        // The retention stage creates and owns its private storage root
+        // itself (0700, no links) — never pre-create it.
+        let retained_root = dir.join("retained");
+        let snapshot = retain_snapshot(&retained_root, commit, &files).expect("retain snapshot");
+
+        // Durable binding store: bind + publish gen-1 at that commit.
+        let bindings = SqlCodeBindingRepository::open(dir.join("bound-bindings.sqlite")).unwrap();
+        block_on(bindings.bind(engram_domain::CodeBinding {
+            scope: scope.clone(),
+            repo_id: engram_domain::RepoId("bound-repo".to_owned()),
+            branch_ref: "refs/heads/main".to_owned(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .unwrap();
+        let repo_id = engram_domain::RepoId("bound-repo".to_owned());
+        let generation = CodeGeneration {
+            id: "gen-1".to_owned(),
+            binding_version: 1,
+            commit_oid: snapshot.commit.oid.clone(),
+            snapshot_digest: snapshot.digest.clone(),
+            parser_fingerprint: "parser".to_owned(),
+            filter_fingerprint: "filter".to_owned(),
+        };
+        let attempt = engram_domain::CodeAttempt {
+            id: "attempt-fetch".to_owned(),
+            idempotency_key: "idempotent-fetch".to_owned(),
+            binding_version: 1,
+            expected_epoch: 0,
+            expected_active_generation: None,
+            fencing_token: 0,
+            state: engram_domain::CodeAttemptState::Created,
+            receipt_kinds: vec![
+                engram_domain::CodeReceiptKind::Source,
+                engram_domain::CodeReceiptKind::Knowledge,
+            ],
+        };
+        block_on(bindings.begin_attempt(&scope, &repo_id, generation.clone(), attempt)).unwrap();
+        for lane in [
+            engram_domain::CodeReceiptKind::Source,
+            engram_domain::CodeReceiptKind::Knowledge,
+        ] {
+            block_on(
+                bindings.record_receipt(engram_knowledge::StageReceipt {
+                    attempt_id: "attempt-fetch".to_owned(),
+                    generation_id: "gen-1".to_owned(),
+                    lane: serde_json::to_value(&lane)
+                        .unwrap()
+                        .as_str()
+                        .unwrap()
+                        .to_owned(),
+                    digest: "d".repeat(64),
+                }),
+            )
+            .unwrap();
+        }
+        let (_, stored) = block_on(bindings.get_attempt(&scope, &repo_id, "attempt-fetch"))
+            .unwrap()
+            .unwrap();
+        block_on(bindings.mark_ready(&scope, &repo_id, "attempt-fetch", stored.fencing_token))
+            .unwrap();
+        block_on(bindings.publish(&scope, &repo_id, "attempt-fetch", 0)).unwrap();
+        let bindings = std::sync::Arc::new(bindings);
+
+        // Knowledge store with one bound code chunk stamped for gen-1.
+        let knowledge = std::sync::Arc::new(SqlKnowledgeStore::open_in_memory().unwrap());
+        block_on(knowledge.put_source(engram_domain::KnowledgeSource {
+            id: engram_domain::Id::from("src-bound"),
+            kind: engram_domain::SourceKind::GitRepository,
+            scope: scope.clone(),
+            name: "bound-repo".to_owned(),
+            uri: None,
+            version: None,
+            repository_key: Some("bound-repo".to_owned()),
+            git_ref: Some("refs/heads/main".to_owned()),
+            policy: fixture_policy(),
+            provenance: fixture_provenance(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }))
+        .unwrap();
+        block_on(knowledge.put_document(SourceDocument {
+            id: engram_domain::Id::from("doc-bound"),
+            source_id: engram_domain::Id::from("src-bound"),
+            kind: SourceDocumentKind::Code,
+            uri: None,
+            path: Some("src/bound.py".to_owned()),
+            title: None,
+            mime_type: None,
+            language: Some("python".to_owned()),
+            version: None,
+            content_hash: "sha256:bound".to_owned(),
+            provenance: fixture_provenance(),
+            policy: fixture_policy(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: None,
+        }))
+        .unwrap();
+        let mut stamps = engram_domain::Metadata::new();
+        stamps.insert(
+            "codeGenerationId".to_owned(),
+            serde_json::Value::String("gen-1".to_owned()),
+        );
+        stamps.insert(
+            "codeRepoId".to_owned(),
+            serde_json::Value::String("bound-repo".to_owned()),
+        );
+        block_on(knowledge.put_chunk(engram_domain::KnowledgeChunk {
+            id: engram_domain::Id::from("chunk-bound-1"),
+            document_id: engram_domain::Id::from("doc-bound"),
+            source_id: engram_domain::Id::from("src-bound"),
+            kind: KnowledgeChunkKind::CodeSymbol,
+            text: source.lines().next().unwrap_or_default().to_owned(),
+            summary: None,
+            location: Some(engram_domain::SourceLocation {
+                path: Some("src/bound.py".to_owned()),
+                start_line: Some(1),
+                end_line: Some(1),
+                start_offset: None,
+                end_offset: None,
+                anchor: None,
+            }),
+            entities: Vec::new(),
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: "sha256:chunk-bound-1".to_owned(),
+            provenance: fixture_provenance(),
+            policy: fixture_policy(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: Some(stamps),
+        }))
+        .unwrap();
+
+        let coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as std::sync::Arc<dyn CodeBindingRepository>,
+            std::sync::Arc::new(PermissiveAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            engram_domain::CapabilityState::Supported,
+        ))
+        .knowledge_query(knowledge)
+        .code_bindings(std::sync::Arc::new(coordinator))
+        .code_source(std::sync::Arc::new(
+            engram_integration::code_binding::RetainedCodeSource::new(retained_root.clone()),
+        ))
+        .build();
+        (
+            App {
+                provider,
+                scope,
+                ontology: OntologyConfig::default(),
+                taxonomy: TaxonomyConfig::default(),
+                storage_dir: dir.to_path_buf(),
+            },
+            retained_root,
+        )
+    }
+
+    /// Bound code serves byte-exact RETAINED bytes with revision labels even
+    /// after the working tree is deleted (task_017: no checkout dependency).
+    #[test]
+    fn fetch_bound_code_serves_exact_retained_bytes_after_checkout_deleted() {
+        let dir = tempfile::tempdir().unwrap();
+        // CRLF content: byte-exactness must preserve it.
+        let source = "def alpha():\r\n    return 1\r\n\u{00e9}t\u{00e9} marker\r\n";
+        let (app, _retained) = bound_app(dir.path(), source);
+        let out = content_of(&fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap());
+        assert_eq!(out["source"], "exact");
+        assert_eq!(out["revision"], "a".repeat(40));
+        let content = out["content"].as_str().unwrap();
+        assert_eq!(
+            content, source,
+            "byte-exact retained bytes (CRLF preserved)"
+        );
+        assert!(
+            out["note"]
+                .as_str()
+                .unwrap()
+                .contains("no checkout fallback")
+        );
+    }
+
+    /// A missing retained snapshot is an ERROR for bound code — a decoy file
+    /// on disk with different bytes is never served as the revision.
+    #[test]
+    fn fetch_bound_code_missing_snapshot_errors_never_disk_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = "def alpha():\n    return 1\n";
+        let (app, retained_root) = bound_app(dir.path(), source);
+        // Delete the retained snapshot; plant a DECOY working-tree file.
+        std::fs::remove_dir_all(&retained_root).unwrap();
+        let decoy_dir = dir.path().join("decoy");
+        std::fs::create_dir_all(decoy_dir.join("src")).unwrap();
+        std::fs::write(decoy_dir.join("src/bound.py"), "IMPOSTER CONTENT").unwrap();
+        let err = fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap_err();
+        assert!(
+            err.message.contains("ExactSourceUnavailable"),
+            "missing snapshot must surface the typed unavailable error: {}",
+            err.message
+        );
+    }
+
+    /// mode=chunks on a bound path is an honest reconstruction — labeled, and
+    /// NEVER presented as exact source.
+    #[test]
+    fn fetch_bound_code_chunks_mode_labels_reconstruction() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = "def alpha():\n    return 1\n";
+        let (app, _retained) = bound_app(dir.path(), source);
+        let out = content_of(
+            &fetch_content(&app, &json!({ "path": "src/bound.py", "mode": "chunks" })).unwrap(),
+        );
+        assert_eq!(out["source"], "chunks");
+        assert_ne!(out["source"], "exact");
+        assert!(
+            out["note"].as_str().unwrap().contains("best-effort"),
+            "chunk mode must stay labeled as best-effort reconstruction: {}",
+            out["note"]
+        );
     }
 
     /// EN-14/EN-16 (eval 0.2.5): default fetch returns VERBATIM on-disk

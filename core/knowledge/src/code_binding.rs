@@ -61,6 +61,20 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
         repo_id: &engram_domain::RepoId,
         attempt_id: &str,
     ) -> CoreResult<Option<(CodeGeneration, CodeAttempt)>>;
+    /// Reads one durable generation record (task_017: maps a published
+    /// active generation to its immutable commit OID for exact source reads).
+    /// Default: unsupported (cells implement over their generation tables).
+    async fn get_generation(
+        &self,
+        _scope: &Scope,
+        _repo_id: &engram_domain::RepoId,
+        _generation_id: &str,
+    ) -> CoreResult<Option<CodeGeneration>> {
+        Err(engram_runtime::CoreError::CapabilityUnsupported {
+            capability: "code-generation-read".into(),
+            reason: "this cell does not expose generation records".into(),
+        })
+    }
     async fn put_generation(&self, generation: CodeGeneration) -> CoreResult<CodeGeneration>;
     async fn put_lineage(
         &self,

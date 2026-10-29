@@ -2,6 +2,7 @@
 mod eligibility;
 mod publication;
 mod registration;
+mod source;
 mod status;
 use async_trait::async_trait;
 use engram_domain::{
@@ -9,6 +10,7 @@ use engram_domain::{
 };
 use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
 pub use publication::CodeRebuildRequest;
+pub use source::{ExactSourceView, RetainedCodeSource, RetainedPath};
 pub use status::CodeBindingStatus;
 
 /// Engine-neutral [`CodeEligibilityResolver`] over the durable

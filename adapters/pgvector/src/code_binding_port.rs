@@ -262,6 +262,34 @@ impl CodeBindingRepository for PgCodeBindingRepository {
             .await
     }
 
+    async fn get_generation(
+        &self,
+        _scope: &Scope,
+        _repo_id: &RepoId,
+        generation_id: &str,
+    ) -> CoreResult<Option<CodeGeneration>> {
+        let generation_id = generation_id.to_owned();
+        self.blocking(move |store| {
+            crate::connection::runtime().block_on(async {
+                let row = store
+                    .connection
+                    .client
+                    .query_opt(
+                        "SELECT record_json FROM code_generations WHERE generation_id = $1",
+                        &[&generation_id],
+                    )
+                    .await
+                    .map_err(|_| storage_error())?;
+                row.map(|row| {
+                    serde_json::from_value::<CodeGeneration>(row.get(0))
+                        .map_err(|_| storage_error())
+                })
+                .transpose()
+            })
+        })
+        .await
+    }
+
     async fn preview_reset(&self, scope: &Scope, repo_id: &RepoId) -> CoreResult<CodeResetPreview> {
         let scope = scope.clone();
         let repo_id = repo_id.clone();

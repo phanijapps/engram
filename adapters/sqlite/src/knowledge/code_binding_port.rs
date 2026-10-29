@@ -253,6 +253,27 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         tx.commit().map_err(|_| storage_error())?;
         Ok(result)
     }
+
+    async fn get_generation(
+        &self,
+        _scope: &Scope,
+        _repo_id: &RepoId,
+        generation_id: &str,
+    ) -> CoreResult<Option<CodeGeneration>> {
+        let store = self.lock()?;
+        let record: Option<String> = store
+            .connection
+            .query_row(
+                "SELECT record_json FROM code_generations WHERE generation_id = ?1",
+                [generation_id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|_| storage_error())?;
+        record
+            .map(|json| serde_json::from_str(&json).map_err(|_| storage_error()))
+            .transpose()
+    }
     async fn preview_reset(&self, _: &Scope, _: &RepoId) -> CoreResult<CodeResetPreview> {
         Err(CoreError::CapabilityUnsupported {
             capability: "code-reset".into(),

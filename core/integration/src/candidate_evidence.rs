@@ -569,15 +569,14 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                             Some(&mut code_dependencies),
                         )
                         .await?;
-                    Ok(EvidenceClassification {
+                    Ok(EvidenceClassification::complete(
                         evidence,
                         code_dependencies,
-                    })
+                    ))
                 }
-                Some(_) | None => Ok(EvidenceClassification {
-                    evidence: CandidateEvidence::Unknown,
-                    code_dependencies: Vec::new(),
-                }),
+                Some(_) | None => Ok(EvidenceClassification::incomplete(
+                    CandidateEvidence::Unknown,
+                )),
             },
             RetrievalTargetType::Belief => match self
                 .beliefs
@@ -602,15 +601,14 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                             Some(&mut code_dependencies),
                         )
                         .await?;
-                    Ok(EvidenceClassification {
+                    Ok(EvidenceClassification::complete(
                         evidence,
                         code_dependencies,
-                    })
+                    ))
                 }
-                Some(_) | None => Ok(EvidenceClassification {
-                    evidence: CandidateEvidence::Unknown,
-                    code_dependencies: Vec::new(),
-                }),
+                Some(_) | None => Ok(EvidenceClassification::incomplete(
+                    CandidateEvidence::Unknown,
+                )),
             },
             RetrievalTargetType::Chunk => match self
                 .knowledge
@@ -630,26 +628,23 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                             && record.policy == candidate.policy =>
                     {
                         if code_chunk(record.kind) {
-                            return Ok(EvidenceClassification {
-                                evidence: CandidateEvidence::CodeDependent,
-                                code_dependencies: vec![candidate.target_id.clone()],
-                            });
+                            return Ok(EvidenceClassification::code_dependent(vec![
+                                candidate.target_id.clone(),
+                            ]));
                         }
                         match self
                             .in_code_lineage(candidate.target_id.as_str(), request)
                             .await?
                         {
                             Some(true) => {
-                                return Ok(EvidenceClassification {
-                                    evidence: CandidateEvidence::CodeDependent,
-                                    code_dependencies: vec![candidate.target_id.clone()],
-                                });
+                                return Ok(EvidenceClassification::code_dependent(vec![
+                                    candidate.target_id.clone(),
+                                ]));
                             }
                             None if source.repository_key.is_some() => {
-                                return Ok(EvidenceClassification {
-                                    evidence: CandidateEvidence::Unknown,
-                                    code_dependencies: Vec::new(),
-                                });
+                                return Ok(EvidenceClassification::incomplete(
+                                    CandidateEvidence::Unknown,
+                                ));
                             }
                             Some(false) | None => {
                                 let mut code_dependencies = Vec::new();
@@ -662,22 +657,20 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                                         Some(&mut code_dependencies),
                                     )
                                     .await?;
-                                Ok(EvidenceClassification {
+                                Ok(EvidenceClassification::complete(
                                     evidence,
                                     code_dependencies,
-                                })
+                                ))
                             }
                         }
                     }
-                    Some(_) | None => Ok(EvidenceClassification {
-                        evidence: CandidateEvidence::Unknown,
-                        code_dependencies: Vec::new(),
-                    }),
+                    Some(_) | None => Ok(EvidenceClassification::incomplete(
+                        CandidateEvidence::Unknown,
+                    )),
                 },
-                None => Ok(EvidenceClassification {
-                    evidence: CandidateEvidence::Unknown,
-                    code_dependencies: Vec::new(),
-                }),
+                None => Ok(EvidenceClassification::incomplete(
+                    CandidateEvidence::Unknown,
+                )),
             },
             RetrievalTargetType::Entity => match self
                 .knowledge
@@ -692,25 +685,22 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                         .authorize_graph(request, &record.scope, record.graph_id.as_ref())
                         .await?
                     {
-                        return Ok(EvidenceClassification {
-                            evidence: CandidateEvidence::Unknown,
-                            code_dependencies: Vec::new(),
-                        });
+                        return Ok(EvidenceClassification::incomplete(
+                            CandidateEvidence::Unknown,
+                        ));
                     }
                     if entity_is_code_kind(&record) {
-                        return Ok(EvidenceClassification {
-                            evidence: CandidateEvidence::CodeDependent,
-                            code_dependencies: vec![candidate.target_id.clone()],
-                        });
+                        return Ok(EvidenceClassification::code_dependent(vec![
+                            candidate.target_id.clone(),
+                        ]));
                     }
                     match self
                         .in_code_lineage(candidate.target_id.as_str(), request)
                         .await?
                     {
-                        Some(true) => Ok(EvidenceClassification {
-                            evidence: CandidateEvidence::CodeDependent,
-                            code_dependencies: vec![candidate.target_id.clone()],
-                        }),
+                        Some(true) => Ok(EvidenceClassification::code_dependent(vec![
+                            candidate.target_id.clone(),
+                        ])),
                         Some(false) => {
                             let mut code_dependencies = Vec::new();
                             let evidence = self
@@ -722,26 +712,23 @@ impl CandidateEvidenceResolver for RepositoryCandidateEvidence {
                                     Some(&mut code_dependencies),
                                 )
                                 .await?;
-                            Ok(EvidenceClassification {
+                            Ok(EvidenceClassification::complete(
                                 evidence,
                                 code_dependencies,
-                            })
+                            ))
                         }
-                        None => Ok(EvidenceClassification {
-                            evidence: CandidateEvidence::Unknown,
-                            code_dependencies: Vec::new(),
-                        }),
+                        None => Ok(EvidenceClassification::incomplete(
+                            CandidateEvidence::Unknown,
+                        )),
                     }
                 }
-                Some(_) | None => Ok(EvidenceClassification {
-                    evidence: CandidateEvidence::Unknown,
-                    code_dependencies: Vec::new(),
-                }),
+                Some(_) | None => Ok(EvidenceClassification::incomplete(
+                    CandidateEvidence::Unknown,
+                )),
             },
-            _ => Ok(EvidenceClassification {
-                evidence: CandidateEvidence::Unknown,
-                code_dependencies: Vec::new(),
-            }),
+            _ => Ok(EvidenceClassification::incomplete(
+                CandidateEvidence::Unknown,
+            )),
         }
     }
 }

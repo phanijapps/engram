@@ -50,6 +50,70 @@ pub enum CandidateEvidence {
 pub struct EvidenceClassification {
     pub evidence: CandidateEvidence,
     pub code_dependencies: Vec<String>,
+    /// True ONLY when the classifier validated the COMPLETE dependency set
+    /// (corrective r5, work package A3): every reachable reference was
+    /// resolved within budget by a repository-backed resolver. The trait
+    /// default and every state that stops short of a validated set (budget
+    /// exhaustion, an unsettleable own-lineage read, an unbound candidate)
+    /// carry `false` — aggregate-only classification cannot prove an empty
+    /// dependency set, so recipes must not accept on it.
+    pub complete: bool,
+}
+
+impl EvidenceClassification {
+    /// A fully validated ordinary chain: every reachable reference resolved
+    /// through authorized ordinary records within budget.
+    pub fn ordinary() -> Self {
+        Self {
+            evidence: CandidateEvidence::Ordinary,
+            code_dependencies: Vec::new(),
+            complete: true,
+        }
+    }
+
+    /// A fully validated code-dependent chain. `code_dependencies` is the
+    /// COMPLETE code set the recipe must validate against its view.
+    pub fn code_dependent(code_dependencies: Vec<String>) -> Self {
+        Self {
+            evidence: CandidateEvidence::CodeDependent,
+            code_dependencies,
+            complete: true,
+        }
+    }
+
+    /// A fully enumerated chain in which a reachable reference refused to
+    /// settle (missing/foreign/unauthorized/unresolvable): a decisive,
+    /// complete denial — not an unfinished walk.
+    pub fn unknown() -> Self {
+        Self {
+            evidence: CandidateEvidence::Unknown,
+            code_dependencies: Vec::new(),
+            complete: true,
+        }
+    }
+
+    /// General complete form produced by repository-backed walks.
+    /// Callers must guarantee `code_dependencies` is nonempty whenever
+    /// `evidence` is `CodeDependent`.
+    pub fn complete(evidence: CandidateEvidence, code_dependencies: Vec<String>) -> Self {
+        Self {
+            evidence,
+            code_dependencies,
+            complete: true,
+        }
+    }
+
+    /// The classifier did NOT validate the complete dependency set (the
+    /// aggregate-only trait default, budget exhaustion, an unsettleable
+    /// own-lineage read, or an unbound candidate). Never sufficient for
+    /// recipe acceptance.
+    pub fn incomplete(evidence: CandidateEvidence) -> Self {
+        Self {
+            evidence,
+            code_dependencies: Vec::new(),
+            complete: false,
+        }
+    }
 }
 
 /// Resolves candidate evidence from the owning canonical stores under the
@@ -70,10 +134,11 @@ pub trait CandidateEvidenceResolver: Send + Sync {
         candidate: &RetrievalResult,
         request: &RetrievalRequest,
     ) -> CoreResult<EvidenceClassification> {
-        Ok(EvidenceClassification {
-            evidence: self.evidence(candidate, request).await?,
-            code_dependencies: Vec::new(),
-        })
+        // Aggregate-only classification cannot prove an empty dependency
+        // set (work package A3): the default is explicitly incomplete.
+        Ok(EvidenceClassification::incomplete(
+            self.evidence(candidate, request).await?,
+        ))
     }
 }
 

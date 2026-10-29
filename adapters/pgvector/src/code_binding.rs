@@ -14,7 +14,7 @@ pub struct PgCodeBindingStore {
 fn db<T>(r: Result<T, tokio_postgres::Error>) -> Result<T, CodeBindingError> {
     r.map_err(|_| CodeBindingError::PersistenceFailure)
 }
-fn scope_key(scope: &Scope) -> Result<String, CodeBindingError> {
+pub(super) fn scope_key(scope: &Scope) -> Result<String, CodeBindingError> {
     serde_json::to_string(scope).map_err(|_| CodeBindingError::PersistenceFailure)
 }
 fn json<T: serde::Serialize>(value: &T) -> Result<serde_json::Value, CodeBindingError> {

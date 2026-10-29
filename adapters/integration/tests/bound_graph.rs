@@ -522,3 +522,213 @@ mod task_015 {
         );
     }
 }
+
+// ---------- task_016 focused cases -----------------------------------------
+
+mod task_016 {
+    use super::*;
+    use engram_integration::knowledge_query::AuthorizedKnowledgeQuery;
+    use engram_knowledge::CodeEligibilityGate;
+
+    /// Extends the fixture with durable LINEAGE records so the cell-backed
+    /// gate has real authorization truth: repo-a/repo-b targets are published
+    /// (authorized), repo-c targets are staged-only (foreign), and one unknown
+    /// id exists nowhere.
+    fn gate_fixture(
+        dir: &std::path::Path,
+    ) -> (AuthorizedKnowledgeQuery, Arc<SqlCodeBindingRepository>) {
+        let bindings = SqlCodeBindingRepository::open(dir.join("gate-bindings.sqlite"))
+            .expect("open binding store");
+        for repo in ["repo-a", "repo-c"] {
+            block_on(bindings.bind(CodeBinding {
+                scope: scope(),
+                repo_id: RepoId(repo.to_string()),
+                branch_ref: "refs/heads/main".to_string(),
+                version: 1,
+                active_generation: None,
+                epoch: 0,
+            }))
+            .expect("bind");
+        }
+        let bindings = Arc::new(bindings);
+        publish_generation(&bindings, "repo-a", "gen-a", 0, None);
+        // repo-c: staged attempt only — never published.
+        let repo_id = RepoId("repo-c".to_string());
+        let attempt_id = "attempt-gate-repo-c";
+        block_on(bindings.begin_attempt(
+            &scope(),
+            &repo_id,
+            generation("gen-c"),
+            attempt(&attempt_id, 0, None),
+        ))
+        .expect("begin staged attempt");
+
+        // Durable lineage: published targets, staged targets.
+        for (record_id, repo, generation_id) in [
+            ("doc-a-1", "repo-a", "gen-a"),
+            ("chunk-a-1", "repo-a", "gen-a"),
+            ("staged-c-1", "repo-c", "gen-c"),
+        ] {
+            block_on(bindings.put_lineage(
+                &scope(),
+                record_id,
+                CodeLineage {
+                    repo_id: RepoId(repo.to_string()),
+                    generation_id: generation_id.to_string(),
+                    source_path: format!("src/{record_id}.rs"),
+                    contributors: vec![record_id.to_string()],
+                },
+            ))
+            .expect("put lineage");
+        }
+
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge open"));
+        block_on(knowledge.put_entity(entity(
+            "chunk-a-1",
+            "publishedSymbol",
+            EntityKind::Function,
+            Some("repo-a"),
+            Some("gen-a"),
+        )))
+        .expect("put entity");
+        block_on(knowledge.put_entity(entity(
+            "staged-c-1",
+            "stagedSymbol",
+            EntityKind::Function,
+            Some("repo-c"),
+            Some("gen-c"),
+        )))
+        .expect("put entity");
+        block_on(knowledge.put_entity(entity(
+            "plain-doc",
+            "ordinaryConcept",
+            EntityKind::Concept,
+            None,
+            None,
+        )))
+        .expect("put entity");
+
+        let authorized = AuthorizedKnowledgeQuery::new(
+            knowledge,
+            bindings.clone() as Arc<dyn CodeEligibilityGate>,
+        );
+        (authorized, bindings)
+    }
+
+    /// foreign_ids_denied: explicit ids from a staged-only generation (or that
+    /// exist nowhere) deny the whole read — even with the caller's own scope —
+    /// while published ids authorize. No partial authorization leaks through.
+    #[test]
+    fn foreign_ids_denied() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (authorized, bindings) = gate_fixture(dir.path());
+
+        // Published ids authorize through the REAL cell gate.
+        let allowed = block_on(authorized.authorize_read(
+            &scope(),
+            &["doc-a-1".to_string(), "chunk-a-1".to_string()],
+            10,
+        ))
+        .expect("published ids authorize");
+        assert_eq!(
+            allowed,
+            vec!["doc-a-1".to_string(), "chunk-a-1".to_string()]
+        );
+
+        // A staged-generation id is foreign: whole-request denial.
+        let mixed = block_on(authorized.authorize_read(
+            &scope(),
+            &["doc-a-1".to_string(), "staged-c-1".to_string()],
+            10,
+        ));
+        assert!(
+            matches!(&mixed, Err(CoreError::InvalidRequest { reason }) if reason.contains("foreign or unpublished")),
+            "one foreign id denies the entire explicit read: {mixed:?}"
+        );
+
+        // Unknown ids deny too.
+        let unknown =
+            block_on(authorized.authorize_read(&scope(), &["no-such-target".to_string()], 10));
+        assert!(unknown.is_err(), "unknown ids never authorize");
+
+        // A DIFFERENT scope never sees this scope's targets either.
+        let mut foreign_scope = scope();
+        foreign_scope.workspace = Some("other-workspace".to_string());
+        let foreign =
+            block_on(bindings.authorize_query(&foreign_scope, &["doc-a-1".to_string()], 10));
+        assert!(
+            matches!(&foreign, Err(CoreError::InvalidRequest { reason }) if reason.contains("foreign or unpublished")),
+            "cross-scope explicit reads deny: {foreign:?}"
+        );
+    }
+
+    /// wildcard_cannot_widen: an empty (wildcard) request resolves to exactly
+    /// the PUBLISHED target set — staged repo-c records and unknown targets
+    /// never appear, and a narrowing request cannot resurrect them.
+    #[test]
+    fn wildcard_cannot_widen() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (authorized, _bindings) = gate_fixture(dir.path());
+
+        let wildcard =
+            block_on(authorized.authorize_read(&scope(), &[], 100)).expect("wildcard authorizes");
+        assert!(
+            wildcard.contains(&"doc-a-1".to_string())
+                && wildcard.contains(&"chunk-a-1".to_string()),
+            "the wildcard resolves the published set: {wildcard:?}"
+        );
+        assert!(
+            !wildcard.contains(&"staged-c-1".to_string()),
+            "the wildcard can never widen to a staged generation: {wildcard:?}"
+        );
+        assert!(!wildcard.iter().any(|id| id.contains("repo-c")));
+
+        // The authorized entity listing keeps non-code flowing and code
+        // constrained to the same published set.
+        let entities = block_on(authorized.list_entities_authorized(&scope(), &[]))
+            .expect("authorized listing");
+        let ids: Vec<String> = entities.iter().map(|e| e.id.to_string()).collect();
+        assert!(
+            ids.contains(&"chunk-a-1".to_string()),
+            "published code entity listed: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"plain-doc".to_string()),
+            "non-code entity preserved: {ids:?}"
+        );
+        assert!(
+            !ids.contains(&"staged-c-1".to_string()),
+            "staged code entity never listed: {ids:?}"
+        );
+    }
+
+    /// maintenance_scope_denied: maintenance requires explicit ids authorized
+    /// by the same view — a staged or unknown target denies, an empty request
+    /// (the old scope-wide shortcut) denies, and a published id authorizes.
+    #[test]
+    fn maintenance_scope_denied() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let (authorized, _bindings) = gate_fixture(dir.path());
+
+        // Explicit published ids authorize maintenance.
+        let maintained =
+            block_on(authorized.authorize_maintenance(&scope(), &["doc-a-1".to_string()]))
+                .expect("published maintenance authorizes");
+        assert_eq!(maintained, vec!["doc-a-1".to_string()]);
+
+        // A staged target denies.
+        let staged =
+            block_on(authorized.authorize_maintenance(&scope(), &["staged-c-1".to_string()]));
+        assert!(
+            matches!(&staged, Err(CoreError::InvalidRequest { reason }) if reason.contains("foreign or unpublished")),
+            "staged targets deny maintenance: {staged:?}"
+        );
+
+        // The scope-wide shortcut (no explicit ids) denies.
+        let empty = block_on(authorized.authorize_maintenance(&scope(), &[]));
+        assert!(
+            matches!(&empty, Err(CoreError::InvalidRequest { reason }) if reason.contains("explicit target ids")),
+            "no scope-wide maintenance shortcut exists: {empty:?}"
+        );
+    }
+}

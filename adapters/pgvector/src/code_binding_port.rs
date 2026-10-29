@@ -1,5 +1,8 @@
 //! Neutral repository port over the PostgreSQL code-binding cell.
-use crate::{code_binding::PgCodeBindingStore, connection::PgConnection};
+use crate::{
+    code_binding::{scope_key, PgCodeBindingStore},
+    connection::PgConnection,
+};
 use async_trait::async_trait;
 use engram_domain::*;
 use engram_knowledge::*;
@@ -269,5 +272,111 @@ impl CodeBindingRepository for PgCodeBindingRepository {
     async fn journal_reset(&self, journal: CodeResetJournal) -> CoreResult<CodeResetJournal> {
         self.blocking(move |store| store.journal_reset(&journal, "pending").map_err(error))
             .await
+    }
+}
+
+/// Shared scoped authorization for explicit code target ids, wildcard listing
+/// and maintenance mutations (task_016) — the PostgreSQL cell's twin of the
+/// SQLite gate. A target id is authorized exactly when its lineage row
+/// belongs to a PUBLISHED generation of a binding in this scope; foreign
+/// scopes, staged generations and unknown ids deny, and a wildcard widens to
+/// the published set only.
+#[async_trait]
+impl CodeEligibilityGate for PgCodeBindingRepository {
+    async fn authorize_query(
+        &self,
+        scope: &Scope,
+        requested_target_ids: &[String],
+        limit: usize,
+    ) -> CoreResult<ConstrainedCodeQuery> {
+        if limit == 0 {
+            return Err(CoreError::InvalidRequest {
+                reason: "authorized code query requires a nonzero budget".into(),
+            });
+        }
+        let scope = scope.clone();
+        let requested = requested_target_ids.to_vec();
+        self.blocking(move |store| {
+            let mut eligibility = store.eligibility(&scope).map_err(error)?;
+            if eligibility.generations.is_empty() {
+                if requested.is_empty() {
+                    eligibility.generations.clear();
+                    eligibility.repository_ids.clear();
+                    return Ok(ConstrainedCodeQuery {
+                        eligibility,
+                        target_ids: Vec::new(),
+                        limit,
+                    });
+                }
+                return Err(foreign_target(&requested));
+            }
+            let key = scope_key(&scope).map_err(error)?;
+            let target_ids = if requested.is_empty() {
+                let rows = crate::connection::runtime().block_on(async {
+                    store
+                        .connection
+                        .client
+                        .query(
+ "SELECT l.record_id FROM code_lineage l JOIN code_repo_bindings b ON b.tenant = l.tenant AND b.scope_key = l.scope_key AND b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.tenant = $1 AND l.scope_key = $2 ORDER BY l.record_id LIMIT $3",
+                            &[&scope.tenant, &key, &(limit as i64)],
+                        )
+                        .await
+                        .map_err(|_| storage_error())
+                })?;
+                rows.iter().map(|row| row.get::<_, String>(0)).collect()
+            } else {
+                let mut authorized = Vec::with_capacity(requested.len());
+                for id in &requested {
+                    let found = crate::connection::runtime().block_on(async {
+                        store
+                            .connection
+                            .client
+                            .query_opt(
+ "SELECT l.record_id FROM code_lineage l JOIN code_repo_bindings b ON b.tenant = l.tenant AND b.scope_key = l.scope_key AND b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.record_id = $1 AND l.tenant = $2 AND l.scope_key = $3",
+                                &[id, &scope.tenant, &key],
+                            )
+                            .await
+                            .map_err(|_| storage_error())
+                    })?;
+                    match found {
+                        Some(row) => authorized.push(row.get::<_, String>(0)),
+                        None => return Err(foreign_target(&[id.clone()])),
+                    }
+                }
+                authorized
+            };
+            Ok(ConstrainedCodeQuery {
+                eligibility,
+                target_ids,
+                limit,
+            })
+        })
+        .await
+    }
+
+    async fn authorize_maintenance(
+        &self,
+        scope: &Scope,
+        requested_target_ids: &[String],
+    ) -> CoreResult<Vec<String>> {
+        if requested_target_ids.is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: "maintenance authorization requires explicit target ids".into(),
+            });
+        }
+        let query = self
+            .authorize_query(scope, requested_target_ids, requested_target_ids.len())
+            .await?;
+        Ok(query.target_ids)
+    }
+}
+
+/// Typed denial for a foreign/unpublished/unknown code target id.
+fn foreign_target(ids: &[String]) -> CoreError {
+    CoreError::InvalidRequest {
+        reason: format!(
+            "BindingRequired: code target ids are foreign or unpublished in this scope: {}",
+            ids.join(", ")
+        ),
     }
 }

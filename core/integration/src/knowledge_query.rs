@@ -16,6 +16,7 @@ use engram_domain::{
     Scope,
 };
 use engram_runtime::CoreResult;
+use std::sync::Arc;
 
 /// Read port: list the entities / relationships / chunks visible to a scope.
 /// Lean chunk reference for embed/index paths (see
@@ -83,4 +84,113 @@ pub trait KnowledgeQuery: Send + Sync {
     ) -> CoreResult<Vec<KnowledgeChunk>> {
         Ok(Vec::new())
     }
+}
+
+/// Shared scoped authorization for explicit-ID code reads, wildcard listing
+/// and maintenance mutations (task_016, engine-neutral).
+///
+/// One seam wraps one [`KnowledgeQuery`] and one cell-backed
+/// [`CodeEligibilityGate`] — the same authorization view serves graph
+/// traversal, explicit-ID fetches and every maintenance operation, with no
+/// second scope hierarchy:
+/// - **Explicit ids** must resolve to lineage of a PUBLISHED generation in
+///   the request scope; a foreign, staged or unknown id denies the whole
+///   request (fail closed — never a silent partial result).
+/// - **Wildcard / empty request** resolves to exactly the published set — it
+///   can never widen to staged, foreign or unbound repositories.
+/// - **Maintenance** requires explicit authorized ids; there is no
+///   scope-wide maintenance shortcut.
+pub struct AuthorizedKnowledgeQuery {
+    query: Arc<dyn KnowledgeQuery>,
+    gate: Arc<dyn engram_knowledge::CodeEligibilityGate>,
+}
+
+impl AuthorizedKnowledgeQuery {
+    /// Wraps a knowledge read surface and the durable eligibility gate.
+    pub fn new(
+        query: Arc<dyn KnowledgeQuery>,
+        gate: Arc<dyn engram_knowledge::CodeEligibilityGate>,
+    ) -> Self {
+        Self { query, gate }
+    }
+
+    /// Authorizes an explicit-id (or wildcard, when `requested` is empty)
+    /// code read and returns the constrained target set.
+    pub async fn authorize_read(
+        &self,
+        scope: &Scope,
+        requested: &[String],
+        limit: usize,
+    ) -> CoreResult<Vec<String>> {
+        let constrained = self.gate.authorize_query(scope, requested, limit).await?;
+        Ok(constrained.target_ids)
+    }
+
+    /// Authorizes a maintenance mutation over explicit target ids — the same
+    /// authorization view, never a wider scope.
+    pub async fn authorize_maintenance(
+        &self,
+        scope: &Scope,
+        requested: &[String],
+    ) -> CoreResult<Vec<String>> {
+        self.gate.authorize_maintenance(scope, requested).await
+    }
+
+    /// Entities visible to `scope`, with code-derived entities constrained to
+    /// the authorized target set when one is requested: non-code entities
+    /// always flow (AC-007 keeps ordinary knowledge usable).
+    pub async fn list_entities_authorized(
+        &self,
+        scope: &Scope,
+        requested: &[String],
+    ) -> CoreResult<Vec<KnowledgeEntity>> {
+        let entities = self.query.list_entities(scope).await?;
+        if requested.is_empty() {
+            // Wildcard listing: everything EXCEPT code-derived entities not in
+            // the published set (constrain, never widen).
+            let authorized: std::collections::HashSet<String> = self
+                .authorize_read(scope, &[], usize::MAX)
+                .await?
+                .into_iter()
+                .collect();
+            return Ok(entities
+                .into_iter()
+                .filter(|entity| {
+                    let stamped = entity
+                        .metadata
+                        .as_ref()
+                        .and_then(|meta| {
+                            meta.get(engram_retrieval::bound_filter::CODE_GENERATION_KEY)
+                        })
+                        .is_some();
+                    !stamped || authorized.contains(&entity.id.to_string())
+                })
+                .collect());
+        }
+        let authorized: std::collections::HashSet<String> = self
+            .authorize_read(scope, requested, requested.len())
+            .await?
+            .into_iter()
+            .collect();
+        Ok(entities
+            .into_iter()
+            .filter(|entity| {
+                !is_code_derived(entity) || authorized.contains(&entity.id.to_string())
+            })
+            .collect())
+    }
+
+    /// The wrapped read surface (for unconstrained non-code reads).
+    pub fn query(&self) -> &Arc<dyn KnowledgeQuery> {
+        &self.query
+    }
+}
+
+/// True when an entity carries a bound-code generation stamp.
+fn is_code_derived(entity: &KnowledgeEntity) -> bool {
+    entity
+        .metadata
+        .as_ref()
+        .and_then(|meta| meta.get(engram_retrieval::bound_filter::CODE_GENERATION_KEY))
+        .is_some()
 }

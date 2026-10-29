@@ -300,3 +300,136 @@ pub(super) fn read_eligibility(
     }
     Ok(result)
 }
+
+/// Shared scoped authorization for explicit code target ids, wildcard listing
+/// and maintenance mutations (task_016). The cell owns the durable truth:
+/// a target id is authorized exactly when its lineage record belongs to a
+/// PUBLISHED generation of a binding in this scope. Foreign scopes,
+/// staged-only generations and unknown ids all deny — never a silent drop,
+/// never a widened wildcard.
+#[async_trait]
+impl engram_knowledge::CodeEligibilityGate for SqlCodeBindingRepository {
+    async fn authorize_query(
+        &self,
+        scope: &Scope,
+        requested_target_ids: &[String],
+        limit: usize,
+    ) -> CoreResult<engram_knowledge::ConstrainedCodeQuery> {
+        if limit == 0 {
+            return Err(CoreError::InvalidRequest {
+                reason: "authorized code query requires a nonzero budget".into(),
+            });
+        }
+        let mut store = self.lock()?;
+        let eligibility = {
+            let tx = store
+                .connection
+                .transaction()
+                .map_err(|_| storage_error())?;
+            let eligibility = read_eligibility(&tx, scope)?;
+            tx.commit().map_err(|_| storage_error())?;
+            eligibility
+        };
+        if eligibility.generations.is_empty() {
+            // No published binding in scope: explicit ids are foreign, and a
+            // wildcard has nothing eligible to widen to.
+            if requested_target_ids.is_empty() {
+                return Ok(engram_knowledge::ConstrainedCodeQuery {
+                    eligibility,
+                    target_ids: Vec::new(),
+                    limit,
+                });
+            }
+            return Err(foreign_target(requested_target_ids));
+        }
+        let target_ids = if requested_target_ids.is_empty() {
+            // Wildcard: every lineage target of a published generation in
+            // this scope, bounded by the requested budget — never staged or
+            // foreign repositories.
+            let tx = store
+                .connection
+                .transaction()
+                .map_err(|_| storage_error())?;
+            let rows = {
+                let mut statement = tx
+                    .prepare(
+                        "SELECT l.record_id FROM code_stage_lineage l JOIN code_repo_bindings b ON b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.scope_key = ?1 AND b.tenant = ?2 AND b.scope_key = ?1 ORDER BY l.record_id LIMIT ?3",
+                    )
+                    .map_err(|_| storage_error())?;
+                statement
+                    .query_map(
+                        rusqlite::params![json(scope)?, scope.tenant, limit as i64],
+                        |row| row.get::<_, String>(0),
+                    )
+                    .map_err(|_| storage_error())?
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| storage_error())?
+            };
+            tx.commit().map_err(|_| storage_error())?;
+            rows
+        } else {
+            // Explicit ids: EVERY requested id must resolve to lineage of a
+            // published generation in this scope; one foreign id denies the
+            // whole request (fail closed — no partial authorization).
+            let tx = store
+                .connection
+                .transaction()
+                .map_err(|_| storage_error())?;
+            let mut authorized = Vec::with_capacity(requested_target_ids.len());
+            {
+                let mut statement = tx
+                    .prepare(
+                        "SELECT l.record_id FROM code_stage_lineage l JOIN code_repo_bindings b ON b.repo_id = l.repo_id AND b.active_generation = l.generation_id WHERE l.record_id = ?1 AND b.tenant = ?2 AND b.scope_key = ?3 AND l.scope_key = ?3",
+                    )
+                    .map_err(|_| storage_error())?;
+                for id in requested_target_ids {
+                    let found = statement
+                        .query_row(rusqlite::params![id, scope.tenant, json(scope)?], |row| {
+                            row.get::<_, String>(0)
+                        })
+                        .optional()
+                        .map_err(|_| storage_error())?;
+                    match found {
+                        Some(record_id) => authorized.push(record_id),
+                        None => {
+                            return Err(foreign_target(&[id.clone()]));
+                        }
+                    }
+                }
+            }
+            tx.commit().map_err(|_| storage_error())?;
+            authorized
+        };
+        Ok(engram_knowledge::ConstrainedCodeQuery {
+            eligibility,
+            target_ids,
+            limit,
+        })
+    }
+
+    async fn authorize_maintenance(
+        &self,
+        scope: &Scope,
+        requested_target_ids: &[String],
+    ) -> CoreResult<Vec<String>> {
+        if requested_target_ids.is_empty() {
+            return Err(CoreError::InvalidRequest {
+                reason: "maintenance authorization requires explicit target ids".into(),
+            });
+        }
+        let query = self
+            .authorize_query(scope, requested_target_ids, requested_target_ids.len())
+            .await?;
+        Ok(query.target_ids)
+    }
+}
+
+/// Typed denial for a foreign/unpublished/unknown code target id.
+fn foreign_target(ids: &[String]) -> CoreError {
+    CoreError::InvalidRequest {
+        reason: format!(
+            "BindingRequired: code target ids are foreign or unpublished in this scope: {}",
+            ids.join(", ")
+        ),
+    }
+}

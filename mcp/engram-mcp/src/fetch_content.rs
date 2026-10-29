@@ -36,140 +36,36 @@ pub const DEFAULT_MAX_BYTES: usize = 100 * 1024;
 /// Hard ceiling for `max_bytes` overrides (matches the scanner's 1 MiB limit).
 pub const MAX_BYTES_CEILING: usize = 1024 * 1024;
 
-/// Canonical participating chunks (corrective r4, canonical 10 / original
-/// 11): a chunk participates in the EXACT path only when its ID carries
-/// DURABLE LINEAGE whose (repository, generation) matches a PUBLISHED
-/// eligible binding in this scope — never a metadata stamp, and never an
-/// unstamped row. Participants span at most one published generation per
-/// repository (retired generations' lineages do not match any eligible
-/// binding), so the origin, the symbol spans and the served revision all
-/// come from the SAME canonical current generation within one read.
-fn canonical_participating_chunks<'a>(
-    app: &App,
-    matched: &[&'a engram_domain::KnowledgeChunk],
-) -> Result<
-    (
-        Vec<&'a engram_domain::KnowledgeChunk>,
-        Option<(String, String)>,
-    ),
-    String,
-> {
-    let Ok(coordinator) = app.provider.code_bindings() else {
-        // No binding coordinator configured: no canonical participant can be
-        // established and the exact path does not apply (the verbatim path
-        // is the caller's fallback). This is not an ambiguity error.
-        return Ok((Vec::new(), None));
-    };
-    let view = futures::executor::block_on(coordinator.eligibility_view(&app.scope, None))
-        .map_err(|error| format!("eligibility resolution failed: {error}"))?;
-    let published: std::collections::BTreeSet<(String, String)> = view
-        .eligible_bindings()
-        .into_iter()
-        .map(|binding| (binding.repo_id, binding.generation_id))
-        .collect();
-    let mut participants: Vec<&'a engram_domain::KnowledgeChunk> = Vec::new();
-    let mut origin: Option<(String, String)> = None;
-    for chunk in matched {
-        let Some((repo, generation)) = view.code_lineage_of(chunk.id.as_str()) else {
-            // No durable lineage: unstamped or forged-stamp rows are not
-            // admissible participants.
-            continue;
-        };
-        if !published.contains(&(repo.to_owned(), generation.to_owned())) {
-            // Durable lineage on a NON-published generation (retained old
-            // generation): not a participant.
-            continue;
-        }
-        let candidate = (repo.to_owned(), generation.to_owned());
-        if let Some(existing) = &origin
-            && existing != &candidate
-        {
-            return Err("matched chunks span multiple published repository generations".into());
-        }
-        origin = Some(candidate);
-        participants.push(*chunk);
-    }
-    Ok((participants, origin))
-}
-
-/// Resolves `symbol` against the matched (same-generation) chunks and maps
-/// its line span to byte offsets in the retained blob (finding 11).
-///
-/// `Ok(None)` — no symbol requested. `Ok(Some((start, end)))` — the unique
-/// byte span. `Err(reason)` — the symbol is missing, matches nothing in this
-/// generation, or is ambiguous across chunks.
-fn exact_symbol_span(
-    chunks: &[&engram_domain::KnowledgeChunk],
-    symbol: Option<&str>,
-    blob: &[u8],
-) -> Result<Option<(usize, usize)>, String> {
-    let Some(symbol) = symbol else {
-        return Ok(None);
-    };
-    let mut spans: Vec<(u32, u32)> = chunks
+/// Canonical participating chunks (corrective r5, A4): one immutable
+/// input snapshot per matched row for the SAME-OPERATION exact read. The
+/// authoritative participant set, origin, spans and bytes are resolved
+/// inside the neutral coordinator/provider operation (`code_fetch_exact_participants`)
+/// — this helper only shapes the caller-side inputs (ids, claimed spans,
+/// symbol names, first stored line) from the listing that matched the path.
+fn exact_read_candidates(
+    matched: &[&engram_domain::KnowledgeChunk],
+) -> Vec<engram_integration::code_binding::ExactReadCandidate> {
+    matched
         .iter()
-        .filter_map(|chunk| {
-            let names = chunk
+        .map(|chunk| {
+            let location = chunk.location.as_ref();
+            let mut names: Vec<String> = chunk
                 .entities
                 .iter()
-                .filter_map(|entity| entity.name.as_deref())
-                .chain(
-                    chunk
-                        .location
-                        .as_ref()
-                        .and_then(|location| location.anchor.as_deref())
-                        .into_iter(),
-                );
-            let names: Vec<&str> = names.collect();
-            if names.is_empty() || !names.iter().any(|name| *name == symbol) {
-                return None;
+                .filter_map(|entity| entity.name.clone())
+                .collect();
+            if let Some(anchor) = location.and_then(|location| location.anchor.as_deref()) {
+                names.push(anchor.to_owned());
             }
-            let location = chunk.location.as_ref()?;
-            Some((
-                location.start_line.unwrap_or(1),
-                location
-                    .end_line
-                    .unwrap_or(location.start_line.unwrap_or(1)),
-            ))
+            engram_integration::code_binding::ExactReadCandidate {
+                record_id: chunk.id.to_string(),
+                start_line: location.and_then(|location| location.start_line),
+                end_line: location.and_then(|location| location.end_line),
+                names,
+                text_head: chunk.text.lines().next().unwrap_or("").to_owned(),
+            }
         })
-        .collect();
-    spans.sort();
-    spans.dedup();
-    match spans.as_slice() {
-        [] => Err(format!(
-            "symbol '{symbol}' has no chunk in the indexed generation for this path"
-        )),
-        [only] => {
-            let start_line = only.0.max(1) as usize;
-            let end_line = (only.1.max(only.0.max(1))) as usize;
-            // Map 1-based inclusive line numbers to byte offsets over the
-            // retained blob (line separators are \n and \r\n).
-            let mut line_start_offsets: Vec<usize> = Vec::with_capacity(end_line + 2);
-            line_start_offsets.push(0);
-            let mut index = 0usize;
-            while index < blob.len() {
-                if blob[index] == b'\n' {
-                    line_start_offsets.push(index + 1);
-                }
-                index += 1;
-            }
-            let start = *line_start_offsets
-                .get(start_line - 1)
-                .ok_or("symbol start line is outside the retained blob")?;
-            let end = line_start_offsets
-                .get(end_line)
-                .copied()
-                .unwrap_or(blob.len());
-            if start > end || end > blob.len() {
-                return Err("symbol span is outside the retained blob bounds".into());
-            }
-            Ok(Some((start, end)))
-        }
-        _ => Err(format!(
-            "symbol '{symbol}' is ambiguous across {len} chunks in the indexed generation",
-            len = spans.len()
-        )),
-    }
+        .collect()
 }
 
 /// The `fetch_content` tool handler.
@@ -227,37 +123,6 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
         ));
     }
 
-    // Disambiguate multi-repo scopes: same rel path indexed from several
-    // sources. Surface the candidates instead of silently mixing content.
-    let sources: Vec<&str> = {
-        let mut s: Vec<&str> = matched
-            .iter()
-            .map(|c| c.provenance.source.as_str())
-            .collect();
-        s.sort_unstable();
-        s.dedup();
-        s
-    };
-    if sources.len() > 1 {
-        let candidates: Vec<Value> = sources
-            .iter()
-            .map(|s| {
-                let count = matched.iter().filter(|c| c.provenance.source == *s).count();
-                json!({ "repository": s, "chunk_count": count })
-            })
-            .collect();
-        return Ok(protocol::text_content(
-            json!({
-                "status": "ambiguous",
-                "path": path,
-                "message": "path indexed from multiple sources — pass the exact `repository` value \
-                            of one candidate (or the search-style \"org/name\" for git-backed sources)",
-                "candidates": candidates,
-            })
-            .to_string(),
-        ));
-    }
-
     // Source order: by source line span; chunks without a start line sort
     // last but keep listing order (stable sort).
     let mut verbatim_fallback_note: Option<String> = None;
@@ -275,7 +140,7 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
         )
     });
 
-    // Kind: any symbol/code chunk ⇒ code; otherwise document chunks ⇒ doc.
+    // Kind: any symbol/code chunk => code; otherwise document chunks => doc.
     let is_code = ordered.iter().any(|c| {
         matches!(
             c.kind,
@@ -284,157 +149,218 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     });
     let kind = if is_code { "code" } else { "doc" };
 
-    // --- Bound code: EXACT retained committed bytes (task_017) -----------
-    // The exact path is reserved for CANONICALLY PARTICIPATING chunks: ids
-    // with durable lineage on a PUBLISHED generation (corrective r4,
-    // canonical 10). Unstamped rows and forged stamps are never admissible —
-    // they cannot select the origin, a span, or the served revision, and a
-    // missing snapshot stays an error in auto and verbatim modes alike
-    // (REQ-006: exact content or an explicit unavailable error, never a
-    // checkout masquerading as the revision).
-    let (participants, bound_origin) =
-        canonical_participating_chunks(app, &ordered).map_err(|reason| {
-            ToolError::new(
+    // --- Bound code: ONE same-operation exact read (task_017 / A4) ---------
+    // Participant identity (durable lineage vs the published eligible
+    // bindings — never metadata stamps), the origin repository/generation,
+    // caller authority, the retained descriptor, the digest-validated
+    // bytes, the symbol span AND the span-content validation are resolved
+    // INSIDE one consistent-read window by the neutral coordinator
+    // operation (a publication racing the operation retries once against
+    // the rebuilt view or denies — never mixed-generation output). A
+    // canonical-ID row whose claimed path or span was changed fails the
+    // in-window content validation against the digest-authenticated bytes.
+    let actor = engram_domain::Actor {
+        id: engram_domain::Id::from("engram-mcp-fetch-content"),
+        kind: engram_domain::ActorKind::Agent,
+        display_name: None,
+        metadata: None,
+    };
+    let outcome = futures::executor::block_on(app.provider.code_fetch_exact_participants(
+        &actor,
+        &app.scope,
+        &path,
+        &exact_read_candidates(&ordered),
+        symbol,
+    ));
+    let outcome = match outcome {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            return Err(ToolError::new(
+                -32603,
+                format!("exact retained source unavailable: {error}"),
+            ));
+        }
+    };
+    match outcome {
+        engram_integration::code_binding::ParticipantExactSource::Denied {
+            symbol_selection,
+            reason,
+        } => {
+            return Err(ToolError::new(
                 -32602,
-                format!("bound source origin is ambiguous: {reason}"),
-            )
-        })?;
-    // A row that asserts bound-code metadata or has durable (but retired)
-    // lineage cannot fall through to verbatim/stitching when no current
-    // canonical participant exists. That would resurrect old-only or forged
-    // rows as ordinary content.
+                if symbol_selection {
+                    format!("symbol selection failed: {reason}")
+                } else {
+                    reason
+                },
+            ));
+        }
+        engram_integration::code_binding::ParticipantExactSource::Served {
+            repo_id,
+            generation_id,
+            view: full_view,
+            span,
+            participants,
+        } => {
+            if mode == "chunks" {
+                // Corrective r4/r5 (canonical 10): the bound path's
+                // best-effort reconstruction consumes ONLY the canonical
+                // current participants the operation validated —
+                // old-generation, unstamped and forged-stamp chunks can
+                // never inject fallback content.
+                let participant_ids: std::collections::BTreeSet<String> =
+                    participants.into_iter().collect();
+                let fallback_chunks: Vec<&engram_domain::KnowledgeChunk> = ordered
+                    .iter()
+                    .copied()
+                    .filter(|chunk| participant_ids.contains(chunk.id.as_str()))
+                    .collect();
+                let source = ordered
+                    .first()
+                    .map(|chunk| chunk.provenance.source.as_str())
+                    .unwrap_or_default();
+                return stitch_chunks(
+                    &path,
+                    source,
+                    kind,
+                    is_code,
+                    &fallback_chunks,
+                    max_bytes,
+                    verbatim_fallback_note,
+                );
+            }
+            // Corrective r2 (finding 11): the exact path honors SYMBOL
+            // selection from the SAME generation (missing/ambiguous symbols
+            // deny), slices the retained bytes at same-OID byte offsets, and
+            // reports truthful digests: `content_sha256_full` hashes the
+            // whole retained blob and `content_sha256` hashes the bytes
+            // ACTUALLY RETURNED after caps. Non-UTF-8 bytes are never lossily
+            // decoded: they are returned as an explicitly labeled hex
+            // encoding of the exact bytes.
+            let (served_bytes, span_json) = match span {
+                None => (full_view.bytes.clone(), serde_json::Value::Null),
+                Some((start, end)) => (
+                    full_view.bytes[start..end].to_vec(),
+                    json!({ "start": start, "end": end }),
+                ),
+            };
+            let total_bytes = served_bytes.len();
+            let served_digest_before_cap = {
+                use sha2::{Digest, Sha256};
+                let mut hasher = Sha256::new();
+                hasher.update(&served_bytes);
+                hasher
+                    .finalize()
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            };
+            // Byte-exact cap: truncate on the returned BYTE budget; UTF-8
+            // safety is handled by the encoding branch below (no lossy
+            // replacement).
+            let (returned, truncated) = if served_bytes.len() > max_bytes {
+                (served_bytes[..max_bytes].to_vec(), true)
+            } else {
+                (served_bytes.clone(), false)
+            };
+            let served_digest = {
+                use sha2::{Digest, Sha256};
+                let mut hasher = Sha256::new();
+                hasher.update(&returned);
+                hasher
+                    .finalize()
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<String>()
+            };
+            let (encoding, content) = match String::from_utf8(returned.clone()) {
+                Ok(text) => ("utf-8", text),
+                Err(_) => {
+                    // Explicit non-UTF-8 handling: hex-encode the exact
+                    // bytes — no lossy replacement that would change them.
+                    (
+                        "hex",
+                        returned
+                            .iter()
+                            .map(|b| format!("{b:02x}"))
+                            .collect::<String>(),
+                    )
+                }
+            };
+            return Ok(protocol::text_content(
+                json!({
+                    "path": path,
+                    "repository": repo_id,
+                    "kind": kind,
+                    "source": "exact",
+                    "revision": full_view.commit_oid,
+                    "generation": generation_id,
+                    "span": span_json,
+                    "content_sha256_full": full_view.full_content_digest,
+                    "content_sha256": served_digest,
+                    "content_sha256_served_precap": served_digest_before_cap,
+                    "chunk_count": ordered.len(),
+                    "total_bytes": total_bytes,
+                    "returned_bytes": returned.len(),
+                    "max_bytes": max_bytes,
+                    "truncated": truncated,
+                    "encoding": encoding,
+                    "content": content,
+                    "note": "exact retained committed bytes for the indexed revision (no checkout fallback); content_sha256 hashes the returned bytes, content_sha256_full the whole blob",
+                })
+                .to_string(),
+            ));
+        }
+        engram_integration::code_binding::ParticipantExactSource::Unbound => {}
+    }
+    // `Unbound`: no matched row carries DURABLE lineage — the ordinary
+    // paths apply. A row that CLAIMS bound code through metadata stamps
+    // without any durable lineage is an impostor's claim: deny rather than
+    // serve it as ordinary content. (The stamp check is ONLY this backstop
+    // for forged claims — the bound/ordinary classification itself is the
+    // lineage-based one resolved above, and old-generation lineage denied
+    // inside the operation.)
     let has_bound_claim = ordered.iter().any(|chunk| {
         chunk.metadata.as_ref().is_some_and(|metadata| {
             metadata.contains_key("codeRepoId") || metadata.contains_key("codeGenerationId")
         })
     });
-    if participants.is_empty() && has_bound_claim {
+    if has_bound_claim {
         return Err(ToolError::new(
             -32602,
             "bound source has no current canonical participants",
         ));
     }
-    // Symbol/span selection uses ONLY the participants.
-    let span_chunks: Vec<&engram_domain::KnowledgeChunk> = if bound_origin.is_some() {
-        participants.clone()
-    } else {
-        Vec::new()
+
+    // Disambiguate multi-repo scopes: same rel path indexed from several
+    // sources. Decided AFTER canonical participant filtering — a
+    // different-source impostor beside a legitimate current participant
+    // cannot force an ambiguous response for a bound path (the bound answer
+    // above already won). Surface the candidates instead of silently mixing
+    // content.
+    let sources: Vec<&str> = {
+        let mut s: Vec<&str> = ordered
+            .iter()
+            .map(|c| c.provenance.source.as_str())
+            .collect();
+        s.sort_unstable();
+        s.dedup();
+        s
     };
-    if mode != "chunks"
-        && let Some((repo_id, generation_id)) = bound_origin
-    {
-        // Corrective r2 (finding 11): the exact path honors SYMBOL selection
-        // from the SAME generation (missing/ambiguous symbols deny), slices
-        // the retained bytes at same-OID byte offsets, and reports truthful
-        // digests: `content_sha256_full` hashes the whole retained blob and
-        // `content_sha256` hashes the bytes ACTUALLY RETURNED after caps.
-        // Non-UTF-8 bytes are never lossily decoded: they are returned as an
-        // explicitly labeled hex encoding of the exact bytes.
-        let actor = engram_domain::Actor {
-            id: engram_domain::Id::from("engram-mcp-fetch-content"),
-            kind: engram_domain::ActorKind::Agent,
-            display_name: None,
-            metadata: None,
-        };
-        let full_view = futures::executor::block_on(app.provider.code_fetch_exact_at(
-            &actor,
-            &app.scope,
-            &repo_id,
-            &generation_id,
-            &path,
-            None,
-        ));
-        let full_view = match full_view {
-            Ok(view) => view,
-            Err(error) => {
-                return Err(ToolError::new(
-                    -32603,
-                    format!("exact retained source unavailable: {error}"),
-                ));
-            }
-        };
-        // Symbol selection: canonical PARTICIPATING chunks naming the symbol
-        // decide the byte span; exactly one distinct span is required.
-        // Unstamped/forged impostors are not participants and can neither
-        // select nor ambiguate a span.
-        let span = match exact_symbol_span(&span_chunks, symbol, &full_view.bytes) {
-            Ok(span) => span,
-            Err(reason) => {
-                return Err(ToolError::new(
-                    -32602,
-                    format!("symbol selection failed: {reason}"),
-                ));
-            }
-        };
-        let (served_bytes, span_json) = match span {
-            None => (full_view.bytes.clone(), serde_json::Value::Null),
-            Some((start, end)) => (
-                full_view.bytes[start..end].to_vec(),
-                json!({ "start": start, "end": end }),
-            ),
-        };
-        let total_bytes = served_bytes.len();
-        let served_digest_before_cap = {
-            use sha2::{Digest, Sha256};
-            let mut hasher = Sha256::new();
-            hasher.update(&served_bytes);
-            hasher
-                .finalize()
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>()
-        };
-        // Byte-exact cap: truncate on the returned BYTE budget; UTF-8 safety
-        // is handled by the encoding branch below (no lossy replacement).
-        let (returned, truncated) = if served_bytes.len() > max_bytes {
-            (served_bytes[..max_bytes].to_vec(), true)
-        } else {
-            (served_bytes.clone(), false)
-        };
-        let served_digest = {
-            use sha2::{Digest, Sha256};
-            let mut hasher = Sha256::new();
-            hasher.update(&returned);
-            hasher
-                .finalize()
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>()
-        };
-        let (encoding, content) = match String::from_utf8(returned.clone()) {
-            Ok(text) => ("utf-8", text),
-            Err(_) => {
-                // Explicit non-UTF-8 handling: hex-encode the exact bytes —
-                // no lossy replacement that would change them.
-                (
-                    "hex",
-                    returned
-                        .iter()
-                        .map(|b| format!("{b:02x}"))
-                        .collect::<String>(),
-                )
-            }
-        };
+    if sources.len() > 1 {
+        let candidates: Vec<Value> = sources
+            .iter()
+            .map(|s| {
+                let count = ordered.iter().filter(|c| c.provenance.source == *s).count();
+                json!({ "repository": s, "chunk_count": count })
+            })
+            .collect();
         return Ok(protocol::text_content(
             json!({
+                "status": "ambiguous",
                 "path": path,
-                "repository": repo_id,
-                "kind": kind,
-                "source": "exact",
-                "revision": full_view.commit_oid,
-                "generation": generation_id,
-                "span": span_json,
-                "content_sha256_full": full_view.full_content_digest,
-                "content_sha256": served_digest,
-                "content_sha256_served_precap": served_digest_before_cap,
-                "chunk_count": ordered.len(),
-                "total_bytes": total_bytes,
-                "returned_bytes": returned.len(),
-                "max_bytes": max_bytes,
-                "truncated": truncated,
-                "encoding": encoding,
-                "content": content,
-                "note": "exact retained committed bytes for the indexed revision (no checkout fallback); content_sha256 hashes the returned bytes, content_sha256_full the whole blob",
+                "message": "path indexed from multiple sources — pass the exact `repository` value of one candidate (or the search-style \"org/name\" for git-backed sources)",
+                "candidates": candidates,
             })
             .to_string(),
         ));
@@ -484,21 +410,33 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
         }
     }
 
-    // Stitch: skip graph-only anchors (empty text — containers with neither
-    // doc comment nor signature). Docs join with a blank line (section
-    // boundaries); code joins with a single newline (line spans are
-    // contiguous-ish).
-    //
-    // Corrective r4 (canonical 10, fallback consumption): when the path is
-    // CANONICALLY BOUND (durable-lineage participants exist), the fallback
-    // reconstruction consumes ONLY those participants — old-generation,
-    // unstamped and forged-stamp chunks can never inject fallback content
-    // for a bound path. Unbound paths keep the historical stitching.
-    let fallback_chunks: Vec<&engram_domain::KnowledgeChunk> = if participants.is_empty() {
-        ordered.clone()
-    } else {
-        participants.clone()
-    };
+    // Unbound path: the historical stitching over the matched rows (a bound
+    // path never reaches here — it stitched only its validated participants
+    // above or denied).
+    stitch_chunks(
+        &path,
+        sources[0],
+        kind,
+        is_code,
+        &ordered,
+        max_bytes,
+        verbatim_fallback_note,
+    )
+}
+
+/// The legacy best-effort reconstruction: skip graph-only anchors (empty
+/// text — containers with neither doc comment nor signature); docs join
+/// with a blank line (section boundaries); code joins with a single newline
+/// (line spans are contiguous-ish). Always labeled as best-effort.
+fn stitch_chunks(
+    path: &str,
+    source: &str,
+    kind: &str,
+    is_code: bool,
+    fallback_chunks: &[&engram_domain::KnowledgeChunk],
+    max_bytes: usize,
+    verbatim_fallback_note: Option<String>,
+) -> Result<Value, ToolError> {
     let separator = if is_code { "\n" } else { "\n\n" };
     let parts: Vec<&str> = fallback_chunks
         .iter()
@@ -519,7 +457,7 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
 
     let mut body = json!({
         "path": path,
-        "repository": sources[0],
+        "repository": source,
         "kind": kind,
         "chunk_count": fallback_chunks.len(),
         "lines": { "first": first_line, "last": last_line },
@@ -723,6 +661,16 @@ mod tests {
         extra_lineage: std::sync::Mutex<Vec<engram_knowledge::TargetLineage>>,
         descriptor_digest: std::sync::Mutex<Option<String>>,
         live_lease: std::sync::Mutex<Option<engram_knowledge::CodeReadLease>>,
+        /// Deterministic mid-window publication (A4 barrier fixtures): when
+        /// `flip_at_descriptor` > 0, the Nth `get_source_descriptor` call
+        /// publishes `flip_generation` (retiring the current active) BEFORE
+        /// serving the durable descriptor — a REAL publication landing
+        /// between participant selection and the byte read, inside the
+        /// consistent-read window. No threads, no timing.
+        flip_at_descriptor: std::sync::atomic::AtomicUsize,
+        descriptor_reads: std::sync::atomic::AtomicUsize,
+        flip_applied: std::sync::atomic::AtomicBool,
+        flip_generation: std::sync::Mutex<Option<CodeGeneration>>,
     }
 
     impl InMemoryBindings {
@@ -748,7 +696,69 @@ mod tests {
                 live_lease: std::sync::Mutex::new(None),
                 retained_old: None,
                 extra_lineage: std::sync::Mutex::new(Vec::new()),
+                flip_at_descriptor: std::sync::atomic::AtomicUsize::new(0),
+                descriptor_reads: std::sync::atomic::AtomicUsize::new(0),
+                flip_applied: std::sync::atomic::AtomicBool::new(false),
+                flip_generation: std::sync::Mutex::new(None),
             }
+        }
+
+        /// Arms the deterministic mid-window publication: the `at`-th
+        /// `get_source_descriptor` call publishes `next` before serving the
+        /// (still durable) descriptor of the retiring generation.
+        fn arm_descriptor_flip(&self, at: usize, next: CodeGeneration) {
+            *self.flip_generation.lock().expect("flip lock") = Some(next);
+            self.flip_at_descriptor
+                .store(at, std::sync::atomic::Ordering::SeqCst);
+        }
+
+        /// Whether the armed publication has actually been applied.
+        fn flip_fired(&self) -> bool {
+            self.flip_applied.load(std::sync::atomic::Ordering::SeqCst)
+        }
+
+        fn flip_armed(&self) -> bool {
+            self.flip_at_descriptor
+                .load(std::sync::atomic::Ordering::SeqCst)
+                > 0
+        }
+
+        /// Marks the armed publication applied (idempotent).
+        fn apply_flip_if_due(&self) {
+            let reads = self
+                .descriptor_reads
+                .load(std::sync::atomic::Ordering::SeqCst);
+            let at = self
+                .flip_at_descriptor
+                .load(std::sync::atomic::Ordering::SeqCst);
+            if at == 0 || reads < at {
+                return;
+            }
+            self.flip_applied
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+
+        /// The EFFECTIVE binding (post-flip active generation + bumped epoch).
+        fn effective_binding(&self) -> engram_domain::CodeBinding {
+            if self.flip_applied.load(std::sync::atomic::Ordering::SeqCst)
+                && let Some(next) = self.flip_generation.lock().expect("flip lock").clone()
+            {
+                let mut binding = self.binding.clone();
+                binding.active_generation = Some(next.id.clone());
+                binding.epoch += 1;
+                return binding;
+            }
+            self.binding.clone()
+        }
+
+        /// The EFFECTIVE active generation record.
+        fn active_generation(&self) -> CodeGeneration {
+            if self.flip_applied.load(std::sync::atomic::Ordering::SeqCst)
+                && let Some(next) = self.flip_generation.lock().expect("flip lock").clone()
+            {
+                return next;
+            }
+            self.generation.clone()
         }
 
         /// Records durable lineage for ADDITIONAL participating chunks.
@@ -867,7 +877,7 @@ mod tests {
         ) -> CoreResult<Option<engram_domain::CodeBinding>> {
             Ok(
                 (scope == &self.binding.scope && *repo_id == self.binding.repo_id)
-                    .then(|| self.binding.clone()),
+                    .then(|| self.effective_binding()),
             )
         }
         async fn begin_attempt(
@@ -893,6 +903,12 @@ mod tests {
             _repo_id: &engram_domain::RepoId,
             generation_id: &str,
         ) -> CoreResult<Option<CodeGeneration>> {
+            let active = self.active_generation();
+            if generation_id == active.id {
+                return Ok(Some(active));
+            }
+            // The pre-flip active generation stays durable and readable
+            // (its descriptors and snapshot are retained).
             if generation_id == self.generation.id {
                 return Ok(Some(self.generation.clone()));
             }
@@ -928,17 +944,35 @@ mod tests {
             generation_id: &str,
             path: &str,
         ) -> CoreResult<Option<engram_domain::IndexedSource>> {
+            self.descriptor_reads
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            // The deterministic mid-window publication lands HERE — after
+            // the participants were selected and authorized, before the
+            // byte read completes the operation.
+            self.apply_flip_if_due();
             if scope != &self.binding.scope
                 || *repo_id != self.binding.repo_id
-                || generation_id != self.generation.id
                 || path != "src/bound.py"
             {
                 return Ok(None);
             }
+            // Durable descriptors serve their OWN generation (retirement of
+            // the active generation does not erase them).
+            let generation = if generation_id == self.generation.id {
+                self.generation.clone()
+            } else if let Some(old) = &self.retained_old
+                && old.id == generation_id
+            {
+                old.clone()
+            } else if generation_id == self.active_generation().id {
+                self.active_generation()
+            } else {
+                return Ok(None);
+            };
             Ok(Some(engram_domain::IndexedSource {
                 repo_id: self.binding.repo_id.clone(),
-                generation_id: self.generation.id.clone(),
-                commit_oid: self.generation.commit_oid.clone(),
+                generation_id: generation.id.clone(),
+                commit_oid: generation.commit_oid.clone(),
                 path: path.to_owned(),
                 content_digest: self
                     .descriptor_digest
@@ -997,16 +1031,17 @@ mod tests {
             &self,
             scope: &engram_domain::Scope,
         ) -> CoreResult<engram_knowledge::CodeEligibility> {
+            let binding = self.effective_binding();
             let published = scope == &self.binding.scope;
             let mut generations = published
-                .then(|| vec![self.generation.id.clone()])
+                .then(|| vec![self.active_generation().id])
                 .unwrap_or_default();
             if let Some(old) = &self.retained_old {
                 generations.push(old.id.clone());
             }
             Ok(engram_knowledge::CodeEligibility {
                 scope: scope.clone(),
-                epoch: u64::from(!published) + if published { self.binding.epoch } else { 0 },
+                epoch: if published { binding.epoch } else { 1 },
                 generations,
                 repository_ids: published
                     .then(|| vec![self.binding.repo_id.0.clone()])
@@ -1084,16 +1119,20 @@ mod tests {
             "codeRepoId".to_owned(),
             serde_json::Value::String("bound-repo".to_owned()),
         );
+        // Scanner-realistic chunk text: the FIRST LINE of the claimed span
+        // (a real CodeSymbol chunk's text is its declaration line — the
+        // same-operation content validation depends on this correspondence).
+        let lossy = String::from_utf8_lossy(&source);
+        let span_text = lossy
+            .lines()
+            .nth(start_line.saturating_sub(1) as usize)
+            .unwrap_or_else(|| lossy.lines().next().unwrap_or_default());
         let chunk = engram_domain::KnowledgeChunk {
             id: engram_domain::Id::from("chunk-bound-1"),
             document_id: engram_domain::Id::from("doc-bound"),
             source_id: engram_domain::Id::from("src-bound"),
             kind: KnowledgeChunkKind::CodeSymbol,
-            text: String::from_utf8_lossy(&source)
-                .lines()
-                .next()
-                .unwrap_or_default()
-                .to_owned(),
+            text: span_text.to_owned(),
             summary: None,
             location: Some(engram_domain::SourceLocation {
                 path: Some("src/bound.py".to_owned()),
@@ -1157,7 +1196,8 @@ mod tests {
     /// knowledge chunks stamped for that generation. Returns the app plus the
     /// retained root for deletion experiments.
     fn bound_app(dir: &std::path::Path, source: &str) -> (App, std::path::PathBuf) {
-        bound_app_impl(dir, source.as_bytes().to_vec(), "alpha", 1, 1)
+        let (app, root, _bindings) = bound_app_impl(dir, source.as_bytes().to_vec(), "alpha", 1, 1);
+        (app, root)
     }
 
     /// `bound_app` with a symbol-carrying chunk spanning [start_line, end_line].
@@ -1178,13 +1218,14 @@ mod tests {
         start_line: u32,
         end_line: u32,
     ) -> (App, std::path::PathBuf) {
-        bound_app_impl(
+        let (app, root, _bindings) = bound_app_impl(
             dir,
             source.as_bytes().to_vec(),
             symbol,
             start_line,
             end_line,
-        )
+        );
+        (app, root)
     }
 
     /// `bound_app` over raw (possibly non-UTF-8) bytes.
@@ -1194,7 +1235,9 @@ mod tests {
         start_line: u32,
         end_line: u32,
     ) -> (App, std::path::PathBuf) {
-        bound_app_impl(dir, source.to_vec(), "alpha", start_line, end_line)
+        let (app, root, _bindings) =
+            bound_app_impl(dir, source.to_vec(), "alpha", start_line, end_line);
+        (app, root)
     }
 
     /// `bound_app` whose chunk set contains TWO same-named entities with
@@ -1212,7 +1255,7 @@ mod tests {
         symbol_name: &str,
         start_line: u32,
         end_line: u32,
-    ) -> (App, std::path::PathBuf) {
+    ) -> (App, std::path::PathBuf, std::sync::Arc<InMemoryBindings>) {
         let scope = crate::scope::project_scope("bound-project", "default");
         let commit = ResolvedCommit {
             branch_ref: "refs/heads/main".to_owned(),
@@ -1258,6 +1301,66 @@ mod tests {
                 storage_dir: dir.to_path_buf(),
             },
             retained_root,
+            bindings,
+        )
+    }
+
+    /// [`bound_app_impl`] over EXPLICIT retained files and chunk rows (the
+    /// canonical-ID tampering fixtures): the digest is bound to the
+    /// `src/bound.py` file bytes, rows are used verbatim, and `lineage`
+    /// seeds durable lineage for additional records.
+    fn bound_app_with_rows(
+        dir: &std::path::Path,
+        files: Vec<CommittedFile>,
+        rows: Vec<engram_domain::KnowledgeChunk>,
+        lineage: &[(String, String)],
+    ) -> (App, std::path::PathBuf, std::sync::Arc<InMemoryBindings>) {
+        let scope = crate::scope::project_scope("bound-project", "default");
+        let commit = ResolvedCommit {
+            branch_ref: "refs/heads/main".to_owned(),
+            oid: "a".repeat(40),
+            object_format: "sha1".to_owned(),
+        };
+        let retained_root = dir.join("retained-rows");
+        let snapshot = retain_snapshot(&retained_root, commit, &files).expect("retain snapshot");
+        let bindings = std::sync::Arc::new(InMemoryBindings::published(&snapshot.commit.oid));
+        let bound_bytes = files
+            .iter()
+            .find(|file| file.path.as_os_str() == "src/bound.py")
+            .map(|file| file.bytes.clone())
+            .expect("fixture carries src/bound.py");
+        bindings.set_descriptor_digest(
+            engram_ingest::content_hash(&bound_bytes)
+                .trim_start_matches("sha256:")
+                .to_string(),
+        );
+        bindings.with_chunk_lineage(lineage);
+        let knowledge: std::sync::Arc<dyn engram_integration::KnowledgeQuery> =
+            std::sync::Arc::new(SeededQuery { chunks: rows });
+        let coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as std::sync::Arc<dyn CodeBindingRepository>,
+            std::sync::Arc::new(PermissiveAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            engram_domain::CapabilityState::Supported,
+        ))
+        .knowledge_query(knowledge)
+        .code_bindings(std::sync::Arc::new(coordinator))
+        .code_source(std::sync::Arc::new(RetainedSnapshotReader::new(
+            retained_root.clone(),
+        )))
+        .build();
+        (
+            App {
+                provider,
+                scope,
+                ontology: OntologyConfig::default(),
+                taxonomy: TaxonomyConfig::default(),
+                storage_dir: dir.to_path_buf(),
+            },
+            retained_root,
+            bindings,
         )
     }
 
@@ -1536,6 +1639,22 @@ mod tests {
             3,
             "def alpha():",
         ));
+        // A4 (r5): a DIFFERENT-SOURCE impostor beside the legitimate current
+        // participants — unstamped, no durable lineage, name `alpha` at
+        // wrong lines. It can neither participate nor force an AMBIGUITY
+        // response for this bound path: ambiguity is decided AFTER canonical
+        // participant filtering, and the bound answer wins.
+        let mut impostor_foreign = chunk_of(
+            "chunk-impostor-foreign-src",
+            "gen-2",
+            "alpha",
+            42,
+            42,
+            "def impostor():",
+        );
+        impostor_foreign.provenance.source = "impostor-foreign-source".to_owned();
+        impostor_foreign.metadata = None;
+        chunks.push(impostor_foreign);
         // Canonical durable lineage: the OLD chunks belong to the retired
         // gen-1 (not participants) and the CURRENT chunks to gen-2; the
         // unstamped and forged-stamp IMPOSTORS deliberately carry NO
@@ -1659,6 +1778,433 @@ mod tests {
                 && err.message.contains("no chunk in the indexed generation"),
             "old-only symbols must deny against the current generation: {}",
             err.message
+        );
+    }
+
+    /// Builds the OLD-ONLY fixture: the path's ONLY rows carry durable
+    /// gen-1 lineage (the retained superseded generation) while gen-2 is the
+    /// published active generation — with or without forged stamps. No
+    /// current participant exists for this path.
+    fn old_only_app(dir: &std::path::Path, forged_stamps: bool) -> App {
+        let scope = crate::scope::project_scope("bound-project", "default");
+        let old_source = b"def oldent():\r\n    return 9\r\n".to_vec();
+        let current_source = b"import os\r\ndef current():\r\n    return 2\r\n".to_vec();
+        let old_commit = ResolvedCommit {
+            branch_ref: "refs/heads/main".to_owned(),
+            oid: "e".repeat(40),
+            object_format: "sha1".to_owned(),
+        };
+        let current_commit = ResolvedCommit {
+            branch_ref: "refs/heads/main".to_owned(),
+            oid: "a".repeat(40),
+            object_format: "sha1".to_owned(),
+        };
+        let retained_root = dir.join("retained-oldonly");
+        retain_snapshot(
+            &retained_root,
+            old_commit.clone(),
+            &[CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "f".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: old_source.clone(),
+            }],
+        )
+        .expect("retain old");
+        retain_snapshot(
+            &retained_root,
+            current_commit.clone(),
+            &[CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "b".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: current_source.clone(),
+            }],
+        )
+        .expect("retain current");
+        let bindings = std::sync::Arc::new(InMemoryBindings::published_two_generations(
+            &old_commit.oid,
+            &current_commit.oid,
+        ));
+        bindings.set_descriptor_digest(
+            engram_ingest::content_hash(&current_source)
+                .trim_start_matches("sha256:")
+                .to_string(),
+        );
+        let mut metadata = engram_domain::Metadata::new();
+        if forged_stamps {
+            metadata.insert(
+                "codeGenerationId".to_owned(),
+                serde_json::Value::String("gen-2".to_owned()),
+            );
+            metadata.insert(
+                "codeRepoId".to_owned(),
+                serde_json::Value::String("bound-repo".to_owned()),
+            );
+        }
+        let row = engram_domain::KnowledgeChunk {
+            id: engram_domain::Id::from("chunk-oldonly-1"),
+            document_id: engram_domain::Id::from("doc-oldonly"),
+            source_id: engram_domain::Id::from("src-oldonly"),
+            kind: KnowledgeChunkKind::CodeSymbol,
+            text: "def oldent():".to_owned(),
+            summary: None,
+            location: Some(engram_domain::SourceLocation {
+                path: Some("src/bound.py".to_owned()),
+                start_line: Some(1),
+                end_line: Some(2),
+                start_offset: None,
+                end_offset: None,
+                anchor: None,
+            }),
+            entities: vec![engram_domain::EntityRef {
+                id: Some(engram_domain::Id::from("chunk-oldonly-1")),
+                kind: None,
+                name: Some("oldent".to_owned()),
+                aliases: Vec::new(),
+            }],
+            concepts: Vec::new(),
+            embedding_refs: Vec::new(),
+            content_hash: "sha256:chunk-oldonly-1".to_owned(),
+            provenance: fixture_provenance(),
+            policy: fixture_policy(),
+            created_at: chrono::Utc::now(),
+            updated_at: None,
+            metadata: if forged_stamps { Some(metadata) } else { None },
+        };
+        // Durable lineage ONLY on the retained old generation — the row is
+        // provably BOUND CODE (this is not an unbound path).
+        bindings.with_chunk_lineage(&[("chunk-oldonly-1".to_owned(), "gen-1".to_owned())]);
+        let knowledge: std::sync::Arc<dyn engram_integration::KnowledgeQuery> =
+            std::sync::Arc::new(SeededQuery { chunks: vec![row] });
+        let coordinator = CodeBindingCoordinator::new(
+            bindings.clone() as std::sync::Arc<dyn CodeBindingRepository>,
+            std::sync::Arc::new(PermissiveAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            engram_domain::CapabilityState::Supported,
+        ))
+        .knowledge_query(knowledge)
+        .code_bindings(std::sync::Arc::new(coordinator))
+        .code_source(std::sync::Arc::new(RetainedSnapshotReader::new(
+            retained_root.clone(),
+        )))
+        .build();
+        App {
+            provider,
+            scope,
+            ontology: OntologyConfig::default(),
+            taxonomy: TaxonomyConfig::default(),
+            storage_dir: dir.to_path_buf(),
+        }
+    }
+
+    /// A4 (r5, the resurrection regression): UNSTAMPED rows whose durable
+    /// lineage points ONLY at a retained old generation DENY in EVERY mode —
+    // the classification is lineage-based (never stamp-based), so there is
+    /// no verbatim and no chunk-stitching fallback for bound code.
+    #[test]
+    fn old_only_lineage_without_stamps_denies_all_modes() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = old_only_app(dir.path(), false);
+        for args in [
+            json!({ "path": "src/bound.py" }),
+            json!({ "path": "src/bound.py", "mode": "chunks" }),
+            json!({ "path": "src/bound.py", "mode": "verbatim" }),
+            json!({ "path": "src/bound.py", "symbol": "oldent" }),
+        ] {
+            let err = fetch_content(&app, &args).unwrap_err();
+            assert!(
+                err.message.contains("no current canonical participants"),
+                "unstamped old-only lineage must deny without fallback ({args}): {}",
+                err.message
+            );
+        }
+    }
+
+    /// A4 (r5): an IMPOSTOR-ONLY path — rows carrying FORGED current stamps
+    /// but no durable lineage — denies too (stamps are an impostor's claim,
+    /// not authority).
+    #[test]
+    fn impostor_only_forged_stamps_deny() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = old_only_app(dir.path(), true);
+        let err = fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap_err();
+        assert!(
+            err.message.contains("no current canonical participants"),
+            "forged-stamp-only rows must deny: {}",
+            err.message
+        );
+        let chunks_err =
+            fetch_content(&app, &json!({ "path": "src/bound.py", "mode": "chunks" })).unwrap_err();
+        assert!(
+            chunks_err
+                .message
+                .contains("no current canonical participants"),
+            "forged stamps never resurrect through chunks mode: {}",
+            chunks_err.message
+        );
+    }
+
+    /// A4 (r5): a DIFFERENT-SOURCE impostor beside a legitimate current
+    /// participant cannot force an AMBIGUITY response — ambiguity is decided
+    /// AFTER canonical participant filtering and the bound answer wins.
+    #[test]
+    fn different_source_impostor_beside_participant_is_not_ambiguous() {
+        let dir = tempfile::tempdir().unwrap();
+        let (app, _retained, current_oid, _len) = mixed_generation_app(dir.path());
+        let out = content_of(&fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap());
+        assert_eq!(
+            out["source"], "exact",
+            "the bound answer wins over the foreign-source impostor: {out}"
+        );
+        assert_eq!(
+            out["status"],
+            serde_json::Value::Null,
+            "no ambiguity status"
+        );
+        assert_eq!(out["revision"], current_oid);
+        // The impostor's text is nowhere in the served bytes.
+        let content = out["content"].as_str().unwrap();
+        assert!(
+            !content.contains("impostor"),
+            "the different-source impostor never contributes bytes: {content}"
+        );
+    }
+
+    /// A4 (r5): a CANONICAL-ID row (current durable lineage) with a CHANGED
+    /// SPAN — its stored declaration line no longer appears inside its
+    /// claimed span of the digest-validated revision — denies; current
+    /// durable-ID membership alone never authenticates a mutable row's span.
+    #[test]
+    fn canonical_id_changed_span_denies() {
+        let dir = tempfile::tempdir().unwrap();
+        let bound = b"def alpha():\r\n    return 1\r\n\r\ndef beta():\r\n    return 2\r\n".to_vec();
+        let row = |id: &str, name: &str, start: u32, end: u32, text: &str, stamps: bool| {
+            let mut metadata = engram_domain::Metadata::new();
+            if stamps {
+                metadata.insert(
+                    "codeGenerationId".to_owned(),
+                    serde_json::Value::String("gen-1".to_owned()),
+                );
+                metadata.insert(
+                    "codeRepoId".to_owned(),
+                    serde_json::Value::String("bound-repo".to_owned()),
+                );
+            }
+            engram_domain::KnowledgeChunk {
+                id: engram_domain::Id::from(id),
+                document_id: engram_domain::Id::from("doc-span"),
+                source_id: engram_domain::Id::from("src-span"),
+                kind: KnowledgeChunkKind::CodeSymbol,
+                text: text.to_owned(),
+                summary: None,
+                location: Some(engram_domain::SourceLocation {
+                    path: Some("src/bound.py".to_owned()),
+                    start_line: Some(start),
+                    end_line: Some(end),
+                    start_offset: None,
+                    end_offset: None,
+                    anchor: None,
+                }),
+                entities: vec![engram_domain::EntityRef {
+                    id: Some(engram_domain::Id::from(id)),
+                    kind: None,
+                    name: Some(name.to_owned()),
+                    aliases: Vec::new(),
+                }],
+                concepts: Vec::new(),
+                embedding_refs: Vec::new(),
+                content_hash: format!("sha256:{id}"),
+                provenance: fixture_provenance(),
+                policy: fixture_policy(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: if stamps { Some(metadata) } else { None },
+            }
+        };
+        // Legit participant: alpha at its true lines (1-2). Tampered
+        // participant: beta's declaration text with a CHANGED span claiming
+        // lines (1-1) — beta's text does not appear in line 1 of the blob.
+        let rows = vec![
+            row("chunk-span-real", "alpha", 1, 2, "def alpha():", true),
+            row("chunk-span-tampered", "beta", 1, 1, "def beta():", true),
+        ];
+        let (app, _root, _bindings) = bound_app_with_rows(
+            dir.path(),
+            vec![CommittedFile {
+                path: "src/bound.py".into(),
+                oid: "b".repeat(40),
+                mode: "100644".to_owned(),
+                bytes: bound,
+            }],
+            rows,
+            &[
+                ("chunk-span-real".to_owned(), "gen-1".to_owned()),
+                ("chunk-span-tampered".to_owned(), "gen-1".to_owned()),
+            ],
+        );
+        let err = fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap_err();
+        assert!(
+            err.message
+                .contains("span that does not match the retained revision"),
+            "a changed span on a canonical-ID row denies: {}",
+            err.message
+        );
+        let symbol_err =
+            fetch_content(&app, &json!({ "path": "src/bound.py", "symbol": "alpha" })).unwrap_err();
+        assert!(
+            symbol_err
+                .message
+                .contains("span that does not match the retained revision"),
+            "the tampered participant denies the whole path, symbol or not: {}",
+            symbol_err.message
+        );
+    }
+
+    /// A4 (r5): a CANONICAL-ID row for a DIFFERENT FILE whose location.path
+    /// was CHANGED to this path — its true content never appears at its
+    /// claimed span of this file's digest-validated blob — denies.
+    #[test]
+    fn canonical_id_changed_path_denies() {
+        let dir = tempfile::tempdir().unwrap();
+        let bound = b"def alpha():\r\n    return 1\r\n".to_vec();
+        let other = b"def otherfn():\r\n    return 7\r\n".to_vec();
+        let mut tampered = {
+            let mut metadata = engram_domain::Metadata::new();
+            metadata.insert(
+                "codeGenerationId".to_owned(),
+                serde_json::Value::String("gen-1".to_owned()),
+            );
+            metadata.insert(
+                "codeRepoId".to_owned(),
+                serde_json::Value::String("bound-repo".to_owned()),
+            );
+            engram_domain::KnowledgeChunk {
+                id: engram_domain::Id::from("chunk-path-tampered"),
+                document_id: engram_domain::Id::from("doc-path"),
+                source_id: engram_domain::Id::from("src-path"),
+                kind: KnowledgeChunkKind::CodeSymbol,
+                // The row's TRUE text (a declaration of ANOTHER file)...
+                text: "def otherfn():".to_owned(),
+                summary: None,
+                // ...with a CHANGED path claiming THIS file.
+                location: Some(engram_domain::SourceLocation {
+                    path: Some("src/bound.py".to_owned()),
+                    start_line: Some(1),
+                    end_line: Some(2),
+                    start_offset: None,
+                    end_offset: None,
+                    anchor: None,
+                }),
+                entities: vec![engram_domain::EntityRef {
+                    id: Some(engram_domain::Id::from("chunk-path-tampered")),
+                    kind: None,
+                    name: Some("otherfn".to_owned()),
+                    aliases: Vec::new(),
+                }],
+                concepts: Vec::new(),
+                embedding_refs: Vec::new(),
+                content_hash: "sha256:chunk-path-tampered".to_owned(),
+                provenance: fixture_provenance(),
+                policy: fixture_policy(),
+                created_at: chrono::Utc::now(),
+                updated_at: None,
+                metadata: Some(metadata),
+            }
+        };
+        tampered.location = Some(engram_domain::SourceLocation {
+            path: Some("src/bound.py".to_owned()),
+            start_line: Some(1),
+            end_line: Some(2),
+            start_offset: None,
+            end_offset: None,
+            anchor: None,
+        });
+        let mut legit = tampered.clone();
+        legit.id = engram_domain::Id::from("chunk-path-real");
+        legit.entities = vec![engram_domain::EntityRef {
+            id: Some(engram_domain::Id::from("chunk-path-real")),
+            kind: None,
+            name: Some("alpha".to_owned()),
+            aliases: Vec::new(),
+        }];
+        legit.text = "def alpha():".to_owned();
+        let (app, _root, _bindings) = bound_app_with_rows(
+            dir.path(),
+            vec![
+                CommittedFile {
+                    path: "src/bound.py".into(),
+                    oid: "b".repeat(40),
+                    mode: "100644".to_owned(),
+                    bytes: bound,
+                },
+                CommittedFile {
+                    path: "src/other.py".into(),
+                    oid: "c".repeat(40),
+                    mode: "100644".to_owned(),
+                    bytes: other,
+                },
+            ],
+            vec![legit, tampered],
+            &[
+                ("chunk-path-real".to_owned(), "gen-1".to_owned()),
+                ("chunk-path-tampered".to_owned(), "gen-1".to_owned()),
+            ],
+        );
+        let err = fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap_err();
+        assert!(
+            err.message
+                .contains("span that does not match the retained revision"),
+            "a changed path on a canonical-ID row denies: {}",
+            err.message
+        );
+    }
+
+    /// A4 (r5, the publication-at-selection/read barrier): a REAL
+    /// publication deterministically interposed between participant
+    /// selection and the byte read (inside the consistent-read window) can
+    /// never produce mixed-generation output — the window's post-check
+    /// catches it, the retry REBUILDS the participant set against the new
+    /// view, and the rebuilt attempt denies (the selected generation is no
+    /// longer published). The flip is a store double state change at a named
+    /// seam — no threads, no timing.
+    #[test]
+    fn publication_between_selection_and_read_denies_never_mixed() {
+        let dir = tempfile::tempdir().unwrap();
+        let source = "def alpha():\r\n    return 1\r\n";
+        let (app, _root, bindings) =
+            bound_app_impl(dir.path(), source.as_bytes().to_vec(), "alpha", 1, 2);
+        bindings.arm_descriptor_flip(
+            1,
+            CodeGeneration {
+                id: "gen-3".to_owned(),
+                binding_version: 1,
+                commit_oid: "9".repeat(40),
+                snapshot_digest: "d".repeat(64),
+                parser_fingerprint: "parser".to_owned(),
+                filter_fingerprint: "filter".to_owned(),
+            },
+        );
+        let err = fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap_err();
+        assert!(
+            err.message.contains("no current canonical participants"),
+            "the rebuilt attempt denies instead of serving the retired \
+             generation's bytes: {}",
+            err.message
+        );
+        assert!(
+            bindings.flip_fired(),
+            "the publication barrier actually fired inside the window"
+        );
+        // A follow-up read on the same state denies consistently — there is
+        // no mixed state left behind.
+        let again = fetch_content(&app, &json!({ "path": "src/bound.py" })).unwrap_err();
+        assert!(
+            again.message.contains("no current canonical participants"),
+            "the post-publication state denies consistently: {}",
+            again.message
         );
     }
 

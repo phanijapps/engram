@@ -10,6 +10,7 @@ use engram_domain::{
 };
 use engram_knowledge::{CodeBindingRepository, CoreResult, StageReceipt};
 pub use publication::CodeRebuildRequest;
+pub use source::{ExactReadCandidate, ParticipantExactSource};
 pub use status::CodeBindingStatus;
 
 /// Engine-neutral [`CodeEligibilityResolver`] over the durable
@@ -157,5 +158,11 @@ impl CodeBindingCoordinator {
     /// The durable binding store handle (shared seams read through this).
     pub fn store(&self) -> Arc<dyn CodeBindingRepository> {
         Arc::clone(&self.store)
+    }
+
+    /// The shared authorizer handle (crate-internal seams revalidate caller
+    /// authority INSIDE their read windows — corrective r5, A4).
+    pub(crate) fn authorizer_handle(&self) -> Arc<dyn CodeBindingAuthorizer> {
+        Arc::clone(&self.authorizer)
     }
 }

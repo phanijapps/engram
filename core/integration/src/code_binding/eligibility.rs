@@ -12,6 +12,59 @@ fn changed() -> CoreError {
         reason: "GenerationChanged".into(),
     }
 }
+
+/// Builds the canonical durable [`BoundCodeView`] for ONE eligibility
+/// snapshot: bindings with their active generations read per-repo from the
+/// binding records, plus the full durable lineage with retirement facts.
+/// Shared by [`CodeBindingCoordinator::eligibility_view`] and the pinned
+/// in-window view of the same-operation exact read (corrective r5, A4) so
+/// both resolve identical views.
+pub(crate) async fn durable_view_for_eligibility(
+    store: &std::sync::Arc<dyn engram_knowledge::CodeBindingRepository>,
+    scope: &Scope,
+    eligibility: &CodeEligibility,
+) -> CoreResult<engram_retrieval::BoundCodeView> {
+    let mut bindings = Vec::with_capacity(eligibility.repository_ids.len());
+    for repo in &eligibility.repository_ids {
+        let repo_id = RepoId(repo.clone());
+        let Some(binding) = store.get_binding(scope, &repo_id).await? else {
+            continue;
+        };
+        if let Some(generation) = binding.active_generation {
+            bindings.push(engram_retrieval::BoundBinding {
+                repo_id: repo.clone(),
+                branch_ref: binding.branch_ref,
+                generation_id: generation,
+            });
+        }
+    }
+    let lineage = store
+        .target_lineage(scope)
+        .await?
+        .into_iter()
+        // Review r5 finding 2: retired associations stay in the
+        // classification universe as POSITIVE code ownership with
+        // explicitly denied eligibility — dropping them here made a
+        // retired code-owned record look ordinary again. The view's
+        // `retired` fact carries the denial; consumers that must not
+        // admit retired records use `allows`/`classify`, and exact-read
+        // participation (`code_lineage_of`) excludes them.
+        .map(|entry| engram_retrieval::DurableLineage {
+            record_id: entry.record_id,
+            repo_id: entry.repo_id,
+            generation_id: entry.generation_id,
+            retired: entry.retired,
+        })
+        .collect();
+    Ok(engram_retrieval::BoundCodeView::from_eligibility(
+        &engram_retrieval::BoundCodeEligibility {
+            epoch: eligibility.epoch,
+            bindings,
+            lineage,
+        },
+    ))
+}
+
 impl CodeBindingCoordinator {
     /// Resolve the published-generation eligibility view for retrieval lanes
     /// and graph composition (task_013 / task_015, engine-neutral): the
@@ -27,46 +80,7 @@ impl CodeBindingCoordinator {
         // published bindings (repository + branch + generation verified
         // together) and the durable target lineage.
         let eligibility = self.store.eligibility(scope).await?;
-        let mut bindings = Vec::with_capacity(eligibility.repository_ids.len());
-        for repo in &eligibility.repository_ids {
-            let repo_id = RepoId(repo.clone());
-            let Some(binding) = self.store.get_binding(scope, &repo_id).await? else {
-                continue;
-            };
-            if let Some(generation) = binding.active_generation {
-                bindings.push(engram_retrieval::BoundBinding {
-                    repo_id: repo.clone(),
-                    branch_ref: binding.branch_ref,
-                    generation_id: generation,
-                });
-            }
-        }
-        let lineage = self
-            .store
-            .target_lineage(scope)
-            .await?
-            .into_iter()
-            // Review r5 finding 2: retired associations stay in the
-            // classification universe as POSITIVE code ownership with
-            // explicitly denied eligibility — dropping them here made a
-            // retired code-owned record look ordinary again. The view's
-            // `retired` fact carries the denial; consumers that must not
-            // admit retired records use `allows`/`classify`, and exact-read
-            // participation (`code_lineage_of`) excludes them.
-            .map(|entry| engram_retrieval::DurableLineage {
-                record_id: entry.record_id,
-                repo_id: entry.repo_id,
-                generation_id: entry.generation_id,
-                retired: entry.retired,
-            })
-            .collect();
-        let view = engram_retrieval::BoundCodeView::from_eligibility(
-            &engram_retrieval::BoundCodeEligibility {
-                epoch: eligibility.epoch,
-                bindings,
-                lineage,
-            },
-        );
+        let view = durable_view_for_eligibility(&self.store, scope, &eligibility).await?;
         Ok(view.with_requested_keys(requested_keys))
     }
 

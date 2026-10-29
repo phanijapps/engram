@@ -759,6 +759,7 @@ mod tests {
                     record_id: record_id.clone(),
                     repo_id: self.binding.repo_id.0.clone(),
                     generation_id: generation_id.clone(),
+                    retired: false,
                 });
             }
         }
@@ -915,6 +916,7 @@ mod tests {
                 record_id: "chunk-bound-1".to_owned(),
                 repo_id: self.binding.repo_id.0.clone(),
                 generation_id: self.generation.id.clone(),
+                retired: false,
             }];
             lineage.extend(self.extra_lineage.lock().expect("lineage lock").clone());
             Ok(lineage)

@@ -46,6 +46,10 @@ impl CodeBindingCoordinator {
             .target_lineage(scope)
             .await?
             .into_iter()
+            // Retirement is an additive ownership fact: keep it available to
+            // callers that classify durable code ownership, but never admit a
+            // retired target into a published-generation eligibility view.
+            .filter(|entry| !entry.retired)
             .map(|entry| engram_retrieval::DurableLineage {
                 record_id: entry.record_id,
                 repo_id: entry.repo_id,

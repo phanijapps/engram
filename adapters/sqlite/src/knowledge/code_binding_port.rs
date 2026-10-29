@@ -168,7 +168,7 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
             .connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|_| storage_error())?;
-        tx.execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id))")
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id)); CREATE TABLE IF NOT EXISTS code_stage_lineage_retirements(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(scope_key,record_id))")
             .map_err(|_| storage_error())?;
         // (1) Authority CAS on every involved binding epoch.
         for (repo_id, expected_epoch) in expected_binding_epochs {
@@ -215,7 +215,7 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
                 )
                 .optional()
                 .map_err(|_| storage_error())?;
-            let Some((repo_id, generation_id)) = lineage else {
+            let Some((repo_id, _generation_id)) = lineage else {
                 return Err(CoreError::Conflict {
                     reason: "GenerationChanged: maintenance target has no durable lineage".into(),
                 });
@@ -229,10 +229,11 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
                         .into(),
                 });
             }
-            let retired_generation = format!("retired:{generation_id}");
+            // Retirement is an additive typed fact. Historical lineage stays
+            // immutable, so indexed columns and record_json always agree.
             tx.execute(
-                "UPDATE code_stage_lineage SET generation_id=?1 WHERE scope_key=?2 AND record_id=?3 AND repo_id=?4 AND generation_id=?5",
-                params![retired_generation, key, target, repo_id, generation_id],
+                "INSERT OR IGNORE INTO code_stage_lineage_retirements(scope_key,record_id) VALUES(?1,?2)",
+                params![key, target],
             )
             .map_err(|_| storage_error())?;
         }
@@ -394,13 +395,14 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
         let store = self.lock()?;
         store
             .connection
-            .execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id))")
+            .execute_batch("CREATE TABLE IF NOT EXISTS code_stage_lineage(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,repo_id TEXT NOT NULL,generation_id TEXT NOT NULL,record_json TEXT NOT NULL,PRIMARY KEY(scope_key,record_id)); CREATE TABLE IF NOT EXISTS code_stage_lineage_retirements(scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(scope_key,record_id))")
             .map_err(|_| storage_error())?;
         let mut statement = store
             .connection
             .prepare(
-                "SELECT record_id, repo_id, generation_id FROM code_stage_lineage \
-                 WHERE scope_key = ?1 ORDER BY record_id",
+                "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL FROM code_stage_lineage lineage \
+                 LEFT JOIN code_stage_lineage_retirements retirement ON retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id \
+                 WHERE lineage.scope_key = ?1 ORDER BY lineage.record_id",
             )
             .map_err(|_| storage_error())?;
         let rows = statement
@@ -409,6 +411,7 @@ impl CodeBindingRepository for SqlCodeBindingRepository {
                     record_id: row.get(0)?,
                     repo_id: row.get(1)?,
                     generation_id: row.get(2)?,
+                    retired: row.get(3)?,
                 })
             })
             .map_err(|_| storage_error())?

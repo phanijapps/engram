@@ -1889,8 +1889,8 @@ mod task_016 {
         )
         .expect("fenced use executes");
 
-        // The OWNED first side effect landed: code ownership remains durable
-        // but its generation is retired, so a surviving target cannot become
+        // The owned side effect preserves immutable historical lineage and
+        // records retirement separately, so a surviving target cannot become
         // ordinary while it is no longer eligible for the active generation.
         let after = block_on(engram_knowledge::CodeBindingRepository::target_lineage(
             &*store,
@@ -1899,9 +1899,11 @@ mod task_016 {
         .expect("lineage after");
         assert!(
             after.iter().any(|entry| {
-                entry.record_id == "a-render" && entry.generation_id == "retired:gen-a"
+                entry.record_id == "a-render"
+                    && entry.generation_id == "gen-a"
+                    && entry.retired
             }),
-            "the owned retirement preserves positive code ownership as retired: {after:?}"
+            "retirement is an additive ownership fact with historical generation intact: {after:?}"
         );
         let binding_epoch_after = block_on(engram_knowledge::CodeBindingRepository::get_binding(
             &*store,

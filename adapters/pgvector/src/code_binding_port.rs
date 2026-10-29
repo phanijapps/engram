@@ -252,6 +252,8 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                 // Preserve code ownership after retirement. Deletion would
                 // turn a surviving code-owned record into an apparently
                 // ordinary record on an unbound/degraded read.
+                // The additive table preserves the historical generation.
+                tx.batch_execute("CREATE TABLE IF NOT EXISTS code_lineage_retirements(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(tenant,scope_key,record_id))").await.map_err(|_| storage_error())?;
                 for target in &targets {
                     let row = tx
                         .query_opt(
@@ -268,15 +270,15 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                     if !repos.iter().any(|repo| repo == &repo_id) {
                         return Err(error(CodeBindingError::StaleGeneration));
                     }
-                    let retired_generation = format!("retired:{generation_id}");
-                    let updated = tx
+                    let _ = generation_id;
+                    let inserted = tx
                         .execute(
-                            "UPDATE code_lineage SET generation_id=$1 WHERE tenant=$2 AND scope_key=$3 AND record_id=$4 AND repo_id=$5 AND generation_id=$6",
-                            &[&retired_generation, &tenant, &key, target, &repo_id, &generation_id],
+                            "INSERT INTO code_lineage_retirements(tenant,scope_key,record_id) VALUES($1,$2,$3) ON CONFLICT(tenant,scope_key,record_id) DO NOTHING",
+                            &[&tenant, &key, target],
                         )
                         .await
                         .map_err(|_| storage_error())?;
-                    if updated != 1 {
+                    if inserted != 1 {
                         return Err(error(CodeBindingError::StaleGeneration));
                     }
                 }
@@ -417,11 +419,12 @@ impl CodeBindingRepository for PgCodeBindingRepository {
         self.blocking(move |store| {
             let key = scope_key(&scope).map_err(error)?;
             crate::connection::runtime().block_on(async {
+                store.connection.client.batch_execute("CREATE TABLE IF NOT EXISTS code_lineage_retirements(tenant TEXT NOT NULL,scope_key TEXT NOT NULL,record_id TEXT NOT NULL,PRIMARY KEY(tenant,scope_key,record_id))").await.map_err(|_| storage_error())?;
                 let rows = store
                     .connection
                     .client
                     .query(
-                        "SELECT record_id, repo_id, generation_id FROM code_lineage WHERE tenant = $1 AND scope_key = $2 ORDER BY record_id",
+                        "SELECT lineage.record_id, lineage.repo_id, lineage.generation_id, retirement.record_id IS NOT NULL FROM code_lineage lineage LEFT JOIN code_lineage_retirements retirement ON retirement.tenant = lineage.tenant AND retirement.scope_key = lineage.scope_key AND retirement.record_id = lineage.record_id WHERE lineage.tenant = $1 AND lineage.scope_key = $2 ORDER BY lineage.record_id",
                         &[&scope.tenant, &key],
                     )
                     .await
@@ -432,6 +435,7 @@ impl CodeBindingRepository for PgCodeBindingRepository {
                         record_id: row.get(0),
                         repo_id: row.get(1),
                         generation_id: row.get(2),
+                        retired: row.get(3),
                     })
                     .collect())
             })

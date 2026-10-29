@@ -165,7 +165,12 @@ pub trait CodeBindingRepository: crate::CodeReadLeases + Send + Sync {
 pub struct TargetLineage {
     pub record_id: String,
     pub repo_id: String,
+    /// The immutable historical generation that created this record.
     pub generation_id: String,
+    /// Additive durable retirement fact. Retired records retain their true
+    /// lineage but are excluded from published-generation eligibility.
+    #[serde(default)]
+    pub retired: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -16,9 +16,35 @@ use engram_knowledge::{
     CoreResult, ExactSourceView, RetainedPath, RetainedSourceReader, content_digest,
     exact_unavailable,
 };
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
-use super::private_storage::private_directory;
+use super::private_storage::{file_identity, named_identity, private_directory};
+
+/// Retained snapshots originate from the acquisition reader's bounded file
+/// policy.  Reapply that ceiling before allocating an exact-source buffer so
+/// a substituted FIFO or oversized regular file cannot turn a read into an
+/// unbounded allocation or block.
+const MAX_RETAINED_READ_BYTES: u64 = 2 * 1024 * 1024;
+
+fn open_regular_nonfollow(
+    parent: &cap_std::fs::Dir,
+    leaf: &str,
+) -> std::io::Result<cap_std::fs::File> {
+    let mut options = cap_std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use cap_std::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    #[cfg(windows)]
+    {
+        use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+        options.follow(FollowSymlinks::No);
+    }
+    parent.open_with(Path::new(leaf), &options)
+}
 
 fn invalid_oid(oid: &str) -> bool {
     !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|b| b.is_ascii_hexdigit())
@@ -102,18 +128,48 @@ impl RetainedSourceReader for RetainedSnapshotReader {
         let metadata = current
             .symlink_metadata(leaf)
             .map_err(|_| exact_unavailable("no retained blob for the indexed path"))?;
-        if metadata.file_type().is_symlink() || !metadata.is_file() {
+        if metadata.file_type().is_symlink()
+            || !metadata.is_file()
+            || metadata.len() > MAX_RETAINED_READ_BYTES
+        {
             return Err(exact_unavailable(
                 "retained source blob was substituted or is unavailable",
             ));
         }
-        let mut bytes = Vec::new();
+        // Bind the checked directory entry to the opened no-follow handle.
+        // A rename or link substitution between inspection and open changes
+        // the handle identity and is denied even when replacement bytes hash
+        // to the same digest.
+        let checked_identity = named_identity(&current, Path::new(leaf)).map_err(|_| {
+            exact_unavailable("retained source blob was substituted or is unavailable")
+        })?;
+        let mut file = open_regular_nonfollow(&current, leaf)
+            .map_err(|_| exact_unavailable("no retained blob for the indexed path"))?;
+        let opened_metadata = file
+            .metadata()
+            .map_err(|_| exact_unavailable("no retained blob for the indexed path"))?;
+        if !opened_metadata.is_file()
+            || opened_metadata.file_type().is_symlink()
+            || opened_metadata.len() > MAX_RETAINED_READ_BYTES
+            || file_identity(&file).map_err(|_| {
+                exact_unavailable("retained source blob was substituted or is unavailable")
+            })? != checked_identity
         {
-            let mut file = current
-                .open(leaf)
-                .map_err(|_| exact_unavailable("no retained blob for the indexed path"))?;
-            std::io::Read::read_to_end(&mut file, &mut bytes)
-                .map_err(|_| exact_unavailable("no retained blob for the indexed path"))?;
+            return Err(exact_unavailable(
+                "retained source blob was substituted or is unavailable",
+            ));
+        }
+        let size = usize::try_from(opened_metadata.len())
+            .map_err(|_| exact_unavailable("retained source blob exceeds the read bound"))?;
+        let mut bytes = Vec::with_capacity(size);
+        file.by_ref()
+            .take(MAX_RETAINED_READ_BYTES.saturating_add(1))
+            .read_to_end(&mut bytes)
+            .map_err(|_| exact_unavailable("no retained blob for the indexed path"))?;
+        if bytes.len() != size || bytes.len() as u64 > MAX_RETAINED_READ_BYTES {
+            return Err(exact_unavailable(
+                "retained source blob changed during the bounded read",
+            ));
         }
         // (e) Integrity: the durable descriptor's digest must match the read
         // bytes; a mismatch means tampering — never serve it as exact. The

@@ -133,7 +133,7 @@ pub(crate) fn file_identity(file: &cap_std::fs::File) -> io::Result<DirectoryId>
         platform::identity_handle(file.as_raw_handle())
     }
 }
-fn named_identity(parent: &Dir, name: &Path) -> io::Result<DirectoryId> {
+pub(crate) fn named_identity(parent: &Dir, name: &Path) -> io::Result<DirectoryId> {
     #[cfg(unix)]
     {
         identity(&parent.symlink_metadata(name)?)

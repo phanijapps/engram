@@ -47,7 +47,7 @@ use engram_procedures::ProcedureRepository;
 use engram_proposals::ProposalService;
 use engram_retrieval::OutcomeLedger;
 use engram_retrieval::{RetrievalIndex, VectorIndex};
-use engram_runtime::CoreResult;
+use engram_runtime::{CoreError, CoreResult};
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
@@ -243,7 +243,15 @@ impl NativeProvider {
 
     /// Treesitter-indexes a code repository into the project workspace through
     /// the provider's knowledge + graph handles (no engine-store bypass). Takes a
-    /// `{ path, scope, scanFilter? }` JSON, returns the serialized `ScanSummary`.
+    /// `{ path, scope, repo, branchRef?, scanFilter? }` JSON, returns the
+    /// serialized `ScanSummary`.
+    ///
+    /// TASK-020: a persisted binding is MANDATORY for code — the request
+    /// names the bound repository (`repo`, a RepoId) and may assert the
+    /// branch (`branchRef`, equality-only). An unbound scope fails with a
+    /// `BindingRequired` denial; a mismatched branch assertion fails with
+    /// `BindingConflict`. There is no direct-ingest bypass around the
+    /// binding cell.
     ///
     /// Lexical-lane feeding and embed-on-scan are Module-1 concerns (Phase C);
     /// this method writes entities/relationships/graph only.
@@ -252,6 +260,62 @@ impl NativeProvider {
         let request: ScanRepoRequest = decode(&request_json)?;
         let summary = scan_via_provider(&self.inner, &request).map_err(to_napi_error)?;
         encode(&summary)
+    }
+
+    // ---- TASK-020: bound code operations (thin JSON forwards over the SAME
+    // neutral coordinator the recipes and MCP use — no independent binding
+    // derivation in the binding layer) ----
+
+    /// Binds a repository's branch for a scope: `{ scope, repo, branchRef }`
+    /// → serialized `CodeBinding`. Same-ref retries are idempotent; another
+    /// branch is a `BindingConflict` denial.
+    #[napi(js_name = "codeBindJson")]
+    pub fn code_bind_json(&self, request_json: String) -> Result<String> {
+        let request: CodeBindRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let binding = futures::executor::block_on(coordinator.bind(
+            &system_code_actor(),
+            &request.scope,
+            &request.repo,
+            &request.branch_ref,
+        ))
+        .map_err(to_napi_error)?;
+        encode(&binding)
+    }
+
+    /// Binding-keyed status for one repository: `{ scope, repo }` → the
+    /// serialized status (binding, indexed OID, on-request ref freshness,
+    /// binding-keyed checkpoint). Freshness is `unknown` until an explicit
+    /// observation — never derived from a checkout HEAD.
+    #[napi(js_name = "codeStatusJson")]
+    pub fn code_status_json(&self, request_json: String) -> Result<String> {
+        let request: CodeStatusRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let status = futures::executor::block_on(coordinator.status(
+            &system_code_actor(),
+            &request.scope,
+            &request.repo,
+            None,
+        ))
+        .map_err(to_napi_error)?;
+        encode(&status)
+    }
+
+    /// Records one on-request ref observation: `{ scope, repo, observedOid }`
+    /// → the serialized observation (policy on_request; stamped with the
+    /// coordinator clock; stored separately from the indexed OID).
+    #[napi(js_name = "codeObserveRefJson")]
+    pub fn code_observe_ref_json(&self, request_json: String) -> Result<String> {
+        let request: CodeObserveRefRequest = decode(&request_json)?;
+        let coordinator = self.inner.code_bindings().map_err(to_napi_error)?.clone();
+        let observation = futures::executor::block_on(coordinator.record_ref_observation(
+            &system_code_actor(),
+            &request.scope,
+            &request.repo,
+            &request.observed_oid,
+        ))
+        .map_err(to_napi_error)?;
+        encode(&observation)
     }
 
     /// Returns an export-import handle, or throws if not wired.
@@ -1625,18 +1689,92 @@ struct ScanRepoRequest {
     path: String,
     /// Scope the scanned entities/relationships/graph land in.
     scope: Scope,
+    /// The BOUND repository this scan belongs to (TASK-020): a persisted
+    /// binding is mandatory for code; the RepoId is the authority key —
+    /// never the path or its basename.
+    /// The BOUND repository this scan belongs to (TASK-020): a persisted
+    /// binding is mandatory for code; the RepoId is the authority key —
+    /// never the path or its basename. Absent `repo` denies with the SAME
+    /// typed `BindingRequired` envelope.
+    repo: Option<engram_domain::RepoId>,
+    /// Optional branch assertion: equality-only against the bound ref.
+    #[serde(default)]
+    branch_ref: Option<String>,
     /// Optional scan-filter config merged over the builtin defaults.
     #[serde(default)]
     scan_filter: Option<ScanFilterConfig>,
 }
 
-/// Runs `scan_repository` against the held provider's knowledge + graph handles.
-///
-/// Extracted from the napi method so it is unit-testable without the napi wrapper.
+/// `{ scope, repo, branch_ref }` for [`NativeProvider::code_bind_json`].
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeBindRequest {
+    scope: Scope,
+    repo: engram_domain::RepoId,
+    branch_ref: String,
+}
+
+/// `{ scope, repo }` for [`NativeProvider::code_status_json`].
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeStatusRequest {
+    scope: Scope,
+    repo: engram_domain::RepoId,
+}
+
+/// `{ scope, repo, observed_oid }` for
+/// [`NativeProvider::code_observe_ref_json`].
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodeObserveRefRequest {
+    scope: Scope,
+    repo: engram_domain::RepoId,
+    observed_oid: String,
+}
+
+/// System actor attributed to bound code operations performed through the
+/// binding layer (same identity discipline as `scan_actor`).
+fn system_code_actor() -> Actor {
+    Actor {
+        id: Id::from("engram-node-code"),
+        kind: ActorKind::Agent,
+        display_name: None,
+        metadata: None,
+    }
+}
+
+/// Runs `scan_repository` against the held provider's knowledge + graph
+/// handles — GATED on the persisted binding (TASK-020): the durable cell,
+/// not the caller's path, is the authority for code scans.
 fn scan_via_provider(
     provider: &EngramProvider,
     request: &ScanRepoRequest,
 ) -> CoreResult<ScanSummary> {
+    let coordinator = provider.code_bindings()?;
+    let repo = request
+        .repo
+        .clone()
+        .ok_or_else(|| CoreError::InvalidRequest {
+            reason:
+                "BindingRequired: code scans require a persisted binding; name the bound repository"
+                    .to_owned(),
+        })?;
+    let binding =
+        futures::executor::block_on(coordinator.store().get_binding(&request.scope, &repo))?
+            .ok_or_else(|| {
+                CoreError::InvalidRequest {
+        reason:
+            "BindingRequired: code scans require a persisted binding; bind the repository first"
+                .to_owned(),
+    }
+            })?;
+    if let Some(asserted) = &request.branch_ref
+        && *asserted != binding.branch_ref
+    {
+        return Err(CoreError::Conflict {
+            reason: "BindingConflict: asserted branch does not match the bound ref".to_owned(),
+        });
+    }
     let knowledge = provider.require_knowledge()?.clone();
     let graph = provider.require_graph()?.clone();
     let repo = KnowledgeRepoGraph::new(knowledge, graph);

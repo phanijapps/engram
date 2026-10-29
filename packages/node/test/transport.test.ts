@@ -58,6 +58,11 @@ class StubNativeProvider {
   scanRepositoryJson(): string {
     return '{"scanned":0,"ingested":0,"unchanged":0,"skipped":0,"entities":0,"relationships":0,"errors":0}';
   }
+  codeBindJson(): string {
+    return '{"repoId":"repo-stub","branchRef":"refs/heads/main","version":1,"activeGeneration":null,"epoch":0}';
+  }
+  codeStatusJson(): string { return "{}"; }
+  codeObserveRefJson(): string { return "{}"; }
   requireMemoryApi() {
     return {
       searchJson(): string {
@@ -326,6 +331,7 @@ describe("@engram/node", () => {
           return '{"graph":{},"entities":[],"relationships":[],"chunkCount":0}';
         }
         startScanJobJson(): string { return '{"jobId":"job-0"}'; }
+        codeBindJson(): string { return '{"repoId":"repo-stub","branchRef":"refs/heads/main","version":1,"activeGeneration":null,"epoch":0}'; }
         getScanJobJson(): string {
           return '{"status":"done","processed":0,"ingested":0,"unchanged":0,"skipped":0,"errors":0}';
         }
@@ -416,6 +422,7 @@ describe("@engram/node", () => {
           return '{"graph":{},"entities":[],"relationships":[],"chunkCount":0}';
         }
         startScanJobJson(): string { return '{"jobId":"job-0"}'; }
+        codeBindJson(): string { return '{"repoId":"repo-stub","branchRef":"refs/heads/main","version":1,"activeGeneration":null,"epoch":0}'; }
         getScanJobJson(): string {
           return '{"status":"done","processed":0,"ingested":0,"unchanged":0,"skipped":0,"errors":0}';
         }

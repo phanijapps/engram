@@ -42,9 +42,20 @@ describe.skipIf(!existsSync(ADDON_PATH))("NativeProviderTransport end-to-end (re
       const caps = (await transport.capabilities()) as { families?: unknown[] };
       expect(caps).toBeDefined();
 
-      // 2. Scan writes entities through the facade + napi boundary.
+      // 2. Bind the repository, then scan it through the facade + napi
+      //    boundary (TASK-020: persisted binding is mandatory for code).
       const scope = { tenant: "smoke", workspace: "smoke" };
-      const summary = (await transport.scan({ path: repo, scope })) as {
+      const binding = (await transport.codeBind({
+        scope,
+        repo: "smoke-repo",
+        branchRef: "refs/heads/main"
+      })) as { branchRef?: string };
+      expect(binding.branchRef).toBe("refs/heads/main");
+      const summary = (await transport.scan({
+        path: repo,
+        scope,
+        repo: "smoke-repo"
+      })) as {
         scanned?: number;
         entities?: number;
       };

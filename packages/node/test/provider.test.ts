@@ -23,6 +23,9 @@ function mockProvider(): {
     },
     consolidateJson: capture("consolidate"),
     scanRepositoryJson: capture("scan"),
+    codeBindJson: capture("codeBind"),
+    codeStatusJson: capture("codeStatus"),
+    codeObserveRefJson: capture("codeObserveRef"),
     requireMemoryApi: () => ({
       searchJson: capture("search"),
       writeJson: capture("write"),
@@ -65,12 +68,16 @@ describe("NativeProviderTransport", () => {
     expect(recorded("write")[0]).toMatchObject({ key: "k", content: "c" });
   });
 
-  it("scan dispatches to scanRepositoryJson with path + scope", async () => {
+  it("scan dispatches to scanRepositoryJson with path + scope + repo (binding mandatory)", async () => {
     const { provider, recorded } = mockProvider();
     const transport = createNativeProviderTransport({ provider });
-    await transport.scan({ path: "/repo", scope: { tenant: "t" } });
+    await transport.scan({ path: "/repo", scope: { tenant: "t" }, repo: "repo-a" });
     expect(recorded("scan")).toHaveLength(1);
-    expect(recorded("scan")[0]).toMatchObject({ path: "/repo", scope: { tenant: "t" } });
+    expect(recorded("scan")[0]).toMatchObject({
+      path: "/repo",
+      scope: { tenant: "t" },
+      repo: "repo-a"
+    });
   });
 
   it("consolidate forwards dryRun and injects a system requester", async () => {

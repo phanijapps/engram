@@ -93,8 +93,33 @@ export interface NativeProviderTransport {
   recall(request: RetrievalRequest): Promise<ContextPayload>;
   /** Write a memory + lifecycle event. */
   write(request: WriteMemoryRequest): Promise<WriteMemoryResponse>;
-  /** Treesitter-index a repository into the project workspace. */
-  scan(request: { path: string; scope: unknown; scanFilter?: unknown }): Promise<unknown>;
+  /** Treesitter-index a BOUND repository into the project workspace
+   *  (TASK-020: `repo` names the persisted binding — the durable cell, not
+   *  the path, is the authority; `branchRef` may assert equality). */
+  scan(request: {
+    path: string;
+    scope: unknown;
+    /** The bound repository (TASK-020): code scans require a persisted
+     *  binding; omitting it denies with the typed `BindingRequired`
+     *  envelope from the Rust side. */
+    repo?: string;
+    branchRef?: string;
+    scanFilter?: unknown;
+  }): Promise<unknown>;
+  /** Bind a repository branch (TASK-020): same-ref idempotent, other branch
+   *  BindingConflict. */
+  codeBind(request: { scope: unknown; repo: string; branchRef: string }): Promise<unknown>;
+  /** Binding-keyed status: indexed OID, on-request ref freshness (unknown
+   *  until an explicit observation — never checkout-HEAD-derived), and the
+   *  binding-keyed checkpoint. */
+  codeStatus(request: { scope: unknown; repo: string }): Promise<unknown>;
+  /** Record one on-request ref observation (observed OID, on-request
+   *  policy; stored separately from the indexed OID). */
+  codeObserveRef(request: {
+    scope: unknown;
+    repo: string;
+    observedOid: string;
+  }): Promise<unknown>;
   /** Run a consolidation cycle (reflection + decay). A system requester is
    *  injected; callers pass only `scope` + optional `dryRun` / `since` / `until`. */
   consolidate(request: {
@@ -237,8 +262,34 @@ class JsonNativeProviderTransport implements NativeProviderTransport {
     return decode<WriteMemoryResponse>(this.provider.requireMemoryApi().writeJson(encode(request)));
   }
 
-  async scan(request: { path: string; scope: unknown; scanFilter?: unknown }): Promise<unknown> {
+  async scan(request: {
+    path: string;
+    scope: unknown;
+    repo?: string;
+    branchRef?: string;
+    scanFilter?: unknown;
+  }): Promise<unknown> {
     return decode(this.provider.scanRepositoryJson(encode(request)));
+  }
+
+  async codeBind(request: {
+    scope: unknown;
+    repo: string;
+    branchRef: string;
+  }): Promise<unknown> {
+    return decode(this.provider.codeBindJson(encode(request)));
+  }
+
+  async codeStatus(request: { scope: unknown; repo: string }): Promise<unknown> {
+    return decode(this.provider.codeStatusJson(encode(request)));
+  }
+
+  async codeObserveRef(request: {
+    scope: unknown;
+    repo: string;
+    observedOid: string;
+  }): Promise<unknown> {
+    return decode(this.provider.codeObserveRefJson(encode(request)));
   }
 
   async consolidate(request: {

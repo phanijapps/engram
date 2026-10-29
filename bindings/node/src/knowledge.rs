@@ -53,6 +53,10 @@ use crate::knowledge_sources::{list_sources_json, put_source_json};
 #[napi]
 pub struct NativeKnowledgeEngine {
     store: Arc<SqlKnowledgeStore>,
+    /// TASK-020: the durable code-binding cell sibling — code-graph queries
+    /// serve only published bound code (fail closed; no checkout-derived
+    /// eligibility).
+    bindings: crate::ingest_ops::BindingCell,
     lexical: Mutex<Option<LexicalIndex>>,
 }
 
@@ -63,13 +67,21 @@ impl NativeKnowledgeEngine {
     /// in-memory.
     #[napi(constructor)]
     pub fn new(path: Option<String>) -> Result<Self> {
-        let store = match path {
+        let store = match &path {
             Some(path) => SqlKnowledgeStore::open_file(path),
             None => SqlKnowledgeStore::open_in_memory(),
         }
         .map_err(|e| Error::from_reason(e.to_string()))?;
+        let bindings_path =
+            path.map(|path| std::path::PathBuf::from(path).with_extension("code-bindings.sqlite"));
+        let bindings = match bindings_path {
+            Some(path) => engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(path),
+            None => engram_store_sqlite::knowledge::SqlCodeBindingRepository::open(":memory:"),
+        }
+        .map_err(|e| Error::from_reason(e.to_string()))?;
         Ok(Self {
             store: Arc::new(store),
+            bindings: crate::ingest_ops::BindingCell::new(bindings),
             lexical: Mutex::new(None),
         })
     }
@@ -98,51 +110,51 @@ impl NativeKnowledgeEngine {
     /// `{scope}` -> dead-code symbol keys (zero callers on `calls` edges).
     #[napi(js_name = "deadCodeJson")]
     pub fn dead_code_json(&self, request_json: String) -> Result<String> {
-        dead_code_json(&self.store, request_json)
+        dead_code_json(&self.store, &self.bindings.cell(), request_json)
     }
 
     /// `{scope}` -> file-level import graph with module→file resolution
     /// (RFC-0020 Phase 2).
     #[napi(js_name = "fileDependenciesJson")]
     pub fn file_dependencies_json(&self, request_json: String) -> Result<String> {
-        file_dependencies_json(&self.store, request_json)
+        file_dependencies_json(&self.store, &self.bindings.cell(), request_json)
     }
 
     /// `{scope, query, depth?, maxNodes?, maxEdges?}` -> relevance-seeded
     /// bounded subgraph (RFC-0020 Phase 2 explore).
     #[napi(js_name = "exploreJson")]
     pub fn explore_json(&self, request_json: String) -> Result<String> {
-        explore_json(&self.store, request_json)
+        explore_json(&self.store, &self.bindings.cell(), request_json)
     }
 
     /// `{scope, target, depth?}` -> transitive caller keys (blast radius).
     #[napi(js_name = "blastRadiusJson")]
     pub fn blast_radius_json(&self, request_json: String) -> Result<String> {
-        blast_radius_json(&self.store, request_json)
+        blast_radius_json(&self.store, &self.bindings.cell(), request_json)
     }
 
     /// `{scope, from, to}` -> shortest call path or `null`.
     #[napi(js_name = "dependencyPathJson")]
     pub fn dependency_path_json(&self, request_json: String) -> Result<String> {
-        dependency_path_json(&self.store, request_json)
+        dependency_path_json(&self.store, &self.bindings.cell(), request_json)
     }
 
     /// `{scope, limit?}` -> `[[symbol, score], ...]` by PageRank centrality.
     #[napi(js_name = "centralSymbolsJson")]
     pub fn central_symbols_json(&self, request_json: String) -> Result<String> {
-        central_symbols_json(&self.store, request_json)
+        central_symbols_json(&self.store, &self.bindings.cell(), request_json)
     }
 
     /// `{scope, limit?}` -> `[[symbol, score], ...]` by betweenness (bridges).
     #[napi(js_name = "bridgeSymbolsJson")]
     pub fn bridge_symbols_json(&self, request_json: String) -> Result<String> {
-        bridge_symbols_json(&self.store, request_json)
+        bridge_symbols_json(&self.store, &self.bindings.cell(), request_json)
     }
 
     /// `{scope, maxPasses?}` -> `{symbol: label}` Louvain communities.
     #[napi(js_name = "callCommunitiesJson")]
     pub fn call_communities_json(&self, request_json: String) -> Result<String> {
-        call_communities_json(&self.store, request_json)
+        call_communities_json(&self.store, &self.bindings.cell(), request_json)
     }
 
     /// `{source}` -> cyclomatic complexity (integer).
@@ -172,7 +184,7 @@ impl NativeKnowledgeEngine {
     /// `{scope, entryPoint, maxDepth?}` -> `[symbol, ...]` execution flow.
     #[napi(js_name = "processFlowJson")]
     pub fn process_flow_json(&self, request_json: String) -> Result<String> {
-        process_flow_json(&self.store, request_json)
+        process_flow_json(&self.store, &self.bindings.cell(), request_json)
     }
 
     /// `{endpoints, calls}` -> cross-service API topology edges.

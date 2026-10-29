@@ -1,4 +1,18 @@
-export { createEngramClient, EngramClient, type EngramClientOptions } from "./client.js";
+export { createEngramClient, EngramClient, type EngramClientOptions, EngramCodeBindingClient } from "./client.js";
 export { createNativeEngramClient } from "./native.js";
-/** Transport boundary consumed by `EngramClient` and JavaScript-side adapters. */
+
 export type { EngramTransport } from "./transport.js";
+export {
+  EngramCodeBindingUnsupportedError,
+  isBindingDenied,
+  type CodeBindRequest,
+  type CodeBindingCheckpoint,
+  type CodeBindingRecord,
+  type CodeBindingStatusResult,
+  type CodeFreshnessState,
+  type CodeObserveRefRequest,
+  type CodeRefFreshness,
+  type CodeRefObservation,
+  type CodeScanRequest,
+  type CheckpointGeneration
+} from "./code-binding.js";

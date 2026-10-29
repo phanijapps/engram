@@ -1,6 +1,12 @@
 //! Chunk operations for the knowledge engine.
 //!
 //! Manages knowledge chunk operations through the KnowledgeRepository port.
+//!
+//! TASK-020 boundary note: these are the ORDINARY DOCUMENT chunk semantics —
+//! deliberately NOT a code-lane retrieval surface. Document chunks stay
+//! available when code is unbound (plan: "ordinary document ingestion remains
+//! separate"); bound CODE content is served only through the retained-source
+//! and constrained-retrieval seams, never by listing chunks here.
 
 use engram_domain::KnowledgeChunk;
 use engram_knowledge::KnowledgeRepository;

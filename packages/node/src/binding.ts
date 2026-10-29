@@ -55,6 +55,7 @@ export interface NativeKnowledgeEngineConstructor {
 export interface NativeIngestEngineBinding {
   ingestExtractJson(requestJson: string): string;
   startScanJobJson(requestJson: string): string;
+  codeBindJson(requestJson: string): string;
   getScanJobJson(requestJson: string): string;
 }
 
@@ -266,6 +267,10 @@ export interface NativeProviderBinding {
   exploreJson(requestJson: string): string;
   consolidateJson(requestJson: string): string;
   scanRepositoryJson(requestJson: string): string;
+  /** TASK-020 bound code operations over the neutral coordinator. */
+  codeBindJson(requestJson: string): string;
+  codeStatusJson(requestJson: string): string;
+  codeObserveRefJson(requestJson: string): string;
   /** Optional for compatibility with older injected test bindings. */
   requireEmbeddingProviderApi?(): NativeEmbeddingProviderApiBinding;
   requireMemoryApi(): NativeMemoryApiBinding;

@@ -3,7 +3,8 @@ use engram_domain::{Actor, CodeAttempt, CodeBinding, CodeGeneration, RepoId, Sco
 use engram_knowledge::{CodeRefObservation, RefObservationPolicy};
 use engram_runtime::{CoreError, CoreResult};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeBindingStatus {
     pub binding: CodeBinding,
     pub attempt: Option<(CodeGeneration, CodeAttempt)>,
@@ -26,7 +27,8 @@ pub struct CodeBindingStatus {
 }
 
 /// Binding-keyed freshness facts derived from durable records only.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeRefFreshness {
     /// The CONFIGURED branch ref (`refs/heads/…`) — the only ref this
     /// binding ever observes or compares against.
@@ -43,7 +45,8 @@ pub struct CodeRefFreshness {
 /// Truthful freshness classification (plan §Contracts, Freshness row):
 /// reported states never compare against an arbitrary checkout HEAD or the
 /// freshest unrelated checkpoint.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum CodeFreshnessState {
     /// No valid observation exists. Freshness relative to the ref is
     /// UNKNOWN; a refresh (explicit observation) is required.
@@ -59,7 +62,8 @@ pub enum CodeFreshnessState {
 /// RepoId, binding version, generation, commit OID, and parser/filter
 /// fingerprints. Root basenames and caller-supplied manifest paths are
 /// never part of the key.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CodeBindingCheckpoint {
     pub repo_id: RepoId,
     pub branch_ref: String,
@@ -69,7 +73,8 @@ pub struct CodeBindingCheckpoint {
 }
 
 /// The immutable generation facts a checkpoint points at.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CheckpointGeneration {
     pub id: String,
     pub commit_oid: String,

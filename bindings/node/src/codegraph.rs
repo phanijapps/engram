@@ -10,7 +10,9 @@ use std::sync::Arc;
 
 use engram_codegraph_queries as cgq;
 use engram_domain::{KnowledgeRelationship, Scope};
+use engram_knowledge::CodeBindingRepository as _;
 use engram_store_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use serde_json::Value;
@@ -25,6 +27,20 @@ fn scope_of(value: &Value) -> Result<Scope> {
     serde_json::from_value(value["scope"].clone()).map_err(json_error)
 }
 
+/// TASK-020 direct-retrieval gate: code-graph queries serve ONLY published
+/// bound code. A scope without a published code generation denies with a
+/// typed code-lane error — legacy unbound code is never served through this
+/// seam, and no checkout-derived eligibility exists.
+fn require_published_code(bindings: &SqlCodeBindingRepository, scope: &Scope) -> Result<()> {
+    let eligibility = block_on(bindings.eligibility(scope)).map_err(to_napi_error)?;
+    if eligibility.generations.is_empty() {
+        return Err(Error::from_reason(
+            "BindingRequired: code lane unavailable — no published code generation for this scope",
+        ));
+    }
+    Ok(())
+}
+
 fn relationships_for(
     store: &Arc<SqlKnowledgeStore>,
     scope: &Scope,
@@ -33,9 +49,14 @@ fn relationships_for(
 }
 
 /// `{scope}` -> dead-code symbol keys (sorted). Mirrors memtrace `find_dead_code`.
-pub fn dead_code_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> Result<String> {
+pub fn dead_code_json(
+    store: &Arc<SqlKnowledgeStore>,
+    bindings: &SqlCodeBindingRepository,
+    request_json: String,
+) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
+    require_published_code(bindings, &scope)?;
     let relationships = relationships_for(store, &scope)?;
     encode(&cgq::dead_code(&cgq::AnalyticsGraph::from_relationships(
         &relationships,
@@ -43,9 +64,14 @@ pub fn dead_code_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> R
 }
 
 /// `{scope, target, depth?}` -> transitive caller keys (blast radius).
-pub fn blast_radius_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> Result<String> {
+pub fn blast_radius_json(
+    store: &Arc<SqlKnowledgeStore>,
+    bindings: &SqlCodeBindingRepository,
+    request_json: String,
+) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
+    require_published_code(bindings, &scope)?;
     let relationships = relationships_for(store, &scope)?;
     let target = value["target"].as_str().unwrap_or("").to_owned();
     let depth = value["depth"].as_u64().unwrap_or(5) as usize;
@@ -59,10 +85,12 @@ pub fn blast_radius_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -
 /// `{scope, from, to}` -> shortest call path (`[symbol, ...]`) or `null`.
 pub fn dependency_path_json(
     store: &Arc<SqlKnowledgeStore>,
+    bindings: &SqlCodeBindingRepository,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
+    require_published_code(bindings, &scope)?;
     let relationships = relationships_for(store, &scope)?;
     let from = value["from"].as_str().unwrap_or("").to_owned();
     let to = value["to"].as_str().unwrap_or("").to_owned();
@@ -72,10 +100,12 @@ pub fn dependency_path_json(
 /// `{scope, limit?}` -> `[[symbol, score], ...]` ranked by PageRank centrality.
 pub fn central_symbols_json(
     store: &Arc<SqlKnowledgeStore>,
+    bindings: &SqlCodeBindingRepository,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
+    require_published_code(bindings, &scope)?;
     let relationships = relationships_for(store, &scope)?;
     let limit = value["limit"].as_u64().unwrap_or(20) as usize;
     encode(&cgq::central_symbols(
@@ -85,9 +115,14 @@ pub fn central_symbols_json(
 }
 
 /// `{scope, limit?}` -> `[[symbol, score], ...]` ranked by betweenness (bridges).
-pub fn bridge_symbols_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> Result<String> {
+pub fn bridge_symbols_json(
+    store: &Arc<SqlKnowledgeStore>,
+    bindings: &SqlCodeBindingRepository,
+    request_json: String,
+) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
+    require_published_code(bindings, &scope)?;
     let relationships = relationships_for(store, &scope)?;
     let limit = value["limit"].as_u64().unwrap_or(20) as usize;
     encode(&cgq::bridge_symbols(
@@ -99,10 +134,12 @@ pub fn bridge_symbols_json(store: &Arc<SqlKnowledgeStore>, request_json: String)
 /// `{scope, maxPasses?}` -> `{symbol: label}` Louvain communities.
 pub fn call_communities_json(
     store: &Arc<SqlKnowledgeStore>,
+    bindings: &SqlCodeBindingRepository,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
+    require_published_code(bindings, &scope)?;
     let relationships = relationships_for(store, &scope)?;
     let max_passes = value["maxPasses"].as_u64().unwrap_or(10) as usize;
     encode(&cgq::call_communities(
@@ -140,9 +177,14 @@ pub fn find_entry_points_json(request_json: String) -> Result<String> {
 }
 
 /// `{scope, entryPoint, maxDepth?}` -> `[symbol, ...]` execution flow.
-pub fn process_flow_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> Result<String> {
+pub fn process_flow_json(
+    store: &Arc<SqlKnowledgeStore>,
+    bindings: &SqlCodeBindingRepository,
+    request_json: String,
+) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
+    require_published_code(bindings, &scope)?;
     let relationships = relationships_for(store, &scope)?;
     let entry = value["entryPoint"].as_str().unwrap_or("");
     let max_depth = value["maxDepth"].as_u64().unwrap_or(10) as usize;
@@ -162,10 +204,12 @@ pub fn match_api_topology_json(request_json: String) -> Result<String> {
 /// module paths, resolved to defining files by stem suffix.
 pub fn file_dependencies_json(
     store: &Arc<SqlKnowledgeStore>,
+    bindings: &SqlCodeBindingRepository,
     request_json: String,
 ) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
+    require_published_code(bindings, &scope)?;
     let relationships = relationships_for(store, &scope)?;
     let entities = block_on(store.list_entities(&scope)).map_err(to_napi_error)?;
     let paths: Vec<String> = entities
@@ -178,9 +222,14 @@ pub fn file_dependencies_json(
 
 /// `{scope, query, depth?, maxNodes?, maxEdges?}` -> relevance-seeded bounded
 /// subgraph (RFC-0020 Phase 2 explore).
-pub fn explore_json(store: &Arc<SqlKnowledgeStore>, request_json: String) -> Result<String> {
+pub fn explore_json(
+    store: &Arc<SqlKnowledgeStore>,
+    bindings: &SqlCodeBindingRepository,
+    request_json: String,
+) -> Result<String> {
     let value: Value = serde_json::from_str(&request_json).map_err(json_error)?;
     let scope = scope_of(&value)?;
+    require_published_code(bindings, &scope)?;
     let query_text = value["query"]
         .as_str()
         .ok_or_else(|| Error::from_reason("explore: `query` must be a string"))?

@@ -2,12 +2,14 @@
 //!
 //! Repository scanning and document ingestion operations with background job support.
 
-use engram_domain::{Actor, Policy, Scope, SourceDocumentKind};
+use engram_domain::{Actor, CodeBinding, Policy, Scope, SourceDocumentKind};
 use engram_ingest::{
     CodeSymbolChunker, DocumentIngestRequest, GraphExtractor, KnowledgeIngestor, PlainTextChunker,
     PlainTextChunkerOptions, ScanOptions, scan_repository,
 };
+use engram_knowledge::CodeBindingRepository as _;
 use engram_store_sqlite::SqlKnowledgeStore;
+use engram_store_sqlite::knowledge::SqlCodeBindingRepository;
 use futures::executor::block_on;
 use napi::bindgen_prelude::*;
 use serde::Serialize;
@@ -18,6 +20,30 @@ use crate::{decode, encode, scope_field, to_napi_error};
 use super::ingest_state::ScanJobState;
 use super::resolve_cross_file_edges;
 
+/// Default write policy when a legacy scan request omits `policy`
+/// (TASK-020: the binding gate is the authority; payload ergonomics default
+/// to the same durable workspace-visible policy the provider scan uses).
+fn default_scan_policy() -> Policy {
+    Policy {
+        visibility: engram_domain::Visibility::Workspace,
+        retention: engram_domain::Retention::Durable,
+        sensitivity: Some(engram_domain::Sensitivity::Low),
+        allowed_uses: vec![engram_domain::AllowedUse::Retrieval],
+        expires_at: None,
+        delete_mode: Some(engram_domain::DeleteMode::Tombstone),
+    }
+}
+
+/// Default system actor when a legacy scan request omits `actor`.
+fn default_scan_actor() -> Actor {
+    Actor {
+        id: engram_domain::Id::from("engram-node-legacy"),
+        kind: engram_domain::ActorKind::Agent,
+        display_name: None,
+        metadata: None,
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct IngestExtractResponse {
@@ -27,20 +53,95 @@ struct IngestExtractResponse {
     chunk_count: usize,
 }
 
+/// Shared handle to the durable binding cell for engines that hold it by
+/// value (TASK-020): `Arc`-wraps the cell so sibling engines (knowledge)
+/// can read eligibility without owning a second connection.
+pub struct BindingCell {
+    inner: std::sync::Arc<SqlCodeBindingRepository>,
+}
+
+impl BindingCell {
+    pub fn new(cell: SqlCodeBindingRepository) -> Self {
+        Self {
+            inner: std::sync::Arc::new(cell),
+        }
+    }
+    pub fn cell(&self) -> &SqlCodeBindingRepository {
+        &self.inner
+    }
+}
+
 /// Provides ingest operations for the Node-API bridge.
 pub struct IngestOps {
     store: SqlKnowledgeStore,
+    /// The durable code-binding cell (TASK-020): code scans require a
+    /// persisted binding — the legacy engine consults the same durable
+    /// authority as the provider path, never a checkout-derived binding.
+    bindings: SqlCodeBindingRepository,
     jobs: std::sync::Arc<std::sync::Mutex<std::collections::HashMap<String, ScanJobState>>>,
     job_counter: std::sync::atomic::AtomicU64,
 }
 
 impl IngestOps {
-    pub fn new(store: SqlKnowledgeStore) -> Self {
+    pub fn new(store: SqlKnowledgeStore, bindings: SqlCodeBindingRepository) -> Self {
         Self {
             store,
+            bindings,
             jobs: std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashMap::new())),
             job_counter: std::sync::atomic::AtomicU64::new(0),
         }
+    }
+
+    /// Binds a repository branch durably (TASK-020): same durable first-bind
+    /// semantics as the neutral coordinator's cell.
+    pub fn code_bind_json(&self, request_json: String) -> Result<String> {
+        let value = decode::<serde_json::Value>(&request_json)?;
+        let scope = scope_field(&value)?;
+        let repo = value
+            .get("repo")
+            .and_then(|field| field.as_str())
+            .ok_or_else(|| Error::from_reason("missing 'repo'"))?
+            .to_owned();
+        let branch_ref = value
+            .get("branchRef")
+            .and_then(|field| field.as_str())
+            .ok_or_else(|| Error::from_reason("missing 'branchRef'"))?
+            .to_owned();
+        let binding = CodeBinding {
+            scope,
+            repo_id: engram_domain::RepoId(repo),
+            branch_ref,
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        };
+        let bound = block_on(self.bindings.bind(binding)).map_err(to_napi_error)?;
+        encode(&bound)
+    }
+
+    /// TASK-020 binding gate: the durable cell, not the caller's path, is
+    /// the authority for code scans. Returns the bound ref on success.
+    fn require_bound_ref(
+        &self,
+        scope: &Scope,
+        repo: &str,
+        asserted_branch: Option<&str>,
+    ) -> Result<String> {
+        let binding = block_on(self.bindings.get_binding(scope, &engram_domain::RepoId(repo.to_owned())))
+            .map_err(to_napi_error)?
+            .ok_or_else(|| {
+                Error::from_reason(
+                    "BindingRequired: code scans require a persisted binding; bind the repository first",
+                )
+            })?;
+        if let Some(asserted) = asserted_branch
+            && asserted != binding.branch_ref
+        {
+            return Err(Error::from_reason(
+                "BindingConflict: asserted branch does not match the bound ref",
+            ));
+        }
+        Ok(binding.branch_ref)
     }
 
     /// Starts a background repository scan; returns `{ jobId }` immediately.
@@ -70,14 +171,27 @@ impl IngestOps {
                 .cloned()
                 .unwrap_or(serde_json::Value::Null),
         )
-        .map_err(|e| Error::from_reason(e.to_string()))?;
+        .unwrap_or_else(|_| default_scan_policy());
         let actor: Actor = serde_json::from_value(
             value
                 .get("actor")
                 .cloned()
                 .unwrap_or(serde_json::Value::Null),
         )
-        .map_err(|e| Error::from_reason(e.to_string()))?;
+        .unwrap_or_else(|_| default_scan_actor());
+
+        // TASK-020: persisted binding is mandatory for code scans.
+        let repo = value
+            .get("repo")
+            .and_then(|field| field.as_str())
+            .ok_or_else(|| {
+                Error::from_reason(
+                    "BindingRequired: code scans require a persisted binding; bind the repository first",
+                )
+            })?
+            .to_owned();
+        let asserted_branch = value.get("branchRef").and_then(|field| field.as_str());
+        self.require_bound_ref(&scope, &repo, asserted_branch)?;
 
         // Load the prior manifest (incremental resume). Skip when force=true so
         // every file is re-ingested (e.g. after an extractor change).

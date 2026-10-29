@@ -40,24 +40,33 @@ pub const MAX_BYTES_CEILING: usize = 1024 * 1024;
 /// exactly when the chunks carry the scanner's generation stamps (task_017).
 /// Non-code / unbound documents return `None` and keep the historical read
 /// paths.
-fn bound_code_origin(chunks: &[&engram_domain::KnowledgeChunk]) -> Option<(String, String)> {
-    let chunk = chunks.iter().find(|chunk| {
-        chunk
-            .metadata
-            .as_ref()
-            .and_then(|meta| meta.get("codeGenerationId"))
-            .is_some()
-    })?;
-    let metadata = chunk.metadata.as_ref()?;
-    let repo = metadata
-        .get("codeRepoId")
-        .and_then(|value| value.as_str())?
-        .to_owned();
-    let generation = metadata
-        .get("codeGenerationId")
-        .and_then(|value| value.as_str())?
-        .to_owned();
-    Some((repo, generation))
+fn bound_code_origin(
+    chunks: &[&engram_domain::KnowledgeChunk],
+) -> Result<Option<(String, String)>, String> {
+    let mut origin: Option<(String, String)> = None;
+    for chunk in chunks {
+        let Some(metadata) = chunk.metadata.as_ref() else {
+            continue;
+        };
+        let generation = metadata
+            .get("codeGenerationId")
+            .and_then(|value| value.as_str());
+        let repo = metadata.get("codeRepoId").and_then(|value| value.as_str());
+        match (repo, generation) {
+            (None, None) => continue,
+            (Some(repo), Some(generation)) => {
+                let candidate = (repo.to_owned(), generation.to_owned());
+                if let Some(existing) = &origin
+                    && existing != &candidate
+                {
+                    return Err("matched chunks span multiple bound repository generations".into());
+                }
+                origin = Some(candidate);
+            }
+            _ => return Err("bound chunk provenance is incomplete".into()),
+        }
+    }
+    Ok(origin)
 }
 
 /// Resolves `symbol` against the matched (same-generation) chunks and maps
@@ -258,8 +267,14 @@ pub fn fetch_content(app: &App, args: &Value) -> Result<Value, ToolError> {
     // working-tree fallback: a missing snapshot is an error in auto and
     // verbatim modes alike (REQ-006: exact content or an explicit
     // unavailable error, never a checkout masquerading as the revision).
+    let bound_origin = bound_code_origin(&ordered).map_err(|reason| {
+        ToolError::new(
+            -32602,
+            format!("bound source origin is ambiguous: {reason}"),
+        )
+    })?;
     if mode != "chunks"
-        && let Some((repo_id, generation_id)) = bound_code_origin(&ordered)
+        && let Some((repo_id, generation_id)) = bound_origin
     {
         // Corrective r2 (finding 11): the exact path honors SYMBOL selection
         // from the SAME generation (missing/ambiguous symbols deny), slices

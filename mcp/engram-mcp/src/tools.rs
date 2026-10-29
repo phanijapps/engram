@@ -2034,6 +2034,200 @@ pub(crate) mod tests {
         );
     }
 
+    /// Minimal seeded knowledge-query double for degrade-path tests: only
+    /// `list_entities` carries data (the degrade scan reads nothing else).
+    struct SeededEntitiesQuery {
+        entities: Vec<KnowledgeEntity>,
+    }
+
+    #[async_trait::async_trait]
+    impl engram_integration::KnowledgeQuery for SeededEntitiesQuery {
+        async fn list_entities(
+            &self,
+            _scope: &engram_domain::Scope,
+        ) -> engram_knowledge::CoreResult<Vec<KnowledgeEntity>> {
+            Ok(self.entities.clone())
+        }
+        async fn list_relationships(
+            &self,
+            _scope: &engram_domain::Scope,
+        ) -> engram_knowledge::CoreResult<Vec<KnowledgeRelationship>> {
+            Ok(Vec::new())
+        }
+        async fn list_chunks(
+            &self,
+            _scope: &engram_domain::Scope,
+        ) -> engram_knowledge::CoreResult<Vec<KnowledgeChunk>> {
+            Ok(Vec::new())
+        }
+    }
+
+    fn fallback_entity(name: &str, kind: EntityKind) -> KnowledgeEntity {
+        KnowledgeEntity {
+            id: Id::from(name),
+            graph_id: None,
+            kind,
+            name: name.to_owned(),
+            aliases: Vec::new(),
+            scope: project_scope("test-project", "default"),
+            source_refs: Vec::new(),
+            concept_refs: Vec::new(),
+            ontology_class_refs: Vec::new(),
+            provenance: provenance("test-a7-fallback"),
+            created_at: Utc::now(),
+            updated_at: None,
+            valid_from: None,
+            valid_until: None,
+            metadata: None,
+            archived_at: None,
+        }
+    }
+
+    /// A7 (r5): the ACTUAL degrade-path substring fallback producer
+    /// (`substring_symbol_scan`, reached when unified recall is unavailable)
+    /// and its consumer (the search packet) — an eligible ordinary positive
+    /// PLUS an injected-shape ineligible high-rank code candidate whose name
+    /// EXACTLY equals the query (the strongest match arm; a naive scan would
+    /// list it first). The fallback serves the ordinary positive and never
+    /// the artifact; the explicit opt-in re-admits it through the SAME
+    /// producer.
+    #[test]
+    fn degrade_substring_fallback_serves_eligible_and_blocks_artifact() {
+        let dir = tempfile::tempdir().unwrap();
+        let knowledge: std::sync::Arc<dyn engram_integration::KnowledgeQuery> =
+            std::sync::Arc::new(SeededEntitiesQuery {
+                entities: vec![
+                    fallback_entity("deploywidgetRunbook", EntityKind::Concept),
+                    fallback_entity("deploywidget", EntityKind::Module),
+                ],
+            });
+        // No recall handle configured: `require_recall` fails and the search
+        // tool takes its REAL degrade arm (the substring fallback producer).
+        let provider = engram_integration::EngramProviderBuilder::new(
+            engram_integration::CapabilityReport::new(engram_domain::CapabilityState::Supported),
+        )
+        .knowledge_query(knowledge)
+        .build();
+        let app = App {
+            provider,
+            scope: project_scope("test-project", "default"),
+            ontology: OntologyConfig::default(),
+            taxonomy: TaxonomyConfig::default(),
+            storage_dir: dir.path().to_path_buf(),
+        };
+        assert!(
+            app.provider.recall().is_none(),
+            "fixture sanity: this app has NO recall handle — the degrade arm runs"
+        );
+
+        let res = crate::codegraph::search(
+            &app,
+            &json!({ "query": "deploywidget", "diagnostics": true }),
+        )
+        .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("deploywidgetRunbook"),
+            "the substring fallback serves the eligible ordinary positive: {body}"
+        );
+        assert!(
+            !body.contains("(Module)"),
+            "the degrade fallback never serves the exact-name artifact: {body}"
+        );
+
+        let opt_in = crate::codegraph::search(
+            &app,
+            &json!({ "query": "deploywidget", "include_code_artifacts": true }),
+        )
+        .unwrap();
+        let opt_in_body = opt_in["content"][0]["text"].as_str().unwrap();
+        assert!(
+            opt_in_body.contains("(Module)"),
+            "the explicit opt-in re-admits the artifact through the same producer: {opt_in_body}"
+        );
+    }
+
+    /// A7 (r5): the ACTUAL post-recall fallback producer
+    /// (`inject_exact_matches` — the tool-level exact/substring injection
+    /// arm) with unified recall wired: an eligible ordinary positive flows
+    /// (recall or injection — both real producers), while an ineligible
+    /// code candidate whose name EXACTLY equals the query — which the
+    /// injection would score at the TOP anchor rank — never enters the
+    /// packet; an artifact-ONLY match yields the SUCCESS-empty packet with
+    /// the actionable opt-in hint, and the opt-in re-admits it.
+    #[test]
+    fn recall_injection_fallback_blocks_exact_name_artifact_at_top_rank() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = test_app(dir.path());
+        put_entity(
+            &app,
+            &json!({ "name": "deploywidgetRunbook", "kind": "concept" }),
+        )
+        .unwrap();
+        put_entity(&app, &json!({ "name": "deploywidget", "kind": "module" })).unwrap();
+        put_entity(&app, &json!({ "name": "kernmod", "kind": "module" })).unwrap();
+        // Fixture sanity: both artifact entities exist and classify as code
+        // artifacts — their absence below is the producer gate, not a
+        // missing fixture.
+        let by_id = crate::codegraph::entity_lookup(&app);
+        assert!(
+            by_id.values().any(|entity| entity.name == "deploywidget"
+                && engram_retrieval::is_code_artifact(entity))
+                && by_id
+                    .values()
+                    .any(|entity| entity.name == "kernmod"
+                        && engram_retrieval::is_code_artifact(entity)),
+            "fixture must contain the exact-name artifact entities"
+        );
+
+        // Eligible ordinary positive + exact-name artifact: the ordinary
+        // positive serves; the artifact (which the injection arm would score
+        // at the TOP anchor rank on an exact identifier match) never appears.
+        let res = crate::codegraph::search(
+            &app,
+            &json!({ "query": "deploywidget", "diagnostics": true }),
+        )
+        .unwrap();
+        let body = res["content"][0]["text"].as_str().unwrap();
+        assert!(
+            body.contains("deploywidgetRunbook"),
+            "the eligible ordinary positive serves: {body}"
+        );
+        assert!(
+            !body.contains("(Module)"),
+            "the exact-name artifact must not be injected at top rank: {body}"
+        );
+
+        // Artifact-ONLY match: SUCCESS-empty packet with the actionable
+        // opt-in hint (never a silent empty, never a fallback serve).
+        let artifact_only = crate::codegraph::search(&app, &json!({ "query": "kernmod" })).unwrap();
+        let hint_body = artifact_only["content"][0]["text"].as_str().unwrap();
+        assert!(
+            hint_body.contains("No results"),
+            "artifact-only match is success-empty: {hint_body}"
+        );
+        assert!(
+            hint_body.contains("include_code_artifacts: true"),
+            "the empty packet carries the opt-in hint: {hint_body}"
+        );
+        assert!(
+            !hint_body.contains("(Module)"),
+            "the artifact-only fallback never serves the artifact: {hint_body}"
+        );
+
+        // Opt-in re-admits the artifact through the same producer.
+        let opt_in = crate::codegraph::search(
+            &app,
+            &json!({ "query": "kernmod", "include_code_artifacts": true, "diagnostics": true }),
+        )
+        .unwrap();
+        let opt_in_body = opt_in["content"][0]["text"].as_str().unwrap();
+        assert!(
+            opt_in_body.contains("(Module)"),
+            "the opt-in re-admits the artifact: {opt_in_body}"
+        );
+    }
+
     /// Code-artifact suppression battery (2026-10-20): scan a fixture whose
     /// graph contains import-path Module/File entities plus a real Function;
     /// default search suppresses the artifacts, the flag opts them back in,

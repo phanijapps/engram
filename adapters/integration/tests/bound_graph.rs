@@ -2203,6 +2203,301 @@ mod task_016 {
         );
     }
 
+    /// A counting in-memory double over the knowledge port: publishes a REAL
+    /// generation (dedicated thread — the port is already inside the recall
+    /// executor, a nested block_on would re-enter the LocalPool) the FIRST
+    /// time `list_entities` runs, and counts every entity/relationship read
+    /// so tests can PROVE the retry rebuilt the universe, seeds and labels
+    /// instead of reusing the first attempt's data. The publication plan is
+    /// caller-owned: (generation, expected_epoch, expected_active, lineage).
+    struct MidflightPublishingQuery {
+        inner: Arc<SqlKnowledgeStore>,
+        bindings: Arc<SqlCodeBindingRepository>,
+        published: std::sync::atomic::AtomicBool,
+        entity_reads: std::sync::atomic::AtomicUsize,
+        relationship_reads: std::sync::atomic::AtomicUsize,
+        next_generation: String,
+        expected_epoch: u64,
+        expected_active: Option<String>,
+        lineage: Vec<String>,
+    }
+
+    #[async_trait::async_trait]
+    impl engram_integration::KnowledgeQuery for MidflightPublishingQuery {
+        async fn list_entities(&self, scope: &Scope) -> CoreResult<Vec<KnowledgeEntity>> {
+            self.entity_reads
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if !self
+                .published
+                .swap(true, std::sync::atomic::Ordering::SeqCst)
+            {
+                // The universe build has ALREADY begun (relationships were
+                // read first): the publication lands mid-build, between the
+                // selection and the return — not publish-before-load.
+                let bindings = self.bindings.clone();
+                let scope = scope.clone();
+                let generation = self.next_generation.clone();
+                let expected_epoch = self.expected_epoch;
+                let expected_active = self.expected_active.clone();
+                let lineage = self.lineage.clone();
+                std::thread::spawn(move || {
+                    let lineage: Vec<&str> = lineage.iter().map(String::as_str).collect();
+                    publish_generation_for_scope(
+                        &bindings,
+                        &scope,
+                        "repo-a",
+                        &generation,
+                        expected_epoch,
+                        expected_active.as_deref(),
+                        &lineage,
+                    );
+                })
+                .join()
+                .expect("midflight publication thread");
+            }
+            self.inner.list_entities(scope).await
+        }
+        async fn list_relationships(
+            &self,
+            scope: &Scope,
+        ) -> CoreResult<Vec<KnowledgeRelationship>> {
+            self.relationship_reads
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.inner.list_relationships(scope).await
+        }
+    }
+
+    /// A7 (r5): a REAL publication landing MID-BUILD (the universe build
+    /// started — relationships already read — and the flip lands between
+    /// selection and return) can never serve the retired generation's
+    /// hop-zero seed under a TIGHT node budget, and EVERY retry REBUILDS the
+    /// universe, seeds and labels (proven by the read counters: exactly two
+    /// full build passes). Node answers assert STABLE entity ids, not label
+    /// numbers or shape histograms.
+    #[test]
+    fn midflight_publication_rebuilds_universe_and_never_serves_retired_seed() {
+        use std::sync::atomic::Ordering;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = SqlCodeBindingRepository::open(dir.path().join("midflight-bindings.sqlite"))
+            .expect("open binding store");
+        block_on(bindings.bind(CodeBinding {
+            scope: scope(),
+            repo_id: RepoId("repo-a".to_string()),
+            branch_ref: "refs/heads/main".to_string(),
+            version: 1,
+            active_generation: None,
+            epoch: 0,
+        }))
+        .expect("bind");
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-a-first",
+            0,
+            None,
+            &["a-render-old", "a-helper-old"],
+        );
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge"));
+        for entity_node in [
+            entity("a-render-old", "renderOld", EntityKind::Function),
+            entity("a-helper-old", "helperOld", EntityKind::Function),
+            entity(
+                "a-render-midflight",
+                "renderMidflight",
+                EntityKind::Function,
+            ),
+        ] {
+            block_on(knowledge.put_entity(entity_node)).expect("put entity");
+        }
+        block_on(knowledge.put_relationship(relationship(
+            "midflight-rel-1",
+            "calls",
+            "a-render-old",
+            "renderOld",
+            "a-helper-old",
+            "helperOld",
+        )))
+        .expect("put relationship");
+        let bindings = Arc::new(bindings);
+        let publishing = Arc::new(MidflightPublishingQuery {
+            inner: knowledge,
+            bindings: bindings.clone(),
+            published: std::sync::atomic::AtomicBool::new(false),
+            entity_reads: std::sync::atomic::AtomicUsize::new(0),
+            relationship_reads: std::sync::atomic::AtomicUsize::new(0),
+            next_generation: "gen-a-midflight".to_owned(),
+            expected_epoch: 1,
+            expected_active: Some("gen-a-first".to_owned()),
+            lineage: vec!["a-render-midflight".to_owned()],
+        });
+        let coordinator = CodeBindingCoordinator::new(
+            bindings as Arc<dyn CodeBindingRepository>,
+            Arc::new(crate::AllowAuthorizer),
+            Vec::new(),
+        );
+        let provider = EngramProviderBuilder::new(engram_integration::CapabilityReport::new(
+            CapabilityState::Supported,
+        ))
+        .knowledge_query(publishing.clone())
+        .code_bindings(Arc::new(coordinator))
+        .build();
+
+        // The retired generation's symbol is the hop-zero SEED of this query
+        // under a TIGHT budget (2 nodes): it must never serve, and its peer
+        // must never leak through the leftover budget either.
+        let retired = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "renderOld",
+            Some(2),
+            Some(2),
+            Some(8),
+            false,
+        ))
+        .expect("explore completes (retry or clean view)");
+        assert!(
+            retired.is_empty(),
+            "the retired generation's hop-zero seed never serves after the midflight \
+             publication: {retired:?}"
+        );
+        // The retry REBUILT the universe, seeds and labels: exactly two full
+        // build passes over the knowledge port (attempt 1 selected under the
+        // pre-publication pin; the rebuilt attempt re-read everything).
+        assert_eq!(
+            publishing.entity_reads.load(Ordering::SeqCst),
+            2,
+            "every retry rebuilds the universe (entity passes)"
+        );
+        assert_eq!(
+            publishing.relationship_reads.load(Ordering::SeqCst),
+            2,
+            "every retry rebuilds the universe (relationship passes)"
+        );
+
+        // The CURRENT generation's symbol explores, and the answer asserts
+        // STABLE entity identity — the node id, not a label histogram.
+        let live = block_on(provider.code_graph_explore_bound(
+            &actor(),
+            &scope(),
+            "renderMidflight",
+            Some(1),
+            Some(4),
+            Some(8),
+            false,
+        ))
+        .expect("live explore");
+        let live_ids: Vec<&str> = live.iter().map(|node| node.id.as_str()).collect();
+        assert_eq!(
+            live_ids,
+            vec!["a-render-midflight"],
+            "stable node identity for the current generation's answer: {live:?}"
+        );
+        assert_eq!(
+            publishing.entity_reads.load(Ordering::SeqCst),
+            3,
+            "the live explore is its own (third) full build"
+        );
+    }
+
+    /// A7 (r5): EXPLICIT nonempty requested-ID selection with a REAL
+    /// publication crossing the selection→return boundary mid-flight. The
+    /// first (pinned) attempt legitimately selects `a-render`; the
+    /// publication retires it before the window closes, the retry REBUILDS
+    /// the selection (entity re-read proven), and the caller receives the
+    /// rebuilt attempt's foreign-target denial — never the stale selection.
+    #[test]
+    fn explicit_requested_id_selection_never_serves_across_midflight_publication() {
+        use std::sync::atomic::Ordering;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let bindings = SqlCodeBindingRepository::open(dir.path().join("explicit-midflight.sqlite"))
+            .expect("open binding store");
+        for repo in ["repo-a", "repo-b"] {
+            block_on(bindings.bind(CodeBinding {
+                scope: scope(),
+                repo_id: RepoId(repo.to_string()),
+                branch_ref: "refs/heads/main".to_string(),
+                version: 1,
+                active_generation: None,
+                epoch: 0,
+            }))
+            .expect("bind");
+        }
+        publish_generation_for_scope(
+            &bindings,
+            &scope(),
+            "repo-a",
+            "gen-a",
+            0,
+            None,
+            &["a-render"],
+        );
+        publish_generation_for_scope(&bindings, &scope(), "repo-b", "gen-b", 0, None, &["b-live"]);
+        let knowledge = Arc::new(SqlKnowledgeStore::open_in_memory().expect("knowledge"));
+        for entity_node in [
+            entity("a-render", "render", EntityKind::Function),
+            entity("b-live", "live", EntityKind::Function),
+        ] {
+            block_on(knowledge.put_entity(entity_node)).expect("put entity");
+        }
+        let bindings = Arc::new(bindings);
+        let publishing = Arc::new(MidflightPublishingQuery {
+            inner: knowledge,
+            bindings: bindings.clone(),
+            published: std::sync::atomic::AtomicBool::new(false),
+            entity_reads: std::sync::atomic::AtomicUsize::new(0),
+            relationship_reads: std::sync::atomic::AtomicUsize::new(0),
+            next_generation: "gen-a-midflight".to_owned(),
+            expected_epoch: 1,
+            expected_active: Some("gen-a".to_owned()),
+            lineage: vec!["a-render-midflight".to_owned()],
+        });
+        let coordinator = CodeBindingCoordinator::new(
+            bindings as Arc<dyn CodeBindingRepository>,
+            Arc::new(crate::AllowAuthorizer),
+            Vec::new(),
+        );
+        let authorized = AuthorizedKnowledgeQuery::new(publishing.clone(), Arc::new(coordinator));
+
+        // EXPLICIT nonempty requested-ID selection: the first pinned attempt
+        // selects a-render; the mid-flight publication retires it; the
+        // REBUILT attempt denies the now-foreign id — never a stale serve.
+        let stale = block_on(authorized.list_entities_authorized(
+            &actor(),
+            &scope(),
+            &["a-render".to_string()],
+        ));
+        assert!(
+            matches!(&stale, Err(CoreError::InvalidRequest { reason })
+                if reason.contains("foreign or unpublished")),
+            "the rebuilt selection denies the retired id instead of serving the \
+             stale selection: {stale:?}"
+        );
+        assert_eq!(
+            publishing.entity_reads.load(Ordering::SeqCst),
+            2,
+            "the selection was REBUILT by the retry (two entity passes)"
+        );
+
+        // Positive control on the SAME double: an id still eligible after the
+        // publication serves with its stable id through the same seam.
+        let live = block_on(authorized.list_entities_authorized(
+            &actor(),
+            &scope(),
+            &["b-live".to_string()],
+        ))
+        .expect("still-eligible explicit id serves");
+        assert_eq!(
+            live.iter()
+                .map(|entity| entity.id.to_string())
+                .collect::<Vec<_>>(),
+            vec!["b-live".to_string()],
+            "stable identity through the explicit-id seam: {live:?}"
+        );
+    }
+
     /// Review r5 (finding 8): in a POPULATED bound scope whose code
     /// repositories the actor CANNOT inspect, ordinary per-record
     /// authorization is independent of code authorization — the positively

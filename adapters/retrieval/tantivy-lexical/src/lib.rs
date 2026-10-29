@@ -10,6 +10,7 @@
 //! Identifier-awareness lives in [`tokenizer::normalize_identifier_text`], a
 //! pure pre-tokenization step, so Tantivy's default tokenizer handles the rest.
 
+mod collector;
 mod index;
 mod retrieval;
 mod tokenizer;

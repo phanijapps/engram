@@ -13,6 +13,146 @@ fn reopen(dir: &std::path::Path) -> LexicalIndex {
 mod task_014 {
     use super::*;
 
+    /// Corrective r4 (canonical 5): canonical target eligibility AND
+    /// authorized contributor membership are enforced together on the REAL
+    /// persistent Tantivy index, with DISTINCT-TARGET collection. A shared
+    /// allowed target carrying EXCLUDED-generation-only tokens cannot match
+    /// through them, and a flood of duplicate contributor documents for one
+    /// allowed target cannot starve another allowed target of the bounded
+    /// page (the budget counts TARGETS, not contribution documents).
+    #[test]
+    fn distinct_targets_and_contributor_isolation() {
+        use std::collections::BTreeSet;
+        let dir = TempDir::new().expect("tempdir");
+        let lexical_dir = dir.path().join("lexical");
+        std::fs::create_dir_all(&lexical_dir).expect("mkdir");
+        let index = reopen(&lexical_dir);
+
+        let current = code_contributor_key("gen-current");
+        let excluded = code_contributor_key("gen-excluded");
+        // shared-target: ALLOWED by target id, but its only documents for the
+        // matching token came from the EXCLUDED generation.
+        index
+            .upsert_batch_stamped(&[
+                (
+                    "shared-target".to_string(),
+                    "render excluded render excluded".to_string(),
+                    excluded.clone(),
+                ),
+                // crowd-target: ALLOWED, with MANY duplicate contributor
+                // documents (well past any small fetch bound) that all match.
+                (
+                    "crowd-target".to_string(),
+                    "render crowd high rank".to_string(),
+                    current.clone(),
+                ),
+                (
+                    "crowd-target".to_string(),
+                    "render crowd more one".to_string(),
+                    current.clone(),
+                ),
+                (
+                    "crowd-target".to_string(),
+                    "render crowd more two".to_string(),
+                    current.clone(),
+                ),
+                (
+                    "crowd-target".to_string(),
+                    "render crowd more three".to_string(),
+                    current.clone(),
+                ),
+                (
+                    "crowd-target".to_string(),
+                    "render crowd more four".to_string(),
+                    current.clone(),
+                ),
+                (
+                    "crowd-target".to_string(),
+                    "render crowd more five".to_string(),
+                    current.clone(),
+                ),
+                (
+                    "crowd-target".to_string(),
+                    "render crowd more six".to_string(),
+                    current.clone(),
+                ),
+                (
+                    "crowd-target".to_string(),
+                    "render crowd more seven".to_string(),
+                    current.clone(),
+                ),
+                (
+                    "crowd-target".to_string(),
+                    "render crowd more eight".to_string(),
+                    current.clone(),
+                ),
+                (
+                    "crowd-target".to_string(),
+                    "render crowd more nine".to_string(),
+                    current.clone(),
+                ),
+                (
+                    "crowd-target".to_string(),
+                    "render crowd more ten".to_string(),
+                    current.clone(),
+                ),
+                // valid-target: lower-ranked but eligible on its own.
+                (
+                    "valid-target".to_string(),
+                    "render valid lower".to_string(),
+                    current.clone(),
+                ),
+            ])
+            .expect("seed stamped docs");
+
+        let targets: BTreeSet<String> = ["shared-target", "crowd-target", "valid-target"]
+            .iter()
+            .map(|id| id.to_string())
+            .collect();
+        let contributors: BTreeSet<String> = [current.clone()]
+            .iter()
+            .cloned()
+            .chain(std::iter::once("doc".to_string()))
+            .collect();
+
+        // Contributor isolation: shared-target's matching documents are all
+        // excluded-contributor rows — it must not match AT ALL.
+        let page = index
+            .search_targets_within("render", 2, &targets, &contributors)
+            .expect("distinct-target search");
+        let ids: Vec<&str> = page.iter().map(|(id, _)| id.as_str()).collect();
+        assert!(
+            !ids.contains(&"shared-target"),
+            "an allowed target must not match through excluded-contributor documents: {ids:?}"
+        );
+        // Distinct-target budget: with limit 2, crowd-target takes ONE slot
+        // (its eleven duplicate documents are one target) and valid-target
+        // fills the second — a document-budget TopDocs page would have
+        // consumed every slot with crowd-target duplicates.
+        assert_eq!(
+            ids.len(),
+            2,
+            "the target budget counts distinct targets: {ids:?}"
+        );
+        assert!(
+            ids.contains(&"crowd-target") && ids.contains(&"valid-target"),
+            "both allowed targets fill the target-budgeted page: {ids:?}"
+        );
+
+        // Reopen the persistent index and repeat: the constraints hold on the
+        // warm path too.
+        drop(index);
+        let warm = reopen(&lexical_dir);
+        let warm_page = warm
+            .search_targets_within("render", 2, &targets, &contributors)
+            .expect("warm distinct-target search");
+        let warm_ids: Vec<&str> = warm_page.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(
+            warm_ids, ids,
+            "the warm persistent index behaves identically: {warm_ids:?}"
+        );
+    }
+
     /// warm_generation_retirement: retiring `code:<gen>` deletes exactly that
     /// generation's documents from the persistent warm index; after two
     /// reopen cycles the retired tokens are unreachable, and the ordinary

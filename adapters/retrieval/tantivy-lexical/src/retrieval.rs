@@ -194,8 +194,9 @@ impl RetrievalIndex for LexicalRetrievalIndex {
                     .target_resolver
                     .eligible_target_ids(request, view)
                     .await?;
+                let contributor_keys = Self::allowed_contributor_keys(view);
                 self.index
-                    .search_targets_within(&request.query, fetch, &target_ids)
+                    .search_targets_within(&request.query, fetch, &target_ids, &contributor_keys)
                     .map_err(|e| CoreError::Adapter {
                         adapter: "engram-store-lexical".to_owned(),
                         message: e.to_string(),

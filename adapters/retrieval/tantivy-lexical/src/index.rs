@@ -408,18 +408,27 @@ impl LexicalIndex {
         self.search_contributors(query, limit, Some(allowed_keys))
     }
 
-    /// Canonical target constraint for bound retrieval.  Target IDs come from
-    /// the authoritative store resolver, not from a Tantivy contributor stamp,
-    /// and are intersected with the user query before TopDocs consumes budget.
+    /// Canonical target + contributor constraint for bound retrieval
+    /// (corrective r4, canonical 5). Target IDs come from the authoritative
+    /// store resolver, not from a Tantivy contributor stamp; the eligibility
+    /// contributor keys are intersected TOO, so a shared allowed target
+    /// cannot be matched through documents an EXCLUDED generation
+    /// contributed. Collection is DISTINCT-TARGET: one slot per target (its
+    /// best matching document's score), so a flood of duplicate contributor
+    /// documents for one target cannot consume the bounded page and starve
+    /// another allowed target. The target budget applies to distinct targets
+    /// BEFORE any document-budget semantics — no fixed overfetch, no
+    /// post-filter.
     pub fn search_targets_within(
         &self,
         query: &str,
         limit: usize,
         target_ids: &std::collections::BTreeSet<String>,
+        allowed_contributors: &std::collections::BTreeSet<String>,
     ) -> tantivy::Result<Vec<(String, f32)>> {
         use std::collections::BTreeSet;
         use tantivy::query::{BooleanQuery, TermSetQuery};
-        if target_ids.is_empty() {
+        if target_ids.is_empty() || allowed_contributors.is_empty() {
             return Ok(Vec::new());
         }
         if limit == 0 {
@@ -430,29 +439,36 @@ impl LexicalIndex {
         let searcher = self.reader.searcher();
         let parser = QueryParser::for_index(&self.index, vec![self.text_field]);
         let parsed = parser.parse_query(&normalized)?;
-        let terms: BTreeSet<Term> = target_ids
+        let target_terms: BTreeSet<Term> = target_ids
             .iter()
             .map(|id| Term::from_field_text(self.target_id_field, id))
+            .collect();
+        let contributor_terms: BTreeSet<Term> = allowed_contributors
+            .iter()
+            .map(|key| Term::from_field_text(self.eligibility_field, key))
             .collect();
         let query = BooleanQuery::new(vec![
             (tantivy::query::Occur::Must, Box::new(parsed)),
             (
                 tantivy::query::Occur::Must,
-                Box::new(TermSetQuery::new(terms)),
+                Box::new(TermSetQuery::new(target_terms)),
+            ),
+            (
+                tantivy::query::Occur::Must,
+                Box::new(TermSetQuery::new(contributor_terms)),
             ),
         ]);
-        let top = searcher.search(&query, &TopDocs::with_limit(limit))?;
-        top.into_iter()
-            .map(|(score, addr)| {
-                let doc = searcher.doc::<TantivyDocument>(addr)?;
-                let id = doc
-                    .get_first(self.target_id_field)
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned)
-                    .unwrap_or_default();
-                Ok((id, score))
-            })
-            .collect()
+        let collector = crate::collector::DistinctTargetCollector::new(limit, self.target_id_field);
+        let best = searcher.search(&query, &collector)?;
+        let mut ranked: Vec<(String, f32)> = best.into_iter().collect();
+        // Deterministic order: score desc, then target id asc.
+        ranked.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.0.cmp(&b.0))
+        });
+        ranked.truncate(limit);
+        Ok(ranked)
     }
 
     /// Shared search path. `allowed_keys` adds a `TermSetQuery` over the
